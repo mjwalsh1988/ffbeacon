@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { saveSourcePreference, saveFormatPreference } from "@/app/actions/preferences";
 import { pickFallbackFormat, type FormatLike } from "@/lib/format-fallback";
 
@@ -24,9 +24,11 @@ export function SourceToggle({
 }: {
   options: SourceOption[];
   initialSlug: string | null;
-  // The user's currently-resolved format. Used to (a) filter the source list
-  // to only those that support this format, and (b) trigger a fall-through
-  // when the user selects a source that doesn't support it.
+  // The user's currently-resolved format. Used to (a) annotate sources that
+  // don't support this format with a pre-click warning + tooltip, and
+  // (b) trigger a fall-through when the user selects a source that doesn't
+  // support it. Sources are NOT filtered out — the user can still pick them
+  // and accept the format swap deliberately.
   currentFormatSlug: string | null;
   // Full active format list, used by pickFallbackFormat when a source switch
   // forces a format substitution.
@@ -37,16 +39,19 @@ export function SourceToggle({
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  // Filter the source dropdown to sources that support the current format.
-  // A source with supported_format_slugs===null supports everything.
-  const filteredOptions = currentFormatSlug
-    ? options.filter((o) =>
-        o.supported_format_slugs === null
-          ? true
-          : o.supported_format_slugs.includes(currentFormatSlug),
-      )
-    : options;
-  const visibleOptions = filteredOptions.length > 0 ? filteredOptions : options;
+  // Show every active source. Sources that don't support the current format
+  // render with a pre-click warning indicator + aria-label expansion + visible
+  // "(changes format)" note + tooltip describing the format swap that will
+  // occur if they pick it. This lets keyboard and screen-reader users hear
+  // the consequence before committing, rather than learning about it only
+  // from the post-switch banner. The fall-through logic in selectSource()
+  // still handles the swap when they choose to proceed.
+  const supportsCurrentFormat = (o: SourceOption): boolean => {
+    if (!currentFormatSlug) return true;
+    if (o.supported_format_slugs === null) return true;
+    return o.supported_format_slugs.includes(currentFormatSlug);
+  };
+  const visibleOptions = options;
 
   const urlSlug = searchParams.get("source");
   const effectiveSlug =
@@ -58,6 +63,11 @@ export function SourceToggle({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // Stable id for the in-menu helper text. The menu uses aria-labelledby
+  // pointing at this so a screen reader hears "Choose which site's values
+  // to display" exactly once when the menu opens, instead of needing to
+  // bake that hint into every option's aria-label.
+  const menuHeadingId = useId();
 
   useEffect(() => {
     if (!announcement) return;
@@ -229,12 +239,47 @@ export function SourceToggle({
         <ul
           ref={menuRef}
           role="menu"
-          aria-label="Choose data source"
+          aria-labelledby={menuHeadingId}
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-40 mt-2 w-72 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl"
+          className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl"
         >
+          {/* Single, presentation-only header. The menu's aria-labelledby
+              wires this up so screen readers announce it as the menu's
+              accessible name on open. Not focusable; arrow keys skip it. */}
+          <li role="presentation" className="border-b border-line">
+            <p
+              id={menuHeadingId}
+              className="px-3 pt-2.5 pb-2 text-xs text-ink-muted"
+            >
+              Choose which site’s values to display
+            </p>
+          </li>
           {visibleOptions.map((option, index) => {
             const isSelected = option.slug === effectiveSlug;
+            const formatSupported = supportsCurrentFormat(option);
+            const fallbackPreview =
+              !formatSupported && currentFormatSlug
+                ? pickFallbackFormat(
+                    allFormats,
+                    currentFormatSlug,
+                    option.supported_format_slugs,
+                  )
+                : null;
+            const currentFormatLabel = currentFormatSlug
+              ? allFormats.find((f) => f.slug === currentFormatSlug)?.display_name ??
+                currentFormatSlug
+              : null;
+            // Compose the aria-label so the screen reader hears the
+            // consequence of selecting this option BEFORE the user commits.
+            // The label is the only programmatic warning channel — we
+            // intentionally don't ALSO mount an sr-only tooltip because
+            // pairing aria-label + aria-describedby would cause a screen
+            // reader to read the fallback target twice on focus.
+            const ariaLabel = !formatSupported
+              ? fallbackPreview
+                ? `${option.display_name}. Warning: selecting this will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name} because ${option.display_name} doesn’t provide values for ${currentFormatLabel}.`
+                : `${option.display_name}. Warning: ${option.display_name} doesn’t provide values for ${currentFormatLabel}.`
+              : undefined;
             return (
               <li
                 key={option.slug}
@@ -249,15 +294,26 @@ export function SourceToggle({
                   role="menuitem"
                   tabIndex={index === activeIndex ? 0 : -1}
                   onClick={() => selectSource(option.slug)}
+                  aria-label={ariaLabel}
+                  title={
+                    !formatSupported && fallbackPreview && currentFormatLabel
+                      ? `Selecting ${option.display_name} will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name}.`
+                      : !formatSupported && currentFormatLabel
+                        ? `${option.display_name} doesn’t provide values for ${currentFormatLabel}.`
+                        : undefined
+                  }
                   className={`flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none ${
                     isSelected ? "text-ink" : "text-ink-muted"
                   }`}
                 >
-                  <span className="flex flex-col">
+                  <span className="flex items-center gap-1.5">
                     <span className="font-medium">{option.display_name}</span>
-                    {option.description && (
-                      <span className="mt-0.5 text-xs text-ink-subtle">
-                        {option.description}
+                    {!formatSupported && (
+                      <span
+                        className="text-xs font-normal text-brand-cyan"
+                        aria-hidden="true"
+                      >
+                        (changes format)
                       </span>
                     )}
                   </span>

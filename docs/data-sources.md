@@ -35,9 +35,27 @@ and how they're presented. Every source slug used by `rankings.source` or
 
 ## Current registry rows
 
-| Slug        | Display Name | Priority | data_type                   | supported_format_slugs                                                                                                  | Status   |
-| ----------- | ------------ | -------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------- |
-| `ktc`       | KTC          | 1        | `['rankings','player_value_history']` | `['dynasty-ppr-std','dynasty-ppr-sflex','dynasty-ppr-tep-sflex','redraft-ppr-std','redraft-ppr-sflex']`                | active |
+| Slug          | Display Name | Priority | data_type                             | supported_format_slugs                                                                                                  | Status |
+| ------------- | ------------ | -------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------ |
+| `fantasycalc` | FantasyCalc  | 2        | `['rankings','player_value_history']` | `['redraft-std-std','redraft-half-std','redraft-ppr-std','redraft-ppr-sflex','dynasty-ppr-std','dynasty-ppr-sflex']`    | active |
+| `ktc`         | KTC          | 3        | `['rankings','player_value_history']` | `['dynasty-ppr-std','dynasty-ppr-sflex','dynasty-ppr-tep-sflex','redraft-ppr-std','redraft-ppr-sflex']`                 | active |
+
+Priority `1` is reserved for `ffbeacon` (FF Beacon's own original ranking
+pipeline). The slot stays empty until we ship original logic; FantasyCalc and
+KTC currently occupy `2` and `3` so future native rankings can slot in at the
+top without renumbering.
+
+### Format coverage matrix
+
+|                        | redraft-std-std | redraft-half-std | redraft-ppr-std | redraft-ppr-sflex | redraft-ppr-tep | dynasty-ppr-std | dynasty-ppr-sflex | dynasty-ppr-tep-sflex |
+| ---------------------- | :-------------: | :--------------: | :-------------: | :---------------: | :-------------: | :-------------: | :---------------: | :-------------------: |
+| `fantasycalc`          | ✓               | ✓                | ✓               | ✓                 |                 | ✓               | ✓                 |                       |
+| `ktc`                  |                 |                  | ✓               | ✓                 |                 | ✓               | ✓                 | ✓ (derived)           |
+
+Coverage gaps are *intentional* — they reflect what each provider actually
+publishes distinct data for, not what they list on their website. Adding a
+checkmark requires the pairwise audit in
+[Adding a new source](#adding-a-new-source).
 
 ### KTC supported format reduction (migration 0011, 2026-05-17)
 
@@ -140,10 +158,18 @@ source actually publishes. It drives three behaviors:
    dropdown hides every format that isn't in X's `supported_format_slugs`.
    (`components/format-toggle.tsx` accepts a `supportedFormatSlugs` prop;
    `components/site-header.tsx` and `components/mobile-menu.tsx` pass it.)
-2. **Source dropdown filtering** — when format Y is the current selection,
-   the Source dropdown hides every source that doesn't list Y in its
-   `supported_format_slugs`. (`components/source-toggle.tsx` filters its
-   own `options` against `currentFormatSlug`.)
+2. **Source dropdown warning (not filtering)** — when format Y is the current
+   selection, the Source dropdown shows **every** active source but visually
+   flags any source that doesn't list Y in its `supported_format_slugs`:
+   a `(changes format)` note appears next to the name, the `aria-label`
+   expands to "Warning: selecting this will switch your format from
+   {Current} to {Fallback} because {Source} doesn't provide values for
+   {Current}.", and a tooltip (`role="tooltip"`, linked via
+   `aria-describedby`) appears inside the option with the fallback target.
+   The user can still pick the warned source; `selectSource()` then performs
+   the format swap and updates URL + cookie + DB. The point of the warning
+   is to surface the consequence **before** the click, not just after. See
+   `components/source-toggle.tsx`.
 3. **Graceful fall-through** — when a user changes source via the dropdown
    to one that doesn't support the current format, the toggle picks a
    fallback format using `pickFallbackFormat()` and persists the swap to
@@ -174,24 +200,103 @@ helper returns `null` and the page renders the standard empty state.
   body, no cookie/DB write. The banner text:
   `"Switched to <NewFormat> because <Source> doesn't provide values for <RequestedFormat>."`
 
+### FantasyCalc (migration 0016, 2026-05-17)
+
+FantasyCalc publishes trade values via a free public JSON API:
+
+```
+GET https://api.fantasycalc.com/values/current
+  ?isDynasty={true|false}
+  &numQbs={1|2}
+  &numTeams=12
+  &ppr={0|0.5|1}
+```
+
+No auth, no API key. The response is a JSON array of player objects of the
+form (abbreviated):
+
+```json
+{
+  "player": { "id": 9833, "name": "Bijan Robinson", "sleeperId": "9509",
+              "position": "RB", "maybeTeam": "ATL", ... },
+  "value": 10447,
+  "overallRank": 1, "positionRank": 1,
+  "trend30Day": -45,
+  "redraftValue": 10447, "combinedValue": 20894,
+  ...
+}
+```
+
+`scripts/sync-fantasycalc.ts` hits the six combinations FantasyCalc actually
+publishes distinct data for and writes `source='fantasycalc'` snapshots into
+`player_value_history`. Player mapping resolves in three layers:
+
+1. `players.external_ids.sleeper === FantasyCalc.player.sleeperId`
+2. `players.slug` ends in `-<sleeperId>` (recovery path — Sleeper sync embeds
+   the ID in the slug, and some rows are missing `external_ids.sleeper` from
+   ordering issues during earlier syncs)
+3. Normalized `name|position` match (last resort, mirrors `sync-ktc.ts`)
+
+First production run match rate: **100% (1594/1594 rows matched)** across all
+six formats. Most matches resolved via the slug-tail layer because
+`external_ids.sleeper` is not consistently populated for every row today.
+
+#### Why FantasyCalc has no TEP support
+
+FantasyCalc does NOT publish TEP variants. Our `supported_format_slugs`
+intentionally omits `dynasty-ppr-tep-sflex` and `redraft-ppr-tep`. If we
+later want FantasyCalc-derived TEP, we'd apply our own TEP algorithm in the
+sync pipeline (mirroring `lib/ktc-tep.ts` for KTC). That derivation is
+explicitly not implemented in migration 0016 — adding it would be a separate
+phase that ports a TEP formula or, more likely, builds an FF-Beacon-native
+TEP adjustment, in which case the rows would be tagged `source='ffbeacon'`,
+not `source='fantasycalc'`.
+
+#### Pairwise verification (FC vs KTC)
+
+For the four formats both sources cover, every FantasyCalc value differs
+from the corresponding KTC value — 0% identical across 1,112 shared
+player-format pairs, with average absolute differences ranging 1,240 to
+3,329 value points. FantasyCalc and KTC are genuinely independent signals,
+not skinned versions of the same dataset.
+
+#### Pairwise verification (within FantasyCalc)
+
+Per the "supported formats must yield distinct data" rule, all six declared
+FantasyCalc formats were also pairwise compared. Highest pair overlap is
+`redraft-std-std ↔ redraft-half-std` at 16.0% (low-value WRs/TEs where the
+PPR difference is negligible — expected and acceptable). All other pairs:
+0–1% identical. No collapsing variants. `MUST_DIFFER_PAIRS` in
+`scripts/sync-fantasycalc.ts` enforces this on every run; the sync aborts
+before writing if any declared-distinct pair collapses to 100% identical.
+
 Other reserved slugs that may appear later:
 
 - `ffbeacon` — FF Beacon's own original logic (editorial overlay, model blends,
   expert consensus). No rows use it yet.
 
-### Why `rankings` is currently tagged `ktc`
+### How `rankings.source` gets assigned
 
-`scripts/seed-rankings.ts` builds ranking rows by:
+`scripts/seed-rankings.ts` is **source-generic**. It walks every active row in
+`source_registry`, then for each of that source's `supported_format_slugs`:
 
-1. Pulling the latest `player_value_history` row per player (where `source='ktc'`).
-2. Sorting by value descending.
-3. Assigning `overall_rank`, `position_rank`, and a 6-tier bucket.
+1. Pulls the latest `player_value_history` row per player tagged with that
+   source for that format.
+2. Sorts by value descending.
+3. Assigns `overall_rank`, `position_rank`, and a 6-tier bucket.
+4. Upserts into `rankings` tagged with the same source slug.
 
-The order is a deterministic restatement of KTC's value ordering, so those
-rankings inherit their provenance from KTC and are tagged `source='ktc'`.
+Each ranking row's `source` matches the upstream value source — `'ktc'`,
+`'fantasycalc'`, etc. The order is a deterministic restatement of the
+provider's own value ordering, so the provenance is inherited unchanged.
+When FF Beacon ships a ranking pipeline that does anything *original*
+(editorial overlays, model blends), those rows will get
+`source='ffbeacon'`.
 
-When FF Beacon ships a ranking pipeline that does anything original, those
-rows will get `source='ffbeacon'`.
+The `rankings` table uses `UNIQUE NULLS NOT DISTINCT
+(player_id, format_config_id, source, week, season)` (migration 0015), so
+the upsert is idempotent — re-running the seed updates the snapshot in
+place instead of doubling the row count.
 
 ## Selecting a source at read time
 
@@ -400,8 +505,9 @@ the resolution helpers. The pages that do this today:
 - `app/players/[slug]/page.tsx` (cross-format ranking grid + the format-pinned
   trade-value pill)
 - `app/tools/faab/page.tsx`
-- `scripts/seed-rankings.ts` (reads `player_value_history` source `ktc`, writes
-  `rankings` source `ktc`)
+- `scripts/seed-rankings.ts` (source-generic — reads `player_value_history`
+  for every active `source_registry` row, writes `rankings` tagged with the
+  same source slug, e.g. `ktc` rows + `fantasycalc` rows in one pass)
 - `app/actions/preferences.ts` (validates a slug exists in the registry
   before persisting it to `user_preferences`)
 
@@ -468,12 +574,21 @@ Schema (see migration `0013_player_value_trends.sql`):
 ### Recalc cadence
 
 `player_value_trends` is recalculated after every value sync. The
-package.json wires it into `sync:ktc:full`:
+package.json wires it into two chains:
 
 ```
 npm run sync:ktc:full
 # = npm run sync:ktc && npm run seed:rankings && npm run calculate:trends
+
+npm run sync:full
+# = npm run sync:ktc && npm run sync:fantasycalc && npm run seed:rankings && npm run calculate:trends
 ```
+
+`sync:full` is the canonical nightly entrypoint. `sync:ktc:full` is kept as
+a single-source escape hatch for refreshing only KTC (e.g. when probing a
+KTC-specific bug). `seed:rankings` and `calculate:trends` are source-generic
+already, so the same chain accommodates every source listed in
+`source_registry` without further changes.
 
 Triggers (Postgres triggers, that is) are intentionally NOT used — the
 recalc is a deliberate scripted step so we can run it independently for
@@ -487,6 +602,105 @@ UI consumers gate display on `data_points_30d` (default threshold: 7).
 The `<TrendChip>` component and the rankings table's `TrendCell` both
 render `—` when the threshold isn't met, with an `aria-label` of
 "Insufficient history for 7-day trend".
+
+## Historical backfill
+
+Some sources expose enough public history that we can populate
+`player_value_history` with **real past snapshots** instead of waiting
+weeks or months for the daily sync to accumulate trend data. Backfill is
+a **one-time** operation per source — it is intentionally NOT in the
+nightly cron.
+
+### KTC dynasty + redraft (`scripts/backfill-ktc-history.ts`)
+
+`POST https://keeptradecut.com/dynasty-rankings/histories` and
+`POST https://keeptradecut.com/fantasy-rankings/histories` both return
+the same shape: an array of `{ playerID, oneQB, superflex }` objects
+where each format section carries four encoded-string arrays
+(`valueHistory`, `tepHistory`, `teppHistory`, `tepppHistory`). Each
+encoded string is `YYMMDDVVVV+` — 2-digit year, month, day, then the
+integer value. The DPC project's `lib/ktc-decode.ts` decoder is the
+canonical reference.
+
+The request body is `'"1"'` (a JSON-encoded `"1"`). We probed alternate
+bodies (`"0"`, `"7"`, `"30"`, `"365"`, `null`) — all return identical
+bytes, so the body is effectively a placeholder. No auth, no rate
+limiting observed. The endpoint returns the entire dataset in one
+response (~3 MB dynasty, ~1.8 MB redraft).
+
+Date range observed at first backfill (2026-05-17):
+
+| Endpoint                            | Players | Earliest      | Latest        | Snapshots (both formats) |
+| ----------------------------------- | ------- | ------------- | ------------- | ------------------------ |
+| `dynasty-rankings/histories`        | ~500    | 2025-11-18    | day-of-fetch  | ~168,000                 |
+| `fantasy-rankings/histories`        | ~378    | 2026-01-01    | day-of-fetch  | ~98,000                  |
+
+Format mapping (FF Beacon native slugs):
+
+| Endpoint                  | Section     | Beacon `format_configs.slug` |
+| ------------------------- | ----------- | ---------------------------- |
+| `dynasty-rankings`        | `oneQB`     | `dynasty-ppr-std`            |
+| `dynasty-rankings`        | `superflex` | `dynasty-ppr-sflex`          |
+| (derived)                 | n/a         | `dynasty-ppr-tep-sflex`      |
+| `fantasy-rankings`        | `oneQB`     | `redraft-ppr-std`            |
+| `fantasy-rankings`        | `superflex` | `redraft-ppr-sflex`          |
+
+`dynasty-ppr-tep-sflex` history is **derived from each historical
+dynasty-ppr-sflex daily snapshot** via `applyKtcTep()` in
+`lib/ktc-tep.ts`, identical to the live daily sync path. We do NOT
+read KTC's published `tepHistory` array because (a) it only contains a
+subset of dates and (b) the live sync derives algorithmically too, so
+the derivation must match across historical and current rows for trend
+continuity. Source stays `'ktc'` because the data origin is unchanged.
+
+KTC publishes no TEP arrays for redraft and we do not host a
+`redraft-ppr-tep-sflex` format, so no redraft TEP derivation runs.
+
+Player matching mirrors `sync-ktc.ts`: name + position lookup against
+`players`. The histories endpoint omits names, so we additionally fetch
+the public rankings pages to extract each `playerID`'s `playerName` +
+`position` from the embedded `playersArray`. Unmatched IDs are logged
+to `/tmp/backfill-ktc-unmatched.json` for manual review.
+
+Idempotency: the script writes via Supabase upsert with
+`onConflict: 'player_id,format_config_id,source,captured_at'` and
+`ignoreDuplicates: true`. Re-runs are no-ops. `captured_at` is set to
+UTC noon on the historical date so a given calendar day maps to a
+single canonical timestamp.
+
+### FantasyCalc historical — not publicly accessible
+
+FantasyCalc exposes `GET /values/current` only. We probed every
+plausible historical variant (path-based `/values/<date>`,
+`/values/historical`, `/values/historic`, `/charts`, `/trends/values`,
+`/values/snapshots`, plus query-string `?date=…`, `?asOfDate=…`,
+`?daysAgo=…`, `?dayOffset=…`, `?startDate=…`). All historical-shaped
+paths return 404. Interestingly the `?date=` *query key* is the only
+one that triggers a 404 instead of being ignored, which suggests
+FantasyCalc once had `?date=`-based historical access and disabled it
+behind the same route. Either way: no public access today.
+
+Consequence: FantasyCalc trend data accumulates from launch date
+(2026-05-17) forward. UI consumers already gate display on
+`player_value_trends.data_points_30d`, so the missing FC trends render
+as `—` until ~30 days of FC syncs have run. KTC trends, by contrast,
+render from the first post-backfill rankings page load.
+
+### Running the backfill
+
+```
+# KTC only:
+npm run backfill:ktc
+
+# KTC + trend recalculation (the canonical post-backfill chain):
+npm run backfill:all
+# = npm run backfill:ktc && npm run calculate:trends
+```
+
+No corresponding `backfill:fantasycalc` script ships, because there is
+nothing to fetch. If FantasyCalc later publishes a historical endpoint,
+add a script that follows the same idempotency + match-and-upsert
+pattern as `backfill-ktc-history.ts` and wire it into `backfill:all`.
 
 ### Read pattern
 

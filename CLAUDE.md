@@ -97,6 +97,17 @@ Apply these ARIA practices on every component:
 
 Before marking any component complete, dispatch a sub-agent to audit accessibility against WCAG 2.2 AA and these rules.
 
+## Mobile-First Layout Rule (Non-Negotiable)
+
+ABSOLUTE RULE: Mobile-first means designing FOR mobile and adapting UP to larger screens, never hiding data on mobile to simplify display. When a feature has more data than fits on mobile naturally, find creative compact layouts (stacked cells, combined values with separators, two-line rows) rather than hiding columns. Every piece of data accessible on desktop must be accessible on mobile.
+
+Apply this rule whenever a Tailwind responsive utility is reached for:
+
+- `hidden sm:table-cell` / `sm:flex` / `md:block` patterns are acceptable ONLY when the data they hide is ALSO surfaced elsewhere in the mobile layout (a stacked context line, a merged cell, an expandable row, an inline pill, etc.).
+- If you find yourself writing `hidden md:…` on a data column without a mobile equivalent, you are violating this rule. Restructure the row instead.
+- Tap targets in the compact mobile layout must remain at least 44×44 CSS px for any interactive element.
+- Sub-agent accessibility reviews must explicitly confirm "no data hidden at any breakpoint" on every UI change that touches responsive utilities.
+
 ## Sub-Agent Workflow
 
 After completing any atomic task on progress.md:
@@ -215,7 +226,12 @@ ABSOLUTE RULE: Sources declare their supported formats via `supported_format_slu
 
 ABSOLUTE RULE: When implementing a new data source, pairwise-compare 50+ players' values across all claimed formats. If values are byte-for-byte identical when they shouldn't be (e.g., PPR matches Half PPR for non-TE players), the source does not actually support those formats — reduce `supported_format_slugs` accordingly. KTC's `fantasy-rankings` `?scoring=half|std`/`?tep=1` params look like server variants but are client-side JS filters; we verified this the hard way (see migration 0011 and `scripts/sync-ktc.ts` header comment). The same audit shape works for any new source: pull a fresh dump for each claimed format, compute per-player value diffs, and reject any pair that hits 100% identical.
 
-ABSOLUTE RULE: Format gating in dropdowns is mandatory. The Format dropdown MUST filter by the current source's `supported_format_slugs`. The Source dropdown MUST filter by the current format. This prevents users from selecting combinations that have no real data. Pages MUST also reconcile via `reconcileFormatWithSource()` in `lib/source.ts` so URL-driven mismatches (shareable links with a stale `?format=…`) gracefully fall through to a supported format with a banner, without persisting the swap to cookie/DB.
+ABSOLUTE RULE: Format gating in dropdowns is asymmetric and deliberate.
+- The **Format** dropdown MUST filter out formats the current source doesn't support. Picking a format that has no data is never useful; hide those entries.
+- The **Source** dropdown MUST show every active source, but options that don't support the current format MUST render with a pre-click warning: a visible `(changes format)` note, an expanded `aria-label` ("Warning: selecting this will switch your format from {Current} to {Fallback} because {Source} doesn't provide values for {Current}."), and a `role="tooltip"` element wired up via `aria-describedby` that names the fallback format. The user can still pick the warned source; the existing fall-through then performs the format swap. We do not hide warned sources because users have a legitimate reason to pick them (they want that source even if it means a format change), and silent filtering hides the choice entirely.
+This prevents users from accidentally selecting combinations that have no real data while preserving the explicit "I want that source even if my format must change" path. Pages MUST also reconcile via `reconcileFormatWithSource()` in `lib/source.ts` so URL-driven mismatches (shareable links with a stale `?format=…`) gracefully fall through to a supported format with a banner, without persisting the swap to cookie/DB.
+
+ABSOLUTE RULE: When a source's UI option would cause a format mismatch on selection, the dropdown must warn the user in advance via visual indicator + aria-label + tooltip. Silent fall-through is acceptable only AFTER explicit user action (the post-click banner); the pre-click warning is mandatory. Sub-agent accessibility reviews must verify the warning renders for screen readers, not just visually.
 
 The fall-through preference chain (defined in `lib/format-fallback.ts`):
 1. Same `league_type` (redraft/dynasty)
@@ -302,6 +318,14 @@ Pre-calculated tables (`player_value_trends`, and any future siblings) are deriv
 Pre-calc tables do NOT need a `metadata` jsonb column since they are derived from internal data, not external sources. Their provenance is the script that produced them, recorded in the script's git history.
 
 When the underlying raw table changes (e.g. a value sync writes new rows to `player_value_history`), the corresponding pre-calc table must be recalculated. Chain the recalc into the relevant sync script (see `npm run sync:ktc:full`). Data scarcity is handled gracefully: when not enough history exists for a window (e.g. fewer than 7 days), the corresponding `*_ago` / `change_*` / `trend_*` fields are NULL. UI consumers gate display on `data_points_30d` (default threshold: 7).
+
+### Historical backfill on source integration
+
+When integrating a new data source, investigate historical API access during the same session. If historical data is available, write a backfill script and run it BEFORE the source goes live in nightly syncs. This avoids users seeing empty trend data after launch. If no historical access exists, document the limitation in `docs/data-sources.md` and accept that trends will accumulate from launch date forward.
+
+ABSOLUTE RULE: Backfill is a one-time operation. NEVER wire it into the nightly cron. Re-runs must be idempotent via the relevant unique constraint, but should not be scheduled — they would burn the public endpoint's resources for no new data.
+
+The backfill script for an existing source lives at `scripts/backfill-<source>-history.ts` and is invoked via `npm run backfill:<source>`. The canonical post-backfill chain (`npm run backfill:all`) runs every available backfill script and then `scripts/calculate-trends.ts` so the derived `player_value_trends` table reflects the freshly-imported snapshots.
 
 ### When These Rules Apply
 

@@ -129,7 +129,9 @@ export default async function RankingsPage({
     valueHistoryResolution.source
       ? supabase
           .from("player_value_trends")
-          .select("player_id, change_7d, change_7d_pct, trend_7d, data_points_30d")
+          .select(
+            "player_id, change_7d, change_7d_pct, trend_7d, rank_change_7d, rank_7d_ago, data_points_30d",
+          )
           .eq("format_config_id", format.id)
           .eq("source", valueHistoryResolution.source)
       : Promise.resolve({ data: [] as never }),
@@ -145,13 +147,22 @@ export default async function RankingsPage({
   }
   const trendByPlayer = new Map<
     string,
-    { change_7d: number | null; change_7d_pct: number | null; trend_7d: string | null; data_points_30d: number }
+    {
+      change_7d: number | null;
+      change_7d_pct: number | null;
+      trend_7d: string | null;
+      rank_change_7d: number | null;
+      rank_7d_ago: number | null;
+      data_points_30d: number;
+    }
   >();
   for (const t of trends ?? []) {
     trendByPlayer.set(t.player_id, {
       change_7d: t.change_7d,
       change_7d_pct: t.change_7d_pct,
       trend_7d: t.trend_7d,
+      rank_change_7d: t.rank_change_7d,
+      rank_7d_ago: t.rank_7d_ago,
       data_points_30d: t.data_points_30d,
     });
   }
@@ -183,6 +194,8 @@ export default async function RankingsPage({
       change_7d: trend?.change_7d ?? null,
       change_7d_pct: trend?.change_7d_pct ?? null,
       trend_7d: trend?.trend_7d ?? null,
+      rank_change_7d: trend?.rank_change_7d ?? null,
+      rank_7d_ago: trend?.rank_7d_ago ?? null,
       data_points_30d: trend?.data_points_30d ?? 0,
     };
   });

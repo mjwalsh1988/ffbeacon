@@ -5,12 +5,17 @@
  * computes current_value, 7/30/90-day-ago anchors (closest snapshot at or
  * before the target date), absolute and percent change, trend direction with
  * a small threshold, volatility (population stddev over 30d), 30d high/low,
- * and the count of data points within the trailing 30-day window. Upserts
- * into player_value_trends.
+ * and the count of data points within the trailing 30-day window. Also
+ * derives historical ordinal ranks: for each (format, source, calendar day)
+ * we sort that day's snapshots by value desc and assign 1..N, then look up
+ * each player's rank on the 7/30/90-day-ago anchor day. `rank_change_*` is
+ * `rank_Nd_ago - current_rank` so positive = moved UP the board (rank 10 ->
+ * rank 6 yields +4) which matches how a fantasy manager describes movement.
+ * Upserts into player_value_trends.
  *
  * Data scarcity is handled gracefully: when no snapshot exists at or before
- * a target window, the corresponding *_ago / change_* / trend_* fields are
- * left NULL. UI consumers gate display on data_points_30d.
+ * a target window, the corresponding *_ago / change_* / trend_* / rank_*
+ * fields are left NULL. UI consumers gate display on data_points_30d.
  *
  * Run: npm run calculate:trends
  * Chained: npm run sync:ktc:full (sync-ktc.ts then this script)
@@ -92,6 +97,32 @@ async function loadAllHistory(
   return rows;
 }
 
+// Group rows by their calendar day (UTC) so we can derive a per-day ranking.
+// Backfill captured_at is canonicalized to UTC noon, and the live sync writes
+// "now" once per cron run, so grouping by `captured_at.slice(0, 10)` collapses
+// each calendar day to a single snapshot per player.
+function dayKey(captured_at: string): string {
+  return captured_at.slice(0, 10);
+}
+
+// Pick the day whose snapshot we should treat as "Nd ago" for ranking. We
+// reuse the same staleness window the value path uses (no more than 1.5x the
+// requested window earlier) so rank and value answer about the same snapshot.
+function pickAnchorDay(
+  daysDesc: string[],
+  targetMs: number,
+  windowDays: number,
+): string | null {
+  const maxStaleMs = targetMs - windowDays * 0.5 * MS_PER_DAY;
+  for (const day of daysDesc) {
+    const ts = new Date(`${day}T12:00:00.000Z`).getTime();
+    if (ts > targetMs) continue;
+    if (ts < maxStaleMs) return null;
+    return day;
+  }
+  return null;
+}
+
 async function main() {
   const supabase = getServiceClient();
   console.log("Loading player_value_history...");
@@ -116,6 +147,46 @@ async function main() {
     );
   }
   console.log(`  ${groups.size} (player, format, source) combos`);
+
+  // Per (format, source, day) ranking. We bucket every snapshot under its
+  // calendar day, then sort each bucket by value desc and assign 1..N as the
+  // overall rank for that day. Lookups during the trend loop are O(1) via
+  // a player_id -> rank map.
+  //
+  // Why per-day not per-snapshot: backfill rows land at UTC noon for a given
+  // calendar date, and the daily sync writes once per run, so calendar day
+  // is the natural granularity for "what was the rank that day". A duplicate
+  // snapshot for the same (player, format, source, day) wouldn't change the
+  // rank — we keep the first row we see per (player, day) which is fine
+  // because all rows on the same day have the same value in our data.
+  type DayRanking = Map<string, number>; // player_id -> rank
+  const ranksByFormatSourceDay = new Map<string, DayRanking>();
+  {
+    type DayBucketEntry = { player_id: string; value: number };
+    const buckets = new Map<string, DayBucketEntry[]>();
+    const seenInDay = new Set<string>(); // dedupe (format_source_day, player_id)
+    for (const row of allRows) {
+      const day = dayKey(row.captured_at);
+      const fsd = `${row.format_config_id}|${row.source}|${day}`;
+      const dedupeKey = `${fsd}|${row.player_id}`;
+      if (seenInDay.has(dedupeKey)) continue;
+      seenInDay.add(dedupeKey);
+      let bucket = buckets.get(fsd);
+      if (!bucket) {
+        bucket = [];
+        buckets.set(fsd, bucket);
+      }
+      bucket.push({ player_id: row.player_id, value: row.value });
+    }
+    for (const [fsd, bucket] of buckets) {
+      bucket.sort((a, b) => b.value - a.value);
+      const ranking: DayRanking = new Map();
+      for (let i = 0; i < bucket.length; i += 1) {
+        ranking.set(bucket[i].player_id, i + 1);
+      }
+      ranksByFormatSourceDay.set(fsd, ranking);
+    }
+  }
 
   const nowMs = Date.now();
   const t7 = nowMs - 7 * MS_PER_DAY;
@@ -142,6 +213,12 @@ async function main() {
     high_30d: number | null;
     low_30d: number | null;
     data_points_30d: number;
+    rank_7d_ago: number | null;
+    rank_30d_ago: number | null;
+    rank_90d_ago: number | null;
+    rank_change_7d: number | null;
+    rank_change_30d: number | null;
+    rank_change_90d: number | null;
     updated_at: string;
   };
 
@@ -174,6 +251,35 @@ async function main() {
     const low_30d = last30dValues.length > 0 ? Math.min(...last30dValues) : null;
     const volatility_30d = populationStddev(last30dValues);
 
+    // Per-player calendar-day list (newest first). Used to pick the anchor
+    // day for each backward window; rank lookup then goes against the
+    // per-day ranking map computed above.
+    const daysDesc = Array.from(new Set(rowsDesc.map((r) => dayKey(r.captured_at))));
+    const currentDay = daysDesc[0];
+    const currentRanking = ranksByFormatSourceDay.get(
+      `${format_config_id}|${source}|${currentDay}`,
+    );
+    const currentRank = currentRanking?.get(player_id) ?? null;
+
+    const lookupRankAt = (
+      windowMs: number,
+      windowDays: number,
+    ): { rankAgo: number | null; rankChange: number | null } => {
+      const day = pickAnchorDay(daysDesc, windowMs, windowDays);
+      if (!day) return { rankAgo: null, rankChange: null };
+      const ranking = ranksByFormatSourceDay.get(`${format_config_id}|${source}|${day}`);
+      const rankAgo = ranking?.get(player_id) ?? null;
+      if (rankAgo === null || currentRank === null) {
+        return { rankAgo, rankChange: null };
+      }
+      // Positive = moved UP. Going from rank 10 to rank 6 -> 10 - 6 = +4.
+      return { rankAgo, rankChange: rankAgo - currentRank };
+    };
+
+    const r7 = lookupRankAt(t7, 7);
+    const r30 = lookupRankAt(t30, 30);
+    const r90 = lookupRankAt(t90, 90);
+
     outputs.push({
       player_id,
       format_config_id,
@@ -194,6 +300,12 @@ async function main() {
       high_30d,
       low_30d,
       data_points_30d,
+      rank_7d_ago: r7.rankAgo,
+      rank_30d_ago: r30.rankAgo,
+      rank_90d_ago: r90.rankAgo,
+      rank_change_7d: r7.rankChange,
+      rank_change_30d: r30.rankChange,
+      rank_change_90d: r90.rankChange,
       updated_at: updatedAt,
     });
   }

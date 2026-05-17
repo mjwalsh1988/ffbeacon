@@ -377,6 +377,12 @@ export type Database = {
           id: string
           low_30d: number | null
           player_id: string
+          rank_30d_ago: number | null
+          rank_7d_ago: number | null
+          rank_90d_ago: number | null
+          rank_change_30d: number | null
+          rank_change_7d: number | null
+          rank_change_90d: number | null
           source: string
           trend_30d: string | null
           trend_7d: string | null
@@ -400,6 +406,12 @@ export type Database = {
           id?: string
           low_30d?: number | null
           player_id: string
+          rank_30d_ago?: number | null
+          rank_7d_ago?: number | null
+          rank_90d_ago?: number | null
+          rank_change_30d?: number | null
+          rank_change_7d?: number | null
+          rank_change_90d?: number | null
           source: string
           trend_30d?: string | null
           trend_7d?: string | null
@@ -423,6 +435,12 @@ export type Database = {
           id?: string
           low_30d?: number | null
           player_id?: string
+          rank_30d_ago?: number | null
+          rank_7d_ago?: number | null
+          rank_90d_ago?: number | null
+          rank_change_30d?: number | null
+          rank_change_7d?: number | null
+          rank_change_90d?: number | null
           source?: string
           trend_30d?: string | null
           trend_7d?: string | null
