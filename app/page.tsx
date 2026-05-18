@@ -149,7 +149,7 @@ function Hero() {
           <HeroStat value="8" label="Active league formats" />
           <HeroStat value="Multi" label="Source-agnostic data" />
           <HeroStat value="AAA" label="WCAG contrast target" />
-          <HeroStat value="Free" label="No paywall, ever" />
+          <HeroStat value="Free" label="No paywall" />
         </ul>
       </div>
     </header>
