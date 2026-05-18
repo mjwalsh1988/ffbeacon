@@ -12,7 +12,6 @@ export const SITE = {
 export const PRIMARY_NAV = [
   { label: "Tools", href: "/tools" as const },
   { label: "Rankings", href: "/rankings" as const },
-  { label: "Players", href: "/players" as const },
   { label: "Guides", href: "/guides" as const },
   { label: "About", href: "/about" as const },
 ];
