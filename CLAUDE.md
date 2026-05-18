@@ -378,4 +378,35 @@ Sleeper API access:
 
 Admin:
 - `user_preferences.is_admin` is the admin flag (migration 0018). A trigger blocks self-promotion; flipping the bit requires service_role.
-- Admin-only actions (e.g. force-resync) live behind both an `is_admin` check AND a 60-second per-league rate limit (planned for Phase 4).
+- Admin-only actions (force-resync) live behind both an auth gate AND a 60-second per-league rate limit. The endpoint at `app/api/leagues/[league_id]/resync/route.ts` re-validates auth independently of the client — never trust the `ResyncButton` `isAuthorized` prop as a security boundary.
+- Authorization is "admin OR commissioner of this league". Commissioner detection matches `user_preferences.sleeper_username` against `league_users.display_name` where `is_commissioner=true`. See `lib/league-auth.ts → getLeagueAdminContext()`.
+- Rate limit ledger lives in `league_resync_attempts` (migration 0025), service-role-only. The endpoint writes the timestamp BEFORE running the sync so concurrent requests fail with 429 instead of all hitting Sleeper.
+
+## League Sync Format Resolution
+
+ABSOLUTE RULE: Inside league views (`/leagues/[id]` and all descendants, plus `/api/og/*` routes that render values from those views), the format used for value calculations is derived from the league's actual Sleeper scoring settings, NOT the user's global format toggle. Source remains user-controlled. Pick values always fall back to KTC. The global header format toggle has no effect inside a league view. This will change when FF Beacon native rankings with custom scoring exist (see plan.md "Future: User Custom Scoring Formats").
+
+The single source of truth is `lib/league-format-resolution.ts → resolveLeagueContext()`. Every page under `/leagues/[id]/**` and every `/api/og/*` route that needs values MUST call this resolver. Do not re-derive format from `?format=` URL params, cookies, or `user_preferences.default_format_config_id` inside a league view; those signals are ignored by contract.
+
+The resolver returns a `LeagueContext` carrying:
+- `formatSlug` / `formatDisplay` / `formatConfigId` — what to query against
+- `sourceSlug` / `sourceDisplay` — the user's chosen source (or first-priority active source)
+- `coverage` — `'exact'` | `'fallback'` | `'none'`
+- `fallback` — when coverage is `'fallback'`, carries the original derived format the source can't cover (drives the explanatory banner)
+- `derived` — the structural format derived from Sleeper (used for `describeDerived()` plain-language descriptions)
+- `pickSource` — null when the player-value source covers picks; otherwise the (slug, display) of the source we'll use for picks. Today this is always KTC when set. UI surfaces a "Draft pick values powered by KTC" footnote when non-null.
+
+ABSOLUTE RULE: Shareable images and social card metadata must never reference DPC or use DPC visual branding. All OG content uses FF Beacon brand: dark background (#07070D / #0F0F1A), purple→cyan beacon gradient, Geist font stack, "FF Beacon" wordmark, "ffbeacon.com" footer. Gold accents (DPC's signature) and `#0c0c18` (DPC's bg) are explicitly forbidden in OG output. Sub-agent reviews of OG routes must verify the brand check.
+
+OG image routes:
+- `/api/og/league/[league_id]` — league overview card (name, season, team count, top 3 by power ranking)
+- `/api/og/team/[league_id]/[roster_id]` — team summary (record, total/starter/bench/picks values, top 5 players)
+- `/api/og/trade/[transaction_id]` — trade analysis (both sides with values + differential + verdict)
+
+All three use `next/og` `ImageResponse` at `runtime = 'nodejs'`, 1200x630, cached via `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`. Values rendered inside the OG image use the league's contextual format per the rule above; pass `?source=` to override the source slug for shareable variants.
+
+Transactions:
+- Feed page: `/leagues/[sleeper_league_id]/transactions` — paginated, filterable by type / team / week / season.
+- Tab on `/leagues/[sleeper_league_id]` shows the most recent 10 with a "View all transactions →" link.
+- Shared row component: `components/transaction-row.tsx`. Trades render the side-by-side analyzer with per-side totals and a verdict. Non-trades render adds / drops / picks / FAAB lists.
+- Trade analyzer lib: `lib/trade-analyzer.ts → analyzeTrade()`. Reads player values from `player_value_trends`; reads pick values from `draft_pick_values` keyed by the resolved pick source (always KTC today).

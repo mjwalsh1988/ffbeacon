@@ -288,6 +288,35 @@ export type Database = {
           },
         ]
       }
+      league_resync_attempts: {
+        Row: {
+          last_attempt_at: string
+          league_id: string
+          triggered_by_user_id: string | null
+          triggered_via: string | null
+        }
+        Insert: {
+          last_attempt_at?: string
+          league_id: string
+          triggered_by_user_id?: string | null
+          triggered_via?: string | null
+        }
+        Update: {
+          last_attempt_at?: string
+          league_id?: string
+          triggered_by_user_id?: string | null
+          triggered_via?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_resync_attempts_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: true
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       league_transactions: {
         Row: {
           adds: Json

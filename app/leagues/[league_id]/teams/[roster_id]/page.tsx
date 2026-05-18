@@ -1,20 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSourceSlug } from "@/lib/preferences";
 import {
-  getActiveFormats,
-  getAvailableSources,
-  reconcileFormatWithSource,
-} from "@/lib/source";
+  resolveLeagueContext,
+  describeDerived,
+} from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
+import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamCard } from "@/components/team-card";
+import { CopyLinkButton } from "@/components/copy-link-button";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ league_id: string; roster_id: string }>;
-type Search = Promise<{ format?: string; source?: string }>;
+type Search = Promise<{ source?: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { league_id, roster_id } = await params;
@@ -41,9 +42,23 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
         .maybeSingle()
     : { data: null };
   const teamName = user?.team_name || user?.display_name || `Team ${roster_id}`;
+  const title = `${teamName} — ${league.name}`;
+  const description = `Roster, draft picks, and value breakdown for ${teamName} in ${league.name}.`;
+  const ogPath = `/api/og/team/${league_id}/${roster_id}`;
   return {
-    title: `${teamName} — ${league.name}`,
-    description: `Roster, draft picks, and value breakdown for ${teamName} in ${league.name}.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: [{ url: ogPath, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogPath],
+    },
   };
 }
 
@@ -55,50 +70,43 @@ export default async function TeamDetailPage({
   searchParams: Search;
 }) {
   const { league_id: sleeperLeagueId, roster_id } = await params;
-  const { format: formatParam, source: sourceParam } = await searchParams;
+  const { source: sourceParam } = await searchParams;
   const sleeperRosterId = Number(roster_id);
   if (!Number.isFinite(sleeperRosterId)) notFound();
 
   const supabase = await createClient();
+  const adminClient = createAdminClient();
 
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, season, status")
+    .select("id, name, season, status, metadata")
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
   if (!league) notFound();
 
-  // Resolve preferences (URL → DB → cookie → default) and reconcile against
-  // the source's supported formats so we never query a (source, format)
-  // combo that has no data.
-  const [resolvedFormat, resolvedSource, registry, allFormats] = await Promise.all([
-    resolveFormatSlug(supabase, formatParam),
-    resolveSourceSlug(supabase, sourceParam),
-    getAvailableSources(supabase),
-    getActiveFormats(supabase),
-  ]);
-  const reconciled = reconcileFormatWithSource(
-    registry,
-    allFormats,
+  // Source respects the user's selection; format is derived from the
+  // league's actual Sleeper settings, NOT the user's global format toggle.
+  // See CLAUDE.md → League Sync Format Resolution.
+  const resolvedSource = await resolveSourceSlug(supabase, sourceParam);
+  const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
+  const context = await resolveLeagueContext(
+    adminClient,
+    sleeperLeague,
     resolvedSource.slug,
-    resolvedFormat.slug,
   );
-  const formatSlug = reconciled.formatSlug;
-  const sourceSlug = resolvedSource.slug;
 
-  const { data: formatRow } = await supabase
-    .from("format_configs")
-    .select("id, display_name")
-    .eq("slug", formatSlug)
-    .maybeSingle();
+  const formatConfigId =
+    context.coverage === "none" ? null : context.formatConfigId;
+  const effectiveSourceSlug =
+    context.coverage === "none" ? null : context.sourceSlug;
 
   // Single shared loader: the league inline view uses this for N teams,
   // we use it for one team. Same code path → identical visuals.
   const allTeams = await loadLeagueTeamCards(
     supabase,
     league.id,
-    formatRow?.id ?? null,
-    sourceSlug,
+    formatConfigId,
+    effectiveSourceSlug,
     league.season != null ? String(league.season) : null,
     league.status ?? null,
   );
@@ -106,8 +114,9 @@ export default async function TeamDetailPage({
   if (!team) notFound();
 
   const sourceDisplay =
-    registry.find((r) => r.slug === sourceSlug)?.display_name ?? sourceSlug ?? "—";
-  const formatDisplay = formatRow?.display_name ?? formatSlug;
+    context.coverage === "none" ? "—" : context.sourceDisplay;
+  const formatDisplay =
+    context.coverage === "none" ? "—" : context.formatDisplay;
 
   return (
     <main id="main">
@@ -139,18 +148,42 @@ export default async function TeamDetailPage({
               </li>
             </ol>
           </nav>
-          <p className="text-xs uppercase tracking-wider text-brand-cyan">
-            Team detail • {formatDisplay} • {sourceDisplay}
-          </p>
-          {reconciled.fallback && (
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <p className="text-xs uppercase tracking-wider text-brand-cyan">
+              Team detail • {formatDisplay} • {sourceDisplay}
+            </p>
+            <CopyLinkButton
+              href={`/leagues/${sleeperLeagueId}/teams/${roster_id}`}
+              ariaLabel="Copy link to this team"
+              size="sm"
+            />
+          </div>
+          {context.coverage === "fallback" && context.fallback && (
             <p
               role="status"
               className="mt-3 rounded-card border border-brand-cyan/30 bg-brand-cyan/5 p-3 text-xs text-ink-muted"
             >
-              Showing {reconciled.fallback.toName} because {reconciled.fallback.sourceName}{" "}
-              does not publish values for {reconciled.fallback.fromName}.
+              Showing values for {context.formatDisplay} because{" "}
+              {context.sourceDisplay} doesn't publish data for{" "}
+              {context.fallback.derivedDisplay}.
             </p>
           )}
+          {context.coverage === "none" && (
+            <p
+              role="status"
+              className="mt-3 rounded-card border border-signal-warning/40 bg-signal-warning/10 p-3 text-xs text-signal-warning"
+            >
+              No data source covers {describeDerived(context.derived)} yet. Values are
+              unavailable for this team.
+            </p>
+          )}
+          {context.coverage !== "none" &&
+            context.pickSource &&
+            context.pickSource.slug !== context.sourceSlug && (
+              <p role="note" className="mt-2 text-xs text-ink-subtle">
+                Draft pick values powered by {context.pickSource.display}.
+              </p>
+            )}
         </div>
       </header>
 

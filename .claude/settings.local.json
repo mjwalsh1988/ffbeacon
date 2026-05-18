@@ -111,7 +111,9 @@
       "PowerShell(cd \"C:\\\\Users\\\\mjwal\\\\OneDrive\\\\Desktop\\\\ffbeacon\"; Get-ChildItem -Path \"app\" -Directory | ForEach-Object { Write-Host \"/$\\($_.Name\\)\" }ing me approve shit)",
       "Bash(node *)",
       "PowerShell(Get-Item *)",
-      "Bash(powershell -NoProfile -Command \"\\(Get-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\\) -replace 'mx-auto max-w-6xl', 'mx-auto max-w-7xl' | Set-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\")"
+      "Bash(powershell -NoProfile -Command \"\\(Get-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\\) -replace 'mx-auto max-w-6xl', 'mx-auto max-w-7xl' | Set-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\")",
+      "PowerShell(if \\(Test-Path \"C:\\\\Users\\\\mjwal\\\\OneDrive\\\\Desktop\\\\ffbeacon\\\\handoff.md\"\\) { \"exists: $\\(\\(\\(Get-Item handoff.md\\).Length\\)\\) bytes\" } else { \"missing\" })",
+      "Bash(echo \"exit: $?\")"
     ]
   },
   "enabledMcpjsonServers": [

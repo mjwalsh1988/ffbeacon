@@ -141,9 +141,140 @@ T054 | completed | Impl review (general-purpose subagent) — 2 blockers + 3
 - `npx tsc --noEmit`: clean
 - `npx next build`: green, 15 dynamic routes (player [slug] now dynamic)
 
+## Phase 12 - League Sync Phase 3 (transactions, trade analyzer, admin resync, OG images)
+T055 | completed | lib/league-format-resolution.ts - league-contextual format resolver
+     | files: lib/league-format-resolution.ts
+     | verified: build+typecheck clean. Resolves (format, source) per-league using
+       Sleeper-derived rules; falls through via lib/format-fallback when source
+       doesn't carry the ideal format; pickSource always KTC for picks.
+T056 | completed | lib/trade-analyzer.ts - per-side value math + verdict
+     | files: lib/trade-analyzer.ts
+     | verified: build+typecheck clean. Player values from player_value_trends;
+       pick values from draft_pick_values keyed by pickSourceSlug (KTC).
+       Verdict thresholds: even <=5%, slight <=15%, won >15%. hasMissingValues
+       flag drives a "Some values missing" warning.
+T057 | completed | components/transaction-row.tsx - shared trade/move row
+     | files: components/transaction-row.tsx
+     | verified: build+typecheck clean. Side-by-side trade analyzer cards with
+       per-asset value chips and winner highlight. Mobile-first stack via
+       grid sm:grid-cols-2.
+T058 | completed | lib/league-transactions-data.ts - server-side row prep
+     | files: lib/league-transactions-data.ts
+     | verified: build+typecheck clean. Pagination via .range() + count:exact,
+       multi filter on type / roster_ids / week / season. Defense-in-depth:
+       sleeperId regex filter before PostgREST .or() string interpolation.
+T059 | completed | components/transaction-filters.tsx - client-side filter bar
+     | files: components/transaction-filters.tsx
+     | verified: build+typecheck clean. Multi-select chips for type + team,
+       selects for week + season. router.replace on change; aria-busy on
+       pending transition; has-[:focus-visible] outline on .sr-only checkbox
+       chips for keyboard a11y; team list region has aria-label.
+T060 | completed | /leagues/[league_id]/transactions feed page
+     | files: app/leagues/[league_id]/transactions/page.tsx
+     | verified: build green (2.68 kB route). Filters + paginated rows with
+       prev/next + OG metadata wired to /api/og/league.
+T061 | completed | Replace ComingSoonPanel on /leagues/[league_id] tab
+     | files: app/leagues/[league_id]/page.tsx (TransactionsPanel)
+     | verified: build green. Recent 10 transactions + "View all" link.
+T062 | completed | League header now displays detected format + format-mismatch
+     banner + KTC-picks footnote + no-coverage empty state
+     | files: app/leagues/[league_id]/page.tsx
+     | verified: page rewritten to use resolveLeagueContext; old
+       reconcileFormatWithSource path retired inside league views.
+T063 | completed | Admin force-resync endpoint + button + rate limit
+     | files: app/api/leagues/[league_id]/resync/route.ts, components/resync-button.tsx,
+       lib/league-auth.ts, supabase/migrations/0025_league_resync_attempts.sql,
+       supabase/migrations/0026_try_claim_league_resync.sql
+     | verified: build green. Auth re-validated server-side (admin OR
+       commissioner). Rate limit is atomic via SECURITY DEFINER function
+       try_claim_league_resync(); concurrent admins get 429 deterministically.
+       CSRF: requires x-requested-with: ff-beacon header on POST.
+       Error messages sanitized — raw DB errors logged server-side only.
+T064 | completed | components/copy-link-button.tsx - shareable URL clipboard button
+     | files: components/copy-link-button.tsx
+     | verified: build green. Wired into /leagues/[id], /leagues/[id]/teams/[roster_id],
+       and individual trade rows. aria-live announces "Link copied to clipboard";
+       clipboard-permission failure shows a fallback "Press Ctrl+C" hint with
+       a hidden focused input.
+T065 | completed | /api/og/league/[league_id] - league OG image (1200x630)
+     | files: app/api/og/league/[league_id]/route.tsx
+     | verified: build green. FF Beacon brand only (purple→cyan gradient, no
+       gold/violet). Uses resolveLeagueContext for the cache lookup so format
+       matches the rest of the site.
+T066 | completed | /api/og/team/[league_id]/[roster_id] - team OG image
+     | files: app/api/og/team/[league_id]/[roster_id]/route.tsx
+     | verified: build green. Shows record, total/starter/bench/picks values,
+       top 5 players by value. Brand-compliant.
+T067 | completed | /api/og/trade/[transaction_id] - trade OG image
+     | files: app/api/og/trade/[transaction_id]/route.tsx
+     | verified: build green. Both-sides side-by-side with verdict +
+       differential + pick-source footnote. Brand-compliant.
+T068 | completed | Wire OG metadata into league + team + transactions pages
+     | files: app/leagues/[league_id]/page.tsx (generateMetadata),
+       app/leagues/[league_id]/teams/[roster_id]/page.tsx (generateMetadata),
+       app/leagues/[league_id]/transactions/page.tsx (generateMetadata)
+     | verified: build green. openGraph + twitter card meta with 1200x630 images.
+T069 | completed | Team detail page uses league-contextual format + adds CopyLinkButton
+     | files: app/leagues/[league_id]/teams/[roster_id]/page.tsx
+     | verified: build green. Drops the old resolveFormatSlug+reconcile path
+       in favor of resolveLeagueContext.
+T070 | completed | Migration 0025 - league_resync_attempts ledger
+     | files: supabase/migrations/0025_league_resync_attempts.sql
+     | verified: applied via MCP. RLS enabled, service-role-only access.
+T071 | completed | Migration 0026 - try_claim_league_resync atomic function
+     | files: supabase/migrations/0026_try_claim_league_resync.sql
+     | verified: applied via MCP. SECURITY DEFINER; EXECUTE granted to
+       authenticated + service_role. Atomic insert/update that returns true
+       only when caller wins the rate-limit window.
+T072 | completed | docs/league-format-resolution.md + CLAUDE.md sections
+     | files: docs/league-format-resolution.md, CLAUDE.md (League Sync Format
+       Resolution + admin auth model + OG brand rule + transactions section)
+     | verified: present and human-readable.
+T073 | completed | Sub-agent review pass (implementation + a11y + security)
+     | findings + fixes:
+       - is_commissioner no longer flagged from Sleeper is_owner (false positives
+         would have granted force-resync to every co-owner) — defaults to false
+         until verified commissioner signal is implemented
+       - Resync TOCTOU race fixed via atomic Postgres function (migration 0026)
+       - CSRF defense: x-requested-with header check on resync POST
+       - Sanitized error messages from resync API (no raw DB error leakage)
+       - SQL injection defense-in-depth: regex-validate sleeperIds before
+         .or() interpolation in trade-analyzer + transactions-data
+       - A11y: focus-visible outline on .sr-only filter chips via has-[:focus-visible]
+       - A11y: team filter region wrapped with role+aria-label+tabIndex so
+         the scrollable list is announced
+       - A11y: removed redundant aria-live from static blocks (TransactionRow
+         verdict, league header last-synced) that were re-announcing on every
+         render
+       - A11y: noValue chips now announce "value not available" instead of
+         a misleading numeric value
+       - Min-h-11 on filter chips to meet 44px tap target
+       - Removed redundant date in article aria-label (date is announced once
+         via the <time> child)
+       - Dropped duplicate aria-label on <select>s that already have a <legend>
+     | known deferred (not blocking ship):
+       - OG routes run on runtime=nodejs (works with createAdminClient).
+         Phase 3 prompt suggested edge runtime; nodejs is the safer choice
+         because of supabase client dependencies and gives us full RLS context.
+       - Resync surfaces inline aria-live announcements + role=alert error
+         instead of a CSS toast — better for screen readers than a transient
+         popup but documented divergence from the spec wording.
+       - Geist via woff2 fetch in OG images deferred — currently falls back
+         to `sans-serif`. Will add once we have a proven low-latency CDN
+         source for the woff2 file.
+
+## Build status (after Phase 12)
+- `npx tsc --noEmit`: clean
+- `npx next build`: green, 22 dynamic routes
+- New routes: /leagues/[league_id]/transactions, /api/leagues/[league_id]/resync,
+  /api/og/league/[league_id], /api/og/team/[league_id]/[roster_id],
+  /api/og/trade/[transaction_id]
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
 - Weekly content cron (waivers, start-sit, sleepers)
 - IndexNow + sitemap generation
 - AdSense readiness sweep
+- Phase 12 follow-ups: real commissioner detection, edge runtime for OG,
+  Geist woff2 fetch in OG cards, toast-style resync feedback

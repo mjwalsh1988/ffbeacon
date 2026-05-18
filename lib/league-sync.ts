@@ -261,6 +261,13 @@ async function upsertLeagueUsers(
   if (users.length === 0) return;
   const rows = users.map((u) => {
     const meta = (u.metadata ?? {}) as Record<string, unknown>;
+    // Sleeper's `is_owner` on the /users response means "active league
+    // member" (not a placeholder), which can include every co-owner of a
+    // roster. It is NOT a reliable commissioner signal — overloading it as
+    // such would grant force-resync to every co-owner. Until we have a
+    // verified commissioner signal (league.metadata.commissioner_id, or
+    // a service-role flip), default is_commissioner to false. Admins (via
+    // user_preferences.is_admin) can still force resync.
     return {
       league_id: leagueRowId,
       sleeper_user_id: u.user_id,
@@ -268,7 +275,7 @@ async function upsertLeagueUsers(
       avatar: u.avatar ?? null,
       team_name: typeof meta.team_name === "string" ? (meta.team_name as string) : null,
       is_owner: Boolean(u.is_owner),
-      is_commissioner: Boolean(u.is_owner),
+      is_commissioner: false,
       metadata: u as unknown as Database["public"]["Tables"]["league_users"]["Insert"]["metadata"],
       updated_at: new Date().toISOString(),
     };
