@@ -18,6 +18,13 @@ import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { TransactionRow } from "@/components/transaction-row";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { ResyncButton } from "@/components/resync-button";
+import {
+  CalendarDays,
+  Users,
+  Trophy,
+  Activity,
+  type LucideIcon,
+} from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -159,23 +166,29 @@ export default async function LeagueDeepViewPage({
             </div>
           </div>
 
-          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-            <div>
-              <dt className="text-ink-subtle">Season</dt>
-              <dd className="font-mono text-ink">{league.season}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-subtle">Teams</dt>
-              <dd className="font-mono text-ink">{league.total_rosters ?? "?"}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-subtle">League format</dt>
-              <dd className="text-ink">{describeDerived(context.derived)}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-subtle">Status</dt>
-              <dd className="capitalize text-ink">{league.status ?? "unknown"}</dd>
-            </div>
+          <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <InfoChip
+              icon={CalendarDays}
+              label="Season"
+              value={<span className="font-mono">{league.season}</span>}
+            />
+            <InfoChip
+              icon={Users}
+              label="Teams"
+              value={
+                <span className="font-mono">{league.total_rosters ?? "?"}</span>
+              }
+            />
+            <InfoChip
+              icon={Trophy}
+              label="League format"
+              value={describeDerived(context.derived)}
+            />
+            <InfoChip
+              icon={Activity}
+              label="Status"
+              value={<StatusPill status={league.status ?? null} />}
+            />
           </dl>
 
           <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
@@ -693,6 +706,100 @@ function Stat({ label, value }: { label: string; value: number }) {
       <p className="text-xs uppercase tracking-wider text-ink-subtle">{label}</p>
       <p className="mt-2 font-mono text-3xl font-semibold text-ink">{value}</p>
     </li>
+  );
+}
+
+function InfoChip({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-card border border-line bg-surface/60 px-4 py-3">
+      <span
+        aria-hidden="true"
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-line bg-base/60 text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
+          {label}
+        </p>
+        <div className="mt-0.5 truncate text-sm font-medium text-ink">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Title-case a Sleeper status slug ("pre_draft" → "Pre Draft"). */
+function humanizeStatus(raw: string | null | undefined): string {
+  if (!raw) return "Unknown";
+  return raw
+    .replace(/_/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function StatusPill({ status }: { status: string | null }) {
+  const label = humanizeStatus(status);
+  const key = (status ?? "").toLowerCase();
+  // Map Sleeper status → semantic accent. Pre-draft = brand cyan (build-up
+  // energy), drafting = warning amber (active event), in-season = brand
+  // purple (live), complete = muted slate, anything else = neutral subtle.
+  const palette: { dot: string; chip: string; text: string } =
+    key === "pre_draft"
+      ? {
+          dot: "#22D3EE",
+          chip: "rgba(34, 211, 238, 0.10)",
+          text: "#22D3EE",
+        }
+      : key === "drafting"
+        ? {
+            dot: "#F59E0B",
+            chip: "rgba(245, 158, 11, 0.10)",
+            text: "#F59E0B",
+          }
+        : key === "in_season"
+          ? {
+              dot: "#A855F7",
+              chip: "rgba(168, 85, 247, 0.10)",
+              text: "#A855F7",
+            }
+          : key === "complete"
+            ? {
+                dot: "#10B981",
+                chip: "rgba(16, 185, 129, 0.10)",
+                text: "#10B981",
+              }
+            : {
+                dot: "#6B6B7D",
+                chip: "rgba(107, 107, 125, 0.10)",
+                text: "#A8A8B8",
+              };
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold"
+      style={{
+        backgroundColor: palette.chip,
+        borderColor: `${palette.dot}55`,
+        color: palette.text,
+      }}
+      aria-label={`Status: ${label}`}
+    >
+      <span
+        aria-hidden="true"
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: palette.dot, boxShadow: `0 0 6px ${palette.dot}` }}
+      />
+      {label}
+    </span>
   );
 }
 
