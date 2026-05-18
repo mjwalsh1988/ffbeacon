@@ -1,10 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getAllSleeperTransactions,
+  getSleeperDraft,
   getSleeperLeague,
+  getSleeperLeagueDrafts,
   getSleeperLeagueUsers,
   getSleeperRosters,
   getSleeperTradedPicks,
+  type SleeperDraft,
   type SleeperLeague,
   type SleeperRoster,
   type SleeperLeagueUser,
@@ -149,17 +152,33 @@ export async function syncLeague(
   const leagueRowId = upserted.id;
 
   // Fetch children in parallel — independent endpoints
-  const [rosters, users, transactions, tradedPicks] = await Promise.all([
+  const [rosters, users, transactions, tradedPicks, draftSummaries] = await Promise.all([
     getSleeperRosters(sleeperLeagueId),
     getSleeperLeagueUsers(sleeperLeagueId),
     getAllSleeperTransactions(sleeperLeagueId),
     getSleeperTradedPicks(sleeperLeagueId),
+    getSleeperLeagueDrafts(sleeperLeagueId),
   ]);
 
+  // Fan out one /draft/{id} fetch per league draft. Sleeper's /league/{id}/drafts
+  // summary does NOT include `slot_to_roster_id` — that lives on the per-draft
+  // endpoint. We need it to render slot labels like "1.04" on rosters and trades.
+  const draftDetails = (
+    await Promise.all(
+      (draftSummaries ?? [])
+        .filter((d): d is SleeperDraft => !!d?.draft_id)
+        .map(async (d) => {
+          const detail = await getSleeperDraft(d.draft_id);
+          return detail ?? d;
+        }),
+    )
+  ).filter((d): d is SleeperDraft => !!d?.draft_id);
+
   await Promise.all([
-    upsertRosters(supabase, leagueRowId, rosters, tradedPicks),
+    upsertRosters(supabase, leagueRowId, rosters, tradedPicks, draftDetails),
     upsertLeagueUsers(supabase, leagueRowId, users),
     upsertTransactions(supabase, leagueRowId, transactions, Number(league.season)),
+    upsertLeagueDrafts(supabase, leagueRowId, draftDetails),
   ]);
 
   // Recalculate power rankings for this league. A failure here does not
@@ -197,25 +216,37 @@ async function upsertRosters(
   leagueRowId: string,
   rosters: SleeperRoster[],
   tradedPicks: SleeperTradedPick[],
+  draftDetails: SleeperDraft[],
 ): Promise<void> {
   if (rosters.length === 0) return;
 
-  // Build a map of current pick ownership by (season, round, original_roster_id)
-  // so each roster can carry its draft_pick_assets array.
+  // Build a map of current pick ownership by (season, round, original_roster_id).
+  // Sleeper's /traded_picks returns the CURRENT state per traded pick (one row
+  // per pick, not one per hop). The `roster_id` field is the IMMUTABLE original
+  // owner. Index baseline by original_roster_id, and update only by that key —
+  // using `previous_owner_id` would mis-attribute multi-hop trades (A→B→C would
+  // leave the pick on A's roster AND add a phantom entry on B's roster).
   const baselinePicks = buildBaselinePicks(rosters);
   for (const traded of tradedPicks) {
-    const key = pickKey(Number(traded.season), traded.round, traded.previous_owner_id);
+    const key = pickKey(Number(traded.season), traded.round, traded.roster_id);
     baselinePicks.set(key, {
       season: Number(traded.season),
       round: traded.round,
-      original_roster_id: traded.previous_owner_id,
+      original_roster_id: traded.roster_id,
       current_roster_id: traded.owner_id,
     });
   }
+
+  // Build season → rosterId → slot map from each season's draft detail so we
+  // can stamp `pick_label` (e.g. "1.04") onto picks for completed/scheduled drafts.
+  const rosterSlotBySeason = buildRosterSlotMap(draftDetails);
+
   const picksByOwner = new Map<number, PickAsset[]>();
   for (const pick of baselinePicks.values()) {
+    const slot = rosterSlotBySeason.get(pick.season)?.get(pick.original_roster_id) ?? null;
+    const pickLabel = slot != null ? `${pick.round}.${String(slot).padStart(2, "0")}` : null;
     const arr = picksByOwner.get(pick.current_roster_id) ?? [];
-    arr.push(pick);
+    arr.push({ ...pick, slot, pick_label: pickLabel });
     picksByOwner.set(pick.current_roster_id, arr);
   }
 
@@ -331,10 +362,79 @@ type PickAsset = {
   round: number;
   original_roster_id: number;
   current_roster_id: number;
+  /** Draft slot (1..N) that this pick maps to. Null until the season's
+   * draft is scheduled and `slot_to_roster_id` is published. */
+  slot?: number | null;
+  /** Pre-formatted "R.SS" label (e.g. "1.04"). Null when slot is unknown. */
+  pick_label?: string | null;
 };
 
 function pickKey(season: number, round: number, originalRosterId: number): string {
   return `${season}:${round}:${originalRosterId}`;
+}
+
+/**
+ * Index draft details by season → originalRosterId → slot. Sleeper's
+ * `slot_to_roster_id` maps slot number → roster_id; we invert it so the
+ * read path can look up a slot from the pick's original owner.
+ */
+function buildRosterSlotMap(
+  details: SleeperDraft[],
+): Map<number, Map<number, number>> {
+  const out = new Map<number, Map<number, number>>();
+  for (const d of details) {
+    const season =
+      typeof d.season === "string" ? parseInt(d.season, 10) : Number(d.season);
+    if (!Number.isFinite(season)) continue;
+    const mapping = d.slot_to_roster_id;
+    if (!mapping || typeof mapping !== "object") continue;
+    const rosterToSlot = new Map<number, number>();
+    for (const [slotStr, rosterId] of Object.entries(mapping)) {
+      const slot = parseInt(slotStr, 10);
+      const rid = Number(rosterId);
+      if (!Number.isFinite(slot) || !Number.isFinite(rid)) continue;
+      rosterToSlot.set(rid, slot);
+    }
+    if (rosterToSlot.size > 0) out.set(season, rosterToSlot);
+  }
+  return out;
+}
+
+async function upsertLeagueDrafts(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  drafts: SleeperDraft[],
+): Promise<void> {
+  if (drafts.length === 0) return;
+  const rows = drafts
+    .map((d) => {
+      const season =
+        typeof d.season === "string" ? parseInt(d.season, 10) : Number(d.season);
+      if (!Number.isFinite(season)) return null;
+      const startTime =
+        typeof d.start_time === "number" && d.start_time > 0
+          ? new Date(d.start_time).toISOString()
+          : null;
+      return {
+        league_id: leagueRowId,
+        sleeper_draft_id: d.draft_id,
+        season,
+        status: d.status ?? null,
+        type: d.type ?? null,
+        start_time: startTime,
+        slot_to_roster_id: (d.slot_to_roster_id ?? {}) as unknown as Database["public"]["Tables"]["league_drafts"]["Insert"]["slot_to_roster_id"],
+        draft_order: ((d as unknown as { draft_order?: unknown }).draft_order ?? null) as Database["public"]["Tables"]["league_drafts"]["Insert"]["draft_order"],
+        settings: (d.settings ?? null) as Database["public"]["Tables"]["league_drafts"]["Insert"]["settings"],
+        metadata: d as unknown as Database["public"]["Tables"]["league_drafts"]["Insert"]["metadata"],
+        updated_at: new Date().toISOString(),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  if (rows.length === 0) return;
+  const { error } = await supabase
+    .from("league_drafts")
+    .upsert(rows, { onConflict: "sleeper_draft_id" });
+  if (error) throw new Error(`league_drafts upsert failed: ${error.message}`);
 }
 
 /**

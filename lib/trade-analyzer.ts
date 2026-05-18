@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import type { LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -51,6 +52,11 @@ export type TradePick = {
   /** Sleeper roster_id of the team that owns the original draft slot
    * (used for "via Team X" labels). */
   originalRosterId: number | null;
+  /** Resolved draft slot (1..N) when the season's draft is scheduled. Null
+   * for future-season picks where Sleeper hasn't published slot_to_roster_id. */
+  slot: number | null;
+  /** "{round}.{slot padded}" label (e.g. "1.04"). Null when slot unknown. */
+  pickLabel: string | null;
   /** Numeric value via the pick source (KTC). 0 when we have no row. */
   value: number;
   noValue: boolean;
@@ -127,6 +133,9 @@ export type TradeAnalyzerInputs = {
   /** Identity map from sleeper_roster_id → display label. Sourced from
    * league_users.team_name / display_name. */
   rosterIdentities: Record<number, RosterIdentity>;
+  /** Optional pre-loaded slot index. When supplied, every TradePick gets a
+   * concrete slot/pickLabel for scheduled drafts; otherwise both stay null. */
+  slotIndex?: LeagueDraftSlotIndex | null;
   /** Resolved league context (from lib/league-format-resolution). */
   context: {
     formatConfigId: string;
@@ -143,7 +152,7 @@ export async function analyzeTrade(
   supabase: AnySupabase,
   inputs: TradeAnalyzerInputs,
 ): Promise<TradeAnalysis | null> {
-  const { adds, draftPicks, rosterIdentities, context } = inputs;
+  const { adds, draftPicks, rosterIdentities, slotIndex = null, context } = inputs;
   const addEntries = parseAdds(adds);
   const pickEntries = parsePicks(draftPicks);
 
@@ -218,11 +227,22 @@ export async function analyzeTrade(
     const noValue = value === 0;
     if (noValue) hasMissingValues = true;
 
+    const slot =
+      slotIndex && pickEntry.originalRosterId != null
+        ? slotIndex.slotFor(pickEntry.season, pickEntry.originalRosterId)
+        : null;
+    const pickLabel =
+      slot != null
+        ? `${pickEntry.round}.${String(slot).padStart(2, "0")}`
+        : null;
+
     const pick: TradePick = {
       season: pickEntry.season,
       round: pickEntry.round,
       pickPosition: pickEntry.pickPosition,
       originalRosterId: pickEntry.originalRosterId,
+      slot,
+      pickLabel,
       value,
       noValue,
     };

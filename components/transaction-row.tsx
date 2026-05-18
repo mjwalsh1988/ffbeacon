@@ -233,27 +233,35 @@ function TradeSideCard({ side, isWinner }: { side: TradeSide; isWinner: boolean 
             </span>
           </li>
         ))}
-        {side.picks.map((p, i) => (
-          <li
-            key={`${side.rosterId}-pick-${i}`}
-            className="flex items-baseline justify-between gap-2 text-sm"
-            aria-label={`${p.season} ${ordinal(p.round)} round pick (${p.pickPosition}), ${p.noValue ? "value not available" : `value ${formatValue(p.value)}`}`}
-          >
-            <div className="min-w-0">
-              <span className="text-ink">
-                {p.season} {ordinal(p.round)} round
-              </span>
-              <span className="ml-1 text-xs text-ink-muted">{p.pickPosition}</span>
-            </div>
-            <span
-              className={`font-mono text-sm tabular-nums ${
-                p.noValue ? "text-ink-muted italic" : "text-ink-muted"
-              }`}
+        {side.picks.map((p, i) => {
+          const labelText = p.pickLabel
+            ? `${p.season} R${p.pickLabel}`
+            : `${p.season} ${ordinal(p.round)} round`;
+          const slotAria = p.pickLabel
+            ? `${p.season} round ${p.round}, slot ${p.slot}`
+            : `${p.season} ${ordinal(p.round)} round pick (${p.pickPosition})`;
+          return (
+            <li
+              key={`${side.rosterId}-pick-${i}`}
+              className="flex items-baseline justify-between gap-2 text-sm"
+              aria-label={`${slotAria}, ${p.noValue ? "value not available" : `value ${formatValue(p.value)}`}`}
             >
-              {p.noValue ? "—" : formatValue(p.value)}
-            </span>
-          </li>
-        ))}
+              <div className="min-w-0">
+                <span className="text-ink">{labelText}</span>
+                {!p.pickLabel && (
+                  <span className="ml-1 text-xs text-ink-muted">{p.pickPosition}</span>
+                )}
+              </div>
+              <span
+                className={`font-mono text-sm tabular-nums ${
+                  p.noValue ? "text-ink-muted italic" : "text-ink-muted"
+                }`}
+              >
+                {p.noValue ? "—" : formatValue(p.value)}
+              </span>
+            </li>
+          );
+        })}
         {side.players.length === 0 && side.picks.length === 0 && (
           <li className="text-xs text-ink-subtle italic">No assets received.</li>
         )}
@@ -374,9 +382,13 @@ function MovesBody({
               const p = (raw ?? {}) as Record<string, unknown>;
               const season = String(p.season ?? "?");
               const round = Number(p.round ?? 0);
+              const label =
+                typeof p.pick_label === "string" && p.pick_label
+                  ? p.pick_label
+                  : null;
               return (
                 <li key={`pick-${i}`} className="text-sm text-ink">
-                  {season} {ordinal(round)} round
+                  {label ? `${season} R${label}` : `${season} ${ordinal(round)} round`}
                 </li>
               );
             })}
@@ -446,7 +458,12 @@ function buildVerdictLabel(
 ): string {
   if (verdict.label === "Even trade") return "Even trade";
   const winner = sides.find((s) => s.rosterId === verdict.winnerRosterId);
-  const name = winner?.teamName ?? "—";
+  // Prefer the owner's Sleeper username on the verdict line so users
+  // immediately recognize the trade partner; team names rotate but
+  // handles are durable. Falls back to team name and a numeric label.
+  const name = winner?.ownerHandle
+    ? `@${winner.ownerHandle}`
+    : (winner?.teamName ?? "—");
   if (verdict.label === "Slight edge") {
     return `Slight edge to ${name} (+${formatValue(verdict.differential)}, ${verdict.differentialPct.toFixed(1)}%)`;
   }

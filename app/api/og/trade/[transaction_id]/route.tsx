@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { analyzeTrade } from "@/lib/trade-analyzer";
+import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
 import type { SleeperLeague } from "@/lib/sleeper";
 
 export const runtime = "nodejs";
@@ -92,6 +93,7 @@ export async function GET(
     };
   }
 
+  const slotIndex = await loadLeagueDraftSlots(supabase, league.id);
   const analysis = await analyzeTrade(supabase, {
     leagueRowId: league.id,
     adds: (txRow.adds as Record<string, number> | null) ?? null,
@@ -99,6 +101,7 @@ export async function GET(
       ? (txRow.draft_picks as unknown[])
       : [],
     rosterIdentities,
+    slotIndex,
     context: {
       formatConfigId: context.formatConfigId,
       formatSlug: context.formatSlug,
@@ -114,8 +117,13 @@ export async function GET(
     return notFoundImage("Trade has no analyzable assets");
   }
 
-  const winnerName = analysis.verdict.winnerRosterId
-    ? (analysis.sides.find((s) => s.rosterId === analysis.verdict.winnerRosterId)?.teamName ?? null)
+  const winnerSide = analysis.verdict.winnerRosterId
+    ? (analysis.sides.find((s) => s.rosterId === analysis.verdict.winnerRosterId) ?? null)
+    : null;
+  // Prefer the Sleeper username on the verdict line so the share card matches
+  // the in-app phrasing. Falls back to team name when no handle is recorded.
+  const winnerName = winnerSide
+    ? (winnerSide.ownerHandle ? `@${winnerSide.ownerHandle}` : winnerSide.teamName)
     : null;
   const verdictText = buildVerdictText(analysis.verdict, winnerName);
 
@@ -281,8 +289,12 @@ export async function GET(
                       }}
                     >
                       <p style={{ margin: 0 }}>
-                        {pick.season} R{pick.round}{" "}
-                        <span style={{ color: INK_SUBTLE }}>{pick.pickPosition}</span>
+                        {pick.season} R{pick.pickLabel ?? pick.round}
+                        {!pick.pickLabel && (
+                          <span style={{ color: INK_SUBTLE, marginLeft: 6 }}>
+                            {pick.pickPosition}
+                          </span>
+                        )}
                       </p>
                       <p style={{ margin: 0, color: INK_MUTED, fontFamily: "monospace" }}>
                         {formatNumber(pick.value)}

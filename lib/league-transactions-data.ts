@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { analyzeTrade, type TradeAnalysis } from "@/lib/trade-analyzer";
 import type { LeagueContext } from "@/lib/league-format-resolution";
+import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
 import type { TransactionRowData } from "@/components/transaction-row";
 
 type AnySupabase =
@@ -81,14 +82,17 @@ export async function loadLeagueTransactions(
 
   // Roster identity is loaded once per call. Used by both trade analyses
   // and non-trade rows ("via Team X" labels).
-  const { data: rosterRows } = await (supabase as SupabaseClient<Database>)
-    .from("rosters")
-    .select("sleeper_roster_id, owner_user_id")
-    .eq("league_id", leagueRowId);
-  const { data: userRows } = await (supabase as SupabaseClient<Database>)
-    .from("league_users")
-    .select("sleeper_user_id, display_name, team_name, avatar")
-    .eq("league_id", leagueRowId);
+  const [{ data: rosterRows }, { data: userRows }, slotIndex] = await Promise.all([
+    (supabase as SupabaseClient<Database>)
+      .from("rosters")
+      .select("sleeper_roster_id, owner_user_id")
+      .eq("league_id", leagueRowId),
+    (supabase as SupabaseClient<Database>)
+      .from("league_users")
+      .select("sleeper_user_id, display_name, team_name, avatar")
+      .eq("league_id", leagueRowId),
+    loadLeagueDraftSlots(supabase, leagueRowId),
+  ]);
 
   const userBySleeperId = new Map(userRows?.map((u) => [u.sleeper_user_id, u]) ?? []);
   const rosterIdentities: Record<
@@ -140,6 +144,7 @@ export async function loadLeagueTransactions(
         adds,
         draftPicks,
         rosterIdentities,
+        slotIndex,
         context: {
           formatConfigId: context.formatConfigId,
           formatSlug: context.formatSlug,
@@ -152,6 +157,32 @@ export async function loadLeagueTransactions(
       });
     }
 
+    // Stamp pick_label on each raw draft pick for the non-trade MovesBody
+    // renderer. The trade analyzer attaches its own label, so this branch
+    // exists for waivers / commissioner moves that occasionally include picks.
+    const enrichedDraftPicks = draftPicks.map((raw) => {
+      if (!raw || typeof raw !== "object") return raw;
+      const p = raw as Record<string, unknown>;
+      const season =
+        typeof p.season === "number"
+          ? p.season
+          : typeof p.season === "string"
+            ? parseInt(p.season, 10)
+            : NaN;
+      const round = typeof p.round === "number" ? p.round : Number(p.round);
+      const originalRosterId =
+        typeof p.roster_id === "number"
+          ? p.roster_id
+          : typeof p.previous_owner_id === "number"
+            ? p.previous_owner_id
+            : null;
+      if (!Number.isFinite(season) || !Number.isFinite(round) || originalRosterId == null) {
+        return raw;
+      }
+      const label = slotIndex.labelFor(season, originalRosterId, round);
+      return label && !p.pick_label ? { ...p, pick_label: label } : raw;
+    });
+
     rows.push({
       sleeperTransactionId: r.sleeper_transaction_id,
       type: r.type,
@@ -161,7 +192,7 @@ export async function loadLeagueTransactions(
       createdAtSleeper: r.created_at_sleeper ?? null,
       adds,
       drops,
-      draftPicks,
+      draftPicks: enrichedDraftPicks,
       waiverBudget,
       playerLookup,
       rosterIdentities,

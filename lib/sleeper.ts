@@ -157,6 +157,10 @@ export async function getSleeperLeagueDrafts(leagueId: string): Promise<SleeperD
   return (await safeFetch<SleeperDraft[]>(`${BASE}/league/${leagueId}/drafts`)) ?? [];
 }
 
+export async function getSleeperDraft(draftId: string): Promise<SleeperDraft | null> {
+  return safeFetch<SleeperDraft>(`${BASE}/draft/${draftId}`);
+}
+
 export function currentNflSeason(): string {
   const now = new Date();
   // NFL season "year" rolls over March-ish. If we're past March, this year is the season.

@@ -211,6 +211,62 @@ export type Database = {
         }
         Relationships: []
       }
+      league_drafts: {
+        Row: {
+          created_at: string
+          draft_order: Json | null
+          id: string
+          league_id: string
+          metadata: Json
+          season: number
+          settings: Json | null
+          sleeper_draft_id: string
+          slot_to_roster_id: Json
+          start_time: string | null
+          status: string | null
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          draft_order?: Json | null
+          id?: string
+          league_id: string
+          metadata?: Json
+          season: number
+          settings?: Json | null
+          sleeper_draft_id: string
+          slot_to_roster_id?: Json
+          start_time?: string | null
+          status?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          draft_order?: Json | null
+          id?: string
+          league_id?: string
+          metadata?: Json
+          season?: number
+          settings?: Json | null
+          sleeper_draft_id?: string
+          slot_to_roster_id?: Json
+          start_time?: string | null
+          status?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_drafts_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       league_power_rankings_cache: {
         Row: {
           bench_value: number
@@ -1279,7 +1335,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      try_claim_league_resync: {
+        Args: {
+          p_league_id: string
+          p_triggered_via: string
+          p_user_id: string
+          p_window_seconds?: number
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

@@ -86,9 +86,14 @@ export function TeamCard({
   const grouped = useMemo(() => groupByPosition(players, trends), [players, trends]);
   const sortedPicks = useMemo(
     () =>
-      [...draftPicks].sort((a, b) =>
-        a.season !== b.season ? a.season - b.season : a.round - b.round,
-      ),
+      [...draftPicks].sort((a, b) => {
+        if (a.season !== b.season) return a.season - b.season;
+        if (a.round !== b.round) return a.round - b.round;
+        const slotA = a.slot ?? Number.MAX_SAFE_INTEGER;
+        const slotB = b.slot ?? Number.MAX_SAFE_INTEGER;
+        if (slotA !== slotB) return slotA - slotB;
+        return (a.original_roster_id ?? 0) - (b.original_roster_id ?? 0);
+      }),
     [draftPicks],
   );
 
@@ -350,13 +355,23 @@ function PicksColumn({
               : username
                 ? `via @${username}`
                 : `via ${teamFallback}`;
+            const pickLabel = p.pick_label
+              ? `${p.season} R${p.pick_label}`
+              : `${p.season} R${p.round}`;
             return (
               <li
                 key={`${p.season}-${p.round}-${p.original_roster_id}-${i}`}
                 className="flex items-baseline gap-2 px-3 py-1.5"
               >
-                <span className="flex-shrink-0 font-mono text-sm font-medium text-ink">
-                  {p.season} R{p.round}
+                <span
+                  className="flex-shrink-0 font-mono text-sm font-medium text-ink"
+                  aria-label={
+                    p.pick_label
+                      ? `${p.season} round ${p.round}, slot ${p.slot}`
+                      : `${p.season} round ${p.round}`
+                  }
+                >
+                  {pickLabel}
                 </span>
                 <span className="ml-auto truncate text-right text-[10px] text-ink-subtle">
                   {attribution}

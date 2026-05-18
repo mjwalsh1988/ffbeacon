@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -26,6 +27,11 @@ export type DraftPickAsset = {
   original_roster_id: number;
   current_roster_id: number;
   pick_position?: string;
+  /** Resolved draft slot (1..N) from league_drafts.slot_to_roster_id. Null
+   * until the season's draft is scheduled and the mapping is published. */
+  slot?: number | null;
+  /** "{round}.{slot padded 2}" label like "1.04". Null when slot unknown. */
+  pick_label?: string | null;
 };
 
 export type CacheRow = {
@@ -105,7 +111,7 @@ export async function loadLeagueTeamCards(
   /** League status from Sleeper. Only `pre_draft` keeps the current-season picks visible. */
   leagueStatus?: string | null,
 ): Promise<TeamCardData[]> {
-  const [rostersRes, usersRes, cacheRes] = await Promise.all([
+  const [rostersRes, usersRes, cacheRes, slotIndex] = await Promise.all([
     supabase
       .from("rosters")
       .select(
@@ -127,6 +133,7 @@ export async function loadLeagueTeamCards(
           .eq("format_config_id", formatConfigId)
           .eq("source", sourceSlug)
       : Promise.resolve({ data: [], error: null }),
+    loadLeagueDraftSlots(supabase, leagueRowId),
   ]);
   const rosters = rostersRes.data ?? [];
   const users = usersRes.data ?? [];
@@ -147,10 +154,37 @@ export async function loadLeagueTeamCards(
   // draft completes, so drop them once the league is past pre_draft.
   const stripCurrentSeasonPicks =
     leagueStatus != null && leagueStatus !== "pre_draft" && !!currentSeason;
-  const filterPicks = (picks: DraftPickAsset[]): DraftPickAsset[] =>
-    stripCurrentSeasonPicks
+  const filterPicks = (picks: DraftPickAsset[]): DraftPickAsset[] => {
+    const filtered = stripCurrentSeasonPicks
       ? picks.filter((p) => String(p.season) !== String(currentSeason))
       : picks;
+    // Stamp every emitted pick with its resolved slot + pick_label, even if
+    // it was synced before the slot mapping landed. Sort so picks read in
+    // chronological order (season → round → slot) which mirrors how DPC
+    // sorts and how users intuitively scan a draft sheet.
+    const stamped = filtered.map((p) => {
+      const slot =
+        p.slot ??
+        slotIndex.slotFor(Number(p.season), Number(p.original_roster_id));
+      const pick_label =
+        p.pick_label ??
+        (slot != null
+          ? `${Number(p.round)}.${String(slot).padStart(2, "0")}`
+          : null);
+      return { ...p, slot: slot ?? null, pick_label };
+    });
+    stamped.sort((a, b) => {
+      const sa = Number(a.season);
+      const sb = Number(b.season);
+      if (sa !== sb) return sa - sb;
+      if (a.round !== b.round) return a.round - b.round;
+      const slotA = a.slot ?? Number.MAX_SAFE_INTEGER;
+      const slotB = b.slot ?? Number.MAX_SAFE_INTEGER;
+      if (slotA !== slotB) return slotA - slotB;
+      return (a.original_roster_id ?? 0) - (b.original_roster_id ?? 0);
+    });
+    return stamped;
+  };
 
   // Single players + trends batch across all rosters
   const allSleeperIds = new Set<string>();
