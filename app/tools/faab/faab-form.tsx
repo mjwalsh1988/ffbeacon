@@ -62,16 +62,54 @@ export function FaabForm({
   const [budget, setBudget] = useState(100);
   const [need, setNeed] = useState<NeedLevel>("medium");
 
-  const recommendation = useMemo(() => {
+  type Recommendation =
+    | {
+        kind: "dump";
+        amount: number;
+        quip: string;
+        reasoning: string;
+        caveat: string;
+      }
+    | {
+        kind: "range";
+        low: number;
+        high: number;
+        reasoning: string;
+      };
+
+  const recommendation = useMemo<Recommendation | null>(() => {
     if (!selectedPlayer) return null;
     const value = selectedPlayer.value;
     const rank = selectedPlayer.overall_rank;
+
+    // Top-100 override: regardless of the value source, anyone ranked top
+    // 100 overall has no business being on waivers in a standard 12-team
+    // league. Skip the math and tell the user to dump their bag.
+    if (rank <= 100) {
+      const quips = [
+        "Empty the piggy bank.",
+        "Mortgage the season. Send it.",
+        "All in. Don't be the one who bid $1 less.",
+        "Bid like you'll never bid again.",
+        "Whatever you were saving it for — it was this.",
+      ];
+      const quip = quips[rank % quips.length];
+      return {
+        kind: "dump",
+        amount: Math.max(1, budget),
+        quip,
+        reasoning:
+          `${selectedPlayer.name} is the #${rank} overall player in ${formatName}` +
+          ` — a top-100 asset showing up on waivers is a gift.` +
+          ` Drop the full ${budget} FAAB and don't blink.`,
+        caveat:
+          "Assumes a standard 10–14 team league. If you're in a 6-team / super-shallow league this tool isn't really built for you — there's no waiver scarcity to defend against.",
+      };
+    }
+
     // Base percentage of remaining budget based on rank tier
     let basePct = 0;
-    if (rank <= 24) basePct = 0.4;
-    else if (rank <= 48) basePct = 0.25;
-    else if (rank <= 96) basePct = 0.12;
-    else if (rank <= 150) basePct = 0.05;
+    if (rank <= 150) basePct = 0.05;
     else basePct = 0.02;
 
     // Adjust by market value relative to top
@@ -83,6 +121,7 @@ export function FaabForm({
     const high = Math.max(low + 1, Math.ceil(center * 1.3));
 
     return {
+      kind: "range",
       low,
       high,
       reasoning: [
@@ -168,13 +207,33 @@ export function FaabForm({
       </div>
       <div
         aria-live="polite"
-        className="rounded-card border border-brand-cyan/30 bg-brand-cyan/5 p-4"
+        className={`rounded-card border p-4 ${
+          recommendation?.kind === "dump"
+            ? "border-brand-purple/40 bg-brand-purple/5"
+            : "border-brand-cyan/30 bg-brand-cyan/5"
+        }`}
       >
         {!selectedPlayer ? (
           <p className="text-sm text-ink-muted">
             Pick a player to see a recommended bid range.
           </p>
-        ) : recommendation ? (
+        ) : recommendation?.kind === "dump" ? (
+          <div className="flex flex-col gap-2">
+            <p className="flex items-center gap-1.5 text-xs uppercase tracking-[0.16em] text-brand-purple">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              FAAB dump alert
+            </p>
+            <p className="font-mono text-3xl font-semibold text-ink">
+              Bid {recommendation.amount} FAAB
+            </p>
+            <p className="text-base font-medium text-ink">{recommendation.quip}</p>
+            <p className="text-sm text-ink-muted">{recommendation.reasoning}</p>
+            <p className="mt-1 rounded-card border border-line/60 bg-base/60 px-3 py-2 text-xs text-ink-subtle">
+              <span className="font-semibold text-ink-muted">Heads up:</span>{" "}
+              {recommendation.caveat}
+            </p>
+          </div>
+        ) : recommendation?.kind === "range" ? (
           <div className="flex flex-col gap-2">
             <p className="flex items-center gap-1.5 text-xs uppercase tracking-[0.16em] text-brand-cyan">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
