@@ -185,28 +185,40 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
           </caption>
           {/* Desktop header. Hidden on mobile because the chip row above and the
               compact 3-column body handle sort + columns differently. */}
-          <thead className="hidden bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle md:table-header-group">
+          <thead className="hidden bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle md:table-header-group">
             <tr>
               {COLUMNS.map((col, idx) => {
                 const isActive = col.key === sortKey;
+                const isFirst = idx === 0;
+                const isLast = idx === COLUMNS.length - 1;
                 const sortAttr: "ascending" | "descending" | "none" = isActive
                   ? sortDir === "asc"
                     ? "ascending"
                     : "descending"
                   : "none";
+                // Player is the only column that anchors left; everything
+                // numeric reads better centered now that the rank column
+                // owns the leftmost slot.
+                const align = col.numeric
+                  ? "text-center"
+                  : col.key === "name"
+                    ? "text-left"
+                    : "text-center";
+                const sidePad = isFirst ? "pl-4" : isLast ? "pr-4" : "";
+                const widthHint = col.key === "overall_rank" ? "w-16" : "";
                 return (
                   <th
                     key={`${col.key}-${idx}`}
                     scope="col"
                     aria-sort={sortAttr}
-                    className={
-                      col.numeric ? "px-3 py-3 text-right" : "px-3 py-3"
-                    }
+                    className={`px-3 py-3 ${align} ${sidePad} ${widthHint}`.trim()}
                   >
                     <button
                       type="button"
                       onClick={() => toggle(col.key)}
-                      className="inline-flex min-h-[44px] items-center gap-1 hover:text-ink"
+                      className={`inline-flex min-h-[44px] items-center gap-1 hover:text-ink ${
+                        col.numeric ? "justify-center" : ""
+                      }`}
                     >
                       <span>{col.label}</span>
                       {isActive ? (
@@ -225,15 +237,15 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
 
           {/* Mobile header (Rank, Player, dynamic metric). Renders only at
               <md and reflects the active mobile sort chip in the third cell. */}
-          <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle md:hidden">
+          <thead className="bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle md:hidden">
             <tr>
-              <th scope="col" className="px-3 py-3 text-right">
+              <th scope="col" className="w-14 py-3 pl-4 pr-2 text-center">
                 Rank
               </th>
-              <th scope="col" className="px-3 py-3">
+              <th scope="col" className="px-3 py-3 text-left">
                 Player
               </th>
-              <th scope="col" className="px-3 py-3 text-right">
+              <th scope="col" className="py-3 pl-2 pr-4 text-center">
                 {mobileMetricLabel(sortKey)}
               </th>
             </tr>
@@ -242,10 +254,10 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
           <tbody className="divide-y divide-line">
             {sorted.map((row) => (
               <tr key={row.slug} className="hover:bg-surface">
-                <td className="px-3 py-3 text-right font-mono tabular-nums text-ink-muted">
+                <td className="w-14 py-3 pl-4 pr-2 text-center font-mono tabular-nums text-ink-muted md:w-16 md:px-3">
                   {row.overall_rank}
                 </td>
-                <td className="px-3 py-3">
+                <td className="px-3 py-3 text-left">
                   {/* Mobile: tap-to-open sheet. Desktop: link to full player profile. */}
                   <button
                     type="button"
@@ -301,22 +313,22 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
                 </td>
 
                 {/* Mobile dynamic metric cell — renders only at <md. */}
-                <td className="px-3 py-3 text-right font-mono tabular-nums md:hidden">
+                <td className="py-3 pl-2 pr-4 text-center font-mono tabular-nums md:hidden">
                   <MobileMetricCell row={row} sortKey={sortKey} />
                 </td>
 
                 {/* Desktop-only cells. */}
-                <td className="hidden px-3 py-3 text-ink-muted md:table-cell">
+                <td className="hidden px-3 py-3 text-center text-ink-muted md:table-cell">
                   {row.team ?? "—"}
                 </td>
-                <td className="hidden px-3 py-3 md:table-cell">
+                <td className="hidden px-3 py-3 text-center md:table-cell">
                   <span className="font-mono text-xs text-brand-cyan">{row.position}</span>
                 </td>
-                <td className="hidden px-3 py-3 text-right font-mono tabular-nums text-ink-muted md:table-cell">
+                <td className="hidden px-3 py-3 text-center font-mono tabular-nums text-ink-muted md:table-cell">
                   {row.position}
                   {row.position_rank}
                 </td>
-                <td className="hidden px-3 py-3 text-right md:table-cell">
+                <td className="hidden px-3 py-3 text-center md:table-cell">
                   {row.tier ? (
                     <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
                       T{row.tier}
@@ -325,14 +337,18 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
                     <span className="text-ink-subtle">—</span>
                   )}
                 </td>
-                <td className="hidden px-3 py-3 text-right font-mono tabular-nums md:table-cell">
+                <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
                   {row.value !== null ? row.value.toLocaleString() : "—"}
                 </td>
-                <td className="hidden px-3 py-3 text-right font-mono tabular-nums md:table-cell">
-                  <RankTrendCell row={row} />
+                <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
+                  <span className="inline-flex justify-center">
+                    <RankTrendCell row={row} />
+                  </span>
                 </td>
-                <td className="hidden px-3 py-3 text-right font-mono tabular-nums md:table-cell">
-                  <ValueTrendCell row={row} />
+                <td className="hidden py-3 pl-3 pr-4 text-center font-mono tabular-nums md:table-cell">
+                  <span className="inline-flex justify-center">
+                    <ValueTrendCell row={row} />
+                  </span>
                 </td>
               </tr>
             ))}
@@ -554,7 +570,7 @@ function RankTrendCell({ row }: { row: RankingsRow }) {
   const Icon = isUp ? ArrowUp : ArrowDown;
   return (
     <span
-      className={`inline-flex items-center justify-end gap-1 ${tone}`}
+      className={`inline-flex items-center justify-center gap-1 ${tone}`}
       aria-label={rankMovementVerb(change)}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
@@ -600,7 +616,7 @@ function ValueTrendCell({ row }: { row: RankingsRow }) {
   const pctText = `${isUp ? "+" : ""}${pct.toFixed(1)}%`;
   return (
     <span
-      className={`inline-flex items-center justify-end gap-1 ${tone}`}
+      className={`inline-flex items-center justify-center gap-1 ${tone}`}
       aria-label={valueMovementVerb(pct)}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
