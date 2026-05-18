@@ -2,6 +2,10 @@ export const SITE = {
   name: "FF Beacon",
   shortName: "Beacon",
   tagline: "Your signal through the fantasy noise.",
+  /** Short paragraph for the footer About column. Keep it under ~30 words so
+   * it sits comfortably alongside the other footer columns. */
+  about:
+    "Accessibility-first fantasy football tools — sortable rankings, FAAB and trade calculators, and Sleeper league insights, built to read clearly on every device.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://ffbeacon.com",
   author: {
     name: "Michael",
@@ -26,15 +30,6 @@ export const FOOTER_COLUMNS = [
     ],
   },
   {
-    heading: "Players",
-    links: [
-      { label: "Quarterbacks", href: "/rankings?position=QB" as const },
-      { label: "Running Backs", href: "/rankings?position=RB" as const },
-      { label: "Wide Receivers", href: "/rankings?position=WR" as const },
-      { label: "Tight Ends", href: "/rankings?position=TE" as const },
-    ],
-  },
-  {
     heading: "Learn",
     links: [
       { label: "Guides", href: "/guides" as const },
@@ -52,10 +47,22 @@ export const FOOTER_COLUMNS = [
   },
 ];
 
-export const SOCIAL_LINKS = [
-  { label: "Discord", href: "https://discord.gg/ffbeacon", external: true },
-  { label: "X / Twitter", href: "https://x.com/ffbeacon", external: true },
-  { label: "Email", href: "mailto:hello@ffbeacon.com", external: false },
+/**
+ * Social profiles shown as icons in the footer About column. Placeholder
+ * hrefs (#) for accounts that don't exist yet — swap them in once the
+ * profiles are claimed. Order: Facebook, Instagram, X, TikTok.
+ */
+export const SOCIAL_LINKS: Array<{
+  label: "Facebook" | "Instagram" | "X" | "TikTok";
+  href: string;
+  /** Whether the link opens a third-party site (true) or stays on ours
+   * (false). Drives target="_blank" + rel attributes in the renderer. */
+  external: boolean;
+}> = [
+  { label: "Facebook", href: "https://facebook.com/ffbeacon", external: true },
+  { label: "Instagram", href: "https://instagram.com/ffbeacon", external: true },
+  { label: "X", href: "https://x.com/ffbeacon", external: true },
+  { label: "TikTok", href: "https://tiktok.com/@ffbeacon", external: true },
 ];
 
 export const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
