@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AuthorPortrait } from "@/components/author-portrait";
 
 export const metadata: Metadata = {
   title: "About FF Beacon",
@@ -35,18 +36,27 @@ export default function AboutPage() {
           FAAB calculator that uses market value plus your real need, and player pages that are
           built to be skimmed by ear, not just by eye.
         </p>
-        <p>
-          Built by{" "}
-          <Link href="/author/michael" className="text-ink underline-offset-4 hover:underline">
-            Michael
+        <div className="flex flex-col items-start gap-5 rounded-card border border-line bg-surface/50 p-5 sm:flex-row sm:items-center sm:gap-6">
+          <Link
+            href="/author/michael"
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-cyan"
+            aria-label="Read Michael's full story on the author page"
+          >
+            <AuthorPortrait size={112} />
           </Link>
-          , who has played fantasy for 20 years and went from 1 dynasty league to 50 in a single
-          year by leaning on stats over visuals. The full story is on his{" "}
-          <Link href="/author/michael" className="text-ink underline-offset-4 hover:underline">
-            author page
-          </Link>
-          .
-        </p>
+          <p className="text-base leading-relaxed">
+            Built by{" "}
+            <Link href="/author/michael" className="text-ink underline-offset-4 hover:underline">
+              Michael
+            </Link>
+            , who has played fantasy for 20 years and went from 1 dynasty league to 50 in a single
+            year by leaning on stats over visuals. The full story is on his{" "}
+            <Link href="/author/michael" className="text-ink underline-offset-4 hover:underline">
+              author page
+            </Link>
+            .
+          </p>
+        </div>
       </article>
     </main>
   );

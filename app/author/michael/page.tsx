@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE } from "@/lib/site";
+import { AuthorPortrait } from "@/components/author-portrait";
 
 export const metadata: Metadata = {
   title: "Michael, founder of FF Beacon",
@@ -40,12 +41,17 @@ export default function AuthorMichaelPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema) }}
       />
       <header className="border-b border-line">
-        <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-          <p className="mb-2 text-sm font-medium uppercase tracking-wider text-brand-cyan">Author</p>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Michael</h1>
-          <p className="mt-3 text-lg text-ink-muted">
-            Founder, FF Beacon. Twenty years in fantasy. One blind dynasty manager.
-          </p>
+        <div className="mx-auto flex max-w-3xl flex-col items-start gap-6 px-4 py-12 sm:flex-row sm:items-center sm:gap-8 sm:px-6 lg:px-8">
+          <AuthorPortrait size={176} />
+          <div className="min-w-0 flex-1">
+            <p className="mb-2 text-sm font-medium uppercase tracking-wider text-brand-cyan">
+              Author
+            </p>
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Michael</h1>
+            <p className="mt-3 text-lg text-ink-muted">
+              Founder, FF Beacon. Twenty years in fantasy. One blind dynasty manager.
+            </p>
+          </div>
         </div>
       </header>
       <article className="mx-auto max-w-3xl space-y-8 px-4 py-10 text-lg leading-relaxed text-ink-muted sm:px-6 lg:px-8">
