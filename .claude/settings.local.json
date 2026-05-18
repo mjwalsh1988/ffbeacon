@@ -113,7 +113,13 @@
       "PowerShell(Get-Item *)",
       "Bash(powershell -NoProfile -Command \"\\(Get-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\\) -replace 'mx-auto max-w-6xl', 'mx-auto max-w-7xl' | Set-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\")",
       "PowerShell(if \\(Test-Path \"C:\\\\Users\\\\mjwal\\\\OneDrive\\\\Desktop\\\\ffbeacon\\\\handoff.md\"\\) { \"exists: $\\(\\(\\(Get-Item handoff.md\\).Length\\)\\) bytes\" } else { \"missing\" })",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(findstr lock *)",
+      "Bash(echo \"tsc-exit: $?\")",
+      "Bash(npx --no tsc -p tsconfig.json --noEmit)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(git rm *)",
+      "Bash([ -d \"/c/Users/mjwal/OneDrive/Desktop/ffbeacon/$p\" ])"
     ]
   },
   "enabledMcpjsonServers": [
