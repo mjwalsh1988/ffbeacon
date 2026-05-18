@@ -9,12 +9,16 @@ import {
   useState,
 } from "react";
 import { BarChart3, Database, Sparkles, Trophy } from "lucide-react";
+import { PlayerHeadshot } from "@/components/player-headshot";
 
 export type FaabPlayer = {
   slug: string;
   name: string;
   position: string;
   team: string | null;
+  /** Sleeper player id pulled from players.external_ids.sleeper. Drives
+   * the headshot CDN URL; null when we don't have a Sleeper mapping yet. */
+  sleeper_id: string | null;
   overall_rank: number;
   /** Per-position rank from rankings.position_rank for the resolved
    * (format, source) pair. Surfaced in the selected-player card. */
@@ -304,7 +308,6 @@ function SelectedPlayerCard({
   rankingsSourceName: string | null;
   valueSourceName: string | null;
 }) {
-  const positionColor = positionAccent(player.position);
   return (
     <section
       aria-label="Selected player"
@@ -312,17 +315,12 @@ function SelectedPlayerCard({
     >
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold uppercase tracking-wider"
-            style={{
-              backgroundColor: `${positionColor}22`,
-              border: `1px solid ${positionColor}55`,
-              color: positionColor,
-            }}
-          >
-            {player.position}
-          </span>
+          <PlayerHeadshot
+            sleeperId={player.sleeper_id}
+            position={player.position}
+            name={player.name}
+            size={48}
+          />
           <div className="min-w-0">
             <h3 className="truncate text-base font-semibold text-ink">{player.name}</h3>
             <p className="truncate text-xs text-ink-subtle">
@@ -380,16 +378,6 @@ function Metric({
   );
 }
 
-/** Brand-aligned accent per offensive position. Keeps the player badge
- * scannable without inventing new colors outside the FF Beacon palette. */
-function positionAccent(position: string): string {
-  const pos = position.toUpperCase();
-  if (pos === "QB") return "#F472B6"; // pink-400 — visually distinct from RB/WR/TE
-  if (pos === "RB") return "#10B981"; // signal-success — common RB green
-  if (pos === "WR") return "#22D3EE"; // brand-cyan
-  if (pos === "TE") return "#F59E0B"; // signal-warning amber
-  return "#A8A8B8"; // ink-muted fallback
-}
 
 /**
  * Accessible combobox/listbox replacement for the old <datalist>. The native

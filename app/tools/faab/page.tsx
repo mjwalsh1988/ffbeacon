@@ -68,7 +68,7 @@ export default async function FaabPage({
       const { data } = await supabase
         .from("rankings")
         .select(
-          "overall_rank, position_rank, players!inner(slug, first_name, last_name, position, team)",
+          "overall_rank, position_rank, players!inner(slug, first_name, last_name, position, team, external_ids)",
         )
         .eq("format_config_id", format.id)
         .eq("source", rankingsResolution.source)
@@ -78,14 +78,32 @@ export default async function FaabPage({
       const playerInfo = new Map<string, FaabPlayer>();
       for (const row of data ?? []) {
         const player = (row as unknown as {
-          players: { slug: string; first_name: string; last_name: string; position: string; team: string | null };
+          players: {
+            slug: string;
+            first_name: string;
+            last_name: string;
+            position: string;
+            team: string | null;
+            external_ids: Record<string, unknown> | null;
+          };
         }).players;
         const slug = player.slug;
+        // Sleeper id lives on players.external_ids.sleeper. May be missing
+        // for older / non-Sleeper-resolved players — headshot falls back to
+        // the position badge in that case.
+        const sleeperExt = player.external_ids?.sleeper;
+        const sleeper_id =
+          typeof sleeperExt === "string" && sleeperExt
+            ? sleeperExt
+            : typeof sleeperExt === "number"
+              ? String(sleeperExt)
+              : null;
         playerInfo.set(slug, {
           slug,
           name: `${player.first_name} ${player.last_name}`,
           position: player.position,
           team: player.team ?? null,
+          sleeper_id,
           overall_rank: row.overall_rank,
           position_rank: row.position_rank,
           value: null,
