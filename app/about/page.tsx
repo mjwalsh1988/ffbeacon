@@ -36,7 +36,7 @@ export default function AboutPage() {
           FAAB calculator that uses market value plus your real need, and player pages that are
           built to be skimmed by ear, not just by eye.
         </p>
-        <div className="flex flex-col items-start gap-5 rounded-card border border-line bg-surface/50 p-5 sm:flex-row sm:items-center sm:gap-6">
+        <div className="flex flex-col items-start gap-5 rounded-card border border-line bg-surface p-5 sm:flex-row sm:items-center sm:gap-6">
           <Link
             href="/author/michael"
             className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-cyan"
@@ -44,14 +44,20 @@ export default function AboutPage() {
           >
             <AuthorPortrait size={112} />
           </Link>
-          <p className="text-base leading-relaxed">
+          <p className="text-base leading-relaxed text-ink">
             Built by{" "}
-            <Link href="/author/michael" className="text-ink underline-offset-4 hover:underline">
+            <Link
+              href="/author/michael"
+              className="text-brand-cyan underline-offset-4 hover:text-brand-purple hover:underline"
+            >
               Michael
             </Link>
             , who has played fantasy for 20 years and went from 1 dynasty league to 50 in a single
             year by leaning on stats over visuals. The full story is on his{" "}
-            <Link href="/author/michael" className="text-ink underline-offset-4 hover:underline">
+            <Link
+              href="/author/michael"
+              className="text-brand-cyan underline-offset-4 hover:text-brand-purple hover:underline"
+            >
               author page
             </Link>
             .
