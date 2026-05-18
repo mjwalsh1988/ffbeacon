@@ -65,7 +65,11 @@ export default async function LeagueSyncPage({
           </p>
         )}
         {user && leagues.length > 0 && (
-          <LeagueResults leagues={leagues} season={season} />
+          <LeagueResults
+            leagues={leagues}
+            season={season}
+            sleeperUsername={user.display_name ?? usernameInput ?? null}
+          />
         )}
       </div>
     </main>

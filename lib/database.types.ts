@@ -115,6 +115,60 @@ export type Database = {
           },
         ]
       }
+      draft_pick_values: {
+        Row: {
+          captured_at: string
+          created_at: string
+          format_config_id: string
+          id: string
+          metadata: Json
+          pick_position: string
+          round: number
+          season: number
+          source: string
+          value: number
+        }
+        Insert: {
+          captured_at?: string
+          created_at?: string
+          format_config_id: string
+          id?: string
+          metadata?: Json
+          pick_position: string
+          round: number
+          season: number
+          source: string
+          value: number
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          format_config_id?: string
+          id?: string
+          metadata?: Json
+          pick_position?: string
+          round?: number
+          season?: number
+          source?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "draft_pick_values_format_config_id_fkey"
+            columns: ["format_config_id"]
+            isOneToOne: false
+            referencedRelation: "format_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "draft_pick_values_source_fkey"
+            columns: ["source"]
+            isOneToOne: false
+            referencedRelation: "source_registry"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
       format_configs: {
         Row: {
           created_at: string
@@ -156,6 +210,260 @@ export type Database = {
           te_premium_bonus?: number
         }
         Relationships: []
+      }
+      league_power_rankings_cache: {
+        Row: {
+          bench_value: number
+          format_config_id: string
+          generated_at: string
+          id: string
+          league_id: string
+          overall_rank: number | null
+          picks_value: number
+          positional_breakdowns: Json
+          roster_id: string
+          source: string
+          starter_rank: number | null
+          starter_value: number
+          total_value: number
+        }
+        Insert: {
+          bench_value?: number
+          format_config_id: string
+          generated_at?: string
+          id?: string
+          league_id: string
+          overall_rank?: number | null
+          picks_value?: number
+          positional_breakdowns?: Json
+          roster_id: string
+          source: string
+          starter_rank?: number | null
+          starter_value?: number
+          total_value?: number
+        }
+        Update: {
+          bench_value?: number
+          format_config_id?: string
+          generated_at?: string
+          id?: string
+          league_id?: string
+          overall_rank?: number | null
+          picks_value?: number
+          positional_breakdowns?: Json
+          roster_id?: string
+          source?: string
+          starter_rank?: number | null
+          starter_value?: number
+          total_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_power_rankings_cache_format_config_id_fkey"
+            columns: ["format_config_id"]
+            isOneToOne: false
+            referencedRelation: "format_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "league_power_rankings_cache_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "league_power_rankings_cache_roster_id_fkey"
+            columns: ["roster_id"]
+            isOneToOne: false
+            referencedRelation: "rosters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "league_power_rankings_cache_source_fkey"
+            columns: ["source"]
+            isOneToOne: false
+            referencedRelation: "source_registry"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
+      league_transactions: {
+        Row: {
+          adds: Json
+          created_at: string
+          created_at_sleeper: string | null
+          draft_picks: Json
+          drops: Json
+          id: string
+          league_id: string
+          metadata: Json
+          roster_ids: Json
+          season: number | null
+          sleeper_transaction_id: string
+          status: string | null
+          type: string
+          waiver_budget: Json
+          week: number | null
+        }
+        Insert: {
+          adds?: Json
+          created_at?: string
+          created_at_sleeper?: string | null
+          draft_picks?: Json
+          drops?: Json
+          id?: string
+          league_id: string
+          metadata?: Json
+          roster_ids?: Json
+          season?: number | null
+          sleeper_transaction_id: string
+          status?: string | null
+          type: string
+          waiver_budget?: Json
+          week?: number | null
+        }
+        Update: {
+          adds?: Json
+          created_at?: string
+          created_at_sleeper?: string | null
+          draft_picks?: Json
+          drops?: Json
+          id?: string
+          league_id?: string
+          metadata?: Json
+          roster_ids?: Json
+          season?: number | null
+          sleeper_transaction_id?: string
+          status?: string | null
+          type?: string
+          waiver_budget?: Json
+          week?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_transactions_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      league_users: {
+        Row: {
+          avatar: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          is_commissioner: boolean
+          is_owner: boolean
+          league_id: string
+          metadata: Json
+          sleeper_user_id: string
+          team_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_commissioner?: boolean
+          is_owner?: boolean
+          league_id: string
+          metadata?: Json
+          sleeper_user_id: string
+          team_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_commissioner?: boolean
+          is_owner?: boolean
+          league_id?: string
+          metadata?: Json
+          sleeper_user_id?: string
+          team_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "league_users_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leagues: {
+        Row: {
+          created_at: string
+          format_config_id: string | null
+          id: string
+          last_synced_at: string | null
+          metadata: Json
+          name: string
+          roster_positions: Json
+          scoring_settings: Json
+          season: number
+          sleeper_league_id: string
+          sport: string
+          status: string | null
+          sync_error: string | null
+          sync_status: string
+          total_rosters: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          format_config_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          metadata?: Json
+          name: string
+          roster_positions?: Json
+          scoring_settings?: Json
+          season: number
+          sleeper_league_id: string
+          sport?: string
+          status?: string | null
+          sync_error?: string | null
+          sync_status?: string
+          total_rosters?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          format_config_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          metadata?: Json
+          name?: string
+          roster_positions?: Json
+          scoring_settings?: Json
+          season?: number
+          sleeper_league_id?: string
+          sport?: string
+          status?: string | null
+          sync_error?: string | null
+          sync_status?: string
+          total_rosters?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leagues_format_config_id_fkey"
+            columns: ["format_config_id"]
+            isOneToOne: false
+            referencedRelation: "format_configs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       news_items: {
         Row: {
@@ -671,6 +979,83 @@ export type Database = {
           },
         ]
       }
+      rosters: {
+        Row: {
+          co_owners: Json
+          created_at: string
+          draft_pick_assets: Json
+          id: string
+          league_id: string
+          losses: number
+          metadata: Json
+          owner_user_id: string | null
+          player_ids: Json
+          points_against: number
+          points_for: number
+          reserve_ids: Json
+          sleeper_roster_id: number
+          starter_ids: Json
+          taxi_ids: Json
+          ties: number
+          updated_at: string
+          waiver_budget: number | null
+          waiver_position: number | null
+          wins: number
+        }
+        Insert: {
+          co_owners?: Json
+          created_at?: string
+          draft_pick_assets?: Json
+          id?: string
+          league_id: string
+          losses?: number
+          metadata?: Json
+          owner_user_id?: string | null
+          player_ids?: Json
+          points_against?: number
+          points_for?: number
+          reserve_ids?: Json
+          sleeper_roster_id: number
+          starter_ids?: Json
+          taxi_ids?: Json
+          ties?: number
+          updated_at?: string
+          waiver_budget?: number | null
+          waiver_position?: number | null
+          wins?: number
+        }
+        Update: {
+          co_owners?: Json
+          created_at?: string
+          draft_pick_assets?: Json
+          id?: string
+          league_id?: string
+          losses?: number
+          metadata?: Json
+          owner_user_id?: string | null
+          player_ids?: Json
+          points_against?: number
+          points_for?: number
+          reserve_ids?: Json
+          sleeper_roster_id?: number
+          starter_ids?: Json
+          taxi_ids?: Json
+          ties?: number
+          updated_at?: string
+          waiver_budget?: number | null
+          waiver_position?: number | null
+          wins?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rosters_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       source_registry: {
         Row: {
           created_at: string
@@ -711,6 +1096,7 @@ export type Database = {
           default_source_slug: string | null
           email_digest_enabled: boolean
           favorite_players: Json
+          is_admin: boolean
           sleeper_username: string | null
           theme: string
           updated_at: string
@@ -722,6 +1108,7 @@ export type Database = {
           default_source_slug?: string | null
           email_digest_enabled?: boolean
           favorite_players?: Json
+          is_admin?: boolean
           sleeper_username?: string | null
           theme?: string
           updated_at?: string
@@ -733,6 +1120,7 @@ export type Database = {
           default_source_slug?: string | null
           email_digest_enabled?: boolean
           favorite_players?: Json
+          is_admin?: boolean
           sleeper_username?: string | null
           theme?: string
           updated_at?: string

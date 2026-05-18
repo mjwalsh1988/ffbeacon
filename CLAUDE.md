@@ -6,7 +6,16 @@
 
 2. **Never move config files**: .env.local, .env.local.example, .mcp.json, .claude/, CLAUDE.md, plan.md, progress.md stay in place permanently. Do not create backup copies.
 
-3. **Reference project**: ~/Desktop/dynasty-price-check/ is READ-ONLY reference. Look at it for patterns. Never write to it.
+3. **Reference project**: ~/Desktop/dynasty-price-check/ is READ-ONLY reference. Look at it for patterns. Never write to it. When porting features from DPC, preserve the FUNCTIONAL UX flow (inline expansion, modal patterns, navigation structure, side-by-side comparison, sticky toolbars) unless explicitly approved to diverge. The VISUAL style must always be FF Beacon brand (dark mode, purple #A855F7 + cyan #22D3EE, Geist fonts), never DPC's gold/violet on `#0c0c18`. Information density and interaction patterns travel; colors and typography do not.
+
+   ABSOLUTE RULE: When porting features from DPC, the implementation is NOT COMPLETE until the actual UX behavior matches. Visual styling is FF Beacon brand. Functional behavior, layout structure, default states, filter behaviors, and interaction patterns MUST match DPC unless explicitly approved otherwise. Verify by opening DPC's implementation alongside the FF Beacon implementation and confirming each interaction works the same way. "Coming soon similar" or "partially matches" is not acceptable: either match it or get approval to diverge BEFORE declaring the work complete. Before marking any DPC port complete, walk through this checklist out loud in the final report and cite DPC file paths + line numbers as evidence:
+   - Default state on first paint matches DPC?
+   - Every filter/toggle behaves identically (action verb match: filter vs anchor-jump, expand vs navigate, multi-select vs single-select)?
+   - Layout structure matches (rows vs cards, sections vs columns, sticky vs scrolling)?
+   - Empty / loading / error states match?
+   - Keyboard + screen-reader interaction patterns match (aria-pressed semantics, focus management, announcement quality)?
+   - Mobile layout retains every piece of data the desktop version shows?
+   If any answer is no, fix it before reporting complete. Re-attempts on a previously-shipped port must explicitly cite the DPC line numbers that prove parity.
 
 4. **Supabase project ID**: This project uses Supabase project `cilvpyivysjxpxbudkfa` (the one wired into .mcp.json). Do not reference any other project IDs or credentials files on the user's desktop.
 
@@ -33,7 +42,7 @@ RULE: Every table migration MUST include its RLS policies in the SAME migration 
 
 ### RLS Policy Patterns by table type
 
-**Public read-only data** (players, format_configs, rankings, player_value_history, player_value_trends, projections, player_stats, articles, news_items, vote_matchups, source_registry):
+**Public read-only data** (players, format_configs, rankings, player_value_history, player_value_trends, projections, player_stats, articles, news_items, vote_matchups, source_registry, leagues, rosters, league_users, league_transactions, draft_pick_values, league_power_rankings_cache):
 - Public SELECT for anyone (anon + authenticated)
 - INSERT/UPDATE/DELETE only via service role (server-side cron/admin)
 - No client-side writes allowed
@@ -309,7 +318,7 @@ For canonical merged tables like `players` where one row represents the union of
 
 NEVER drop raw source data on the floor during ingestion. Even if we "only need 3 fields right now," store the full object.
 
-Tables currently subject to this rule: `player_value_history`, `rankings`, `projections`, `player_stats`, `news_items`, `players`. Add to this list whenever a new ingestion table lands.
+Tables currently subject to this rule: `player_value_history`, `rankings`, `projections`, `player_stats`, `news_items`, `players`, `leagues`, `rosters`, `league_users`, `league_transactions`, `draft_pick_values`. Add to this list whenever a new ingestion table lands.
 
 ### Pre-Calculated (Derived) Tables
 
@@ -334,3 +343,39 @@ The backfill script for an existing source lives at `scripts/backfill-<source>-h
 - Every refactor of existing tables
 - Sub-agent implementation reviews must verify these rules on any schema work
 - If you find existing tables that violate these rules, fix them
+
+## League Sync feature (continuous flow)
+
+League Sync is ONE continuous user journey, not multiple features. The journey:
+
+1. `/tools/league-sync` — entry point. User enters Sleeper username and season, sees their leagues. No DB writes happen here; data comes straight from Sleeper.
+2. `/dashboard` — logged-in users persist their Sleeper username on user_preferences and see the same league list cached for fast return visits.
+3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 triggers `app/leagues/actions.ts ensureLeagueAndOpen`, which calls `lib/league-sync.ts syncLeague` (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role) and then navigates. The page itself also calls `syncLeague` on every render; the 10-minute cache inside `syncLeague` short-circuits redundant Sleeper hits.
+4. `/leagues/[sleeper_league_id]?tab=teams|transactions|power-rankings` — tabbed deep view. Each tab renders from the synced rows; never re-derives from Sleeper.
+
+Naming rules:
+- Feature name in copy/docs: "League Sync".
+- Routes: `/tools/league-sync` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
+- Tabs within `/leagues/[sleeper_league_id]` use plain functional labels.
+
+Sync rules:
+- All writes flow through `lib/league-sync.ts syncLeague(supabase, sleeper_league_id, { force })`. Do not write to `leagues`, `rosters`, `league_users`, or `league_transactions` from anywhere else. If you need a one-off, run `npm run sync:league -- <id>` or `npm run sync:league -- <id> --force`.
+- Cache TTL: 10 minutes (`LEAGUE_SYNC_TTL_MS`). `force=true` bypasses; `force=false` (default) returns early with cached: true if the DB row is fresh.
+- Format derivation lives in `lib/sleeper-to-format.ts`. If a Sleeper league's scoring or roster shape does not map cleanly to one of the 8 active `format_configs.slug` rows, the function returns null and `leagues.format_config_id` is left null. The UI must handle "Unmatched" gracefully (display the slug as Unmatched, do not crash).
+- `syncLeague` chains into `lib/league-power-rankings.ts calculateLeaguePowerRankings(supabase, league_id)` after a successful sync. The calc iterates every active (format, source) combo and upserts `league_power_rankings_cache` rows so the deep view can flip format/source without recomputing. A calc failure is logged but does NOT fail the parent sync — the cache row is non-critical.
+- Standalone recalc: `npm run calculate:power-rankings` (all leagues) or `npm run calculate:power-rankings -- --sleeper-league-id <id>` (one league). Run this after `npm run sync:ktc:full` if you want power rankings to reflect freshly-synced player values without re-running every league sync.
+
+Draft pick values:
+- KTC publishes dynasty draft picks alongside players in the same scraped payload (position=RDP). `scripts/sync-ktc.ts` parses those rows via `lib/ktc-picks.ts parsePickName` and writes to `draft_pick_values` for `dynasty-ppr-std` and `dynasty-ppr-sflex`. The TEP-sflex pick values are copied byte-for-byte from `dynasty-ppr-sflex` because picks have no TE position so the TEP multiplier is a no-op.
+- KTC does NOT publish redraft picks. Do not fabricate redraft pick rows; the power-rankings calc treats missing pick values as 0 contribution.
+- Pick lookup uses (season, round, pick_position) as the key. The current sync writes `pick_position` as the bucket KTC publishes ("early", "mid", "late"); if a roster's pick descriptor lacks a slot we default to "mid" when reading.
+
+Sleeper API access:
+- All Sleeper endpoints live in `lib/sleeper.ts`. Do not call `api.sleeper.app` directly from pages, server actions, or other lib files. Add new endpoints to `lib/sleeper.ts` as exported functions with 20-second timeouts and null-on-failure semantics, matching the existing pattern.
+- Sleeper sends transaction `draft_picks` as array OR object OR JSON string OR null. Always normalize via `lib/league-sync.ts normalizeDraftPicks` (or copy the pattern) before persisting or rendering.
+- Sleeper uses the string `"0"` as a placeholder for empty roster slots. Strip these out with `validPlayerId` before storing or rendering player IDs.
+
+Admin:
+- `user_preferences.is_admin` is the admin flag (migration 0018). A trigger blocks self-promotion; flipping the bit requires service_role.
+- Admin-only actions (e.g. force-resync) live behind both an `is_admin` check AND a 60-second per-league rate limit (planned for Phase 4).

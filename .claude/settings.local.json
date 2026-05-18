@@ -104,7 +104,14 @@
       "Bash(grep -oE '[^\"]{0,30}Brock Bowers[^\"]{0,500}' /tmp/rankings.html)",
       "Bash(grep -oE 'Davante Adams[^\"]{0,100}' /tmp/rankings.html)",
       "Bash(grep -oE '\"name\\\\\\\\\":\\\\\\\\\"Davante Adams[^}]+' /tmp/rankings.html)",
-      "Bash(grep -oE '\"name\\\\\\\\\":\\\\\\\\\"Brock Bowers[^}]+' /tmp/rankings.html)"
+      "Bash(grep -oE '\"name\\\\\\\\\":\\\\\\\\\"Brock Bowers[^}]+' /tmp/rankings.html)",
+      "Bash(git commit *)",
+      "Bash(Get-ChildItem -Recurse -Directory -Name)",
+      "Bash(Select-Object -First 50)",
+      "PowerShell(cd \"C:\\\\Users\\\\mjwal\\\\OneDrive\\\\Desktop\\\\ffbeacon\"; Get-ChildItem -Path \"app\" -Directory | ForEach-Object { Write-Host \"/$\\($_.Name\\)\" }ing me approve shit)",
+      "Bash(node *)",
+      "PowerShell(Get-Item *)",
+      "Bash(powershell -NoProfile -Command \"\\(Get-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\\) -replace 'mx-auto max-w-6xl', 'mx-auto max-w-7xl' | Set-Content 'app\\\\leagues\\\\[league_id]\\\\page.tsx'\")"
     ]
   },
   "enabledMcpjsonServers": [

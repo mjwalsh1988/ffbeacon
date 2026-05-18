@@ -2,13 +2,23 @@ const BASE = "https://api.sleeper.app/v1";
 
 const headers = { "user-agent": "ffbeacon/1.0" };
 
-async function safeFetch<T>(url: string): Promise<T | null> {
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+async function safeFetch<T>(url: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { headers, cache: "no-store" });
+    const response = await fetch(url, {
+      headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
     if (!response.ok) return null;
     return (await response.json()) as T;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -17,6 +27,7 @@ export type SleeperUser = {
   username: string;
   display_name: string;
   avatar: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type SleeperLeague = {
@@ -26,6 +37,7 @@ export type SleeperLeague = {
   sport: string;
   status: string;
   total_rosters: number;
+  previous_league_id?: string | null;
   scoring_settings?: Record<string, number>;
   roster_positions?: string[];
   settings?: Record<string, number>;
@@ -34,9 +46,55 @@ export type SleeperLeague = {
 export type SleeperRoster = {
   roster_id: number;
   owner_id: string | null;
+  co_owners?: string[] | null;
   players: string[] | null;
   starters: string[] | null;
+  reserve?: string[] | null;
+  taxi?: string[] | null;
   settings?: Record<string, number>;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type SleeperLeagueUser = SleeperUser & {
+  is_owner?: boolean;
+  is_bot?: boolean;
+};
+
+export type SleeperTransaction = {
+  transaction_id: string;
+  type: string;
+  status: string;
+  status_updated?: number | null;
+  created?: number | null;
+  week?: number | null;
+  leg?: number | null;
+  roster_ids?: number[];
+  adds: Record<string, number> | null;
+  drops: Record<string, number> | null;
+  draft_picks?: unknown;
+  waiver_budget?: unknown;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type SleeperTradedPick = {
+  season: string;
+  round: number;
+  roster_id: number;
+  previous_owner_id: number;
+  owner_id: number;
+};
+
+export type SleeperDraft = {
+  draft_id: string;
+  league_id: string | null;
+  season: string;
+  status: string;
+  type: string;
+  settings?: Record<string, number>;
+  metadata?: Record<string, unknown> | null;
+  slot_to_roster_id?: Record<string, number>;
+  start_time?: number | null;
+  last_picked?: number | null;
 };
 
 export async function getSleeperUser(username: string): Promise<SleeperUser | null> {
@@ -50,12 +108,53 @@ export async function getSleeperLeagues(
   return (await safeFetch<SleeperLeague[]>(`${BASE}/user/${userId}/leagues/nfl/${season}`)) ?? [];
 }
 
+export async function getSleeperLeague(leagueId: string): Promise<SleeperLeague | null> {
+  return safeFetch<SleeperLeague>(`${BASE}/league/${leagueId}`);
+}
+
 export async function getSleeperRosters(leagueId: string): Promise<SleeperRoster[]> {
   return (await safeFetch<SleeperRoster[]>(`${BASE}/league/${leagueId}/rosters`)) ?? [];
 }
 
-export async function getSleeperLeagueUsers(leagueId: string): Promise<SleeperUser[]> {
-  return (await safeFetch<SleeperUser[]>(`${BASE}/league/${leagueId}/users`)) ?? [];
+export async function getSleeperLeagueUsers(leagueId: string): Promise<SleeperLeagueUser[]> {
+  return (await safeFetch<SleeperLeagueUser[]>(`${BASE}/league/${leagueId}/users`)) ?? [];
+}
+
+export async function getSleeperWeekTransactions(
+  leagueId: string,
+  week: number,
+): Promise<SleeperTransaction[]> {
+  return (
+    (await safeFetch<SleeperTransaction[]>(`${BASE}/league/${leagueId}/transactions/${week}`)) ?? []
+  );
+}
+
+export async function getAllSleeperTransactions(
+  leagueId: string,
+  maxWeek = 25,
+  emptyStop = 3,
+): Promise<SleeperTransaction[]> {
+  const all: SleeperTransaction[] = [];
+  let emptyStreak = 0;
+  for (let week = 0; week <= maxWeek; week++) {
+    const batch = await getSleeperWeekTransactions(leagueId, week);
+    if (batch.length === 0) {
+      emptyStreak++;
+      if (emptyStreak >= emptyStop && week > 0) break;
+      continue;
+    }
+    emptyStreak = 0;
+    all.push(...batch);
+  }
+  return all;
+}
+
+export async function getSleeperTradedPicks(leagueId: string): Promise<SleeperTradedPick[]> {
+  return (await safeFetch<SleeperTradedPick[]>(`${BASE}/league/${leagueId}/traded_picks`)) ?? [];
+}
+
+export async function getSleeperLeagueDrafts(leagueId: string): Promise<SleeperDraft[]> {
+  return (await safeFetch<SleeperDraft[]>(`${BASE}/league/${leagueId}/drafts`)) ?? [];
 }
 
 export function currentNflSeason(): string {

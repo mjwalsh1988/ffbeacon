@@ -79,7 +79,13 @@ export default async function DashboardPage() {
               No active leagues for {season}. If you joined a league after this page loaded, refresh.
             </p>
           )}
-          {leagues.length > 0 && <LeagueResults leagues={leagues} season={season} />}
+          {leagues.length > 0 && (
+            <LeagueResults
+              leagues={leagues}
+              season={season}
+              sleeperUsername={sleeperUser?.display_name ?? sleeperUsername ?? null}
+            />
+          )}
         </section>
 
         <section aria-labelledby="quick-heading">

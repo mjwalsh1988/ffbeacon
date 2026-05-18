@@ -35,9 +35,26 @@
  * Run: npm run sync:ktc  (then npm run seed:rankings to refresh rankings)
  */
 
-import { getServiceClient } from "./_supabase";
+import { getServiceClient, withRetry } from "./_supabase";
 import { applyKtcTep, tepTierFromTePremiumBonus, type TepPlayer } from "../lib/ktc-tep";
+import { parsePickName } from "../lib/ktc-picks";
 import type { Json } from "../lib/database.types";
+
+// Dynasty formats where KTC publishes draft pick values. Redraft formats
+// do not include picks. TEP-sflex inherits picks from dynasty-ppr-sflex
+// (picks have no TE position so the multiplier does not apply).
+const PICK_FORMAT_SLUGS = new Set<string>(["dynasty-ppr-std", "dynasty-ppr-sflex"]);
+
+type PickRow = {
+  season: number;
+  round: number;
+  pick_position: "early" | "mid" | "late";
+  format_config_id: string;
+  source: string;
+  value: number;
+  captured_at: string;
+  metadata: Json;
+};
 
 type KtcPlayer = {
   playerID: number;
@@ -132,11 +149,17 @@ async function main() {
   const supabase = getServiceClient();
 
   console.log("Loading format_configs and existing players...");
-  const { data: formats, error: formatErr } = await supabase
-    .from("format_configs")
-    .select("id, slug, te_premium_bonus");
-  if (formatErr) throw formatErr;
-  if (!formats) throw new Error("missing format data");
+  const formats = await withRetry(
+    async () => {
+      const { data, error } = await supabase
+        .from("format_configs")
+        .select("id, slug, te_premium_bonus");
+      if (error) throw error;
+      if (!data) throw new Error("missing format data");
+      return data;
+    },
+    { label: "format_configs select" },
+  );
 
   // Page through players (Supabase JS defaults to 1000 rows max)
   const players: Array<{
@@ -149,14 +172,21 @@ async function main() {
   }> = [];
   const PAGE_SIZE = 1000;
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from("players")
-      .select("id, external_ids, first_name, last_name, position, team")
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    players.push(...data);
-    if (data.length < PAGE_SIZE) break;
+    const pageOffset = from;
+    const page = await withRetry(
+      async () => {
+        const { data, error } = await supabase
+          .from("players")
+          .select("id, external_ids, first_name, last_name, position, team")
+          .range(pageOffset, pageOffset + PAGE_SIZE - 1);
+        if (error) throw error;
+        return data ?? [];
+      },
+      { label: `players select page ${from}` },
+    );
+    if (page.length === 0) break;
+    players.push(...page);
+    if (page.length < PAGE_SIZE) break;
   }
   console.log(`  ${players.length} players loaded`);
 
@@ -193,6 +223,7 @@ async function main() {
   };
 
   const batches: ScrapedBatch[] = [];
+  const pickRows: PickRow[] = [];
 
   for (const target of TARGETS) {
     // Defense-in-depth: refuse to even scrape a target that isn't on the
@@ -222,7 +253,26 @@ async function main() {
       const value = valueBlock?.value;
       if (typeof value !== "number") continue;
       const position = k.position === "RDP" ? "PICK" : k.position?.toUpperCase();
-      if (!position || position === "PICK") continue;
+      if (!position) continue;
+
+      if (position === "PICK") {
+        if (!PICK_FORMAT_SLUGS.has(target.formatSlug)) continue;
+        const parsed = parsePickName(k.playerName);
+        if (!parsed) continue;
+        pickRows.push({
+          season: parsed.season,
+          round: parsed.round,
+          pick_position:
+            parsed.pick_position === "unknown" ? "mid" : parsed.pick_position,
+          format_config_id: formatId,
+          source: "ktc",
+          value,
+          captured_at: now,
+          metadata: k as unknown as Json,
+        });
+        continue;
+      }
+
       const key = `${normalizeName(k.playerName)}|${position}`;
       fingerprint.set(key, value);
       const playerId = playerByName.get(key);
@@ -345,16 +395,18 @@ async function main() {
 
     for (let i = 0; i < rows.length; i += 200) {
       const chunk = rows.slice(i, i + 200);
-      const { error } = await supabase
-        .from("player_value_history")
-        .upsert(chunk, {
-          onConflict: "player_id,format_config_id,source,captured_at",
-          ignoreDuplicates: false,
-        });
-      if (error) {
-        console.error("Upsert error:", error.message);
-        throw error;
-      }
+      await withRetry(
+        async () => {
+          const { error } = await supabase
+            .from("player_value_history")
+            .upsert(chunk, {
+              onConflict: "player_id,format_config_id,source,captured_at",
+              ignoreDuplicates: false,
+            });
+          if (error) throw error;
+        },
+        { label: `player_value_history upsert ${target.formatSlug}` },
+      );
       totalRows += chunk.length;
     }
 
@@ -383,14 +435,23 @@ async function main() {
         metadata: Record<string, unknown>;
       }
     >();
-    for (let from = 0; from < updateIds.length; from += 1000) {
-      const batch = updateIds.slice(from, from + 1000);
-      const { data, error } = await supabase
-        .from("players")
-        .select("id, external_ids, source_synced_at, metadata")
-        .in("id", batch);
-      if (error) throw error;
-      for (const p of data ?? []) {
+    // Chunk size 200: 1000 UUIDs in a .in() filter blows past PostgREST's
+    // ~16KB header limit (each UUID is 36 chars, so 1000 IDs encode to ~37KB
+    // of URL). 200 keeps the request URL under 8KB.
+    for (let from = 0; from < updateIds.length; from += 200) {
+      const batch = updateIds.slice(from, from + 200);
+      const data = await withRetry(
+        async () => {
+          const { data, error } = await supabase
+            .from("players")
+            .select("id, external_ids, source_synced_at, metadata")
+            .in("id", batch);
+          if (error) throw error;
+          return data ?? [];
+        },
+        { label: `players select for merge` },
+      );
+      for (const p of data) {
         existingByPlayerId.set(p.id, {
           external_ids: (p.external_ids as Record<string, unknown>) ?? {},
           source_synced_at: (p.source_synced_at as Record<string, unknown>) ?? {},
@@ -420,22 +481,97 @@ async function main() {
       };
       // Always update source_synced_at + metadata; only update external_ids
       // (effectively a no-op when ktc id was already present).
-      const { error } = await supabase
-        .from("players")
-        .update({
-          external_ids: externalIds,
-          source_synced_at: sourceSyncedAt,
-          metadata,
-        })
-        .eq("id", update.playerId);
-      if (error) {
-        console.error("Player merge error:", error.message);
-        throw error;
+      try {
+        await withRetry(
+          async () => {
+            const { error } = await supabase
+              .from("players")
+              .update({
+                external_ids: externalIds,
+                source_synced_at: sourceSyncedAt,
+                metadata,
+              })
+              .eq("id", update.playerId);
+            if (error) throw error;
+          },
+          { label: `players update ${update.playerId.slice(0, 8)}` },
+        );
+      } catch (err) {
+        const code = (err as { code?: string } | undefined)?.code;
+        // 23505 = postgres unique_violation. This happens when our name+position
+        // matcher mapped a KTC playerID that another FF Beacon player already
+        // claims as external_ids.ktc. Don't overwrite — that would destroy a
+        // prior mapping decision. Drop the ktc field from the update and write
+        // the rest (source_synced_at + metadata still need to land).
+        if (code === "23505") {
+          console.warn(
+            `  ktc id collision: another player already owns ktc=${update.ktcRaw.playerID}; ` +
+              `updating source_synced_at + metadata only for player ${update.playerId.slice(0, 8)}`,
+          );
+          await withRetry(
+            async () => {
+              const { error: retryErr } = await supabase
+                .from("players")
+                .update({ source_synced_at: sourceSyncedAt, metadata })
+                .eq("id", update.playerId);
+              if (retryErr) throw retryErr;
+            },
+            { label: `players update (no ktc) ${update.playerId.slice(0, 8)}` },
+          );
+          continue;
+        }
+        throw err;
       }
     }
   }
 
-  console.log(`\nDone. Inserted ${totalRows} player_value_history rows. Unmatched KTC players: ${unmatched}`);
+  // ---- Draft pick values ----
+  // Derive TEP-sflex picks from dynasty-ppr-sflex base. Picks have no TE
+  // position, so the TEP transform is a no-op: the values copy across.
+  for (const { targetSlug, baseSlug } of DERIVED_FROM_SFLEX) {
+    if (!PICK_FORMAT_SLUGS.has(baseSlug)) continue;
+    const targetEntry = formatBySlug.get(targetSlug);
+    if (!targetEntry) continue;
+    const baseFormatId = formatBySlug.get(baseSlug)?.id;
+    if (!baseFormatId) continue;
+    const basePicks = pickRows.filter((p) => p.format_config_id === baseFormatId);
+    for (const p of basePicks) {
+      pickRows.push({
+        ...p,
+        format_config_id: targetEntry.id,
+        metadata: {
+          derived_from: { source_slug: "ktc", base_format_slug: baseSlug },
+          algorithm: "copy",
+          original: p.metadata,
+        },
+      });
+    }
+  }
+
+  let picksWritten = 0;
+  if (pickRows.length > 0) {
+    console.log(`\nWriting ${pickRows.length} draft_pick_values rows...`);
+    for (let i = 0; i < pickRows.length; i += 200) {
+      const chunk = pickRows.slice(i, i + 200);
+      await withRetry(
+        async () => {
+          const { error } = await supabase
+            .from("draft_pick_values")
+            .upsert(chunk, {
+              onConflict: "season,round,pick_position,format_config_id,source,captured_at",
+              ignoreDuplicates: false,
+            });
+          if (error) throw error;
+        },
+        { label: "draft_pick_values upsert" },
+      );
+      picksWritten += chunk.length;
+    }
+  }
+
+  console.log(
+    `\nDone. Inserted ${totalRows} player_value_history rows and ${picksWritten} draft_pick_values rows. Unmatched KTC players: ${unmatched}`,
+  );
 }
 
 main().catch((err) => {
