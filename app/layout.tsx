@@ -13,6 +13,19 @@ export const metadata: Metadata = {
   },
   description: "Your signal through the fantasy noise.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://ffbeacon.com"),
+  // Favicons live in /public/img. We explicitly enumerate them so Next.js
+  // never falls back to its starter favicon (which still ships as a stale
+  // app/favicon.ico when scaffolded) and so browsers pick the highest-
+  // fidelity variant they support: SVG first, then PNG, then ICO.
+  icons: {
+    icon: [
+      { url: "/img/favicon.svg", type: "image/svg+xml" },
+      { url: "/img/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+      { url: "/img/favicon.ico", sizes: "any" },
+    ],
+    shortcut: ["/img/favicon.ico"],
+    apple: [{ url: "/img/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({
