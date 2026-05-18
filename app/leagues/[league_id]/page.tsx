@@ -19,6 +19,10 @@ import { TransactionRow } from "@/components/transaction-row";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { ResyncButton } from "@/components/resync-button";
 import {
+  buildLeagueFormatTags,
+  type FormatTag,
+} from "@/lib/league-format-tags";
+import {
   CalendarDays,
   Users,
   Trophy,
@@ -116,12 +120,18 @@ export default async function LeagueDeepViewPage({
   const { data: league } = await supabase
     .from("leagues")
     .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_synced_at, sync_status, sync_error, format_config_id, roster_positions, metadata",
+      "id, sleeper_league_id, name, season, status, total_rosters, last_synced_at, sync_status, sync_error, format_config_id, roster_positions, scoring_settings, metadata",
     )
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
 
   if (!league) notFound();
+
+  const formatTags = buildLeagueFormatTags({
+    rosterPositions: league.roster_positions,
+    scoringSettings: league.scoring_settings,
+    teamCount: league.total_rosters,
+  });
 
   // Resolve source preference. Format is NOT user-controlled inside a
   // league view (CLAUDE.md: League Sync Format Resolution rule). We derive
@@ -190,6 +200,10 @@ export default async function LeagueDeepViewPage({
               value={<StatusPill status={league.status ?? null} />}
             />
           </dl>
+
+          {formatTags.length > 0 && (
+            <FormatTagRow tags={formatTags} />
+          )}
 
           <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
             <span>
@@ -745,6 +759,42 @@ function humanizeStatus(raw: string | null | undefined): string {
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(" ");
+}
+
+function FormatTagRow({ tags }: { tags: FormatTag[] }) {
+  // Two visual tones so format meta (cyan) is scannable apart from per-slot
+  // counts (purple), mirroring the FF Beacon brand split. Border + chip tint
+  // are inline so the colors survive PurgeCSS even when Tailwind misses the
+  // arbitrary value.
+  const styles = {
+    format: {
+      backgroundColor: "rgba(34, 211, 238, 0.08)",
+      borderColor: "rgba(34, 211, 238, 0.30)",
+      color: "#22D3EE",
+    },
+    position: {
+      backgroundColor: "rgba(168, 85, 247, 0.08)",
+      borderColor: "rgba(168, 85, 247, 0.30)",
+      color: "#A855F7",
+    },
+  } as const;
+  return (
+    <ul
+      className="mt-4 flex flex-wrap gap-1.5"
+      role="list"
+      aria-label="League format tags"
+    >
+      {tags.map((t) => (
+        <li
+          key={t.key}
+          className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide"
+          style={styles[t.tone]}
+        >
+          {t.label}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function StatusPill({ status }: { status: string | null }) {
