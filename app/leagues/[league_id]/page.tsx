@@ -352,16 +352,6 @@ async function OverviewPanel({
         leagueSeason={leagueSeason}
         leagueStatus={leagueStatus}
       />
-
-      <section aria-labelledby="next-heading">
-        <h2 id="next-heading" className="text-2xl font-semibold tracking-tight">
-          Quick links
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm text-ink-muted">
-          Sleeper league: <span className="font-mono text-ink">{sleeperLeagueId}</span>.
-          Use the tabs above to browse teams and transactions.
-        </p>
-      </section>
     </div>
   );
 }
