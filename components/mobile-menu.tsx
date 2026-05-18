@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PRIMARY_NAV } from "@/lib/site";
 import type { FormatLike } from "@/lib/format-fallback";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -27,11 +28,20 @@ export function MobileMenu({
   supportedFormatSlugs: string[] | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
   const labelId = useId();
+
+  // SSR-safe portal: we only have a `document` after hydration. Setting this
+  // once on mount lets the open-state JSX render via createPortal into
+  // document.body, which is required so the overlay escapes the sticky
+  // <header>'s z-30 stacking context (otherwise page hero text paints over it).
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setOpen(false);
@@ -86,13 +96,13 @@ export function MobileMenu({
       >
         <span aria-hidden="true">☰</span>
       </button>
-      {open && (
+      {open && mounted && createPortal(
         <div
           id="mobile-menu"
           role="dialog"
           aria-modal="true"
           aria-labelledby={labelId}
-          className="fixed inset-0 z-50 flex md:hidden"
+          className="fixed inset-0 z-[60] flex md:hidden"
         >
           <button
             type="button"
@@ -186,7 +196,8 @@ export function MobileMenu({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
