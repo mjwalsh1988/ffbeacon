@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 export type FaabPlayer = {
   slug: string;
@@ -25,6 +32,8 @@ const NEED_LABEL: Record<NeedLevel, string> = {
   high: "Starter you need now (high need)",
 };
 
+const MAX_SUGGESTIONS = 40;
+
 export function FaabForm({
   players,
   formatName,
@@ -32,15 +41,10 @@ export function FaabForm({
   players: FaabPlayer[];
   formatName: string;
 }) {
-  const datalistId = useId();
-  const [playerInput, setPlayerInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedPlayer, setSelectedPlayer] = useState<FaabPlayer | null>(null);
   const [budget, setBudget] = useState(100);
   const [need, setNeed] = useState<NeedLevel>("medium");
-
-  const selectedPlayer = useMemo(() => {
-    const exact = players.find((p) => p.name.toLowerCase() === playerInput.toLowerCase());
-    return exact ?? null;
-  }, [playerInput, players]);
 
   const recommendation = useMemo(() => {
     if (!selectedPlayer) return null;
@@ -85,31 +89,17 @@ export function FaabForm({
       <h2 id="faab-form-heading" className="sr-only">
         FAAB calculator inputs
       </h2>
-      <div>
-        <label htmlFor="faab-player" className="block text-sm font-medium">
-          Player
-        </label>
-        <input
-          id="faab-player"
-          list={datalistId}
-          autoComplete="off"
-          value={playerInput}
-          onChange={(event) => setPlayerInput(event.target.value)}
-          placeholder="Start typing a player name"
-          className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2 text-sm focus:border-brand-purple focus:outline-none"
-          aria-describedby="faab-player-help"
-        />
-        <datalist id={datalistId}>
-          {players.map((p) => (
-            <option key={p.slug} value={p.name}>
-              {p.position} {p.team ? `• ${p.team}` : ""} • #{p.overall_rank}
-            </option>
-          ))}
-        </datalist>
-        <p id="faab-player-help" className="mt-1 text-xs text-ink-subtle">
-          Pull from the top 300 ranked players. {formatName} format.
-        </p>
-      </div>
+      <PlayerCombobox
+        players={players}
+        query={query}
+        onQueryChange={setQuery}
+        selected={selectedPlayer}
+        onSelect={(p) => {
+          setSelectedPlayer(p);
+          setQuery(p ? p.name : "");
+        }}
+        formatName={formatName}
+      />
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="faab-budget" className="block text-sm font-medium">
@@ -164,5 +154,240 @@ export function FaabForm({
         )}
       </div>
     </form>
+  );
+}
+
+/**
+ * Accessible combobox/listbox replacement for the old <datalist>. The native
+ * datalist was the source of the bugs the user reported:
+ *   - On iOS Safari / Chrome Android, datalist suggestions either don't render
+ *     or only display the `value` attribute (so no metadata is visible).
+ *   - On desktop, the browser-rendered popup can't be styled, and with 300
+ *     options it occasionally renders pinned to the viewport edge instead of
+ *     anchored below the input.
+ *
+ * This custom combobox follows the WAI-ARIA combobox-with-listbox pattern:
+ *   role="combobox" on the input, aria-controls + aria-expanded wired to the
+ *   listbox, aria-activedescendant tracks the highlighted option, and the
+ *   listbox is positioned absolutely directly under the input.
+ */
+function PlayerCombobox({
+  players,
+  query,
+  onQueryChange,
+  selected,
+  onSelect,
+  formatName,
+}: {
+  players: FaabPlayer[];
+  query: string;
+  onQueryChange: (q: string) => void;
+  selected: FaabPlayer | null;
+  onSelect: (player: FaabPlayer | null) => void;
+  formatName: string;
+}) {
+  const inputId = useId();
+  const listboxId = useId();
+  const helpId = useId();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [open, setOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      // Empty query — show the top-ranked players so users see something
+      // immediately when they tap the field.
+      return players.slice(0, MAX_SUGGESTIONS);
+    }
+    // Rank substring matches by overall_rank ascending so the most relevant
+    // player shows up first. Cap to keep the DOM small.
+    const out: FaabPlayer[] = [];
+    for (const p of players) {
+      if (p.name.toLowerCase().includes(q)) out.push(p);
+      if (out.length >= MAX_SUGGESTIONS) break;
+    }
+    return out;
+  }, [players, query]);
+
+  // Clamp the active index whenever the visible match list changes (e.g. user
+  // types another character and the matching set shrinks).
+  useEffect(() => {
+    if (activeIdx >= matches.length) setActiveIdx(0);
+  }, [matches.length, activeIdx]);
+
+  // Click-outside closes the listbox.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent | TouchEvent) => {
+      const node = wrapperRef.current;
+      if (!node) return;
+      if (node.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
+  }, [open]);
+
+  const commit = useCallback(
+    (player: FaabPlayer) => {
+      onSelect(player);
+      setOpen(false);
+      // Defocus on touch devices so the on-screen keyboard collapses; users
+      // wanted to see the recommendation after selecting.
+      inputRef.current?.blur();
+    },
+    [onSelect],
+  );
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIdx((i) => Math.min(matches.length - 1, i + 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIdx((i) => Math.max(0, i - 1));
+    } else if (event.key === "Enter") {
+      if (open && matches[activeIdx]) {
+        event.preventDefault();
+        commit(matches[activeIdx]);
+      }
+    } else if (event.key === "Escape") {
+      if (open) {
+        event.preventDefault();
+        setOpen(false);
+      }
+    } else if (event.key === "Home") {
+      if (open) {
+        event.preventDefault();
+        setActiveIdx(0);
+      }
+    } else if (event.key === "End") {
+      if (open) {
+        event.preventDefault();
+        setActiveIdx(matches.length - 1);
+      }
+    }
+  };
+
+  const showClear = query.length > 0 || selected != null;
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <label htmlFor={inputId} className="block text-sm font-medium">
+        Player
+      </label>
+      <div className="relative mt-2">
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          aria-activedescendant={
+            open && matches[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined
+          }
+          aria-describedby={helpId}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="words"
+          spellCheck={false}
+          inputMode="search"
+          value={query}
+          onChange={(event) => {
+            onQueryChange(event.target.value);
+            setOpen(true);
+            // Editing invalidates the current selection — caller re-resolves
+            // on the next commit.
+            if (selected && event.target.value !== selected.name) {
+              onSelect(null);
+            }
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          placeholder="Start typing a player name"
+          className="w-full rounded-card border border-line bg-base px-3 py-2 pr-9 text-base focus:border-brand-purple focus:outline-none sm:text-sm"
+        />
+        {showClear && (
+          <button
+            type="button"
+            onClick={() => {
+              onQueryChange("");
+              onSelect(null);
+              setActiveIdx(0);
+              setOpen(true);
+              inputRef.current?.focus();
+            }}
+            aria-label="Clear player selection"
+            className="absolute inset-y-0 right-0 inline-flex w-9 items-center justify-center text-ink-muted hover:text-ink"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        )}
+      </div>
+
+      <p id={helpId} className="mt-1 text-xs text-ink-subtle">
+        Pull from the top 300 ranked players. {formatName} format.
+      </p>
+
+      {open && (
+        <ul
+          id={listboxId}
+          role="listbox"
+          aria-label="Player suggestions"
+          className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface-elevated shadow-2xl shadow-black/50"
+        >
+          {matches.length === 0 ? (
+            <li className="px-3 py-3 text-sm text-ink-subtle">
+              No players match &ldquo;{query}&rdquo;.
+            </li>
+          ) : (
+            matches.map((p, i) => {
+              const isActive = i === activeIdx;
+              return (
+                <li
+                  key={p.slug}
+                  id={`${listboxId}-opt-${i}`}
+                  role="option"
+                  aria-selected={isActive}
+                  // Mouse-over highlights so cursor + keyboard stay in sync.
+                  onMouseEnter={() => setActiveIdx(i)}
+                  // onMouseDown (not click) so the input doesn't blur before
+                  // we get the chance to handle selection.
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    commit(p);
+                  }}
+                  className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm transition-colors ${
+                    isActive ? "bg-brand-purple/15 text-ink" : "text-ink-muted"
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-ink">{p.name}</span>
+                    <span className="ml-2 text-xs text-ink-subtle">
+                      {p.position}
+                      {p.team ? ` · ${p.team}` : ""}
+                    </span>
+                  </span>
+                  <span className="flex-shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
+                    #{p.overall_rank}
+                  </span>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      )}
+    </div>
   );
 }
