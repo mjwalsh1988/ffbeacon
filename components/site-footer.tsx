@@ -24,10 +24,20 @@ export function SiteFooter() {
               </h2>
               <ul className="space-y-2 text-sm">
                 {column.links.map((link) => (
-                  <li key={link.href}>
-                    <Link href={link.href} className="text-ink-muted hover:text-ink">
-                      {link.label}
-                    </Link>
+                  <li key={`${column.heading}-${link.label}`}>
+                    {link.disabled ? (
+                      <span
+                        className="cursor-default text-ink-subtle/70"
+                        aria-disabled="true"
+                        title="Coming soon"
+                      >
+                        {link.label}
+                      </span>
+                    ) : (
+                      <Link href={link.href} className="text-ink-muted hover:text-ink">
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -66,16 +76,27 @@ function AboutColumn() {
       <ul className="mt-5 flex items-center gap-2" aria-label="Social profiles">
         {SOCIAL_LINKS.map((link) => (
           <li key={link.label}>
-            <a
-              href={link.href}
-              {...(link.external
-                ? { target: "_blank", rel: "noopener noreferrer" }
-                : {})}
-              aria-label={`${SITE.name} on ${link.label}${link.external ? " (opens in new tab)" : ""}`}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-muted transition-colors hover:border-brand-purple/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <SocialIcon name={link.label} className="h-4 w-4" />
-            </a>
+            {link.disabled ? (
+              <span
+                aria-disabled="true"
+                aria-label={`${SITE.name} on ${link.label} (coming soon)`}
+                title="Coming soon"
+                className="inline-flex h-9 w-9 cursor-default items-center justify-center rounded-full border border-line bg-surface text-ink-subtle/70"
+              >
+                <SocialIcon name={link.label} className="h-4 w-4" />
+              </span>
+            ) : (
+              <a
+                href={link.href}
+                {...(link.external
+                  ? { target: "_blank", rel: "noopener noreferrer" }
+                  : {})}
+                aria-label={`${SITE.name} on ${link.label}${link.external ? " (opens in new tab)" : ""}`}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-muted transition-colors hover:border-brand-purple/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                <SocialIcon name={link.label} className="h-4 w-4" />
+              </a>
+            )}
           </li>
         ))}
       </ul>

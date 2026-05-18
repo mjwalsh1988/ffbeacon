@@ -20,49 +20,61 @@ export const PRIMARY_NAV = [
   { label: "About", href: "/about" as const },
 ];
 
-export const FOOTER_COLUMNS = [
+/** Footer-link shape. `disabled` links render as a non-interactive
+ * placeholder (the destination doesn't exist yet) so we don't ship broken
+ * navigation. Swap to `disabled: false` (or drop the flag) once the page lands. */
+export type FooterLink = {
+  label: string;
+  href: string;
+  disabled?: boolean;
+};
+
+export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
   {
     heading: "Tools",
     links: [
-      { label: "Rankings Board", href: "/rankings" as const },
-      { label: "Sleeper League Sync", href: "/tools/league-sync" as const },
-      { label: "FAAB Calculator", href: "/tools/faab" as const },
+      { label: "Rankings Board", href: "/rankings" },
+      { label: "Sleeper League Sync", href: "/tools/league-sync" },
+      { label: "FAAB Calculator", href: "/tools/faab" },
     ],
   },
   {
     heading: "Learn",
     links: [
-      { label: "Guides", href: "/guides" as const },
-      { label: "Fantasy Analytics 101", href: "/guides/fantasy-analytics-101" as const },
-      { label: "Accessible Fantasy Football", href: "/guides/accessible-fantasy-football" as const },
+      { label: "Guides", href: "/guides" },
+      { label: "Fantasy Analytics 101", href: "/guides/fantasy-analytics-101", disabled: true },
+      { label: "Accessible Fantasy Football", href: "/guides/accessible-fantasy-football", disabled: true },
     ],
   },
   {
     heading: "Site",
     links: [
-      { label: "About", href: "/about" as const },
-      { label: "Author", href: "/author/michael" as const },
-      { label: "Privacy", href: "/privacy" as const },
+      { label: "About", href: "/about" },
+      { label: "Author", href: "/author/michael" },
+      { label: "Terms of Service", href: "/terms" },
+      { label: "Privacy Policy", href: "/privacy" },
     ],
   },
 ];
 
 /**
- * Social profiles shown as icons in the footer About column. Placeholder
- * hrefs (#) for accounts that don't exist yet — swap them in once the
- * profiles are claimed. Order: Facebook, Instagram, X, TikTok.
+ * Social profiles shown as icons in the footer About column. All four
+ * are placeholders for now — the renderer treats `disabled: true` as a
+ * non-interactive icon (still labeled, still styled, but no navigation)
+ * so the brand row reads correctly before the accounts exist.
  */
 export const SOCIAL_LINKS: Array<{
   label: "Facebook" | "Instagram" | "X" | "TikTok";
   href: string;
-  /** Whether the link opens a third-party site (true) or stays on ours
-   * (false). Drives target="_blank" + rel attributes in the renderer. */
+  /** Whether the link opens a third-party site. Ignored when disabled. */
   external: boolean;
+  /** Hide the actual navigation while the social account isn't claimed yet. */
+  disabled?: boolean;
 }> = [
-  { label: "Facebook", href: "https://facebook.com/ffbeacon", external: true },
-  { label: "Instagram", href: "https://instagram.com/ffbeacon", external: true },
-  { label: "X", href: "https://x.com/ffbeacon", external: true },
-  { label: "TikTok", href: "https://tiktok.com/@ffbeacon", external: true },
+  { label: "Facebook", href: "#", external: true, disabled: true },
+  { label: "Instagram", href: "#", external: true, disabled: true },
+  { label: "X", href: "#", external: true, disabled: true },
+  { label: "TikTok", href: "#", external: true, disabled: true },
 ];
 
 export const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
