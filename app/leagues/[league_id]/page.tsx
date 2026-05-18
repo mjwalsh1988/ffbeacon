@@ -60,7 +60,6 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "teams", label: "Teams" },
   { id: "transactions", label: "Transactions" },
-  { id: "power-rankings", label: "Power Rankings" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -277,6 +276,12 @@ export default async function LeagueDeepViewPage({
             leagueRowId={league.id}
             sleeperLeagueId={sleeperLeagueId}
             counts={syncResult.counts}
+            formatSlug={context.coverage === "none" ? null : context.formatSlug}
+            sourceSlug={context.coverage === "none" ? null : context.sourceSlug}
+            formatDisplay={context.coverage === "none" ? "—" : context.formatDisplay}
+            sourceDisplay={context.coverage === "none" ? "—" : context.sourceDisplay}
+            leagueSeason={league.season != null ? String(league.season) : null}
+            leagueStatus={league.status ?? null}
           />
         )}
         {activeTab === "teams" && (
@@ -298,18 +303,6 @@ export default async function LeagueDeepViewPage({
             context={context.coverage === "none" ? null : (context as LeagueContext)}
           />
         )}
-        {activeTab === "power-rankings" && (
-          <PowerRankingsPanel
-            leagueRowId={league.id}
-            sleeperLeagueId={sleeperLeagueId}
-            formatSlug={context.coverage === "none" ? null : context.formatSlug}
-            sourceSlug={context.coverage === "none" ? null : context.sourceSlug}
-            formatDisplay={context.coverage === "none" ? "—" : context.formatDisplay}
-            sourceDisplay={context.coverage === "none" ? "—" : context.sourceDisplay}
-            leagueSeason={league.season != null ? String(league.season) : null}
-            leagueStatus={league.status ?? null}
-          />
-        )}
       </div>
     </main>
   );
@@ -319,18 +312,23 @@ async function OverviewPanel({
   leagueRowId,
   sleeperLeagueId,
   counts,
+  formatSlug,
+  sourceSlug,
+  formatDisplay,
+  sourceDisplay,
+  leagueSeason,
+  leagueStatus,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
   counts: { rosters: number; users: number; transactions: number };
+  formatSlug: string | null;
+  sourceSlug: string | null;
+  formatDisplay: string;
+  sourceDisplay: string;
+  leagueSeason: string | null;
+  leagueStatus: string | null;
 }) {
-  const supabase = await createClient();
-  const { data: users } = await supabase
-    .from("league_users")
-    .select("display_name, team_name, sleeper_user_id, is_commissioner")
-    .eq("league_id", leagueRowId)
-    .order("display_name", { ascending: true });
-
   return (
     <div className="space-y-8">
       <section aria-labelledby="snapshot-heading">
@@ -344,32 +342,16 @@ async function OverviewPanel({
         </ul>
       </section>
 
-      <section aria-labelledby="members-heading">
-        <h2 id="members-heading" className="text-2xl font-semibold tracking-tight">
-          Members
-        </h2>
-        {users && users.length > 0 ? (
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-            {users.map((u) => (
-              <li
-                key={u.sleeper_user_id}
-                className="rounded-card border border-line bg-surface p-4"
-              >
-                <p className="text-base font-semibold text-ink">
-                  {u.team_name || u.display_name || "Unnamed team"}
-                </p>
-                {u.team_name && u.display_name && (
-                  <p className="text-sm text-ink-muted">{u.display_name}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-sm text-ink-muted">
-            No members synced yet. Try refreshing the page in a moment.
-          </p>
-        )}
-      </section>
+      <PowerRankingsSection
+        leagueRowId={leagueRowId}
+        sleeperLeagueId={sleeperLeagueId}
+        formatSlug={formatSlug}
+        sourceSlug={sourceSlug}
+        formatDisplay={formatDisplay}
+        sourceDisplay={sourceDisplay}
+        leagueSeason={leagueSeason}
+        leagueStatus={leagueStatus}
+      />
 
       <section aria-labelledby="next-heading">
         <h2 id="next-heading" className="text-2xl font-semibold tracking-tight">
@@ -377,7 +359,7 @@ async function OverviewPanel({
         </h2>
         <p className="mt-3 max-w-2xl text-sm text-ink-muted">
           Sleeper league: <span className="font-mono text-ink">{sleeperLeagueId}</span>.
-          Use the tabs above to browse teams, transactions, and power rankings.
+          Use the tabs above to browse teams and transactions.
         </p>
       </section>
     </div>
@@ -502,7 +484,7 @@ async function TransactionsPanel({
   );
 }
 
-async function PowerRankingsPanel({
+async function PowerRankingsSection({
   leagueRowId,
   sleeperLeagueId,
   formatSlug,
