@@ -112,7 +112,7 @@ export function FaabForm({
             max={1000}
             value={budget}
             onChange={(event) => setBudget(Number.parseInt(event.target.value || "0", 10))}
-            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2 text-sm focus:border-brand-purple focus:outline-none"
+            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none"
           />
         </div>
         <fieldset>
@@ -316,7 +316,7 @@ function PlayerCombobox({
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
           placeholder="Start typing a player name"
-          className="w-full rounded-card border border-line bg-base px-3 py-2 pr-9 text-base focus:border-brand-purple focus:outline-none sm:text-sm"
+          className="w-full rounded-card border border-line bg-base px-3 py-2 pr-9 text-base text-ink placeholder:text-ink-subtle caret-brand-purple focus:border-brand-purple focus:outline-none sm:text-sm"
         />
         {showClear && (
           <button
@@ -328,8 +328,13 @@ function PlayerCombobox({
               setOpen(true);
               inputRef.current?.focus();
             }}
-            aria-label="Clear player selection"
-            className="absolute inset-y-0 right-0 inline-flex w-9 items-center justify-center text-ink-muted hover:text-ink"
+            aria-label={
+              selected
+                ? `Clear ${selected.name} and search for a different player`
+                : "Clear search field"
+            }
+            title="Clear"
+            className="absolute inset-y-0 right-0 my-1 mr-1 inline-flex w-8 items-center justify-center rounded-card text-ink-muted transition-colors hover:bg-line/40 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             <span aria-hidden="true">✕</span>
           </button>
