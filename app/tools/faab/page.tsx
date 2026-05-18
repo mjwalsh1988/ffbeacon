@@ -35,6 +35,8 @@ export default async function FaabPage({
 
   let players: FaabPlayer[] = [];
   let fallbackBanner: { requested: string | null; actual: string } | null = null;
+  let rankingsSourceName: string | null = null;
+  let valueSourceName: string | null = null;
   if (format) {
     const registry = await getAvailableSources(supabase);
     const rankingsResolution = resolveSourceForFormat(
@@ -49,6 +51,12 @@ export default async function FaabPage({
       format.slug,
       requestedSourceSlug,
     );
+    if (rankingsResolution.source) {
+      rankingsSourceName = describeSource(registry, rankingsResolution.source);
+    }
+    if (valueHistoryResolution.source) {
+      valueSourceName = describeSource(registry, valueHistoryResolution.source);
+    }
     if (rankingsResolution.fellBack && rankingsResolution.source) {
       fallbackBanner = {
         requested: describeSource(registry, rankingsResolution.requested),
@@ -59,7 +67,9 @@ export default async function FaabPage({
     if (rankingsResolution.source) {
       const { data } = await supabase
         .from("rankings")
-        .select("overall_rank, players!inner(slug, first_name, last_name, position, team)")
+        .select(
+          "overall_rank, position_rank, players!inner(slug, first_name, last_name, position, team)",
+        )
         .eq("format_config_id", format.id)
         .eq("source", rankingsResolution.source)
         .order("overall_rank")
@@ -77,6 +87,7 @@ export default async function FaabPage({
           position: player.position,
           team: player.team ?? null,
           overall_rank: row.overall_rank,
+          position_rank: row.position_rank,
           value: null,
         });
         playerIds.push(slug);
@@ -136,7 +147,12 @@ export default async function FaabPage({
         </div>
       </header>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-        <FaabForm players={players} formatName={format?.display_name ?? "default format"} />
+        <FaabForm
+          players={players}
+          formatName={format?.display_name ?? "default format"}
+          rankingsSourceName={rankingsSourceName}
+          valueSourceName={valueSourceName}
+        />
       </div>
     </main>
   );

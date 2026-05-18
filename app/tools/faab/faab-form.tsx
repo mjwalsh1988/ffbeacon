@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { BarChart3, Database, Sparkles, Trophy } from "lucide-react";
 
 export type FaabPlayer = {
   slug: string;
@@ -15,6 +16,9 @@ export type FaabPlayer = {
   position: string;
   team: string | null;
   overall_rank: number;
+  /** Per-position rank from rankings.position_rank for the resolved
+   * (format, source) pair. Surfaced in the selected-player card. */
+  position_rank: number;
   value: number | null;
 };
 
@@ -37,9 +41,17 @@ const MAX_SUGGESTIONS = 40;
 export function FaabForm({
   players,
   formatName,
+  rankingsSourceName,
+  valueSourceName,
 }: {
   players: FaabPlayer[];
   formatName: string;
+  /** Display name of the source backing the rankings (e.g. "KTC",
+   * "FantasyCalc"). Falls back to null when no source covers the format. */
+  rankingsSourceName: string | null;
+  /** Same, for the player_value_history source. Often equal to rankings
+   * source but can differ when one source publishes rankings only. */
+  valueSourceName: string | null;
 }) {
   const [query, setQuery] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<FaabPlayer | null>(null);
@@ -89,6 +101,13 @@ export function FaabForm({
       <h2 id="faab-form-heading" className="sr-only">
         FAAB calculator inputs
       </h2>
+
+      <SourceContextBar
+        formatName={formatName}
+        rankingsSourceName={rankingsSourceName}
+        valueSourceName={valueSourceName}
+      />
+
       <PlayerCombobox
         players={players}
         query={query}
@@ -100,6 +119,16 @@ export function FaabForm({
         }}
         formatName={formatName}
       />
+
+      {selectedPlayer && (
+        <SelectedPlayerCard
+          player={selectedPlayer}
+          formatName={formatName}
+          rankingsSourceName={rankingsSourceName}
+          valueSourceName={valueSourceName}
+        />
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="faab-budget" className="block text-sm font-medium">
@@ -133,14 +162,20 @@ export function FaabForm({
           </div>
         </fieldset>
       </div>
-      <div aria-live="polite" className="rounded-card border border-line bg-base p-4">
+      <div
+        aria-live="polite"
+        className="rounded-card border border-brand-cyan/30 bg-brand-cyan/5 p-4"
+      >
         {!selectedPlayer ? (
           <p className="text-sm text-ink-muted">
             Pick a player to see a recommended bid range.
           </p>
         ) : recommendation ? (
           <div className="flex flex-col gap-2">
-            <p className="text-sm uppercase tracking-wide text-ink-subtle">Recommended bid</p>
+            <p className="flex items-center gap-1.5 text-xs uppercase tracking-[0.16em] text-brand-cyan">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              Recommended bid
+            </p>
             <p className="font-mono text-3xl font-semibold text-ink">
               {recommendation.low} – {recommendation.high} FAAB
             </p>
@@ -155,6 +190,205 @@ export function FaabForm({
       </div>
     </form>
   );
+}
+
+/**
+ * Small banner pinned to the top of the form so the user always knows which
+ * (source, format) pair is feeding rankings + values. Mirrors the design of
+ * the league overview header chips: icon + label + value, brand-cyan accents.
+ */
+function SourceContextBar({
+  formatName,
+  rankingsSourceName,
+  valueSourceName,
+}: {
+  formatName: string;
+  rankingsSourceName: string | null;
+  valueSourceName: string | null;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-base/60 px-3 py-2.5 text-xs text-ink-muted">
+      <ContextChip
+        icon={Trophy}
+        label="Format"
+        value={formatName}
+        tone="purple"
+      />
+      <ContextChip
+        icon={BarChart3}
+        label="Rankings"
+        value={rankingsSourceName ?? "—"}
+        tone="cyan"
+      />
+      {valueSourceName && valueSourceName !== rankingsSourceName ? (
+        <ContextChip
+          icon={Database}
+          label="Values"
+          value={valueSourceName}
+          tone="cyan"
+        />
+      ) : (
+        <ContextChip
+          icon={Database}
+          label="Values"
+          value={valueSourceName ?? rankingsSourceName ?? "—"}
+          tone="cyan"
+        />
+      )}
+      <p className="ml-auto text-[11px] text-ink-subtle">
+        Change source or format from the site header.
+      </p>
+    </div>
+  );
+}
+
+function ContextChip({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: typeof Trophy;
+  label: string;
+  value: string;
+  tone: "cyan" | "purple";
+}) {
+  const palette =
+    tone === "cyan"
+      ? {
+          backgroundColor: "rgba(34, 211, 238, 0.08)",
+          borderColor: "rgba(34, 211, 238, 0.30)",
+          iconColor: "#22D3EE",
+        }
+      : {
+          backgroundColor: "rgba(168, 85, 247, 0.08)",
+          borderColor: "rgba(168, 85, 247, 0.30)",
+          iconColor: "#A855F7",
+        };
+  return (
+    <span
+      className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs"
+      style={{
+        backgroundColor: palette.backgroundColor,
+        borderColor: palette.borderColor,
+      }}
+    >
+      <Icon
+        className="h-3.5 w-3.5"
+        style={{ color: palette.iconColor }}
+        aria-hidden="true"
+      />
+      <span className="font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+        {label}
+      </span>
+      <span className="font-semibold text-ink">{value}</span>
+    </span>
+  );
+}
+
+/**
+ * Selected-player card. Shows the player identity (position badge, name,
+ * NFL team) on the left and the three metrics that drive the FAAB heuristic
+ * on the right: per-position rank, overall rank, and market value — each
+ * labeled with the source it came from so users know which data they're
+ * looking at (KTC vs FantasyCalc).
+ */
+function SelectedPlayerCard({
+  player,
+  formatName,
+  rankingsSourceName,
+  valueSourceName,
+}: {
+  player: FaabPlayer;
+  formatName: string;
+  rankingsSourceName: string | null;
+  valueSourceName: string | null;
+}) {
+  const positionColor = positionAccent(player.position);
+  return (
+    <section
+      aria-label="Selected player"
+      className="rounded-card border border-line bg-base/60 p-4"
+    >
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold uppercase tracking-wider"
+            style={{
+              backgroundColor: `${positionColor}22`,
+              border: `1px solid ${positionColor}55`,
+              color: positionColor,
+            }}
+          >
+            {player.position}
+          </span>
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold text-ink">{player.name}</h3>
+            <p className="truncate text-xs text-ink-subtle">
+              {player.position}
+              {player.team ? ` · ${player.team}` : ""} · {formatName}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <Metric
+          label={`${player.position} rank`}
+          value={`#${player.position_rank}`}
+          attribution={rankingsSourceName ?? "—"}
+        />
+        <Metric
+          label="Overall rank"
+          value={`#${player.overall_rank}`}
+          attribution={rankingsSourceName ?? "—"}
+        />
+        <Metric
+          label="Market value"
+          value={
+            player.value != null && player.value > 0
+              ? player.value.toLocaleString()
+              : "—"
+          }
+          attribution={valueSourceName ?? rankingsSourceName ?? "—"}
+        />
+      </dl>
+    </section>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  attribution,
+}: {
+  label: string;
+  value: string;
+  attribution: string;
+}) {
+  return (
+    <div className="rounded-card border border-line/60 bg-surface px-3 py-2.5">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+        {label}
+      </dt>
+      <dd className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-ink">
+        {value}
+      </dd>
+      <p className="mt-0.5 text-[10px] text-ink-subtle">via {attribution}</p>
+    </div>
+  );
+}
+
+/** Brand-aligned accent per offensive position. Keeps the player badge
+ * scannable without inventing new colors outside the FF Beacon palette. */
+function positionAccent(position: string): string {
+  const pos = position.toUpperCase();
+  if (pos === "QB") return "#F472B6"; // pink-400 — visually distinct from RB/WR/TE
+  if (pos === "RB") return "#10B981"; // signal-success — common RB green
+  if (pos === "WR") return "#22D3EE"; // brand-cyan
+  if (pos === "TE") return "#F59E0B"; // signal-warning amber
+  return "#A8A8B8"; // ink-muted fallback
 }
 
 /**
