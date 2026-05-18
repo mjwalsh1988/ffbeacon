@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowUp, ArrowDown } from "lucide-react";
+import { PlayerHeadshot } from "@/components/player-headshot";
 
 export type RankingsRow = {
   overall_rank: number;
   position_rank: number;
   tier: number | null;
   slug: string;
+  /** Sleeper player id from players.external_ids.sleeper. Drives the
+   * small headshot circle next to the player name. */
+  sleeper_id: string | null;
   name: string;
   position: string;
   team: string | null;
@@ -190,31 +194,41 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
                 {row.overall_rank}
               </td>
               <td className="px-3 py-3">
-                <Link
-                  href={`/players/${row.slug}`}
-                  className="font-medium text-ink hover:text-brand-purple"
-                >
-                  {row.name}
-                </Link>
-                {row.status !== "active" && (
-                  <span
-                    className="ml-2 rounded bg-signal-warning/15 px-1.5 py-0.5 text-xs uppercase text-signal-warning"
-                    aria-label={`Injury status: ${row.status}`}
-                  >
-                    {row.status}
-                  </span>
-                )}
-                {/* Mobile-only compact context line: surfaces team / pos / pos-rank
-                    that the desktop layout shows in dedicated columns. Keeps the
-                    same data accessible on mobile per CLAUDE.md mobile-first rule. */}
-                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-subtle sm:hidden">
-                  <span className="font-mono text-brand-cyan">
-                    {row.position}
-                    {row.position_rank}
-                  </span>
-                  {row.team && <span>{row.team}</span>}
-                  {row.tier !== null && <span>T{row.tier}</span>}
-                </span>
+                <div className="flex items-center gap-2.5">
+                  <PlayerHeadshot
+                    sleeperId={row.sleeper_id}
+                    position={row.position}
+                    name={row.name}
+                    size={32}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/players/${row.slug}`}
+                      className="font-medium text-ink hover:text-brand-purple"
+                    >
+                      {row.name}
+                    </Link>
+                    {row.status !== "active" && (
+                      <span
+                        className="ml-2 rounded bg-signal-warning/15 px-1.5 py-0.5 text-xs uppercase text-signal-warning"
+                        aria-label={`Injury status: ${row.status}`}
+                      >
+                        {row.status}
+                      </span>
+                    )}
+                    {/* Mobile-only compact context line: surfaces team / pos / pos-rank
+                        that the desktop layout shows in dedicated columns. Keeps the
+                        same data accessible on mobile per CLAUDE.md mobile-first rule. */}
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-subtle sm:hidden">
+                      <span className="font-mono text-brand-cyan">
+                        {row.position}
+                        {row.position_rank}
+                      </span>
+                      {row.team && <span>{row.team}</span>}
+                      {row.tier !== null && <span>T{row.tier}</span>}
+                    </span>
+                  </div>
+                </div>
               </td>
               <td className="hidden px-3 py-3 text-ink-muted sm:table-cell">{row.team ?? "—"}</td>
               <td className="hidden px-3 py-3 sm:table-cell">

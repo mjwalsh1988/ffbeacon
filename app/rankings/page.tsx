@@ -103,7 +103,7 @@ export default async function RankingsPage({
   const rankingsQuery = supabase
     .from("rankings")
     .select(
-      "overall_rank, position_rank, tier, players!inner(id, slug, first_name, last_name, position, team, status)",
+      "overall_rank, position_rank, tier, players!inner(id, slug, first_name, last_name, position, team, status, external_ids)",
     )
     .eq("format_config_id", format.id)
     .eq("source", rankingsResolution.source ?? "__none__")
@@ -177,15 +177,27 @@ export default async function RankingsPage({
         position: string;
         team: string | null;
         status: string;
+        external_ids: Record<string, unknown> | null;
       };
     }).players;
     const value = valueByPlayer.get(player.id);
     const trend = trendByPlayer.get(player.id);
+    // Sleeper id lives on players.external_ids.sleeper. May be missing for
+    // older / non-Sleeper-resolved players; the headshot component falls
+    // back to a position badge in that case.
+    const sleeperExt = player.external_ids?.sleeper;
+    const sleeper_id =
+      typeof sleeperExt === "string" && sleeperExt
+        ? sleeperExt
+        : typeof sleeperExt === "number"
+          ? String(sleeperExt)
+          : null;
     return {
       overall_rank: r.overall_rank,
       position_rank: r.position_rank,
       tier: r.tier ?? null,
       slug: player.slug,
+      sleeper_id,
       name: `${player.first_name} ${player.last_name}`,
       position: player.position,
       team: player.team,
