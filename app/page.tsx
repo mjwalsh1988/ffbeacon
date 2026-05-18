@@ -48,7 +48,7 @@ const TRUST_POINTS = [
   },
   {
     title: "20 years of fantasy",
-    body: "Founder Michael has played fantasy since 2006 and ran 50 dynasty leagues in a single year.",
+    body: "Founder Michael has played fantasy since 2006 and now runs a stats-first dynasty stable across multiple formats.",
   },
   {
     title: "Free, no spam",
@@ -89,7 +89,7 @@ export default async function HomePage() {
           </h1>
           <p className="mt-6 max-w-2xl text-lg text-ink-muted">
             Rankings, analysis, and tools that work for sighted fans and screen reader users alike.
-            Built by Michael, who runs 50 dynasty leagues a year using stats first and visuals last.
+            Built by Michael, an active dynasty manager who plays the game stats-first.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link

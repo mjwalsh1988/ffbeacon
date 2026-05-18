@@ -28,7 +28,7 @@ const personSchema = {
   name: "Michael",
   jobTitle: "Founder, FF Beacon",
   description:
-    "Twenty-year fantasy football player and blind dynasty manager who runs 50 leagues simultaneously by leaning on advanced stats.",
+    "Twenty-year fantasy football player and blind dynasty manager who plays the game stats-first.",
   url: `${SITE.url}/author/michael`,
   worksFor: {
     "@type": "Organization",
@@ -95,8 +95,8 @@ function Hero() {
             Michael
           </h1>
           <p className="mt-3 text-lg leading-relaxed text-ink-muted">
-            Founder of FF Beacon. Twenty seasons in fantasy. One blind dynasty
-            manager who plays 50 leagues at once — and finally got tired of
+            Founder of FF Beacon. Twenty seasons in fantasy. An active dynasty
+            manager who plays the game stats-first — and finally got tired of
             fantasy tools that weren&rsquo;t built for him.
           </p>
           <ul
@@ -105,7 +105,7 @@ function Hero() {
             aria-label="Quick facts"
           >
             <HeroStat value="20+" label="Seasons" />
-            <HeroStat value="50" label="Leagues" />
+            <HeroStat value="Dynasty" label="Format focus" />
             <HeroStat value="2006" label="Started" />
           </ul>
         </div>
@@ -146,15 +146,15 @@ function StorySection() {
           id="story-heading"
           className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
         >
-          How I went from one league to fifty.
+          How I learned to play fantasy stats-first.
         </h2>
         <div className="mt-6 space-y-5 text-lg leading-relaxed text-ink-muted">
           <p>
             I&rsquo;ve been playing fantasy football since 2006 — twenty seasons.
-            For most of those years I ran one or two leagues. Then in 2023 I
-            started dynasty. The next year I was in fifty leagues at the same
-            time. The unlock wasn&rsquo;t free time. It was finally learning
-            how to actually use the data.
+            For most of those years I ran one or two leagues. In 2023 I jumped
+            into dynasty, and within a year I was managing more rosters than I
+            could keep in my head. The unlock wasn&rsquo;t free time. It was
+            finally learning how to actually use the data.
           </p>
           <p>
             I&rsquo;m blind. That cuts both ways in fantasy. Every app I tried
@@ -242,8 +242,8 @@ function AtAGlanceSection() {
           />
           <FactCard
             icon={Layers}
-            value="50 dynasty"
-            label="Leagues run simultaneously in 2024"
+            value="Multi-format"
+            label="Redraft, dynasty, superflex, TE-premium"
           />
           <FactCard
             icon={Calendar}
@@ -298,7 +298,7 @@ function ToolsSection() {
           id="tools-heading"
           className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
         >
-          The stack behind 50 leagues.
+          The stack behind every roster decision.
         </h2>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
           Placeholder copy — swap these for the real apps, podcasts, and

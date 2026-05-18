@@ -86,7 +86,7 @@ function StatStrip() {
   return (
     <ul className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4" role="list">
       <Stat value="20+" label="Seasons of fantasy" />
-      <Stat value="50" label="Dynasty leagues, one year" />
+      <Stat value="100%" label="Keyboard navigable" />
       <Stat value="AAA" label="WCAG contrast target" />
       <Stat value="Multi" label="Source-agnostic data" />
     </ul>
@@ -363,11 +363,11 @@ function FounderSection() {
               Michael — Founder, FF Beacon
             </p>
             <p className="mt-3 text-base leading-relaxed text-ink">
-              Twenty years in fantasy. Went from 1 dynasty league to 50 in a single
-              year by leaning on stats over visuals — partly because that's how
-              winners play the game, partly because most fantasy UIs aren't
-              built for blind dynasty managers. FF Beacon is what happens when
-              that lived experience drives the product.
+              Twenty years in fantasy. Plays the game stats-first across
+              redraft, dynasty, superflex, and TE-premium — partly because
+              that&rsquo;s how winners win, partly because most fantasy UIs
+              aren&rsquo;t built for blind dynasty managers. FF Beacon is what
+              happens when that lived experience drives the product.
             </p>
             <Link
               href="/author/michael"
