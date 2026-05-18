@@ -1,5 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  Trophy,
+  Layers,
+  Calendar,
+  Briefcase,
+  Sparkles,
+  Headphones,
+  Mic,
+  PenLine,
+  Mail,
+  ArrowRight,
+  type LucideIcon,
+} from "lucide-react";
 import { SITE } from "@/lib/site";
 import { AuthorPortrait } from "@/components/author-portrait";
 
@@ -40,88 +53,420 @@ export default function AuthorMichaelPage() {
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema) }}
       />
-      <header className="border-b border-line">
-        <div className="mx-auto flex max-w-3xl flex-col items-start gap-6 px-4 py-12 sm:flex-row sm:items-center sm:gap-8 sm:px-6 lg:px-8">
-          <AuthorPortrait size={176} />
-          <div className="min-w-0 flex-1">
-            <p className="mb-2 text-sm font-medium uppercase tracking-wider text-brand-cyan">
-              Author
-            </p>
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Michael</h1>
-            <p className="mt-3 text-lg text-ink-muted">
-              Founder, FF Beacon. Twenty years in fantasy. One blind dynasty manager.
-            </p>
-          </div>
+      <Hero />
+      <StorySection />
+      <WhySection />
+      <AtAGlanceSection />
+      <ToolsSection />
+      <SpeakingSection />
+      <ConnectSection />
+    </main>
+  );
+}
+
+/* ---------- Hero ---------- */
+
+function Hero() {
+  return (
+    <header className="relative overflow-hidden border-b border-line">
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-24 left-1/2 h-[360px] w-[720px] -translate-x-1/2"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.15) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
+        }}
+      />
+      <div className="relative mx-auto flex max-w-5xl flex-col items-start gap-8 px-4 py-16 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
+        <AuthorPortrait size={176} />
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+            Author
+          </p>
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+            Michael
+          </h1>
+          <p className="mt-3 text-lg leading-relaxed text-ink-muted">
+            Founder of FF Beacon. Twenty seasons in fantasy. One blind dynasty
+            manager who plays 50 leagues at once — and finally got tired of
+            fantasy tools that weren&rsquo;t built for him.
+          </p>
+          <ul
+            className="mt-6 grid grid-cols-3 gap-2 sm:gap-3"
+            role="list"
+            aria-label="Quick facts"
+          >
+            <HeroStat value="20+" label="Seasons" />
+            <HeroStat value="50" label="Leagues" />
+            <HeroStat value="2006" label="Started" />
+          </ul>
         </div>
-      </header>
-      <article className="mx-auto max-w-3xl space-y-8 px-4 py-10 text-lg leading-relaxed text-ink-muted sm:px-6 lg:px-8">
-        <section aria-labelledby="story-heading">
-          <h2 id="story-heading" className="sr-only">
-            Story
-          </h2>
+      </div>
+    </header>
+  );
+}
+
+function HeroStat({ value, label }: { value: string; label: string }) {
+  return (
+    <li className="rounded-card border border-line bg-surface/60 px-3 py-2">
+      <p
+        className="bg-clip-text font-mono text-xl font-bold tabular-nums text-transparent sm:text-2xl"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+        }}
+      >
+        {value}
+      </p>
+      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+        {label}
+      </p>
+    </li>
+  );
+}
+
+/* ---------- Story ---------- */
+
+function StorySection() {
+  return (
+    <section
+      aria-labelledby="story-heading"
+      className="border-b border-line"
+    >
+      <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <SectionEyebrow>Story</SectionEyebrow>
+        <h2
+          id="story-heading"
+          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+        >
+          How I went from one league to fifty.
+        </h2>
+        <div className="mt-6 space-y-5 text-lg leading-relaxed text-ink-muted">
           <p>
-            I have been playing fantasy football since 2006. Twenty seasons. Most of those years I
-            ran 1 or 2 leagues. Then in 2023, I started dynasty. The next year I was in 50 dynasty
-            leagues at the same time. The reason was not free time. It was that I finally learned
+            I&rsquo;ve been playing fantasy football since 2006 — twenty seasons.
+            For most of those years I ran one or two leagues. Then in 2023 I
+            started dynasty. The next year I was in fifty leagues at the same
+            time. The unlock wasn&rsquo;t free time. It was finally learning
             how to actually use the data.
           </p>
           <p>
-            I am blind. That cuts both ways in fantasy. Every app I tried had friction that sighted
-            users never notice. Stats trapped inside an unlabeled chart. Filters you can only reach
-            with a mouse. Player news that does not announce when it updates. So I leaned on what
-            does work for me: stat lines, target shares, snap counts, analyst tape breakdowns on
+            I&rsquo;m blind. That cuts both ways in fantasy. Every app I tried
+            had friction sighted users never notice — stats trapped inside an
+            unlabeled chart, filters you can only reach with a mouse, player
+            news that updates silently. So I leaned on what does work for me:
+            stat lines, target shares, snap counts, analyst tape breakdowns on
             audio, and advanced metrics that travel well as text.
           </p>
           <p>
-            That accidentally made me a better fantasy player. I was already evaluating players the
-            way successful managers do: from numbers and tape first, vibes last.
+            That accidentally made me a better fantasy player. I was already
+            evaluating players the way successful managers do — numbers and
+            tape first, vibes last.
           </p>
-        </section>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-        <section aria-labelledby="why-heading">
-          <h2 id="why-heading" className="text-2xl font-semibold tracking-tight text-ink">
-            Why FF Beacon
-          </h2>
-          <p className="mt-4">
-            Two things were obvious. First, there was a massive gap in fantasy resources for
-            people who do not already speak analytics. Second, there was almost nothing built for
-            fantasy players who use a screen reader.
+/* ---------- Why ---------- */
+
+function WhySection() {
+  return (
+    <section
+      aria-labelledby="why-heading"
+      className="border-b border-line bg-surface/30"
+    >
+      <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <SectionEyebrow>Why FF Beacon</SectionEyebrow>
+        <h2
+          id="why-heading"
+          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+        >
+          The product I wish existed when I started.
+        </h2>
+        <div className="mt-6 space-y-5 text-lg leading-relaxed text-ink-muted">
+          <p>
+            Two things were obvious. First, there&rsquo;s a massive gap in
+            fantasy resources for people who don&rsquo;t already speak
+            analytics. Second, almost nothing was built for fantasy players who
+            use a screen reader.
           </p>
           <p>
-            FF Beacon is my attempt to fix both. It is built accessibility-first. Every component is
-            checked against keyboard navigation, semantic HTML, and screen reader announcements
-            before it ships. And every guide explains the analytic before it asks you to use it.
+            FF Beacon is my attempt to close both at once. Every component is
+            checked against keyboard navigation, semantic HTML, and screen
+            reader announcements before it ships. Every guide explains the
+            analytic before it asks you to use it.
           </p>
           <p>
-            If you have ever felt locked out of fantasy football by either the jargon or the
-            interface, this site is for you. Read me by ear or by eye. It works both ways.
+            If you&rsquo;ve ever felt locked out of fantasy football by the
+            jargon or the interface — this site is for you. Read it by ear or
+            by eye. It works both ways.
           </p>
-        </section>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-        <section aria-labelledby="background-heading">
-          <h2 id="background-heading" className="text-2xl font-semibold tracking-tight text-ink">
-            Background
-          </h2>
-          <ul className="mt-4 space-y-2">
-            <li>20 seasons of fantasy football, starting 2006</li>
-            <li>3 seasons of dynasty, starting 2023</li>
-            <li>50 dynasty leagues run simultaneously in 2024</li>
-            <li>Marketing + development background that runs the technical side of FF Beacon</li>
-          </ul>
-        </section>
+/* ---------- At a glance ---------- */
 
-        <p className="text-sm text-ink-subtle">
-          Want to talk about accessibility, fantasy, or analytics?{" "}
-          <a href="mailto:hello@ffbeacon.com" className="text-ink underline-offset-4 hover:underline">
-            hello@ffbeacon.com
-          </a>
-          .{" "}
-          <Link href="/about" className="text-ink underline-offset-4 hover:underline">
-            Read more about the site mission
-          </Link>
-          .
+function AtAGlanceSection() {
+  return (
+    <section
+      aria-labelledby="ataglance-heading"
+      className="border-b border-line"
+    >
+      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <SectionEyebrow>At a glance</SectionEyebrow>
+        <h2
+          id="ataglance-heading"
+          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+        >
+          The short version.
+        </h2>
+        <ul
+          className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          role="list"
+        >
+          <FactCard
+            icon={Trophy}
+            value="20 seasons"
+            label="Of fantasy football, starting 2006"
+          />
+          <FactCard
+            icon={Layers}
+            value="50 dynasty"
+            label="Leagues run simultaneously in 2024"
+          />
+          <FactCard
+            icon={Calendar}
+            value="3 seasons"
+            label="In dynasty so far, since 2023"
+          />
+          <FactCard
+            icon={Briefcase}
+            value="Marketing + dev"
+            label="Day-job background powering the build"
+          />
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function FactCard({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: LucideIcon;
+  value: string;
+  label: string;
+}) {
+  return (
+    <li className="rounded-card border border-line bg-surface p-4">
+      <span
+        aria-hidden="true"
+        className="flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <p className="mt-3 text-base font-semibold text-ink">{value}</p>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{label}</p>
+    </li>
+  );
+}
+
+/* ---------- Tools I rely on ---------- */
+
+function ToolsSection() {
+  return (
+    <section
+      aria-labelledby="tools-heading"
+      className="border-b border-line bg-surface/30"
+    >
+      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <SectionEyebrow>Tools I rely on</SectionEyebrow>
+        <h2
+          id="tools-heading"
+          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+        >
+          The stack behind 50 leagues.
+        </h2>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
+          Placeholder copy — swap these for the real apps, podcasts, and
+          assistive tech you actually run with. Each card supports an icon, a
+          short blurb, and an optional outbound link.
         </p>
-      </article>
-    </main>
+
+        <ul
+          className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          role="list"
+        >
+          <ToolCard
+            icon={Sparkles}
+            title="Sleeper"
+            body="Where my leagues live. Public APIs make it the only host worth syncing against."
+          />
+          <ToolCard
+            icon={Headphones}
+            title="Screen reader of choice"
+            body="The assistive tech I use day-to-day. Add your specific reader here (VoiceOver, NVDA, JAWS)."
+          />
+          <ToolCard
+            icon={Mic}
+            title="Podcasts & tape shows"
+            body="Tape doesn't translate visually — audio breakdowns travel well. List your weekly rotation here."
+          />
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function ToolCard({
+  icon: Icon,
+  title,
+  body,
+}: {
+  icon: LucideIcon;
+  title: string;
+  body: string;
+}) {
+  return (
+    <li className="flex flex-col rounded-card border border-line bg-surface p-5">
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
+      <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{body}</p>
+    </li>
+  );
+}
+
+/* ---------- Speaking & Writing ---------- */
+
+function SpeakingSection() {
+  return (
+    <section
+      aria-labelledby="speaking-heading"
+      className="border-b border-line"
+    >
+      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <SectionEyebrow>Speaking & Writing</SectionEyebrow>
+        <h2
+          id="speaking-heading"
+          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+        >
+          Conversations, articles, appearances.
+        </h2>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
+          As guest spots, podcasts, and pieces accumulate, they&rsquo;ll live
+          here. Replace this placeholder with a list as it fills out.
+        </p>
+
+        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <PlaceholderCard
+            icon={Mic}
+            title="Podcast appearances"
+            body="Coming soon. Want to feature this story on your show? Reach out via the contact link below."
+          />
+          <PlaceholderCard
+            icon={PenLine}
+            title="Written pieces"
+            body="Coming soon. Articles on accessibility-first fantasy and analytics-first roster building will land here as they ship."
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlaceholderCard({
+  icon: Icon,
+  title,
+  body,
+}: {
+  icon: LucideIcon;
+  title: string;
+  body: string;
+}) {
+  return (
+    <article className="rounded-card border border-dashed border-line bg-base/40 p-5">
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 items-center justify-center rounded-card border border-line bg-surface text-ink-muted"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
+      <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{body}</p>
+    </article>
+  );
+}
+
+/* ---------- Connect / CTA ---------- */
+
+function ConnectSection() {
+  return (
+    <section aria-labelledby="connect-heading">
+      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <div
+          className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
+          }}
+        >
+          <SectionEyebrow>Connect</SectionEyebrow>
+          <h2
+            id="connect-heading"
+            className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
+          >
+            Want to talk about accessibility, fantasy, or analytics?
+          </h2>
+          <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
+            Email is the fastest way through. The social accounts in the footer
+            will start posting as the site grows.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a
+              href="mailto:hello@ffbeacon.com"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <Mail aria-hidden="true" className="h-4 w-4" />
+              hello@ffbeacon.com
+            </a>
+            <Link
+              href="/about"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Read about FF Beacon
+              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Shared ---------- */
+
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+      {children}
+    </p>
   );
 }
