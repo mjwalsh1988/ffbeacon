@@ -14,10 +14,10 @@ import { loadLeagueTransactions } from "@/lib/league-transactions-data";
 import { getLeagueAdminContext } from "@/lib/league-auth";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamFilter } from "@/components/team-filter";
-import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { TransactionRow } from "@/components/transaction-row";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { ResyncButton } from "@/components/resync-button";
+import { PowerRankingsRow } from "@/components/power-rankings-row";
 import {
   buildLeagueFormatTags,
   type FormatTag,
@@ -605,113 +605,56 @@ async function PowerRankingsSection({
               <th scope="col" className="px-3 py-3">
                 Team
               </th>
-              <th scope="col" className="px-3 py-3 text-center">
+              <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
                 QB
               </th>
-              <th scope="col" className="px-3 py-3 text-center">
+              <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
                 RB
               </th>
-              <th scope="col" className="px-3 py-3 text-center">
+              <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
                 WR
               </th>
-              <th scope="col" className="px-3 py-3 text-center">
+              <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
                 TE
               </th>
-              <th scope="col" className="px-4 py-3 text-center">
+              <th scope="col" className="hidden px-4 py-3 text-center md:table-cell">
                 Picks
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {ranked.map((t) => {
-              const ownerHandle = t.ownerSleeperUsername;
-              return (
-                <tr key={t.rosterRowId} className="hover:bg-surface">
-                  <td className="px-4 py-2 text-center font-mono tabular-nums text-ink-muted">
-                    {t.cacheRow?.overall_rank ?? "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/leagues/${sleeperLeagueId}?tab=teams&roster=${t.sleeperRosterId}`}
-                      className="flex items-center gap-3 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                      aria-label={`Open ${t.teamName} on the Teams tab. Chip filter will show only this team.`}
-                    >
-                      <SleeperAvatar
-                        avatarId={t.ownerAvatarId}
-                        initial={t.teamName.charAt(0)}
-                        title={t.teamName}
-                        size={36}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-ink">
-                          {t.teamName}
-                        </span>
-                        {ownerHandle && (
-                          <span className="block truncate text-[11px] text-ink-subtle">
-                            @{ownerHandle}
-                          </span>
-                        )}
-                      </span>
-                    </Link>
-                  </td>
-                  <PositionRankCell rank={t.positionRanks.QB} teamCount={teamCount} />
-                  <PositionRankCell rank={t.positionRanks.RB} teamCount={teamCount} />
-                  <PositionRankCell rank={t.positionRanks.WR} teamCount={teamCount} />
-                  <PositionRankCell rank={t.positionRanks.TE} teamCount={teamCount} />
-                  <PositionRankCell rank={t.statRanks.picks} teamCount={teamCount} />
-                </tr>
-              );
-            })}
+            {ranked.map((t) => (
+              <PowerRankingsRow
+                key={t.rosterRowId}
+                sleeperLeagueId={sleeperLeagueId}
+                teamCount={teamCount}
+                data={{
+                  rosterRowId: t.rosterRowId,
+                  sleeperRosterId: t.sleeperRosterId,
+                  teamName: t.teamName,
+                  ownerHandle: t.ownerSleeperUsername,
+                  ownerAvatarId: t.ownerAvatarId,
+                  overallRank: t.cacheRow?.overall_rank ?? null,
+                  positionRanks: {
+                    QB: t.positionRanks.QB,
+                    RB: t.positionRanks.RB,
+                    WR: t.positionRanks.WR,
+                    TE: t.positionRanks.TE,
+                    PICKS: t.statRanks.picks,
+                  },
+                  record: {
+                    wins: t.record.wins,
+                    losses: t.record.losses,
+                    ties: t.record.ties,
+                  },
+                }}
+              />
+            ))}
           </tbody>
         </table>
       </div>
     </section>
   );
-}
-
-function PositionRankCell({
-  rank,
-  teamCount,
-}: {
-  rank: number | null;
-  teamCount: number;
-}) {
-  const tier = rankTier(rank, teamCount);
-  const style =
-    tier === "top"
-      ? { color: "#22D3EE" }
-      : tier === "bottom"
-        ? { color: "#A855F7" }
-        : { color: "#F4F4F8" };
-  const ariaTier =
-    tier === "top" ? " (top three)" : tier === "bottom" ? " (bottom three)" : "";
-  const label = rank != null ? rankOrdinal(rank) : "—";
-  return (
-    <td
-      className="px-3 py-2 text-center font-mono font-semibold tabular-nums"
-      style={style}
-      aria-label={`Rank ${label}${ariaTier}`}
-    >
-      {label}
-    </td>
-  );
-}
-
-function rankTier(rank: number | null, teamCount: number): "top" | "bottom" | "mid" | "unknown" {
-  if (rank == null || teamCount === 0) return "unknown";
-  if (rank <= 3) return "top";
-  if (rank > teamCount - 3) return "bottom";
-  return "mid";
-}
-
-function rankOrdinal(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
-  if (mod10 === 1) return `${n}st`;
-  if (mod10 === 2) return `${n}nd`;
-  if (mod10 === 3) return `${n}rd`;
-  return `${n}th`;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
