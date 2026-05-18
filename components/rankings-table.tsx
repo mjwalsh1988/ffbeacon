@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { BottomSheet } from "@/components/bottom-sheet";
 
 export type RankingsRow = {
   overall_rank: number;
@@ -42,35 +43,48 @@ type SortDir = "asc" | "desc";
 // (per CLAUDE.md "Pre-calculated tables" rule — sparse data shouldn't be shown).
 const TREND_MIN_DATA_POINTS = 7;
 
+// Desktop columns. Mobile renders a different layout (Rank, Player, dynamic
+// metric column driven by the active sort chip) so it does not consume this
+// list — see MOBILE_SORT_OPTIONS below.
 const COLUMNS: Array<{
   key: SortKey;
   label: string;
   numeric: boolean;
-  // Mobile column is the merged "Trend" stack cell that holds both rank and
-  // value movement vertically. On desktop the rank + value trends split into
-  // two sortable columns; sorting on either one is preserved on mobile by
-  // making the merged header a button that cycles both columns' sort state.
-  mobileOnly?: boolean;
-  desktopOnly?: boolean;
 }> = [
   { key: "overall_rank", label: "Rank", numeric: true },
   { key: "name", label: "Player", numeric: false },
-  { key: "team", label: "Team", numeric: false, desktopOnly: true },
-  { key: "position", label: "Pos", numeric: false, desktopOnly: true },
-  { key: "position_rank", label: "Pos rank", numeric: true, desktopOnly: true },
-  { key: "tier", label: "Tier", numeric: true, desktopOnly: true },
+  { key: "team", label: "Team", numeric: false },
+  { key: "position", label: "Pos", numeric: false },
+  { key: "position_rank", label: "Pos rank", numeric: true },
+  { key: "tier", label: "Tier", numeric: true },
   { key: "value", label: "Value", numeric: true },
-  { key: "rank_change_7d", label: "Rank 7d", numeric: true, desktopOnly: true },
-  { key: "change_7d", label: "Value 7d", numeric: true, desktopOnly: true },
-  // Mobile-only merged header. The button toggles between sorting by
-  // rank_change_7d and change_7d on each press so both metrics remain
-  // sortable when the columns are stacked.
-  { key: "rank_change_7d", label: "Trend 7d", numeric: true, mobileOnly: true },
+  { key: "rank_change_7d", label: "Rank 7d", numeric: true },
+  { key: "change_7d", label: "Value 7d", numeric: true },
+];
+
+// Mobile sort chip row. Each chip both selects the sort key AND determines
+// which metric the dynamic third column on mobile renders. Tap the active
+// chip again to flip the sort direction; tap an inactive chip to switch
+// metrics (resets direction to the chip's natural default — Rank low→high,
+// values/trends high→low).
+const MOBILE_SORT_OPTIONS: Array<{
+  key: SortKey;
+  label: string;
+  short: string;
+  defaultDir: SortDir;
+}> = [
+  { key: "overall_rank", label: "Rank", short: "Rank", defaultDir: "asc" },
+  { key: "value", label: "Value", short: "Value", defaultDir: "desc" },
+  { key: "tier", label: "Tier", short: "Tier", defaultDir: "asc" },
+  { key: "position_rank", label: "Pos rank", short: "Pos #", defaultDir: "asc" },
+  { key: "rank_change_7d", label: "Rank 7d", short: "Rank 7d", defaultDir: "desc" },
+  { key: "change_7d", label: "Value 7d", short: "Val 7d", defaultDir: "desc" },
 ];
 
 export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("overall_rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [openRow, setOpenRow] = useState<RankingsRow | null>(null);
 
   const sorted = useMemo(() => {
     const copy = [...rows];
@@ -99,175 +113,407 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
     }
   };
 
-  // For the mobile merged "Trend 7d" column we want a tap to cycle through:
-  // rank-desc → rank-asc → value-desc → value-asc → ... so a single thumb-tap
-  // can reach both metrics. Desktop users get two separate column headers
-  // and don't see this control.
-  const cycleMobileTrend = () => {
-    if (sortKey === "rank_change_7d" && sortDir === "desc") {
-      setSortDir("asc");
-    } else if (sortKey === "rank_change_7d" && sortDir === "asc") {
-      setSortKey("change_7d");
-      setSortDir("desc");
-    } else if (sortKey === "change_7d" && sortDir === "desc") {
-      setSortDir("asc");
-    } else if (sortKey === "change_7d" && sortDir === "asc") {
-      setSortKey("rank_change_7d");
-      setSortDir("desc");
+  // Mobile chip-row sort handler. Tapping the active chip flips direction;
+  // tapping an inactive chip switches the active metric and resets to that
+  // chip's natural default direction (Rank ascending, values/trends
+  // descending — the "best first" intent for each metric).
+  const handleMobileSort = (key: SortKey, defaultDir: SortDir) => {
+    if (key === sortKey) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
     } else {
-      setSortKey("rank_change_7d");
-      setSortDir("desc");
+      setSortKey(key);
+      setSortDir(defaultDir);
     }
   };
 
-  const mobileTrendLabel = (() => {
-    if (sortKey === "rank_change_7d") return `Trend 7d (by rank, ${sortDir === "asc" ? "low→high" : "high→low"}). Activate to flip direction or move to value sort.`;
-    if (sortKey === "change_7d") return `Trend 7d (by value, ${sortDir === "asc" ? "low→high" : "high→low"}). Activate to flip direction or move to rank sort.`;
-    return "Trend 7d, not currently sorted. Activate to sort by rank movement, highest gain first.";
-  })();
-
   return (
-    <div className="overflow-x-auto rounded-card border border-line">
-      <table className="w-full text-sm">
-        <caption className="sr-only">
-          Player rankings. Sortable by rank, name, team, position, tier, value, 7-day rank
-          movement, and 7-day value change.
-        </caption>
-        <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-          <tr>
-            {COLUMNS.map((col, idx) => {
-              const isActive = col.key === sortKey;
-              const isTrendStack = col.mobileOnly && col.label === "Trend 7d";
-              const isStackParticipant =
-                isTrendStack &&
-                (sortKey === "rank_change_7d" || sortKey === "change_7d");
-              const visibility = col.mobileOnly
-                ? "sm:hidden"
-                : col.desktopOnly
-                  ? "hidden sm:table-cell"
-                  : "";
-              const sortAttr: "ascending" | "descending" | "none" = isTrendStack
-                ? isStackParticipant
-                  ? sortDir === "asc"
-                    ? "ascending"
-                    : "descending"
-                  : "none"
-                : isActive
+    <>
+      {/* Mobile-only sort chip row. Each chip flips both the sort AND the
+          dynamic third column on the table below, so users always see the
+          metric they're sorting by. */}
+      <div className="mb-3 rounded-card border border-line bg-surface p-3 md:hidden">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
+          Sort by
+        </p>
+        <div
+          role="radiogroup"
+          aria-label="Sort rankings by"
+          className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
+        >
+          {MOBILE_SORT_OPTIONS.map((opt) => {
+            const isActive = opt.key === sortKey;
+            return (
+              <button
+                key={`${opt.key}-${opt.label}`}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                onClick={() => handleMobileSort(opt.key, opt.defaultDir)}
+                className={`inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  isActive
+                    ? "border-brand-purple bg-brand-purple/15 text-ink"
+                    : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
+                }`}
+                aria-label={
+                  isActive
+                    ? `Sort by ${opt.label}, currently ${sortDir === "asc" ? "ascending" : "descending"}. Tap to flip direction.`
+                    : `Sort by ${opt.label}. Tap to activate.`
+                }
+              >
+                <span>{opt.short}</span>
+                {isActive && (
+                  <span aria-hidden="true">
+                    {sortDir === "asc" ? (
+                      <ArrowUp className="h-3 w-3" />
+                    ) : (
+                      <ArrowDown className="h-3 w-3" />
+                    )}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-card border border-line">
+        <table className="w-full text-sm">
+          <caption className="sr-only">
+            Player rankings. Sortable by rank, name, team, position, tier, value, 7-day rank
+            movement, and 7-day value change. On mobile, tap a player row for full
+            details.
+          </caption>
+          {/* Desktop header. Hidden on mobile because the chip row above and the
+              compact 3-column body handle sort + columns differently. */}
+          <thead className="hidden bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle md:table-header-group">
+            <tr>
+              {COLUMNS.map((col, idx) => {
+                const isActive = col.key === sortKey;
+                const sortAttr: "ascending" | "descending" | "none" = isActive
                   ? sortDir === "asc"
                     ? "ascending"
                     : "descending"
                   : "none";
-              return (
-                <th
-                  key={`${col.key}-${idx}-${col.mobileOnly ? "m" : "d"}`}
-                  scope="col"
-                  aria-sort={sortAttr}
-                  className={`${col.numeric ? "px-3 py-3 text-right" : "px-3 py-3"} ${visibility}`}
-                >
+                return (
+                  <th
+                    key={`${col.key}-${idx}`}
+                    scope="col"
+                    aria-sort={sortAttr}
+                    className={
+                      col.numeric ? "px-3 py-3 text-right" : "px-3 py-3"
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggle(col.key)}
+                      className="inline-flex min-h-[44px] items-center gap-1 hover:text-ink"
+                    >
+                      <span>{col.label}</span>
+                      {isActive ? (
+                        <span aria-hidden="true">{sortDir === "asc" ? "▲" : "▼"}</span>
+                      ) : (
+                        <span aria-hidden="true" className="text-ink-subtle">
+                          ⇅
+                        </span>
+                      )}
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+
+          {/* Mobile header (Rank, Player, dynamic metric). Renders only at
+              <md and reflects the active mobile sort chip in the third cell. */}
+          <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle md:hidden">
+            <tr>
+              <th scope="col" className="px-3 py-3 text-right">
+                Rank
+              </th>
+              <th scope="col" className="px-3 py-3">
+                Player
+              </th>
+              <th scope="col" className="px-3 py-3 text-right">
+                {mobileMetricLabel(sortKey)}
+              </th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-line">
+            {sorted.map((row) => (
+              <tr key={row.slug} className="hover:bg-surface">
+                <td className="px-3 py-3 text-right font-mono tabular-nums text-ink-muted">
+                  {row.overall_rank}
+                </td>
+                <td className="px-3 py-3">
+                  {/* Mobile: tap-to-open sheet. Desktop: link to full player profile. */}
                   <button
                     type="button"
-                    onClick={() => (isTrendStack ? cycleMobileTrend() : toggle(col.key))}
-                    // 44px min height per WCAG 2.5.5. The header rows are
-                    // dense on mobile; without min-h the button hit area
-                    // collapses to ~38-40px.
-                    className="inline-flex min-h-[44px] items-center gap-1 hover:text-ink"
-                    aria-label={isTrendStack ? mobileTrendLabel : undefined}
+                    onClick={() => setOpenRow(row)}
+                    aria-haspopup="dialog"
+                    aria-label={`Open details for ${row.name}`}
+                    className="flex w-full items-center gap-2.5 text-left md:hidden"
                   >
-                    <span>{col.label}</span>
-                    {(isTrendStack ? isStackParticipant : isActive) ? (
-                      <span aria-hidden="true">{sortDir === "asc" ? "▲" : "▼"}</span>
-                    ) : (
-                      <span aria-hidden="true" className="text-ink-subtle">
-                        ⇅
+                    <PlayerHeadshot
+                      sleeperId={row.sleeper_id}
+                      position={row.position}
+                      name={row.name}
+                      size={32}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-ink">
+                        {row.name}
                       </span>
-                    )}
-                  </button>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {sorted.map((row) => (
-            <tr key={row.slug} className="hover:bg-surface">
-              <td className="px-3 py-3 text-right font-mono tabular-nums text-ink-muted">
-                {row.overall_rank}
-              </td>
-              <td className="px-3 py-3">
-                <div className="flex items-center gap-2.5">
-                  <PlayerHeadshot
-                    sleeperId={row.sleeper_id}
-                    position={row.position}
-                    name={row.name}
-                    size={32}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/players/${row.slug}`}
-                      className="font-medium text-ink hover:text-brand-purple"
-                    >
-                      {row.name}
-                    </Link>
-                    {row.status !== "active" && (
-                      <span
-                        className="ml-2 rounded bg-signal-warning/15 px-1.5 py-0.5 text-xs uppercase text-signal-warning"
-                        aria-label={`Injury status: ${row.status}`}
-                      >
-                        {row.status}
-                      </span>
-                    )}
-                    {/* Mobile-only compact context line: surfaces team / pos / pos-rank
-                        that the desktop layout shows in dedicated columns. Keeps the
-                        same data accessible on mobile per CLAUDE.md mobile-first rule. */}
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-subtle sm:hidden">
-                      <span className="font-mono text-brand-cyan">
-                        {row.position}
-                        {row.position_rank}
-                      </span>
-                      {row.team && <span>{row.team}</span>}
-                      {row.tier !== null && <span>T{row.tier}</span>}
+                      {row.status !== "active" && (
+                        <span
+                          className="mt-0.5 inline-flex rounded bg-signal-warning/15 px-1.5 py-0.5 text-[10px] uppercase text-signal-warning"
+                          aria-label={`Injury status: ${row.status}`}
+                        >
+                          {row.status}
+                        </span>
+                      )}
                     </span>
+                  </button>
+                  <div className="hidden items-center gap-2.5 md:flex">
+                    <PlayerHeadshot
+                      sleeperId={row.sleeper_id}
+                      position={row.position}
+                      name={row.name}
+                      size={32}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/players/${row.slug}`}
+                        className="font-medium text-ink hover:text-brand-purple"
+                      >
+                        {row.name}
+                      </Link>
+                      {row.status !== "active" && (
+                        <span
+                          className="ml-2 rounded bg-signal-warning/15 px-1.5 py-0.5 text-xs uppercase text-signal-warning"
+                          aria-label={`Injury status: ${row.status}`}
+                        >
+                          {row.status}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td className="hidden px-3 py-3 text-ink-muted sm:table-cell">{row.team ?? "—"}</td>
-              <td className="hidden px-3 py-3 sm:table-cell">
-                <span className="font-mono text-xs text-brand-cyan">{row.position}</span>
-              </td>
-              <td className="hidden px-3 py-3 text-right font-mono tabular-nums text-ink-muted sm:table-cell">
-                {row.position}
-                {row.position_rank}
-              </td>
-              <td className="hidden px-3 py-3 text-right sm:table-cell">
-                {row.tier ? (
-                  <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
-                    T{row.tier}
-                  </span>
-                ) : (
-                  <span className="text-ink-subtle">—</span>
-                )}
-              </td>
-              <td className="px-3 py-3 text-right font-mono tabular-nums">
-                {row.value !== null ? row.value.toLocaleString() : "—"}
-              </td>
-              {/* Desktop: two separate trend columns. */}
-              <td className="hidden px-3 py-3 text-right font-mono tabular-nums sm:table-cell">
-                <RankTrendCell row={row} />
-              </td>
-              <td className="hidden px-3 py-3 text-right font-mono tabular-nums sm:table-cell">
-                <ValueTrendCell row={row} />
-              </td>
-              {/* Mobile: stacked merged cell. Both metrics still visible. */}
-              <td className="px-3 py-3 text-right font-mono tabular-nums sm:hidden">
-                <span className="flex flex-col items-end gap-0.5">
+                </td>
+
+                {/* Mobile dynamic metric cell — renders only at <md. */}
+                <td className="px-3 py-3 text-right font-mono tabular-nums md:hidden">
+                  <MobileMetricCell row={row} sortKey={sortKey} />
+                </td>
+
+                {/* Desktop-only cells. */}
+                <td className="hidden px-3 py-3 text-ink-muted md:table-cell">
+                  {row.team ?? "—"}
+                </td>
+                <td className="hidden px-3 py-3 md:table-cell">
+                  <span className="font-mono text-xs text-brand-cyan">{row.position}</span>
+                </td>
+                <td className="hidden px-3 py-3 text-right font-mono tabular-nums text-ink-muted md:table-cell">
+                  {row.position}
+                  {row.position_rank}
+                </td>
+                <td className="hidden px-3 py-3 text-right md:table-cell">
+                  {row.tier ? (
+                    <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
+                      T{row.tier}
+                    </span>
+                  ) : (
+                    <span className="text-ink-subtle">—</span>
+                  )}
+                </td>
+                <td className="hidden px-3 py-3 text-right font-mono tabular-nums md:table-cell">
+                  {row.value !== null ? row.value.toLocaleString() : "—"}
+                </td>
+                <td className="hidden px-3 py-3 text-right font-mono tabular-nums md:table-cell">
                   <RankTrendCell row={row} />
+                </td>
+                <td className="hidden px-3 py-3 text-right font-mono tabular-nums md:table-cell">
                   <ValueTrendCell row={row} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <PlayerDetailSheet
+        row={openRow}
+        onClose={() => setOpenRow(null)}
+      />
+    </>
+  );
+}
+
+function mobileMetricLabel(sortKey: SortKey): string {
+  const opt = MOBILE_SORT_OPTIONS.find((o) => o.key === sortKey);
+  // When the active sort is one of the "name"-style sort keys that don't
+  // have a mobile chip (e.g. desktop sorted by team/name then user came to
+  // mobile), default the third column to Value to preserve the user's
+  // explicit "default = Value" instruction.
+  return opt?.label ?? "Value";
+}
+
+function MobileMetricCell({
+  row,
+  sortKey,
+}: {
+  row: RankingsRow;
+  sortKey: SortKey;
+}) {
+  switch (sortKey) {
+    case "tier":
+      return row.tier !== null ? (
+        <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
+          T{row.tier}
+        </span>
+      ) : (
+        <span className="text-ink-subtle">—</span>
+      );
+    case "position_rank":
+      return (
+        <span className="text-ink">
+          {row.position}
+          {row.position_rank}
+        </span>
+      );
+    case "rank_change_7d":
+      return <RankTrendCell row={row} />;
+    case "change_7d":
+      return <ValueTrendCell row={row} />;
+    case "value":
+    case "overall_rank":
+    default:
+      return (
+        <span>{row.value !== null ? row.value.toLocaleString() : "—"}</span>
+      );
+  }
+}
+
+/**
+ * Mobile bottom-sheet that surfaces every column from the desktop table
+ * (team, position, tier, value, 7-day rank movement, 7-day value movement)
+ * plus a CTA to the full player profile. Satisfies the mobile-first rule:
+ * data hidden from the mobile table is still reachable via this sheet.
+ */
+function PlayerDetailSheet({
+  row,
+  onClose,
+}: {
+  row: RankingsRow | null;
+  onClose: () => void;
+}) {
+  const open = row !== null;
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      label={row ? `${row.name} details` : "Player details"}
+    >
+      {row && (
+        <>
+          <header className="flex items-start gap-3 px-5 pt-4">
+            <PlayerHeadshot
+              sleeperId={row.sleeper_id}
+              position={row.position}
+              name={row.name}
+              size={56}
+            />
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-lg font-semibold tracking-tight text-ink">
+                {row.name}
+              </h2>
+              <p className="truncate text-xs text-ink-subtle">
+                {row.position}
+                {row.team ? ` · ${row.team}` : ""}
+                {row.position_rank ? ` · ${row.position}#${row.position_rank}` : ""}
+              </p>
+              {row.status !== "active" && (
+                <span
+                  className="mt-1 inline-flex rounded bg-signal-warning/15 px-1.5 py-0.5 text-[10px] uppercase text-signal-warning"
+                  aria-label={`Injury status: ${row.status}`}
+                >
+                  {row.status}
                 </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close player details"
+              className="-mr-1 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink"
+            >
+              <span aria-hidden="true">✕</span>
+            </button>
+          </header>
+
+          <section
+            aria-label="Player metrics"
+            className="grid grid-cols-2 gap-2 px-5 pt-5"
+          >
+            <MetricTile label="Overall rank" value={`#${row.overall_rank}`} />
+            <MetricTile
+              label={`${row.position} rank`}
+              value={`#${row.position_rank}`}
+            />
+            <MetricTile
+              label="Tier"
+              value={row.tier !== null ? `T${row.tier}` : "—"}
+            />
+            <MetricTile
+              label="Value"
+              value={row.value !== null ? row.value.toLocaleString() : "—"}
+            />
+            <MetricTile
+              label="Rank 7d"
+              value={<RankTrendCell row={row} />}
+            />
+            <MetricTile
+              label="Value 7d"
+              value={<ValueTrendCell row={row} />}
+            />
+          </section>
+
+          <div className="mt-5 flex flex-col gap-2 px-5">
+            <Link
+              href={`/players/${row.slug}`}
+              onClick={onClose}
+              className="inline-flex min-h-11 items-center justify-center rounded-card bg-beacon px-4 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              View full profile →
+            </Link>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex min-h-11 items-center justify-center rounded-card border border-line bg-surface px-4 py-3 text-sm font-medium text-ink-muted transition-colors hover:border-line-accent hover:text-ink"
+            >
+              Close
+            </button>
+          </div>
+        </>
+      )}
+    </BottomSheet>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-card border border-line bg-base/60 px-3 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-base font-semibold tabular-nums text-ink">
+        {value}
+      </p>
     </div>
   );
 }
