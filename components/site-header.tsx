@@ -10,7 +10,6 @@ import {
 import type { FormatLike } from "@/lib/format-fallback";
 import { getActiveFormats, getAvailableSources } from "@/lib/source";
 import { BeaconMark } from "@/components/beacon-mark";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { FormatToggle, type FormatOption } from "@/components/format-toggle";
 import { SourceToggle, type SourceOption } from "@/components/source-toggle";
 import { MobileMenu } from "@/components/mobile-menu";
@@ -153,9 +152,6 @@ export async function SiteHeader() {
                 supportedFormatSlugs={supportedFormatSlugs}
               />
             </Suspense>
-          </div>
-          <div className="hidden md:block">
-            <ThemeToggle />
           </div>
           {isAuthenticated ? (
             <form action="/auth/signout" method="post" className="hidden md:block">

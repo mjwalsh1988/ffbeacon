@@ -6,7 +6,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PRIMARY_NAV } from "@/lib/site";
 import type { FormatLike } from "@/lib/format-fallback";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { FormatToggle, type FormatOption } from "@/components/format-toggle";
 import { SourceToggle, type SourceOption } from "@/components/source-toggle";
 
@@ -170,12 +169,6 @@ export function MobileMenu({
                   supportedFormatSlugs={supportedFormatSlugs}
                   placement="above"
                 />
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                  Theme
-                </p>
-                <ThemeToggle />
               </div>
               <div>
                 {isAuthenticated ? (
