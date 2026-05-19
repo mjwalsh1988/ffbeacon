@@ -14,6 +14,11 @@ import { FormatToggle, type FormatOption } from "@/components/format-toggle";
 import { SourceToggle, type SourceOption } from "@/components/source-toggle";
 import { MobileMenu } from "@/components/mobile-menu";
 import { HeaderNavLink } from "@/components/header-nav-link";
+import {
+  InfoTooltip,
+  SOURCE_INFO_TOOLTIP,
+  FORMAT_INFO_TOOLTIP,
+} from "@/components/info-tooltip";
 
 async function loadHeaderData(): Promise<{
   formats: FormatOption[];
@@ -133,7 +138,12 @@ export async function SiteHeader() {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {sources.length > 0 && (
-            <div className="hidden md:block">
+            <div className="hidden items-center gap-1 md:flex">
+              <InfoTooltip
+                content={SOURCE_INFO_TOOLTIP}
+                placement="below"
+                align="start"
+              />
               <Suspense fallback={<TogglePillSkeleton />}>
                 <SourceToggle
                   options={sources}
@@ -144,7 +154,12 @@ export async function SiteHeader() {
               </Suspense>
             </div>
           )}
-          <div className="hidden md:block">
+          <div className="hidden items-center gap-1 md:flex">
+            <InfoTooltip
+              content={FORMAT_INFO_TOOLTIP}
+              placement="below"
+              align="start"
+            />
             <Suspense fallback={<TogglePillSkeleton />}>
               <FormatToggle
                 options={fallbackFormats}

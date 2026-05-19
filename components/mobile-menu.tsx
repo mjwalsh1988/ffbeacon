@@ -8,6 +8,11 @@ import { PRIMARY_NAV } from "@/lib/site";
 import type { FormatLike } from "@/lib/format-fallback";
 import { FormatToggle, type FormatOption } from "@/components/format-toggle";
 import { SourceToggle, type SourceOption } from "@/components/source-toggle";
+import {
+  InfoTooltip,
+  SOURCE_INFO_TOOLTIP,
+  FORMAT_INFO_TOOLTIP,
+} from "@/components/info-tooltip";
 
 export function MobileMenu({
   formats,
@@ -148,9 +153,16 @@ export function MobileMenu({
             </nav>
             <div className="mt-auto space-y-4 border-t border-line pt-6">
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                  Source
-                </p>
+                <div className="mb-2 flex items-center gap-1.5">
+                  <InfoTooltip
+                    content={SOURCE_INFO_TOOLTIP}
+                    placement="below"
+                    align="start"
+                  />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                    Source
+                  </p>
+                </div>
                 <SourceToggle
                   options={sources}
                   initialSlug={initialSourceSlug}
@@ -160,9 +172,16 @@ export function MobileMenu({
                 />
               </div>
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                  Format
-                </p>
+                <div className="mb-2 flex items-center gap-1.5">
+                  <InfoTooltip
+                    content={FORMAT_INFO_TOOLTIP}
+                    placement="below"
+                    align="start"
+                  />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                    Format
+                  </p>
+                </div>
                 <FormatToggle
                   options={formats}
                   initialSlug={initialFormatSlug}
