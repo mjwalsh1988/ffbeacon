@@ -9,12 +9,12 @@ import {
   Headphones,
   Mic,
   PenLine,
-  Mail,
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { AuthorPortrait } from "@/components/author-portrait";
+import { EmailReveal } from "@/components/email-reveal";
 
 export const metadata: Metadata = {
   title: "Michael, founder of FF Beacon",
@@ -140,35 +140,39 @@ function StorySection() {
       aria-labelledby="story-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <SectionEyebrow>Story</SectionEyebrow>
-        <h2
-          id="story-heading"
-          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          How I learned to play fantasy stats-first.
-        </h2>
-        <div className="mt-6 space-y-5 text-lg leading-relaxed text-ink-muted">
-          <p>
-            I&rsquo;ve been playing fantasy football since 2006 — twenty seasons.
-            For most of those years I ran one or two leagues. In 2023 I jumped
-            into dynasty, and within a year I was managing more rosters than I
-            could keep in my head. The unlock wasn&rsquo;t free time. It was
-            finally learning how to actually use the data.
-          </p>
-          <p>
-            I&rsquo;m blind. That cuts both ways in fantasy. Every app I tried
-            had friction sighted users never notice — stats trapped inside an
-            unlabeled chart, filters you can only reach with a mouse, player
-            news that updates silently. So I leaned on what does work for me:
-            stat lines, target shares, snap counts, analyst tape breakdowns on
-            audio, and advanced metrics that travel well as text.
-          </p>
-          <p>
-            That accidentally made me a better fantasy player. I was already
-            evaluating players the way successful managers do — numbers and
-            tape first, vibes last.
-          </p>
+      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
+          <div>
+            <SectionEyebrow>Story</SectionEyebrow>
+            <h2
+              id="story-heading"
+              className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+            >
+              How I learned to play fantasy stats-first.
+            </h2>
+          </div>
+          <div className="space-y-5 text-lg leading-relaxed text-ink-muted">
+            <p>
+              I&rsquo;ve been playing fantasy football since 2006 — twenty
+              seasons. For most of those years I ran one or two leagues. In 2023
+              I jumped into dynasty, and within a year I was managing more
+              rosters than I could keep in my head. The unlock wasn&rsquo;t free
+              time. It was finally learning how to actually use the data.
+            </p>
+            <p>
+              I&rsquo;m blind. That cuts both ways in fantasy. Every app I tried
+              had friction sighted users never notice — stats trapped inside an
+              unlabeled chart, filters you can only reach with a mouse, player
+              news that updates silently. So I leaned on what does work for me:
+              stat lines, target shares, snap counts, analyst tape breakdowns on
+              audio, and advanced metrics that travel well as text.
+            </p>
+            <p>
+              That accidentally made me a better fantasy player. I was already
+              evaluating players the way successful managers do — numbers and
+              tape first, vibes last.
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -183,32 +187,36 @@ function WhySection() {
       aria-labelledby="why-heading"
       className="border-b border-line bg-surface/30"
     >
-      <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <SectionEyebrow>Why FF Beacon</SectionEyebrow>
-        <h2
-          id="why-heading"
-          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          The product I wish existed when I started.
-        </h2>
-        <div className="mt-6 space-y-5 text-lg leading-relaxed text-ink-muted">
-          <p>
-            Two things were obvious. First, there&rsquo;s a massive gap in
-            fantasy resources for people who don&rsquo;t already speak
-            analytics. Second, almost nothing was built for fantasy players who
-            use a screen reader.
-          </p>
-          <p>
-            FF Beacon is my attempt to close both at once. Every component is
-            checked against keyboard navigation, semantic HTML, and screen
-            reader announcements before it ships. Every guide explains the
-            analytic before it asks you to use it.
-          </p>
-          <p>
-            If you&rsquo;ve ever felt locked out of fantasy football by the
-            jargon or the interface — this site is for you. Read it by ear or
-            by eye. It works both ways.
-          </p>
+      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
+          <div>
+            <SectionEyebrow>Why FF Beacon</SectionEyebrow>
+            <h2
+              id="why-heading"
+              className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
+            >
+              The product I wish existed when I started.
+            </h2>
+          </div>
+          <div className="space-y-5 text-lg leading-relaxed text-ink-muted">
+            <p>
+              Two things were obvious. First, there&rsquo;s a massive gap in
+              fantasy resources for people who don&rsquo;t already speak
+              analytics. Second, almost nothing was built for fantasy players
+              who use a screen reader.
+            </p>
+            <p>
+              FF Beacon is my attempt to close both at once. Every component is
+              checked against keyboard navigation, semantic HTML, and screen
+              reader announcements before it ships. Every guide explains the
+              analytic before it asks you to use it.
+            </p>
+            <p>
+              If you&rsquo;ve ever felt locked out of fantasy football by the
+              jargon or the interface — this site is for you. Read it by ear or
+              by eye. It works both ways.
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -243,12 +251,12 @@ function AtAGlanceSection() {
           <FactCard
             icon={Layers}
             value="Multi-format"
-            label="Redraft, dynasty, superflex, TE-premium"
+            label="Redraft, dynasty, best ball, chop/guillotine, auction/contract, and exploring more on the daily."
           />
           <FactCard
             icon={Calendar}
-            value="3 seasons"
-            label="In dynasty so far, since 2023"
+            value="20+ seasons in fantasy"
+            label="Drafted my first team on dial-up. Still chasing the edge."
           />
           <FactCard
             icon={Briefcase}
@@ -301,9 +309,7 @@ function ToolsSection() {
           The stack behind every roster decision.
         </h2>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-          Placeholder copy — swap these for the real apps, podcasts, and
-          assistive tech you actually run with. Each card supports an icon, a
-          short blurb, and an optional outbound link.
+          The apps, assistive tech, and audio I lean on every week to stay sharp.
         </p>
 
         <ul
@@ -317,13 +323,13 @@ function ToolsSection() {
           />
           <ToolCard
             icon={Headphones}
-            title="Screen reader of choice"
-            body="The assistive tech I use day-to-day. Add your specific reader here (VoiceOver, NVDA, JAWS)."
+            title="NVDA"
+            body="My daily driver across every interface. Free, open-source, and built by the community that actually depends on it."
           />
           <ToolCard
             icon={Mic}
             title="Podcasts & tape shows"
-            body="Tape doesn't translate visually — audio breakdowns travel well. List your weekly rotation here."
+            body="A daily rotation of redraft, dynasty, and best ball shows because tape breakdowns travel better by ear than by chart."
           />
         </ul>
       </div>
@@ -440,13 +446,7 @@ function ConnectSection() {
             will start posting as the site grows.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href="mailto:hello@ffbeacon.com"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <Mail aria-hidden="true" className="h-4 w-4" />
-              hello@ffbeacon.com
-            </a>
+            <EmailReveal />
             <Link
               href="/about"
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
