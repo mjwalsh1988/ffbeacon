@@ -81,3 +81,9 @@ export const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
 export type Position = (typeof POSITIONS)[number];
 
 export const DEFAULT_FORMAT_SLUG = "redraft-ppr-std";
+
+// Default data source when no URL param, user pref, or cookie has been
+// set. KTC is the canonical baseline — every other source we add layers
+// on top of that. Keep this in lockstep with whichever source you want
+// new visitors to see first.
+export const DEFAULT_SOURCE_SLUG = "ktc";

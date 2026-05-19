@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { PRIMARY_NAV, DEFAULT_FORMAT_SLUG } from "@/lib/site";
+import { PRIMARY_NAV, DEFAULT_FORMAT_SLUG, DEFAULT_SOURCE_SLUG } from "@/lib/site";
 import {
   readCookieSlug,
   SOURCE_COOKIE,
@@ -112,7 +112,15 @@ export async function SiteHeader() {
     preferredSourceSlug,
   } = await loadHeaderData();
   const initialFormatSlug = preferredFormatSlug ?? DEFAULT_FORMAT_SLUG;
-  const initialSourceSlug = preferredSourceSlug ?? sources[0]?.slug ?? null;
+  // Mirror lib/preferences.ts → resolveSourceSlug: prefer the
+  // explicitly-configured DEFAULT_SOURCE_SLUG (KTC) over the registry's
+  // priority-ordered first entry, so new visitors with no preference
+  // land on KTC in the header dropdown.
+  const initialSourceSlug =
+    preferredSourceSlug ??
+    sources.find((s) => s.slug === DEFAULT_SOURCE_SLUG)?.slug ??
+    sources[0]?.slug ??
+    null;
   const fallbackFormats: FormatOption[] = formats.length
     ? formats
     : [

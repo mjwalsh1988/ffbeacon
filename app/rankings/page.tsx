@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, Database, Layers, Users, Filter } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { readPosition } from "@/lib/format";
 import {
@@ -214,8 +216,26 @@ export default async function RankingsPage({
 
   return (
     <main id="main">
-      <header className="border-b border-line">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <header className="relative overflow-hidden border-b border-line">
+        {/* Beacon-gradient accent bar pinned to the very top. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+          }}
+        />
+        {/* Soft ambient glow behind the headline. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[820px] -translate-x-1/2"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
+          }}
+        />
+        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           {reconciled.fallback && (
             <p
               role="status"
@@ -238,44 +258,158 @@ export default async function RankingsPage({
               {describeSource(registry, rankingsResolution.source)} data instead.
             </p>
           )}
-          <p className="mb-2 text-sm font-medium uppercase tracking-wider text-brand-cyan">
-            Rankings
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+            Rankings board
           </p>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-            {format.display_name} rankings
+          {/* Static SEO headline. We keep the format/source surfaced
+              separately in the status strip below so crawlers see one
+              stable h1 across every searchParam combination, while
+              human readers still see exactly what's loaded. The
+              gradient sits on the SEO-keyword phrase. */}
+          <h1
+            aria-label="Fantasy football player rankings for every format."
+            className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl"
+          >
+            Fantasy football{" "}
+            <span
+              className="bg-clip-text text-transparent"
+              style={{
+                backgroundImage:
+                  "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+              }}
+            >
+              player rankings
+            </span>{" "}
+            for every format.
           </h1>
-          <p className="mt-3 max-w-2xl text-ink-muted">
-            {rows.length} ranked players for {format.league_type} {format.scoring_type.replace("_", " ")}
-            {format.is_superflex ? ", superflex" : ""}
-            {Number(format.te_premium_bonus) > 0 ? ", TE premium" : ""}. Updated nightly from market
-            value plus our editorial overlay.
+          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
+            Every player worth knowing, every major league type, in plain
+            English. Sort, filter, and switch your data source on the fly
+            without losing your place.
           </p>
-          <nav aria-label="Filter by position" className="mt-6 flex flex-wrap gap-2">
-            <FilterLink
-              href={`/rankings?format=${formatSlug}`}
-              active={!positionFilter}
-              label="All positions"
-            />
-            {POSITIONS.map((pos) => (
-              <FilterLink
-                key={pos}
-                href={`/rankings?format=${formatSlug}&position=${pos}`}
-                active={positionFilter === pos}
-                label={pos}
+          <div className="mt-10">
+            <p
+              id="currently-viewing-label"
+              className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+            >
+              Currently viewing
+            </p>
+            <dl
+              aria-labelledby="currently-viewing-label"
+              className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+            >
+              <StatusTile
+                icon={Database}
+                label="Data source"
+                value={
+                  rankingsResolution.source
+                    ? describeSource(registry, rankingsResolution.source)
+                    : "Not available"
+                }
               />
-            ))}
-          </nav>
+              <StatusTile
+                icon={Layers}
+                label="Scoring format"
+                value={format.display_name}
+              />
+              <StatusTile
+                icon={Users}
+                label="Players ranked"
+                value={rows.length.toLocaleString()}
+              />
+            </dl>
+          </div>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {rows.length === 0 ? (
-          <p className="rounded-card border border-dashed border-line bg-surface p-6 text-sm text-ink-muted">
-            No ranking data for this format yet. Try a different format.
-          </p>
-        ) : (
-          <RankingsTable rows={rows} />
-        )}
-      </div>
+      <section
+        aria-labelledby="rankings-board-heading"
+        className="border-b border-line bg-surface/30"
+      >
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+          <div className="mb-8">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+              The board
+            </p>
+            <h2
+              id="rankings-board-heading"
+              className="text-3xl font-semibold tracking-tight sm:text-4xl"
+            >
+              Every ranked player, in one sortable view.
+            </h2>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
+              {rows.length.toLocaleString()} players in{" "}
+              {format.display_name}, sorted by current market value. Click any
+              column header to re-sort, or open a player&rsquo;s row for the
+              full breakdown.
+            </p>
+          </div>
+
+          {/* Filter card. Matches the StatusTile visual language (icon
+              chip + label) and stacks gracefully on mobile: icon + label
+              on top, chips wrap below, every chip is 44px tall for touch. */}
+          <div
+            className="relative mb-5 overflow-hidden rounded-card border border-line bg-surface p-4 sm:p-5"
+            style={{
+              boxShadow: "0 0 48px -40px rgba(168, 85, 247, 0.55)",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-0 left-0 w-px"
+              style={{
+                backgroundImage:
+                  "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+              }}
+            />
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+                >
+                  <Filter className="h-4 w-4" />
+                </span>
+                <p
+                  id="position-filter-label"
+                  className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+                >
+                  Filter by position
+                </p>
+              </div>
+              <nav
+                aria-labelledby="position-filter-label"
+                className="flex flex-wrap gap-2 sm:flex-1"
+              >
+                <FilterLink
+                  href={`/rankings?format=${formatSlug}`}
+                  active={!positionFilter}
+                  label="All positions"
+                />
+                {POSITIONS.map((pos) => (
+                  <FilterLink
+                    key={pos}
+                    href={`/rankings?format=${formatSlug}&position=${pos}`}
+                    active={positionFilter === pos}
+                    label={pos}
+                  />
+                ))}
+              </nav>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-card border border-line bg-surface">
+            {rows.length === 0 ? (
+              <p className="p-6 text-sm text-ink-muted">
+                No ranking data for this format yet. Try a different format.
+              </p>
+            ) : (
+              <RankingsTable rows={rows} />
+            )}
+          </div>
+        </div>
+      </section>
+
+      <CtaSection />
     </main>
   );
 }
@@ -293,13 +427,106 @@ function FilterLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`rounded-card border px-3 py-1.5 text-sm transition-colors ${
+      className={`inline-flex min-h-11 items-center rounded-card border px-4 text-sm font-medium transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
         active
-          ? "border-brand-purple bg-brand-purple/15 text-ink"
-          : "border-line bg-surface text-ink-muted hover:border-line-accent hover:text-ink"
+          ? "border-brand-purple/60 bg-brand-purple/15 text-ink shadow-[0_0_24px_-12px_rgba(168,85,247,0.65)]"
+          : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
       }`}
     >
       {label}
     </Link>
+  );
+}
+
+function StatusTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div
+      className="group relative flex items-center gap-3 overflow-hidden rounded-card border border-line bg-surface px-4 py-3.5 transition-colors hover:border-line-accent"
+      style={{
+        boxShadow: "0 0 48px -40px rgba(168, 85, 247, 0.55)",
+      }}
+    >
+      {/* Subtle gradient accent strip on the left edge so the tile reads as
+          a deliberate "status" card, not a floating box. */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+        }}
+      />
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+          {label}
+        </dt>
+        <dd className="mt-0.5 truncate text-base font-semibold text-ink">
+          {value}
+        </dd>
+      </div>
+    </div>
+  );
+}
+
+function CtaSection() {
+  return (
+    <section
+      aria-labelledby="rankings-cta-heading"
+      className="border-t border-line"
+    >
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <div
+          className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+            Pair it up
+          </p>
+          <h2
+            id="rankings-cta-heading"
+            className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
+          >
+            Take these values into your actual lineup.
+          </h2>
+          <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
+            Got the rankings. Now run them against your league or set a smart
+            waiver bid with the tools that share the same data.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/tools/faab"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Run a FAAB bid
+              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+            <Link
+              href="/tools/league-sync"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Sync a Sleeper league
+              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
