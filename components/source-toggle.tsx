@@ -21,6 +21,7 @@ export function SourceToggle({
   initialSlug,
   currentFormatSlug,
   allFormats,
+  placement = "below",
 }: {
   options: SourceOption[];
   initialSlug: string | null;
@@ -33,6 +34,10 @@ export function SourceToggle({
   // Full active format list, used by pickFallbackFormat when a source switch
   // forces a format substitution.
   allFormats: FormatLike[];
+  // Mobile drawer places this control near the bottom of a fixed-height
+  // panel, so the default downward-opening dropdown gets clipped. Callers
+  // there pass "above" to flip the menu upward.
+  placement?: "below" | "above";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -241,7 +246,9 @@ export function SourceToggle({
           role="menu"
           aria-labelledby={menuHeadingId}
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl"
+          className={`absolute right-0 z-40 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl ${
+            placement === "above" ? "bottom-full mb-2" : "mt-2"
+          }`}
         >
           {/* Single, presentation-only header. The menu's aria-labelledby
               wires this up so screen readers announce it as the menu's

@@ -108,7 +108,7 @@ export function MobileMenu({
             type="button"
             aria-label="Close menu overlay"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-black/70"
+            className="absolute inset-0 bg-black/60 backdrop-blur-md"
           />
           <div
             ref={dialogRef}
@@ -157,6 +157,7 @@ export function MobileMenu({
                   initialSlug={initialSourceSlug}
                   currentFormatSlug={initialFormatSlug}
                   allFormats={allFormats}
+                  placement="above"
                 />
               </div>
               <div>
@@ -167,6 +168,7 @@ export function MobileMenu({
                   options={formats}
                   initialSlug={initialFormatSlug}
                   supportedFormatSlugs={supportedFormatSlugs}
+                  placement="above"
                 />
               </div>
               <div>

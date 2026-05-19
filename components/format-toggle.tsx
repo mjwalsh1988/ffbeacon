@@ -18,6 +18,7 @@ export function FormatToggle({
   options,
   initialSlug,
   supportedFormatSlugs,
+  placement = "below",
 }: {
   options: FormatOption[];
   initialSlug: string | null;
@@ -26,6 +27,10 @@ export function FormatToggle({
   // every active format). An empty array means "the current source supports
   // nothing" and the dropdown collapses to a static label.
   supportedFormatSlugs?: string[] | null;
+  // Mobile drawer places this control near the bottom of a fixed-height
+  // panel, so the default downward-opening dropdown gets clipped. Callers
+  // there pass "above" to flip the menu upward.
+  placement?: "below" | "above";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -166,7 +171,9 @@ export function FormatToggle({
           role="menu"
           aria-label="Choose scoring format"
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl"
+          className={`absolute right-0 z-40 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl ${
+            placement === "above" ? "bottom-full mb-2" : "mt-2"
+          }`}
         >
           {visibleOptions.map((option, index) => {
             const isSelected = option.slug === effectiveSlug;
