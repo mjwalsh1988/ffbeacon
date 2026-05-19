@@ -5,7 +5,7 @@ export const SITE = {
   /** Short paragraph for the footer About column. Keep it under ~30 words so
    * it sits comfortably alongside the other footer columns. */
   about:
-    "Accessibility-first fantasy football tools — sortable rankings, FAAB and trade calculators, and Sleeper league insights, built to read clearly on every device.",
+    "Fantasy football tools built for everyone. Rankings, league sync, and waiver bids in plain English that work the same by eye or by ear.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://ffbeacon.com",
   author: {
     name: "Michael",
