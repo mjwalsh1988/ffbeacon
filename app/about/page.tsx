@@ -59,7 +59,16 @@ function Hero() {
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           About FF Beacon
         </p>
-        <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl">
+        {/* aria-label gives the h1 a single accessible name covering the
+            entire headline, so heading navigation announces it as one piece
+            even though the gradient is achieved via a nested span. We
+            intentionally do NOT aria-hide the inner content — that would
+            remove the text from the accessibility tree and break
+            mouse-hover-to-read features. */}
+        <h1
+          aria-label="Fantasy football that finally works for everyone."
+          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl"
+        >
           Fantasy football that{" "}
           <span
             className="bg-clip-text text-transparent"
@@ -275,21 +284,21 @@ function FeaturesSection() {
           <FeatureCard
             icon={BarChart3}
             title="Rankings Board"
-            body="Sortable, filterable rankings across redraft, dynasty, superflex, and TE-premium. Switch sources without losing your place."
+            body="See who's worth what across every major league type, from standard redraft to dynasty superflex. Filter by position, sort the way you think, and switch between ranking sites without losing your spot."
             href="/rankings"
             cta="Open rankings"
           />
           <FeatureCard
             icon={Workflow}
             title="Sleeper League Sync"
-            body="Paste your Sleeper username, get every league back with real rosters, real transactions, real draft slots, and power rankings calibrated to your scoring."
+            body="Drop in your Sleeper username and pull up every league you're in. Real rosters, recent trades, draft pick values, and a power ranking tuned to your league's actual scoring settings."
             href="/tools/league-sync"
             cta="Sync a league"
           />
           <FeatureCard
             icon={Calculator}
             title="FAAB Calculator"
-            body="Market value plus your real need, weighted into a bid range. Top-100 overall? You'll get told to dump it."
+            body="Not sure how much to bid on a waiver pickup? Tell us the player and your league setup, and you'll get a suggested bid range that factors in the player's value and your roster's needs."
             href="/tools/faab"
             cta="Run a bid"
           />

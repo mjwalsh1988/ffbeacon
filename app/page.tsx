@@ -106,8 +106,15 @@ function Hero() {
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           Fantasy football, built for everyone
         </p>
+        {/* aria-label gives the h1 a single accessible name covering the
+            entire headline, so heading navigation announces it as one piece
+            even though the gradient is achieved via a nested span. We
+            intentionally do NOT aria-hide the inner content — that would
+            remove the text from the accessibility tree and break
+            mouse-hover-to-read features. */}
         <h1
           id="hero-heading"
+          aria-label="Your signal through the fantasy noise."
           className="max-w-4xl text-5xl font-semibold leading-tight tracking-tight sm:text-6xl md:text-7xl"
         >
           <span
