@@ -177,20 +177,44 @@ export async function SiteHeader() {
             </Suspense>
           </div>
           {isAuthenticated ? (
-            <form action="/auth/signout" method="post" className="hidden md:block">
-              <button
-                type="submit"
-                className="inline-flex h-9 items-center rounded-card border border-line bg-surface px-3 text-sm font-medium hover:border-line-accent"
+            <>
+              {/* Desktop: accent icon shortcut to My Beacon. Sits to the
+                  left of Sign out so the primary user-space action stays
+                  visually distinct from the destructive one. */}
+              <Link
+                href="/my-beacon"
+                aria-label="Go to your My Beacon dashboard"
+                className="hidden md:inline-flex h-9 w-9 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                Sign out
-              </button>
-            </form>
+                <UserIcon />
+              </Link>
+              <form action="/auth/signout" method="post" className="hidden md:block">
+                <button
+                  type="submit"
+                  className="inline-flex h-9 items-center rounded-card border border-line bg-surface px-3 text-sm font-medium hover:border-line-accent"
+                >
+                  Sign out
+                </button>
+              </form>
+            </>
           ) : (
             <Link
               href="/login"
               className="hidden md:inline-flex h-9 items-center rounded-card bg-beacon px-3 text-sm font-semibold text-black"
             >
               Sign in
+            </Link>
+          )}
+          {/* Mobile: same accent My Beacon shortcut, sits to the left of
+              the hamburger so authenticated users can jump to their space
+              in one tap. Only rendered when signed in. */}
+          {isAuthenticated && (
+            <Link
+              href="/my-beacon"
+              aria-label="Go to your My Beacon dashboard"
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <UserIcon />
             </Link>
           )}
           <Suspense fallback={null}>
@@ -216,5 +240,23 @@ function TogglePillSkeleton() {
       aria-hidden="true"
       className="inline-flex h-9 w-32 items-center rounded-card border border-line bg-surface"
     />
+  );
+}
+
+/* Flat single-color user glyph used by the desktop + mobile My Beacon
+   shortcuts. fill="currentColor" so it inherits the button's text color. */
+function UserIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="currentColor"
+      focusable="false"
+      aria-hidden="true"
+    >
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.31 0-8 1.67-8 5v1h16v-1c0-3.33-4.69-5-8-5Z" />
+    </svg>
   );
 }

@@ -49,11 +49,11 @@ export function SaveUsernameForm({ defaultUsername }: { defaultUsername: string 
       className="mt-6 grid gap-3 rounded-card border border-line bg-surface p-5 md:grid-cols-[1fr_auto]"
     >
       <div>
-        <label htmlFor="dashboard-sleeper" className="block text-sm font-medium">
+        <label htmlFor="my-beacon-sleeper" className="block text-sm font-medium">
           Sleeper username
         </label>
         <input
-          id="dashboard-sleeper"
+          id="my-beacon-sleeper"
           autoComplete="off"
           value={username}
           onChange={(event) => setUsername(event.target.value)}

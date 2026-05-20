@@ -85,7 +85,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.15) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
         }}
       />
-      <div className="relative mx-auto flex max-w-5xl flex-col items-start gap-8 px-4 py-16 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
+      <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-16 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
         <AuthorPortrait size={176} />
         <div className="min-w-0 flex-1">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
@@ -140,7 +140,7 @@ function StorySection() {
       aria-labelledby="story-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
           <div>
             <SectionEyebrow>Story</SectionEyebrow>
@@ -187,7 +187,7 @@ function WhySection() {
       aria-labelledby="why-heading"
       className="border-b border-line bg-surface/30"
     >
-      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
           <div>
             <SectionEyebrow>Why FF Beacon</SectionEyebrow>
@@ -231,7 +231,7 @@ function AtAGlanceSection() {
       aria-labelledby="ataglance-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <SectionEyebrow>At a glance</SectionEyebrow>
         <h2
           id="ataglance-heading"
@@ -300,7 +300,7 @@ function ToolsSection() {
       aria-labelledby="tools-heading"
       className="border-b border-line bg-surface/30"
     >
-      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <SectionEyebrow>Tools I rely on</SectionEyebrow>
         <h2
           id="tools-heading"
@@ -368,7 +368,7 @@ function SpeakingSection() {
       aria-labelledby="speaking-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <SectionEyebrow>Speaking & Writing</SectionEyebrow>
         <h2
           id="speaking-heading"
@@ -426,7 +426,7 @@ function PlaceholderCard({
 function ConnectSection() {
   return (
     <section aria-labelledby="connect-heading">
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div
           className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
           style={{

@@ -54,7 +54,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
-      <div className="relative mx-auto max-w-5xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           Fantasy football tools
         </p>
@@ -153,7 +153,7 @@ function ToolSection({ tool, tinted }: { tool: Tool; tinted: boolean }) {
       aria-labelledby={headingId}
       className={`border-b border-line ${tinted ? "bg-surface/30" : ""}`}
     >
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
           <div>
             <span
@@ -210,7 +210,7 @@ function PrinciplesSection() {
       aria-labelledby="principles-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>What every tool gets right</SectionEyebrow>
         <h2
           id="principles-heading"
@@ -272,7 +272,7 @@ function PrincipleCard({
 function CtaSection() {
   return (
     <section aria-labelledby="cta-heading">
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div
           className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
           style={{

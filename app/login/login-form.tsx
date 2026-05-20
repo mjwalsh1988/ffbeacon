@@ -15,7 +15,7 @@ type Status =
 export function LoginForm({
   searchParamsPromise,
 }: {
-  searchParamsPromise: Promise<{ error?: string; sent?: string }>;
+  searchParamsPromise: Promise<{ error?: string; sent?: string; next?: string }>;
 }) {
   const initial = use(searchParamsPromise);
   const [mode, setMode] = useState<Mode>("signin");
@@ -40,12 +40,25 @@ export function LoginForm({
     process.env.NEXT_PUBLIC_SITE_URL ??
     (typeof window !== "undefined" ? window.location.origin : "");
 
+  // Sanitize the post-login destination. Must be a same-origin path —
+  // anything starting with `//` or an absolute URL is rejected as an
+  // open-redirect attempt. /my-beacon is the default landing for
+  // logged-in users.
+  const safeNext =
+    initial.next && initial.next.startsWith("/") && !initial.next.startsWith("//")
+      ? initial.next
+      : "/my-beacon";
+  // The OAuth/email flows redirect through /auth/callback which only
+  // honors `?next=` for same-origin paths, so we forward the validated
+  // path along for the round-trip back here from Supabase.
+  const callbackUrl = `${siteUrl}/auth/callback?next=${encodeURIComponent(safeNext)}`;
+
   const signInWith = (provider: "google" | "discord") => {
     setStatus({ kind: "idle" });
     startTransition(async () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: `${siteUrl}/auth/callback` },
+        options: { redirectTo: callbackUrl },
       });
       if (error) setStatus({ kind: "error", message: error.message });
     });
@@ -58,7 +71,7 @@ export function LoginForm({
     startTransition(async () => {
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${siteUrl}/auth/callback` },
+        options: { emailRedirectTo: callbackUrl },
       });
       if (error) {
         setStatus({ kind: "error", message: error.message });
@@ -84,13 +97,13 @@ export function LoginForm({
           setStatus({ kind: "signed_in" });
           // Hard-navigate so the server-rendered shell picks up the new
           // session cookie immediately instead of a stale auth state.
-          window.location.assign("/dashboard");
+          window.location.assign(safeNext);
         }
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${siteUrl}/auth/callback` },
+          options: { emailRedirectTo: callbackUrl },
         });
         if (error) {
           setStatus({ kind: "error", message: error.message });
@@ -99,9 +112,10 @@ export function LoginForm({
           // confirmation link, no session yet.
           setStatus({ kind: "sent_confirm", email });
         } else {
-          // Auto-confirm path (rare in production) → straight to dashboard.
+          // Auto-confirm path (rare in production) → respect the next
+          // round-trip just like password sign-in.
           setStatus({ kind: "signed_in" });
-          window.location.assign("/dashboard");
+          window.location.assign(safeNext);
         }
       }
     });

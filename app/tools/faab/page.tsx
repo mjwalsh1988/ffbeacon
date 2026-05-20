@@ -144,7 +144,7 @@ export default async function FaabPage({
   return (
     <main id="main">
       <header className="border-b border-line">
-        <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           {fallbackBanner && (
             <p
               role="status"
@@ -164,7 +164,7 @@ export default async function FaabPage({
           </p>
         </div>
       </header>
-      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <FaabForm
           players={players}
           formatName={format?.display_name ?? "default format"}

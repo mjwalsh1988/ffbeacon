@@ -191,7 +191,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     <main id="main">
       <article>
         <header className="border-b border-line">
-          <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
             {fallbackBanner && (
               <p
                 role="status"
@@ -296,7 +296,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         </header>
 
         <section aria-labelledby="rankings-heading" className="border-b border-line">
-          <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
             <h2 id="rankings-heading" className="text-2xl font-semibold tracking-tight">
               Rankings across formats
             </h2>
@@ -327,7 +327,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         </section>
 
         <section aria-labelledby="stats-heading" className="border-b border-line">
-          <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
             <h2 id="stats-heading" className="text-2xl font-semibold tracking-tight">
               Last games
             </h2>
@@ -378,7 +378,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         </section>
 
         <section aria-labelledby="news-heading" className="border-b border-line">
-          <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
             <h2 id="news-heading" className="text-2xl font-semibold tracking-tight">
               Latest news
             </h2>
@@ -416,7 +416,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           </div>
         </section>
 
-        <footer className="mx-auto max-w-5xl px-4 py-10 text-sm text-ink-muted sm:px-6 lg:px-8">
+        <footer className="mx-auto max-w-7xl px-4 py-10 text-sm text-ink-muted sm:px-6 lg:px-8">
           Built and maintained by{" "}
           <Link href={SITE.author.bylineHref} className="text-ink hover:underline">
             {SITE.author.name}

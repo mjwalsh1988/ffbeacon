@@ -30,7 +30,7 @@ export type LeagueAdminContext = {
  * - Commissioner detection matches sleeper username (display_name on
  *   league_users) against user_preferences.sleeper_username. This handles
  *   the typical case where the logged-in FF Beacon user has linked their
- *   Sleeper username via /dashboard.
+ *   Sleeper username via /my-beacon.
  */
 export async function getLeagueAdminContext(
   supabase: AnySupabase,

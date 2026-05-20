@@ -55,7 +55,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
-      <div className="relative mx-auto max-w-5xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           About FF Beacon
         </p>
@@ -128,7 +128,7 @@ function MissionSection() {
       aria-labelledby="mission-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>Mission</SectionEyebrow>
         <h2
           id="mission-heading"
@@ -204,7 +204,7 @@ function PrinciplesSection() {
       aria-labelledby="principles-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>How we build</SectionEyebrow>
         <h2
           id="principles-heading"
@@ -271,7 +271,7 @@ function FeaturesSection() {
       aria-labelledby="features-heading"
       className="border-b border-line bg-surface/30"
     >
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>What you can do here</SectionEyebrow>
         <h2
           id="features-heading"
@@ -350,7 +350,7 @@ function FounderSection() {
       aria-labelledby="founder-heading"
       className="border-b border-line"
     >
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>Founder</SectionEyebrow>
         <h2
           id="founder-heading"
@@ -397,7 +397,7 @@ function FounderSection() {
 function CtaSection() {
   return (
     <section aria-labelledby="cta-heading">
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div
           className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-12"
           style={{

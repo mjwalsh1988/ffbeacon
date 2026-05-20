@@ -189,16 +189,27 @@ export function MobileMenu({
                   placement="above"
                 />
               </div>
-              <div>
+              <div className="space-y-3">
                 {isAuthenticated ? (
-                  <form action="/auth/signout" method="post">
-                    <button
-                      type="submit"
-                      className="w-full rounded-card border border-line bg-surface px-3 py-3 text-sm font-medium hover:border-line-accent"
+                  <>
+                    {/* Primary accent action — visually distinct from
+                        Sign out so users tap "My Beacon" by mistake far
+                        less often. */}
+                    <Link
+                      href="/my-beacon"
+                      className="block rounded-card bg-beacon px-3 py-3 text-center text-sm font-semibold text-black"
                     >
-                      Sign out
-                    </button>
-                  </form>
+                      My Beacon
+                    </Link>
+                    <form action="/auth/signout" method="post">
+                      <button
+                        type="submit"
+                        className="w-full rounded-card border border-line bg-surface px-3 py-3 text-sm font-medium hover:border-line-accent"
+                      >
+                        Sign out
+                      </button>
+                    </form>
+                  </>
                 ) : (
                   <Link
                     href="/login"

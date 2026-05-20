@@ -48,7 +48,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
-      <div className="relative mx-auto max-w-5xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           Fantasy football guides
         </p>
@@ -129,7 +129,7 @@ function GuidesSection() {
       aria-labelledby="guides-heading"
       className="border-b border-line bg-surface/30"
     >
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           On the way
         </p>
@@ -219,7 +219,7 @@ function GuideCard({ guide }: { guide: Guide }) {
 function CtaSection() {
   return (
     <section aria-labelledby="guides-cta-heading">
-      <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div
           className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
           style={{

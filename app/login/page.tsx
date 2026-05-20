@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; sent?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string; next?: string }>;
 }) {
   return (
     <main id="main" className="relative overflow-hidden">
@@ -35,16 +35,21 @@ export default function LoginPage({
         }}
       />
 
-      <div className="relative mx-auto max-w-xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
-        <header className="mb-6 text-center">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            Account
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Sign in or register
-          </h1>
-        </header>
-        <LoginForm searchParamsPromise={searchParams} />
+      {/* Outer container matches the site header (max-w-7xl) for edge
+          alignment consistency across the site. The focused form card
+          stays centered at its intended narrower width. */}
+      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
+        <div className="mx-auto max-w-xl">
+          <header className="mb-6 text-center">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+              Account
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Sign in or register
+            </h1>
+          </header>
+          <LoginForm searchParamsPromise={searchParams} />
+        </div>
       </div>
     </main>
   );
