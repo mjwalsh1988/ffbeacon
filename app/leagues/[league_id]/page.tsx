@@ -12,6 +12,7 @@ import {
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { loadLeagueTransactions } from "@/lib/league-transactions-data";
 import { getLeagueAdminContext } from "@/lib/league-auth";
+import { humanizeLeagueStatus } from "@/lib/league-status";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamFilter } from "@/components/team-filter";
 import { TransactionRow } from "@/components/transaction-row";
@@ -693,16 +694,6 @@ function InfoChip({
   );
 }
 
-/** Title-case a Sleeper status slug ("pre_draft" → "Pre Draft"). */
-function humanizeStatus(raw: string | null | undefined): string {
-  if (!raw) return "Unknown";
-  return raw
-    .replace(/_/g, " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
 
 function FormatTagRow({ tags }: { tags: FormatTag[] }) {
   // Two visual tones so format meta (cyan) is scannable apart from per-slot
@@ -741,7 +732,7 @@ function FormatTagRow({ tags }: { tags: FormatTag[] }) {
 }
 
 function StatusPill({ status }: { status: string | null }) {
-  const label = humanizeStatus(status);
+  const label = humanizeLeagueStatus(status);
   const key = (status ?? "").toLowerCase();
   // Map Sleeper status → semantic accent. Pre-draft = brand cyan (build-up
   // energy), drafting = warning amber (active event), in-season = brand

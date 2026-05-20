@@ -17,6 +17,7 @@ import {
   setFeaturedLeague,
   setLeagueShownOnProfile,
 } from "@/app/my-beacon/actions";
+import { humanizeLeagueStatus } from "@/lib/league-status";
 import { LeagueDetailSheet } from "./league-detail-sheet";
 
 /**
@@ -865,40 +866,28 @@ const POSITION_LABEL: Record<string, string> = {
 
 /* ---------- Status helpers ---------- */
 
+/**
+ * Pair the shared humanized label with a Tailwind tone for the badge
+ * background. The label comes from {@link humanizeLeagueStatus} so the
+ * /tools/league-sync table, the My Sleeper Leagues dashboard, and the
+ * league deep view all render the same string for the same status.
+ *
+ * Tone mapping is intentionally local — it's a visual concern tied to
+ * the badge component, not to the status string itself.
+ */
 function describeStatus(raw: string): { label: string; tone: string } {
-  switch (raw) {
-    case "in_season":
-      return {
-        label: "In season",
-        tone: "bg-signal-success/15 text-signal-success",
-      };
-    case "drafting":
-      return {
-        label: "Drafting",
-        tone: "bg-brand-cyan/15 text-brand-cyan",
-      };
-    case "pre_draft":
-      return {
-        label: "Pre-draft",
-        tone: "bg-signal-warning/15 text-signal-warning",
-      };
-    case "complete":
-      return {
-        label: "Complete",
-        tone: "bg-ink-subtle/15 text-ink-muted",
-      };
-    case "post_season":
-      return {
-        label: "Playoffs",
-        tone: "bg-brand-purple/15 text-brand-purple",
-      };
-    default:
-      return {
-        label: raw
-          .split("_")
-          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-          .join(" "),
-        tone: "bg-surface text-ink-muted",
-      };
-  }
+  const label = humanizeLeagueStatus(raw);
+  const tone =
+    raw === "in_season"
+      ? "bg-signal-success/15 text-signal-success"
+      : raw === "drafting"
+        ? "bg-brand-cyan/15 text-brand-cyan"
+        : raw === "pre_draft"
+          ? "bg-signal-warning/15 text-signal-warning"
+          : raw === "complete"
+            ? "bg-ink-subtle/15 text-ink-muted"
+            : raw === "post_season"
+              ? "bg-brand-purple/15 text-brand-purple"
+              : "bg-surface text-ink-muted";
+  return { label, tone };
 }
