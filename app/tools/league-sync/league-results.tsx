@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   ChevronRight,
   ArrowRight,
@@ -8,6 +8,8 @@ import {
   Star,
   Eye,
   EyeOff,
+  SlidersHorizontal,
+  Trophy,
 } from "lucide-react";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { ensureLeagueAndOpen } from "@/app/leagues/actions";
@@ -67,7 +69,32 @@ export function LeagueResults({
   const [shownIds, setShownIds] = useState<Set<string>>(
     () => new Set(shownLeagueIds),
   );
+  // Dashboard view filter. Defaults to true so first-time users see
+  // every synced league — turning the toggle OFF narrows the table to
+  // just the leagues marked Featured or Shown on profile, for users
+  // who want their dashboard to mirror exactly what their profile
+  // surfaces.
+  const [showAll, setShowAll] = useState(true);
   const [, startTransition] = useTransition();
+
+  // Filter the leagues array passed down to the dashboard renderers.
+  // When `showAll` is true we pass everything through. When false, we
+  // keep only the ones that are explicitly Featured or in the Shown
+  // set — leagues the user has signaled they care about for their
+  // public profile.
+  const visibleLeagues = useMemo(() => {
+    if (variant !== "dashboard" || showAll) return leagues;
+    return leagues.filter(
+      (l) => featuredId === l.league_id || shownIds.has(l.league_id),
+    );
+  }, [variant, showAll, leagues, featuredId, shownIds]);
+
+  // Public variant skips the filter UI and bypasses the count.
+  const profileLeagueCount = useMemo(() => {
+    const set = new Set(shownIds);
+    if (featuredId) set.add(featuredId);
+    return set.size;
+  }, [featuredId, shownIds]);
 
   const handleSetFeatured = (leagueId: string | null) => {
     setFeaturedId(leagueId);
@@ -96,22 +123,35 @@ export function LeagueResults({
 
       {variant === "dashboard" ? (
         <>
-          <DesktopDashboardTable
-            leagues={leagues}
-            sleeperUsername={sleeperUsername}
-            featuredId={featuredId}
-            shownIds={shownIds}
-            onSetFeatured={handleSetFeatured}
-            onToggleShown={handleToggleShown}
+          <DashboardFilter
+            showAll={showAll}
+            onChange={setShowAll}
+            totalCount={leagues.length}
+            visibleCount={visibleLeagues.length}
+            profileLeagueCount={profileLeagueCount}
           />
-          <MobileDashboardCards
-            leagues={leagues}
-            sleeperUsername={sleeperUsername}
-            featuredId={featuredId}
-            shownIds={shownIds}
-            onSetFeatured={handleSetFeatured}
-            onToggleShown={handleToggleShown}
-          />
+          {visibleLeagues.length === 0 ? (
+            <FilterEmptyState onReset={() => setShowAll(true)} />
+          ) : (
+            <>
+              <DesktopDashboardTable
+                leagues={visibleLeagues}
+                sleeperUsername={sleeperUsername}
+                featuredId={featuredId}
+                shownIds={shownIds}
+                onSetFeatured={handleSetFeatured}
+                onToggleShown={handleToggleShown}
+              />
+              <MobileDashboardCards
+                leagues={visibleLeagues}
+                sleeperUsername={sleeperUsername}
+                featuredId={featuredId}
+                shownIds={shownIds}
+                onSetFeatured={handleSetFeatured}
+                onToggleShown={handleToggleShown}
+              />
+            </>
+          )}
         </>
       ) : (
         <>
@@ -619,6 +659,107 @@ function ShownToggle({
       )}
       <span>{isShown ? "Shown" : "Hidden"}</span>
     </button>
+  );
+}
+
+/* ---------- Dashboard filter ---------- */
+
+/**
+ * Filter panel rendered above the dashboard variant. The toggle starts
+ * ON (every synced league visible) so first-time users aren't confused
+ * by a partial table. Flipping it OFF narrows the table to leagues the
+ * user has explicitly Featured or Shown on their profile.
+ */
+function DashboardFilter({
+  showAll,
+  onChange,
+  totalCount,
+  visibleCount,
+  profileLeagueCount,
+}: {
+  showAll: boolean;
+  onChange: (next: boolean) => void;
+  totalCount: number;
+  visibleCount: number;
+  profileLeagueCount: number;
+}) {
+  return (
+    <div
+      role="region"
+      aria-label="League filters"
+      className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface/40 px-4 py-3"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">Filter leagues</p>
+          <p className="text-xs text-ink-muted">
+            {showAll
+              ? `Showing all ${totalCount} ${totalCount === 1 ? "league" : "leagues"}.`
+              : profileLeagueCount === 0
+                ? "No featured or shown leagues yet — toggle one below."
+                : `Showing ${visibleCount} of ${totalCount} (featured + shown).`}
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={showAll}
+        aria-label={
+          showAll
+            ? "Show all leagues is on. Turn off to hide leagues not featured or shown on profile."
+            : "Show all leagues is off. Turn on to see every synced league."
+        }
+        onClick={() => onChange(!showAll)}
+        className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+          showAll
+            ? "border-brand-cyan bg-brand-cyan/15 text-brand-cyan"
+            : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
+        }`}
+      >
+        {showAll ? (
+          <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+        ) : (
+          <EyeOff aria-hidden="true" className="h-3.5 w-3.5" />
+        )}
+        <span>Show all leagues</span>
+      </button>
+    </div>
+  );
+}
+
+function FilterEmptyState({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="flex flex-col items-start gap-4 rounded-card border border-dashed border-line bg-base/40 p-6 sm:flex-row sm:items-center">
+      <span
+        aria-hidden="true"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+      >
+        <Trophy className="h-5 w-5" />
+      </span>
+      <div className="flex-1">
+        <p className="text-base font-semibold text-ink">
+          No leagues match this filter.
+        </p>
+        <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+          Flip Show all leagues back on, or mark a league Featured or Shown
+          on profile below.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onReset}
+        className="inline-flex h-10 items-center rounded-card border border-line bg-surface px-4 text-sm font-medium text-ink hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        Show all leagues
+      </button>
+    </div>
   );
 }
 
