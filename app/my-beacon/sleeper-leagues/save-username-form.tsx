@@ -3,6 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import {
+  mergeSleeperLeagueSettings,
+  parseSleeperLeagueSettings,
+} from "@/lib/sleeper-league-settings";
 
 export function SaveUsernameForm({ defaultUsername }: { defaultUsername: string }) {
   const router = useRouter();
@@ -24,12 +28,24 @@ export function SaveUsernameForm({ defaultUsername }: { defaultUsername: string 
         setStatus({ kind: "error", message: "Not signed in." });
         return;
       }
+      // Read-merge-write so we don't clobber other keys in the jsonb
+      // (featured_league_id, shown_league_ids, etc.). Read uses the
+      // owner-only RLS policy that already gates this row.
+      const { data: existing } = await supabase
+        .from("user_preferences")
+        .select("sleeper_league_settings")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const current = parseSleeperLeagueSettings(existing?.sleeper_league_settings);
+      const next = mergeSleeperLeagueSettings(current, {
+        username: cleaned.length > 0 ? cleaned : null,
+      });
       const { error } = await supabase
         .from("user_preferences")
         .upsert(
           {
             user_id: user.id,
-            sleeper_username: cleaned || null,
+            sleeper_league_settings: next,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" },

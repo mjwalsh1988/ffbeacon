@@ -12,6 +12,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getActiveFormats, getAvailableSources } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -105,6 +106,24 @@ export default async function MyBeaconDashboardPage() {
     resolveSourceSlug(supabase, undefined),
   ]);
 
+  // Fetch sleeper_league_settings separately because it needs the user.id
+  // we just resolved above (so it can't go in the parallel batch).
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("sleeper_league_settings")
+    .eq("user_id", user!.id)
+    .maybeSingle();
+  const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
+
+  // Profile-league count = union of "featured" and "shown" league ids.
+  // A featured league counts even if it isn't separately toggled to show,
+  // because pinning it to the profile is itself a kind of visibility.
+  const profileLeagueIds = new Set<string>(settings.shown_league_ids ?? []);
+  if (settings.featured_league_id) {
+    profileLeagueIds.add(settings.featured_league_id);
+  }
+  const profileLeagueCount = profileLeagueIds.size;
+
   const formatRow = formats.find((f) => f.slug === formatRes.slug);
   const sourceRow = sources.find((s) => s.slug === sourceRes.slug);
 
@@ -124,9 +143,12 @@ export default async function MyBeaconDashboardPage() {
 
   const statCards: StatCard[] = [
     {
-      label: "Saved leagues",
-      value: "—",
-      caption: "Connect Sleeper to populate.",
+      label: "On profile",
+      value: profileLeagueCount.toString(),
+      caption:
+        profileLeagueCount === 0
+          ? "Toggle Featured or Show on My Sleeper Leagues."
+          : "Leagues featured or shown on your public profile.",
       kind: "numeric",
     },
     {

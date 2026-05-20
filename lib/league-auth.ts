@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -12,8 +13,9 @@ export type LeagueAdminContext = {
   isAdmin: boolean;
   /** True when the current user's Sleeper username appears as is_owner=true
    * (Sleeper's commissioner bit) on this league's league_users. Note: we
-   * match by sleeper username persisted to user_preferences.sleeper_username
-   * because user_preferences doesn't yet store sleeper_user_id. */
+   * match by sleeper username persisted under
+   * user_preferences.sleeper_league_settings.username because
+   * user_preferences doesn't yet store sleeper_user_id. */
   isCommissionerForLeague: boolean;
   /** Convenience: admin OR commissioner. Components use this to gate
    * privileged UI. The server-side API endpoint must independently
@@ -28,9 +30,9 @@ export type LeagueAdminContext = {
  * - This is read-side gating. The corresponding API endpoint MUST do its
  *   own check before executing — never trust the client.
  * - Commissioner detection matches sleeper username (display_name on
- *   league_users) against user_preferences.sleeper_username. This handles
- *   the typical case where the logged-in FF Beacon user has linked their
- *   Sleeper username via /my-beacon.
+ *   league_users) against user_preferences.sleeper_league_settings.username.
+ *   This handles the typical case where the logged-in FF Beacon user has
+ *   linked their Sleeper username via /my-beacon/sleeper-leagues.
  */
 export async function getLeagueAdminContext(
   supabase: AnySupabase,
@@ -50,11 +52,12 @@ export async function getLeagueAdminContext(
 
   const { data: prefs } = await (supabase as SupabaseClient<Database>)
     .from("user_preferences")
-    .select("is_admin, sleeper_username")
+    .select("is_admin, sleeper_league_settings")
     .eq("user_id", user.id)
     .maybeSingle();
   const isAdmin = Boolean(prefs?.is_admin);
-  const sleeperUsername = prefs?.sleeper_username ?? null;
+  const sleeperUsername =
+    parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
 
   let isCommissionerForLeague = false;
   if (sleeperUsername) {

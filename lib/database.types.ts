@@ -1179,11 +1179,8 @@ export type Database = {
           created_at: string
           default_format_config_id: string | null
           default_source_slug: string | null
-          email_digest_enabled: boolean
-          favorite_players: Json
           is_admin: boolean
-          sleeper_username: string | null
-          theme: string
+          sleeper_league_settings: Json
           updated_at: string
           user_id: string
         }
@@ -1191,11 +1188,8 @@ export type Database = {
           created_at?: string
           default_format_config_id?: string | null
           default_source_slug?: string | null
-          email_digest_enabled?: boolean
-          favorite_players?: Json
           is_admin?: boolean
-          sleeper_username?: string | null
-          theme?: string
+          sleeper_league_settings?: Json
           updated_at?: string
           user_id: string
         }
@@ -1203,11 +1197,8 @@ export type Database = {
           created_at?: string
           default_format_config_id?: string | null
           default_source_slug?: string | null
-          email_digest_enabled?: boolean
-          favorite_players?: Json
           is_admin?: boolean
-          sleeper_username?: string | null
-          theme?: string
+          sleeper_league_settings?: Json
           updated_at?: string
           user_id?: string
         }

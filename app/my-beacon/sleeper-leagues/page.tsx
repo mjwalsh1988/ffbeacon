@@ -7,6 +7,7 @@ import {
   getSleeperLeagues,
   currentNflSeason,
 } from "@/lib/sleeper";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { LeagueResults } from "@/app/tools/league-sync/league-results";
 import { SaveUsernameForm } from "./save-username-form";
 
@@ -25,11 +26,14 @@ export default async function SleeperLeaguesPage() {
 
   const { data: prefs } = await supabase
     .from("user_preferences")
-    .select("sleeper_username")
+    .select("sleeper_league_settings")
     .eq("user_id", user!.id)
     .maybeSingle();
 
-  const sleeperUsername = prefs?.sleeper_username ?? "";
+  const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
+  const sleeperUsername = settings.username ?? "";
+  const featuredLeagueId = settings.featured_league_id ?? null;
+  const shownLeagueIds = settings.shown_league_ids ?? [];
   const season = currentNflSeason();
 
   let leagues: Awaited<ReturnType<typeof getSleeperLeagues>> = [];
@@ -89,6 +93,11 @@ export default async function SleeperLeaguesPage() {
             >
               Your {season} season
             </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+              Click a league name to open its deep view. Use the toggles to
+              feature one league on your profile and choose which others appear
+              there.
+            </p>
           </div>
           <Link
             href="/tools/league-sync"
@@ -116,9 +125,12 @@ export default async function SleeperLeaguesPage() {
         {leagues.length > 0 && (
           <div className="mt-6">
             <LeagueResults
+              variant="dashboard"
               leagues={leagues}
               season={season}
               sleeperUsername={sleeperUser?.display_name ?? sleeperUsername ?? null}
+              featuredLeagueId={featuredLeagueId}
+              shownLeagueIds={shownLeagueIds}
             />
           </div>
         )}
