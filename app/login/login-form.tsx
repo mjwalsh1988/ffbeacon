@@ -36,9 +36,13 @@ export function LoginForm({
   const headingId = "login-form-heading";
 
   const supabase = createClient();
+  // Always use the live browser origin so OAuth round-trips land back on
+  // the same environment the user started in. `NEXT_PUBLIC_SITE_URL` is
+  // canonical (production) and would route dev sessions to the live site.
   const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (typeof window !== "undefined" ? window.location.origin : "");
+    typeof window !== "undefined"
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_SITE_URL ?? "");
 
   // Sanitize the post-login destination. Must be a same-origin path —
   // anything starting with `//` or an absolute URL is rejected as an

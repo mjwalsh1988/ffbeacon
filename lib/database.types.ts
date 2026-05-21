@@ -1326,6 +1326,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      account_has_password: { Args: never; Returns: boolean }
+      get_my_active_sessions: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          ip: unknown
+          not_after: string
+          refreshed_at: string
+          updated_at: string
+          user_agent: string
+        }[]
+      }
       try_claim_league_resync: {
         Args: {
           p_league_id: string

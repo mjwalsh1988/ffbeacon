@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Trophy, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Trophy, Settings, type LucideIcon } from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -28,6 +28,13 @@ const NAV_ITEMS: NavItem[] = [
     label: "My Sleeper Leagues",
     icon: Trophy,
     description: "Saved Sleeper username and every active league synced from it.",
+  },
+  {
+    href: "/my-beacon/account",
+    label: "Account Settings",
+    icon: Settings,
+    description:
+      "Manage linked sign-in providers, password, email, and active sessions.",
   },
 ];
 

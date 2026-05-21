@@ -10,7 +10,19 @@ import {
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  // Resolution order for the post-auth landing path:
+  //   1. `?next=` URL param (login flow — signInWithOAuth threads this
+  //      through reliably)
+  //   2. `ff_oauth_return` cookie (link flow — set by identity-manager
+  //      before linkIdentity, because that endpoint doesn't always
+  //      preserve redirectTo query strings)
+  //   3. "/" (default landing for password / magic-link confirmations)
+  const nextParam = searchParams.get("next");
+  const cookieReturn = request.cookies.get("ff_oauth_return")?.value ?? null;
+  const decodedCookieReturn = cookieReturn
+    ? safeDecode(cookieReturn)
+    : null;
+  const candidate = nextParam ?? decodedCookieReturn ?? "/";
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
@@ -23,8 +35,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  const redirectPath = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  const redirectPath =
+    candidate.startsWith("/") && !candidate.startsWith("//") ? candidate : "/";
   const response = NextResponse.redirect(`${origin}${redirectPath}`);
+
+  // Consume the one-shot return cookie so it doesn't influence later
+  // unrelated callbacks (e.g. a subsequent password reset flow).
+  if (cookieReturn) {
+    response.cookies.set("ff_oauth_return", "", { path: "/", maxAge: 0 });
+  }
 
   // Sync saved preferences from DB into cookies so the next server render
   // already reflects this user's settings (cross-device login experience).
@@ -65,4 +84,17 @@ export async function GET(request: NextRequest) {
   }
 
   return response;
+}
+
+/**
+ * Defensive decode for the return-path cookie. A malformed value (e.g.
+ * a stale entry from a previous deploy) should never throw and crash the
+ * auth callback — it just falls through to the default landing.
+ */
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }

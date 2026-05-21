@@ -119,7 +119,11 @@
       "Bash(npx --no tsc -p tsconfig.json --noEmit)",
       "Bash(echo \"exit:$?\")",
       "Bash(git rm *)",
-      "Bash([ -d \"/c/Users/mjwal/OneDrive/Desktop/ffbeacon/$p\" ])"
+      "Bash([ -d \"/c/Users/mjwal/OneDrive/Desktop/ffbeacon/$p\" ])",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 80)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Out-String)",
+      "PowerShell(npm ls *)",
+      "PowerShell($out = npx tsc --noEmit 2>&1; if \\($LASTEXITCODE -ne 0\\) { Write-Host \"exit=$LASTEXITCODE\"; $out | Out-String } else { Write-Host \"tsc OK\" })"
     ]
   },
   "enabledMcpjsonServers": [
