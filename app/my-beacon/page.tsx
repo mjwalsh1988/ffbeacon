@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveFormats, getAvailableSources } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { shortFormatName } from "@/lib/format-display";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -26,6 +27,10 @@ type StatCard = {
   /** Numeric values use the mono gradient treatment; text values use sans
    * at a smaller size so longer strings like "Dynasty Superflex" fit. */
   kind: "numeric" | "text";
+  /** Optional accessible name for the value — used when the visible value
+   * is abbreviated (e.g. "Dynasty PPR SF") and we want screen readers to
+   * hear the full unabbreviated form ("Dynasty PPR Superflex"). */
+  valueAriaLabel?: string;
 };
 
 type QuickAction = {
@@ -127,7 +132,11 @@ export default async function MyBeaconDashboardPage() {
   const formatRow = formats.find((f) => f.slug === formatRes.slug);
   const sourceRow = sources.find((s) => s.slug === sourceRes.slug);
 
-  const formatDisplay = formatRow?.display_name ?? "—";
+  // Keep the full display name available for accessibility — the card
+  // value uses the abbreviated form for visual density, but screen
+  // readers should still hear "Superflex" via the aria-label below.
+  const formatFullName = formatRow?.display_name ?? "—";
+  const formatDisplay = shortFormatName(formatFullName);
   const sourceDisplay = sourceRow?.display_name ?? "—";
 
   // user.created_at is an ISO string in the Supabase auth schema.
@@ -154,6 +163,8 @@ export default async function MyBeaconDashboardPage() {
     {
       label: "Default format",
       value: formatDisplay,
+      // SR hears the full "Dynasty PPR Superflex" instead of "Dynasty PPR SF".
+      valueAriaLabel: formatFullName,
       caption: "Change from the header.",
       kind: "text",
     },
@@ -222,6 +233,7 @@ function StatsSection({ cards }: { cards: StatCard[] }) {
                 backgroundImage:
                   "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
               }}
+              aria-label={stat.valueAriaLabel}
             >
               {stat.value}
             </p>

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { DEFAULT_FORMAT_SLUG } from "@/lib/site";
 import { saveFormatPreference } from "@/app/actions/preferences";
+import { shortFormatName } from "@/lib/format-display";
 
 export type FormatOption = {
   id: string;
@@ -129,10 +130,13 @@ export function FormatToggle({
     }
   };
 
+  // Keep the full name for accessible labels + the screen-reader
+  // announcement; collapse "Superflex" → "SF" for the visible UI only.
   const currentLabel =
     visibleOptions.find((option) => option.slug === effectiveSlug)?.display_name ??
     options.find((option) => option.slug === effectiveSlug)?.display_name ??
     "Redraft PPR";
+  const currentLabelShort = shortFormatName(currentLabel);
 
   if (visibleOptions.length === 1) {
     return (
@@ -141,7 +145,7 @@ export function FormatToggle({
         aria-label={`Scoring format: ${currentLabel}`}
       >
         <span aria-hidden="true" className="text-ink-muted">Format:</span>
-        <span>{currentLabel}</span>
+        <span aria-hidden="true">{currentLabelShort}</span>
       </span>
     );
   }
@@ -159,7 +163,7 @@ export function FormatToggle({
         className="inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-50"
       >
         <span aria-hidden="true" className="text-ink-muted">Format:</span>
-        <span>{currentLabel}</span>
+        <span aria-hidden="true">{currentLabelShort}</span>
         <span aria-hidden="true" className="text-ink-subtle">▾</span>
       </button>
       <span aria-live="polite" className="sr-only">
@@ -191,11 +195,16 @@ export function FormatToggle({
                   role="menuitem"
                   tabIndex={index === activeIndex ? 0 : -1}
                   onClick={() => selectFormat(option.slug)}
+                  // aria-label carries the unabbreviated name so screen
+                  // readers hear "Dynasty PPR Superflex" instead of "SF".
+                  aria-label={option.display_name}
                   className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none ${
                     isSelected ? "text-ink" : "text-ink-muted"
                   }`}
                 >
-                  <span>{option.display_name}</span>
+                  <span aria-hidden="true">
+                    {shortFormatName(option.display_name)}
+                  </span>
                   {isSelected && (
                     <span className="text-brand-purple" aria-hidden="true">
                       ✓
