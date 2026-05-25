@@ -58,23 +58,27 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
 ];
 
 /**
- * Social profiles shown as icons in the footer About column. All four
- * are placeholders for now — the renderer treats `disabled: true` as a
- * non-interactive icon (still labeled, still styled, but no navigation)
- * so the brand row reads correctly before the accounts exist.
+ * Social profiles shown as icons in the footer About column. The Discord
+ * link points at the internal /join redirect so the shareable URL on
+ * marketing posts is `ffbeacon.com/join` rather than the raw invite — the
+ * route serves an OG-branded landing page and then forwards the visitor.
  */
 export const SOCIAL_LINKS: Array<{
-  label: "Facebook" | "Instagram" | "X" | "TikTok";
+  label: "Instagram" | "X" | "TikTok" | "Discord";
   href: string;
-  /** Whether the link opens a third-party site. Ignored when disabled. */
+  /** Whether the link opens in a new tab. The footer renderer reads this
+   * flag to set target="_blank" + rel="noopener noreferrer" and to append
+   * "(opens in new tab)" to the aria-label. Discord is internal (/join)
+   * but still opens in a new tab so visitors don't lose their FF Beacon
+   * session when they go grab the invite. */
   external: boolean;
   /** Hide the actual navigation while the social account isn't claimed yet. */
   disabled?: boolean;
 }> = [
-  { label: "Facebook", href: "#", external: true, disabled: true },
-  { label: "Instagram", href: "#", external: true, disabled: true },
-  { label: "X", href: "#", external: true, disabled: true },
-  { label: "TikTok", href: "#", external: true, disabled: true },
+  { label: "Instagram", href: "https://instagram.com/ffbeacon", external: true },
+  { label: "X", href: "https://x.com/ffbeacon", external: true },
+  { label: "TikTok", href: "https://tiktok.com/@ffbeacon", external: true },
+  { label: "Discord", href: "/join", external: true },
 ];
 
 export const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;

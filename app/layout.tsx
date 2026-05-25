@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { DiscordCta } from "@/components/discord-cta";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -49,6 +50,7 @@ export default function RootLayout({
           <div className="flex-1">{children}</div>
           <SiteFooter />
         </div>
+        <DiscordCta />
       </body>
     </html>
   );
