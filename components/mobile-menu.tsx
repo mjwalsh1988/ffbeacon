@@ -132,7 +132,10 @@ export function MobileMenu({
                 <span aria-hidden="true">✕</span>
               </button>
             </div>
-            <nav aria-label="Mobile primary" className="flex flex-col gap-1">
+            <nav
+              aria-label="Mobile primary"
+              className="flex flex-col divide-y divide-line/60 border-y border-line/60"
+            >
               {PRIMARY_NAV.map((item) => {
                 const active = pathname?.startsWith(item.href);
                 return (
@@ -140,10 +143,10 @@ export function MobileMenu({
                     key={item.href}
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`rounded-card px-3 py-3 text-base ${
+                    className={`px-3 py-3.5 text-base transition-colors ${
                       active
-                        ? "bg-surface text-ink"
-                        : "text-ink-muted hover:bg-surface hover:text-ink"
+                        ? "border-l-2 border-l-brand-purple bg-surface text-ink"
+                        : "border-l-2 border-l-transparent text-ink-muted hover:bg-surface hover:text-ink"
                     }`}
                   >
                     {item.label}

@@ -14,9 +14,8 @@ import { useEffect, useState } from "react";
  * Behavior:
  *   - Anchored bottom-right with `env(safe-area-inset-bottom)` padding so it
  *     clears iOS home-bar and Android nav-bar regions cleanly.
- *   - Icon-only on small screens, icon+label on `sm:` and up — keeps the
- *     thumb-target tight on mobile while still reading as a labeled call to
- *     action on desktop.
+ *   - Icon+label on every breakpoint so the "Join the Discord" intent is
+ *     never ambiguous, including on mobile.
  *   - Dismissible. The X button writes `ffbeacon.discord_cta_dismissed = "1"`
  *     to localStorage and hides the component for the rest of the session and
  *     across return visits. There is no re-prompt; the footer + /join still
@@ -86,7 +85,7 @@ export function DiscordCta() {
           className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-brand-purple to-brand-cyan px-3 py-2 text-sm font-semibold text-black transition-transform hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:px-4"
         >
           <DiscordGlyph className="h-5 w-5" />
-          <span className="hidden sm:inline">Join the Discord</span>
+          <span>Join the Discord</span>
         </a>
         <button
           type="button"
