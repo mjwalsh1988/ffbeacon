@@ -689,18 +689,71 @@ render from the first post-backfill rankings page load.
 ### Running the backfill
 
 ```
-# KTC only:
+# KTC only (via KTC's /histories endpoint, ~6 months of history):
 npm run backfill:ktc
 
 # KTC + trend recalculation (the canonical post-backfill chain):
 npm run backfill:all
 # = npm run backfill:ktc && npm run calculate:trends
+
+# Deeper KTC history via the community archive (2024-01-01 onward by default):
+npm run backfill:ktc:community
+npm run backfill:ktc:community -- --since 2023-06-01
 ```
 
 No corresponding `backfill:fantasycalc` script ships, because there is
 nothing to fetch. If FantasyCalc later publishes a historical endpoint,
 add a script that follows the same idempotency + match-and-upsert
 pattern as `backfill-ktc-history.ts` and wire it into `backfill:all`.
+
+### KTC pre-`/histories` backfill via community archive
+
+`scripts/backfill-ktc-community-archive.ts` (lib at `lib/backfill-ktc-community-archive.ts`)
+ingests the community-maintained Google Sheet by u/325xi5mt
+(https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs).
+That sheet snapshots the top 500 KTC values daily and has retained values
+since 2020-04-01 — far deeper than KTC's own `/histories` endpoint, which
+only returns ~6 months. Companion scraper at github.com/ees4/KeepTradeCut-Scraper.
+
+What we ingest from the sheet:
+- `1QB Historical Data` tab → `dynasty-ppr-std` values
+- `SF Historical Data` tab → `dynasty-ppr-sflex` values
+- `dynasty-ppr-tep-sflex` is derived per-date via `applyKtcTep()` from the
+  sflex bucket, identical to the live sync pipeline.
+
+What we deliberately skip:
+- Pick columns (`2024 Early 1st`, `2025 Late 2nd`, etc.) — they don't map
+  cleanly to our `(season, round, slot)` schema; live sync handles picks.
+- FantasyCalc columns — they're current-snapshot, not historical (the sheet
+  overwrites them daily, no archive).
+- Redraft history — not in the sheet.
+- Players ranked below 500 historically — sheet only tracks top 500.
+
+Player matching mirrors `sync-ktc.ts`:
+1. Read positions from the sheet's current `1QB` snapshot tab (this gives
+   a `name -> position` map for every historical player).
+2. For each historical cell with a value, look up `players` by
+   `normalizeName(name) + position`.
+3. Unmatched names are logged but non-fatal (mostly retired/inactive players
+   no longer in our `players` table).
+
+Idempotency: upsert on `(player_id, format_config_id, source, captured_at)`
+with `ignoreDuplicates: true`. `captured_at` is `YYYY-MM-DDT12:00:00.000Z`,
+identical to `scripts/backfill-ktc-history.ts`, so the two backfills coexist
+without duplicate rows.
+
+ABSOLUTE RULE: This is a one-time bootstrap. Do NOT add it to the nightly
+cron. The live `/api/cron/sync-ktc` already handles forward-going writes.
+
+Provenance: each row's `metadata` carries
+`{ ktc_community_archive: { source: "u/325xi5mt google sheet", sheet_id,
+tab, date, column_header, raw_value } }` so the data is distinguishable
+from rows written by `backfill-ktc-history.ts` (which carries
+`{ ktc_historical: {...} }`) or by the live sync (which carries the raw
+KTC `playersArray` object).
+
+Cross-validation against KTC's own `/histories` data shows ≤0.15% value
+drift per row (rounding + snapshot timing differences).
 
 ### Read pattern
 

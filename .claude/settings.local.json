@@ -123,7 +123,24 @@
       "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 80)",
       "PowerShell(npx tsc --noEmit 2>&1 | Out-String)",
       "PowerShell(npm ls *)",
-      "PowerShell($out = npx tsc --noEmit 2>&1; if \\($LASTEXITCODE -ne 0\\) { Write-Host \"exit=$LASTEXITCODE\"; $out | Out-String } else { Write-Host \"tsc OK\" })"
+      "PowerShell($out = npx tsc --noEmit 2>&1; if \\($LASTEXITCODE -ne 0\\) { Write-Host \"exit=$LASTEXITCODE\"; $out | Out-String } else { Write-Host \"tsc OK\" })",
+      "Bash(findstr /v \"^$\")",
+      "Bash(grep -v '^$')",
+      "Bash(grep -oE 'api\\\\.fantasycalc\\\\.com[^\"'\\\\'' ]*' __TRACKED_VAR__/fc-profile.html)",
+      "Bash(grep -oE '[\"'\\\\''][^\"'\\\\'']*\\(history|timeseries|chart|graph\\)[^\"'\\\\'']*[\"'\\\\'']' __TRACKED_VAR__/fc-profile.html)",
+      "Bash(grep -oE 'src=\"[^\"]*\\\\.js[^\"]*\"' __TRACKED_VAR__/fc-profile.html)",
+      "Bash(grep -oE 'src=\"/[^\"]*\"' __TRACKED_VAR__/fc-profile.html)",
+      "Bash(grep -oE '\"/[a-z][a-z0-9/_-]{2,80}\"' __TRACKED_VAR__/fc-main.js)",
+      "Bash(grep -oE 'api\\\\.fantasycalc\\\\.com[^\"'\\\\'' \\\\\\\\]*' __TRACKED_VAR__/fc-main.js)",
+      "Bash(grep -oE 'src=\"[^\"]*\\\\.js[^\"]*\"' __TRACKED_VAR__/fc-bijan.html)",
+      "Bash(grep -oE 'window\\\\.[a-zA-Z]*\\\\s*=' __TRACKED_VAR__/fc-bijan.html)",
+      "Bash(grep -rh -oE 'http\\\\.\\(get|post|put|delete\\)\\\\\\([^\\)]{1,300}' __TRACKED_VAR__/fc-chunks/ __TRACKED_VAR__/fc-main.js)",
+      "Bash(grep -rh -oE '`https?://[^`]{1,300}`' __TRACKED_VAR__/fc-chunks/ __TRACKED_VAR__/fc-main.js)",
+      "WebFetch(domain:www.reddit.com)",
+      "Bash(grep -oE '\"name\":\"[^\"]{1,60}\"' __TRACKED_VAR__/sheet-edit.html)",
+      "Bash(file __TRACKED_VAR__/sheet.zip)",
+      "Bash(file __TRACKED_VAR__/sheet.xlsx)",
+      "Bash(grep *)"
     ]
   },
   "enabledMcpjsonServers": [
