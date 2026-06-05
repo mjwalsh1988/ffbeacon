@@ -1,0 +1,94 @@
+/* PulseLoader styles. Brand color is sourced from the Tailwind design tokens
+   via theme() so it stays in sync with tailwind.config.ts (no hex here). */
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fullScreen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 60vh;
+  padding: 2rem;
+}
+
+.icon {
+  display: block;
+}
+
+/* Gradient stops pulled from the brand tokens. */
+.stopFrom {
+  stop-color: theme("colors.brand.purple");
+}
+
+.stopTo {
+  stop-color: theme("colors.brand.cyan");
+}
+
+/* Pulse-wave arcs. Each one emanates from the arrowhead apex (32,30 in viewBox
+   units): fades in while scaling up, then fades out, on an infinite loop. The
+   three delays are spaced evenly across the loop so the arcs light up ONE AT A
+   TIME, like radio waves from the arrowhead. animation-fill-mode: backwards
+   holds the 0% (invisible) state during each arc's start delay so nothing
+   flashes before its turn. */
+.arc {
+  transform-box: view-box;
+  transform-origin: 32px 30px;
+  animation: pulseWave 1.8s ease-out infinite backwards;
+}
+
+.arc1 {
+  animation-delay: 0s;
+}
+
+.arc2 {
+  animation-delay: 0.6s;
+}
+
+.arc3 {
+  animation-delay: 1.2s;
+}
+
+@keyframes pulseWave {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+/* The arrowhead is the static anchor of the mark; it never animates. */
+.chevron {
+  opacity: 1;
+}
+
+/* Reduced motion: drop the arc animation and show the arcs at graded static
+   opacities so the mark still reads as the beacon logo. This ONLY applies when
+   the user has requested reduced motion; the animated version above is the
+   default. */
+@media (prefers-reduced-motion: reduce) {
+  .arc {
+    animation: none;
+    transform: none;
+  }
+  .arc1 {
+    opacity: 0.9;
+  }
+  .arc2 {
+    opacity: 0.6;
+  }
+  .arc3 {
+    opacity: 0.35;
+  }
+}
