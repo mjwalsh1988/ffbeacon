@@ -9,14 +9,14 @@ import { SleeperAvatar } from "@/components/sleeper-avatar";
  * One row of the Power Rankings table on the league overview.
  *
  * Desktop: shows Rank + Team (linked) + per-position rank columns (QB, RB,
- * WR, TE, Picks). Same as before.
+ * WR, TE, Picks) + total team Value.
  *
- * Mobile (<md): only Rank + Team are visible; the per-position columns are
- * hidden with `hidden md:table-cell`. The Team cell becomes a tap target
- * that opens a bottom-sheet modal listing the full breakdown (record, all
- * position ranks) and a "View team" button that links to the team's
- * roster filter view. This satisfies the mobile-first rule (no data hidden
- * without being surfaced elsewhere).
+ * Mobile (<md): only Rank + Team are visible; the per-position columns and
+ * the Value column are hidden with `hidden md:table-cell`. The Team cell
+ * becomes a tap target that opens a bottom-sheet modal listing the full
+ * breakdown (record, total value, all position ranks) and a "View team"
+ * button that links to the team's roster filter view. This satisfies the
+ * mobile-first rule (no data hidden without being surfaced elsewhere).
  */
 
 export type PowerRankingsRowData = {
@@ -38,6 +38,9 @@ export type PowerRankingsRowData = {
     PICKS: number | null;
   };
   record: { wins: number; losses: number; ties: number };
+  /** Total value of all assets on the team (starters + bench + picks) from
+   * league_power_rankings_cache.total_value. Null when no cache row exists. */
+  totalValue: number | null;
 };
 
 export function PowerRankingsRow({
@@ -55,7 +58,7 @@ export function PowerRankingsRow({
   return (
     <>
       <tr className="hover:bg-surface">
-        <td className="px-4 py-2 text-center font-mono tabular-nums text-ink-muted">
+        <td className="w-px whitespace-nowrap px-2 py-2 text-center font-mono tabular-nums text-ink-muted">
           {data.overallRank ?? "—"}
         </td>
         <td className="px-3 py-2">
@@ -84,6 +87,12 @@ export function PowerRankingsRow({
         <PositionRankCell rank={data.positionRanks.WR} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.TE} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.PICKS} teamCount={teamCount} />
+        <td
+          className="hidden px-4 py-2 text-right font-mono font-semibold tabular-nums text-ink md:table-cell"
+          aria-label={`Total value ${formatValue(data.totalValue)}`}
+        >
+          {formatValue(data.totalValue)}
+        </td>
       </tr>
       {sheetOpen && (
         <TeamRankSheet
@@ -284,6 +293,18 @@ function TeamRankSheet({
           </button>
         </header>
 
+        <div
+          className="mx-5 mt-4 flex items-center justify-between rounded-card border border-line bg-base px-4 py-3"
+          aria-label={`Total team value ${formatValue(data.totalValue)}`}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
+            Total value
+          </span>
+          <span className="font-mono text-xl font-extrabold tabular-nums text-brand-cyan">
+            {formatValue(data.totalValue)}
+          </span>
+        </div>
+
         <section
           aria-label="Position ranks"
           className="grid grid-cols-3 gap-2 px-5 pt-5"
@@ -404,6 +425,12 @@ function rankTier(
   if (rank <= 3) return "top";
   if (rank > teamCount - 3) return "bottom";
   return "mid";
+}
+
+function formatValue(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(Number(v))) return "—";
+  const n = Number(v);
+  return n >= 1000 ? Math.round(n).toLocaleString() : n.toFixed(0);
 }
 
 function rankOrdinal(n: number): string {

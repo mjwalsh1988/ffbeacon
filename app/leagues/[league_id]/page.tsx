@@ -594,13 +594,13 @@ async function PowerRankingsSection({
       <div className="overflow-x-auto rounded-card border border-line">
         <table className="w-full text-sm">
           <caption className="sr-only">
-            League power rankings. Columns: overall rank, team, then positional rank
-            (QB, RB, WR, TE, Picks). Top three for each column are highlighted cyan;
-            bottom three are highlighted purple.
+            League power rankings. Columns: overall rank, team, positional rank
+            (QB, RB, WR, TE, Picks), then total team value. Top three for each
+            position column are highlighted cyan; bottom three are highlighted purple.
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
-              <th scope="col" className="px-4 py-3 text-center">
+              <th scope="col" className="w-px whitespace-nowrap px-2 py-3 text-center">
                 Rank
               </th>
               <th scope="col" className="px-3 py-3">
@@ -620,6 +620,9 @@ async function PowerRankingsSection({
               </th>
               <th scope="col" className="hidden px-4 py-3 text-center md:table-cell">
                 Picks
+              </th>
+              <th scope="col" className="hidden px-4 py-3 text-right md:table-cell">
+                Value
               </th>
             </tr>
           </thead>
@@ -648,6 +651,7 @@ async function PowerRankingsSection({
                     losses: t.record.losses,
                     ties: t.record.ties,
                   },
+                  totalValue: t.cacheRow?.total_value ?? null,
                 }}
               />
             ))}
