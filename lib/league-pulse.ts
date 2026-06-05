@@ -432,9 +432,17 @@ async function upsertLeagueDrafts(
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
   if (rows.length === 0) return;
+  // Dedupe by sleeper_draft_id so one upsert batch never targets the same
+  // conflict row twice (Postgres rejects "affect a row a second time").
+  const seen = new Set<string>();
+  const deduped = rows.filter((r) => {
+    if (seen.has(r.sleeper_draft_id)) return false;
+    seen.add(r.sleeper_draft_id);
+    return true;
+  });
   const { error } = await supabase
     .from("league_drafts")
-    .upsert(rows, { onConflict: "sleeper_draft_id" });
+    .upsert(deduped, { onConflict: "sleeper_draft_id" });
   if (error) throw new Error(`league_drafts upsert failed: ${error.message}`);
 }
 
