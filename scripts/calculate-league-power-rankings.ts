@@ -8,8 +8,8 @@
  *
  * Reads player_value_trends and draft_pick_values for every active
  * (format, source) combo and computes per-roster starter/bench/picks/total
- * values plus overall + starter ranks. Chained from sync-league.ts after a
- * fresh sync; also runnable standalone after npm run sync:ktc:full to
+ * values plus overall + starter ranks. Chained from pulse-league.ts after a
+ * fresh pulse; also runnable standalone after npm run sync:ktc:full to
  * refresh all leagues when player values change.
  */
 

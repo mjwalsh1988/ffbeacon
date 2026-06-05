@@ -1,26 +1,26 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { syncLeague } from "@/lib/league-sync";
+import { pulseLeague } from "@/lib/league-pulse";
 import { getLeagueAdminContext } from "@/lib/league-auth";
 
 const RATE_LIMIT_SECONDS = 60;
 
 /**
- * POST /api/leagues/[league_id]/resync
+ * POST /api/leagues/[league_id]/refresh
  *
- * Force-resync a Sleeper league. Restricted to:
+ * Force-refresh a Sleeper league. Restricted to:
  *   1. FF Beacon users with user_preferences.is_admin=true, OR
  *   2. The Sleeper commissioner for the specific league (matched by
  *      sleeper username persisted in user_preferences)
  *
- * Rate limit: one successful resync per league per RATE_LIMIT_SECONDS.
- * Backed by the league_resync_attempts table so the limit holds across
+ * Rate limit: one successful refresh per league per RATE_LIMIT_SECONDS.
+ * Backed by the league_refresh_attempts table so the limit holds across
  * Next.js instances. Hot reloads and multi-instance deploys can't bypass it.
  *
  * Response shape:
  *   200 OK { ok: true, cached: false, counts: { rosters, users, transactions } }
  *   401     { error: "Authentication required" }
- *   403     { error: "Not authorized to resync this league" }
+ *   403     { error: "Not authorized to refresh this league" }
  *   404     { error: "League not found" }
  *   429     { error: "Rate limited", retryInSeconds: number }
  *   500     { error: <message> }
@@ -52,7 +52,7 @@ export async function POST(
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
   if (leagueErr) {
-    console.error("[resync] league lookup failed", leagueErr);
+    console.error("[refresh] league lookup failed", leagueErr);
     return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
   }
   if (!leagueRow) {
@@ -64,9 +64,9 @@ export async function POST(
   if (!auth.userId) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
-  if (!auth.canForceResync) {
+  if (!auth.canForceRefresh) {
     return NextResponse.json(
-      { error: "Not authorized to resync this league" },
+      { error: "Not authorized to refresh this league" },
       { status: 403 },
     );
   }
@@ -76,7 +76,7 @@ export async function POST(
   // for this window, false otherwise. This avoids the TOCTOU window
   // between read-and-write that two concurrent admins could exploit.
   const { data: claimed, error: claimErr } = await adminClient.rpc(
-    "try_claim_league_resync" as never,
+    "try_claim_league_refresh" as never,
     {
       p_league_id: leagueRow.id,
       p_user_id: auth.userId,
@@ -85,7 +85,7 @@ export async function POST(
     } as never,
   );
   if (claimErr) {
-    console.error("[resync] rate-limit rpc failed", claimErr);
+    console.error("[refresh] rate-limit rpc failed", claimErr);
     return NextResponse.json({ error: "Rate-limit check failed" }, { status: 500 });
   }
   if (claimed !== true) {
@@ -98,11 +98,11 @@ export async function POST(
     );
   }
 
-  // Force a sync. This bypasses the 10-minute LEAGUE_SYNC_TTL_MS cache.
-  const result = await syncLeague(adminClient, sleeperLeagueId, { force: true });
+  // Force a pulse. This bypasses the 10-minute LEAGUE_PULSE_TTL_MS cache.
+  const result = await pulseLeague(adminClient, sleeperLeagueId, { force: true });
   if (!result.ok) {
-    console.error("[resync] syncLeague failed", result.error);
-    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+    console.error("[refresh] pulseLeague failed", result.error);
+    return NextResponse.json({ error: "Refresh failed" }, { status: 500 });
   }
 
   return NextResponse.json({

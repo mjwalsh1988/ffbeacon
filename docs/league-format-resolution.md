@@ -1,4 +1,4 @@
-# League Sync — format resolution
+# League Pulse — format resolution
 
 ## TL;DR
 

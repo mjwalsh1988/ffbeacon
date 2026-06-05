@@ -3,12 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
-import { syncLeague } from "@/lib/league-sync";
+import { pulseLeague } from "@/lib/league-pulse";
 
 /**
- * Ensure a Sleeper league is synced into our DB, then navigate to its
+ * Ensure a Sleeper league is pulsed into our DB, then navigate to its
  * deep view at /leagues/[sleeper_league_id]. Triggered from the "Open
- * league" button on the league-sync results and dashboard.
+ * league" button on the League Pulse results and dashboard.
  *
  * If a Sleeper username was attached to the form, we forward it as
  * `?username=` so the deep view can default the team-visibility filter
@@ -31,10 +31,10 @@ export async function ensureLeagueAndOpen(formData: FormData): Promise<void> {
       : null;
 
   const supabase = createAdminClient();
-  const result = await syncLeague(supabase, sleeperLeagueId);
+  const result = await pulseLeague(supabase, sleeperLeagueId);
   if (!result.ok) {
     // Surface to user via search param on the referrer.
-    redirect(`/tools/league-sync?sync_error=${encodeURIComponent(result.error)}`);
+    redirect(`/tools/league-pulse?pulse_error=${encodeURIComponent(result.error)}`);
   }
 
   revalidatePath(`/leagues/${sleeperLeagueId}`);

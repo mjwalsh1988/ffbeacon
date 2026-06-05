@@ -9,7 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "sync:players": "tsx --env-file=.env.local scripts/sync-sleeper-players.ts",
-    "sync:league": "tsx --env-file=.env.local scripts/sync-league.ts",
+    "pulse:league": "tsx --env-file=.env.local scripts/pulse-league.ts",
     "sync:ktc": "tsx --env-file=.env.local scripts/sync-ktc.ts",
     "sync:fantasycalc": "tsx --env-file=.env.local scripts/sync-fantasycalc.ts",
     "sync:stats": "tsx --env-file=.env.local scripts/sync-sleeper-stats.ts",

@@ -86,7 +86,7 @@ export default async function TeamDetailPage({
 
   // Source respects the user's selection; format is derived from the
   // league's actual Sleeper settings, NOT the user's global format toggle.
-  // See CLAUDE.md → League Sync Format Resolution.
+  // See CLAUDE.md → League Pulse Format Resolution.
   const resolvedSource = await resolveSourceSlug(supabase, sourceParam);
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
   const context = await resolveLeagueContext(
@@ -127,10 +127,10 @@ export default async function TeamDetailPage({
             <ol className="flex flex-wrap items-center gap-1 text-ink-subtle">
               <li>
                 <Link
-                  href="/tools/league-sync"
+                  href="/tools/league-pulse"
                   className="hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
-                  League Sync
+                  League Pulse
                 </Link>
               </li>
               <li aria-hidden="true">/</li>

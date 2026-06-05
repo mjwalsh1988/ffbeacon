@@ -9,7 +9,7 @@
  * - Empty / nullish input renders as "Unknown" so the UI never shows a
  *   bare empty pill.
  *
- * Used by both /tools/league-sync (LeagueResults) and the league deep
+ * Used by both /tools/league-pulse (LeagueResults) and the league deep
  * view (/leagues/[id]) so any future Sleeper status string gets the
  * same treatment everywhere without per-call-site tweaks.
  */

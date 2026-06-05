@@ -89,7 +89,7 @@ function Hero() {
 
 type Tool = {
   icon: LucideIcon;
-  href: "/rankings" | "/tools/league-sync" | "/tools/faab";
+  href: "/rankings" | "/tools/league-pulse" | "/tools/faab";
   eyebrow: string;
   title: string;
   pitch: string;
@@ -115,9 +115,9 @@ const TOOLS: Tool[] = [
   },
   {
     icon: Workflow,
-    href: "/tools/league-sync",
+    href: "/tools/league-pulse",
     eyebrow: "League management",
-    title: "Sleeper League Sync",
+    title: "Sleeper League Pulse",
     pitch:
       "Bring every Sleeper league you're in into one place. See your full roster portfolio at a glance, with values and standings tuned to each league's actual scoring.",
     bullets: [

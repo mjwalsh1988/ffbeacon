@@ -18,6 +18,17 @@ const nextConfig: NextConfig = {
     SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
   },
   typedRoutes: false,
+  // The League Sync tool was renamed to League Pulse. Keep old shared links
+  // and bookmarks working by redirecting the legacy path to the new one.
+  async redirects() {
+    return [
+      {
+        source: "/tools/league-sync",
+        destination: "/tools/league-pulse",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

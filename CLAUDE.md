@@ -344,27 +344,27 @@ The backfill script for an existing source lives at `scripts/backfill-<source>-h
 - Sub-agent implementation reviews must verify these rules on any schema work
 - If you find existing tables that violate these rules, fix them
 
-## League Sync feature (continuous flow)
+## League Pulse feature (continuous flow)
 
-League Sync is ONE continuous user journey, not multiple features. The journey:
+League Pulse is ONE continuous user journey, not multiple features. The journey:
 
-1. `/tools/league-sync` — entry point. User enters Sleeper username and season, sees their leagues. No DB writes happen here; data comes straight from Sleeper.
+1. `/tools/league-pulse` — entry point. User enters Sleeper username and season, sees their leagues. No DB writes happen here; data comes straight from Sleeper.
 2. `/dashboard` — logged-in users persist their Sleeper username on user_preferences and see the same league list cached for fast return visits.
-3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 triggers `app/leagues/actions.ts ensureLeagueAndOpen`, which calls `lib/league-sync.ts syncLeague` (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role) and then navigates. The page itself also calls `syncLeague` on every render; the 10-minute cache inside `syncLeague` short-circuits redundant Sleeper hits.
+3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 triggers `app/leagues/actions.ts ensureLeagueAndOpen`, which calls `lib/league-pulse.ts pulseLeague` (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role) and then navigates. The page itself also calls `pulseLeague` on every render; the 10-minute cache inside `pulseLeague` short-circuits redundant Sleeper hits.
 4. `/leagues/[sleeper_league_id]?tab=teams|transactions|power-rankings` — tabbed deep view. Each tab renders from the synced rows; never re-derives from Sleeper.
 
 Naming rules:
-- Feature name in copy/docs: "League Sync".
-- Routes: `/tools/league-sync` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- Feature name in copy/docs: "League Pulse".
+- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
 - Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
 - Tabs within `/leagues/[sleeper_league_id]` use plain functional labels.
 
 Sync rules:
-- All writes flow through `lib/league-sync.ts syncLeague(supabase, sleeper_league_id, { force })`. Do not write to `leagues`, `rosters`, `league_users`, or `league_transactions` from anywhere else. If you need a one-off, run `npm run sync:league -- <id>` or `npm run sync:league -- <id> --force`.
-- Cache TTL: 10 minutes (`LEAGUE_SYNC_TTL_MS`). `force=true` bypasses; `force=false` (default) returns early with cached: true if the DB row is fresh.
+- All writes flow through `lib/league-pulse.ts pulseLeague(supabase, sleeper_league_id, { force })`. Do not write to `leagues`, `rosters`, `league_users`, or `league_transactions` from anywhere else. If you need a one-off, run `npm run pulse:league -- <id>` or `npm run pulse:league -- <id> --force`.
+- Cache TTL: 10 minutes (`LEAGUE_PULSE_TTL_MS`). `force=true` bypasses; `force=false` (default) returns early with cached: true if the DB row is fresh.
 - Format derivation lives in `lib/sleeper-to-format.ts`. If a Sleeper league's scoring or roster shape does not map cleanly to one of the 8 active `format_configs.slug` rows, the function returns null and `leagues.format_config_id` is left null. The UI must handle "Unmatched" gracefully (display the slug as Unmatched, do not crash).
-- `syncLeague` chains into `lib/league-power-rankings.ts calculateLeaguePowerRankings(supabase, league_id)` after a successful sync. The calc iterates every active (format, source) combo and upserts `league_power_rankings_cache` rows so the deep view can flip format/source without recomputing. A calc failure is logged but does NOT fail the parent sync — the cache row is non-critical.
-- Standalone recalc: `npm run calculate:power-rankings` (all leagues) or `npm run calculate:power-rankings -- --sleeper-league-id <id>` (one league). Run this after `npm run sync:ktc:full` if you want power rankings to reflect freshly-synced player values without re-running every league sync.
+- `pulseLeague` chains into `lib/league-power-rankings.ts calculateLeaguePowerRankings(supabase, league_id)` after a successful sync. The calc iterates every active (format, source) combo and upserts `league_power_rankings_cache` rows so the deep view can flip format/source without recomputing. A calc failure is logged but does NOT fail the parent sync — the cache row is non-critical.
+- Standalone recalc: `npm run calculate:power-rankings` (all leagues) or `npm run calculate:power-rankings -- --sleeper-league-id <id>` (one league). Run this after `npm run sync:ktc:full` if you want power rankings to reflect freshly-synced player values without re-running every league pulse.
 
 Draft pick values:
 - KTC publishes dynasty draft picks alongside players in the same scraped payload (position=RDP). `scripts/sync-ktc.ts` parses those rows via `lib/ktc-picks.ts parsePickName` and writes to `draft_pick_values` for `dynasty-ppr-std` and `dynasty-ppr-sflex`. The TEP-sflex pick values are copied byte-for-byte from `dynasty-ppr-sflex` because picks have no TE position so the TEP multiplier is a no-op.
@@ -373,16 +373,16 @@ Draft pick values:
 
 Sleeper API access:
 - All Sleeper endpoints live in `lib/sleeper.ts`. Do not call `api.sleeper.app` directly from pages, server actions, or other lib files. Add new endpoints to `lib/sleeper.ts` as exported functions with 20-second timeouts and null-on-failure semantics, matching the existing pattern.
-- Sleeper sends transaction `draft_picks` as array OR object OR JSON string OR null. Always normalize via `lib/league-sync.ts normalizeDraftPicks` (or copy the pattern) before persisting or rendering.
+- Sleeper sends transaction `draft_picks` as array OR object OR JSON string OR null. Always normalize via `lib/league-pulse.ts normalizeDraftPicks` (or copy the pattern) before persisting or rendering.
 - Sleeper uses the string `"0"` as a placeholder for empty roster slots. Strip these out with `validPlayerId` before storing or rendering player IDs.
 
 Admin:
 - `user_preferences.is_admin` is the admin flag (migration 0018). A trigger blocks self-promotion; flipping the bit requires service_role.
-- Admin-only actions (force-resync) live behind both an auth gate AND a 60-second per-league rate limit. The endpoint at `app/api/leagues/[league_id]/resync/route.ts` re-validates auth independently of the client — never trust the `ResyncButton` `isAuthorized` prop as a security boundary.
+- Admin-only actions (force-refresh) live behind both an auth gate AND a 60-second per-league rate limit. The endpoint at `app/api/leagues/[league_id]/refresh/route.ts` re-validates auth independently of the client — never trust the `RefreshButton` `isAuthorized` prop as a security boundary.
 - Authorization is "admin OR commissioner of this league". Commissioner detection matches `user_preferences.sleeper_username` against `league_users.display_name` where `is_commissioner=true`. See `lib/league-auth.ts → getLeagueAdminContext()`.
-- Rate limit ledger lives in `league_resync_attempts` (migration 0025), service-role-only. The endpoint writes the timestamp BEFORE running the sync so concurrent requests fail with 429 instead of all hitting Sleeper.
+- Rate limit ledger lives in `league_refresh_attempts` (migration 0025), service-role-only. The endpoint writes the timestamp BEFORE running the sync so concurrent requests fail with 429 instead of all hitting Sleeper.
 
-## League Sync Format Resolution
+## League Pulse Format Resolution
 
 ABSOLUTE RULE: Inside league views (`/leagues/[id]` and all descendants, plus `/api/og/*` routes that render values from those views), the format used for value calculations is derived from the league's actual Sleeper scoring settings, NOT the user's global format toggle. Source remains user-controlled. Pick values always fall back to KTC. The global header format toggle has no effect inside a league view. This will change when FF Beacon native rankings with custom scoring exist (see plan.md "Future: User Custom Scoring Formats").
 

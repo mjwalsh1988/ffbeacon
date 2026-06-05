@@ -27,8 +27,8 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     icon: BarChart3,
   },
   {
-    href: "/tools/league-sync",
-    title: "Sleeper League Sync",
+    href: "/tools/league-pulse",
+    title: "Sleeper League Pulse",
     description:
       "Paste your Sleeper username, get every league back with real rosters, real transactions, real draft slots, and power rankings calibrated to your scoring.",
     icon: Workflow,
@@ -141,10 +141,10 @@ function Hero() {
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
           <Link
-            href="/tools/league-sync"
+            href="/tools/league-pulse"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            Sync your Sleeper leagues
+            Pulse your Sleeper leagues
           </Link>
         </div>
 
@@ -430,10 +430,10 @@ function CtaSection() {
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
-              href="/tools/league-sync"
+              href="/tools/league-pulse"
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
-              Sync a Sleeper league
+              Pulse a Sleeper league
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
             <Link

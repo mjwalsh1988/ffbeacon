@@ -101,10 +101,10 @@ export default function PrivacyPage() {
             <li>To authenticate you and keep you signed in.</li>
             <li>To save the preferences that personalize the product.</li>
             <li>
-              To power features that need league data — League Sync, the power-
+              To power features that need league data — League Pulse, the power-
               rankings table, the trade analyzer, the transaction feed.
             </li>
-            <li>To prevent abuse and rate-limit force-resync requests.</li>
+            <li>To prevent abuse and rate-limit force-refresh requests.</li>
             <li>
               To send you email digests if and only if you have explicitly
               opted in to email digests in your preferences.

@@ -86,7 +86,7 @@ export default function TermsPage() {
             </li>
             <li>
               Circumvent rate limits or abuse the admin / commissioner
-              force-resync endpoint described in our documentation.
+              force-refresh endpoint described in our documentation.
             </li>
           </ul>
         </section>
@@ -120,7 +120,7 @@ export default function TermsPage() {
           <p className="mt-3">
             The Service is provided on an as-is, best-effort basis. We may add,
             change, suspend, or remove features at any time, including data
-            sources, rankings, or league-sync coverage. We are not liable for
+            sources, rankings, or League Pulse coverage. We are not liable for
             downtime, data loss, or content that becomes unavailable because a
             third-party provider changed their API.
           </p>

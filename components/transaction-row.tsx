@@ -15,7 +15,7 @@ export type TransactionRowData = {
   /** Map of sleeper_player_id → receiving roster_id. */
   adds: Record<string, number> | null;
   drops: Record<string, number> | null;
-  /** Normalized draft pick array (see lib/league-sync.normalizeDraftPicks). */
+  /** Normalized draft pick array (see lib/league-pulse.normalizeDraftPicks). */
   draftPicks: unknown[];
   /** Sleeper waiver_budget transfer array. */
   waiverBudget: Array<{ sender: number; receiver: number; amount: number }>;

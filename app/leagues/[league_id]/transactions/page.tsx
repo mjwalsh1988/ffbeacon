@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { syncLeague } from "@/lib/league-sync";
+import { pulseLeague } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, type LeagueContext } from "@/lib/league-format-resolution";
 import { loadLeagueTransactions, type TransactionFilter } from "@/lib/league-transactions-data";
@@ -60,10 +60,10 @@ export default async function LeagueTransactionsPage({
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
 
-  // Idempotent first-touch sync — same as the deep view.
+  // Idempotent first-touch pulse — same as the deep view.
   const adminClient = createAdminClient();
-  const syncResult = await syncLeague(adminClient, sleeperLeagueId);
-  if (!syncResult.ok) notFound();
+  const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
+  if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
   const { data: league } = await supabase

@@ -140,7 +140,9 @@
       "Bash(grep -oE '\"name\":\"[^\"]{1,60}\"' __TRACKED_VAR__/sheet-edit.html)",
       "Bash(file __TRACKED_VAR__/sheet.zip)",
       "Bash(file __TRACKED_VAR__/sheet.xlsx)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(git mv *)",
+      "Bash(git checkout *)"
     ]
   },
   "enabledMcpjsonServers": [

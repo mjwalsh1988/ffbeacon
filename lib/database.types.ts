@@ -344,7 +344,7 @@ export type Database = {
           },
         ]
       }
-      league_resync_attempts: {
+      league_refresh_attempts: {
         Row: {
           last_attempt_at: string
           league_id: string
@@ -365,7 +365,7 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "league_resync_attempts_league_id_fkey"
+            foreignKeyName: "league_refresh_attempts_league_id_fkey"
             columns: ["league_id"]
             isOneToOne: true
             referencedRelation: "leagues"
@@ -490,7 +490,7 @@ export type Database = {
           created_at: string
           format_config_id: string | null
           id: string
-          last_synced_at: string | null
+          last_pulsed_at: string | null
           metadata: Json
           name: string
           roster_positions: Json
@@ -499,8 +499,8 @@ export type Database = {
           sleeper_league_id: string
           sport: string
           status: string | null
-          sync_error: string | null
-          sync_status: string
+          pulse_error: string | null
+          pulse_status: string
           total_rosters: number | null
           updated_at: string
         }
@@ -508,7 +508,7 @@ export type Database = {
           created_at?: string
           format_config_id?: string | null
           id?: string
-          last_synced_at?: string | null
+          last_pulsed_at?: string | null
           metadata?: Json
           name: string
           roster_positions?: Json
@@ -517,8 +517,8 @@ export type Database = {
           sleeper_league_id: string
           sport?: string
           status?: string | null
-          sync_error?: string | null
-          sync_status?: string
+          pulse_error?: string | null
+          pulse_status?: string
           total_rosters?: number | null
           updated_at?: string
         }
@@ -526,7 +526,7 @@ export type Database = {
           created_at?: string
           format_config_id?: string | null
           id?: string
-          last_synced_at?: string | null
+          last_pulsed_at?: string | null
           metadata?: Json
           name?: string
           roster_positions?: Json
@@ -535,8 +535,8 @@ export type Database = {
           sleeper_league_id?: string
           sport?: string
           status?: string | null
-          sync_error?: string | null
-          sync_status?: string
+          pulse_error?: string | null
+          pulse_status?: string
           total_rosters?: number | null
           updated_at?: string
         }
@@ -1339,7 +1339,7 @@ export type Database = {
           user_agent: string
         }[]
       }
-      try_claim_league_resync: {
+      try_claim_league_refresh: {
         Args: {
           p_league_id: string
           p_triggered_via: string

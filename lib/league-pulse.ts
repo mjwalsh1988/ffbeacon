@@ -18,9 +18,9 @@ import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import type { Database } from "@/lib/database.types";
 
-export const LEAGUE_SYNC_TTL_MS = 10 * 60 * 1000; // 10 minutes
+export const LEAGUE_PULSE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-export type LeagueSyncResult =
+export type LeaguePulseResult =
   | {
       ok: true;
       leagueRowId: string;
@@ -33,36 +33,37 @@ export type LeagueSyncResult =
 type ServiceClient = SupabaseClient<Database>;
 
 /**
- * Sync one Sleeper league end-to-end. Idempotent — re-running upserts every
- * table by its natural key. Returns the leagues.id (uuid) on success.
+ * Pulse one Sleeper league end-to-end (fetch + persist). Idempotent —
+ * re-running upserts every table by its natural key. Returns the
+ * leagues.id (uuid) on success.
  *
- * Cache: refuses to refetch from Sleeper if last_synced_at is within
- * LEAGUE_SYNC_TTL_MS, unless force=true. The cached path still returns ok.
+ * Cache: refuses to refetch from Sleeper if last_pulsed_at is within
+ * LEAGUE_PULSE_TTL_MS, unless force=true. The cached path still returns ok.
  *
  * Caller supplies the service-role supabase client (scripts use
  * scripts/_supabase.ts getServiceClient(); the server action uses
  * lib/supabase/server.ts createAdminClient()).
  */
-export async function syncLeague(
+export async function pulseLeague(
   supabase: ServiceClient,
   sleeperLeagueId: string,
   options: { force?: boolean } = {},
-): Promise<LeagueSyncResult> {
+): Promise<LeaguePulseResult> {
   const { force = false } = options;
 
   // Cache check
   const { data: existing } = await supabase
     .from("leagues")
-    .select("id, last_synced_at, sync_status")
+    .select("id, last_pulsed_at, pulse_status")
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
 
   if (
     !force &&
     existing &&
-    existing.last_synced_at &&
-    existing.sync_status === "complete" &&
-    Date.now() - new Date(existing.last_synced_at).getTime() < LEAGUE_SYNC_TTL_MS
+    existing.last_pulsed_at &&
+    existing.pulse_status === "complete" &&
+    Date.now() - new Date(existing.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS
   ) {
     const [{ count: rosterCount }, { count: userCount }, { count: txCount }] = await Promise.all([
       supabase.from("rosters").select("id", { count: "exact", head: true }).eq("league_id", existing.id),
@@ -85,11 +86,11 @@ export async function syncLeague(
     };
   }
 
-  // Mark syncing
+  // Mark pulsing
   if (existing) {
     await supabase
       .from("leagues")
-      .update({ sync_status: "syncing", sync_error: null, updated_at: new Date().toISOString() })
+      .update({ pulse_status: "pulsing", pulse_error: null, updated_at: new Date().toISOString() })
       .eq("id", existing.id);
   }
 
@@ -99,8 +100,8 @@ export async function syncLeague(
       await supabase
         .from("leagues")
         .update({
-          sync_status: "error",
-          sync_error: "Sleeper league fetch returned null",
+          pulse_status: "error",
+          pulse_error: "Sleeper league fetch returned null",
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
@@ -130,9 +131,9 @@ export async function syncLeague(
     roster_positions: (league.roster_positions ?? []) as Database["public"]["Tables"]["leagues"]["Insert"]["roster_positions"],
     format_config_id: formatConfigId,
     metadata: league as unknown as Database["public"]["Tables"]["leagues"]["Insert"]["metadata"],
-    last_synced_at: new Date().toISOString(),
-    sync_status: "complete" as const,
-    sync_error: null,
+    last_pulsed_at: new Date().toISOString(),
+    pulse_status: "complete" as const,
+    pulse_error: null,
     updated_at: new Date().toISOString(),
   };
 
@@ -188,12 +189,12 @@ export async function syncLeague(
     const calcResult = await calculateLeaguePowerRankings(supabase, leagueRowId);
     if (!calcResult.ok) {
       console.warn(
-        `[syncLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
+        `[pulseLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
       );
     }
   } catch (err) {
     console.warn(
-      `[syncLeague] power-rankings calc threw for league ${leagueRowId}:`,
+      `[pulseLeague] power-rankings calc threw for league ${leagueRowId}:`,
       (err as Error).message,
     );
   }
@@ -295,10 +296,10 @@ async function upsertLeagueUsers(
     // Sleeper's `is_owner` on the /users response means "active league
     // member" (not a placeholder), which can include every co-owner of a
     // roster. It is NOT a reliable commissioner signal — overloading it as
-    // such would grant force-resync to every co-owner. Until we have a
+    // such would grant force-refresh to every co-owner. Until we have a
     // verified commissioner signal (league.metadata.commissioner_id, or
     // a service-role flip), default is_commissioner to false. Admins (via
-    // user_preferences.is_admin) can still force resync.
+    // user_preferences.is_admin) can still force refresh.
     return {
       league_id: leagueRowId,
       sleeper_user_id: u.user_id,

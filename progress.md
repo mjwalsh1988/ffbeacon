@@ -70,8 +70,8 @@ T039 | completed | Player sections: header, cross-format rankings, recent games,
      | files: app/players/[slug]/page.tsx
 
 ## Phase 8 - Sleeper Tool + Dashboard
-T040 | completed | /tools/league-sync anonymous Sleeper username -> leagues
-     | files: app/tools/league-sync/page.tsx + league-sync-form.tsx + league-results.tsx,
+T040 | completed | /tools/league-pulse anonymous Sleeper username -> leagues
+     | files: app/tools/league-pulse/page.tsx + league-pulse-form.tsx + league-results.tsx,
              lib/sleeper.ts
 T041 | completed | /dashboard for logged-in users, saves Sleeper username
      | files: app/dashboard/page.tsx + save-username-form.tsx
@@ -141,7 +141,7 @@ T054 | completed | Impl review (general-purpose subagent) — 2 blockers + 3
 - `npx tsc --noEmit`: clean
 - `npx next build`: green, 15 dynamic routes (player [slug] now dynamic)
 
-## Phase 12 - League Sync Phase 3 (transactions, trade analyzer, admin resync, OG images)
+## Phase 12 - League Pulse Phase 3 (transactions, trade analyzer, admin refresh, OG images)
 T055 | completed | lib/league-format-resolution.ts - league-contextual format resolver
      | files: lib/league-format-resolution.ts
      | verified: build+typecheck clean. Resolves (format, source) per-league using
@@ -181,13 +181,13 @@ T062 | completed | League header now displays detected format + format-mismatch
      | files: app/leagues/[league_id]/page.tsx
      | verified: page rewritten to use resolveLeagueContext; old
        reconcileFormatWithSource path retired inside league views.
-T063 | completed | Admin force-resync endpoint + button + rate limit
-     | files: app/api/leagues/[league_id]/resync/route.ts, components/resync-button.tsx,
-       lib/league-auth.ts, supabase/migrations/0025_league_resync_attempts.sql,
-       supabase/migrations/0026_try_claim_league_resync.sql
+T063 | completed | Admin force-refresh endpoint + button + rate limit
+     | files: app/api/leagues/[league_id]/refresh/route.ts, components/refresh-button.tsx,
+       lib/league-auth.ts, supabase/migrations/0025_league_refresh_attempts.sql,
+       supabase/migrations/0026_try_claim_league_refresh.sql
      | verified: build green. Auth re-validated server-side (admin OR
        commissioner). Rate limit is atomic via SECURITY DEFINER function
-       try_claim_league_resync(); concurrent admins get 429 deterministically.
+       try_claim_league_refresh(); concurrent admins get 429 deterministically.
        CSRF: requires x-requested-with: ff-beacon header on POST.
        Error messages sanitized — raw DB errors logged server-side only.
 T064 | completed | components/copy-link-button.tsx - shareable URL clipboard button
@@ -218,26 +218,26 @@ T069 | completed | Team detail page uses league-contextual format + adds CopyLin
      | files: app/leagues/[league_id]/teams/[roster_id]/page.tsx
      | verified: build green. Drops the old resolveFormatSlug+reconcile path
        in favor of resolveLeagueContext.
-T070 | completed | Migration 0025 - league_resync_attempts ledger
-     | files: supabase/migrations/0025_league_resync_attempts.sql
+T070 | completed | Migration 0025 - league_refresh_attempts ledger
+     | files: supabase/migrations/0025_league_refresh_attempts.sql
      | verified: applied via MCP. RLS enabled, service-role-only access.
-T071 | completed | Migration 0026 - try_claim_league_resync atomic function
-     | files: supabase/migrations/0026_try_claim_league_resync.sql
+T071 | completed | Migration 0026 - try_claim_league_refresh atomic function
+     | files: supabase/migrations/0026_try_claim_league_refresh.sql
      | verified: applied via MCP. SECURITY DEFINER; EXECUTE granted to
        authenticated + service_role. Atomic insert/update that returns true
        only when caller wins the rate-limit window.
 T072 | completed | docs/league-format-resolution.md + CLAUDE.md sections
-     | files: docs/league-format-resolution.md, CLAUDE.md (League Sync Format
+     | files: docs/league-format-resolution.md, CLAUDE.md (League Pulse Format
        Resolution + admin auth model + OG brand rule + transactions section)
      | verified: present and human-readable.
 T073 | completed | Sub-agent review pass (implementation + a11y + security)
      | findings + fixes:
        - is_commissioner no longer flagged from Sleeper is_owner (false positives
-         would have granted force-resync to every co-owner) — defaults to false
+         would have granted force-refresh to every co-owner) — defaults to false
          until verified commissioner signal is implemented
-       - Resync TOCTOU race fixed via atomic Postgres function (migration 0026)
-       - CSRF defense: x-requested-with header check on resync POST
-       - Sanitized error messages from resync API (no raw DB error leakage)
+       - Refresh TOCTOU race fixed via atomic Postgres function (migration 0026)
+       - CSRF defense: x-requested-with header check on refresh POST
+       - Sanitized error messages from refresh API (no raw DB error leakage)
        - SQL injection defense-in-depth: regex-validate sleeperIds before
          .or() interpolation in trade-analyzer + transactions-data
        - A11y: focus-visible outline on .sr-only filter chips via has-[:focus-visible]
@@ -256,7 +256,7 @@ T073 | completed | Sub-agent review pass (implementation + a11y + security)
        - OG routes run on runtime=nodejs (works with createAdminClient).
          Phase 3 prompt suggested edge runtime; nodejs is the safer choice
          because of supabase client dependencies and gives us full RLS context.
-       - Resync surfaces inline aria-live announcements + role=alert error
+       - Refresh surfaces inline aria-live announcements + role=alert error
          instead of a CSS toast — better for screen readers than a transient
          popup but documented divergence from the spec wording.
        - Geist via woff2 fetch in OG images deferred — currently falls back
@@ -266,7 +266,7 @@ T073 | completed | Sub-agent review pass (implementation + a11y + security)
 ## Build status (after Phase 12)
 - `npx tsc --noEmit`: clean
 - `npx next build`: green, 22 dynamic routes
-- New routes: /leagues/[league_id]/transactions, /api/leagues/[league_id]/resync,
+- New routes: /leagues/[league_id]/transactions, /api/leagues/[league_id]/refresh,
   /api/og/league/[league_id], /api/og/team/[league_id]/[roster_id],
   /api/og/trade/[transaction_id]
 
@@ -277,4 +277,4 @@ T073 | completed | Sub-agent review pass (implementation + a11y + security)
 - IndexNow + sitemap generation
 - AdSense readiness sweep
 - Phase 12 follow-ups: real commissioner detection, edge runtime for OG,
-  Geist woff2 fetch in OG cards, toast-style resync feedback
+  Geist woff2 fetch in OG cards, toast-style refresh feedback

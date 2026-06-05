@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { Search } from "lucide-react";
 import { currentNflSeason } from "@/lib/sleeper";
 
-export function LeagueSyncForm({
+export function LeaguePulseForm({
   defaultUsername,
   defaultSeason,
 }: {
@@ -21,14 +21,14 @@ export function LeagueSyncForm({
     event.preventDefault();
     if (!username.trim()) return;
     const params = new URLSearchParams({ username: username.trim(), season });
-    startTransition(() => router.push(`/tools/league-sync?${params.toString()}`));
+    startTransition(() => router.push(`/tools/league-pulse?${params.toString()}`));
   };
 
   return (
     <form
       onSubmit={submit}
       className="relative overflow-hidden rounded-modal border border-line bg-surface p-5 sm:p-6"
-      aria-describedby="league-sync-help"
+      aria-describedby="league-pulse-help"
       style={{
         boxShadow: "0 0 64px -32px rgba(168, 85, 247, 0.35)",
       }}
@@ -81,11 +81,11 @@ export function LeagueSyncForm({
             className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan md:w-auto"
           >
             <Search aria-hidden="true" className="h-3.5 w-3.5" />
-            {pending ? "Syncing..." : "Sync leagues"}
+            {pending ? "Searching..." : "Find leagues"}
           </button>
         </div>
       </div>
-      <p id="league-sync-help" className="mt-4 text-xs text-ink-subtle">
+      <p id="league-pulse-help" className="mt-4 text-xs text-ink-subtle">
         We never store your username unless you sign in and save it. All
         requests hit the Sleeper API directly.
       </p>

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-type ResyncButtonProps = {
+type RefreshButtonProps = {
   /** Sleeper league id used in the POST URL. */
   sleeperLeagueId: string;
   /** Visible only after the server confirms admin/commissioner. The
@@ -13,11 +13,11 @@ type ResyncButtonProps = {
 };
 
 /**
- * Admin / commissioner force-resync button.
+ * Admin / commissioner force-refresh button.
  *
  * Behavior:
  * - Hidden when `isAuthorized` is false (server determines this)
- * - On click: POST /api/leagues/[id]/resync
+ * - On click: POST /api/leagues/[id]/refresh
  * - Loading state with aria-live announcement
  * - On success: router.refresh() to re-render the page with fresh data
  * - On rate-limit (429): inline message "Try again in N seconds"
@@ -27,7 +27,7 @@ type ResyncButtonProps = {
  * NOT pre-check the limit client-side — we let the server be the
  * source of truth so refreshing the page can never bypass it.
  */
-export function ResyncButton({ sleeperLeagueId, isAuthorized }: ResyncButtonProps) {
+export function RefreshButton({ sleeperLeagueId, isAuthorized }: RefreshButtonProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<
@@ -40,7 +40,7 @@ export function ResyncButton({ sleeperLeagueId, isAuthorized }: ResyncButtonProp
     startTransition(async () => {
       setStatus({ kind: "idle" });
       try {
-        const res = await fetch(`/api/leagues/${sleeperLeagueId}/resync`, {
+        const res = await fetch(`/api/leagues/${sleeperLeagueId}/refresh`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -50,7 +50,7 @@ export function ResyncButton({ sleeperLeagueId, isAuthorized }: ResyncButtonProp
           body: JSON.stringify({}),
         });
         if (!res.ok) {
-          let message = `Resync failed (${res.status})`;
+          let message = `Refresh failed (${res.status})`;
           try {
             const body = await res.json();
             if (body && typeof body.error === "string") message = body.error;
@@ -65,7 +65,7 @@ export function ResyncButton({ sleeperLeagueId, isAuthorized }: ResyncButtonProp
       } catch (err) {
         setStatus({
           kind: "error",
-          message: err instanceof Error ? err.message : "Resync failed",
+          message: err instanceof Error ? err.message : "Refresh failed",
         });
       }
     });
@@ -78,18 +78,18 @@ export function ResyncButton({ sleeperLeagueId, isAuthorized }: ResyncButtonProp
         onClick={handleClick}
         disabled={pending}
         className="inline-flex min-h-10 items-center gap-2 rounded-card border border-brand-purple/40 bg-brand-purple/10 px-3 py-2 text-sm font-medium text-brand-purple transition-colors hover:bg-brand-purple/20 focus-visible:outline-2 focus-visible:outline-brand-purple disabled:cursor-wait disabled:opacity-60"
-        aria-label={pending ? "Resyncing league" : "Force resync from Sleeper"}
+        aria-label={pending ? "Refreshing league" : "Force refresh from Sleeper"}
       >
         <RefreshIcon spinning={pending} />
-        {pending ? "Syncing..." : "Resync"}
+        {pending ? "Refreshing..." : "Refresh"}
       </button>
       <p className="sr-only" aria-live="polite" role="status">
         {pending
-          ? "Resync in progress."
+          ? "Refresh in progress."
           : status.kind === "success"
-            ? "Resync complete. Reloading."
+            ? "Refresh complete. Reloading."
             : status.kind === "error"
-              ? `Resync failed: ${status.message}`
+              ? `Refresh failed: ${status.message}`
               : ""}
       </p>
       {status.kind === "error" && !pending && (

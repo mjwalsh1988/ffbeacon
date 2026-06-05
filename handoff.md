@@ -9,7 +9,7 @@ Phases 0-10 complete. 47 atomic tasks shipped: T001-T047. Production build is gr
 - Public site at `/`, `/about`, `/author/michael`, `/tools`, `/guides`, `/players`
 - Rankings board at `/rankings` with format + position filters, sortable accessible table
 - Player pages at `/players/[slug]` (top 200 SSG, rest ISR on demand)
-- Anonymous Sleeper league sync at `/tools/league-sync`
+- Anonymous Sleeper league pulse at `/tools/league-pulse`
 - Logged-in personalized dashboard at `/dashboard` with sleeper_username save
 - FAAB calculator at `/tools/faab` with player autocomplete + need-weighted bid
 - Auth: Google OAuth + Discord OAuth + magic-link email at `/login`

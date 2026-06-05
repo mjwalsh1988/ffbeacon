@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Workflow, Sparkles, Lock, ArrowRight } from "lucide-react";
-import { LeagueSyncForm } from "./league-sync-form";
+import { LeaguePulseForm } from "./league-pulse-form";
 import { LeagueResults } from "./league-results";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 
 export const metadata: Metadata = {
-  title: "Sleeper League Sync",
+  title: "Sleeper League Pulse",
   description: "View every Sleeper league roster you own in one accessible place.",
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function LeagueSyncPage({
+export default async function LeaguePulsePage({
   searchParams,
 }: {
   searchParams: Promise<{ username?: string; season?: string }>;
@@ -51,12 +51,12 @@ export default async function LeagueSyncPage({
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
             We hit Sleeper directly and return every active league for that user
-            and season. Tap any league to see its roster shape and open the
-            synced deep view.
+            and season. Tap any league to see its roster shape and open its
+            deep view.
           </p>
 
           <div className="mt-6">
-            <LeagueSyncForm defaultUsername={usernameInput ?? ""} defaultSeason={season} />
+            <LeaguePulseForm defaultUsername={usernameInput ?? ""} defaultSeason={season} />
           </div>
 
           {error && (
@@ -151,7 +151,7 @@ function Hero() {
       />
       <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Tools · Sleeper League Sync
+          Tools · Sleeper League Pulse
         </p>
         {/* aria-label gives the h1 a clean accessible name covering the
             entire headline even though the gradient is achieved via a
@@ -195,7 +195,7 @@ function Hero() {
           />
           <HeroBullet
             icon={Workflow}
-            title="One click sync"
+            title="One click open"
             body="Open any league for rosters, transactions, and power rankings."
           />
           <HeroBullet

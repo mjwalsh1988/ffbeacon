@@ -34,7 +34,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
     heading: "Tools",
     links: [
       { label: "Rankings Board", href: "/rankings" },
-      { label: "Sleeper League Sync", href: "/tools/league-sync" },
+      { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
       { label: "FAAB Calculator", href: "/tools/faab" },
     ],
   },

@@ -60,8 +60,8 @@ const QUICK_ACTIONS: QuickAction[] = [
     icon: Calculator,
   },
   {
-    href: "/tools/league-sync",
-    title: "League Sync",
+    href: "/tools/league-pulse",
+    title: "League Pulse",
     body: "Pull every league for a Sleeper username — no account required for the preview view.",
     icon: Workflow,
   },

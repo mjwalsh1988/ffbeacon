@@ -8,7 +8,7 @@ import {
   currentNflSeason,
 } from "@/lib/sleeper";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
-import { LeagueResults } from "@/app/tools/league-sync/league-results";
+import { LeagueResults } from "@/app/tools/league-pulse/league-results";
 import { SaveUsernameForm } from "./save-username-form";
 
 export const metadata: Metadata = {
@@ -100,10 +100,10 @@ export default async function SleeperLeaguesPage() {
             </p>
           </div>
           <Link
-            href="/tools/league-sync"
+            href="/tools/league-pulse"
             className="inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple"
           >
-            Use the public sync tool
+            Use the public League Pulse tool
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </div>

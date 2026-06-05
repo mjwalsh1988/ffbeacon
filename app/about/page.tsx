@@ -290,10 +290,10 @@ function FeaturesSection() {
           />
           <FeatureCard
             icon={Workflow}
-            title="Sleeper League Sync"
+            title="Sleeper League Pulse"
             body="Drop in your Sleeper username and pull up every league you're in. Real rosters, recent trades, draft pick values, and a power ranking tuned to your league's actual scoring settings."
-            href="/tools/league-sync"
-            cta="Sync a league"
+            href="/tools/league-pulse"
+            cta="Pulse a league"
           />
           <FeatureCard
             icon={Calculator}
@@ -424,10 +424,10 @@ function CtaSection() {
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
             <Link
-              href="/tools/league-sync"
+              href="/tools/league-pulse"
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
-              Sync a Sleeper league
+              Pulse a Sleeper league
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
           </div>

@@ -212,8 +212,8 @@ Accessibility sub-hub (the moat):
 ## 6. Tools (Phase 1)
 
 
-### Tool 1: Sleeper League Sync + Personal Dashboard
-Path: /tools/league-sync  +  /dashboard (logged in)
+### Tool 1: Sleeper League Pulse + Personal Dashboard
+Path: /tools/league-pulse  +  /dashboard (logged in)
 
 
 Anonymous flow:
@@ -911,7 +911,7 @@ Days 8-21:  Data pipeline
 
 Days 22-35: Core tools
 - Rankings board
-- Sleeper league sync + dashboard
+- Sleeper league pulse + dashboard
 - Waiver wire calculator
 
 

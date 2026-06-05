@@ -25,7 +25,7 @@ const LINE = "#1F1F33";
  * top-3 power rankings (when cache rows exist). FF Beacon brand only.
  *
  * Values rendered here use the league's contextual format resolution
- * (CLAUDE.md → League Sync Format Resolution): we accept ?source= for
+ * (CLAUDE.md → League Pulse Format Resolution): we accept ?source= for
  * the active source slug, otherwise read the highest-priority source
  * that publishes rankings.
  *
@@ -169,7 +169,7 @@ export async function GET(
             fontWeight: 600,
           }}
         >
-          League Sync
+          League Pulse
         </p>
         <h1
           style={{

@@ -20,7 +20,7 @@ export type LeagueAdminContext = {
   /** Convenience: admin OR commissioner. Components use this to gate
    * privileged UI. The server-side API endpoint must independently
    * re-validate before honoring the request. */
-  canForceResync: boolean;
+  canForceRefresh: boolean;
 };
 
 /**
@@ -46,7 +46,7 @@ export async function getLeagueAdminContext(
       userId: null,
       isAdmin: false,
       isCommissionerForLeague: false,
-      canForceResync: false,
+      canForceRefresh: false,
     };
   }
 
@@ -75,6 +75,6 @@ export async function getLeagueAdminContext(
     userId: user.id,
     isAdmin,
     isCommissionerForLeague,
-    canForceResync: isAdmin || isCommissionerForLeague,
+    canForceRefresh: isAdmin || isCommissionerForLeague,
   };
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { syncLeague } from "@/lib/league-sync";
+import { pulseLeague } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -17,7 +17,7 @@ import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamFilter } from "@/components/team-filter";
 import { TransactionRow } from "@/components/transaction-row";
 import { CopyLinkButton } from "@/components/copy-link-button";
-import { ResyncButton } from "@/components/resync-button";
+import { RefreshButton } from "@/components/refresh-button";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import {
   buildLeagueFormatTags,
@@ -108,11 +108,11 @@ export default async function LeagueDeepViewPage({
     return Number.isFinite(n) ? n : null;
   })();
 
-  // First-touch sync — idempotent, internally cached for 10 minutes.
+  // First-touch pulse — idempotent, internally cached for 10 minutes.
   const adminClient = createAdminClient();
-  const syncResult = await syncLeague(adminClient, sleeperLeagueId);
+  const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
 
-  if (!syncResult.ok) {
+  if (!pulseResult.ok) {
     notFound();
   }
 
@@ -121,7 +121,7 @@ export default async function LeagueDeepViewPage({
   const { data: league } = await supabase
     .from("leagues")
     .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_synced_at, sync_status, sync_error, format_config_id, roster_positions, scoring_settings, metadata",
+      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, pulse_status, pulse_error, format_config_id, roster_positions, scoring_settings, metadata",
     )
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
@@ -135,7 +135,7 @@ export default async function LeagueDeepViewPage({
   });
 
   // Resolve source preference. Format is NOT user-controlled inside a
-  // league view (CLAUDE.md: League Sync Format Resolution rule). We derive
+  // league view (CLAUDE.md: League Pulse Format Resolution rule). We derive
   // the league's natural format from Sleeper settings and map to the
   // closest format the chosen source supports.
   const resolvedSource = await resolveSourceSlug(supabase, sourceParam);
@@ -146,11 +146,11 @@ export default async function LeagueDeepViewPage({
     resolvedSource.slug,
   );
 
-  // Admin / commissioner check — gates the Resync button.
+  // Admin / commissioner check — gates the Refresh button.
   const adminCtx = await getLeagueAdminContext(supabase, league.id);
 
-  const lastSynced = league.last_synced_at ? new Date(league.last_synced_at) : null;
-  const lastSyncedLabel = lastSynced ? formatRelative(lastSynced) : "never";
+  const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
+  const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";
 
   return (
     <main id="main">
@@ -159,7 +159,7 @@ export default async function LeagueDeepViewPage({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <p className="mb-2 text-sm font-medium uppercase tracking-wider text-brand-cyan">
-                League Sync
+                League Pulse
               </p>
               <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
                 {league.name}
@@ -170,9 +170,9 @@ export default async function LeagueDeepViewPage({
                 href={`/leagues/${sleeperLeagueId}`}
                 ariaLabel="Copy link to this league"
               />
-              <ResyncButton
+              <RefreshButton
                 sleeperLeagueId={sleeperLeagueId}
-                isAuthorized={adminCtx.canForceResync}
+                isAuthorized={adminCtx.canForceRefresh}
               />
             </div>
           </div>
@@ -208,8 +208,8 @@ export default async function LeagueDeepViewPage({
 
           <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
             <span>
-              Last synced {lastSyncedLabel}
-              {syncResult.cached ? " (served from cache)" : " (fresh from Sleeper)"}.
+              Last updated {lastPulsedLabel}
+              {pulseResult.cached ? " (served from cache)" : " (fresh from Sleeper)"}.
             </span>
             {context.coverage !== "none" && (
               <span
@@ -229,12 +229,12 @@ export default async function LeagueDeepViewPage({
             display.
           </p>
 
-          {league.sync_status === "error" && league.sync_error && (
+          {league.pulse_status === "error" && league.pulse_error && (
             <p
               role="alert"
               className="mt-3 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-3 text-sm text-signal-danger"
             >
-              Last sync failed: {league.sync_error}
+              Last refresh failed: {league.pulse_error}
             </p>
           )}
 
@@ -303,7 +303,7 @@ export default async function LeagueDeepViewPage({
           <OverviewPanel
             leagueRowId={league.id}
             sleeperLeagueId={sleeperLeagueId}
-            counts={syncResult.counts}
+            counts={pulseResult.counts}
             formatSlug={context.coverage === "none" ? null : context.formatSlug}
             sourceSlug={context.coverage === "none" ? null : context.sourceSlug}
             formatDisplay={context.coverage === "none" ? "—" : context.formatDisplay}

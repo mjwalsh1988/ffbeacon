@@ -23,8 +23,8 @@ import { LeagueDetailSheet } from "./league-detail-sheet";
 /**
  * League results render in two variants:
  *
- * - `"public"` (default): the public /tools/league-sync tool. Desktop
- *   shows a full table with every column inline; clicking a row syncs
+ * - `"public"` (default): the public /tools/league-pulse tool. Desktop
+ *   shows a full table with every column inline; clicking a row pulses
  *   and navigates straight to the deep view. Mobile shows a compact
  *   3-column table that opens a slide-up modal on tap.
  * - `"dashboard"`: rendered inside /my-beacon/sleeper-leagues. The only
@@ -193,7 +193,7 @@ function DesktopPublicTable({
     <div className="hidden overflow-x-auto rounded-card border border-line md:block">
       <table className="w-full text-sm">
         <caption className="sr-only">
-          Your Sleeper leagues. Click any row to sync the league into FF Beacon
+          Your Sleeper leagues. Click any row to load the league into FF Beacon
           and open its deep view.
         </caption>
         <thead className="bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle">
@@ -715,7 +715,7 @@ function DashboardFilter({
         aria-label={
           showAll
             ? "Show all leagues is on. Turn off to hide leagues not featured or shown on profile."
-            : "Show all leagues is off. Turn on to see every synced league."
+            : "Show all leagues is off. Turn on to see every saved league."
         }
         onClick={() => onChange(!showAll)}
         className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
@@ -869,7 +869,7 @@ const POSITION_LABEL: Record<string, string> = {
 /**
  * Pair the shared humanized label with a Tailwind tone for the badge
  * background. The label comes from {@link humanizeLeagueStatus} so the
- * /tools/league-sync table, the My Sleeper Leagues dashboard, and the
+ * /tools/league-pulse table, the My Sleeper Leagues dashboard, and the
  * league deep view all render the same string for the same status.
  *
  * Tone mapping is intentionally local — it's a visual concern tied to
