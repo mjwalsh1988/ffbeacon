@@ -36,22 +36,38 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ league_id: string }>;
+  searchParams: Promise<{ name?: string }>;
 }): Promise<Metadata> {
   const { league_id } = await params;
+  const { name: nameParam } = await searchParams;
   const supabase = await createClient();
   const { data: league } = await supabase
     .from("leagues")
     .select("name, season")
     .eq("sleeper_league_id", league_id)
     .maybeSingle();
-  if (!league) {
-    return { title: "League not found" };
-  }
+
+  // On a league's first open the row doesn't exist yet (the sync runs in the
+  // page body, under the loader). Fall back to the name passed from the
+  // previous page via ?name= so the title is correct on first load; the DB
+  // name takes over once the row exists. Never surface "League not found" —
+  // the page renders a branded retry state if the sync truly fails.
+  const fallbackName =
+    typeof nameParam === "string" && nameParam.trim() ? nameParam.trim() : null;
+  const displayName = league?.name ?? fallbackName;
+
   const ogPath = `/api/og/league/${league_id}`;
-  const title = `${league.name} (${league.season})`;
-  const description = `League overview, rosters, transactions, and power rankings for ${league.name}.`;
+  const title = displayName
+    ? league?.season != null
+      ? `${displayName} (${league.season})`
+      : displayName
+    : "League Pulse";
+  const description = displayName
+    ? `League overview, rosters, transactions, and power rankings for ${displayName}.`
+    : "League overview, rosters, transactions, and power rankings.";
   return {
     title,
     description,

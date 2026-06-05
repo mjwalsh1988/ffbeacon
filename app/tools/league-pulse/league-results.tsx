@@ -25,11 +25,24 @@ import { LeagueDetailSheet } from "./league-detail-sheet";
  * server action applied: forward ?tab=teams&username= so the deep view's team
  * chips default to the user's roster. Navigating with a plain <Link> lets the
  * branded loading boundary show instantly; the deep-view page does the sync.
+ *
+ * Also forwards ?name= so the deep view's <title> is correct on a league's
+ * first open (before the row is synced), since generateMetadata can't yet read
+ * the league name from the DB. The DB name takes precedence once it exists.
  */
-function leagueHref(leagueId: string, sleeperUsername: string | null): string {
-  return sleeperUsername
-    ? `/leagues/${leagueId}?tab=teams&username=${encodeURIComponent(sleeperUsername)}`
-    : `/leagues/${leagueId}`;
+function leagueHref(
+  leagueId: string,
+  sleeperUsername: string | null,
+  leagueName: string | null,
+): string {
+  const params = new URLSearchParams();
+  if (sleeperUsername) {
+    params.set("tab", "teams");
+    params.set("username", sleeperUsername);
+  }
+  if (leagueName) params.set("name", leagueName);
+  const qs = params.toString();
+  return qs ? `/leagues/${leagueId}?${qs}` : `/leagues/${leagueId}`;
 }
 
 /**
@@ -238,7 +251,7 @@ function DesktopPublicTable({
               >
                 <td colSpan={5} className="p-0">
                   <Link
-                    href={leagueHref(league.league_id, sleeperUsername)}
+                    href={leagueHref(league.league_id, sleeperUsername, league.name)}
                     aria-label={`Open ${league.name}, ${label}, ${league.total_rosters} teams`}
                     className="group grid w-full grid-cols-[1fr_8rem_5rem_minmax(12rem,1.5fr)_2rem] items-center gap-3 px-4 py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
                   >
@@ -419,7 +432,7 @@ function DesktopDashboardTable({
                       the row. Status / teams / roster cells beside it are
                       non-interactive. */}
                   <Link
-                    href={leagueHref(league.league_id, sleeperUsername)}
+                    href={leagueHref(league.league_id, sleeperUsername, league.name)}
                     aria-label={`Open ${league.name} deep view`}
                     className="group inline-flex max-w-full flex-col items-start gap-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                   >
@@ -512,7 +525,7 @@ function MobileDashboardCards({
                 Toggle row sits beneath it, separated by a visible
                 divider so the tap zones don't compete. */}
             <Link
-              href={leagueHref(league.league_id, sleeperUsername)}
+              href={leagueHref(league.league_id, sleeperUsername, league.name)}
               aria-label={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams`}
               className="group block w-full p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
             >

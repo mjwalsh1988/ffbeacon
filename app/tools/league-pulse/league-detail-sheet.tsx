@@ -32,9 +32,15 @@ export function LeagueDetailSheet({
   const positions = aggregatePositions(league.roster_positions ?? []);
   // Plain link to the deep view so the branded loading boundary shows
   // instantly on click; the deep-view page runs the sync under the loader.
-  const href = sleeperUsername
-    ? `/leagues/${league.league_id}?tab=teams&username=${encodeURIComponent(sleeperUsername)}`
-    : `/leagues/${league.league_id}`;
+  // ?name= gives the deep view a correct <title> on first open, before the
+  // league row is synced (the DB name takes precedence once it exists).
+  const hrefParams = new URLSearchParams();
+  if (sleeperUsername) {
+    hrefParams.set("tab", "teams");
+    hrefParams.set("username", sleeperUsername);
+  }
+  hrefParams.set("name", league.name);
+  const href = `/leagues/${league.league_id}?${hrefParams.toString()}`;
 
   return (
     <SlideUpDialog
