@@ -18,6 +18,7 @@ import { TeamFilter } from "@/components/team-filter";
 import { TransactionRow } from "@/components/transaction-row";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { RefreshButton } from "@/components/refresh-button";
+import { LeagueLoadError } from "@/components/league-load-error";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import {
   buildLeagueFormatTags,
@@ -113,7 +114,9 @@ export default async function LeagueDeepViewPage({
   const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
 
   if (!pulseResult.ok) {
-    notFound();
+    // Sync failed (missing league or a transient Sleeper outage; the API
+    // can't distinguish them). Show a branded retry state rather than 404.
+    return <LeagueLoadError />;
   }
 
   // Read the canonical row for render (anon-readable, RLS-safe).

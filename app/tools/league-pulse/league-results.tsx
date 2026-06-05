@@ -11,14 +11,26 @@ import {
   SlidersHorizontal,
   Trophy,
 } from "lucide-react";
+import Link from "next/link";
 import type { SleeperLeague } from "@/lib/sleeper";
-import { ensureLeagueAndOpen } from "@/app/leagues/actions";
 import {
   setFeaturedLeague,
   setLeagueShownOnProfile,
 } from "@/app/my-beacon/actions";
 import { humanizeLeagueStatus } from "@/lib/league-status";
 import { LeagueDetailSheet } from "./league-detail-sheet";
+
+/**
+ * Build the deep-view href for a league. Mirrors the username default the old
+ * server action applied: forward ?tab=teams&username= so the deep view's team
+ * chips default to the user's roster. Navigating with a plain <Link> lets the
+ * branded loading boundary show instantly; the deep-view page does the sync.
+ */
+function leagueHref(leagueId: string, sleeperUsername: string | null): string {
+  return sleeperUsername
+    ? `/leagues/${leagueId}?tab=teams&username=${encodeURIComponent(sleeperUsername)}`
+    : `/leagues/${leagueId}`;
+}
 
 /**
  * League results render in two variants:
@@ -225,24 +237,11 @@ function DesktopPublicTable({
                 className="transition-colors hover:bg-surface/60 focus-within:bg-surface/60"
               >
                 <td colSpan={5} className="p-0">
-                  <form action={ensureLeagueAndOpen} className="contents">
-                    <input
-                      type="hidden"
-                      name="sleeper_league_id"
-                      value={league.league_id}
-                    />
-                    {sleeperUsername && (
-                      <input
-                        type="hidden"
-                        name="sleeper_username"
-                        value={sleeperUsername}
-                      />
-                    )}
-                    <button
-                      type="submit"
-                      aria-label={`Open ${league.name}, ${label}, ${league.total_rosters} teams`}
-                      className="group grid w-full grid-cols-[1fr_8rem_5rem_minmax(12rem,1.5fr)_2rem] items-center gap-3 px-4 py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
-                    >
+                  <Link
+                    href={leagueHref(league.league_id, sleeperUsername)}
+                    aria-label={`Open ${league.name}, ${label}, ${league.total_rosters} teams`}
+                    className="group grid w-full grid-cols-[1fr_8rem_5rem_minmax(12rem,1.5fr)_2rem] items-center gap-3 px-4 py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
+                  >
                       <span className="min-w-0">
                         <span className="block truncate text-base font-semibold text-ink">
                           {league.name}
@@ -270,8 +269,7 @@ function DesktopPublicTable({
                           className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
                         />
                       </span>
-                    </button>
-                  </form>
+                  </Link>
                 </td>
               </tr>
             );
@@ -417,39 +415,25 @@ function DesktopDashboardTable({
                 className="transition-colors hover:bg-surface/40"
               >
                 <td className="px-4 py-4">
-                  {/* Form submit is the ONLY navigational action on the
-                      row. Status / teams / roster cells beside it are
+                  {/* The league-name link is the ONLY navigational action on
+                      the row. Status / teams / roster cells beside it are
                       non-interactive. */}
-                  <form action={ensureLeagueAndOpen} className="contents">
-                    <input
-                      type="hidden"
-                      name="sleeper_league_id"
-                      value={league.league_id}
-                    />
-                    {sleeperUsername && (
-                      <input
-                        type="hidden"
-                        name="sleeper_username"
-                        value={sleeperUsername}
+                  <Link
+                    href={leagueHref(league.league_id, sleeperUsername)}
+                    aria-label={`Open ${league.name} deep view`}
+                    className="group inline-flex max-w-full flex-col items-start gap-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  >
+                    <span className="inline-flex items-center gap-2 text-base font-semibold text-ink group-hover:text-brand-purple">
+                      <span className="truncate">{league.name}</span>
+                      <ArrowRight
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
                       />
-                    )}
-                    <button
-                      type="submit"
-                      aria-label={`Open ${league.name} deep view`}
-                      className="group inline-flex max-w-full flex-col items-start gap-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                    >
-                      <span className="inline-flex items-center gap-2 text-base font-semibold text-ink group-hover:text-brand-purple">
-                        <span className="truncate">{league.name}</span>
-                        <ArrowRight
-                          aria-hidden="true"
-                          className="h-3.5 w-3.5 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
-                        />
-                      </span>
-                      <span className="text-xs text-ink-subtle">
-                        {league.season} season
-                      </span>
-                    </button>
-                  </form>
+                    </span>
+                    <span className="text-xs text-ink-subtle">
+                      {league.season} season
+                    </span>
+                  </Link>
                 </td>
                 <td className="px-3 py-4 text-center">
                   <StatusBadge label={label} tone={tone} />
@@ -527,48 +511,34 @@ function MobileDashboardCards({
             {/* League-name link is the only navigational action.
                 Toggle row sits beneath it, separated by a visible
                 divider so the tap zones don't compete. */}
-            <form action={ensureLeagueAndOpen} className="contents">
-              <input
-                type="hidden"
-                name="sleeper_league_id"
-                value={league.league_id}
-              />
-              {sleeperUsername && (
-                <input
-                  type="hidden"
-                  name="sleeper_username"
-                  value={sleeperUsername}
-                />
-              )}
-              <button
-                type="submit"
-                aria-label={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams`}
-                className="group block w-full p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-base font-semibold text-ink group-hover:text-brand-purple">
-                    {league.name}
-                    <ArrowRight
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5 opacity-60 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
-                    />
-                  </span>
-                  <StatusBadge label={label} tone={tone} />
-                </div>
-                <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
-                  <Users
+            <Link
+              href={leagueHref(league.league_id, sleeperUsername)}
+              aria-label={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams`}
+              className="group block w-full p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-base font-semibold text-ink group-hover:text-brand-purple">
+                  {league.name}
+                  <ArrowRight
                     aria-hidden="true"
-                    className="h-3 w-3 text-brand-cyan"
+                    className="h-3.5 w-3.5 opacity-60 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
                   />
-                  {league.total_rosters} teams · {league.season}
-                </p>
-                {positions.length > 0 && (
-                  <div className="mt-3">
-                    <PositionPillRow positions={positions} />
-                  </div>
-                )}
-              </button>
-            </form>
+                </span>
+                <StatusBadge label={label} tone={tone} />
+              </div>
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                <Users
+                  aria-hidden="true"
+                  className="h-3 w-3 text-brand-cyan"
+                />
+                {league.total_rosters} teams · {league.season}
+              </p>
+              {positions.length > 0 && (
+                <div className="mt-3">
+                  <PositionPillRow positions={positions} />
+                </div>
+              )}
+            </Link>
             <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
               <FeaturedToggle
                 leagueName={league.name}

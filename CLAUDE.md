@@ -350,7 +350,7 @@ League Pulse is ONE continuous user journey, not multiple features. The journey:
 
 1. `/tools/league-pulse` — entry point. User enters Sleeper username and season, sees their leagues. No DB writes happen here; data comes straight from Sleeper.
 2. `/dashboard` — logged-in users persist their Sleeper username on user_preferences and see the same league list cached for fast return visits.
-3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 triggers `app/leagues/actions.ts ensureLeagueAndOpen`, which calls `lib/league-pulse.ts pulseLeague` (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role) and then navigates. The page itself also calls `pulseLeague` on every render; the 10-minute cache inside `pulseLeague` short-circuits redundant Sleeper hits.
+3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 is a plain `<Link>` navigation to the deep view, so the branded loading boundary shows immediately on click. The deep-view page calls `lib/league-pulse.ts pulseLeague` on every render (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role); the 10-minute cache inside `pulseLeague` short-circuits redundant Sleeper hits. A sync failure renders a branded retry state (`components/league-load-error.tsx`), not a redirect or 404.
 4. `/leagues/[sleeper_league_id]?tab=teams|transactions|power-rankings` — tabbed deep view. Each tab renders from the synced rows; never re-derives from Sleeper.
 
 Naming rules:

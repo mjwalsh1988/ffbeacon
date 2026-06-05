@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { X, Users, CalendarDays, Trophy, ArrowRight } from "lucide-react";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
-import { ensureLeagueAndOpen } from "@/app/leagues/actions";
 
 /**
  * Slide-up modal showing the deep details for a single Sleeper league —
@@ -30,6 +30,11 @@ export function LeagueDetailSheet({
   statusTone: string;
 }) {
   const positions = aggregatePositions(league.roster_positions ?? []);
+  // Plain link to the deep view so the branded loading boundary shows
+  // instantly on click; the deep-view page runs the sync under the loader.
+  const href = sleeperUsername
+    ? `/leagues/${league.league_id}?tab=teams&username=${encodeURIComponent(sleeperUsername)}`
+    : `/leagues/${league.league_id}`;
 
   return (
     <SlideUpDialog
@@ -121,24 +126,20 @@ export function LeagueDetailSheet({
 
         {/* Footer action — primary CTA stays visible without scrolling. */}
         <div className="border-t border-line bg-surface px-5 py-4 sm:px-6 sm:py-5">
-          <form action={ensureLeagueAndOpen} className="flex flex-wrap items-center justify-between gap-3">
-            <input type="hidden" name="sleeper_league_id" value={league.league_id} />
-            {sleeperUsername && (
-              <input type="hidden" name="sleeper_username" value={sleeperUsername} />
-            )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-ink-muted">
-              Opens the synced deep view, including rosters, transactions, and
-              power rankings.
+              Opens the deep view, including rosters, transactions, and power
+              rankings.
             </p>
-            <button
-              type="submit"
+            <Link
+              href={href}
               aria-label={`Open ${league.name} deep view`}
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               Open league
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </button>
-          </form>
+            </Link>
+          </div>
         </div>
       </div>
     </SlideUpDialog>
