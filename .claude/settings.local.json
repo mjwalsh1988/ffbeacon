@@ -144,7 +144,11 @@
       "Bash(git mv *)",
       "Bash(git checkout *)",
       "Bash(npx eslint *)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(git --no-pager diff --cached -- CLAUDE.md .claude/settings.local.json)",
+      "Bash(git --no-pager log -1 --format=\"%B\")",
+      "Bash(rm .git/COMMIT_EDITMSG_FIX.txt)",
+      "Bash(git --no-pager log -1 --format=\"%s\")"
     ]
   },
   "enabledMcpjsonServers": [

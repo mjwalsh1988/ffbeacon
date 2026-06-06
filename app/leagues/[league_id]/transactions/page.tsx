@@ -6,8 +6,11 @@ import { pulseLeague } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, type LeagueContext } from "@/lib/league-format-resolution";
 import { loadLeagueTransactions, type TransactionFilter } from "@/lib/league-transactions-data";
+import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { TransactionRow } from "@/components/transaction-row";
 import { TransactionFilters } from "@/components/transaction-filters";
+import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
+import { LeagueHeaderActions } from "@/components/league-header-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -55,10 +58,15 @@ export default async function LeagueTransactionsPage({
     week?: string;
     offset?: string;
     source?: string;
+    username?: string;
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
+  const searchedUsername =
+    typeof sp.username === "string" && sp.username.trim()
+      ? sp.username.trim()
+      : null;
 
   // Idempotent first-touch pulse — same as the deep view.
   const adminClient = createAdminClient();
@@ -72,6 +80,26 @@ export default async function LeagueTransactionsPage({
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
   if (!league) notFound();
+
+  // Shared header action data (in-view switcher + admin refresh gate).
+  const { otherLeagues, canForceRefresh } = await loadLeagueHeaderActions(
+    supabase,
+    league.id,
+    sleeperLeagueId,
+    searchedUsername,
+    league.season != null ? String(league.season) : null,
+  );
+
+  // Back-links forward the searched handle so the switcher and overview
+  // context survive the round trip.
+  const homeHref = searchedUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+    : "/tools/league-pulse";
+  const leagueHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}`;
+  // Copy link is the clean, shareable canonical URL (no personal username).
+  const copyHref = `/leagues/${sleeperLeagueId}/transactions`;
 
   // Resolve league context (format + source) — source respects user prefs;
   // format is derived from the actual Sleeper league settings.
@@ -103,17 +131,28 @@ export default async function LeagueTransactionsPage({
     <main id="main">
       <header className="border-b border-line">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-brand-cyan">
-            <Link
-              href={`/leagues/${sleeperLeagueId}`}
-              className="hover:text-brand-purple focus-visible:underline"
-            >
-              ← {league.name}
-            </Link>
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Transactions
-          </h1>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6">
+            <LeagueBreadcrumb
+              homeHref={homeHref}
+              crumbs={[
+                { label: league.name, href: leagueHref },
+                { label: "Transactions" },
+              ]}
+              className="sm:col-start-1 sm:row-start-1"
+            />
+            <LeagueHeaderActions
+              sleeperLeagueId={sleeperLeagueId}
+              copyHref={copyHref}
+              copyAriaLabel="Copy link to this league's transactions"
+              otherLeagues={otherLeagues}
+              searchedUsername={searchedUsername}
+              canForceRefresh={canForceRefresh}
+              className="sm:col-start-2 sm:row-start-1"
+            />
+            <h1 className="min-w-0 text-3xl font-semibold tracking-tight sm:col-start-1 sm:row-start-2 sm:text-4xl">
+              Transactions
+            </h1>
+          </div>
           <p className="mt-2 text-sm text-ink-muted">
             {total} total {total === 1 ? "transaction" : "transactions"}
             {context.coverage !== "none" && (
@@ -216,6 +255,7 @@ function buildHref(
   if (sp.team) params.set("team", sp.team);
   if (sp.week) params.set("week", sp.week);
   if (sp.source) params.set("source", sp.source);
+  if (sp.username) params.set("username", sp.username);
   if (offset > 0) params.set("offset", String(offset));
   const qs = params.toString();
   return `/leagues/${sleeperLeagueId}/transactions${qs ? `?${qs}` : ""}`;

@@ -69,9 +69,12 @@ export function TransactionFilters({
   };
 
   const clearAll = () => {
-    startTransition(() =>
-      router.replace(`/leagues/${sleeperLeagueId}/transactions`, { scroll: false }),
-    );
+    // Preserve the searched username so clearing filters doesn't drop the
+    // in-view league switcher context.
+    const next = new URLSearchParams();
+    const username = searchParams.get("username");
+    if (username) next.set("username", username);
+    startTransition(() => router.replace(buildHref(next), { scroll: false }));
   };
 
   const hasAnyFilter =

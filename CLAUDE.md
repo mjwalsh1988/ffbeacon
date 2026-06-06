@@ -32,6 +32,8 @@
    - Non-breaking spaces and any other typographic flourishes: use a normal space.
    Stick to plain ASCII punctuation. When in doubt, restructure the sentence so no special dash is needed. This rule is non-negotiable and overrides any stylistic habit.
 
+7. **Never chain shell commands (ABSOLUTE RULE)**: Run every shell command as its own separate tool call. Do NOT join commands with `&&`, `;`, `||`, or pipe chains just to batch them, and do NOT use `cd ... ; command` prefixes. The project owner has to approve each command through a permission guard, and a chained command forces a fresh approval prompt for the whole string every time, which slows the dev loop badly. One command per tool call. The only exception is a genuine data pipeline where one command's output must feed directly into the next (for example `something | grep`) and there is no way to express it as separate calls; even then, prefer the dedicated Grep/Glob/Read tools over shell pipes. When you have several independent commands to run, issue them as multiple separate tool calls (in parallel when they do not depend on each other), never strung together in one shell line.
+
 ## Supabase MCP Workflow
 
 The Supabase MCP server is connected. For all database operations:

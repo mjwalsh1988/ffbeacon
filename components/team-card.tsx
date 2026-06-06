@@ -20,6 +20,9 @@ type TeamCardProps = {
   expanded?: boolean;
   /** Provided by TeamFilter on the league inline view. Omit to render a non-collapsible card. */
   onToggleExpand?: () => void;
+  /** Forwarded from `?username=` so the "View team page" link keeps the
+   * in-view league switcher context on the team detail page. */
+  searchedUsername?: string | null;
 };
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE"] as const;
@@ -58,6 +61,7 @@ export function TeamCard({
   headingLevel = "h2",
   expanded: expandedProp,
   onToggleExpand,
+  searchedUsername = null,
 }: TeamCardProps) {
   const HeadingTag = headingLevel;
   const collapsible = typeof onToggleExpand === "function";
@@ -218,7 +222,11 @@ export function TeamCard({
           {showViewTeamPageLink && (
             <footer className="border-t border-line p-4 sm:p-5">
               <Link
-                href={`/leagues/${sleeperLeagueId}/teams/${sleeperRosterId}`}
+                href={
+                  searchedUsername
+                    ? `/leagues/${sleeperLeagueId}/teams/${sleeperRosterId}?username=${encodeURIComponent(searchedUsername)}`
+                    : `/leagues/${sleeperLeagueId}/teams/${sleeperRosterId}`
+                }
                 className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-base px-4 py-2 text-sm font-medium text-ink hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 aria-label={`Open dedicated page for ${teamName}`}
               >

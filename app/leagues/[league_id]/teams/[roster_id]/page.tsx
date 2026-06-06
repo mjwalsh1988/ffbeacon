@@ -8,14 +8,16 @@ import {
   describeDerived,
 } from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
+import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamCard } from "@/components/team-card";
-import { CopyLinkButton } from "@/components/copy-link-button";
+import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
+import { LeagueHeaderActions } from "@/components/league-header-actions";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ league_id: string; roster_id: string }>;
-type Search = Promise<{ source?: string }>;
+type Search = Promise<{ source?: string; username?: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { league_id, roster_id } = await params;
@@ -70,7 +72,11 @@ export default async function TeamDetailPage({
   searchParams: Search;
 }) {
   const { league_id: sleeperLeagueId, roster_id } = await params;
-  const { source: sourceParam } = await searchParams;
+  const { source: sourceParam, username: usernameParam } = await searchParams;
+  const searchedUsername =
+    typeof usernameParam === "string" && usernameParam.trim()
+      ? usernameParam.trim()
+      : null;
   const sleeperRosterId = Number(roster_id);
   if (!Number.isFinite(sleeperRosterId)) notFound();
 
@@ -114,49 +120,56 @@ export default async function TeamDetailPage({
   if (!team) notFound();
 
   const sourceDisplay =
-    context.coverage === "none" ? "—" : context.sourceDisplay;
+    context.coverage === "none" ? "N/A" : context.sourceDisplay;
   const formatDisplay =
-    context.coverage === "none" ? "—" : context.formatDisplay;
+    context.coverage === "none" ? "N/A" : context.formatDisplay;
+
+  // Shared header action data (in-view switcher + admin refresh gate).
+  const { otherLeagues, canForceRefresh } = await loadLeagueHeaderActions(
+    supabase,
+    league.id,
+    sleeperLeagueId,
+    searchedUsername,
+    league.season != null ? String(league.season) : null,
+  );
+
+  // Back-links forward the searched handle so the switcher and overview
+  // context survive the round trip; the copy link stays clean for sharing.
+  const homeHref = searchedUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+    : "/tools/league-pulse";
+  const leagueHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}`;
+  const backToTeamsHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}#team-${sleeperRosterId}`
+    : `/leagues/${sleeperLeagueId}?tab=teams#team-${sleeperRosterId}`;
 
   return (
     <main id="main">
       <header className="border-b border-line">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* Breadcrumb */}
-          <nav aria-label="Breadcrumb" className="mb-4 text-xs">
-            <ol className="flex flex-wrap items-center gap-1 text-ink-subtle">
-              <li>
-                <Link
-                  href="/tools/league-pulse"
-                  className="hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                >
-                  League Pulse
-                </Link>
-              </li>
-              <li aria-hidden="true">/</li>
-              <li>
-                <Link
-                  href={`/leagues/${sleeperLeagueId}`}
-                  className="hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                >
-                  {league.name}
-                </Link>
-              </li>
-              <li aria-hidden="true">/</li>
-              <li className="text-ink" aria-current="page">
-                {team.teamName}
-              </li>
-            </ol>
-          </nav>
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <p className="text-xs uppercase tracking-wider text-brand-cyan">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6">
+            <LeagueBreadcrumb
+              homeHref={homeHref}
+              crumbs={[
+                { label: league.name, href: leagueHref },
+                { label: team.teamName },
+              ]}
+              className="sm:col-start-1 sm:row-start-1"
+            />
+            <LeagueHeaderActions
+              sleeperLeagueId={sleeperLeagueId}
+              copyHref={`/leagues/${sleeperLeagueId}/teams/${roster_id}`}
+              copyAriaLabel="Copy link to this team"
+              otherLeagues={otherLeagues}
+              searchedUsername={searchedUsername}
+              canForceRefresh={canForceRefresh}
+              className="sm:col-start-2 sm:row-start-1"
+            />
+            <p className="text-xs uppercase tracking-wider text-brand-cyan sm:col-start-1 sm:row-start-2">
               Team detail • {formatDisplay} • {sourceDisplay}
             </p>
-            <CopyLinkButton
-              href={`/leagues/${sleeperLeagueId}/teams/${roster_id}`}
-              ariaLabel="Copy link to this team"
-              size="sm"
-            />
           </div>
           {context.coverage === "fallback" && context.fallback && (
             <p
@@ -197,7 +210,7 @@ export default async function TeamDetailPage({
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
           <Link
-            href={`/leagues/${sleeperLeagueId}?tab=teams#team-${sleeperRosterId}`}
+            href={backToTeamsHref}
             className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-base px-4 py-2 text-sm font-medium text-ink hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             aria-label="Back to league with all teams side-by-side"
           >

@@ -159,6 +159,7 @@ export function TeamFilter({
                 headingLevel="h2"
                 expanded={expandedRosterIds.has(t.sleeperRosterId)}
                 onToggleExpand={() => handleToggleExpand(t.sleeperRosterId)}
+                searchedUsername={searchedUsername}
               />
             </li>
           ))}
