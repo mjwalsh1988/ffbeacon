@@ -13,12 +13,14 @@ import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { loadLeagueTransactions } from "@/lib/league-transactions-data";
 import { getLeagueAdminContext } from "@/lib/league-auth";
 import { humanizeLeagueStatus } from "@/lib/league-status";
-import type { SleeperLeague } from "@/lib/sleeper";
+import { currentNflSeason, type SleeperLeague } from "@/lib/sleeper";
+import { loadUserOtherLeagues } from "@/lib/league-switcher-data";
 import { TeamFilter } from "@/components/team-filter";
 import { TransactionRow } from "@/components/transaction-row";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { RefreshButton } from "@/components/refresh-button";
 import { LeagueLoadError } from "@/components/league-load-error";
+import { LeagueSwitcher } from "@/components/league-switcher";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import {
   buildLeagueFormatTags,
@@ -31,6 +33,7 @@ import {
   Activity,
   ClipboardList,
   ArrowLeftRight,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 
@@ -170,6 +173,25 @@ export default async function LeagueDeepViewPage({
   // Admin / commissioner check — gates the Refresh button.
   const adminCtx = await getLeagueAdminContext(supabase, league.id);
 
+  // Breadcrumb back-link. Forward the searched handle so the logo crumb lands
+  // the user back on their own league results, not a blank search form.
+  const backHref = searchedUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+    : "/tools/league-pulse";
+
+  // League switcher data — the searched user's OTHER leagues for this season,
+  // so they can hop between leagues without returning to /tools/league-pulse.
+  // Only fetched when we know which user was searched (forwarded via ?username=).
+  const otherLeagues = searchedUsername
+    ? await loadUserOtherLeagues(
+        supabase,
+        league.id,
+        sleeperLeagueId,
+        searchedUsername,
+        league.season != null ? String(league.season) : currentNflSeason(),
+      )
+    : [];
+
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
   const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";
 
@@ -177,16 +199,53 @@ export default async function LeagueDeepViewPage({
     <main id="main">
       <header className="border-b border-line">
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="mb-2 text-sm font-medium uppercase tracking-wider text-brand-cyan">
-                League Pulse
-              </p>
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                {league.name}
-              </h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+          {/* Grid so the source order (breadcrumb → buttons → name) is the
+              mobile stacking order, while sm+ reflows to a two-column layout:
+              breadcrumb + name in the left column, buttons top-right. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6">
+            <nav
+              aria-label="Breadcrumb"
+              className="min-w-0 sm:col-start-1 sm:row-start-1"
+            >
+              <ol className="flex items-center gap-1.5 text-sm">
+                <li className="flex items-center">
+                  <Link
+                    href={backHref}
+                    title="Back to League Pulse"
+                    aria-label="Back to League Pulse home"
+                    className="inline-flex items-center rounded-card p-0.5 transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/img/ff-beacon-logo.png"
+                      alt=""
+                      width={20}
+                      height={20}
+                      style={{ width: 20, height: 20 }}
+                      className="flex-shrink-0 rounded-sm"
+                    />
+                  </Link>
+                </li>
+                <li aria-hidden="true" className="flex items-center text-ink-subtle">
+                  <ChevronRight className="h-4 w-4" />
+                </li>
+                <li className="min-w-0">
+                  <span
+                    aria-current="page"
+                    className="block truncate text-ink-muted"
+                  >
+                    {league.name}
+                  </span>
+                </li>
+              </ol>
+            </nav>
+            <div className="flex flex-wrap items-center gap-2 sm:col-start-2 sm:row-start-1 sm:justify-end">
+              {otherLeagues.length > 0 && (
+                <LeagueSwitcher
+                  leagues={otherLeagues}
+                  searchedUsername={searchedUsername}
+                />
+              )}
               <CopyLinkButton
                 href={`/leagues/${sleeperLeagueId}`}
                 ariaLabel="Copy link to this league"
@@ -196,6 +255,9 @@ export default async function LeagueDeepViewPage({
                 isAuthorized={adminCtx.canForceRefresh}
               />
             </div>
+            <h1 className="min-w-0 text-3xl font-semibold tracking-tight sm:col-start-1 sm:row-start-2 sm:text-4xl">
+              {league.name}
+            </h1>
           </div>
 
           <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
