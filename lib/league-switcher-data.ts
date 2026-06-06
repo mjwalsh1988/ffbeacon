@@ -15,8 +15,8 @@ import type { SwitcherLeague } from "@/components/league-switcher";
  * direct Sleeper /user lookup would hit. The searched user is always a member
  * of this league (they clicked in from their own list), so the row exists.
  *
- * Sleeper is hit live for the user's league list. Null/empty on any failure —
- * the switcher simply doesn't render when this returns [].
+ * Sleeper is hit live for the user's league list. Null/empty on any failure,
+ * so the switcher simply doesn't render when this returns [].
  */
 export async function loadUserOtherLeagues(
   supabase: SupabaseClient<Database>,

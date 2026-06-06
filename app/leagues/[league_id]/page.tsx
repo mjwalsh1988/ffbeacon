@@ -58,7 +58,7 @@ export async function generateMetadata({
   // On a league's first open the row doesn't exist yet (the sync runs in the
   // page body, under the loader). Fall back to the name passed from the
   // previous page via ?name= so the title is correct on first load; the DB
-  // name takes over once the row exists. Never surface "League not found" —
+  // name takes over once the row exists. Never surface "League not found";
   // the page renders a branded retry state if the sync truly fails.
   const fallbackName =
     typeof nameParam === "string" && nameParam.trim() ? nameParam.trim() : null;
@@ -130,7 +130,7 @@ export default async function LeagueDeepViewPage({
     return Number.isFinite(n) ? n : null;
   })();
 
-  // First-touch pulse — idempotent, internally cached for 10 minutes.
+  // First-touch pulse: idempotent, internally cached for 10 minutes.
   const adminClient = createAdminClient();
   const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
 
@@ -170,7 +170,7 @@ export default async function LeagueDeepViewPage({
     resolvedSource.slug,
   );
 
-  // Admin / commissioner check — gates the Refresh button.
+  // Admin / commissioner check gates the Refresh button.
   const adminCtx = await getLeagueAdminContext(supabase, league.id);
 
   // Breadcrumb back-link. Forward the searched handle so the logo crumb lands
@@ -179,7 +179,17 @@ export default async function LeagueDeepViewPage({
     ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
     : "/tools/league-pulse";
 
-  // League switcher data — the searched user's OTHER leagues for this season,
+  // Tab links preserve the searched handle so the in-view league switcher and
+  // the Teams-tab owner default survive tab navigation. Without this, clicking
+  // any tab drops ?username= and the switcher disappears mid-browse, regardless
+  // of whether the user arrived from the public tool or their dashboard.
+  const tabHref = (tabId: TabId): string => {
+    const qs = new URLSearchParams({ tab: tabId });
+    if (searchedUsername) qs.set("username", searchedUsername);
+    return `/leagues/${sleeperLeagueId}?${qs.toString()}`;
+  };
+
+  // League switcher data: the searched user's OTHER leagues for this season,
   // so they can hop between leagues without returning to /tools/league-pulse.
   // Only fetched when we know which user was searched (forwarded via ?username=).
   const otherLeagues = searchedUsername
@@ -239,20 +249,32 @@ export default async function LeagueDeepViewPage({
                 </li>
               </ol>
             </nav>
-            <div className="flex flex-wrap items-center gap-2 sm:col-start-2 sm:row-start-1 sm:justify-end">
-              {otherLeagues.length > 0 && (
-                <LeagueSwitcher
-                  leagues={otherLeagues}
-                  searchedUsername={searchedUsername}
+            <div className="flex flex-col gap-2 sm:col-start-2 sm:row-start-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              {/* Mobile: Switch league and Copy link share the top row (50/50
+                  when both present, full width when one is absent); Refresh
+                  drops to a full-width line below. sm+ dissolves this wrapper
+                  via display:contents so every control sits inline, right
+                  aligned. */}
+              <div
+                className={`grid gap-2 sm:contents ${
+                  otherLeagues.length > 0 ? "grid-cols-2" : "grid-cols-1"
+                }`}
+              >
+                {otherLeagues.length > 0 && (
+                  <LeagueSwitcher
+                    leagues={otherLeagues}
+                    searchedUsername={searchedUsername}
+                  />
+                )}
+                <CopyLinkButton
+                  href={`/leagues/${sleeperLeagueId}`}
+                  ariaLabel="Copy link to this league"
                 />
-              )}
-              <CopyLinkButton
-                href={`/leagues/${sleeperLeagueId}`}
-                ariaLabel="Copy link to this league"
-              />
+              </div>
               <RefreshButton
                 sleeperLeagueId={sleeperLeagueId}
                 isAuthorized={adminCtx.canForceRefresh}
+                mobileFullWidth
               />
             </div>
             <h1 className="min-w-0 text-3xl font-semibold tracking-tight sm:col-start-1 sm:row-start-2 sm:text-4xl">
@@ -364,7 +386,7 @@ export default async function LeagueDeepViewPage({
               return (
                 <li key={t.id}>
                   <Link
-                    href={`/leagues/${sleeperLeagueId}?tab=${t.id}`}
+                    href={tabHref(t.id)}
                     aria-current={isActive ? "page" : undefined}
                     className={`inline-block min-h-11 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                       isActive
@@ -389,10 +411,11 @@ export default async function LeagueDeepViewPage({
             counts={pulseResult.counts}
             formatSlug={context.coverage === "none" ? null : context.formatSlug}
             sourceSlug={context.coverage === "none" ? null : context.sourceSlug}
-            formatDisplay={context.coverage === "none" ? "—" : context.formatDisplay}
-            sourceDisplay={context.coverage === "none" ? "—" : context.sourceDisplay}
+            formatDisplay={context.coverage === "none" ? "N/A" : context.formatDisplay}
+            sourceDisplay={context.coverage === "none" ? "N/A" : context.sourceDisplay}
             leagueSeason={league.season != null ? String(league.season) : null}
             leagueStatus={league.status ?? null}
+            searchedUsername={searchedUsername}
           />
         )}
         {activeTab === "teams" && (
@@ -429,6 +452,7 @@ async function OverviewPanel({
   sourceDisplay,
   leagueSeason,
   leagueStatus,
+  searchedUsername,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -439,6 +463,7 @@ async function OverviewPanel({
   sourceDisplay: string;
   leagueSeason: string | null;
   leagueStatus: string | null;
+  searchedUsername: string | null;
 }) {
   return (
     <div className="space-y-8">
@@ -462,6 +487,7 @@ async function OverviewPanel({
         sourceDisplay={sourceDisplay}
         leagueSeason={leagueSeason}
         leagueStatus={leagueStatus}
+        searchedUsername={searchedUsername}
       />
     </div>
   );
@@ -594,6 +620,7 @@ async function PowerRankingsSection({
   sourceDisplay,
   leagueSeason,
   leagueStatus,
+  searchedUsername,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -603,6 +630,7 @@ async function PowerRankingsSection({
   sourceDisplay: string;
   leagueSeason: string | null;
   leagueStatus: string | null;
+  searchedUsername: string | null;
 }) {
   const supabase = await createClient();
 
@@ -714,6 +742,7 @@ async function PowerRankingsSection({
               <PowerRankingsRow
                 key={t.rosterRowId}
                 sleeperLeagueId={sleeperLeagueId}
+                searchedUsername={searchedUsername}
                 teamCount={teamCount}
                 data={{
                   rosterRowId: t.rosterRowId,

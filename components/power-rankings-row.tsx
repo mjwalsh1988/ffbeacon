@@ -47,13 +47,24 @@ export function PowerRankingsRow({
   data,
   teamCount,
   sleeperLeagueId,
+  searchedUsername = null,
 }: {
   data: PowerRankingsRowData;
   teamCount: number;
   sleeperLeagueId: string;
+  /** Forwarded from `?username=` so the team link keeps the in-view league
+   * switcher alive when it lands back on the main deep view. */
+  searchedUsername?: string | null;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const teamHref = `/leagues/${sleeperLeagueId}?tab=teams&roster=${data.sleeperRosterId}`;
+  const teamHref = (() => {
+    const qs = new URLSearchParams({
+      tab: "teams",
+      roster: String(data.sleeperRosterId),
+    });
+    if (searchedUsername) qs.set("username", searchedUsername);
+    return `/leagues/${sleeperLeagueId}?${qs.toString()}`;
+  })();
 
   return (
     <>

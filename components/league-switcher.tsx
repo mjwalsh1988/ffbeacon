@@ -106,22 +106,19 @@ export function LeagueSwitcher({
   const triggerClasses =
     "inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-3 py-2 text-sm font-medium text-ink";
 
-  const optionLabel = (l: SwitcherLeague): string => {
-    const teams = l.totalRosters != null ? `${l.totalRosters} teams` : "";
-    const bits = [l.season, teams].filter(Boolean).join(" · ");
-    return bits ? `${l.name} — ${bits}` : l.name;
-  };
-
   return (
     <>
-      {/* Mobile: native picker behind the custom-looking button. */}
+      {/* Mobile: native picker behind the custom-looking button. Stretches to
+          fill its grid cell so it shares the top action row with Copy link. */}
       <div className="relative sm:hidden">
         <div
           aria-hidden="true"
-          className={`${triggerClasses} pointer-events-none`}
+          className={`${triggerClasses} pointer-events-none w-full justify-between`}
         >
-          <ArrowLeftRight className="h-4 w-4" />
-          <span>Switch league</span>
+          <span className="inline-flex items-center gap-1.5">
+            <ArrowLeftRight className="h-4 w-4" />
+            <span>Switch league</span>
+          </span>
           <ChevronDown className="h-3.5 w-3.5 text-ink-subtle" />
         </div>
         <select
@@ -140,7 +137,7 @@ export function LeagueSwitcher({
           </option>
           {leagues.map((l) => (
             <option key={l.sleeperLeagueId} value={l.sleeperLeagueId}>
-              {optionLabel(l)}
+              {l.name}
             </option>
           ))}
         </select>
@@ -209,7 +206,7 @@ export function LeagueSwitcher({
             >
               {filtered.length === 0 ? (
                 <li className="px-3 py-3 text-sm text-ink-muted">
-                  No leagues match “{query}”.
+                  No leagues match "{query}".
                 </li>
               ) : (
                 filtered.map((l) => (
@@ -223,8 +220,8 @@ export function LeagueSwitcher({
                         {l.name}
                       </span>
                       <span className="mt-0.5 block text-xs text-ink-subtle">
-                        {l.season} · {l.totalRosters ?? "?"} teams
-                        {l.status ? ` · ${humanizeLeagueStatus(l.status)}` : ""}
+                        {l.season}, {l.totalRosters ?? "?"} teams
+                        {l.status ? `, ${humanizeLeagueStatus(l.status)}` : ""}
                       </span>
                     </Link>
                   </li>

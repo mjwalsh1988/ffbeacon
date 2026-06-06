@@ -27,8 +27,8 @@ import {
  *   2. If the user's chosen source supports the ideal format → use it
  *   3. Otherwise, fall back via pickLeagueTypeSafeFormat() to the source's
  *      closest supported format WITHIN THE SAME league_type (dynasty vs
- *      redraft is a hard wall — never cross it), then same scoring_type →
- *      same is_superflex → lowest display_order
+ *      redraft is a hard wall, never cross it), then same scoring_type,
+ *      then same is_superflex, then lowest display_order
  *   4. If the source supports nothing in the league's own league_type,
  *      return `coverage: 'none'` and the UI renders an empty state. We
  *      deliberately do NOT cross to the other league_type: a redraft value
@@ -129,7 +129,7 @@ export async function resolveLeagueContext(
     };
   }
 
-  // No mapping at all — Sleeper league doesn't fit any of our active formats
+  // No mapping at all. Sleeper league doesn't fit any of our active formats
   // (e.g. half-ppr dynasty). Try to give the user *something* coherent, but
   // stay inside the league's own league_type: a dynasty league must fall to a
   // dynasty format, never a redraft one.
@@ -350,7 +350,7 @@ async function loadFormatConfigId(
 
 /** Human-readable description of the league's structural format. Used in
  * fallback banners ("we don't have FantasyCalc values for Dynasty TEP
- * Superflex"). Does NOT use the format slug — describes what the league
+ * Superflex"). Does NOT use the format slug; describes what the league
  * actually looks like in plain language. */
 export function describeDerived(d: DerivedFormat): string {
   const parts: string[] = [];

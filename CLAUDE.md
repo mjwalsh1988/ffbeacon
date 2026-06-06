@@ -23,7 +23,14 @@
    - Put copyable content in code blocks
    - Keep responses concise and direct
    - Reference UI elements with their on-screen location when giving instructions
-   - Never use em-dashes in any content output
+
+6. **No AI-tell punctuation (ABSOLUTE RULE)**: Never use the em-dash (the long dash) or any other character that signals AI-generated writing. This applies EVERYWHERE: chat responses, code, comments, commit messages, UI copy, docs, alt text, ARIA labels, option labels, migration comments, and any generated content. Banned characters and the plain replacement to use instead:
+   - Em-dash and en-dash: rewrite the sentence, or use a comma, colon, or parentheses. Use a hyphen only for genuinely hyphenated words.
+   - Curly/smart quotes and apostrophes: use straight quotes (`"` and `'`).
+   - Ellipsis character: use three periods only when truly needed.
+   - Middle dot / bullet character used as inline separator: use a plain comma or the word "and".
+   - Non-breaking spaces and any other typographic flourishes: use a normal space.
+   Stick to plain ASCII punctuation. When in doubt, restructure the sentence so no special dash is needed. This rule is non-negotiable and overrides any stylistic habit.
 
 ## Supabase MCP Workflow
 
