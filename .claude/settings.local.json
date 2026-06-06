@@ -142,7 +142,8 @@
       "Bash(file __TRACKED_VAR__/sheet.xlsx)",
       "Bash(grep *)",
       "Bash(git mv *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(npx eslint *)"
     ]
   },
   "enabledMcpjsonServers": [
