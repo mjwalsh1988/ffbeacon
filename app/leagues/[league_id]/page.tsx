@@ -29,6 +29,8 @@ import {
   Users,
   Trophy,
   Activity,
+  ClipboardList,
+  ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
 
@@ -383,9 +385,9 @@ async function OverviewPanel({
           Snapshot
         </h2>
         <ul className="mt-4 grid gap-4 sm:grid-cols-3">
-          <Stat label="Rosters synced" value={counts.rosters} />
-          <Stat label="Members" value={counts.users} />
-          <Stat label="Transactions" value={counts.transactions} />
+          <Stat icon={ClipboardList} label="Rosters synced" value={counts.rosters} />
+          <Stat icon={Users} label="Members" value={counts.users} />
+          <Stat icon={ArrowLeftRight} label="Transactions" value={counts.transactions} />
         </ul>
       </section>
 
@@ -681,11 +683,27 @@ async function PowerRankingsSection({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+}) {
   return (
-    <li className="rounded-card border border-line bg-surface p-5">
-      <p className="text-xs uppercase tracking-wider text-ink-subtle">{label}</p>
-      <p className="mt-2 font-mono text-3xl font-semibold text-ink">{value}</p>
+    <li className="flex items-center gap-4 rounded-card border border-line bg-surface p-5">
+      <span
+        aria-hidden="true"
+        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-line bg-base/60 text-brand-cyan"
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs uppercase tracking-wider text-ink-subtle">{label}</p>
+        <p className="mt-1 font-mono text-3xl font-semibold text-ink">{value}</p>
+      </div>
     </li>
   );
 }
