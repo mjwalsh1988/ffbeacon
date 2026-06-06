@@ -1,24 +1,21 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { pulseLeague } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
   describeDerived,
-  type LeagueContext,
 } from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
-import { loadLeagueTransactions } from "@/lib/league-transactions-data";
 import { humanizeLeagueStatus } from "@/lib/league-status";
 import { type SleeperLeague } from "@/lib/sleeper";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { TeamFilter } from "@/components/team-filter";
-import { TransactionRow } from "@/components/transaction-row";
 import { LeagueLoadError } from "@/components/league-load-error";
 import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
+import { LeagueTabs } from "@/components/league-tabs";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import {
   buildLeagueFormatTags,
@@ -87,17 +84,9 @@ export async function generateMetadata({
   };
 }
 
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "teams", label: "Teams" },
-  { id: "transactions", label: "Transactions" },
-] as const;
-
-type TabId = (typeof TABS)[number]["id"];
-
-function isTab(value: string | undefined): value is TabId {
-  return TABS.some((t) => t.id === value);
-}
+// Inline-rendered tabs on this page. Transactions is its own full page, so
+// it's not in this union (the redirect below sends ?tab=transactions there).
+type InlineTabId = "overview" | "teams";
 
 export default async function LeagueDeepViewPage({
   params,
@@ -118,9 +107,21 @@ export default async function LeagueDeepViewPage({
     username: usernameParam,
     roster: rosterParam,
   } = await searchParams;
-  const activeTab: TabId = isTab(tabParam) ? tabParam : "overview";
   const searchedUsername =
     typeof usernameParam === "string" && usernameParam.trim() ? usernameParam.trim() : null;
+
+  // Transactions is its own full page now, not an inline tab. The tab nav
+  // links straight there; this redirect catches legacy ?tab=transactions
+  // links (and any bookmarks) so nobody lands on a blank tab.
+  if (tabParam === "transactions") {
+    const qs = new URLSearchParams();
+    if (searchedUsername) qs.set("username", searchedUsername);
+    if (typeof sourceParam === "string" && sourceParam) qs.set("source", sourceParam);
+    const s = qs.toString();
+    redirect(`/leagues/${sleeperLeagueId}/transactions${s ? `?${s}` : ""}`);
+  }
+
+  const activeTab: InlineTabId = tabParam === "teams" ? "teams" : "overview";
   const focusedRosterId = (() => {
     if (typeof rosterParam !== "string" || !rosterParam.trim()) return null;
     const n = Number.parseInt(rosterParam, 10);
@@ -172,16 +173,6 @@ export default async function LeagueDeepViewPage({
   const backHref = searchedUsername
     ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
     : "/tools/league-pulse";
-
-  // Tab links preserve the searched handle so the in-view league switcher and
-  // the Teams-tab owner default survive tab navigation. Without this, clicking
-  // any tab drops ?username= and the switcher disappears mid-browse, regardless
-  // of whether the user arrived from the public tool or their dashboard.
-  const tabHref = (tabId: TabId): string => {
-    const qs = new URLSearchParams({ tab: tabId });
-    if (searchedUsername) qs.set("username", searchedUsername);
-    return `/leagues/${sleeperLeagueId}?${qs.toString()}`;
-  };
 
   // Header action data: the searched user's OTHER leagues (for the in-view
   // switcher, fetched only when ?username= is present) plus the admin /
@@ -321,30 +312,11 @@ export default async function LeagueDeepViewPage({
         </div>
       </header>
 
-      <nav aria-label="League sections" className="border-b border-line">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <ul className="flex flex-wrap gap-1">
-            {TABS.map((t) => {
-              const isActive = t.id === activeTab;
-              return (
-                <li key={t.id}>
-                  <Link
-                    href={tabHref(t.id)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={`inline-block min-h-11 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                      isActive
-                        ? "border-brand-purple text-ink"
-                        : "border-transparent text-ink-muted hover:text-ink"
-                    }`}
-                  >
-                    {t.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </nav>
+      <LeagueTabs
+        sleeperLeagueId={sleeperLeagueId}
+        activeTab={activeTab}
+        searchedUsername={searchedUsername}
+      />
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {activeTab === "overview" && (
@@ -371,14 +343,6 @@ export default async function LeagueDeepViewPage({
             focusedRosterId={focusedRosterId}
             leagueSeason={league.season != null ? String(league.season) : null}
             leagueStatus={league.status ?? null}
-          />
-        )}
-        {activeTab === "transactions" && (
-          <TransactionsPanel
-            leagueRowId={league.id}
-            sleeperLeagueId={sleeperLeagueId}
-            context={context.coverage === "none" ? null : (context as LeagueContext)}
-            searchedUsername={searchedUsername}
           />
         )}
       </div>
@@ -497,71 +461,6 @@ async function TeamsPanel({
         searchedUsername={searchedUsername}
         focusedRosterId={focusedRosterId}
       />
-    </section>
-  );
-}
-
-async function TransactionsPanel({
-  leagueRowId,
-  sleeperLeagueId,
-  context,
-  searchedUsername,
-}: {
-  leagueRowId: string;
-  sleeperLeagueId: string;
-  context: LeagueContext | null;
-  searchedUsername: string | null;
-}) {
-  const supabase = await createClient();
-  const { rows, total } = await loadLeagueTransactions(supabase, leagueRowId, context, {
-    limit: 10,
-  });
-
-  // Forward the searched handle so the transactions feed keeps the in-view
-  // switcher and the "back to league" context the user arrived with.
-  const allTxHref = (() => {
-    const qs = new URLSearchParams();
-    if (searchedUsername) qs.set("username", searchedUsername);
-    const s = qs.toString();
-    return `/leagues/${sleeperLeagueId}/transactions${s ? `?${s}` : ""}`;
-  })();
-
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-card border border-line bg-surface p-8 text-center">
-        <h2 className="text-xl font-semibold tracking-tight">Transactions</h2>
-        <p className="mx-auto mt-3 max-w-md text-sm text-ink-muted">
-          No transactions synced yet. Try refreshing the page in a moment.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <section aria-labelledby="tx-heading" className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h2 id="tx-heading" className="text-2xl font-semibold tracking-tight">
-            Recent transactions
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            Showing the latest {rows.length} of {total}.
-          </p>
-        </div>
-        <Link
-          href={allTxHref}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline-2 focus-visible:outline-brand-cyan"
-        >
-          View all transactions →
-        </Link>
-      </div>
-      <ol className="space-y-3" role="list" aria-label="Recent league transactions">
-        {rows.map((row) => (
-          <li key={row.sleeperTransactionId} id={`tx-${row.sleeperTransactionId}`}>
-            <TransactionRow data={row} sleeperLeagueId={sleeperLeagueId} />
-          </li>
-        ))}
-      </ol>
     </section>
   );
 }

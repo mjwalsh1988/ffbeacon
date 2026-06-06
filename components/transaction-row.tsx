@@ -1,5 +1,7 @@
+import { Plus, Minus, ArrowRight, Coins, Layers } from "lucide-react";
 import type { TradeAnalysis, TradeSide } from "@/lib/trade-analyzer";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
+import { PlayerHeadshot } from "@/components/player-headshot";
 import { CopyLinkButton } from "@/components/copy-link-button";
 
 export type TransactionRowData = {
@@ -214,18 +216,21 @@ function TradeSideCard({ side, isWinner }: { side: TradeSide; isWinner: boolean 
         {side.players.map((p) => (
           <li
             key={`${side.rosterId}-p-${p.sleeperId}`}
-            className="flex items-baseline justify-between gap-2 text-sm"
+            className="flex items-center justify-between gap-2 text-sm"
             aria-label={`${p.name}${p.position ? ` ${p.position}` : ""}${p.team ? ` ${p.team}` : ""}, ${p.noValue ? "value not available" : `value ${formatValue(p.value)}`}`}
           >
-            <div className="min-w-0">
-              <span className="truncate text-ink">{p.name}</span>
-              {p.position && (
-                <span className="ml-1 text-xs text-ink-muted">{p.position}</span>
-              )}
-              {p.team && <span className="ml-1 text-xs text-ink-muted">· {p.team}</span>}
+            <div className="flex min-w-0 items-center gap-2">
+              <PlayerHeadshot
+                sleeperId={p.sleeperId}
+                position={p.position ?? ""}
+                name={p.name}
+                size={20}
+              />
+              <span className="min-w-0 truncate text-ink">{p.name}</span>
+              <PlayerMetaTag position={p.position} team={p.team} />
             </div>
             <span
-              className={`font-mono text-sm tabular-nums ${
+              className={`shrink-0 font-mono text-sm tabular-nums ${
                 p.noValue ? "text-ink-muted italic" : "text-ink-muted"
               }`}
             >
@@ -243,17 +248,18 @@ function TradeSideCard({ side, isWinner }: { side: TradeSide; isWinner: boolean 
           return (
             <li
               key={`${side.rosterId}-pick-${i}`}
-              className="flex items-baseline justify-between gap-2 text-sm"
+              className="flex items-center justify-between gap-2 text-sm"
               aria-label={`${slotAria}, ${p.noValue ? "value not available" : `value ${formatValue(p.value)}`}`}
             >
-              <div className="min-w-0">
-                <span className="text-ink">{labelText}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <PickToken />
+                <span className="truncate text-ink">{labelText}</span>
                 {!p.pickLabel && (
-                  <span className="ml-1 text-xs text-ink-muted">{p.pickPosition}</span>
+                  <span className="shrink-0 text-xs text-ink-muted">{p.pickPosition}</span>
                 )}
               </div>
               <span
-                className={`font-mono text-sm tabular-nums ${
+                className={`shrink-0 font-mono text-sm tabular-nums ${
                   p.noValue ? "text-ink-muted italic" : "text-ink-muted"
                 }`}
               >
@@ -270,6 +276,13 @@ function TradeSideCard({ side, isWinner }: { side: TradeSide; isWinner: boolean 
   );
 }
 
+type PlayerMeta = { name: string; position: string | null; team: string | null };
+type RosterIdentity = {
+  teamName: string;
+  ownerHandle: string | null;
+  avatarId: string | null;
+};
+
 function MovesBody({
   adds,
   drops,
@@ -282,14 +295,8 @@ function MovesBody({
   drops: Record<string, number> | null;
   draftPicks: unknown[];
   waiverBudget: Array<{ sender: number; receiver: number; amount: number }>;
-  playerLookup: Record<
-    string,
-    { name: string; position: string | null; team: string | null }
-  >;
-  rosterIdentities: Record<
-    number,
-    { teamName: string; ownerHandle: string | null; avatarId: string | null }
-  >;
+  playerLookup: Record<string, PlayerMeta>;
+  rosterIdentities: Record<number, RosterIdentity>;
 }) {
   const addEntries = adds ? Object.entries(adds) : [];
   const dropEntries = drops ? Object.entries(drops) : [];
@@ -307,77 +314,80 @@ function MovesBody({
     );
   }
 
+  // Group adds and drops under the roster that made the move. The common
+  // waiver / free-agent shape is one manager adding a player and dropping
+  // another, so showing the team once with clearly-labelled Added / Dropped
+  // columns reads far cleaner than repeating "via Team" on every line.
+  const byRoster = new Map<number, { added: string[]; dropped: string[] }>();
+  const ensure = (rid: number) => {
+    let group = byRoster.get(rid);
+    if (!group) {
+      group = { added: [], dropped: [] };
+      byRoster.set(rid, group);
+    }
+    return group;
+  };
+  for (const [pid, rid] of addEntries) ensure(rid).added.push(pid);
+  for (const [pid, rid] of dropEntries) ensure(rid).dropped.push(pid);
+  const rosterGroups = Array.from(byRoster.entries());
+
   return (
-    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      {addEntries.length > 0 && (
-        <section aria-labelledby="adds-heading">
-          <h3
-            id="adds-heading"
-            className="text-xs font-semibold uppercase tracking-wider text-brand-cyan"
-          >
-            Acquired
-          </h3>
-          <ul className="mt-2 space-y-1.5" role="list">
-            {addEntries.map(([pid, rid]) => (
-              <PlayerLine
-                key={`add-${pid}`}
-                pid={pid}
-                rosterId={rid}
-                lookup={playerLookup}
-                rosterIdentities={rosterIdentities}
-              />
-            ))}
-          </ul>
-        </section>
-      )}
-      {dropEntries.length > 0 && (
-        <section aria-labelledby="drops-heading">
-          <h3
-            id="drops-heading"
-            className="text-xs font-semibold uppercase tracking-wider text-signal-warning"
-          >
-            Released
-          </h3>
-          <ul className="mt-2 space-y-1.5" role="list">
-            {dropEntries.map(([pid, rid]) => (
-              <PlayerLine
-                key={`drop-${pid}`}
-                pid={pid}
-                rosterId={rid}
-                lookup={playerLookup}
-                rosterIdentities={rosterIdentities}
-              />
-            ))}
-          </ul>
-        </section>
-      )}
+    <div className="mt-4 space-y-3">
+      {rosterGroups.map(([rid, group]) => (
+        <RosterMoveCard
+          key={`roster-${rid}`}
+          rosterId={rid}
+          roster={rosterIdentities[rid]}
+          added={group.added}
+          dropped={group.dropped}
+          lookup={playerLookup}
+        />
+      ))}
+
       {waiverBudget.length > 0 && (
-        <section aria-labelledby="faab-heading" className="sm:col-span-2">
+        <section
+          aria-labelledby="faab-heading"
+          className="rounded-card border border-line bg-base/30 p-3 sm:p-4"
+        >
           <h3
             id="faab-heading"
-            className="text-xs font-semibold uppercase tracking-wider text-ink-muted"
+            className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted"
           >
+            <Coins aria-hidden="true" className="h-3.5 w-3.5 text-signal-positive" />
             FAAB transfer
           </h3>
-          <ul className="mt-2 space-y-1" role="list">
+          <ul className="mt-2 space-y-1.5" role="list">
             {waiverBudget.map((b, i) => (
-              <li key={`faab-${i}`} className="text-sm text-ink">
-                {labelFor(b.sender, rosterIdentities)} → {labelFor(b.receiver, rosterIdentities)} ·{" "}
-                <span className="font-mono text-ink-muted">${b.amount}</span>
+              <li
+                key={`faab-${i}`}
+                className="flex flex-wrap items-center gap-1.5 text-sm"
+                aria-label={`${labelFor(b.sender, rosterIdentities)} sent $${b.amount} FAAB to ${labelFor(b.receiver, rosterIdentities)}`}
+              >
+                <span className="text-ink">{labelFor(b.sender, rosterIdentities)}</span>
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
+                <span className="text-ink">{labelFor(b.receiver, rosterIdentities)}</span>
+                <span className="ml-0.5 rounded-full border border-signal-positive/30 bg-signal-positive/10 px-2 py-0.5 font-mono text-xs font-semibold text-signal-positive">
+                  ${b.amount}
+                </span>
               </li>
             ))}
           </ul>
         </section>
       )}
+
       {draftPicks.length > 0 && (
-        <section aria-labelledby="picks-heading" className="sm:col-span-2">
+        <section
+          aria-labelledby="picks-heading"
+          className="rounded-card border border-line bg-base/30 p-3 sm:p-4"
+        >
           <h3
             id="picks-heading"
-            className="text-xs font-semibold uppercase tracking-wider text-ink-muted"
+            className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted"
           >
+            <Layers aria-hidden="true" className="h-3.5 w-3.5 text-brand-purple" />
             Draft picks moved
           </h3>
-          <ul className="mt-2 space-y-1" role="list">
+          <ul className="mt-2 flex flex-wrap gap-1.5" role="list">
             {draftPicks.map((raw, i) => {
               const p = (raw ?? {}) as Record<string, unknown>;
               const season = String(p.season ?? "?");
@@ -387,7 +397,10 @@ function MovesBody({
                   ? p.pick_label
                   : null;
               return (
-                <li key={`pick-${i}`} className="text-sm text-ink">
+                <li
+                  key={`pick-${i}`}
+                  className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-xs font-medium text-ink"
+                >
                   {label ? `${season} R${label}` : `${season} ${ordinal(round)} round`}
                 </li>
               );
@@ -399,46 +412,172 @@ function MovesBody({
   );
 }
 
-function PlayerLine({
-  pid,
+function RosterMoveCard({
   rosterId,
+  roster,
+  added,
+  dropped,
   lookup,
-  rosterIdentities,
+}: {
+  rosterId: number;
+  roster: RosterIdentity | undefined;
+  added: string[];
+  dropped: string[];
+  lookup: Record<string, PlayerMeta>;
+}) {
+  const teamName = roster?.teamName ?? `Team ${rosterId}`;
+  const bothSides = added.length > 0 && dropped.length > 0;
+  return (
+    <section
+      aria-label={`Roster move for ${teamName}`}
+      className="rounded-card border border-line bg-base/30 p-3 sm:p-4"
+    >
+      <header className="flex items-center gap-2 border-b border-line pb-2.5">
+        <SleeperAvatar
+          avatarId={roster?.avatarId ?? null}
+          initial={teamName.charAt(0)}
+          title={teamName}
+          size={24}
+        />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">{teamName}</p>
+          {roster?.ownerHandle && (
+            <p className="truncate text-[11px] text-ink-subtle">
+              @{roster.ownerHandle}
+            </p>
+          )}
+        </div>
+      </header>
+      <div
+        className={`mt-3 grid gap-x-6 gap-y-3 ${
+          bothSides ? "sm:grid-cols-2" : "sm:grid-cols-1"
+        }`}
+      >
+        {added.length > 0 && (
+          <MoveGroup variant="added" players={added} lookup={lookup} />
+        )}
+        {dropped.length > 0 && (
+          <MoveGroup variant="dropped" players={dropped} lookup={lookup} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MoveGroup({
+  variant,
+  players,
+  lookup,
+}: {
+  variant: "added" | "dropped";
+  players: string[];
+  lookup: Record<string, PlayerMeta>;
+}) {
+  const isAdd = variant === "added";
+  return (
+    <div>
+      <h4
+        className={`text-[11px] font-semibold uppercase tracking-wider ${
+          isAdd ? "text-brand-cyan" : "text-signal-warning"
+        }`}
+      >
+        {isAdd ? "Added" : "Dropped"}{" "}
+        <span className="text-ink-subtle">({players.length})</span>
+      </h4>
+      <ul className="mt-2 space-y-1.5" role="list">
+        {players.map((pid) => (
+          <MovePlayerLine
+            key={`${variant}-${pid}`}
+            pid={pid}
+            lookup={lookup}
+            variant={variant}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MovePlayerLine({
+  pid,
+  lookup,
+  variant,
 }: {
   pid: string;
-  rosterId: number;
-  lookup: Record<string, { name: string; position: string | null; team: string | null }>;
-  rosterIdentities: Record<
-    number,
-    { teamName: string; ownerHandle: string | null; avatarId: string | null }
-  >;
+  lookup: Record<string, PlayerMeta>;
+  variant: "added" | "dropped";
 }) {
   const meta = lookup[pid] ?? { name: pid, position: null, team: null };
-  const roster = rosterIdentities[rosterId];
+  const isAdd = variant === "added";
+  const Icon = isAdd ? Plus : Minus;
   return (
-    <li className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-      <div className="min-w-0">
-        <span className="truncate text-ink">{meta.name}</span>
-        {meta.position && (
-          <span className="ml-1 text-xs text-ink-muted">{meta.position}</span>
-        )}
-        {meta.team && <span className="ml-1 text-xs text-ink-muted">· {meta.team}</span>}
-      </div>
-      {roster && (
-        <span
-          className="inline-flex items-center gap-1.5 text-xs text-ink-muted"
-          aria-label={`via ${roster.teamName}`}
-        >
-          <SleeperAvatar
-            avatarId={roster.avatarId}
-            initial={roster.teamName.charAt(0)}
-            title={roster.teamName}
-            size={20}
-          />
-          <span className="truncate">{roster.teamName}</span>
-        </span>
-      )}
+    <li
+      className="flex items-center gap-2 text-sm"
+      aria-label={`${isAdd ? "Added" : "Dropped"} ${meta.name}${meta.position ? `, ${meta.position}` : ""}${meta.team ? `, ${meta.team}` : ""}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+          isAdd
+            ? "bg-brand-cyan/15 text-brand-cyan"
+            : "bg-signal-warning/15 text-signal-warning"
+        }`}
+      >
+        <Icon className="h-3 w-3" strokeWidth={3} />
+      </span>
+      <PlayerHeadshot
+        sleeperId={pid}
+        position={meta.position ?? ""}
+        name={meta.name}
+        size={20}
+      />
+      {/* Name is content-width (not flex-1) so the meta tag sits inline right
+          after it on every breakpoint. min-w-0 + truncate lets a long name
+          ellipsis instead of shoving the tag off the row. */}
+      <span className="min-w-0 truncate text-ink">{meta.name}</span>
+      <PlayerMetaTag position={meta.position} team={meta.team} />
     </li>
+  );
+}
+
+/**
+ * Condensed position + NFL team tag (e.g. "QB · KC") in one small rounded
+ * pill. Shared by the trade side cards and the waiver / free-agent move
+ * cards so player meta reads identically everywhere. The dot separator is a
+ * styled element, not a character, so it stays crisp at any size.
+ */
+function PlayerMetaTag({
+  position,
+  team,
+}: {
+  position: string | null;
+  team: string | null;
+}) {
+  if (!position && !team) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-1.5 py-0.5 text-[10px] font-medium leading-none">
+      {position && <span className="uppercase text-ink-muted">{position}</span>}
+      {position && team && (
+        <span aria-hidden="true" className="h-0.5 w-0.5 rounded-full bg-ink-subtle" />
+      )}
+      {team && <span className="text-ink-subtle">{team}</span>}
+    </span>
+  );
+}
+
+/**
+ * Round token rendered in front of draft picks in the trade side cards so
+ * pick rows line up with the player rows (which lead with a headshot of the
+ * same size). Uses the same purple Layers glyph as the "Draft picks" heading.
+ */
+function PickToken() {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line bg-base text-brand-purple"
+    >
+      <Layers className="h-3 w-3" />
+    </span>
   );
 }
 

@@ -11,6 +11,7 @@ import { TransactionRow } from "@/components/transaction-row";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
+import { LeagueTabs } from "@/components/league-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +165,12 @@ export default async function LeagueTransactionsPage({
           </p>
         </div>
       </header>
+
+      <LeagueTabs
+        sleeperLeagueId={sleeperLeagueId}
+        activeTab="transactions"
+        searchedUsername={searchedUsername}
+      />
 
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <TransactionFilters

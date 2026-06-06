@@ -184,7 +184,7 @@ export async function SiteHeader() {
               <Link
                 href="/my-beacon"
                 aria-label="Go to your My Beacon dashboard"
-                className="hidden md:inline-flex h-9 w-9 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="hidden md:inline-flex h-9 w-9 aspect-square shrink-0 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <UserIcon />
               </Link>
@@ -212,7 +212,7 @@ export async function SiteHeader() {
             <Link
               href="/my-beacon"
               aria-label="Go to your My Beacon dashboard"
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="md:hidden inline-flex h-9 w-9 aspect-square shrink-0 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               <UserIcon />
             </Link>
