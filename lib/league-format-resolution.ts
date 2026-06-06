@@ -1,12 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { deriveLeagueFormat, mapToFormatSlug, type DerivedFormat } from "@/lib/sleeper-to-format";
-import { pickFallbackFormat, type FormatLike } from "@/lib/format-fallback";
+import type { FormatLike } from "@/lib/format-fallback";
 import {
   getActiveFormats,
   getAvailableSources,
   sourceSupportsFormat,
-  type ActiveFormatRow,
   type SourceRegistryRow,
 } from "@/lib/source";
 
@@ -26,11 +25,14 @@ import {
  * Resolution chain (each step strictly tighter than the next):
  *   1. Derive ideal format from Sleeper league settings (deriveLeagueFormat)
  *   2. If the user's chosen source supports the ideal format → use it
- *   3. Otherwise, fall back via pickFallbackFormat() to the source's
- *      closest supported format (same league_type → same scoring_type →
- *      same is_superflex → lowest display_order)
- *   4. If the source supports nothing that matches at all, return
- *      `coverage: 'none'` and the UI renders an empty state
+ *   3. Otherwise, fall back via pickLeagueTypeSafeFormat() to the source's
+ *      closest supported format WITHIN THE SAME league_type (dynasty vs
+ *      redraft is a hard wall — never cross it), then same scoring_type →
+ *      same is_superflex → lowest display_order
+ *   4. If the source supports nothing in the league's own league_type,
+ *      return `coverage: 'none'` and the UI renders an empty state. We
+ *      deliberately do NOT cross to the other league_type: a redraft value
+ *      is meaningless for a dynasty roster and vice versa.
  *
  * Draft pick values are a separate axis. FantasyCalc doesn't publish them,
  * so we ALWAYS look them up via the highest-priority source whose
@@ -128,9 +130,15 @@ export async function resolveLeagueContext(
   }
 
   // No mapping at all — Sleeper league doesn't fit any of our active formats
-  // (e.g. half-ppr dynasty). Try to give the user *something* coherent.
+  // (e.g. half-ppr dynasty). Try to give the user *something* coherent, but
+  // stay inside the league's own league_type: a dynasty league must fall to a
+  // dynasty format, never a redraft one.
   if (!idealSlug) {
-    const fallbackFormat = pickAnyFormatForSource(allFormats, resolvedSource);
+    const fallbackFormat = pickLeagueTypeSafeFormat(
+      allFormats,
+      derived,
+      resolvedSource.supported_format_slugs,
+    );
     if (!fallbackFormat) {
       return {
         formatSlug: null,
@@ -209,11 +217,12 @@ export async function resolveLeagueContext(
     };
   }
 
-  // Source doesn't carry the ideal format → fall through to the closest
-  // it does support.
-  const replacement = pickFallbackFormat(
+  // Source doesn't carry the ideal format → fall through to the closest it
+  // does support, locked to the league's own league_type (dynasty stays
+  // dynasty, redraft stays redraft).
+  const replacement = pickLeagueTypeSafeFormat(
     allFormats,
-    idealSlug,
+    derived,
     resolvedSource.supported_format_slugs,
   );
   if (!replacement) {
@@ -280,16 +289,51 @@ export function pickSourceForDraftPicks(
   return registry.find((r) => r.data_type.includes("draft_pick_values")) ?? null;
 }
 
-/** Last-resort format picker when the league has no canonical mapping.
- * Same chain as pickFallbackFormat, but seeded with the source's first
- * supported format as the "current" so we land somewhere sensible. */
-function pickAnyFormatForSource(
-  allFormats: ActiveFormatRow[],
-  source: SourceRegistryRow,
+/**
+ * Pick the closest format a source supports for a league, with league_type
+ * (dynasty vs redraft) as a HARD constraint. This is the league-view-specific
+ * sibling of pickFallbackFormat: inside a league view, a redraft value must
+ * never back a dynasty roster (or vice versa), so we refuse to cross that line
+ * even when it would leave us with nothing.
+ *
+ * Within the league's own league_type the preference chain is the usual one:
+ * same scoring_type → same is_superflex → lowest display_order. Returns null
+ * (→ coverage 'none') when the source publishes no format in this league_type.
+ */
+function pickLeagueTypeSafeFormat(
+  allFormats: FormatLike[],
+  derived: DerivedFormat,
+  supportedSlugs: string[] | null,
 ): FormatLike | null {
-  const supported = source.supported_format_slugs;
-  if (supported === null) return allFormats[0] ?? null;
-  return allFormats.find((f) => supported.includes(f.slug)) ?? null;
+  const eligible =
+    supportedSlugs === null
+      ? allFormats
+      : allFormats.filter((f) => supportedSlugs.includes(f.slug));
+
+  // HARD wall: only formats in the league's own league_type are candidates.
+  const sameLeague = eligible.filter(
+    (f) => f.league_type === derived.league_type,
+  );
+  if (sameLeague.length === 0) return null;
+
+  const sameScoring = sameLeague.filter(
+    (f) => f.scoring_type === derived.scoring_type,
+  );
+  const scoringPool = sameScoring.length > 0 ? sameScoring : sameLeague;
+
+  const sameSflex = scoringPool.filter(
+    (f) => f.is_superflex === derived.is_superflex,
+  );
+  const sflexPool = sameSflex.length > 0 ? sameSflex : scoringPool;
+
+  return [...sflexPool].sort(byDisplayOrder)[0] ?? null;
+}
+
+function byDisplayOrder(a: FormatLike, b: FormatLike): number {
+  const ao = a.display_order ?? Number.MAX_SAFE_INTEGER;
+  const bo = b.display_order ?? Number.MAX_SAFE_INTEGER;
+  if (ao !== bo) return ao - bo;
+  return a.slug.localeCompare(b.slug);
 }
 
 async function loadFormatConfigId(
