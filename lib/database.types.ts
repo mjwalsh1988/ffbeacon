@@ -493,14 +493,14 @@ export type Database = {
           last_pulsed_at: string | null
           metadata: Json
           name: string
+          pulse_error: string | null
+          pulse_status: string
           roster_positions: Json
           scoring_settings: Json
           season: number
           sleeper_league_id: string
           sport: string
           status: string | null
-          pulse_error: string | null
-          pulse_status: string
           total_rosters: number | null
           updated_at: string
         }
@@ -511,14 +511,14 @@ export type Database = {
           last_pulsed_at?: string | null
           metadata?: Json
           name: string
+          pulse_error?: string | null
+          pulse_status?: string
           roster_positions?: Json
           scoring_settings?: Json
           season: number
           sleeper_league_id: string
           sport?: string
           status?: string | null
-          pulse_error?: string | null
-          pulse_status?: string
           total_rosters?: number | null
           updated_at?: string
         }
@@ -529,14 +529,14 @@ export type Database = {
           last_pulsed_at?: string | null
           metadata?: Json
           name?: string
+          pulse_error?: string | null
+          pulse_status?: string
           roster_positions?: Json
           scoring_settings?: Json
           season?: number
           sleeper_league_id?: string
           sport?: string
           status?: string | null
-          pulse_error?: string | null
-          pulse_status?: string
           total_rosters?: number | null
           updated_at?: string
         }
@@ -602,103 +602,307 @@ export type Database = {
       }
       player_stats: {
         Row: {
-          air_yards: number | null
-          carries: number | null
+          blk_kick: number
+          bonus_pass_cmp_25: number
+          bonus_pass_yd_300: number
+          bonus_pass_yd_400: number
+          bonus_rec_te: number
+          bonus_rec_wr: number
+          bonus_rec_yd_100: number
+          bonus_rec_yd_200: number
+          bonus_rush_yd_100: number
+          bonus_rush_yd_200: number
+          def_td: number
+          ff: number
+          fga: number
+          fgm: number
+          fgm_0_19: number
+          fgm_20_29: number
+          fgm_30_39: number
+          fgm_40_49: number
+          fgm_50p: number
+          fgmiss: number
+          fum: number
           fum_lost: number
+          fum_rec: number
+          fum_rec_td: number
           game_id: string | null
+          gp: number
+          gs: number
           id: string
           ingested_at: string
+          interceptions: number
           metadata: Json | null
+          off_snp: number | null
           opponent: string | null
           pass_2pt: number
+          pass_air_yd: number
+          pass_att: number
+          pass_cmp: number
+          pass_cmp_40p: number
+          pass_fd: number
+          pass_inc: number
           pass_int: number
+          pass_int_td: number
+          pass_lng: number
+          pass_rz_att: number
+          pass_sack: number
           pass_td: number
+          pass_td_40p: number
+          pass_td_lng: number
           pass_yd: number
           player_id: string
-          pts_half_ppr: number
-          pts_ppr: number
-          pts_standard: number
+          pts_allow: number | null
+          pts_allow_0: number
+          pts_allow_1_6: number
+          pts_allow_14_20: number
+          pts_allow_21_27: number
+          pts_allow_28_34: number
+          pts_allow_35p: number
+          pts_allow_7_13: number
           rec: number
+          rec_0_4: number
+          rec_10_19: number
+          rec_20_29: number
           rec_2pt: number
+          rec_30_39: number
+          rec_40p: number
+          rec_5_9: number
+          rec_air_yd: number | null
+          rec_drop: number
+          rec_fd: number
+          rec_lng: number
           rec_td: number
+          rec_td_40p: number
+          rec_td_lng: number
+          rec_tgt: number | null
+          rec_yar: number
           rec_yd: number
           rush_2pt: number
+          rush_att: number
+          rush_btkl: number
+          rush_fd: number
+          rush_lng: number
+          rush_rz_att: number
           rush_td: number
+          rush_td_lng: number
+          rush_yac: number
           rush_yd: number
+          sack: number
+          safety: number
           season: number
           season_type: string
-          snap_count: number | null
           snap_pct: number | null
           target_share: number | null
-          targets: number | null
+          tm_off_snp: number | null
           updated_at: string
           week: number
+          xpa: number
+          xpm: number
+          xpmiss: number
+          yds_allow: number | null
         }
         Insert: {
-          air_yards?: number | null
-          carries?: number | null
+          blk_kick?: number
+          bonus_pass_cmp_25?: number
+          bonus_pass_yd_300?: number
+          bonus_pass_yd_400?: number
+          bonus_rec_te?: number
+          bonus_rec_wr?: number
+          bonus_rec_yd_100?: number
+          bonus_rec_yd_200?: number
+          bonus_rush_yd_100?: number
+          bonus_rush_yd_200?: number
+          def_td?: number
+          ff?: number
+          fga?: number
+          fgm?: number
+          fgm_0_19?: number
+          fgm_20_29?: number
+          fgm_30_39?: number
+          fgm_40_49?: number
+          fgm_50p?: number
+          fgmiss?: number
+          fum?: number
           fum_lost?: number
+          fum_rec?: number
+          fum_rec_td?: number
           game_id?: string | null
+          gp?: number
+          gs?: number
           id?: string
           ingested_at?: string
+          interceptions?: number
           metadata?: Json | null
+          off_snp?: number | null
           opponent?: string | null
           pass_2pt?: number
+          pass_air_yd?: number
+          pass_att?: number
+          pass_cmp?: number
+          pass_cmp_40p?: number
+          pass_fd?: number
+          pass_inc?: number
           pass_int?: number
+          pass_int_td?: number
+          pass_lng?: number
+          pass_rz_att?: number
+          pass_sack?: number
           pass_td?: number
+          pass_td_40p?: number
+          pass_td_lng?: number
           pass_yd?: number
           player_id: string
-          pts_half_ppr?: number
-          pts_ppr?: number
-          pts_standard?: number
+          pts_allow?: number | null
+          pts_allow_0?: number
+          pts_allow_1_6?: number
+          pts_allow_14_20?: number
+          pts_allow_21_27?: number
+          pts_allow_28_34?: number
+          pts_allow_35p?: number
+          pts_allow_7_13?: number
           rec?: number
+          rec_0_4?: number
+          rec_10_19?: number
+          rec_20_29?: number
           rec_2pt?: number
+          rec_30_39?: number
+          rec_40p?: number
+          rec_5_9?: number
+          rec_air_yd?: number | null
+          rec_drop?: number
+          rec_fd?: number
+          rec_lng?: number
           rec_td?: number
+          rec_td_40p?: number
+          rec_td_lng?: number
+          rec_tgt?: number | null
+          rec_yar?: number
           rec_yd?: number
           rush_2pt?: number
+          rush_att?: number
+          rush_btkl?: number
+          rush_fd?: number
+          rush_lng?: number
+          rush_rz_att?: number
           rush_td?: number
+          rush_td_lng?: number
+          rush_yac?: number
           rush_yd?: number
+          sack?: number
+          safety?: number
           season: number
           season_type?: string
-          snap_count?: number | null
           snap_pct?: number | null
           target_share?: number | null
-          targets?: number | null
+          tm_off_snp?: number | null
           updated_at?: string
           week: number
+          xpa?: number
+          xpm?: number
+          xpmiss?: number
+          yds_allow?: number | null
         }
         Update: {
-          air_yards?: number | null
-          carries?: number | null
+          blk_kick?: number
+          bonus_pass_cmp_25?: number
+          bonus_pass_yd_300?: number
+          bonus_pass_yd_400?: number
+          bonus_rec_te?: number
+          bonus_rec_wr?: number
+          bonus_rec_yd_100?: number
+          bonus_rec_yd_200?: number
+          bonus_rush_yd_100?: number
+          bonus_rush_yd_200?: number
+          def_td?: number
+          ff?: number
+          fga?: number
+          fgm?: number
+          fgm_0_19?: number
+          fgm_20_29?: number
+          fgm_30_39?: number
+          fgm_40_49?: number
+          fgm_50p?: number
+          fgmiss?: number
+          fum?: number
           fum_lost?: number
+          fum_rec?: number
+          fum_rec_td?: number
           game_id?: string | null
+          gp?: number
+          gs?: number
           id?: string
           ingested_at?: string
+          interceptions?: number
           metadata?: Json | null
+          off_snp?: number | null
           opponent?: string | null
           pass_2pt?: number
+          pass_air_yd?: number
+          pass_att?: number
+          pass_cmp?: number
+          pass_cmp_40p?: number
+          pass_fd?: number
+          pass_inc?: number
           pass_int?: number
+          pass_int_td?: number
+          pass_lng?: number
+          pass_rz_att?: number
+          pass_sack?: number
           pass_td?: number
+          pass_td_40p?: number
+          pass_td_lng?: number
           pass_yd?: number
           player_id?: string
-          pts_half_ppr?: number
-          pts_ppr?: number
-          pts_standard?: number
+          pts_allow?: number | null
+          pts_allow_0?: number
+          pts_allow_1_6?: number
+          pts_allow_14_20?: number
+          pts_allow_21_27?: number
+          pts_allow_28_34?: number
+          pts_allow_35p?: number
+          pts_allow_7_13?: number
           rec?: number
+          rec_0_4?: number
+          rec_10_19?: number
+          rec_20_29?: number
           rec_2pt?: number
+          rec_30_39?: number
+          rec_40p?: number
+          rec_5_9?: number
+          rec_air_yd?: number | null
+          rec_drop?: number
+          rec_fd?: number
+          rec_lng?: number
           rec_td?: number
+          rec_td_40p?: number
+          rec_td_lng?: number
+          rec_tgt?: number | null
+          rec_yar?: number
           rec_yd?: number
           rush_2pt?: number
+          rush_att?: number
+          rush_btkl?: number
+          rush_fd?: number
+          rush_lng?: number
+          rush_rz_att?: number
           rush_td?: number
+          rush_td_lng?: number
+          rush_yac?: number
           rush_yd?: number
+          sack?: number
+          safety?: number
           season?: number
           season_type?: string
-          snap_count?: number | null
           snap_pct?: number | null
           target_share?: number | null
-          targets?: number | null
+          tm_off_snp?: number | null
           updated_at?: string
           week?: number
+          xpa?: number
+          xpm?: number
+          xpmiss?: number
+          yds_allow?: number | null
         }
         Relationships: [
           {
