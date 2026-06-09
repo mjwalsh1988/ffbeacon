@@ -148,7 +148,9 @@
       "Bash(git --no-pager diff --cached -- CLAUDE.md .claude/settings.local.json)",
       "Bash(git --no-pager log -1 --format=\"%B\")",
       "Bash(rm .git/COMMIT_EDITMSG_FIX.txt)",
-      "Bash(git --no-pager log -1 --format=\"%s\")"
+      "Bash(git --no-pager log -1 --format=\"%s\")",
+      "mcp__supabase__get_logs",
+      "PowerShell(git add *)"
     ]
   },
   "enabledMcpjsonServers": [

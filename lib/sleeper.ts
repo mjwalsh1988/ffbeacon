@@ -161,6 +161,60 @@ export async function getSleeperDraft(draftId: string): Promise<SleeperDraft | n
   return safeFetch<SleeperDraft>(`${BASE}/draft/${draftId}`);
 }
 
+export type SleeperNflState = {
+  week: number;
+  leg: number;
+  season: string;
+  season_type: string; // "pre" | "regular" | "post" | "off"
+  league_season: string;
+  previous_season: string;
+  display_week: number;
+  season_has_scores?: boolean;
+  season_start_date?: string | null;
+};
+
+/**
+ * Current NFL state: which season, phase, and week Sleeper considers live.
+ * `season_type` is "off" between the Super Bowl and the next preseason, which
+ * is the signal the stats sync uses to skip work entirely. Null on failure.
+ */
+export async function getNflState(): Promise<SleeperNflState | null> {
+  return safeFetch<SleeperNflState>(`${BASE}/state/nfl`);
+}
+
+export type SleeperSeasonType = "regular" | "post" | "pre";
+
+export type SleeperStatEntry = {
+  sleeperId: string;
+  payload: Record<string, number>;
+};
+
+/**
+ * Weekly player stats for one (seasonType, season, week).
+ *
+ * Sleeper's stats endpoint is undocumented but stable. It returns an object
+ * keyed by Sleeper player_id whose values are the FLAT stats object (there is
+ * no `.stats` wrapper, and no `opponent` / `game_id` / `team` fields). We
+ * normalize to an array so callers don't depend on the keyed-object shape.
+ * Returns [] on any failure, matching this lib's empty-on-failure convention.
+ */
+export async function getWeeklyStats(
+  seasonType: SleeperSeasonType,
+  season: number,
+  week: number,
+): Promise<SleeperStatEntry[]> {
+  const raw = await safeFetch<Record<string, Record<string, number>>>(
+    `${BASE}/stats/nfl/${seasonType}/${season}/${week}`,
+  );
+  if (!raw || typeof raw !== "object") return [];
+  const out: SleeperStatEntry[] = [];
+  for (const [sleeperId, payload] of Object.entries(raw)) {
+    if (!sleeperId || !payload || typeof payload !== "object") continue;
+    out.push({ sleeperId, payload: payload as Record<string, number> });
+  }
+  return out;
+}
+
 export function currentNflSeason(): string {
   const now = new Date();
   // NFL season "year" rolls over March-ish. If we're past March, this year is the season.

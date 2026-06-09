@@ -18,6 +18,7 @@
     "calculate:power-rankings": "tsx --env-file=.env.local scripts/calculate-league-power-rankings.ts",
     "sync:ktc:full": "npm run sync:ktc && npm run seed:rankings && npm run calculate:trends",
     "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run seed:rankings && npm run calculate:trends",
+    "backfill:sleeper-stats": "tsx --env-file=.env.local scripts/backfill-sleeper-stats.ts",
     "backfill:ktc": "tsx --env-file=.env.local scripts/backfill-ktc-history.ts",
     "backfill:ktc:community": "tsx --env-file=.env.local scripts/backfill-ktc-community-archive.ts",
     "backfill:all": "npm run backfill:ktc && npm run calculate:trends"
