@@ -73,6 +73,7 @@ export type FantasyCalcSyncResult = {
   unmatched: number;
   mergedPlayers: number;
   perFormat: Array<{ formatSlug: string; rows: number }>;
+  warnings: string[];
   startedAt: string;
   finishedAt: string;
   durationMs: number;
@@ -141,6 +142,7 @@ export async function runFantasyCalcSync(
 ): Promise<FantasyCalcSyncResult> {
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
+  const warnings: string[] = [];
 
   console.log("Loading format_configs and existing players...");
   const { data: formats, error: formatErr } = await supabase
@@ -275,10 +277,18 @@ export async function runFantasyCalcSync(
       shared++;
       if (va === vb) identical++;
     }
+    // Non-fatal canary. FantasyCalc is a real JSON API queried with explicit
+    // scoring params (ppr / numQbs), so identical values across a "must differ"
+    // pair means the API ignored a param for this run, or genuinely had no
+    // spread for these players that day. We record it for visibility but never
+    // abort the write: dropping a whole night of good data over a soft signal
+    // is the worse failure. (Compare sync-ktc.ts, where the same canary stays
+    // fatal because that path scrapes HTML and identical bytes there means the
+    // scrape silently fell back to a client-filtered view: see migration 0011.)
     if (shared > 0 && identical === shared) {
-      throw new Error(
-        `runFantasyCalcSync: ${a} and ${b} returned identical values for ${shared} shared players.`,
-      );
+      const msg = `${a} and ${b} returned identical values for all ${shared} shared players (FantasyCalc may have ignored a scoring param this run).`;
+      warnings.push(msg);
+      console.warn(`  WARN: ${msg}`);
     }
   }
 
@@ -299,6 +309,16 @@ export async function runFantasyCalcSync(
       formatRows += chunk.length;
     }
     perFormat.push({ formatSlug: batch.target.formatSlug, rows: formatRows });
+  }
+
+  // A run that writes nothing is a failure, not a quiet success. Every target
+  // returning empty means FantasyCalc was unreachable or changed its response
+  // shape, and we want the cron to surface a 500 so the outage is visible
+  // rather than logging a green "ok" with no data behind it.
+  if (totalRows === 0) {
+    throw new Error(
+      "runFantasyCalcSync: wrote 0 rows — every FantasyCalc target returned empty or failed to fetch.",
+    );
   }
 
   const updatesByPlayerId = new Map<string, FantasyCalcRow>();
@@ -375,7 +395,7 @@ export async function runFantasyCalcSync(
 
   const finished = Date.now();
   console.log(
-    `\nDone. Inserted ${totalRows} player_value_history rows. Merged ${mergeCount} players. Unmatched: ${totalUnmatched}`,
+    `\nDone. Inserted ${totalRows} player_value_history rows. Merged ${mergeCount} players. Unmatched: ${totalUnmatched}. Warnings: ${warnings.length}`,
   );
 
   return {
@@ -384,6 +404,7 @@ export async function runFantasyCalcSync(
     unmatched: totalUnmatched,
     mergedPlayers: mergeCount,
     perFormat,
+    warnings,
     startedAt,
     finishedAt: new Date(finished).toISOString(),
     durationMs: finished - started,

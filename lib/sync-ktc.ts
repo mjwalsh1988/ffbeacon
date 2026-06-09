@@ -490,6 +490,16 @@ export async function runKtcSync(
     }
   }
 
+  // A run that writes nothing is a failure, not a quiet success. Every target
+  // returning empty means KTC's markup changed or the scrape was blocked, and
+  // we want the cron to surface a 500 so the outage is visible rather than
+  // logging a green "ok" with no data behind it.
+  if (totalRows === 0) {
+    throw new Error(
+      "runKtcSync: wrote 0 player_value_history rows — every KTC target returned empty (source markup may have changed or the scrape was blocked).",
+    );
+  }
+
   const finished = Date.now();
   console.log(
     `\nDone. Inserted ${totalRows} player_value_history rows and ${picksWritten} draft_pick_values rows. Unmatched: ${unmatched}`,
