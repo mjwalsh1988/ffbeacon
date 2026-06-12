@@ -98,7 +98,7 @@ export async function POST(
     );
   }
 
-  // Force a pulse. This bypasses the 10-minute LEAGUE_PULSE_TTL_MS cache.
+  // Force a pulse. This bypasses the 30-minute LEAGUE_PULSE_TTL_MS cache.
   const result = await pulseLeague(adminClient, sleeperLeagueId, { force: true });
   if (!result.ok) {
     console.error("[refresh] pulseLeague failed", result.error);

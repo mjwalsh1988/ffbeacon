@@ -18,7 +18,7 @@ import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import type { Database } from "@/lib/database.types";
 
-export const LEAGUE_PULSE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+export const LEAGUE_PULSE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 export type LeaguePulseResult =
   | {
@@ -38,7 +38,9 @@ type ServiceClient = SupabaseClient<Database>;
  * leagues.id (uuid) on success.
  *
  * Cache: refuses to refetch from Sleeper if last_pulsed_at is within
- * LEAGUE_PULSE_TTL_MS, unless force=true. The cached path still returns ok.
+ * LEAGUE_PULSE_TTL_MS (30 minutes), unless force=true. The cached path still
+ * recomputes power rankings (player values sync nightly, independent of this
+ * TTL) and returns ok.
  *
  * Caller supplies the service-role supabase client (scripts use
  * scripts/_supabase.ts getServiceClient(); the server action uses
@@ -65,6 +67,24 @@ export async function pulseLeague(
     existing.pulse_status === "complete" &&
     Date.now() - new Date(existing.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS
   ) {
+    // Cache hit: the league/roster/user/transaction rows are fresh enough that
+    // we do NOT re-hit Sleeper. We still recompute power rankings so the cache
+    // reflects the latest player values, which sync nightly independent of this
+    // TTL. A calc failure is non-fatal, same as the full sync path below.
+    try {
+      const calcResult = await calculateLeaguePowerRankings(supabase, existing.id);
+      if (!calcResult.ok) {
+        console.warn(
+          `[pulseLeague] cached power-rankings calc failed for league ${existing.id}: ${calcResult.error}`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `[pulseLeague] cached power-rankings calc threw for league ${existing.id}:`,
+        (err as Error).message,
+      );
+    }
+
     const [{ count: rosterCount }, { count: userCount }, { count: txCount }] = await Promise.all([
       supabase.from("rosters").select("id", { count: "exact", head: true }).eq("league_id", existing.id),
       supabase.from("league_users").select("id", { count: "exact", head: true }).eq("league_id", existing.id),

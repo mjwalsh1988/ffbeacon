@@ -8,7 +8,8 @@
  *   npm run pulse:league -- <sleeper_league_id>
  *   npm run pulse:league -- <sleeper_league_id> --force
  *
- * Cache: skips network fetch if last_pulsed_at within 10 minutes unless --force.
+ * Cache: skips network fetch if last_pulsed_at within 30 minutes unless --force.
+ *   Power rankings still recompute on the cached path.
  */
 
 import { getServiceClient } from "./_supabase";
