@@ -18,7 +18,14 @@ import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import type { Database } from "@/lib/database.types";
 
-export const LEAGUE_PULSE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+export const LEAGUE_PULSE_TTL_MS = 60 * 60 * 1000; // 60 minutes
+
+// Power rankings depend on player values that sync once nightly, so there is no
+// benefit to recomputing them more than once a day per league. We recompute on
+// the first league load after this window elapses (or when there are no cache
+// rows yet); reloads within the window serve the existing cache untouched. A
+// force refresh bypasses this gate.
+export const LEAGUE_POWER_RANKINGS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export type LeaguePulseResult =
   | {
@@ -33,14 +40,37 @@ export type LeaguePulseResult =
 type ServiceClient = SupabaseClient<Database>;
 
 /**
+ * Decide whether this league's power rankings need recomputing. Returns true
+ * when there are no cache rows yet, or the freshest cache row is older than
+ * LEAGUE_POWER_RANKINGS_TTL_MS. On any query error we return true (recompute
+ * rather than silently serve stale rankings). Reads a single indexed row.
+ */
+async function powerRankingsAreStale(
+  supabase: ServiceClient,
+  leagueRowId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("league_power_rankings_cache")
+    .select("generated_at")
+    .eq("league_id", leagueRowId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.generated_at) return true;
+  return Date.now() - new Date(data.generated_at).getTime() >= LEAGUE_POWER_RANKINGS_TTL_MS;
+}
+
+/**
  * Pulse one Sleeper league end-to-end (fetch + persist). Idempotent —
  * re-running upserts every table by its natural key. Returns the
  * leagues.id (uuid) on success.
  *
  * Cache: refuses to refetch from Sleeper if last_pulsed_at is within
- * LEAGUE_PULSE_TTL_MS (30 minutes), unless force=true. The cached path still
- * recomputes power rankings (player values sync nightly, independent of this
- * TTL) and returns ok.
+ * LEAGUE_PULSE_TTL_MS (60 minutes), unless force=true.
+ *
+ * Power rankings are recomputed at most once per LEAGUE_POWER_RANKINGS_TTL_MS
+ * (24 hours) per league, on whichever load first crosses that window, on both
+ * the cached and full-sync paths. force=true always recomputes them.
  *
  * Caller supplies the service-role supabase client (scripts use
  * scripts/_supabase.ts getServiceClient(); the server action uses
@@ -68,21 +98,24 @@ export async function pulseLeague(
     Date.now() - new Date(existing.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS
   ) {
     // Cache hit: the league/roster/user/transaction rows are fresh enough that
-    // we do NOT re-hit Sleeper. We still recompute power rankings so the cache
-    // reflects the latest player values, which sync nightly independent of this
-    // TTL. A calc failure is non-fatal, same as the full sync path below.
-    try {
-      const calcResult = await calculateLeaguePowerRankings(supabase, existing.id);
-      if (!calcResult.ok) {
+    // we do NOT re-hit Sleeper. We still recompute power rankings, but only once
+    // per 24h (they track the nightly player-value sync, not the league TTL), so
+    // reloads inside that window serve the existing cache untouched. A calc
+    // failure is non-fatal, same as the full sync path below.
+    if (await powerRankingsAreStale(supabase, existing.id)) {
+      try {
+        const calcResult = await calculateLeaguePowerRankings(supabase, existing.id);
+        if (!calcResult.ok) {
+          console.warn(
+            `[pulseLeague] cached power-rankings calc failed for league ${existing.id}: ${calcResult.error}`,
+          );
+        }
+      } catch (err) {
         console.warn(
-          `[pulseLeague] cached power-rankings calc failed for league ${existing.id}: ${calcResult.error}`,
+          `[pulseLeague] cached power-rankings calc threw for league ${existing.id}:`,
+          (err as Error).message,
         );
       }
-    } catch (err) {
-      console.warn(
-        `[pulseLeague] cached power-rankings calc threw for league ${existing.id}:`,
-        (err as Error).message,
-      );
     }
 
     const [{ count: rosterCount }, { count: userCount }, { count: txCount }] = await Promise.all([
@@ -202,21 +235,23 @@ export async function pulseLeague(
     upsertLeagueDrafts(supabase, leagueRowId, draftDetails),
   ]);
 
-  // Recalculate power rankings for this league. A failure here does not
-  // fail the sync; the cache row is non-critical and can be backfilled by
-  // npm run calculate:power-rankings.
-  try {
-    const calcResult = await calculateLeaguePowerRankings(supabase, leagueRowId);
-    if (!calcResult.ok) {
+  // Recalculate power rankings for this league, but only once per 24h unless
+  // this is a force refresh. A failure here does not fail the sync; the cache
+  // row is non-critical and can be backfilled by npm run calculate:power-rankings.
+  if (force || (await powerRankingsAreStale(supabase, leagueRowId))) {
+    try {
+      const calcResult = await calculateLeaguePowerRankings(supabase, leagueRowId);
+      if (!calcResult.ok) {
+        console.warn(
+          `[pulseLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
+        );
+      }
+    } catch (err) {
       console.warn(
-        `[pulseLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
+        `[pulseLeague] power-rankings calc threw for league ${leagueRowId}:`,
+        (err as Error).message,
       );
     }
-  } catch (err) {
-    console.warn(
-      `[pulseLeague] power-rankings calc threw for league ${leagueRowId}:`,
-      (err as Error).message,
-    );
   }
 
   return {

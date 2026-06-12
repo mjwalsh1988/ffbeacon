@@ -98,7 +98,8 @@ export async function POST(
     );
   }
 
-  // Force a pulse. This bypasses the 30-minute LEAGUE_PULSE_TTL_MS cache.
+  // Force a pulse. This bypasses the 60-minute LEAGUE_PULSE_TTL_MS cache and
+  // always recomputes power rankings (force skips the 24h power-rankings gate).
   const result = await pulseLeague(adminClient, sleeperLeagueId, { force: true });
   if (!result.ok) {
     console.error("[refresh] pulseLeague failed", result.error);
