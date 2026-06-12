@@ -8,6 +8,7 @@ import { chunkUpsert } from "./supabase/retry";
 import type { Database } from "./database.types";
 
 type HistoryRow = {
+  id: string;
   player_id: string;
   format_config_id: string;
   source: string;
@@ -83,18 +84,26 @@ function pickAnchorDay(
 }
 
 /**
- * Load player_value_history via keyset pagination by primary key (id).
+ * Load player_value_history via compound keyset pagination on (captured_at, id).
  *
- * Keyset on id avoids deep OFFSET scans that exceed Supabase's statement
- * timeout on the ~1M-row history table, and avoids the tie-breaking problem of
- * paginating by captured_at (a single backfill day can have ~5000 rows all
- * sharing the same UTC-noon timestamp). captured_at sort is applied client-side
- * per-group by the caller.
+ * Ordering by captured_at lets Postgres satisfy a `captured_at >= sinceIso`
+ * bound with a range scan on idx_player_value_history_captured_at instead of
+ * walking the whole pkey and filtering (the id-only keyset did the latter, so
+ * the date bound barely helped). The cursor is the compound (captured_at, id)
+ * pair, NOT captured_at alone: a single sync writes ~2000 rows sharing one
+ * captured_at, and a captured_at-only cursor would skip or duplicate rows
+ * across those tie boundaries. id breaks the tie deterministically.
  *
  * When `sinceIso` is provided, only rows with captured_at >= sinceIso are
- * loaded (backed by idx_player_value_history_captured_at). The nightly trend
- * calc passes a 140-day cutoff so it never ships the ~70% of the table that is
- * older than any window the math uses. Pass undefined to load all history.
+ * loaded. The nightly trend calc passes a 140-day cutoff so it never ships the
+ * ~70% of the table older than any window the math uses. Pass undefined for all.
+ *
+ * Rows are returned sorted by id, the same canonical order the previous
+ * id-keyset loader produced. This matters: computeTrendRows' per-day ranking
+ * dedup keeps the first-seen row per (combo, day), and some days carry multiple
+ * snapshots with differing values, so the iteration order is output-significant.
+ * The captured_at ordering is only a load-time concern; the sub-second in-memory
+ * re-sort restores byte-for-byte parity with the original load order.
  *
  * Page size is capped at Supabase's configured PostgREST db-max-rows (1000).
  * Requesting more silently truncates the response.
@@ -105,22 +114,38 @@ export async function loadAllHistory(
 ): Promise<HistoryRow[]> {
   const rows: HistoryRow[] = [];
   const PAGE = 1000;
-  let cursor: string | null = null;
+  let cursor: { ts: string; id: string } | null = null;
   for (;;) {
     let query = supabase
       .from("player_value_history")
       .select("id, player_id, format_config_id, source, value, captured_at")
+      .order("captured_at", { ascending: true })
       .order("id", { ascending: true })
       .limit(PAGE);
-    if (sinceIso) query = query.gte("captured_at", sinceIso);
-    if (cursor) query = query.gt("id", cursor);
+    if (cursor) {
+      // Set the index lower bound to the cursor timestamp itself so the scan
+      // STARTS at the cursor (Index Cond), rather than at the static window
+      // floor with the keyset applied as a Filter. Without this, every page
+      // re-scans the window from the floor up to the cursor (O(n^2) overall).
+      // cursor.ts >= sinceIso always, so this still respects the date bound.
+      // Quote the timestamp in the or() so PostgREST treats the embedded ":",
+      // "+" and "." as literal value characters, not filter-grammar separators.
+      const ts = JSON.stringify(cursor.ts);
+      query = query
+        .gte("captured_at", cursor.ts)
+        .or(`captured_at.gt.${ts},and(captured_at.eq.${ts},id.gt.${cursor.id})`);
+    } else if (sinceIso) {
+      query = query.gte("captured_at", sinceIso);
+    }
     const { data, error } = await query;
     if (error) throw error;
     if (!data || data.length === 0) break;
-    rows.push(...data);
+    rows.push(...(data as HistoryRow[]));
     if (data.length < PAGE) break;
-    cursor = (data[data.length - 1] as { id: string }).id;
+    const last = data[data.length - 1] as { id: string; captured_at: string };
+    cursor = { ts: last.captured_at, id: last.id };
   }
+  rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return rows;
 }
 
