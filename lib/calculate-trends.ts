@@ -20,6 +20,14 @@ type Direction = "up" | "down" | "stable";
 const TREND_THRESHOLD_PCT = 2;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// The deepest lookback any output field needs is 135 days: value_90d_ago and
+// rank_90d_ago anchor at t90 with a half-window (45-day) staleness tolerance
+// (90 + 45 = 135). Every other field is a subset of that. We load 140 days (a
+// small safety margin past 135) and nothing older, because rows older than the
+// 90d-window floor can never affect any column written to player_value_trends.
+// This keeps the nightly load to the recent slice of the ~1M-row history table.
+export const HISTORY_LOOKBACK_DAYS = 140;
+
 function direction(changePct: number | null): Direction | null {
   if (changePct === null) return null;
   if (changePct > TREND_THRESHOLD_PCT) return "up";
@@ -74,18 +82,28 @@ function pickAnchorDay(
   return null;
 }
 
-async function loadAllHistory(
+/**
+ * Load player_value_history via keyset pagination by primary key (id).
+ *
+ * Keyset on id avoids deep OFFSET scans that exceed Supabase's statement
+ * timeout on the ~1M-row history table, and avoids the tie-breaking problem of
+ * paginating by captured_at (a single backfill day can have ~5000 rows all
+ * sharing the same UTC-noon timestamp). captured_at sort is applied client-side
+ * per-group by the caller.
+ *
+ * When `sinceIso` is provided, only rows with captured_at >= sinceIso are
+ * loaded (backed by idx_player_value_history_captured_at). The nightly trend
+ * calc passes a 140-day cutoff so it never ships the ~70% of the table that is
+ * older than any window the math uses. Pass undefined to load all history.
+ *
+ * Page size is capped at Supabase's configured PostgREST db-max-rows (1000).
+ * Requesting more silently truncates the response.
+ */
+export async function loadAllHistory(
   supabase: SupabaseClient<Database>,
+  sinceIso?: string,
 ): Promise<HistoryRow[]> {
   const rows: HistoryRow[] = [];
-  // Keyset pagination by primary key (id). Avoids deep OFFSET scans that
-  // exceed Supabase's statement timeout on the ~1M-row history table, and
-  // avoids the tie-breaking problem of paginating by captured_at (a single
-  // backfill day can have ~5000 rows all sharing the same UTC-noon timestamp).
-  // captured_at sort is applied client-side per-group below.
-  //
-  // Page size is capped at Supabase's configured PostgREST db-max-rows (1000).
-  // Requesting more silently truncates the response.
   const PAGE = 1000;
   let cursor: string | null = null;
   for (;;) {
@@ -94,6 +112,7 @@ async function loadAllHistory(
       .select("id, player_id, format_config_id, source, value, captured_at")
       .order("id", { ascending: true })
       .limit(PAGE);
+    if (sinceIso) query = query.gte("captured_at", sinceIso);
     if (cursor) query = query.gt("id", cursor);
     const { data, error } = await query;
     if (error) throw error;
@@ -105,25 +124,45 @@ async function loadAllHistory(
   return rows;
 }
 
-export type CalculateTrendsResult = {
-  ok: boolean;
-  combos: number;
-  written: number;
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
+export type TrendRow = {
+  player_id: string;
+  format_config_id: string;
+  source: string;
+  current_value: number;
+  value_7d_ago: number | null;
+  value_30d_ago: number | null;
+  value_90d_ago: number | null;
+  change_7d: number | null;
+  change_7d_pct: number | null;
+  change_30d: number | null;
+  change_30d_pct: number | null;
+  change_90d: number | null;
+  change_90d_pct: number | null;
+  trend_7d: Direction | null;
+  trend_30d: Direction | null;
+  volatility_30d: number | null;
+  high_30d: number | null;
+  low_30d: number | null;
+  data_points_30d: number;
+  rank_7d_ago: number | null;
+  rank_30d_ago: number | null;
+  rank_90d_ago: number | null;
+  rank_change_7d: number | null;
+  rank_change_30d: number | null;
+  rank_change_90d: number | null;
+  updated_at: string;
 };
 
-export async function runCalculateTrends(
-  supabase: SupabaseClient<Database>,
-): Promise<CalculateTrendsResult> {
-  const started = Date.now();
-  const startedAt = new Date(started).toISOString();
-
-  console.log("Loading player_value_history...");
-  const allRows = await loadAllHistory(supabase);
-  console.log(`  ${allRows.length} history rows`);
-
+/**
+ * Pure computation: turn raw history rows into one trend row per
+ * (player, format, source) combo. No DB access, so it can be run against any
+ * row set (full or date-bounded) for parity testing. `nowMs` anchors the
+ * 7/30/90-day windows and updated_at; defaults to Date.now().
+ */
+export function computeTrendRows(
+  allRows: HistoryRow[],
+  nowMs: number = Date.now(),
+): TrendRow[] {
   const groups = new Map<string, HistoryRow[]>();
   for (const row of allRows) {
     const key = `${row.player_id}|${row.format_config_id}|${row.source}`;
@@ -139,7 +178,6 @@ export async function runCalculateTrends(
       (a, b) => new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime(),
     );
   }
-  console.log(`  ${groups.size} (player, format, source) combos`);
 
   type DayRanking = Map<string, number>;
   const ranksByFormatSourceDay = new Map<string, DayRanking>();
@@ -170,41 +208,11 @@ export async function runCalculateTrends(
     }
   }
 
-  const nowMs = Date.now();
   const t7 = nowMs - 7 * MS_PER_DAY;
   const t30 = nowMs - 30 * MS_PER_DAY;
   const t90 = nowMs - 90 * MS_PER_DAY;
 
-  type TrendRow = {
-    player_id: string;
-    format_config_id: string;
-    source: string;
-    current_value: number;
-    value_7d_ago: number | null;
-    value_30d_ago: number | null;
-    value_90d_ago: number | null;
-    change_7d: number | null;
-    change_7d_pct: number | null;
-    change_30d: number | null;
-    change_30d_pct: number | null;
-    change_90d: number | null;
-    change_90d_pct: number | null;
-    trend_7d: Direction | null;
-    trend_30d: Direction | null;
-    volatility_30d: number | null;
-    high_30d: number | null;
-    low_30d: number | null;
-    data_points_30d: number;
-    rank_7d_ago: number | null;
-    rank_30d_ago: number | null;
-    rank_90d_ago: number | null;
-    rank_change_7d: number | null;
-    rank_change_30d: number | null;
-    rank_change_90d: number | null;
-    updated_at: string;
-  };
-
-  const updatedAt = new Date().toISOString();
+  const updatedAt = new Date(nowMs).toISOString();
   const outputs: TrendRow[] = [];
 
   for (const [, rowsDesc] of groups) {
@@ -288,6 +296,33 @@ export async function runCalculateTrends(
     });
   }
 
+  return outputs;
+}
+
+export type CalculateTrendsResult = {
+  ok: boolean;
+  combos: number;
+  written: number;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+};
+
+export async function runCalculateTrends(
+  supabase: SupabaseClient<Database>,
+): Promise<CalculateTrendsResult> {
+  const started = Date.now();
+  const startedAt = new Date(started).toISOString();
+
+  const sinceIso = new Date(started - HISTORY_LOOKBACK_DAYS * MS_PER_DAY).toISOString();
+  console.log(`Loading player_value_history (last ${HISTORY_LOOKBACK_DAYS} days)...`);
+  const allRows = await loadAllHistory(supabase, sinceIso);
+  console.log(`  ${allRows.length} history rows`);
+
+  const nowMs = Date.now();
+  const outputs = computeTrendRows(allRows, nowMs);
+  console.log(`  ${outputs.length} (player, format, source) combos`);
+
   console.log(`Upserting ${outputs.length} trend rows...`);
   let written = 0;
   await chunkUpsert(outputs, 500, async (chunk) => {
@@ -305,7 +340,7 @@ export async function runCalculateTrends(
   console.log(`Done. ${written} player_value_trends rows updated.`);
   return {
     ok: true,
-    combos: groups.size,
+    combos: outputs.length,
     written,
     startedAt,
     finishedAt: new Date(finished).toISOString(),
