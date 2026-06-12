@@ -115,6 +115,42 @@ export type Database = {
           },
         ]
       }
+      cron_runs: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          job_name: string
+          result: Json | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_name: string
+          result?: Json | null
+          started_at?: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_name?: string
+          result?: Json | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       draft_pick_values: {
         Row: {
           captured_at: string

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { runFantasyCalcSync } from "@/lib/sync-fantasycalc";
+import { recordCronRun } from "@/lib/cron-runs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,9 @@ export async function GET(req: Request) {
 
   const supabase = createAdminClient();
   try {
-    const result = await runFantasyCalcSync(supabase);
+    const result = await recordCronRun(supabase, "sync-fantasycalc", () =>
+      runFantasyCalcSync(supabase),
+    );
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

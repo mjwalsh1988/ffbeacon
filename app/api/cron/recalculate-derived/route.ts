@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { runSeedRankings } from "@/lib/seed-rankings";
 import { runCalculateTrends } from "@/lib/calculate-trends";
+import { recordCronRun } from "@/lib/cron-runs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,19 +41,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const started = Date.now();
   const supabase = createAdminClient();
   try {
-    const rankings = await runSeedRankings(supabase);
-    const trends = await runCalculateTrends(supabase);
-
-    const finished = Date.now();
-    return NextResponse.json({
-      ok: true,
-      rankings,
-      trends,
-      durationMs: finished - started,
+    const result = await recordCronRun(supabase, "recalculate-derived", async () => {
+      const started = Date.now();
+      const rankings = await runSeedRankings(supabase);
+      const trends = await runCalculateTrends(supabase);
+      return {
+        ok: true as const,
+        rankings,
+        trends,
+        durationMs: Date.now() - started,
+      };
     });
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[cron/recalculate-derived] failed", message);

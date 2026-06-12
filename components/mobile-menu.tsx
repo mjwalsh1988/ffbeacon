@@ -20,6 +20,7 @@ export function MobileMenu({
   sources,
   initialSourceSlug,
   isAuthenticated,
+  isAdmin,
   allFormats,
   supportedFormatSlugs,
 }: {
@@ -28,6 +29,7 @@ export function MobileMenu({
   sources: SourceOption[];
   initialSourceSlug: string | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   allFormats: FormatLike[];
   supportedFormatSlugs: string[] | null;
 }) {
@@ -195,6 +197,14 @@ export function MobileMenu({
               <div className="space-y-3">
                 {isAuthenticated ? (
                   <>
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        className="block rounded-card border border-brand-purple/50 bg-brand-purple/10 px-3 py-3 text-center text-sm font-semibold text-ink"
+                      >
+                        Admin
+                      </Link>
+                    )}
                     {/* Primary accent action — visually distinct from
                         Sign out so users tap "My Beacon" by mistake far
                         less often. */}

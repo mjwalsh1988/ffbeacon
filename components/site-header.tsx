@@ -25,6 +25,7 @@ async function loadHeaderData(): Promise<{
   allFormats: FormatLike[];
   sources: SourceOption[];
   isAuthenticated: boolean;
+  isAdmin: boolean;
   preferredFormatSlug: string | null;
   preferredSourceSlug: string | null;
 }> {
@@ -39,12 +40,14 @@ async function loadHeaderData(): Promise<{
 
     let preferredFormatSlug: string | null = null;
     let preferredSourceSlug: string | null = null;
+    let isAdmin = false;
     if (userData?.user) {
       const { data: prefs } = await supabase
         .from("user_preferences")
-        .select("default_format_config_id, default_source_slug")
+        .select("default_format_config_id, default_source_slug, is_admin")
         .eq("user_id", userData.user.id)
         .maybeSingle();
+      isAdmin = Boolean(prefs?.is_admin);
       if (prefs?.default_format_config_id) {
         const match = formats.find((f) => f.id === prefs.default_format_config_id);
         if (match) preferredFormatSlug = match.slug;
@@ -87,6 +90,7 @@ async function loadHeaderData(): Promise<{
       allFormats,
       sources: sources as SourceOption[],
       isAuthenticated: !!userData?.user,
+      isAdmin,
       preferredFormatSlug,
       preferredSourceSlug,
     };
@@ -96,6 +100,7 @@ async function loadHeaderData(): Promise<{
       allFormats: [],
       sources: [],
       isAuthenticated: false,
+      isAdmin: false,
       preferredFormatSlug: null,
       preferredSourceSlug: null,
     };
@@ -108,6 +113,7 @@ export async function SiteHeader() {
     allFormats,
     sources,
     isAuthenticated,
+    isAdmin,
     preferredFormatSlug,
     preferredSourceSlug,
   } = await loadHeaderData();
@@ -178,6 +184,17 @@ export async function SiteHeader() {
           </div>
           {isAuthenticated ? (
             <>
+              {/* Desktop: Admin link, only for admins. Sits before the My
+                  Beacon shortcut so the operational entry point is grouped
+                  with the other authenticated actions. */}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className="hidden md:inline-flex h-9 items-center rounded-card border border-brand-purple/50 bg-brand-purple/10 px-3 text-sm font-semibold text-ink hover:border-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  Admin
+                </Link>
+              )}
               {/* Desktop: accent icon shortcut to My Beacon. Sits to the
                   left of Sign out so the primary user-space action stays
                   visually distinct from the destructive one. */}
@@ -224,6 +241,7 @@ export async function SiteHeader() {
               sources={sources}
               initialSourceSlug={initialSourceSlug}
               isAuthenticated={isAuthenticated}
+              isAdmin={isAdmin}
               allFormats={allFormats}
               supportedFormatSlugs={supportedFormatSlugs}
             />

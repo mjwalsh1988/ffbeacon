@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { runSleeperStatsSync } from "@/lib/sync-sleeper-stats";
+import { recordCronRun } from "@/lib/cron-runs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,9 @@ export async function GET(req: Request) {
 
   const supabase = createAdminClient();
   try {
-    const result = await runSleeperStatsSync(supabase);
+    const result = await recordCronRun(supabase, "sync-sleeper-stats", () =>
+      runSleeperStatsSync(supabase),
+    );
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

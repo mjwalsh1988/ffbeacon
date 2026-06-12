@@ -7,6 +7,7 @@ import {
   Workflow,
   Sparkles,
   ArrowRight,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -115,10 +116,11 @@ export default async function MyBeaconDashboardPage() {
   // we just resolved above (so it can't go in the parallel batch).
   const { data: prefs } = await supabase
     .from("user_preferences")
-    .select("sleeper_league_settings")
+    .select("sleeper_league_settings, is_admin")
     .eq("user_id", user!.id)
     .maybeSingle();
   const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
+  const isAdmin = Boolean(prefs?.is_admin);
 
   // Profile-league count = union of "featured" and "shown" league ids.
   // A featured league counts even if it isn't separately toggled to show,
@@ -186,11 +188,55 @@ export default async function MyBeaconDashboardPage() {
 
   return (
     <div className="space-y-12">
+      {isAdmin && <AdminCallout />}
       <StatsSection cards={statCards} />
       <QuickActionsSection />
       <ComingSoonSection />
       <SignOutSection />
     </div>
+  );
+}
+
+/* ---------- Admin ---------- */
+
+function AdminCallout() {
+  return (
+    <section
+      aria-labelledby="admin-callout-heading"
+      className="rounded-modal border border-brand-purple/40 bg-brand-purple/[0.06] p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden="true"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-brand-purple/40 bg-base text-brand-purple"
+          >
+            <ShieldCheck className="h-5 w-5" />
+          </span>
+          <div>
+            <SectionEyebrow>Admin access</SectionEyebrow>
+            <h2
+              id="admin-callout-heading"
+              className="mt-1 text-lg font-semibold text-ink"
+            >
+              You have admin privileges.
+            </h2>
+            <p className="mt-1 max-w-xl text-sm leading-relaxed text-ink-muted">
+              Open the admin panel for system health, user activity, and cron
+              run logs.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/admin"
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-card bg-beacon px-4 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          aria-label="Open the admin panel"
+        >
+          Open admin panel
+          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </section>
   );
 }
 
