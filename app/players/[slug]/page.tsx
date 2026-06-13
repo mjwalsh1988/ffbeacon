@@ -296,7 +296,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         ? supabase
             .from("player_value_trends")
             .select(
-              "change_7d, change_7d_pct, change_30d, change_30d_pct, trend_7d, trend_30d, volatility_30d, high_30d, low_30d, data_points_30d",
+              "change_7d, change_7d_pct, change_30d, change_30d_pct, change_90d, change_90d_pct, trend_7d, trend_30d, volatility_30d, high_30d, low_30d, show_trend_7d, show_trend_30d, show_trend_90d",
             )
             .eq("player_id", player.id)
             .eq("format_config_id", defaultFormat.id)
@@ -377,7 +377,16 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       : null;
   const latestValue = valueHistory?.[0];
   const trends = trendRows ?? null;
-  const trendDataReady = (trends?.data_points_30d ?? 0) >= 7;
+  const sourceCadence = registry.find((r) => r.slug === valueHistoryResolution.source)
+    ?.update_cadence as "daily" | "weekly" | undefined;
+  // 90d has no stored trend_* column; derive its direction from the pct using
+  // the same +/-2% threshold calculate-trends.ts applies to 7d/30d.
+  const directionFromPct = (pct: number | null): "up" | "down" | "stable" | null => {
+    if (pct === null) return null;
+    if (pct > 2) return "up";
+    if (pct < -2) return "down";
+    return "stable";
+  };
 
   const fullName = `${player.first_name} ${player.last_name}`;
   const sleeperId = (player.external_ids as { sleeper?: string } | null)?.sleeper ?? null;
@@ -523,12 +532,31 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
                   value={latestValue ? latestValue.value.toLocaleString() : "—"}
                   sub={defaultFormat?.display_name ?? ""}
                 >
-                  {trendDataReady && trends && (
+                  {trends?.show_trend_7d && (
                     <TrendChip
                       direction={trends.trend_7d as "up" | "down" | "stable" | null}
                       delta={trends.change_7d}
                       deltaPct={trends.change_7d_pct}
                       windowLabel="7-day"
+                      cadence={sourceCadence}
+                    />
+                  )}
+                  {trends?.show_trend_30d && (
+                    <TrendChip
+                      direction={trends.trend_30d as "up" | "down" | "stable" | null}
+                      delta={trends.change_30d}
+                      deltaPct={trends.change_30d_pct}
+                      windowLabel="30-day"
+                      cadence={sourceCadence}
+                    />
+                  )}
+                  {trends?.show_trend_90d && (
+                    <TrendChip
+                      direction={directionFromPct(trends.change_90d_pct)}
+                      delta={trends.change_90d}
+                      deltaPct={trends.change_90d_pct}
+                      windowLabel="90-day"
+                      cadence={sourceCadence}
                     />
                   )}
                 </MetricTile>

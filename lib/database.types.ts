@@ -1016,6 +1016,9 @@ export type Database = {
           rank_change_30d: number | null
           rank_change_7d: number | null
           rank_change_90d: number | null
+          show_trend_30d: boolean
+          show_trend_7d: boolean
+          show_trend_90d: boolean
           source: string
           trend_30d: string | null
           trend_7d: string | null
@@ -1045,6 +1048,9 @@ export type Database = {
           rank_change_30d?: number | null
           rank_change_7d?: number | null
           rank_change_90d?: number | null
+          show_trend_30d?: boolean
+          show_trend_7d?: boolean
+          show_trend_90d?: boolean
           source: string
           trend_30d?: string | null
           trend_7d?: string | null
@@ -1074,6 +1080,9 @@ export type Database = {
           rank_change_30d?: number | null
           rank_change_7d?: number | null
           rank_change_90d?: number | null
+          show_trend_30d?: boolean
+          show_trend_7d?: boolean
+          show_trend_90d?: boolean
           source?: string
           trend_30d?: string | null
           trend_7d?: string | null
@@ -1391,6 +1400,7 @@ export type Database = {
           priority: number
           slug: string
           supported_format_slugs: string[] | null
+          update_cadence: string
         }
         Insert: {
           created_at?: string
@@ -1401,6 +1411,7 @@ export type Database = {
           priority: number
           slug: string
           supported_format_slugs?: string[] | null
+          update_cadence?: string
         }
         Update: {
           created_at?: string
@@ -1411,6 +1422,7 @@ export type Database = {
           priority?: number
           slug?: string
           supported_format_slugs?: string[] | null
+          update_cadence?: string
         }
         Relationships: []
       }

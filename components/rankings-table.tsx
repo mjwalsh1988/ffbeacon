@@ -24,7 +24,13 @@ export type RankingsRow = {
   trend_7d: string | null;
   rank_change_7d: number | null;
   rank_7d_ago: number | null;
-  data_points_30d: number;
+  /** Per-window bookend gate from player_value_trends. True when the source has
+   *  a data point near both ends of the 7-day window. Replaces the old
+   *  data_points_30d >= 7 count gate. */
+  show_trend_7d: boolean;
+  /** Resolved source cadence (same for every row in one table). Drives the
+   *  "updated weekly" note so a weekly trend is not misread as daily-fresh. */
+  cadence?: "daily" | "weekly";
 };
 
 type SortKey =
@@ -39,9 +45,9 @@ type SortKey =
   | "rank_change_7d";
 type SortDir = "asc" | "desc";
 
-// Rows with fewer than this many history points hide the 7-day trend display
-// (per CLAUDE.md "Pre-calculated tables" rule — sparse data shouldn't be shown).
-const TREND_MIN_DATA_POINTS = 7;
+// The 7-day trend display is gated by row.show_trend_7d (computed in
+// calculate-trends.ts via the cadence-aware bookend rule): show movement only
+// when the source has a data point near both ends of the 7-day window.
 
 // Desktop columns. Mobile renders a different layout (Rank, Player, dynamic
 // metric column driven by the active sort chip) so it does not consume this
@@ -550,17 +556,19 @@ function valueMovementVerb(pct: number): string {
 }
 
 function RankTrendCell({ row }: { row: RankingsRow }) {
-  if (row.data_points_30d < TREND_MIN_DATA_POINTS || row.rank_change_7d === null) {
+  if (!row.show_trend_7d || row.rank_change_7d === null) {
     return (
       <span className="text-ink-subtle" aria-label="Insufficient history for 7-day rank movement">
         —
       </span>
     );
   }
+  const weekly = row.cadence === "weekly" ? ", updated weekly" : "";
+  const title = row.cadence === "weekly" ? "Updated weekly" : undefined;
   const change = row.rank_change_7d;
   if (change === 0) {
     return (
-      <span className="text-ink-muted" aria-label="No rank change in the last 7 days">
+      <span className="text-ink-muted" aria-label={`No rank change in the last 7 days${weekly}`} title={title}>
         –
       </span>
     );
@@ -571,7 +579,8 @@ function RankTrendCell({ row }: { row: RankingsRow }) {
   return (
     <span
       className={`inline-flex items-center justify-center gap-1 ${tone}`}
-      aria-label={rankMovementVerb(change)}
+      aria-label={`${rankMovementVerb(change)}${weekly}`}
+      title={title}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
       <span aria-hidden="true">{Math.abs(change)}</span>
@@ -580,17 +589,15 @@ function RankTrendCell({ row }: { row: RankingsRow }) {
 }
 
 function ValueTrendCell({ row }: { row: RankingsRow }) {
-  if (
-    row.data_points_30d < TREND_MIN_DATA_POINTS ||
-    row.change_7d_pct === null ||
-    row.trend_7d === null
-  ) {
+  if (!row.show_trend_7d || row.change_7d_pct === null || row.trend_7d === null) {
     return (
       <span className="text-ink-subtle" aria-label="Insufficient history for 7-day value trend">
         —
       </span>
     );
   }
+  const weekly = row.cadence === "weekly" ? ", updated weekly" : "";
+  const title = row.cadence === "weekly" ? "Updated weekly" : undefined;
   const pct = row.change_7d_pct;
   if (row.trend_7d === "stable" || pct === 0) {
     // "Stable" can include a small non-zero pct (within the ±2% trend
@@ -602,9 +609,10 @@ function ValueTrendCell({ row }: { row: RankingsRow }) {
         className="text-ink-muted"
         aria-label={
           pct === 0
-            ? "No value change in the last 7 days"
-            : `Value held roughly steady in the last 7 days, ${valueMovementVerb(pct).toLowerCase().replace(/^value /, "")}`
+            ? `No value change in the last 7 days${weekly}`
+            : `Value held roughly steady in the last 7 days, ${valueMovementVerb(pct).toLowerCase().replace(/^value /, "")}${weekly}`
         }
+        title={title}
       >
         {pctText}
       </span>
@@ -617,7 +625,8 @@ function ValueTrendCell({ row }: { row: RankingsRow }) {
   return (
     <span
       className={`inline-flex items-center justify-center gap-1 ${tone}`}
-      aria-label={valueMovementVerb(pct)}
+      aria-label={`${valueMovementVerb(pct)}${weekly}`}
+      title={title}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />
       <span aria-hidden="true">{pctText}</span>

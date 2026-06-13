@@ -175,18 +175,68 @@ export type TrendRow = {
   rank_change_7d: number | null;
   rank_change_30d: number | null;
   rank_change_90d: number | null;
+  show_trend_7d: boolean;
+  show_trend_30d: boolean;
+  show_trend_90d: boolean;
   updated_at: string;
 };
+
+// Map a source's publish cadence to its base bookend tolerance in days.
+// daily sources get +/-2: +/-1 was rejecting fringe daily players over normal
+// cron timing jitter, while +/-2 still rejects multi-day-stale data but
+// tolerates a single late or skipped run. Weekly sources get +/-7. Unknown
+// cadence defaults to daily. (The floor((W-1)/2) cap below still tightens the
+// 7d-weekly case to +/-3.)
+export const INTERVAL_DAYS_BY_CADENCE: Record<string, number> = { daily: 2, weekly: 7 };
+const DEFAULT_INTERVAL_DAYS = 2;
+
+// Bookend tolerance for a window. Capped at floor((window-1)/2) so the start
+// bookend window [target +/- tol] and the end bookend window [now +/- tol]
+// (which are `windowDays` apart) can never overlap. This is what tightens the
+// 7-day window for a weekly source to +/-3 instead of the invalid +/-7.
+export function bookendToleranceDays(intervalDays: number, windowDays: number): number {
+  const cap = Math.floor((windowDays - 1) / 2);
+  return Math.max(0, Math.min(intervalDays, cap));
+}
+
+// True when some history timestamp sits within tolDays of targetMs (either side).
+function hasBookend(timestampsMs: number[], targetMs: number, tolDays: number): boolean {
+  const tolMs = tolDays * MS_PER_DAY;
+  for (const ts of timestampsMs) {
+    if (Math.abs(ts - targetMs) <= tolMs) return true;
+  }
+  return false;
+}
+
+// Per-window display gate: the source must have a data point near BOTH the
+// window start (now - windowDays) and now. Replaces the old data_points_30d
+// count gate, which never proved the window was actually covered.
+function windowCovered(
+  timestampsMs: number[],
+  nowMs: number,
+  windowDays: number,
+  intervalDays: number,
+): boolean {
+  const tol = bookendToleranceDays(intervalDays, windowDays);
+  const startCovered = hasBookend(timestampsMs, nowMs - windowDays * MS_PER_DAY, tol);
+  const endCovered = hasBookend(timestampsMs, nowMs, tol);
+  return startCovered && endCovered;
+}
 
 /**
  * Pure computation: turn raw history rows into one trend row per
  * (player, format, source) combo. No DB access, so it can be run against any
  * row set (full or date-bounded) for parity testing. `nowMs` anchors the
  * 7/30/90-day windows and updated_at; defaults to Date.now().
+ *
+ * `intervalBySource` maps a source slug to its publish interval in days (1 for
+ * daily, 7 for weekly). It drives the per-window show_trend_* bookend gate.
+ * Missing entries default to daily, so existing callers behave as before.
  */
 export function computeTrendRows(
   allRows: HistoryRow[],
   nowMs: number = Date.now(),
+  intervalBySource: Map<string, number> = new Map(),
 ): TrendRow[] {
   const groups = new Map<string, HistoryRow[]>();
   for (const row of allRows) {
@@ -246,6 +296,12 @@ export function computeTrendRows(
     const player_id = newest.player_id;
     const format_config_id = newest.format_config_id;
     const source = newest.source;
+
+    const intervalDays = intervalBySource.get(source) ?? DEFAULT_INTERVAL_DAYS;
+    const tsList = rowsDesc.map((r) => new Date(r.captured_at).getTime());
+    const show_trend_7d = windowCovered(tsList, nowMs, 7, intervalDays);
+    const show_trend_30d = windowCovered(tsList, nowMs, 30, intervalDays);
+    const show_trend_90d = windowCovered(tsList, nowMs, 90, intervalDays);
 
     const v7 = valueAtOrBefore(rowsDesc, t7, 7);
     const v30 = valueAtOrBefore(rowsDesc, t30, 30);
@@ -317,6 +373,9 @@ export function computeTrendRows(
       rank_change_7d: r7.rankChange,
       rank_change_30d: r30.rankChange,
       rank_change_90d: r90.rankChange,
+      show_trend_7d,
+      show_trend_30d,
+      show_trend_90d,
       updated_at: updatedAt,
     });
   }
@@ -344,8 +403,18 @@ export async function runCalculateTrends(
   const allRows = await loadAllHistory(supabase, sinceIso);
   console.log(`  ${allRows.length} history rows`);
 
+  // Per-source publish cadence drives the bookend tolerance for the show flags.
+  const { data: sources, error: srcErr } = await supabase
+    .from("source_registry")
+    .select("slug, update_cadence");
+  if (srcErr) throw srcErr;
+  const intervalBySource = new Map<string, number>();
+  for (const s of sources ?? []) {
+    intervalBySource.set(s.slug, INTERVAL_DAYS_BY_CADENCE[s.update_cadence] ?? DEFAULT_INTERVAL_DAYS);
+  }
+
   const nowMs = Date.now();
-  const outputs = computeTrendRows(allRows, nowMs);
+  const outputs = computeTrendRows(allRows, nowMs, intervalBySource);
   console.log(`  ${outputs.length} (player, format, source) combos`);
 
   console.log(`Upserting ${outputs.length} trend rows...`);

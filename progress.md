@@ -270,6 +270,140 @@ T073 | completed | Sub-agent review pass (implementation + a11y + security)
   /api/og/league/[league_id], /api/og/team/[league_id]/[roster_id],
   /api/og/trade/[transaction_id]
 
+## Phase 13 - DynastyProcess source integration
+T074 | completed | Migration 0033 - register dynastyprocess in source_registry
+     | files: supabase/migrations/0033_add_dynastyprocess_source.sql
+     | detail: priority 4, is_active=false initially (flipped true after audit),
+       data_type ['rankings','player_value_history'] (NO draft_pick_values),
+       supported_format_slugs ['dynasty-ppr-std','dynasty-ppr-sflex']
+     | verified: yes (applied via MCP, row confirmed, pg_policies intact on
+       source_registry/player_value_history/players: public SELECT + service ALL)
+T075 | completed | Regenerate lib/database.types.ts via MCP
+     | files: lib/database.types.ts (unchanged)
+     | depends on: T074
+     | verified: yes (0033 is a data-only INSERT, no DDL; generated types are
+       byte-identical to the existing file, so nothing to write)
+T076 | completed | Dependency-free quoted-CSV parser
+     | files: lib/csv.ts
+     | detail: RFC-4180-ish, handles quoted fields with embedded commas + CRLF
+     | verified: yes (typecheck clean, parses live DP CSVs end to end)
+T077 | completed | DynastyProcess sync pipeline (library form)
+     | files: lib/sync-dynastyprocess.ts
+     | depends on: T075, T076
+     | detail: fetch values-players.csv + db_playerids.csv crosswalk; match
+       fp_id->fantasypros_id->sleeper_id->player, name|position fallback; two
+       batches (value_1qb->dynasty-ppr-std, value_2qb->dynasty-ppr-sflex);
+       captured_at = scrape_date T12:00:00Z; merge external_ids.fantasypros +
+       source_synced_at.dynastyprocess + metadata.dynastyprocess; non-fatal
+       must-differ canary; fatal on zero rows written
+     | verified: yes (live run: 1398 rows, 699/format, 4 unmatched, 699 merged.
+       Added per-player dedupe: two DP rows can resolve to one player and would
+       collide on the conflict key since captured_at is constant; keep the
+       better-ranked row and warn)
+T078 | completed | CLI wrapper script
+     | files: scripts/sync-dynastyprocess.ts
+     | depends on: T077
+     | verified: yes (npm run sync:dynastyprocess succeeds)
+T079 | completed | Cron endpoint
+     | files: app/api/cron/sync-dynastyprocess/route.ts, lib/cron-runs.ts
+     | depends on: T077
+     | detail: CRON_SECRET bearer auth, recordCronRun; added 'sync-dynastyprocess'
+       to CronJobName union + CRON_JOBS registry (admin health panel)
+     | verified: yes (typecheck clean, mirrors sync-fantasycalc route exactly)
+T080 | completed | One-time historical backfill from git history
+     | files: scripts/backfill-dynastyprocess-history.ts
+     | depends on: T077
+     | detail: walk GitHub commits API for files/values-players.csv newest->old;
+       schema-drift hard stop on header mismatch/404; 3-year absolute ceiling;
+       per-snapshot zero-rows stop; cache crosswalk once; rate-limit backoff;
+       NEVER wired to nightly cron
+     | verified: yes (live run: 148 weekly snapshots 2023-06-16..2026-06-12,
+       170262 rows / 85131 per format, stopped cleanly at 3-year ceiling, no
+       schema drift in window, match rates high on old snapshots)
+T081 | completed | Wire npm scripts + vercel cron
+     | files: package.json, vercel.json
+     | depends on: T078, T079, T080
+     | detail: sync:dynastyprocess + backfill:dynastyprocess added; folded into
+       sync:full + backfill:all; vercel cron "0 9 * * *" (after fantasycalc 08:00,
+       before recalculate-derived 10:00)
+     | verified: yes (typecheck clean)
+T082 | completed | Pre-launch pairwise audit + flip is_active=true
+     | detail: value_1qb != value_2qb for 452 players (avg 962, the meaningful
+       tier); 247 "identical" are the floored tail (avg value 3, max 72).
+       DP vs KTC 0/477 identical; DP vs FantasyCalc 0/433 identical. Genuine
+       two-format source, not the fake-format footgun. Flipped is_active=true.
+     | depends on: T077
+     | verified: yes (rankings reseeded: 699/format DP rows; trends recomputed)
+T083 | resolved | DP weekly cadence vs data_points_30d>=7 UI trend gate
+     | detail: superseded by the cadence-aware bookend gate below (T084-T089).
+       Old count-based gate (data_points_30d>=7) replaced entirely.
+     | verified: yes (see T084-T089)
+
+## Phase 14 - Cadence-aware bookend trend gate (replaces data_points_30d>=7)
+T084 | completed | Migration 0034 - source cadence + per-window show flags
+     | files: supabase/migrations/0034_trend_bookend_gate.sql
+     | detail: source_registry.update_cadence ('daily'|'weekly', default 'daily',
+       DP='weekly'); player_value_trends.show_trend_7d/30d/90d boolean not null
+       default false (one flag per window, gates value + rank movement)
+     | verified: yes (applied via MCP; RLS/access matrix unchanged on both tables)
+T085 | completed | Sync database.types.ts to the 0034 schema
+     | files: lib/database.types.ts
+     | depends on: T084
+     | verified: yes (update_cadence + show_trend_* added to Row/Insert/Update;
+       typecheck clean. Hand-edited to match generator output, kept in sync)
+T086 | completed | calculate-trends: bookend gate computation
+     | files: lib/calculate-trends.ts
+     | depends on: T084
+     | detail: per (player,format,source,window) show flag = start bookend within
+       tol of (now-W) AND end bookend within tol of now. tol = min(intervalDays,
+       floor((W-1)/2)); intervalDays daily=1 weekly=7. Cap makes 7d-weekly tol=3
+       (the flagged small-window case). Numeric change fields untouched (parity).
+     | verified: yes (recomputed 5347 rows)
+T087 | completed | UI gate refactor + weekly label
+     | files: components/trend-chip.tsx, components/rankings-table.tsx
+     | depends on: T086
+     | detail: replaced data_points_30d<7 with show_trend_* booleans; player tile
+       renders gated 7d/30d/90d chips; TrendChip + rankings cells get a weekly
+       aria-label/title; cadence denormalized onto each RankingsRow
+     | verified: yes (build green)
+T088 | completed | Page queries: select flags + cadence, drop count gate
+     | files: app/rankings/page.tsx, app/players/[slug]/page.tsx, lib/source.ts
+     | depends on: T087
+     | detail: select show_trend_* + change_90d/pct; getAvailableSources now
+       returns update_cadence; pages resolve source cadence and pass to components
+     | verified: yes (build green)
+T089 | completed | Recompute trends + per-source show/hide verification
+     | depends on: T086, T087, T088
+     | detail: per-source results below. All show/hide outcomes trace to real data
+       coverage (gate working), not bugs.
+     | verified: yes
+
+## Phase 14 verification (per-source, computed 2026-06-13)
+- KTC (daily, 894 distinct days = genuinely daily): show_7d 1915 / show_30d 1926
+  / show_90d 1881 of 2085. ~92% at 7d vs 99% under the old count gate. The ~8%
+  now hidden are players lacking a KTC point within +/-1 day of the exact
+  bookend (intermittently-ranked players near KTC's top-N cutoff). Healthy daily
+  behaves as intended.
+- FantasyCalc (daily): ALL hidden in THIS dev DB because dev FC has only 8
+  sporadic sync days (2026-05-17,18,25, 06-09..13), no point within +/-1 of the
+  7d/30d bookends. NOT a code regression: in production the daily cron lands a
+  point every day, so both bookends are satisfied and chips show. Documented so
+  this is not mistaken for a regression.
+- DynastyProcess (weekly, tol +/-7 capped to +/-3 at 7d): show_7d 1398 / show_30d
+  1372 / show_90d 0 of 1566.
+  - 7d + 30d SHOW: last DP update was 1 day ago and prior weekly points land near
+    the 7d/30d bookends. DP chips carry the "updated weekly" label.
+  - 90d HIDES (currently): DP pauses in the deep offseason. It has data through
+    2026-02-27 then nothing until 2026-04-30. 90-days-ago (2026-03-15) falls in
+    that gap, so no start bookend within +/-7 (nearest is 16 days off). The gate
+    correctly suppresses a misleading 90d chip (the old change_90d would anchor
+    on a point 16+ days stale). DP's 90d chip will begin showing once 90-days-ago
+    advances past the offseason gap (after ~2026-07-29).
+- FLAGGED (7d-weekly tolerance): the 7-day window is <= 14d, so a weekly +/-7
+  would overlap the bookends. calculate-trends caps tol at floor((W-1)/2) = 3 for
+  the 7d window (roughly half the 7-day interval, as proposed). Implemented, not
+  silently using +/-7. Raise/lower via the cap if you want different behavior.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

@@ -22,6 +22,7 @@ export type SourceRegistryRow = {
   priority: number;
   data_type: string[];
   supported_format_slugs: string[] | null;
+  update_cadence: string;
 };
 
 // React.cache makes this a request-scoped memo: every server-side caller in
@@ -32,7 +33,7 @@ export const getAvailableSources = cache(
   async (supabase: SupabaseClient<Database>): Promise<SourceRegistryRow[]> => {
     const { data } = await supabase
       .from("source_registry")
-      .select("slug, display_name, description, priority, data_type, supported_format_slugs")
+      .select("slug, display_name, description, priority, data_type, supported_format_slugs, update_cadence")
       .eq("is_active", true)
       .order("priority");
     return data ?? [];

@@ -18,6 +18,7 @@ import type { Database, Json } from "./database.types";
 export type CronJobName =
   | "sync-ktc"
   | "sync-fantasycalc"
+  | "sync-dynastyprocess"
   | "recalculate-derived"
   | "sync-sleeper-stats";
 
@@ -49,6 +50,13 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "0 8 * * *",
     scheduleHuman: "Daily, 08:00 UTC",
     description: "Pulls FantasyCalc current values into player_value_history.",
+  },
+  {
+    name: "sync-dynastyprocess",
+    label: "DynastyProcess value sync",
+    schedule: "0 9 * * *",
+    scheduleHuman: "Daily, 09:00 UTC",
+    description: "Pulls DynastyProcess FantasyPros-derived dynasty values into player_value_history.",
   },
   {
     name: "recalculate-derived",

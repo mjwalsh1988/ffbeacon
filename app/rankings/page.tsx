@@ -132,7 +132,7 @@ export default async function RankingsPage({
       ? supabase
           .from("player_value_trends")
           .select(
-            "player_id, change_7d, change_7d_pct, trend_7d, rank_change_7d, rank_7d_ago, data_points_30d",
+            "player_id, change_7d, change_7d_pct, trend_7d, rank_change_7d, rank_7d_ago, show_trend_7d",
           )
           .eq("format_config_id", format.id)
           .eq("source", valueHistoryResolution.source)
@@ -155,7 +155,7 @@ export default async function RankingsPage({
       trend_7d: string | null;
       rank_change_7d: number | null;
       rank_7d_ago: number | null;
-      data_points_30d: number;
+      show_trend_7d: boolean;
     }
   >();
   for (const t of trends ?? []) {
@@ -165,9 +165,12 @@ export default async function RankingsPage({
       trend_7d: t.trend_7d,
       rank_change_7d: t.rank_change_7d,
       rank_7d_ago: t.rank_7d_ago,
-      data_points_30d: t.data_points_30d,
+      show_trend_7d: t.show_trend_7d,
     });
   }
+
+  const tableCadence = registry.find((s) => s.slug === valueHistoryResolution.source)
+    ?.update_cadence as "daily" | "weekly" | undefined;
 
   const rows: RankingsRow[] = (rankings ?? []).map((r) => {
     const player = (r as unknown as {
@@ -210,7 +213,8 @@ export default async function RankingsPage({
       trend_7d: trend?.trend_7d ?? null,
       rank_change_7d: trend?.rank_change_7d ?? null,
       rank_7d_ago: trend?.rank_7d_ago ?? null,
-      data_points_30d: trend?.data_points_30d ?? 0,
+      show_trend_7d: trend?.show_trend_7d ?? false,
+      cadence: tableCadence,
     };
   });
 

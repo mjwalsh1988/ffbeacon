@@ -10,6 +10,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/sync-dynastyprocess",
+      "schedule": "0 9 * * *"
+    },
+    {
       "path": "/api/cron/recalculate-derived",
       "schedule": "0 10 * * *"
     },

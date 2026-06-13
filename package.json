@@ -12,16 +12,18 @@
     "pulse:league": "tsx --env-file=.env.local scripts/pulse-league.ts",
     "sync:ktc": "tsx --env-file=.env.local scripts/sync-ktc.ts",
     "sync:fantasycalc": "tsx --env-file=.env.local scripts/sync-fantasycalc.ts",
+    "sync:dynastyprocess": "tsx --env-file=.env.local scripts/sync-dynastyprocess.ts",
     "sync:stats": "tsx --env-file=.env.local scripts/sync-sleeper-stats.ts",
     "seed:rankings": "tsx --env-file=.env.local scripts/seed-rankings.ts",
     "calculate:trends": "tsx --env-file=.env.local scripts/calculate-trends.ts",
     "calculate:power-rankings": "tsx --env-file=.env.local scripts/calculate-league-power-rankings.ts",
     "sync:ktc:full": "npm run sync:ktc && npm run seed:rankings && npm run calculate:trends",
-    "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run seed:rankings && npm run calculate:trends",
+    "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run sync:dynastyprocess && npm run seed:rankings && npm run calculate:trends",
     "backfill:sleeper-stats": "tsx --env-file=.env.local scripts/backfill-sleeper-stats.ts",
     "backfill:ktc": "tsx --env-file=.env.local scripts/backfill-ktc-history.ts",
     "backfill:ktc:community": "tsx --env-file=.env.local scripts/backfill-ktc-community-archive.ts",
-    "backfill:all": "npm run backfill:ktc && npm run calculate:trends"
+    "backfill:dynastyprocess": "tsx --env-file=.env.local scripts/backfill-dynastyprocess-history.ts",
+    "backfill:all": "npm run backfill:ktc && npm run backfill:dynastyprocess && npm run calculate:trends"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
