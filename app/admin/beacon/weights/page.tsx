@@ -22,7 +22,7 @@ export default async function BeaconWeightsPage() {
   return (
     <BeaconPageShell
       title="Signal weights"
-      description="Weight, confidence cap, and enable toggle for each signal and source. Higher weight gives a signal more pull on the blend."
+      description="Each row is one input the engine can use. Weight is how much pull it has (higher means more influence on the final value). Confidence cap is the ceiling on how much an adjustment signal is trusted even when it is very sure. Enabled turns the input on or off entirely. Source rows feed the base blend; the stat_performance and ai_adjust rows are the signals that then nudge that blend up or down."
       recompute={recompute}
     >
       <SignalWeightsTable weights={(weights ?? []) as never} />

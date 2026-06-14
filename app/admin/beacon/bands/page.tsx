@@ -26,7 +26,7 @@ export default async function BeaconBandsPage() {
   return (
     <BeaconPageShell
       title="Value bands"
-      description="The value range each position can occupy. Resolution: per-format override, then global default. Skill is 0-10000; K/DEF are lower, and compressed further in dynasty."
+      description="The floor and ceiling each position's value is allowed to land in. Every computed value is clamped into this range as the final step, so a band sets the hard minimum and maximum a player at that position can ever be worth. A per-format row overrides the global default for that one format; with no per-format row the global default applies. Skill positions run 0 to 10000; K and DEF sit lower, and are compressed further in dynasty."
       recompute={recompute}
     >
       <ValueBandsEditor bands={(bands ?? []) as never} formats={formats} />

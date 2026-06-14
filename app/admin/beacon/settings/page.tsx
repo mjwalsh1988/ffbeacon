@@ -9,11 +9,11 @@ export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
 
 const GROUPS: Array<{ category: string; title: string; description: string }> = [
-  { category: "factor", title: "Adjustment factor clamp", description: "Bounds the combined adjustment factor before the band clamp." },
-  { category: "staleness", title: "Source staleness thresholds", description: "How old a source's newest snapshot may be before it drops from the blend." },
-  { category: "normalization", title: "Normalization", description: "How source values are aligned before blending." },
-  { category: "derivation", title: "TEP derivation", description: "Controls the per-TE TE-premium boost used to derive dynasty-ppr-tep." },
-  { category: "ai", title: "AI signal", description: "The ai_adjust signal: a bounded per-player nudge from the model. The system prompt below is the exact template sent on every call; edit it to review or change what the AI receives. Off by default (set AI signal enabled to On and enable the ai_adjust weight to activate)." },
+  { category: "factor", title: "How far signals can move a value", description: "After sources are blended, the performance and AI signals nudge each value up or down. These two numbers are the guardrail on how far that nudge can go, applied just before each position's value band is enforced." },
+  { category: "staleness", title: "When to stop trusting a source", description: "If a source has not refreshed in this many days, we drop it from the blend until it updates again, so old data never quietly drags values around." },
+  { category: "normalization", title: "Putting sources on one scale", description: "Every source uses its own numbering. These settings control how we rescale them all onto one common 0 to 10000 curve so they can be averaged fairly before blending." },
+  { category: "derivation", title: "Tight-end-premium boost", description: "The tight-end-premium format (dynasty-ppr-tep) gives tight ends extra value. These settings control how big that per-TE boost can be and which TEs qualify for it." },
+  { category: "ai", title: "AI signal", description: "An optional, tightly bounded per-player nudge from an Anthropic model, layered on top of the blended value. It is Off by default. To turn it on you need this master switch (AI signal enabled) set to On AND the ai_adjust weight enabled on the Signal weights page. The system prompt below is the exact text sent to the model on every call." },
 ];
 
 export default async function BeaconSettingsPage() {
@@ -34,7 +34,7 @@ export default async function BeaconSettingsPage() {
   return (
     <BeaconPageShell
       title="Settings"
-      description="Engine-wide tunables, grouped by area. Every value is DB-backed and applied on the next recompute."
+      description="The engine-wide knobs, grouped by what they affect. Each card explains in plain terms how changing that value shifts FF Beacon values. Changes are saved immediately and take effect on the next recompute."
       recompute={recompute}
     >
       <div className="space-y-10">
