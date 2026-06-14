@@ -13,6 +13,13 @@
     "sync:ktc": "tsx --env-file=.env.local scripts/sync-ktc.ts",
     "sync:fantasycalc": "tsx --env-file=.env.local scripts/sync-fantasycalc.ts",
     "sync:dynastyprocess": "tsx --env-file=.env.local scripts/sync-dynastyprocess.ts",
+    "calculate:beacon": "tsx --env-file=.env.local scripts/calculate-beacon-values.ts",
+    "beacon:tests": "tsx --env-file=.env.local scripts/beacon-reliability-tests.ts",
+    "beacon:audit": "tsx --env-file=.env.local scripts/beacon-normalization-audit.ts",
+    "beacon:offset-test": "tsx scripts/beacon-offset-trends-test.ts",
+    "beacon:outage": "tsx --env-file=.env.local scripts/beacon-outage-sim.ts",
+    "beacon:board": "tsx --env-file=.env.local scripts/beacon-board-audit.ts",
+    "beacon:ai-smoke": "tsx --env-file=.env.local scripts/beacon-ai-smoke.ts",
     "sync:stats": "tsx --env-file=.env.local scripts/sync-sleeper-stats.ts",
     "seed:rankings": "tsx --env-file=.env.local scripts/seed-rankings.ts",
     "calculate:trends": "tsx --env-file=.env.local scripts/calculate-trends.ts",
@@ -26,6 +33,7 @@
     "backfill:all": "npm run backfill:ktc && npm run backfill:dynastyprocess && npm run calculate:trends"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "geist": "^1.3.1",

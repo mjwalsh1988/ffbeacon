@@ -20,6 +20,7 @@ export type SourceRegistryRow = {
   display_name: string;
   description: string | null;
   priority: number;
+  is_default: boolean;
   data_type: string[];
   supported_format_slugs: string[] | null;
   update_cadence: string;
@@ -33,7 +34,7 @@ export const getAvailableSources = cache(
   async (supabase: SupabaseClient<Database>): Promise<SourceRegistryRow[]> => {
     const { data } = await supabase
       .from("source_registry")
-      .select("slug, display_name, description, priority, data_type, supported_format_slugs, update_cadence")
+      .select("slug, display_name, description, priority, is_default, data_type, supported_format_slugs, update_cadence")
       .eq("is_active", true)
       .order("priority");
     return data ?? [];
@@ -72,11 +73,21 @@ export function sourceSupportsFormat(
   return list.includes(formatSlug);
 }
 
+// The site-wide default source: the active source flagged is_default in
+// source_registry, falling back to the first by display order (priority) if no
+// flag is set. This is the DB-backed replacement for the old hardcoded
+// DEFAULT_SOURCE_SLUG constant. A logged-in user's saved preference is resolved
+// earlier in the chain (see lib/preferences.ts), so this only governs anonymous
+// visitors and logged-in users with no saved source preference.
+export function pickDefaultSource(sources: SourceRegistryRow[]): string | null {
+  return sources.find((s) => s.is_default)?.slug ?? sources[0]?.slug ?? null;
+}
+
 export async function getDefaultSourceSlug(
   supabase: SupabaseClient<Database>,
 ): Promise<string | null> {
   const sources = await getAvailableSources(supabase);
-  return sources[0]?.slug ?? null;
+  return pickDefaultSource(sources);
 }
 
 export type ResolvedSource = {
@@ -94,9 +105,10 @@ export type ResolvedSource = {
 // purely in-memory. data_type still filters out sources that don't publish
 // the table at all.
 //
-// requestedSlug is honored when the requesting source supports the format;
-// otherwise we fall back to the highest-priority supporting source. If
-// nothing covers the (table, format) combo, returns null and the caller
+// requestedSlug is honored when the requesting source supports the format.
+// With no valid request we pick the site-wide default source when it supports
+// the format, otherwise the first supporting source in display order (priority).
+// If nothing covers the (table, format) combo, returns null and the caller
 // renders the empty state.
 export function resolveSourceForFormat(
   registry: SourceRegistryRow[],
@@ -105,10 +117,12 @@ export function resolveSourceForFormat(
   requestedSlug: string | null,
 ): ResolvedSource {
   const availableForFormat: string[] = [];
+  let defaultSlug: string | null = null;
   for (const r of registry) {
     if (!r.data_type.includes(table)) continue;
     if (!sourceSupportsFormat(r, formatSlug)) continue;
     availableForFormat.push(r.slug);
+    if (r.is_default) defaultSlug = r.slug;
   }
 
   if (availableForFormat.length === 0) {
@@ -119,8 +133,10 @@ export function resolveSourceForFormat(
     return { source: requestedSlug, requested: requestedSlug, fellBack: false, availableForFormat };
   }
 
+  // No valid request: prefer the default source (if it covers this format),
+  // else the first supporting source in display order.
   return {
-    source: availableForFormat[0],
+    source: defaultSlug ?? availableForFormat[0],
     requested: requestedSlug,
     fellBack: !!requestedSlug,
     availableForFormat,

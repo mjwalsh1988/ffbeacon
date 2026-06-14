@@ -284,6 +284,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         : { data: [] },
       defaultFormat && valueHistoryResolution.source
         ? supabase
+            // Only [0].value is read (the headline = published worth, correct).
+            // If a value sparkline is ever added here, it must subtract
+            // formula_offset to plot the market series, per the value-read audit.
             .from("player_value_history")
             .select("value, captured_at")
             .eq("player_id", player.id)

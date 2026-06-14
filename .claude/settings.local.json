@@ -152,7 +152,10 @@
       "mcp__supabase__get_logs",
       "PowerShell(git add *)",
       "PowerShell(git push *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "mcp__supabase__list_migrations",
+      "Skill(claude-api)",
+      "Bash(npm audit *)"
     ]
   },
   "enabledMcpjsonServers": [

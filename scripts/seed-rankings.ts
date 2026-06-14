@@ -1,5 +1,5 @@
 /**
- * Build source-attributed rankings — CLI entrypoint.
+ * Build source-attributed rankings (CLI entrypoint).
  * Implementation lives in lib/seed-rankings.ts.
  *
  * Run: npm run seed:rankings

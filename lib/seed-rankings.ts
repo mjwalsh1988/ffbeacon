@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
+import { withRetry } from "./supabase/retry";
 
 const SEASON = 2025;
 const TIERS = 6;
@@ -36,10 +37,16 @@ export async function runSeedRankings(
   if (fErr) throw fErr;
   const formatBySlug = new Map<string, string>((formats ?? []).map((f) => [f.slug, f.id]));
 
+  // NOTE: we intentionally do NOT filter by is_active here. rankings is a
+  // derived cache; public visibility is gated downstream by
+  // resolveSourceForFormat (which filters source_registry on is_active), so
+  // seeding an inactive source's rankings is never read by the public UI.
+  // Seeding all sources keeps the cache pre-staged, so flipping is_active is the
+  // ONLY step that exposes a source publicly (its rankings already exist). This
+  // matters for ffbeacon, which launches at priority 1 with is_active=false.
   const { data: sources, error: sErr } = await supabase
     .from("source_registry")
     .select("slug, data_type, supported_format_slugs")
-    .eq("is_active", true)
     .order("priority");
   if (sErr) throw sErr;
 
@@ -64,17 +71,24 @@ export async function runSeedRankings(
         continue;
       }
       console.log(`Seeding rankings for ${source.slug} / ${slug}...`);
-      const { data: values, error: vErr } = await supabase
-        .from("player_value_history")
-        .select("player_id, value, captured_at, players(position)")
-        .eq("format_config_id", formatId)
-        .eq("source", source.slug)
-        .order("captured_at", { ascending: false });
-      if (vErr) {
-        console.warn(`  ${vErr.message}`);
-        continue;
-      }
-      if (!values || values.length === 0) {
+      // withRetry: a transient PostgREST statement_timeout must not silently drop
+      // an entire (source, format) from rankings. Retry transient failures, and
+      // let a persistent error throw so the run fails loudly instead of shipping
+      // a format with no rankings.
+      const values = await withRetry(
+        async () => {
+          const { data, error } = await supabase
+            .from("player_value_history")
+            .select("player_id, value, captured_at, players(position)")
+            .eq("format_config_id", formatId)
+            .eq("source", source.slug)
+            .order("captured_at", { ascending: false });
+          if (error) throw error;
+          return data ?? [];
+        },
+        { label: `seed rankings ${source.slug}/${slug}` },
+      );
+      if (values.length === 0) {
         console.log(`  no ${source.slug} values yet`);
         continue;
       }

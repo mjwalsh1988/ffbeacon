@@ -86,8 +86,6 @@ export type Position = (typeof POSITIONS)[number];
 
 export const DEFAULT_FORMAT_SLUG = "redraft-ppr-std";
 
-// Default data source when no URL param, user pref, or cookie has been
-// set. KTC is the canonical baseline — every other source we add layers
-// on top of that. Keep this in lockstep with whichever source you want
-// new visitors to see first.
-export const DEFAULT_SOURCE_SLUG = "ktc";
+// NOTE: the default data source is no longer a hardcoded constant. It lives in
+// source_registry.is_default (admin-editable on /admin/beacon/sources) and is
+// resolved via pickDefaultSource() in lib/source.ts. See migration 0053.

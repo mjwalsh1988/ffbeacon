@@ -1,14 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { PRIMARY_NAV, DEFAULT_FORMAT_SLUG, DEFAULT_SOURCE_SLUG } from "@/lib/site";
+import { PRIMARY_NAV, DEFAULT_FORMAT_SLUG } from "@/lib/site";
 import {
   readCookieSlug,
   SOURCE_COOKIE,
   FORMAT_COOKIE,
 } from "@/lib/preferences";
 import type { FormatLike } from "@/lib/format-fallback";
-import { getActiveFormats, getAvailableSources } from "@/lib/source";
+import { getActiveFormats, getAvailableSources, pickDefaultSource } from "@/lib/source";
 import { BeaconMark } from "@/components/beacon-mark";
 import { FormatToggle, type FormatOption } from "@/components/format-toggle";
 import { SourceToggle, type SourceOption } from "@/components/source-toggle";
@@ -28,6 +28,7 @@ async function loadHeaderData(): Promise<{
   isAdmin: boolean;
   preferredFormatSlug: string | null;
   preferredSourceSlug: string | null;
+  defaultSourceSlug: string | null;
 }> {
   try {
     const supabase = await createClient();
@@ -93,6 +94,7 @@ async function loadHeaderData(): Promise<{
       isAdmin,
       preferredFormatSlug,
       preferredSourceSlug,
+      defaultSourceSlug: pickDefaultSource(sources),
     };
   } catch {
     return {
@@ -103,6 +105,7 @@ async function loadHeaderData(): Promise<{
       isAdmin: false,
       preferredFormatSlug: null,
       preferredSourceSlug: null,
+      defaultSourceSlug: null,
     };
   }
 }
@@ -116,17 +119,14 @@ export async function SiteHeader() {
     isAdmin,
     preferredFormatSlug,
     preferredSourceSlug,
+    defaultSourceSlug,
   } = await loadHeaderData();
   const initialFormatSlug = preferredFormatSlug ?? DEFAULT_FORMAT_SLUG;
-  // Mirror lib/preferences.ts → resolveSourceSlug: prefer the
-  // explicitly-configured DEFAULT_SOURCE_SLUG (KTC) over the registry's
-  // priority-ordered first entry, so new visitors with no preference
-  // land on KTC in the header dropdown.
+  // Mirror lib/preferences.ts resolveSourceSlug: a saved preference wins, else
+  // the DB-backed site-wide default (source_registry.is_default), else the first
+  // source in display order. No hardcoded default slug.
   const initialSourceSlug =
-    preferredSourceSlug ??
-    sources.find((s) => s.slug === DEFAULT_SOURCE_SLUG)?.slug ??
-    sources[0]?.slug ??
-    null;
+    preferredSourceSlug ?? defaultSourceSlug ?? sources[0]?.slug ?? null;
   const fallbackFormats: FormatOption[] = formats.length
     ? formats
     : [

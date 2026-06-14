@@ -115,6 +115,396 @@ export type Database = {
           },
         ]
       }
+      beacon_ai_cache: {
+        Row: {
+          adjustment_pct: number
+          confidence: number
+          created_at: string
+          input_hash: string
+          model: string
+          player_id: string | null
+          rationale: string | null
+        }
+        Insert: {
+          adjustment_pct: number
+          confidence: number
+          created_at?: string
+          input_hash: string
+          model: string
+          player_id?: string | null
+          rationale?: string | null
+        }
+        Update: {
+          adjustment_pct?: number
+          confidence?: number
+          created_at?: string
+          input_hash?: string
+          model?: string
+          player_id?: string | null
+          rationale?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beacon_ai_cache_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      beacon_custom_formats: {
+        Row: {
+          created_at: string
+          created_by: string
+          descriptor: Json
+          descriptor_hash: string
+          id: string
+          label: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          descriptor: Json
+          descriptor_hash: string
+          id?: string
+          label?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          descriptor?: Json
+          descriptor_hash?: string
+          id?: string
+          label?: string | null
+        }
+        Relationships: []
+      }
+      beacon_custom_value_cache: {
+        Row: {
+          computed_at: string
+          descriptor_hash: string
+          payload: Json
+          run_id: string
+          source_slug: string
+        }
+        Insert: {
+          computed_at?: string
+          descriptor_hash: string
+          payload: Json
+          run_id: string
+          source_slug: string
+        }
+        Update: {
+          computed_at?: string
+          descriptor_hash?: string
+          payload?: Json
+          run_id?: string
+          source_slug?: string
+        }
+        Relationships: []
+      }
+      beacon_format_status: {
+        Row: {
+          baseline_format_config_id: string | null
+          format_config_id: string
+          is_placeholder: boolean
+          note: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          baseline_format_config_id?: string | null
+          format_config_id: string
+          is_placeholder?: boolean
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          baseline_format_config_id?: string | null
+          format_config_id?: string
+          is_placeholder?: boolean
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beacon_format_status_baseline_format_config_id_fkey"
+            columns: ["baseline_format_config_id"]
+            isOneToOne: false
+            referencedRelation: "format_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beacon_format_status_format_config_id_fkey"
+            columns: ["format_config_id"]
+            isOneToOne: true
+            referencedRelation: "format_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      beacon_manual_signals: {
+        Row: {
+          adjustment_type: string
+          created_at: string
+          created_by: string | null
+          decay_days: number | null
+          expires_at: string | null
+          format_config_id: string | null
+          id: string
+          is_active: boolean
+          magnitude: number
+          pick_position: string | null
+          pick_round: number | null
+          pick_season: number | null
+          player_id: string | null
+          reason: string | null
+          silent: boolean
+          target: string
+        }
+        Insert: {
+          adjustment_type: string
+          created_at?: string
+          created_by?: string | null
+          decay_days?: number | null
+          expires_at?: string | null
+          format_config_id?: string | null
+          id?: string
+          is_active?: boolean
+          magnitude: number
+          pick_position?: string | null
+          pick_round?: number | null
+          pick_season?: number | null
+          player_id?: string | null
+          reason?: string | null
+          silent?: boolean
+          target: string
+        }
+        Update: {
+          adjustment_type?: string
+          created_at?: string
+          created_by?: string | null
+          decay_days?: number | null
+          expires_at?: string | null
+          format_config_id?: string | null
+          id?: string
+          is_active?: boolean
+          magnitude?: number
+          pick_position?: string | null
+          pick_round?: number | null
+          pick_season?: number | null
+          player_id?: string | null
+          reason?: string | null
+          silent?: boolean
+          target?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beacon_manual_signals_format_config_id_fkey"
+            columns: ["format_config_id"]
+            isOneToOne: false
+            referencedRelation: "format_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beacon_manual_signals_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      beacon_settings: {
+        Row: {
+          category: string
+          description: string | null
+          key: string
+          label: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+          value_type: string
+        }
+        Insert: {
+          category: string
+          description?: string | null
+          key: string
+          label: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+          value_type: string
+        }
+        Update: {
+          category?: string
+          description?: string | null
+          key?: string
+          label?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+          value_type?: string
+        }
+        Relationships: []
+      }
+      beacon_signal_weights: {
+        Row: {
+          confidence_cap: number
+          id: string
+          is_enabled: boolean
+          params: Json
+          signal_type: string
+          source_slug: string | null
+          updated_at: string
+          updated_by: string | null
+          weight: number
+        }
+        Insert: {
+          confidence_cap?: number
+          id?: string
+          is_enabled?: boolean
+          params?: Json
+          signal_type: string
+          source_slug?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          weight?: number
+        }
+        Update: {
+          confidence_cap?: number
+          id?: string
+          is_enabled?: boolean
+          params?: Json
+          signal_type?: string
+          source_slug?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          weight?: number
+        }
+        Relationships: []
+      }
+      beacon_stat_profiles: {
+        Row: {
+          components: Json
+          games: number | null
+          player_id: string
+          recency: Json | null
+          updated_at: string
+        }
+        Insert: {
+          components?: Json
+          games?: number | null
+          player_id: string
+          recency?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          components?: Json
+          games?: number | null
+          player_id?: string
+          recency?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beacon_stat_profiles_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: true
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      beacon_value_bands: {
+        Row: {
+          ceiling: number
+          floor: number
+          format_config_id: string | null
+          id: string
+          position: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          ceiling: number
+          floor: number
+          format_config_id?: string | null
+          id?: string
+          position: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          ceiling?: number
+          floor?: number
+          format_config_id?: string | null
+          id?: string
+          position?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beacon_value_bands_format_config_id_fkey"
+            columns: ["format_config_id"]
+            isOneToOne: false
+            referencedRelation: "format_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      beacon_value_runs: {
+        Row: {
+          ai_calls: number | null
+          error: string | null
+          factor_saturated: number | null
+          finished_at: string | null
+          id: string
+          notes: string | null
+          players_processed: number | null
+          rows_written: number | null
+          skipped_no_signal: number | null
+          source_freshness: Json | null
+          started_at: string
+          status: string
+          weights_snapshot: Json | null
+        }
+        Insert: {
+          ai_calls?: number | null
+          error?: string | null
+          factor_saturated?: number | null
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          players_processed?: number | null
+          rows_written?: number | null
+          skipped_no_signal?: number | null
+          source_freshness?: Json | null
+          started_at?: string
+          status?: string
+          weights_snapshot?: Json | null
+        }
+        Update: {
+          ai_calls?: number | null
+          error?: string | null
+          factor_saturated?: number | null
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          players_processed?: number | null
+          rows_written?: number | null
+          skipped_no_signal?: number | null
+          source_freshness?: Json | null
+          started_at?: string
+          status?: string
+          weights_snapshot?: Json | null
+        }
+        Relationships: []
+      }
       cron_runs: {
         Row: {
           created_at: string
@@ -212,6 +602,7 @@ export type Database = {
           display_order: number | null
           id: string
           is_active: boolean
+          is_bestball: boolean
           is_default: boolean
           is_superflex: boolean
           league_type: string
@@ -225,6 +616,7 @@ export type Database = {
           display_order?: number | null
           id?: string
           is_active?: boolean
+          is_bestball?: boolean
           is_default?: boolean
           is_superflex?: boolean
           league_type: string
@@ -238,6 +630,7 @@ export type Database = {
           display_order?: number | null
           id?: string
           is_active?: boolean
+          is_bestball?: boolean
           is_default?: boolean
           is_superflex?: boolean
           league_type?: string
@@ -954,6 +1347,7 @@ export type Database = {
         Row: {
           captured_at: string
           format_config_id: string
+          formula_offset: number
           id: string
           metadata: Json | null
           player_id: string
@@ -963,6 +1357,7 @@ export type Database = {
         Insert: {
           captured_at?: string
           format_config_id: string
+          formula_offset?: number
           id?: string
           metadata?: Json | null
           player_id: string
@@ -972,6 +1367,7 @@ export type Database = {
         Update: {
           captured_at?: string
           format_config_id?: string
+          formula_offset?: number
           id?: string
           metadata?: Json | null
           player_id?: string
@@ -1397,6 +1793,7 @@ export type Database = {
           description: string | null
           display_name: string
           is_active: boolean
+          is_default: boolean
           priority: number
           slug: string
           supported_format_slugs: string[] | null
@@ -1408,6 +1805,7 @@ export type Database = {
           description?: string | null
           display_name: string
           is_active?: boolean
+          is_default?: boolean
           priority: number
           slug: string
           supported_format_slugs?: string[] | null
@@ -1419,6 +1817,7 @@ export type Database = {
           description?: string | null
           display_name?: string
           is_active?: boolean
+          is_default?: boolean
           priority?: number
           slug?: string
           supported_format_slugs?: string[] | null
@@ -1591,6 +1990,7 @@ export type Database = {
           user_agent: string
         }[]
       }
+      set_default_source: { Args: { target_slug: string }; Returns: undefined }
       try_claim_league_refresh: {
         Args: {
           p_league_id: string

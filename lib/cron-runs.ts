@@ -19,6 +19,7 @@ export type CronJobName =
   | "sync-ktc"
   | "sync-fantasycalc"
   | "sync-dynastyprocess"
+  | "recalculate-beacon"
   | "recalculate-derived"
   | "sync-sleeper-stats";
 
@@ -57,6 +58,13 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "0 9 * * *",
     scheduleHuman: "Daily, 09:00 UTC",
     description: "Pulls DynastyProcess FantasyPros-derived dynasty values into player_value_history.",
+  },
+  {
+    name: "recalculate-beacon",
+    label: "FF Beacon value recalc",
+    schedule: "30 9 * * *",
+    scheduleHuman: "Daily, 09:30 UTC",
+    description: "Recomputes FF Beacon proprietary values (all signals) into player_value_history + draft_pick_values, after the source syncs and before the derived recalc.",
   },
   {
     name: "recalculate-derived",

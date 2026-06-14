@@ -14,7 +14,18 @@ type HistoryRow = {
   source: string;
   value: number;
   captured_at: string;
+  // FF Beacon only: the formula-induced portion of value (published - market).
+  // market = value - formula_offset. Trends compute ALL movement (change/trend/
+  // rank/volatility) on the market series so silent manual changes do not render
+  // as market movement; current_value is published (value as stored). 0 for every
+  // external source, so this is a no-op for KTC / FantasyCalc / DynastyProcess.
+  formula_offset: number;
 };
+
+// market = value - formula_offset. The trend-basis value. See HistoryRow above.
+function marketValue(row: HistoryRow): number {
+  return row.value - Number(row.formula_offset ?? 0);
+}
 
 type Direction = "up" | "down" | "stable";
 
@@ -46,7 +57,7 @@ function valueAtOrBefore(
     const tsMs = new Date(row.captured_at).getTime();
     if (tsMs > targetMs) continue;
     if (tsMs < maxStaleMs) return null;
-    return row.value;
+    return marketValue(row); // movement anchors use the market series
   }
   return null;
 }
@@ -118,7 +129,7 @@ export async function loadAllHistory(
   for (;;) {
     let query = supabase
       .from("player_value_history")
-      .select("id, player_id, format_config_id, source, value, captured_at")
+      .select("id, player_id, format_config_id, source, value, captured_at, formula_offset")
       .order("captured_at", { ascending: true })
       .order("id", { ascending: true })
       .limit(PAGE);
@@ -271,7 +282,7 @@ export function computeTrendRows(
         bucket = [];
         buckets.set(fsd, bucket);
       }
-      bucket.push({ player_id: row.player_id, value: row.value });
+      bucket.push({ player_id: row.player_id, value: marketValue(row) });
     }
     for (const [fsd, bucket] of buckets) {
       bucket.sort((a, b) => b.value - a.value);
@@ -292,7 +303,11 @@ export function computeTrendRows(
 
   for (const [, rowsDesc] of groups) {
     const newest = rowsDesc[0];
-    const currentValue = newest.value;
+    // current_value stored = published (worth). All movement math below runs on
+    // the market series (value - formula_offset), so a silent FF Beacon change
+    // does not show as movement. Identical for external sources (offset 0).
+    const currentPublished = newest.value;
+    const currentValue = marketValue(newest);
     const player_id = newest.player_id;
     const format_config_id = newest.format_config_id;
     const source = newest.source;
@@ -316,7 +331,7 @@ export function computeTrendRows(
 
     const last30dValues = rowsDesc
       .filter((r) => new Date(r.captured_at).getTime() >= t30)
-      .map((r) => r.value);
+      .map((r) => marketValue(r));
     const data_points_30d = last30dValues.length;
     const high_30d = last30dValues.length > 0 ? Math.max(...last30dValues) : null;
     const low_30d = last30dValues.length > 0 ? Math.min(...last30dValues) : null;
@@ -351,7 +366,7 @@ export function computeTrendRows(
       player_id,
       format_config_id,
       source,
-      current_value: currentValue,
+      current_value: currentPublished,
       value_7d_ago: v7,
       value_30d_ago: v30,
       value_90d_ago: v90,

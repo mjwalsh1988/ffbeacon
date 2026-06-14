@@ -404,6 +404,209 @@ T089 | completed | Recompute trends + per-source show/hide verification
   the 7d window (roughly half the 7-day interval, as proposed). Implemented, not
   silently using +/-7. Raise/lower via the cap if you want different behavior.
 
+## FF Beacon Value Engine (plan v3.1)
+
+Proprietary signal-pipeline value + ranking source. Plan approved through v3.1.
+ffbeacon source row stays is_active=false until Phase 1-3 audits pass + owner
+sign-off. All tunables are DB-backed from the start (admin surface is Phase 6).
+
+### Phase B0 - Migrations + tunable foundation (completed)
+T700 | completed | format_configs: is_bestball column + 4 new presets (dynasty-ppr-tep, 3 best-ball)
+     | files: supabase/migrations/0035_format_configs_bestball_and_presets.sql
+     | note: is_bestball is orthogonal to league_type (deviation from v3.1 wording, justified)
+     | verified: yes (12 formats, 3 bestball)
+T701 | completed | source_registry: ffbeacon row, priority 1, is_active=false, 9 supported formats
+     | files: supabase/migrations/0036_source_registry_ffbeacon.sql
+     | verified: yes (ffbeacon_active=false, gated)
+T702 | completed | beacon_settings (global tunable KV) + 10 seeded defaults (staleness, factor, normalization, AI)
+     | files: supabase/migrations/0037_beacon_settings.sql
+     | verified: yes (RLS service-role-only, 10 rows)
+T703 | completed | beacon_signal_weights (per-signal/source) + 7 seeds; ai_adjust seeded disabled
+     | files: supabase/migrations/0038_beacon_signal_weights.sql
+     | verified: yes (RLS service-role-only, 7 rows)
+T704 | completed | beacon_value_bands (format-aware) + 6 global seeds (skill 0-10000, K/DEF 0-1500)
+     | files: supabase/migrations/0039_beacon_value_bands.sql
+     | verified: yes (RLS service-role-only, 6 rows)
+T705 | completed | beacon_manual_signals (player/pick, silent toggle, set_value, decay)
+     | files: supabase/migrations/0040_beacon_manual_signals.sql
+     | verified: yes (RLS service-role-only)
+T706 | completed | beacon_value_runs (run_id source, source_freshness, skipped_no_signal, factor_saturated)
+     | files: supabase/migrations/0041_beacon_value_runs.sql
+     | verified: yes (RLS service-role-only)
+T707 | completed | beacon_format_status (placeholder badge) + 3 best-ball baseline seeds
+     | files: supabase/migrations/0042_beacon_format_status.sql
+     | verified: yes (public SELECT + service role; baselines auto-resolved)
+T708 | completed | beacon_stat_profiles (scoring-invariant stat vector, K/DEF incl, no IDP)
+     | files: supabase/migrations/0043_beacon_stat_profiles.sql
+     | verified: yes (RLS service-role-only)
+T709 | completed | beacon_custom_formats (per-user saved custom formats, user-owned RLS)
+     | files: supabase/migrations/0044_beacon_custom_formats.sql
+     | verified: yes (own-row CRUD policies)
+T710 | completed | beacon_custom_value_cache (run_id-keyed on-demand cache)
+     | files: supabase/migrations/0045_beacon_custom_value_cache.sql
+     | verified: yes (RLS service-role-only)
+T711 | completed | player_value_history.formula_offset column (silent-change trend exclusion)
+     | files: supabase/migrations/0046_player_value_history_formula_offset.sql
+     | verified: yes (column present, default 0, inherits table RLS)
+T712 | completed | Regenerate database.types.ts; typecheck clean
+     | files: lib/database.types.ts
+     | verified: yes (tsc --noEmit passes; beacon tables + is_bestball + formula_offset present)
+
+### Phase B1 - Engine v1 (completed)
+T713 | completed | Engine pure core: types, freshness (cadence cutoffs), settings loader (live DB), engine combine (weightedAverage null guard, bounded factor, set_value short-circuit, offset)
+     | files: lib/beacon/types.ts, lib/beacon/freshness.ts, lib/beacon/settings.ts, lib/beacon/engine.ts
+     | verified: yes (reliability tests pass)
+T714 | completed | Normalization: trimmed P99 + median canonical curve + quantile matching + KS/Spearman helpers + MIN_PLAYERS_FOR_QUANTILE
+     | files: lib/beacon/normalize.ts
+     | verified: yes (audit: convergence, fidelity, outlier, non-identity all pass)
+T715 | completed | source_value producer (self-excluded + staleness-gated, freshness report) + manual producer (overrides + decay)
+     | files: lib/beacon/signals/source-value.ts, lib/beacon/signals/manual.ts
+     | verified: yes
+T716 | completed | Orchestrator: mint run_id, live settings, per-format normalize+combine, all-stale skip, KTC-baselined picks, finalize with source_freshness
+     | files: lib/calculate-beacon-values.ts, scripts/calculate-beacon-values.ts
+     | verified: yes (705 players, 2507 rows, 0 skipped, 0 saturated; ffbeacon is_active still false)
+T717 | completed | Reliability tests (staleness exclusion, single-signal valid, all-stale skip) + normalization audit harness
+     | files: scripts/beacon-reliability-tests.ts, scripts/beacon-normalization-audit.ts
+     | verified: yes (12/12 reliability pass; audit ALL PASS)
+     | note: B1 writes 5 source-backed formats; dynasty-ppr-tep + best-ball formats write 0 (skip path) until Phase 3 stat_value / baseline inheritance
+
+### Phase B2 - Offset-aware trends (completed)
+T718 | completed | calculate-trends offset-aware: marketValue helper; current_value=published; all change/trend/rank/volatility on market (value - formula_offset); per-day rankings on market; bookend gate unchanged
+     | files: lib/calculate-trends.ts
+     | verified: yes (real run 7854 combos; ffbeacon current_value matches published, 0 mismatch; external offset 0 = no-op parity)
+T719 | completed | Players page: headline uses published (only consumer is latestValue[0]); comment added so a future sparkline uses the market series. No sparkline exists today.
+     | files: app/players/[slug]/page.tsx
+     | verified: yes (7a audit)
+T720 | completed | Offset-trends verification via production computeTrendRows: silent change=no chip, true-signal=chip, external parity
+     | files: scripts/beacon-offset-trends-test.ts
+     | verified: yes (12/12 pass); real-data engine demo confirmed silent offset!=0 / true offset=0, then reverted
+     | note: value-read audit (7a) signed off; every call site decided published vs market
+
+### Phase B3 - stat_value (K/DEF) + format-aware bands (completed)
+T721 | completed | Stat scoring (kicking + team-defense), admin-tunable via beacon_signal_weights.params; migration 0047 seeds the scoring config
+     | files: lib/beacon/scoring.ts, supabase/migrations/0047_beacon_stat_value_scoring_params.sql
+     | verified: yes (eyeball sane)
+T722 | completed | stat_value producer: recency-weighted K/DEF re-score from player_stats; range() pagination (fixed 1000-row truncation that under-counted K/DEF)
+     | files: lib/beacon/signals/stat-value.ts
+     | verified: yes (58 K + 32 DEF valued, was truncated to 36/16 before fix)
+T723 | completed | Orchestrator: shared emit closure + K/DEF stat_value pools per format (only on formats with a skill board)
+     | files: lib/calculate-beacon-values.ts
+     | verified: yes (795 players, 2957 rows, 0 skipped)
+T724 | completed | Format-aware K/DEF bands: dynasty compressed to 0-250, redraft global 0-1500 (migration 0048)
+     | files: supabase/migrations/0048_beacon_kdef_dynasty_bands.sql
+     | verified: yes (Aubrey 1499 redraft / 250 dynasty; Broncos D 1466 / 244)
+T725 | completed | Outage simulation: total external outage leaves K/DEF alive (degraded board, not dead)
+     | files: scripts/beacon-outage-sim.ts
+     | verified: yes (skill survivors 0, K/DEF 58+32 alive, all sources dropped)
+     | note: 4 formats still empty (dynasty-ppr-tep + 3 best-ball) - no skill base yet, pending TEP derivation / best-ball baseline inheritance (later phase)
+
+### Phase B4 - stat_performance + stat profiles (completed)
+T726 | completed | Skill scoring map + PROFILE_COLUMNS in scoring.ts (re-score skill components under any config)
+     | files: lib/beacon/scoring.ts
+     | verified: yes
+T727 | completed | beacon_stat_profiles nightly materialization (scoring-invariant components, range-paged)
+     | files: lib/beacon/stat-profiles.ts
+     | verified: yes (1025 profiles, 637 with 2 seasons)
+T728 | completed | stat_performance producer: bounded YoY skill trajectory adjustment, confidence-damped; params seeded (migration 0049)
+     | files: lib/beacon/signals/stat-performance.ts, supabase/migrations/0049_beacon_stat_performance_params.sql
+     | verified: yes (adj bounded to +/-0.10; risers Lawrence/Wilson, fallers Darnold/Burrow; conf damping confirmed)
+T729 | completed | Orchestrator: materialize profiles, gather perf, thread adjustInputs through emit closure (skill only)
+     | files: lib/calculate-beacon-values.ts
+     | verified: yes (795 players, 2957 rows, 0 skipped, 0 saturated, 146 perf-adjusted)
+
+### Phase B5 - fill 4 empty formats + full-board audit (completed)
+T730 | completed | Derivation: dynasty-ppr-tep (TE-premium boost from dynasty-ppr-std) + 3 best-ball identity inherits; stat-driven TE boost; TEP settings (migration 0050)
+     | files: lib/beacon/derive.ts, lib/calculate-beacon-values.ts, supabase/migrations/0050_beacon_tep_derivation_settings.sql
+     | verified: yes (TEs boosted 6.8-10.4%, best-ball identity exact, picks inherited)
+T731 | completed | Full-board audit across all 9 formats (in-band, positions populated, derivation invariants)
+     | files: scripts/beacon-board-audit.ts
+     | verified: yes (ALL PASS)
+T732 | completed | FIX: unordered range() pagination on players loads silently dropped ~100 players (incl elite TEs) from position maps; added .order("id") across all beacon producers
+     | files: lib/beacon/stat-profiles.ts, lib/beacon/signals/{source-value,stat-value,stat-performance}.ts, lib/beacon/derive.ts, scripts/beacon-board-audit.ts
+     | verified: yes (profiles 1025 -> 1125, perfAdjusted 181 -> 239, elite TEs now boosted)
+
+### ALL 9 FORMATS POPULATED - ready for owner end-to-end ranking review
+- 5363 value rows + 180 picks across 9 formats; trends 10710 combos.
+- is_active STILL FALSE. Awaiting owner review of every format's rankings + sign-off.
+
+### Phase B6 - admin control surface /admin/beacon (completed)
+T733 | completed | All crons registered in one place: recalculate-beacon added to CRON_JOBS + cron route + vercel.json (09:30). Future jobs: add to CRON_JOBS + a route and they auto-appear.
+     | files: lib/cron-runs.ts, app/api/cron/recalculate-beacon/route.ts, vercel.json
+     | verified: yes (build)
+T734 | completed | Server actions (requireAdmin): updateBeaconSetting, updateSignalWeight, toggleSource, upsertValueBand, createManualSignal, setManualSignalActive, recomputeBeacon
+     | files: app/admin/beacon/actions.ts
+     | verified: yes (typecheck + build)
+T735 | completed | Settings UI: source toggles, signal weights table, scalar settings (factor/staleness/normalization/TEP/AI), format-aware bands editor, manual composer (silent vs true-signal explained)
+     | files: components/admin/{recompute-bar,source-toggles,setting-field,signal-weights-table,value-bands-editor,manual-composer}.tsx
+     | verified: yes
+T736 | completed | Visibility UI: all-cron monitoring, beacon_value_runs report (freshness/skipped/saturation), rankings review (filter by format+position, expandable signal breakdown, placeholder badge), recompute-now + staleness indicator
+     | files: components/admin/rankings-review.tsx, app/admin/beacon/page.tsx, components/admin-nav.tsx
+     | verified: yes (build; review query returns data)
+     | note: screen-reader-first - role=switch/aria-checked toggles, aria-live status, captioned tables w/ scope, keyboard nav, no visual-only state
+
+### Phase B6.1 - admin IA restructure (completed)
+T737 | completed | Split the single /admin/beacon page into a parent index + 7 focused sub-pages, each its own route/title/H1, screen-reader-first. Renamed section to "Player Values & Sources".
+     | files: app/admin/beacon/{page,rankings,sources,weights,bands,settings,manual,runs}/page.tsx, lib/beacon-admin-nav.ts, lib/beacon-admin.ts, components/admin/{beacon-subnav,beacon-page-shell,manual-signals-list}.tsx, components/admin-nav.tsx
+     | verified: yes (typecheck + build; 8 routes compiled)
+     | note: shared BeaconPageShell (subnav + heading + RecomputeBar); recompute affordance + staleness warning on rankings/sources/weights/bands/settings/manual. Server actions + engine unchanged.
+
+### Phase B7 - AI signal (ai_adjust) wired to Claude (completed, shipped OFF)
+T738 | completed | Migration 0051: beacon_ai_cache (input-hash keyed AI response cache so unchanged inputs never re-bill). RLS enabled, service_role_all only.
+     | files: supabase/migrations/0051_beacon_ai_cache.sql, lib/database.types.ts
+     | verified: yes (RLS confirmed: rowsecurity on, single service_role ALL policy, no anon/auth access)
+T739 | completed | Migration 0052: AI settings into beacon_settings (category 'ai') - ALL admin-editable on /admin/beacon/settings. ai_system_prompt (full prompt template, DB-backed, {bound} substituted live), ai_max_calls (60), ai_min_spread (0.15), ai_min_mover (0.05).
+     | files: supabase/migrations/0052_beacon_ai_settings.sql
+     | verified: yes (7 ai rows present; prompt visible + editable)
+T740 | completed | Producer lib/beacon/signals/ai-adjust.ts: callClaudeForAdjustment (official @anthropic-ai/sdk, structured-output json_schema, clamp to [-bound,bound] + [0,1]) + gatherAiAdjustments (sha256 cache check, live calls capped at maxCalls, cache upsert). DEFAULT_AI_SYSTEM_PROMPT is fallback only.
+     | files: lib/beacon/signals/ai-adjust.ts, lib/beacon/settings.ts
+     | verified: yes (typecheck)
+T741 | completed | Orchestrator wiring: candidates from flagship dynasty-ppr-sflex skill slice, gated by source spread >= ai_min_spread OR abs(perf) >= ai_min_mover, ranked by contestedness, capped at ai_max_calls. AI folded into skill adjustInputs alongside stat_performance; metadata.ai_adjust = {adjustment_pct, confidence, rationale, cached}. ai_calls written to beacon_value_runs + CalculateBeaconResult. OFF unless ai_enabled AND ai_adjust weight enabled AND ANTHROPIC_API_KEY set.
+     | files: lib/calculate-beacon-values.ts
+     | verified: yes (typecheck + build)
+T742 | completed | SettingField textarea: string settings whose key includes 'prompt' (or value > 60 chars) render a full-width monospace textarea (col-span-2) so the prompt is fully visible + editable, never truncated. AI group description updated.
+     | files: components/admin/setting-field.tsx, app/admin/beacon/settings/page.tsx
+     | verified: yes (build)
+T743 | completed | Smoke test scripts/beacon-ai-smoke.ts + npm run beacon:ai-smoke: reads live prompt/model/bound, one Haiku call, prints parsed/clamped result. Ran ONCE: valid model id, strict JSON parsed, clamp held (adjustment 0.03 in [-0.12,0.12], confidence 0.55). AI left OFF.
+     | files: scripts/beacon-ai-smoke.ts, package.json
+     | verified: yes (live call succeeded)
+
+### Sources management + a11y pass (completed)
+T747 | completed | DEFAULT SOURCE as its own concept. Migration 0053: source_registry.is_default (seeded to ktc to preserve current behavior) + atomic set_default_source(text) RPC (SECURITY DEFINER, service_role-only EXECUTE). resolveSourceForFormat + new pickDefaultSource() honor is_default; resolveSourceSlug + site-header use it. Removed hardcoded DEFAULT_SOURCE_SLUG. Per-user saved pref still wins (resolved earlier in the chain). Default cannot be deactivated (toggleSource blocks it).
+     | files: supabase/migrations/0053_source_default_flag.sql, lib/source.ts, lib/preferences.ts, lib/site.ts, components/site-header.tsx, lib/database.types.ts, app/admin/beacon/actions.ts
+     | verified: yes (exactly one default; RPC anon/authenticated have no EXECUTE; typecheck + build)
+T748 | completed | DISPLAY ORDER control (reuses priority). moveSource(slug, up|down) swaps priority with the adjacent source. Keyboard up/down buttons (no drag), aria-live announces new position. Public picker reads priority order.
+     | files: app/admin/beacon/actions.ts, components/admin/sources-manager.tsx
+     | verified: yes
+T749 | completed | FORMAT DISPLAY NAMES editor. updateFormatDisplayName(formatId, name) writes format_configs.display_name (public UI reads it live). Per-format labeled input + Save + aria-live. Raw slug shown only as dimmed admin reference.
+     | files: app/admin/beacon/actions.ts, components/admin/format-names-editor.tsx, app/admin/beacon/sources/page.tsx
+     | verified: yes
+T750 | completed | New SourcesManager component (replaces source-toggles.tsx, deleted): active switch + set-as-default + reorder per row, shared aria-live region, optimistic updates with revert-on-failure, 44px targets, full keyboard nav. Sources page split into "Value sources" + "Format display names" sections.
+     | files: components/admin/sources-manager.tsx, components/admin/format-names-editor.tsx, app/admin/beacon/sources/page.tsx; removed components/admin/source-toggles.tsx
+     | verified: yes
+T751 | completed | a11y fixes from audit: manual-signals-list deactivate now announces via aria-live + moves focus to next button (or empty-state) instead of dropping it; unique H1 per admin sub-page (BeaconPageShell h2->h1, crons h2->h1) with the shared hero H1 scoped to /admin index (new components/admin/admin-hero.tsx, removed from layout); aria-current=page added to crons JobFilter (incl. All jobs) and subnav Overview (done previously).
+     | files: components/admin/{beacon-page-shell,admin-hero,manual-signals-list}.tsx, app/admin/layout.tsx, app/admin/page.tsx, app/admin/crons/page.tsx
+     | verified: yes (typecheck + build)
+T752 | completed | Deep-tail $0 fix. Migration 0054: skill band floors (QB/RB/WR/TE global) 0 -> 1. Recomputed beacon + rankings + trends: zero $0 skill rows (min now 9-77 by position). ~0.01% compression vs 10000 ceiling, negligible. K/DEF left at 0. is_active + ai_enabled untouched (false).
+     | files: supabase/migrations/0054_skill_band_floor.sql
+     | verified: yes (no skill value = 0 post-recompute)
+
+### Pre-launch audit (security / a11y / data integrity) - completed
+T744 | completed | BLOCKER fixed: seed-rankings filtered sources by is_active, so ffbeacon rankings were never seeded; flipping is_active would have exposed an empty rankings board (ffbeacon is priority 1 = default). Decoupled ranking seeding from is_active (rankings is a derived cache; reads are is_active-gated by resolveSourceForFormat). Pre-staged all 9 ffbeacon ranking formats (5363 rows) with is_active still FALSE.
+     | files: lib/seed-rankings.ts
+     | verified: yes (rankings now has ffbeacon for 9 formats)
+T745 | completed | BLOCKER fixed: seed-rankings silently swallowed a transient PostgREST statement_timeout (caught vErr, continue), dropping an entire (source,format) from rankings with no failure signal (hit on ffbeacon/dynasty-ppr-tep-sflex). Wrapped the value fetch in withRetry; persistent errors now throw instead of shipping a missing format.
+     | files: lib/seed-rankings.ts
+     | verified: yes (retry recovered tep-sflex; loud failure on exhaustion)
+T746 | completed | a11y + rule-6: removed banned em-dash / middle-dot chars across admin (signal-weights, runs, rankings-review, manual-signals-list), added aria-current to subnav Overview chip, surfaced ai_adjust (adj %, confidence, rationale, cached) in rankings-review breakdown + ai_calls in runs monitoring.
+     | files: components/admin/{signal-weights-table,rankings-review,manual-signals-list,beacon-subnav}.tsx, app/admin/beacon/runs/page.tsx
+     | verified: yes (typecheck + build)
+     | RLS audit: all 15 beacon/value/config tables RLS-enabled with correct posture (service-role writes, public SELECT only on data tables, own-row CRUD on custom_formats, no client write path to config/settings/engine tables). Secret key + ANTHROPIC_API_KEY server-only (next.config forwards only the publishable key). Every /admin/beacon page + server action behind requireAdmin (validates JWT + service-role-only is_admin). Cron routes gated by CRON_SECRET, fail closed. No XSS (reason/labels are escaped JSX; no dangerouslySetInnerHTML on user input).
+
+### B7 state: AI integration complete and proven, shipped OFF
+- ai_enabled = false, ai_adjust weight is_enabled = false, source_registry.ffbeacon.is_active = false. Nothing flipped.
+- EVERY AI prompt is visible + editable in the admin AI settings (the ai_system_prompt textarea on /admin/beacon/settings shows the exact template sent on every call; {bound} is the only runtime substitution).
+- Owner reviews all 9 formats via /admin/beacon, tunes, then authorizes is_active flip + the recalculate-beacon cron goes live. Enable AI later to test effectiveness against the non-AI baseline.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

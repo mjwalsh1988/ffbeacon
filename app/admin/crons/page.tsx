@@ -55,9 +55,9 @@ export default async function AdminCronLogsPage({
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           Operations
         </p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
           Cron run logs
-        </h2>
+        </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
           The most recent {FEED_LIMIT} scheduled job runs, newest first. Each run
           records its status, timing, and the result the handler returned so
@@ -93,14 +93,18 @@ function JobFilter({ activeJob }: { activeJob: CronJobName | null }) {
     }`;
   return (
     <nav aria-label="Filter by job" className="flex flex-wrap gap-2">
-      <Link href="/admin/crons" className={chip(activeJob === null)}>
+      <Link
+        href="/admin/crons"
+        aria-current={activeJob === null ? "page" : undefined}
+        className={chip(activeJob === null)}
+      >
         All jobs
       </Link>
       {CRON_JOBS.map((j) => (
         <Link
           key={j.name}
           href={`/admin/crons?job=${j.name}`}
-          aria-current={activeJob === j.name ? "true" : undefined}
+          aria-current={activeJob === j.name ? "page" : undefined}
           className={chip(activeJob === j.name)}
         >
           {j.label}

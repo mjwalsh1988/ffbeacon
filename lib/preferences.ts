@@ -2,8 +2,8 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { readSourceSlug, getAvailableSources } from "@/lib/source";
-import { DEFAULT_FORMAT_SLUG, DEFAULT_SOURCE_SLUG } from "@/lib/site";
+import { readSourceSlug, getAvailableSources, pickDefaultSource } from "@/lib/source";
+import { DEFAULT_FORMAT_SLUG } from "@/lib/site";
 
 // Shared, request-scoped fetch of (user, user_preferences). Both resolvers
 // below used to issue their own auth.getUser() + user_preferences SELECT,
@@ -78,16 +78,12 @@ export async function resolveSourceSlug(
   if (fromCookie) return { slug: fromCookie, origin: "cookie", transient: false };
 
   const sources = await getAvailableSources(supabase);
-  // Always prefer the explicitly-configured DEFAULT_SOURCE_SLUG (KTC)
-  // when it's an active source, regardless of the registry priority
-  // order. This is the only place new visitors with no URL/DB/cookie
-  // signal land, so it controls "first-impression" data shown across
-  // the site. Falls back to the highest-priority available source if
-  // KTC is ever disabled.
-  const def =
-    sources.find((s) => s.slug === DEFAULT_SOURCE_SLUG)?.slug ??
-    sources[0]?.slug ??
-    null;
+  // The DB-backed site-wide default (source_registry.is_default), admin-editable
+  // on /admin/beacon/sources. This is the only place new visitors with no
+  // URL/DB/cookie signal land, so it controls the first-impression data shown
+  // across the site. Falls back to the first active source in display order if
+  // no default is flagged.
+  const def = pickDefaultSource(sources);
   if (!def) return { slug: null, origin: "default", transient: false };
   return { slug: def, origin: "default", transient: false };
 }

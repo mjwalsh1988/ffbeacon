@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { CRON_JOBS, summarizeCronResult, type CronJobName } from "@/lib/cron-runs";
 import { CronStatusBadge } from "@/components/cron-status-badge";
+import { AdminHero } from "@/components/admin/admin-hero";
 import { formatRelative, formatUtc, formatDuration } from "@/lib/datetime";
 import type { Json } from "@/lib/database.types";
 
@@ -100,6 +101,7 @@ export default async function AdminOverviewPage() {
 
   return (
     <div className="space-y-12">
+      <AdminHero />
       <StatsSection stats={stats} />
       <CronHealthSection latestByJob={latestByJob} nowMs={nowMs} />
       <RecentLeaguesSection leagues={recentLeagues.data ?? []} nowMs={nowMs} />
