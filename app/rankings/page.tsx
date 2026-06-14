@@ -407,7 +407,10 @@ export default async function RankingsPage({
                 No ranking data for this format yet. Try a different format.
               </p>
             ) : (
-              <RankingsTable rows={rows} />
+              <RankingsTable
+                rows={rows}
+                valueIsBeacon={valueHistoryResolution.source === "ffbeacon"}
+              />
             )}
           </div>
         </div>

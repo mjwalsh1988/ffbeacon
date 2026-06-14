@@ -206,6 +206,7 @@ export default async function TeamDetailPage({
           sleeperLeagueId={sleeperLeagueId}
           showViewTeamPageLink={false}
           headingLevel="h1"
+          valueIsBeacon={effectiveSourceSlug === "ffbeacon"}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">

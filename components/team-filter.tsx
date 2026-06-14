@@ -16,6 +16,9 @@ export type TeamFilterProps = {
    * row links). Takes priority over `searchedUsername` for the default
    * selection so deep-links zero in on the specific team. */
   focusedRosterId?: number | null;
+  /** True when the league's selected value source is FF Beacon, forwarded to
+   * each TeamCard so position subtotals render with the FF Beacon mark. */
+  valueIsBeacon?: boolean;
 };
 
 /**
@@ -30,6 +33,7 @@ export function TeamFilter({
   sleeperLeagueId,
   searchedUsername,
   focusedRosterId,
+  valueIsBeacon = false,
 }: TeamFilterProps) {
   const ownerRosterId = useMemo(
     () => resolveOwnerRosterId(teams, searchedUsername, focusedRosterId),
@@ -160,6 +164,7 @@ export function TeamFilter({
                 expanded={expandedRosterIds.has(t.sleeperRosterId)}
                 onToggleExpand={() => handleToggleExpand(t.sleeperRosterId)}
                 searchedUsername={searchedUsername}
+                valueIsBeacon={valueIsBeacon}
               />
             </li>
           ))}

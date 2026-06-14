@@ -24,6 +24,7 @@ import {
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { TrendChip } from "@/components/trend-chip";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { BeaconValue } from "@/components/beacon-value-icon";
 
 const SEASON = 2025;
 
@@ -522,7 +523,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               </div>
 
               {/* Key metric tiles */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:max-w-md lg:flex-shrink-0">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:max-w-2xl lg:flex-shrink-0">
                 <MetricTile
                   icon={Trophy}
                   label="Overall rank"
@@ -532,7 +533,17 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
                 <MetricTile
                   icon={LineChart}
                   label="Market value"
-                  value={latestValue ? latestValue.value.toLocaleString() : "—"}
+                  value={
+                    latestValue ? (
+                      <BeaconValue
+                        show={valueHistoryResolution.source === "ffbeacon"}
+                      >
+                        {latestValue.value.toLocaleString()}
+                      </BeaconValue>
+                    ) : (
+                      "—"
+                    )
+                  }
                   sub={defaultFormat?.display_name ?? ""}
                 >
                   {trends?.show_trend_7d && (
@@ -831,15 +842,15 @@ function MetricTile({
 }: {
   icon: typeof Trophy;
   label: string;
-  value: string;
+  value: React.ReactNode;
   sub: string;
   children?: React.ReactNode;
 }) {
   return (
     <div className="rounded-card border border-line bg-surface p-4">
       <div className="flex items-center gap-2 text-ink-subtle">
-        <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-        <p className="text-[11px] font-semibold uppercase tracking-wider">{label}</p>
+        <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+        <p className="text-[11px] font-semibold uppercase tracking-wider lg:whitespace-nowrap">{label}</p>
       </div>
       <p className="mt-1.5 font-mono text-2xl font-bold tabular-nums text-ink">{value}</p>
       {sub && <p className="text-xs text-ink-muted">{sub}</p>}

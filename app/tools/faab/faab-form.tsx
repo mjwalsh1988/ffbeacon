@@ -10,6 +10,7 @@ import {
 } from "react";
 import { BarChart3, Database, Sparkles, Trophy } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { BeaconValue } from "@/components/beacon-value-icon";
 
 export type FaabPlayer = {
   slug: string;
@@ -47,6 +48,7 @@ export function FaabForm({
   formatName,
   rankingsSourceName,
   valueSourceName,
+  valueSourceIsBeacon = false,
 }: {
   players: FaabPlayer[];
   formatName: string;
@@ -56,6 +58,9 @@ export function FaabForm({
   /** Same, for the player_value_history source. Often equal to rankings
    * source but can differ when one source publishes rankings only. */
   valueSourceName: string | null;
+  /** True when the value source is FF Beacon, so the market value renders
+   * with the FF Beacon mark. */
+  valueSourceIsBeacon?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<FaabPlayer | null>(null);
@@ -169,6 +174,7 @@ export function FaabForm({
           formatName={formatName}
           rankingsSourceName={rankingsSourceName}
           valueSourceName={valueSourceName}
+          valueSourceIsBeacon={valueSourceIsBeacon}
         />
       )}
 
@@ -361,11 +367,13 @@ function SelectedPlayerCard({
   formatName,
   rankingsSourceName,
   valueSourceName,
+  valueSourceIsBeacon,
 }: {
   player: FaabPlayer;
   formatName: string;
   rankingsSourceName: string | null;
   valueSourceName: string | null;
+  valueSourceIsBeacon: boolean;
 }) {
   return (
     <section
@@ -404,9 +412,13 @@ function SelectedPlayerCard({
         <Metric
           label="Market value"
           value={
-            player.value != null && player.value > 0
-              ? player.value.toLocaleString()
-              : "—"
+            player.value != null && player.value > 0 ? (
+              <BeaconValue show={valueSourceIsBeacon}>
+                {player.value.toLocaleString()}
+              </BeaconValue>
+            ) : (
+              "—"
+            )
           }
           attribution={valueSourceName ?? rankingsSourceName ?? "—"}
         />
@@ -421,7 +433,7 @@ function Metric({
   attribution,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   attribution: string;
 }) {
   return (

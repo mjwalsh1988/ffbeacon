@@ -341,13 +341,20 @@ export async function runCalculateBeaconValues(
       });
       if (result === null) return "skip";
       if (result.factorSaturated) factorSaturated += 1;
+      // FF Beacon publishes whole-number values like every other source. Round
+      // the published value, and derive formula_offset from the rounded market
+      // so the trend basis (market = value - formula_offset, see
+      // calculate-trends.ts) stays integer-clean. metadata keeps the raw engine
+      // floats for diagnostics.
+      const publishedValue = Math.round(result.published);
+      const marketValue = Math.round(result.market);
       historyRows.push({
         player_id: playerId,
         format_config_id: fmt.id,
-        value: result.published,
+        value: publishedValue,
         source: SOURCE_SLUG,
         captured_at: capturedAt,
-        formula_offset: result.formulaOffset,
+        formula_offset: publishedValue - marketValue,
         metadata: {
           engine: "beacon-v1",
           run_id: runId,
@@ -532,7 +539,9 @@ export async function runCalculateBeaconValues(
         };
         if (spec.transform === "te_premium" && position === "TE") {
           const b = teBoost.get(br.player_id) ?? 0;
-          value = Math.min(10000, br.value * (1 + b));
+          // Keep derived values whole too. Identity inherits stay integer
+          // because the baseline rows are already rounded above.
+          value = Math.round(Math.min(10000, br.value * (1 + b)));
           signal = "tep_derived";
           extra.te_boost_pct = b;
         }

@@ -37,6 +37,7 @@ export default async function FaabPage({
   let fallbackBanner: { requested: string | null; actual: string } | null = null;
   let rankingsSourceName: string | null = null;
   let valueSourceName: string | null = null;
+  let valueSourceIsBeacon = false;
   if (format) {
     const registry = await getAvailableSources(supabase);
     const rankingsResolution = resolveSourceForFormat(
@@ -56,6 +57,7 @@ export default async function FaabPage({
     }
     if (valueHistoryResolution.source) {
       valueSourceName = describeSource(registry, valueHistoryResolution.source);
+      valueSourceIsBeacon = valueHistoryResolution.source === "ffbeacon";
     }
     if (rankingsResolution.fellBack && rankingsResolution.source) {
       fallbackBanner = {
@@ -170,6 +172,7 @@ export default async function FaabPage({
           formatName={format?.display_name ?? "default format"}
           rankingsSourceName={rankingsSourceName}
           valueSourceName={valueSourceName}
+          valueSourceIsBeacon={valueSourceIsBeacon}
         />
       </div>
     </main>

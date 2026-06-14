@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
+import { BeaconValue } from "@/components/beacon-value-icon";
 
 /**
  * One row of the Power Rankings table on the league overview.
@@ -48,6 +49,7 @@ export function PowerRankingsRow({
   teamCount,
   sleeperLeagueId,
   searchedUsername = null,
+  valueIsBeacon = false,
 }: {
   data: PowerRankingsRowData;
   teamCount: number;
@@ -55,6 +57,9 @@ export function PowerRankingsRow({
   /** Forwarded from `?username=` so the team link keeps the in-view league
    * switcher alive when it lands back on the main deep view. */
   searchedUsername?: string | null;
+  /** True when the league's selected value source is FF Beacon, so the total
+   * team value renders with the FF Beacon mark. */
+  valueIsBeacon?: boolean;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const teamHref = (() => {
@@ -102,7 +107,9 @@ export function PowerRankingsRow({
           className="hidden px-4 py-2 text-right font-mono font-semibold tabular-nums text-ink md:table-cell"
           aria-label={`Total value ${formatValue(data.totalValue)}`}
         >
-          {formatValue(data.totalValue)}
+          <BeaconValue show={valueIsBeacon && data.totalValue != null}>
+            {formatValue(data.totalValue)}
+          </BeaconValue>
         </td>
       </tr>
       {sheetOpen && (
@@ -110,6 +117,7 @@ export function PowerRankingsRow({
           data={data}
           teamCount={teamCount}
           teamHref={teamHref}
+          valueIsBeacon={valueIsBeacon}
           onClose={() => setSheetOpen(false)}
         />
       )}
@@ -172,11 +180,13 @@ function TeamRankSheet({
   data,
   teamCount,
   teamHref,
+  valueIsBeacon,
   onClose,
 }: {
   data: PowerRankingsRowData;
   teamCount: number;
   teamHref: string;
+  valueIsBeacon: boolean;
   onClose: () => void;
 }) {
   const labelId = useId();
@@ -312,7 +322,9 @@ function TeamRankSheet({
             Total value
           </span>
           <span className="font-mono text-xl font-extrabold tabular-nums text-brand-cyan">
-            {formatValue(data.totalValue)}
+            <BeaconValue show={valueIsBeacon && data.totalValue != null}>
+              {formatValue(data.totalValue)}
+            </BeaconValue>
           </span>
         </div>
 

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { BeaconValue } from "@/components/beacon-value-icon";
 
 export type RankingsRow = {
   overall_rank: number;
@@ -87,7 +88,16 @@ const MOBILE_SORT_OPTIONS: Array<{
   { key: "change_7d", label: "Value 7d", short: "Val 7d", defaultDir: "desc" },
 ];
 
-export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
+export function RankingsTable({
+  rows,
+  valueIsBeacon = false,
+}: {
+  rows: RankingsRow[];
+  /** True when the source backing the Value column is FF Beacon. Drives the
+   *  small FF Beacon mark shown to the left of every value number so readers
+   *  recognize the proprietary values as ours. */
+  valueIsBeacon?: boolean;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>("overall_rank");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [openRow, setOpenRow] = useState<RankingsRow | null>(null);
@@ -320,7 +330,11 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
 
                 {/* Mobile dynamic metric cell — renders only at <md. */}
                 <td className="py-3 pl-2 pr-4 text-center font-mono tabular-nums md:hidden">
-                  <MobileMetricCell row={row} sortKey={sortKey} />
+                  <MobileMetricCell
+                    row={row}
+                    sortKey={sortKey}
+                    valueIsBeacon={valueIsBeacon}
+                  />
                 </td>
 
                 {/* Desktop-only cells. */}
@@ -344,7 +358,13 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
                   )}
                 </td>
                 <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
-                  {row.value !== null ? row.value.toLocaleString() : "—"}
+                  {row.value !== null ? (
+                    <BeaconValue show={valueIsBeacon}>
+                      {row.value.toLocaleString()}
+                    </BeaconValue>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
                   <span className="inline-flex justify-center">
@@ -365,6 +385,7 @@ export function RankingsTable({ rows }: { rows: RankingsRow[] }) {
       <PlayerDetailSheet
         row={openRow}
         onClose={() => setOpenRow(null)}
+        valueIsBeacon={valueIsBeacon}
       />
     </>
   );
@@ -382,9 +403,11 @@ function mobileMetricLabel(sortKey: SortKey): string {
 function MobileMetricCell({
   row,
   sortKey,
+  valueIsBeacon,
 }: {
   row: RankingsRow;
   sortKey: SortKey;
+  valueIsBeacon: boolean;
 }) {
   switch (sortKey) {
     case "tier":
@@ -409,8 +432,12 @@ function MobileMetricCell({
     case "value":
     case "overall_rank":
     default:
-      return (
-        <span>{row.value !== null ? row.value.toLocaleString() : "—"}</span>
+      return row.value !== null ? (
+        <BeaconValue show={valueIsBeacon}>
+          {row.value.toLocaleString()}
+        </BeaconValue>
+      ) : (
+        <span>—</span>
       );
   }
 }
@@ -424,9 +451,11 @@ function MobileMetricCell({
 function PlayerDetailSheet({
   row,
   onClose,
+  valueIsBeacon,
 }: {
   row: RankingsRow | null;
   onClose: () => void;
+  valueIsBeacon: boolean;
 }) {
   const open = row !== null;
   return (
@@ -487,7 +516,15 @@ function PlayerDetailSheet({
             />
             <MetricTile
               label="Value"
-              value={row.value !== null ? row.value.toLocaleString() : "—"}
+              value={
+                row.value !== null ? (
+                  <BeaconValue show={valueIsBeacon}>
+                    {row.value.toLocaleString()}
+                  </BeaconValue>
+                ) : (
+                  "—"
+                )
+              }
             />
             <MetricTile
               label="Rank 7d"

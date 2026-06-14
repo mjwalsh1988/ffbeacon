@@ -4,6 +4,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { saveSourcePreference, saveFormatPreference } from "@/app/actions/preferences";
 import { pickFallbackFormat, type FormatLike } from "@/lib/format-fallback";
+import { BeaconValueIcon, BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
 
 export type SourceOption = {
   slug: string;
@@ -314,6 +315,11 @@ export function SourceToggle({
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
+                    {/* FF Beacon is our proprietary source: mark its row with
+                        the brand logo so it reads as "our values" in the list.
+                        Every other source stays icon-free. Sized 1em so it sits
+                        inline without changing the option row's height. */}
+                    {option.slug === BEACON_SOURCE_SLUG && <BeaconValueIcon />}
                     <span className="font-medium">{option.display_name}</span>
                     {!formatSupported && (
                       <span

@@ -3,6 +3,7 @@ import type { TradeAnalysis, TradeSide } from "@/lib/trade-analyzer";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { CopyLinkButton } from "@/components/copy-link-button";
+import { BeaconValue, BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
 
 export type TransactionRowData = {
   /** Sleeper transaction id (used in trade share links). */
@@ -143,6 +144,10 @@ function TypePill({ type, label }: { type: string; label: string }) {
 function TradeAnalyzerBody({ analysis }: { analysis: TradeAnalysis }) {
   const { sides, verdict, hasMissingValues, context } = analysis;
   const verdictLabel = buildVerdictLabel(verdict, sides);
+  // Player values come from the user-selected value source; mark them when
+  // that source is FF Beacon. Draft pick values always come from KTC
+  // (context.pickSourceSlug), so pick rows never get the mark.
+  const valueIsBeacon = context.sourceSlug === BEACON_SOURCE_SLUG;
 
   return (
     <div className="mt-4 space-y-4">
@@ -154,6 +159,7 @@ function TradeAnalyzerBody({ analysis }: { analysis: TradeAnalysis }) {
             isWinner={
               verdict.winnerRosterId != null && side.rosterId === verdict.winnerRosterId
             }
+            valueIsBeacon={valueIsBeacon}
           />
         ))}
       </div>
@@ -184,7 +190,15 @@ function TradeAnalyzerBody({ analysis }: { analysis: TradeAnalysis }) {
   );
 }
 
-function TradeSideCard({ side, isWinner }: { side: TradeSide; isWinner: boolean }) {
+function TradeSideCard({
+  side,
+  isWinner,
+  valueIsBeacon,
+}: {
+  side: TradeSide;
+  isWinner: boolean;
+  valueIsBeacon: boolean;
+}) {
   return (
     <section
       aria-labelledby={`side-${side.rosterId}-name`}
@@ -208,7 +222,9 @@ function TradeSideCard({ side, isWinner }: { side: TradeSide; isWinner: boolean 
           className="font-mono text-lg font-semibold text-ink"
           aria-label={`Total value received: ${formatValue(side.totalValue)} points`}
         >
-          {formatValue(side.totalValue)}
+          <BeaconValue show={valueIsBeacon}>
+            {formatValue(side.totalValue)}
+          </BeaconValue>
         </p>
       </header>
       <p className="mt-1 text-xs uppercase tracking-wider text-ink-subtle">Acquired</p>
@@ -234,7 +250,9 @@ function TradeSideCard({ side, isWinner }: { side: TradeSide; isWinner: boolean 
                 p.noValue ? "text-ink-muted italic" : "text-ink-muted"
               }`}
             >
-              {p.noValue ? "—" : formatValue(p.value)}
+              <BeaconValue show={valueIsBeacon && !p.noValue}>
+                {p.noValue ? "—" : formatValue(p.value)}
+              </BeaconValue>
             </span>
           </li>
         ))}

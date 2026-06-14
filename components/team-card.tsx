@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useId, useMemo } from "react";
+import { BeaconValue } from "@/components/beacon-value-icon";
 import type {
   DraftPickAsset,
   ResolvedPlayer,
@@ -23,6 +24,9 @@ type TeamCardProps = {
   /** Forwarded from `?username=` so the "View team page" link keeps the
    * in-view league switcher context on the team detail page. */
   searchedUsername?: string | null;
+  /** True when the league's selected value source is FF Beacon, so each
+   * position subtotal renders with the FF Beacon mark. */
+  valueIsBeacon?: boolean;
 };
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE"] as const;
@@ -62,6 +66,7 @@ export function TeamCard({
   expanded: expandedProp,
   onToggleExpand,
   searchedUsername = null,
+  valueIsBeacon = false,
 }: TeamCardProps) {
   const HeadingTag = headingLevel;
   const collapsible = typeof onToggleExpand === "function";
@@ -208,6 +213,7 @@ export function TeamCard({
                 totalValue={positionValues[pos]}
                 rank={positionRanks[pos]}
                 teamCount={teamCount}
+                valueIsBeacon={valueIsBeacon}
               />
             ))}
             <PicksColumn
@@ -250,6 +256,7 @@ function PositionColumn({
   totalValue,
   rank,
   teamCount,
+  valueIsBeacon,
 }: {
   position: ValuedPosition;
   players: ResolvedPlayer[];
@@ -257,6 +264,7 @@ function PositionColumn({
   totalValue: number;
   rank: number | null;
   teamCount: number;
+  valueIsBeacon: boolean;
 }) {
   const rankLabel = rank != null ? ordinal(rank) : "—";
   const denominator = teamCount > 0 ? ` of ${teamCount}` : "";
@@ -277,7 +285,7 @@ function PositionColumn({
           </span>
         </h3>
         <p className="font-mono text-xs font-semibold tabular-nums text-ink">
-          {formatValue(totalValue)}
+          <BeaconValue show={valueIsBeacon}>{formatValue(totalValue)}</BeaconValue>
         </p>
       </header>
       {players.length === 0 ? (

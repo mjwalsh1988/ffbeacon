@@ -460,6 +460,7 @@ async function TeamsPanel({
         sleeperLeagueId={sleeperLeagueId}
         searchedUsername={searchedUsername}
         focusedRosterId={focusedRosterId}
+        valueIsBeacon={sourceSlug === "ffbeacon"}
       />
     </section>
   );
@@ -598,6 +599,7 @@ async function PowerRankingsSection({
                 sleeperLeagueId={sleeperLeagueId}
                 searchedUsername={searchedUsername}
                 teamCount={teamCount}
+                valueIsBeacon={sourceSlug === "ffbeacon"}
                 data={{
                   rosterRowId: t.rosterRowId,
                   sleeperRosterId: t.sleeperRosterId,
