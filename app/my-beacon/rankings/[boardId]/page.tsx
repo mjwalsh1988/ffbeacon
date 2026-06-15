@@ -4,6 +4,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
+  getActiveFormats,
+  getAvailableSources,
+  pickDefaultSource,
+} from "@/lib/source";
+import {
   isBoardScope,
   readSleeperId,
   scopeLabel,
@@ -70,6 +75,24 @@ export default async function BoardEditorPage({
   const scope: BoardScope = isBoardScope(board.scope) ? board.scope : "overall";
   const tierLabels = (board.tier_labels ?? {}) as Record<string, string>;
 
+  // Source + format options for the "Import from FF Beacon rankings" action.
+  // Only sources that actually publish rankings are offered.
+  const [formats, registry] = await Promise.all([
+    getActiveFormats(supabase),
+    getAvailableSources(supabase),
+  ]);
+  const rankingSources = registry.filter((s) => s.data_type.includes("rankings"));
+  const importSources = rankingSources.map((s) => ({
+    slug: s.slug,
+    displayName: s.display_name,
+    supportedFormatSlugs: s.supported_format_slugs,
+  }));
+  const importFormats = formats.map((f) => ({
+    slug: f.slug,
+    displayName: f.display_name,
+  }));
+  const defaultSourceSlug = pickDefaultSource(rankingSources);
+
   return (
     <div className="space-y-8">
       <div>
@@ -95,6 +118,9 @@ export default async function BoardEditorPage({
         initialTierCount={board.tier_count}
         initialTierLabels={tierLabels}
         initialPlayers={initialPlayers}
+        importSources={importSources}
+        importFormats={importFormats}
+        defaultSourceSlug={defaultSourceSlug}
       />
     </div>
   );

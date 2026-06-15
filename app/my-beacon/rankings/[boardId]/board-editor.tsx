@@ -9,14 +9,17 @@ import {
   useState,
 } from "react";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Download,
   GripVertical,
   Layers,
   Plus,
   X,
 } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import {
   MAX_BOARD_NAME_LENGTH,
@@ -25,12 +28,20 @@ import {
   tierLabel,
   type BoardPlayer,
   type BoardScope,
+  type ImportedRankingPlayer,
   type SearchablePlayer,
 } from "@/lib/ranking-boards";
 
 const SAVE_DEBOUNCE_MS = 700;
 const SEARCH_DEBOUNCE_MS = 250;
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
+
+type ImportSource = {
+  slug: string;
+  displayName: string;
+  supportedFormatSlugs: string[] | null;
+};
+type ImportFormat = { slug: string; displayName: string };
 
 export function BoardEditor({
   boardId,
@@ -40,6 +51,9 @@ export function BoardEditor({
   initialTierCount,
   initialTierLabels,
   initialPlayers,
+  importSources,
+  importFormats,
+  defaultSourceSlug,
 }: {
   boardId: string;
   initialName: string;
@@ -48,6 +62,9 @@ export function BoardEditor({
   initialTierCount: number;
   initialTierLabels: Record<string, string>;
   initialPlayers: BoardPlayer[];
+  importSources: ImportSource[];
+  importFormats: ImportFormat[];
+  defaultSourceSlug: string | null;
 }) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -124,6 +141,119 @@ export function BoardEditor({
       }
     };
   }, [flushPlayers]);
+
+  // Replace the whole board with our current rankings for a (source, format).
+  // Cancels any pending debounced save and writes atomically (delete all rows,
+  // then insert) so the board ends up as exactly the imported set.
+  //
+  // When the board has tiers enabled, the source's published tiers are carried
+  // over: distinct source tiers are remapped to contiguous board tiers (1..N),
+  // tier_count is set to match, and the tier labels reset to defaults. When
+  // tiers are off, imported players land in "no tier".
+  const importRankings = useCallback(
+    async (imported: ImportedRankingPlayer[]): Promise<boolean> => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      pendingRemovals.current = new Set();
+
+      // Build the source-tier to board-tier remap when tiers are on.
+      const tierByPlayer = new Map<string, number | null>();
+      let nextTierCount = tierCount;
+      let importedTiers = false;
+      if (tiersEnabled) {
+        const distinct = Array.from(
+          new Set(
+            imported
+              .map((p) => p.tier)
+              .filter((t): t is number => t != null),
+          ),
+        )
+          .sort((a, b) => a - b)
+          .slice(0, MAX_TIERS);
+        if (distinct.length > 0) {
+          const remap = new Map<number, number>();
+          distinct.forEach((srcTier, i) => remap.set(srcTier, i + 1));
+          imported.forEach((p) =>
+            tierByPlayer.set(
+              p.playerId,
+              p.tier != null ? remap.get(p.tier) ?? null : null,
+            ),
+          );
+          nextTierCount = distinct.length;
+          importedTiers = true;
+        }
+      }
+
+      const next: BoardPlayer[] = imported.map((p) => ({
+        rowId: null,
+        playerId: p.playerId,
+        slug: p.slug,
+        name: p.name,
+        position: p.position,
+        team: p.team,
+        sleeperId: p.sleeperId,
+        tier: importedTiers ? tierByPlayer.get(p.playerId) ?? null : null,
+      }));
+      setPlayers(next);
+      if (importedTiers) {
+        setTierCount(nextTierCount);
+        setTierLabels({});
+      }
+      setSaveState("saving");
+
+      const { error: deleteError } = await supabase
+        .from("user_ranking_board_players")
+        .delete()
+        .eq("board_id", boardId);
+      if (deleteError) {
+        setSaveState("error");
+        return false;
+      }
+
+      if (importedTiers) {
+        const { error: metaError } = await supabase
+          .from("user_ranking_boards")
+          .update({
+            tier_count: nextTierCount,
+            tier_labels: {},
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", boardId);
+        if (metaError) {
+          setSaveState("error");
+          return false;
+        }
+      }
+
+      if (next.length > 0) {
+        const rows = next.map((p, index) => ({
+          board_id: boardId,
+          player_id: p.playerId,
+          rank_position: index + 1,
+          tier: p.tier,
+          updated_at: new Date().toISOString(),
+        }));
+        const { error: insertError } = await supabase
+          .from("user_ranking_board_players")
+          .insert(rows);
+        if (insertError) {
+          setSaveState("error");
+          return false;
+        }
+      }
+
+      setSaveState("saved");
+      setAnnouncement(
+        `Imported ${next.length} player${next.length === 1 ? "" : "s"} from rankings${
+          importedTiers ? ` into ${nextTierCount} tiers` : ""
+        }.`,
+      );
+      return true;
+    },
+    [supabase, boardId, tiersEnabled, tierCount],
+  );
 
   // ----- board meta persistence -----------------------------------------
   const metaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -347,6 +477,15 @@ export function BoardEditor({
         onToggle={toggleTiers}
         onAddTier={addTier}
         onRemoveTier={removeTier}
+      />
+
+      <ImportFromRankings
+        scope={scope}
+        sources={importSources}
+        formats={importFormats}
+        defaultSourceSlug={defaultSourceSlug}
+        currentPlayerCount={players.length}
+        onImport={importRankings}
       />
 
       <AddPlayerCombobox
@@ -1027,5 +1166,259 @@ function AddPlayerCombobox({
         </ul>
       )}
     </div>
+  );
+}
+
+/* ---------------- Import from FF Beacon rankings ---------------- */
+
+/** A source supports a format when its list is null ("all") or contains the
+ * slug. Mirrors lib/source.ts sourceSupportsFormat for client-side gating. */
+function supportsFormat(source: ImportSource | undefined, formatSlug: string) {
+  if (!source) return false;
+  return source.supportedFormatSlugs === null
+    ? true
+    : source.supportedFormatSlugs.includes(formatSlug);
+}
+
+function ImportFromRankings({
+  scope,
+  sources,
+  formats,
+  defaultSourceSlug,
+  currentPlayerCount,
+  onImport,
+}: {
+  scope: BoardScope;
+  sources: ImportSource[];
+  formats: ImportFormat[];
+  defaultSourceSlug: string | null;
+  currentPlayerCount: number;
+  onImport: (players: ImportedRankingPlayer[]) => Promise<boolean>;
+}) {
+  const sourceId = useId();
+  const formatId = useId();
+  const headingId = useId();
+
+  const [sourceSlug, setSourceSlug] = useState<string>(
+    defaultSourceSlug ?? sources[0]?.slug ?? "",
+  );
+  const activeSource = sources.find((s) => s.slug === sourceSlug);
+
+  // Formats the chosen source actually publishes rankings for.
+  const supportedFormats = useMemo(
+    () => formats.filter((f) => supportsFormat(activeSource, f.slug)),
+    [formats, activeSource],
+  );
+
+  const [formatSlug, setFormatSlug] = useState<string>(
+    supportedFormats[0]?.slug ?? formats[0]?.slug ?? "",
+  );
+
+  // Keep the format valid whenever the source (and its supported set) changes.
+  useEffect(() => {
+    if (!supportedFormats.some((f) => f.slug === formatSlug)) {
+      setFormatSlug(supportedFormats[0]?.slug ?? "");
+    }
+  }, [supportedFormats, formatSlug]);
+
+  const [importing, setImporting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [message, setMessage] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const scopeWord = scope === "overall" ? "overall" : `${scope}`;
+
+  // Clicking Import: confirm first (via modal) when the board already has
+  // players, otherwise import straight away.
+  const handleImportClick = () => {
+    if (!sourceSlug || !formatSlug) return;
+    if (currentPlayerCount > 0) {
+      setConfirmOpen(true);
+      return;
+    }
+    void performImport();
+  };
+
+  const performImport = async () => {
+    if (!sourceSlug || !formatSlug) return;
+    setImporting(true);
+    setMessage(null);
+    try {
+      const params = new URLSearchParams({
+        source: sourceSlug,
+        format: formatSlug,
+        scope,
+      });
+      const res = await fetch(`/api/rankings/import?${params.toString()}`, {
+        headers: FETCH_HEADERS,
+      });
+      if (!res.ok) {
+        setMessage({ kind: "error", text: "Import failed. Please try again." });
+        return;
+      }
+      const json = (await res.json()) as {
+        players: ImportedRankingPlayer[];
+        sourceDisplay: string | null;
+        requestedDisplay: string;
+        formatDisplay: string;
+        fellBack: boolean;
+      };
+      if (!json.players || json.players.length === 0) {
+        setMessage({
+          kind: "error",
+          text: `No ranked ${scopeWord} players found for that source and format.`,
+        });
+        return;
+      }
+      const ok = await onImport(json.players);
+      if (!ok) {
+        setMessage({
+          kind: "error",
+          text: "Imported the rankings but saving failed. Try again.",
+        });
+        return;
+      }
+      const fallbackNote = json.fellBack
+        ? ` ${json.requestedDisplay} has no data for ${json.formatDisplay}, so we used ${json.sourceDisplay}.`
+        : "";
+      setMessage({
+        kind: "success",
+        text: `Imported ${json.players.length} player${
+          json.players.length === 1 ? "" : "s"
+        } from ${json.sourceDisplay}, ${json.formatDisplay}.${fallbackNote}`,
+      });
+    } catch {
+      setMessage({ kind: "error", text: "Import failed. Please try again." });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  if (sources.length === 0 || formats.length === 0) return null;
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="rounded-card border border-line bg-surface p-4 sm:p-5"
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        >
+          <Download className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h3 id={headingId} className="text-base font-semibold text-ink">
+            Start from our rankings
+          </h3>
+          <p className="mt-1 text-sm text-ink-muted">
+            Import our current {scopeWord} rankings as a starting point, then
+            reorder and customize. Pick the source and format to import from.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <div>
+          <label htmlFor={sourceId} className="block text-sm font-medium text-ink">
+            Source
+          </label>
+          <select
+            id={sourceId}
+            value={sourceSlug}
+            onChange={(event) => setSourceSlug(event.target.value)}
+            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2.5 text-base text-ink focus:border-brand-purple focus:outline-none sm:py-2 sm:text-sm"
+          >
+            {sources.map((s) => (
+              <option key={s.slug} value={s.slug}>
+                {s.displayName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={formatId} className="block text-sm font-medium text-ink">
+            Format
+          </label>
+          <select
+            id={formatId}
+            value={formatSlug}
+            onChange={(event) => setFormatSlug(event.target.value)}
+            disabled={supportedFormats.length === 0}
+            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2.5 text-base text-ink focus:border-brand-purple focus:outline-none disabled:opacity-50 sm:py-2 sm:text-sm"
+          >
+            {supportedFormats.length === 0 ? (
+              <option value="">No formats for this source</option>
+            ) : (
+              supportedFormats.map((f) => (
+                <option key={f.slug} value={f.slug}>
+                  {f.displayName}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={handleImportClick}
+          disabled={importing || !sourceSlug || !formatSlug}
+          className="inline-flex h-11 items-center justify-center gap-1.5 rounded-card border border-line bg-surface-elevated px-4 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:h-10"
+        >
+          <Download aria-hidden="true" className="h-4 w-4" />
+          {importing ? "Importing..." : "Import rankings"}
+        </button>
+      </div>
+
+      {currentPlayerCount > 0 && (
+        <p className="mt-2 text-xs text-ink-subtle">
+          Importing replaces the {currentPlayerCount} player
+          {currentPlayerCount === 1 ? "" : "s"} already on this board.
+        </p>
+      )}
+
+      <div aria-live="polite" className="min-h-[1.25rem]">
+        {message && (
+          <p
+            role={message.kind === "error" ? "alert" : undefined}
+            className={`mt-2 text-sm ${
+              message.kind === "error"
+                ? "text-signal-danger"
+                : "text-signal-success"
+            }`}
+          >
+            {message.text}
+          </p>
+        )}
+      </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          icon={AlertTriangle}
+          tone="danger"
+          title="Replace this board?"
+          description={
+            <>
+              Importing rankings will replace the{" "}
+              <span className="font-semibold text-ink">
+                {currentPlayerCount} player
+                {currentPlayerCount === 1 ? "" : "s"}
+              </span>{" "}
+              currently on this board, including any custom order and tiers.
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Replace board"
+          cancelLabel="Keep current"
+          onConfirm={() => {
+            setConfirmOpen(false);
+            void performImport();
+          }}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
+    </section>
   );
 }

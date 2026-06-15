@@ -71,6 +71,13 @@ export type SearchablePlayer = {
   sleeperId: string | null;
 };
 
+/** A player returned by the rankings-import endpoint. Same shape as a
+ * searchable player plus the source's published tier (null when the source
+ * doesn't tier that player), used to seed the board's tiers on import. */
+export type ImportedRankingPlayer = SearchablePlayer & {
+  tier: number | null;
+};
+
 /** Pull a usable Sleeper id (string) out of players.external_ids.sleeper,
  * which may be a string, number, or absent. */
 export function readSleeperId(
