@@ -1827,28 +1827,40 @@ export type Database = {
       }
       user_preferences: {
         Row: {
+          avatar_path: string | null
+          bio: string | null
           created_at: string
           default_format_config_id: string | null
           default_source_slug: string | null
+          first_name: string | null
           is_admin: boolean
+          last_name: string | null
           sleeper_league_settings: Json
           updated_at: string
           user_id: string
         }
         Insert: {
+          avatar_path?: string | null
+          bio?: string | null
           created_at?: string
           default_format_config_id?: string | null
           default_source_slug?: string | null
+          first_name?: string | null
           is_admin?: boolean
+          last_name?: string | null
           sleeper_league_settings?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
+          avatar_path?: string | null
+          bio?: string | null
           created_at?: string
           default_format_config_id?: string | null
           default_source_slug?: string | null
+          first_name?: string | null
           is_admin?: boolean
+          last_name?: string | null
           sleeper_league_settings?: Json
           updated_at?: string
           user_id?: string

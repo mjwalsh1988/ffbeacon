@@ -29,9 +29,21 @@ export default async function MyBeaconLayout({
     redirect("/login?next=/my-beacon");
   }
 
-  // Prefer the email's local part for the greeting because most users sign
-  // in with email-based providers; OAuth users still get a usable handle.
-  const displayName = user.email ? user.email.split("@")[0] : "fantasy player";
+  // Greeting name priority: the auth display name, then the saved first name,
+  // then the email's local part, then a friendly fallback.
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("first_name")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const metaDisplayName =
+    typeof user.user_metadata?.display_name === "string"
+      ? user.user_metadata.display_name.trim()
+      : "";
+  const firstName = prefs?.first_name?.trim() ?? "";
+  const emailLocalPart = user.email ? user.email.split("@")[0] : "";
+  const displayName =
+    metaDisplayName || firstName || emailLocalPart || "fantasy player";
 
   return (
     <main id="main">

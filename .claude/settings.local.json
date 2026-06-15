@@ -155,7 +155,10 @@
       "Bash(git *)",
       "mcp__supabase__list_migrations",
       "Skill(claude-api)",
-      "Bash(npm audit *)"
+      "Bash(npm audit *)",
+      "Bash(sed 's/=$//')",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(git restore *)"
     ]
   },
   "enabledMcpjsonServers": [

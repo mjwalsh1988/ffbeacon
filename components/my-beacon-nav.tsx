@@ -8,6 +8,7 @@ import {
   ListOrdered,
   Trophy,
   Settings,
+  UserCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,6 +29,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Dashboard",
     icon: LayoutDashboard,
     description: "Overview of your account, preferences, and activity.",
+  },
+  {
+    href: "/my-beacon/profile",
+    label: "Edit Profile",
+    icon: UserCircle,
+    description: "Edit your name, display name, Sleeper username, bio, and avatar.",
   },
   {
     href: "/my-beacon/rankings",
