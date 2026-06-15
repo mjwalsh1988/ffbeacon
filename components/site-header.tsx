@@ -14,6 +14,7 @@ import { FormatToggle, type FormatOption } from "@/components/format-toggle";
 import { SourceToggle, type SourceOption } from "@/components/source-toggle";
 import { MobileMenu } from "@/components/mobile-menu";
 import { HeaderNavLink } from "@/components/header-nav-link";
+import { NavDropdown } from "@/components/nav-dropdown";
 import {
   InfoTooltip,
   SOURCE_INFO_TOOLTIP,
@@ -144,11 +145,20 @@ export async function SiteHeader() {
           <BeaconMark />
         </Link>
         <nav aria-label="Primary" className="ml-6 hidden flex-1 items-center gap-1 md:flex">
-          {PRIMARY_NAV.map((item) => (
-            <HeaderNavLink key={item.href} href={item.href}>
-              {item.label}
-            </HeaderNavLink>
-          ))}
+          {PRIMARY_NAV.map((item) =>
+            item.children && item.children.length > 0 ? (
+              <NavDropdown
+                key={item.href}
+                label={item.label}
+                href={item.href}
+                items={item.children}
+              />
+            ) : (
+              <HeaderNavLink key={item.href} href={item.href}>
+                {item.label}
+              </HeaderNavLink>
+            ),
+          )}
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {sources.length > 0 && (

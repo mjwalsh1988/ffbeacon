@@ -139,20 +139,54 @@ export function MobileMenu({
               className="flex flex-col divide-y divide-line/60 border-y border-line/60"
             >
               {PRIMARY_NAV.map((item) => {
-                const active = pathname?.startsWith(item.href);
+                const active =
+                  pathname === item.href ||
+                  (pathname?.startsWith(`${item.href}/`) ?? false);
+                const hasChildren = Boolean(
+                  item.children && item.children.length > 0,
+                );
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={active ? "page" : undefined}
-                    className={`px-3 py-3.5 text-base transition-colors ${
-                      active
-                        ? "border-l-2 border-l-brand-purple bg-surface text-ink"
-                        : "border-l-2 border-l-transparent text-ink-muted hover:bg-surface hover:text-ink"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
+                  <div key={item.href}>
+                    <Link
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex min-h-11 items-center px-3 py-3.5 text-base transition-colors ${
+                        active
+                          ? "border-l-2 border-l-brand-purple bg-surface text-ink"
+                          : "border-l-2 border-l-transparent text-ink-muted hover:bg-surface hover:text-ink"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                    {hasChildren && (
+                      <ul
+                        role="list"
+                        aria-label={`${item.label} pages`}
+                        className="flex flex-col pb-2"
+                      >
+                        {item.children!.map((child) => {
+                          const childActive =
+                            pathname === child.href ||
+                            (pathname?.startsWith(`${child.href}/`) ?? false);
+                          return (
+                            <li key={child.href}>
+                              <Link
+                                href={child.href}
+                                aria-current={childActive ? "page" : undefined}
+                                className={`flex min-h-11 items-center py-2.5 pl-7 pr-3 text-sm transition-colors ${
+                                  childActive
+                                    ? "border-l-2 border-l-brand-cyan bg-surface text-ink"
+                                    : "border-l-2 border-l-transparent text-ink-muted hover:bg-surface hover:text-ink"
+                                }`}
+                              >
+                                {child.label}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
                 );
               })}
             </nav>

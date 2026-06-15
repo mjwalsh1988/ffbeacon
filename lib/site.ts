@@ -13,11 +13,52 @@ export const SITE = {
   },
 };
 
-export const PRIMARY_NAV = [
-  { label: "Tools", href: "/tools" as const },
-  { label: "Rankings", href: "/rankings" as const },
-  { label: "Guides", href: "/guides" as const },
-  { label: "About", href: "/about" as const },
+import type { Route } from "next";
+
+/** A second-level navigation entry rendered inside a parent's dropdown
+ * (desktop) and as an indented sub-link (mobile). */
+export type NavChild = {
+  label: string;
+  href: Route;
+  /** Short plain-language summary shown under the label in the dropdown. */
+  description: string;
+};
+
+/** A top-level navigation entry. When `children` is present the desktop
+ * header renders it as an accessible disclosure dropdown and the mobile
+ * menu surfaces the children as indented sub-links. */
+export type NavItem = {
+  label: string;
+  href: Route;
+  children?: NavChild[];
+};
+
+/** Every tool on the site, in display order. Single source of truth shared
+ * by the header dropdown, the mobile menu, and (conceptually) the footer
+ * Tools column. Keep descriptions short and jargon-free. */
+export const TOOLS_NAV: NavChild[] = [
+  {
+    label: "Rankings Board",
+    href: "/rankings",
+    description: "Sortable player values, tiers, and trends",
+  },
+  {
+    label: "Sleeper League Pulse",
+    href: "/tools/league-pulse",
+    description: "Sync and analyze your Sleeper leagues",
+  },
+  {
+    label: "FAAB Calculator",
+    href: "/tools/faab",
+    description: "Recommended waiver bid ranges",
+  },
+];
+
+export const PRIMARY_NAV: NavItem[] = [
+  { label: "Tools", href: "/tools", children: TOOLS_NAV },
+  { label: "Rankings", href: "/rankings" },
+  { label: "Guides", href: "/guides" },
+  { label: "About", href: "/about" },
 ];
 
 /** Footer-link shape. `disabled` links render as a non-interactive
