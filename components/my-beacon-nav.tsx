@@ -3,7 +3,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Trophy, Settings, type LucideIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListOrdered,
+  Trophy,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -22,6 +28,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Dashboard",
     icon: LayoutDashboard,
     description: "Overview of your account, preferences, and activity.",
+  },
+  {
+    href: "/my-beacon/rankings",
+    label: "My Rankings",
+    icon: ListOrdered,
+    description: "Build and reorder your own custom player ranking boards.",
   },
   {
     href: "/my-beacon/sleeper-leagues",

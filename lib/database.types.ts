@@ -1870,6 +1870,87 @@ export type Database = {
           },
         ]
       }
+      user_ranking_board_players: {
+        Row: {
+          board_id: string
+          created_at: string
+          id: string
+          player_id: string
+          rank_position: number
+          tier: number | null
+          updated_at: string
+        }
+        Insert: {
+          board_id: string
+          created_at?: string
+          id?: string
+          player_id: string
+          rank_position: number
+          tier?: number | null
+          updated_at?: string
+        }
+        Update: {
+          board_id?: string
+          created_at?: string
+          id?: string
+          player_id?: string
+          rank_position?: number
+          tier?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_ranking_board_players_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "user_ranking_boards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_ranking_board_players_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_ranking_boards: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          scope: string
+          tier_count: number
+          tier_labels: Json
+          tiers_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          scope?: string
+          tier_count?: number
+          tier_labels?: Json
+          tiers_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          scope?: string
+          tier_count?: number
+          tier_labels?: Json
+          tiers_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vote_matchups: {
         Row: {
           analysis_generated_at: string | null
