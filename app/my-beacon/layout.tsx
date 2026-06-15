@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     template: "%s | My Beacon",
     default: "My Beacon",
   },
-  description: "Your personal FF Beacon dashboard — saved leagues, preferences, and quick links.",
+  description: "My Beacon is your personal fantasy cockpit: leagues, rankings, custom boards, and every FF Beacon tool in one accessible place.",
 };
 
 // Force-dynamic across the entire /my-beacon space because every page
@@ -88,8 +88,9 @@ function MyBeaconHero({ displayName }: { displayName: string }) {
           .
         </h1>
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          Your saved Sleeper leagues, default format, and shortcuts to the
-          tools you actually use — all in one accessible space.
+          My Beacon is your fantasy cockpit: one place to run your leagues,
+          rankings, custom boards, and every tool in the system, with more
+          landing here as we build it. Same clarity, by eye or by ear.
         </p>
       </div>
     </header>

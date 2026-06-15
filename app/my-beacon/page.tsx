@@ -18,7 +18,7 @@ import { shortFormatName } from "@/lib/format-display";
 
 export const metadata: Metadata = {
   title: "Dashboard",
-  description: "Your FF Beacon dashboard — a snapshot of your activity, preferences, and quick links to every tool.",
+  description: "Your My Beacon dashboard: a snapshot of your account and preferences, with quick links to every FF Beacon tool.",
 };
 
 type StatCard = {

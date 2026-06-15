@@ -81,7 +81,7 @@ export function CreateBoardForm() {
             maxLength={MAX_BOARD_NAME_LENGTH}
             placeholder="My dynasty SF board"
             autoComplete="off"
-            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none"
+            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2.5 text-base text-ink caret-brand-purple focus:border-brand-purple focus:outline-none sm:py-2 sm:text-sm"
           />
         </div>
         <div>
@@ -93,7 +93,7 @@ export function CreateBoardForm() {
             value={scope}
             onChange={(event) => setScope(event.target.value as BoardScope)}
             aria-describedby={`${scopeId}-desc`}
-            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink focus:border-brand-purple focus:outline-none sm:w-44"
+            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2.5 text-base text-ink focus:border-brand-purple focus:outline-none sm:w-44 sm:py-2 sm:text-sm"
           >
             {BOARD_SCOPES.map((value) => (
               <option key={value} value={value}>
@@ -105,7 +105,7 @@ export function CreateBoardForm() {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-card bg-beacon px-4 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
+          className="inline-flex h-11 items-center justify-center gap-1.5 rounded-card bg-beacon px-4 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:h-10"
         >
           <Plus aria-hidden="true" className="h-4 w-4" />
           {pending ? "Creating..." : "Create board"}

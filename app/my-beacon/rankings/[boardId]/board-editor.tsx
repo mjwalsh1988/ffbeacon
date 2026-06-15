@@ -413,7 +413,7 @@ function BoardHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0 flex-1">
-        <label htmlFor={inputId} className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
+        <label htmlFor={inputId} className="block text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
           Board name
         </label>
         <input
@@ -428,7 +428,7 @@ function BoardHeader({
               event.currentTarget.blur();
             }
           }}
-          className="mt-1 w-full max-w-xl rounded-card border border-transparent bg-transparent px-0 py-1 text-2xl font-semibold tracking-tight text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-3 focus:outline-none sm:text-3xl"
+          className="mt-2 w-full max-w-xl rounded-card border border-transparent bg-transparent px-0 py-1 text-2xl font-semibold tracking-tight text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-3 focus:outline-none sm:text-3xl"
         />
         <p className="mt-1 text-sm text-ink-muted">
           {scopeLabel(scope)} board, {playerCount} player
@@ -514,7 +514,7 @@ function TierControls({
             onClick={onRemoveTier}
             disabled={tierCount <= 1}
             aria-label="Remove the last tier"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40 sm:h-8 sm:w-8"
           >
             <span aria-hidden="true">-</span>
           </button>
@@ -523,7 +523,7 @@ function TierControls({
             onClick={onAddTier}
             disabled={tierCount >= MAX_TIERS}
             aria-label="Add a tier"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40 sm:h-8 sm:w-8"
           >
             <Plus aria-hidden="true" className="h-4 w-4" />
           </button>
@@ -584,7 +584,7 @@ function TierGroup({
               placeholder={`Tier ${group.tier}`}
               maxLength={40}
               onBlur={(event) => onRenameTier(group.tier as number, event.target.value)}
-              className="rounded-card border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-2 focus:outline-none"
+              className="w-40 max-w-full rounded-card border border-transparent bg-transparent px-1 py-1.5 text-base font-semibold text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-2 focus:outline-none sm:w-auto sm:py-0.5 sm:text-sm"
             />
           </div>
         )}
@@ -723,7 +723,7 @@ function PlayerRow({
         event.preventDefault();
         onDropRow();
       }}
-      className={`flex items-center gap-3 rounded-card border bg-base p-2.5 transition-colors ${
+      className={`flex flex-col gap-2 rounded-card border bg-base p-2.5 transition-colors sm:flex-row sm:items-center sm:gap-3 ${
         isDropTarget
           ? "border-brand-cyan"
           : isDragging
@@ -731,66 +731,71 @@ function PlayerRow({
             : "border-line"
       }`}
     >
-      <span
-        aria-hidden="true"
-        title="Drag to reorder"
-        className="hidden cursor-grab text-ink-subtle sm:block"
-      >
-        <GripVertical className="h-4 w-4" />
-      </span>
+      {/* Identity: full-width on mobile, flexes on desktop. */}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <span
+          aria-hidden="true"
+          title="Drag to reorder"
+          className="hidden cursor-grab text-ink-subtle sm:block"
+        >
+          <GripVertical className="h-4 w-4" />
+        </span>
 
-      <span className="w-6 shrink-0 text-center font-mono text-sm tabular-nums text-ink-subtle">
-        {position}
-      </span>
+        <span className="w-6 shrink-0 text-center font-mono text-sm tabular-nums text-ink-subtle">
+          {position}
+        </span>
 
-      <PlayerHeadshot
-        sleeperId={player.sleeperId}
-        position={player.position}
-        name={player.name}
-        size={36}
-      />
+        <PlayerHeadshot
+          sleeperId={player.sleeperId}
+          position={player.position}
+          name={player.name}
+          size={36}
+        />
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-ink">{player.name}</p>
-        <p className="truncate text-xs text-ink-subtle">
-          {player.position}
-          {player.team ? ` · ${player.team}` : ""}
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{player.name}</p>
+          <p className="truncate text-xs text-ink-subtle">
+            {player.position}
+            {player.team ? ` · ${player.team}` : ""}
+          </p>
+        </div>
       </div>
 
-      {tiersEnabled && (
-        <div className="shrink-0">
-          <label htmlFor={tierSelectId} className="sr-only">
-            Tier for {player.name}
-          </label>
-          <select
-            id={tierSelectId}
-            value={player.tier ?? ""}
-            onChange={(event) =>
-              onAssignTier(
-                player.playerId,
-                event.target.value === "" ? null : Number(event.target.value),
-              )
-            }
-            className="h-9 rounded-card border border-line bg-surface px-2 text-xs text-ink focus:border-brand-purple focus:outline-none"
-          >
-            <option value="">No tier</option>
-            {Array.from({ length: tierCount }, (_, i) => i + 1).map((t) => (
-              <option key={t} value={t}>
-                {tierLabel(tierLabels, t)}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Controls: drop onto their own right-aligned row on mobile so nothing
+          gets crushed. 44px tap targets on mobile, compact on desktop. */}
+      <div className="flex items-center justify-end gap-1.5 sm:shrink-0 sm:gap-1">
+        {tiersEnabled && (
+          <>
+            <label htmlFor={tierSelectId} className="sr-only">
+              Tier for {player.name}
+            </label>
+            <select
+              id={tierSelectId}
+              value={player.tier ?? ""}
+              onChange={(event) =>
+                onAssignTier(
+                  player.playerId,
+                  event.target.value === "" ? null : Number(event.target.value),
+                )
+              }
+              className="h-11 min-w-0 flex-1 rounded-card border border-line bg-surface px-2 text-base text-ink focus:border-brand-purple focus:outline-none sm:h-9 sm:flex-none sm:text-xs"
+            >
+              <option value="">No tier</option>
+              {Array.from({ length: tierCount }, (_, i) => i + 1).map((t) => (
+                <option key={t} value={t}>
+                  {tierLabel(tierLabels, t)}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
 
-      <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
           onClick={() => onMove(player.playerId, "up")}
           disabled={isFirst}
           aria-label={`Move ${player.name} up`}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-30"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-30 sm:h-9 sm:w-9"
         >
           <ChevronUp aria-hidden="true" className="h-4 w-4" />
         </button>
@@ -799,7 +804,7 @@ function PlayerRow({
           onClick={() => onMove(player.playerId, "down")}
           disabled={isLast}
           aria-label={`Move ${player.name} down`}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-30"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-30 sm:h-9 sm:w-9"
         >
           <ChevronDown aria-hidden="true" className="h-4 w-4" />
         </button>
@@ -807,7 +812,7 @@ function PlayerRow({
           type="button"
           onClick={() => onRemove(player.playerId)}
           aria-label={`Remove ${player.name} from the board`}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-card border border-line text-ink-muted hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:h-9 sm:w-9"
         >
           <X aria-hidden="true" className="h-4 w-4" />
         </button>
