@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ImageWithFallback } from "@/components/image-with-fallback";
 
 const BUCKET = "user-avatars";
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -25,10 +26,8 @@ const ACCEPTED: Record<string, string> = {
  */
 export function AvatarUploader({
   initialAvatarUrl,
-  initials,
 }: {
   initialAvatarUrl: string | null;
-  initials: string;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -159,24 +158,11 @@ export function AvatarUploader({
   return (
     <div className="flex flex-col gap-4 rounded-card border border-line bg-surface p-5 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
       <div className="flex items-center gap-4">
-        {previewUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- signed URL with
-          // a rotating token; the optimizer would cache a soon-expired URL.
-          <img
-            src={previewUrl}
-            alt="Your current avatar"
-            width={80}
-            height={80}
-            className="h-20 w-20 shrink-0 rounded-full border border-line object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden="true"
-            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-line bg-base text-2xl font-semibold text-brand-cyan"
-          >
-            {initials}
-          </span>
-        )}
+        <ImageWithFallback
+          src={previewUrl}
+          alt="Your current avatar"
+          size={80}
+        />
         <div className="sm:hidden">
           <p className="text-sm font-medium text-ink">Profile photo</p>
           <p className="text-xs text-ink-subtle">JPG, PNG, WebP, or GIF. Max 5 MB.</p>

@@ -40,18 +40,6 @@ export default async function ProfilePage() {
     avatarUrl = data?.signedUrl ?? null;
   }
 
-  const initialsSource =
-    `${prefs?.first_name ?? ""} ${prefs?.last_name ?? ""}`.trim() ||
-    displayName ||
-    user!.email ||
-    "U";
-  const initials = initialsSource
-    .split(/\s+/)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
   return (
     <div className="space-y-12">
       <section aria-labelledby="profile-intro-heading">
@@ -69,10 +57,7 @@ export default async function ProfilePage() {
         </p>
 
         <div className="mt-6">
-          <AvatarUploader
-            initialAvatarUrl={avatarUrl}
-            initials={initials}
-          />
+          <AvatarUploader initialAvatarUrl={avatarUrl} />
         </div>
       </section>
 
