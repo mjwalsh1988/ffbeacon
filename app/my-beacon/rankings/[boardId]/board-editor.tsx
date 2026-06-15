@@ -500,19 +500,29 @@ export function BoardEditor({
         </p>
       ) : tierGroups ? (
         <div className="space-y-6">
-          {tierGroups.map((group) => (
-            <TierGroup
-              key={group.tier ?? "none"}
-              group={group}
-              tierCount={tierCount}
-              tierLabels={tierLabels}
-              onRenameTier={renameTier}
-              onMove={movePlayer}
-              onRemove={removePlayer}
-              onAssignTier={assignTier}
-              onReorderDrag={reorderByDrag}
-            />
-          ))}
+          {(() => {
+            // Numbering runs continuously across tiers, so each group starts
+            // where the previous one ended rather than restarting at 1.
+            let runningStart = 0;
+            return tierGroups.map((group) => {
+              const startIndex = runningStart;
+              runningStart += group.items.length;
+              return (
+                <TierGroup
+                  key={group.tier ?? "none"}
+                  group={group}
+                  startIndex={startIndex}
+                  tierCount={tierCount}
+                  tierLabels={tierLabels}
+                  onRenameTier={renameTier}
+                  onMove={movePlayer}
+                  onRemove={removePlayer}
+                  onAssignTier={assignTier}
+                  onReorderDrag={reorderByDrag}
+                />
+              );
+            });
+          })()}
         </div>
       ) : (
         <PlayerList
@@ -681,6 +691,7 @@ function TierControls({
 
 function TierGroup({
   group,
+  startIndex,
   tierCount,
   tierLabels,
   onRenameTier,
@@ -690,6 +701,8 @@ function TierGroup({
   onReorderDrag,
 }: {
   group: { tier: number | null; label: string; items: BoardPlayer[] };
+  /** Running count of players in all earlier tiers, so numbering continues. */
+  startIndex: number;
   tierCount: number;
   tierLabels: Record<string, string>;
   onRenameTier: (tier: number, label: string) => void;
@@ -738,6 +751,7 @@ function TierGroup({
       ) : (
         <PlayerList
           players={group.items}
+          startIndex={startIndex}
           tiersEnabled
           tierCount={tierCount}
           tierLabels={tierLabels}
@@ -755,6 +769,7 @@ function TierGroup({
 
 function PlayerList({
   players,
+  startIndex = 0,
   tiersEnabled,
   tierCount,
   tierLabels,
@@ -764,6 +779,8 @@ function PlayerList({
   onReorderDrag,
 }: {
   players: BoardPlayer[];
+  /** Position number offset so numbering can continue across tier groups. */
+  startIndex?: number;
   tiersEnabled: boolean;
   tierCount: number;
   tierLabels: Record<string, string>;
@@ -781,7 +798,7 @@ function PlayerList({
         <PlayerRow
           key={player.playerId}
           player={player}
-          position={index + 1}
+          position={startIndex + index + 1}
           isFirst={index === 0}
           isLast={index === players.length - 1}
           tiersEnabled={tiersEnabled}
