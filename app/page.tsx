@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { POSITIONS } from "@/lib/site";
@@ -8,6 +9,44 @@ import {
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
+
+// Homepage description, drawn from the hero subtitle below. Kept to ~150
+// characters so search engines and social cards show it without truncation.
+const HOME_DESCRIPTION =
+  "Fantasy football rankings, calculators, and Sleeper league insights that read clearly by eye or by ear. Pick a format and source and get clear answers.";
+
+export const metadata: Metadata = {
+  // `absolute` bypasses the root layout's "%s | FF Beacon" title template so
+  // the homepage renders this exact string.
+  title: {
+    absolute: "FF Beacon - Your signal through the fantasy noise.",
+  },
+  description: HOME_DESCRIPTION,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "FF Beacon - Your signal through the fantasy noise.",
+    description: HOME_DESCRIPTION,
+    url: "/",
+    siteName: "FF Beacon",
+    type: "website",
+    images: [
+      {
+        url: "/img/ff-beacon-logo.png",
+        width: 782,
+        height: 749,
+        alt: "FF Beacon logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "FF Beacon - Your signal through the fantasy noise.",
+    description: HOME_DESCRIPTION,
+    images: ["/img/ff-beacon-logo.png"],
+  },
+};
 
 export const dynamic = "force-dynamic";
 
