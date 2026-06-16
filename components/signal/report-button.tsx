@@ -38,11 +38,20 @@ export function ReportButton({
   const panelId = useId();
   const legendId = useId();
   const firstRadioRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const messageRef = useRef<HTMLParagraphElement>(null);
 
   const openPanel = () => {
     setOpen(true);
     setMessage(null);
     requestAnimationFrame(() => firstRadioRef.current?.focus());
+  };
+
+  // Close the panel and return focus to the trigger so keyboard and screen
+  // reader users are never stranded on the unmounted panel.
+  const closePanel = () => {
+    setOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
   const submit = (event: React.FormEvent) => {
@@ -79,6 +88,9 @@ export function ReportButton({
               ? "You already reported this. Thank you."
               : "Thank you. Our moderators will review this.",
           );
+          // The trigger unmounts on success, so move focus to the confirmation
+          // so it is reliably reached rather than dropping to the page body.
+          requestAnimationFrame(() => messageRef.current?.focus());
           return;
         }
         setMessage(data.error ?? "Could not submit your report. Please try again.");
@@ -92,11 +104,12 @@ export function ReportButton({
     <div className="mt-1">
       {!done && (
         <button
+          ref={triggerRef}
           type="button"
-          onClick={() => (open ? setOpen(false) : openPanel())}
+          onClick={() => (open ? closePanel() : openPanel())}
           aria-expanded={open}
           aria-controls={panelId}
-          className="inline-flex h-9 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-subtle hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          className="inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-subtle hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           <Flag aria-hidden="true" className="h-3.5 w-3.5" />
           Report
@@ -156,7 +169,7 @@ export function ReportButton({
             <button
               type="button"
               disabled={pending}
-              onClick={() => setOpen(false)}
+              onClick={closePanel}
               className="inline-flex h-11 items-center rounded-card border border-line px-4 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               Cancel
@@ -166,7 +179,15 @@ export function ReportButton({
       )}
 
       <div aria-live="polite" role="status" className="min-h-[1.1rem]">
-        {message && <p className="mt-1.5 text-xs text-ink-muted">{message}</p>}
+        {message && (
+          <p
+            ref={messageRef}
+            tabIndex={-1}
+            className="mt-1.5 text-xs text-ink-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            {message}
+          </p>
+        )}
       </div>
     </div>
   );

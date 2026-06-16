@@ -194,14 +194,19 @@ export function WallComposer() {
                     maxLength={420}
                     onChange={(e) => setAlt(img.key, e.target.value)}
                     aria-invalid={img.alt.trim().length === 0}
+                    aria-describedby={`alt-hint-${img.key}`}
                     placeholder="Who or what is in this image?"
                     className="mt-1 w-full rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink caret-brand-purple placeholder:text-ink-subtle focus:border-brand-purple focus:outline-none"
                   />
                 </label>
+                <p id={`alt-hint-${img.key}`} className="mt-1 text-xs text-ink-subtle">
+                  {img.alt.trim().length} of 420 characters. This is read aloud to
+                  people using a screen reader.
+                </p>
                 <button
                   type="button"
                   onClick={() => removeImage(img.key)}
-                  className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-subtle hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-subtle hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
                   <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
                   Remove image {index + 1}
@@ -224,6 +229,7 @@ export function WallComposer() {
         <button
           type="submit"
           disabled={disabled}
+          aria-describedby={missingAlt ? "alt-required-hint" : undefined}
           className="inline-flex h-11 items-center justify-center gap-2 rounded-card bg-beacon px-5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
         >
           <Send aria-hidden="true" className="h-4 w-4" />
@@ -247,7 +253,7 @@ export function WallComposer() {
       </div>
 
       {missingAlt && images.length > 0 && (
-        <p className="mt-2 text-xs text-ink-muted">
+        <p id="alt-required-hint" className="mt-2 text-xs text-ink-muted">
           Add a description to each image before posting.
         </p>
       )}

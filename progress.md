@@ -905,7 +905,7 @@ T801 | completed | Public Wall render: WallBlock on /u/[handle] (dynamic),
      force-dynamic; signal id added to ProfileBundle for the live posts read.
      | files: components/signal/{wall,report-button}.tsx, app/u/[handle]/page.tsx,
        lib/signal-profile.ts
-     | verified: yes (build; /u/[handle] now ƒ dynamic)
+     | verified: yes (build; /u/[handle] now renders dynamically)
 T802 | completed | Report endpoint /api/signal/report: same-origin header + auth +
      per-reporter rate limit (15s/10h/40d) + target-publicly-reportable check +
      unique-violation -> alreadyReported. Posts only this phase (comments rejected
