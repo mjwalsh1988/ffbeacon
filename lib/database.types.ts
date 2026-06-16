@@ -1786,6 +1786,236 @@ export type Database = {
           },
         ]
       }
+      signal_follows: {
+        Row: {
+          created_at: string
+          followee_user_id: string
+          follower_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          followee_user_id: string
+          follower_user_id: string
+        }
+        Update: {
+          created_at?: string
+          followee_user_id?: string
+          follower_user_id?: string
+        }
+        Relationships: []
+      }
+      signal_handle_history: {
+        Row: {
+          changed_at: string
+          old_handle: string
+          signal_id: string
+        }
+        Insert: {
+          changed_at?: string
+          old_handle: string
+          signal_id: string
+        }
+        Update: {
+          changed_at?: string
+          old_handle?: string
+          signal_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_handle_history_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_post_reports: {
+        Row: {
+          created_at: string
+          details: string | null
+          id: string
+          post_id: string
+          reason: string
+          reporter_user_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          post_id: string
+          reason: string
+          reporter_user_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          post_id?: string
+          reason?: string
+          reporter_user_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_post_reports_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "signal_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_posts: {
+        Row: {
+          body: string
+          created_at: string
+          edited_at: string | null
+          hidden: boolean
+          hidden_at: string | null
+          hidden_by: string | null
+          hidden_reason: string | null
+          id: string
+          pinned: boolean
+          signal_id: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          edited_at?: string | null
+          hidden?: boolean
+          hidden_at?: string | null
+          hidden_by?: string | null
+          hidden_reason?: string | null
+          id?: string
+          pinned?: boolean
+          signal_id: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          edited_at?: string | null
+          hidden?: boolean
+          hidden_at?: string | null
+          hidden_by?: string | null
+          hidden_reason?: string | null
+          id?: string
+          pinned?: boolean
+          signal_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_posts_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_reserved_handles: {
+        Row: {
+          handle: string
+        }
+        Insert: {
+          handle: string
+        }
+        Update: {
+          handle?: string
+        }
+        Relationships: []
+      }
+      signals: {
+        Row: {
+          accent: string
+          avatar_path: string | null
+          banner_path: string | null
+          bio: string | null
+          created_at: string
+          display_name: string
+          favorite_player_id: string | null
+          favorite_team: string | null
+          follower_count: number
+          handle: string
+          headline: string | null
+          hidden: boolean
+          hidden_at: string | null
+          hidden_reason: string | null
+          id: string
+          layout: string
+          layout_config: Json
+          links: Json
+          published_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          visibility: string
+        }
+        Insert: {
+          accent?: string
+          avatar_path?: string | null
+          banner_path?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name: string
+          favorite_player_id?: string | null
+          favorite_team?: string | null
+          follower_count?: number
+          handle: string
+          headline?: string | null
+          hidden?: boolean
+          hidden_at?: string | null
+          hidden_reason?: string | null
+          id?: string
+          layout?: string
+          layout_config?: Json
+          links?: Json
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          visibility?: string
+        }
+        Update: {
+          accent?: string
+          avatar_path?: string | null
+          banner_path?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string
+          favorite_player_id?: string | null
+          favorite_team?: string | null
+          follower_count?: number
+          handle?: string
+          headline?: string | null
+          hidden?: boolean
+          hidden_at?: string | null
+          hidden_reason?: string | null
+          id?: string
+          layout?: string
+          layout_config?: Json
+          links?: Json
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signals_favorite_player_id_fkey"
+            columns: ["favorite_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       source_registry: {
         Row: {
           created_at: string
@@ -1932,6 +2162,10 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          profile_is_primary: boolean
+          profile_sort: number
+          profile_top_n: number | null
+          profile_visible: boolean
           scope: string
           tier_count: number
           tier_labels: Json
@@ -1943,6 +2177,10 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          profile_is_primary?: boolean
+          profile_sort?: number
+          profile_top_n?: number | null
+          profile_visible?: boolean
           scope?: string
           tier_count?: number
           tier_labels?: Json
@@ -1954,6 +2192,10 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          profile_is_primary?: boolean
+          profile_sort?: number
+          profile_top_n?: number | null
+          profile_visible?: boolean
           scope?: string
           tier_count?: number
           tier_labels?: Json

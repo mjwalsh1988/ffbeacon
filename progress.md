@@ -607,6 +607,47 @@ T746 | completed | a11y + rule-6: removed banned em-dash / middle-dot chars acro
 - EVERY AI prompt is visible + editable in the admin AI settings (the ai_system_prompt textarea on /admin/beacon/settings shows the exact template sent on every call; {bound} is the only runtime substitution).
 - Owner reviews all 9 formats via /admin/beacon, tunes, then authorizes is_active flip + the recalculate-beacon cron goes live. Enable AI later to test effectiveness against the non-AI baseline.
 
+### My Rankings - profile display controls (completed, pending owner review)
+T760 | completed | Migration 0058: profile-display columns on user_ranking_boards (profile_visible, profile_is_primary, profile_sort). Check constraint primary-implies-visible + partial unique index (one primary per user) + partial index for the featured-in-order read path. Access matrix unchanged from 0056 (owner-only). Types regenerated.
+     | files: supabase/migrations/0058_ranking_board_profile_display.sql, lib/database.types.ts
+     | verified: yes (constraint + both partial indexes confirmed in pg)
+T761 | completed | ProfileBoardsManager client component on /my-beacon/rankings: feature a board on/off, pick ONE primary, reorder secondary boards (up/down). Owner-only RLS writes via browser client; controls disabled during in-flight writes so the ordered multi-statement updates never overlap. First featured board auto-becomes primary; removing the primary auto-promotes the first secondary. aria-live announcements + assertive error region, 44px tap targets, ol for the ranked featured list. Cards show On profile / Primary badges.
+     | files: app/my-beacon/rankings/profile-boards-manager.tsx, app/my-beacon/rankings/page.tsx
+     | verified: yes (typecheck passed)
+
+### Signal - Phase 0 (data model + RLS) - completed
+Public creator-profile feature ("Signal"). Phase 0 is database-only: schema,
+RLS, triggers, seeded reserved handles, public media bucket, regenerated types.
+No UI shipped (Phase 1 = My Signal editor + public profile at /u/[handle]).
+T762 | completed | Migration 0059: signals table (public profile root, one row/user, user_id unique FK auth.users) + signal_reserved_handles (57 seeded) + signal_handle_history (301 redirects). citext handle, bounded accent (8) / layout (feed,sidebar,spotlight), favorite_team (current 32 NFL codes), favorite_player_id FK players, links + layout_config jsonb, status draft/published, visibility public/private only (no unlisted), hidden trio + follower_count. RLS: anon SELECT only published+public+not-hidden; owner reads own any state; column-level GRANTs block owner writes to hidden*/follower_count.
+     | files: supabase/migrations/0059_signals.sql, lib/database.types.ts
+     | verified: yes (RLS enabled; column-grant matrix; anon/owner/non-owner read sim all correct)
+T763 | completed | Migration 0060: public signal-media storage bucket (8MB cap, image mime allowlist) + owner-folder-scoped write RLS. Images re-encoded/EXIF-stripped server-side in Phase 1 before upload.
+     | files: supabase/migrations/0060_signal_media_bucket.sql
+     | verified: yes (bucket public; folder-scoped writes)
+T764 | completed | Migration 0061: signal_posts (Wall) + moderation columns (hidden/hidden_reason/hidden_at/hidden_by) + BEFORE INSERT trigger (rate limits 15s/10per-hour/40per-day, max 3 links). SECURITY DEFINER so the window counts include hidden posts (a hidden post still consumes quota). Column GRANTs block owner writes to hidden*.
+     | files: supabase/migrations/0061_signal_posts.sql
+     | verified: yes (link cap, 15s, and hourly-cap-incl-4-hidden-of-10 all enforced)
+T765 | completed | Migration 0062: signal_post_reports (report/flag). Authenticated-only insert, one per (post, reporter) via unique constraint; admin queue via service_role. Per-reporter rate limit (15s/10h/40d) enforced server-side in the Phase 4 report endpoint.
+     | files: supabase/migrations/0062_signal_post_reports.sql
+     | verified: yes (anon blocked; reporter scoped to own rows)
+T766 | completed | Migration 0063: signal_follows graph (for future For You feed; feed UI deferred) + AFTER trigger maintaining denormalized signals.follower_count. Follower count public via the counter; follower list authenticated-only; insert/delete own follower rows only.
+     | files: supabase/migrations/0063_signal_follows.sql
+     | verified: yes (follower-count trigger SECURITY DEFINER; self-follow blocked)
+T767 | completed | Migration 0064: profile_top_n on user_ranking_boards + public-read RLS for featured boards and board players, gated on owner Signal published+public+not-hidden AND profile_visible. The 0056 owner-only policies remain and OR with this. Phase 2 wraps the read in unstable_cache so the EXISTS subquery runs only on cache miss, never per anon request.
+     | files: supabase/migrations/0064_ranking_boards_profile_top_n_and_public_read.sql
+     | verified: yes (anon sees featured board only when signal published+public; hidden under unpublished)
+T768 | completed | Migration 0065: Phase 0 security-advisor hardening. citext relocated to extensions schema; broad signal-media LIST SELECT policy dropped (public bucket serves via object URL); EXECUTE revoked on both trigger functions from anon/authenticated/public.
+     | files: supabase/migrations/0065_signal_phase0_hardening.sql
+     | verified: yes (advisor shows zero new warnings; citext still resolves for anon after move)
+T769 | completed | Migration 0066: handle CHECK cast to text. Because handle is citext, the ~ operator matched case-insensitively, so the original check wrongly accepted uppercase and would store non-canonical handles. Cast to text makes the regex case-sensitive (lowercase-only); CI uniqueness retained via the citext unique index.
+     | files: supabase/migrations/0066_signal_handle_lowercase_check.sql
+     | verified: yes (uppercase handle rejected on insert; single handle check + unique index confirmed)
+T770 | completed | Migration 0067: trigger hardening from security + implementation reviews. Force created_at = now() on insert (a client could otherwise backdate created_at to evade the rate-limit windows); apply the max-3-links cap on UPDATE too (was insert-only, so an edit could add links). Rate-limit windows remain insert-only.
+     | files: supabase/migrations/0067_signal_posts_trigger_hardening.sql
+     | verified: yes (backdate overridden to now; 4-link UPDATE blocked, 3-link UPDATE allowed)
+     | reviews: implementation + security + accessibility sub-agents run. a11y PASS (no UI shipped; Phase 1 obligations recorded). Security + impl findings (backdating, link-cap-on-update, doc drift) fixed in 0067 + 0060 header note.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
