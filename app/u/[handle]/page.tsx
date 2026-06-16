@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getIsAdmin } from "@/lib/admin-auth";
 import { SITE } from "@/lib/site";
 import { accentGradient } from "@/lib/signal";
 import {
@@ -91,15 +92,38 @@ export default async function SignalProfilePage({
     permanentRedirect(`/u/${signal.handle}`);
   }
 
-  // Live path: viewer-agnostic. The identity bundle comes from the data cache;
-  // only the Wall posts are read live (public posts, hidden excluded).
+  // Live path: the identity bundle still comes from the data cache, but the Wall
+  // is read live. We resolve the viewer here (the page is force-dynamic) so the
+  // comment composer, author edit/delete, and owner/admin moderation controls can
+  // render correctly. The viewer identity never enters the cached bundle.
   if (isProfileLive(signal)) {
-    const posts = await loadWallPosts(signal.id);
-    return <ProfileBody bundle={bundle} ownerPreview={false} posts={posts} />;
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const isWallOwner = !!user && user.id === signal.user_id;
+    const isAdmin = user ? await getIsAdmin(supabase) : false;
+    const canModerate = isWallOwner || isAdmin;
+
+    // Public posts (hidden excluded). Hidden comments are included only for a
+    // viewer who can moderate this Wall (owner or admin), and are flagged in UI.
+    const posts = await loadWallPosts(signal.id, {
+      includeHiddenComments: canModerate,
+    });
+    return (
+      <ProfileBody
+        bundle={bundle}
+        ownerPreview={false}
+        posts={posts}
+        viewerUserId={user?.id ?? null}
+        viewerIsAdmin={isAdmin}
+        viewerIsWallOwner={isWallOwner}
+      />
+    );
   }
 
   // Not live: the only viewer allowed is the owner (preview). This path reads
-  // cookies and shows the owner's hidden posts flagged.
+  // cookies and shows the owner's hidden posts and hidden comments flagged.
   const supabase = await createClient();
   const {
     data: { user },
@@ -108,18 +132,36 @@ export default async function SignalProfilePage({
     notFound();
   }
 
-  const posts = await loadWallPosts(signal.id, { includeHidden: true });
-  return <ProfileBody bundle={bundle} ownerPreview posts={posts} />;
+  const posts = await loadWallPosts(signal.id, {
+    includeHidden: true,
+    includeHiddenComments: true,
+  });
+  return (
+    <ProfileBody
+      bundle={bundle}
+      ownerPreview
+      posts={posts}
+      viewerUserId={user.id}
+      viewerIsAdmin={false}
+      viewerIsWallOwner
+    />
+  );
 }
 
 function ProfileBody({
   bundle,
   ownerPreview,
   posts,
+  viewerUserId,
+  viewerIsAdmin,
+  viewerIsWallOwner,
 }: {
   bundle: ProfileBundle;
   ownerPreview: boolean;
   posts: WallPost[];
+  viewerUserId: string | null;
+  viewerIsAdmin: boolean;
+  viewerIsWallOwner: boolean;
 }) {
   const signal = bundle.signal!;
   const avatar = signalMediaUrl(signal.avatar_path);
@@ -206,7 +248,13 @@ function ProfileBody({
       <FeaturedBoardsBlock handle={signal.handle} boards={bundle.boards} />
       <FeaturedLeaguesBlock leagues={bundle.leagues} />
       <LinksBlock links={bundle.links} accent={signal.accent} />
-      <WallBlock posts={posts} ownerPreview={ownerPreview} />
+      <WallBlock
+        posts={posts}
+        ownerPreview={ownerPreview}
+        viewerUserId={viewerUserId}
+        viewerIsAdmin={viewerIsAdmin}
+        viewerIsWallOwner={viewerIsWallOwner}
+      />
     </main>
   );
 }

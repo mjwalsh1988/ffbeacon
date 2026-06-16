@@ -109,6 +109,7 @@ export function ReportButton({
           onClick={() => (open ? closePanel() : openPanel())}
           aria-expanded={open}
           aria-controls={panelId}
+          aria-label={`Report this ${targetType}`}
           className="inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-subtle hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           <Flag aria-hidden="true" className="h-3.5 w-3.5" />
@@ -124,7 +125,7 @@ export function ReportButton({
         >
           <fieldset>
             <legend id={legendId} className="text-xs font-semibold text-ink">
-              Why are you reporting this post?
+              Why are you reporting this {targetType}?
             </legend>
             <div className="mt-2 flex flex-col gap-1.5">
               {REASONS.map((r, index) => (

@@ -139,6 +139,9 @@ export default async function MySignalPage() {
       createdAt: row.created_at,
       editedAt: row.edited_at,
       images: imagesByPost.get(row.id) ?? [],
+      // The owner editor manages posts only; comments are moderated on the public
+      // Wall (where the owner gets inline hide/restore controls).
+      comments: [],
     }));
   }
 

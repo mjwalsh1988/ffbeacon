@@ -26,6 +26,15 @@ export const BIO_MAX = 2000;
 export const POST_BODY_MAX = 2000;
 export const POST_LINKS_MAX = 3;
 
+// Comment limits. These mirror the database backstops on signal_comments
+// (migration 0072):
+//   - body CHECK is char_length(body) BETWEEN 1 AND 1000 (code points, same
+//     caveat as posts: emoji can count as several characters). Submit gating uses
+//     codePointLength so it never disagrees with the DB.
+//   - the BEFORE INSERT/UPDATE trigger rejects more than 2 links.
+export const COMMENT_BODY_MAX = 1000;
+export const COMMENT_LINKS_MAX = 2;
+
 /** Code-point length, matching Postgres char_length (NOT String.prototype.length,
  * which counts UTF-16 code units, and NOT grapheme count). This is the value the
  * 1..2000 body CHECK is evaluated against, so submit gating uses it. */

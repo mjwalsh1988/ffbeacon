@@ -64,8 +64,7 @@ export async function POST(req: Request) {
   const detailsRaw =
     typeof payload.details === "string" ? payload.details.trim() : "";
 
-  // Comments arrive in sub-phase (c); only posts are reportable today.
-  if (targetType !== "post") {
+  if (targetType !== "post" && targetType !== "comment") {
     return NextResponse.json({ error: "That content cannot be reported." }, { status: 400 });
   }
   if (
@@ -85,24 +84,54 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // Target must be a real, publicly viewable post.
-  const { data: post } = await admin
-    .from("signal_posts")
-    .select("id, hidden, signals!inner(status, visibility, hidden)")
-    .eq("id", targetId)
-    .maybeSingle();
-  const parent = post?.signals as unknown as
-    | { status: string; visibility: string; hidden: boolean }
-    | null;
-  if (
-    !post ||
-    post.hidden ||
-    !parent ||
-    parent.status !== "published" ||
-    parent.visibility !== "public" ||
-    parent.hidden
-  ) {
-    return NextResponse.json({ error: "That content cannot be reported." }, { status: 400 });
+  // Target must be real and publicly viewable: the content itself not hidden, and
+  // (for a comment) its parent post not hidden, and the parent Signal live.
+  if (targetType === "post") {
+    const { data: post } = await admin
+      .from("signal_posts")
+      .select("id, hidden, signals!inner(status, visibility, hidden)")
+      .eq("id", targetId)
+      .maybeSingle();
+    const parent = post?.signals as unknown as
+      | { status: string; visibility: string; hidden: boolean }
+      | null;
+    if (
+      !post ||
+      post.hidden ||
+      !parent ||
+      parent.status !== "published" ||
+      parent.visibility !== "public" ||
+      parent.hidden
+    ) {
+      return NextResponse.json({ error: "That content cannot be reported." }, { status: 400 });
+    }
+  } else {
+    const { data: comment } = await admin
+      .from("signal_comments")
+      .select(
+        "id, hidden, signal_posts!inner(hidden, signals!inner(status, visibility, hidden))",
+      )
+      .eq("id", targetId)
+      .maybeSingle();
+    const parentPost = comment?.signal_posts as unknown as
+      | {
+          hidden: boolean;
+          signals: { status: string; visibility: string; hidden: boolean };
+        }
+      | null;
+    const parentSignal = parentPost?.signals ?? null;
+    if (
+      !comment ||
+      comment.hidden ||
+      !parentPost ||
+      parentPost.hidden ||
+      !parentSignal ||
+      parentSignal.status !== "published" ||
+      parentSignal.visibility !== "public" ||
+      parentSignal.hidden
+    ) {
+      return NextResponse.json({ error: "That content cannot be reported." }, { status: 400 });
+    }
   }
 
   // Per-reporter rate limit across all of this reporter's reports.
@@ -133,7 +162,7 @@ export async function POST(req: Request) {
   }
 
   const { error } = await supabase.from("signal_reports").insert({
-    target_type: "post",
+    target_type: targetType,
     target_id: targetId,
     reporter_user_id: user.id,
     reason,

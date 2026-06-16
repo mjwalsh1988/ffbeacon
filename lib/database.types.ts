@@ -1786,6 +1786,56 @@ export type Database = {
           },
         ];
       };
+      signal_comments: {
+        Row: {
+          author_user_id: string;
+          body: string;
+          created_at: string;
+          edited_at: string | null;
+          hidden: boolean;
+          hidden_at: string | null;
+          hidden_by: string | null;
+          hidden_reason: string | null;
+          id: string;
+          post_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          author_user_id: string;
+          body: string;
+          created_at?: string;
+          edited_at?: string | null;
+          hidden?: boolean;
+          hidden_at?: string | null;
+          hidden_by?: string | null;
+          hidden_reason?: string | null;
+          id?: string;
+          post_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          author_user_id?: string;
+          body?: string;
+          created_at?: string;
+          edited_at?: string | null;
+          hidden?: boolean;
+          hidden_at?: string | null;
+          hidden_by?: string | null;
+          hidden_reason?: string | null;
+          id?: string;
+          post_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_comments_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "signal_posts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       signal_follows: {
         Row: {
           created_at: string;

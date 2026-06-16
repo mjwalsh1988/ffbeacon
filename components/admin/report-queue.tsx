@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { EyeOff, Eye } from "lucide-react";
 import { PostBody } from "@/components/signal/post-body";
 import { hidePost, unhidePost, setReportStatus } from "@/app/admin/signal/actions";
+import { moderateComment } from "@/app/u/[handle]/comment-actions";
 
 /**
- * Interactive moderation queue. Renders one card per reported post with its
- * reports and the hide/restore + per-report resolve actions. All actions call the
- * requireAdmin-gated server actions and router.refresh() to repaint. A shared
- * polite live region announces outcomes; an assertive region carries errors.
+ * Interactive moderation queue. Renders one card per reported target (post or
+ * comment) with its reports and the hide/restore + per-report resolve actions.
+ * All actions call server actions that re-validate authorization server-side
+ * (requireAdmin for posts; owner-or-admin for comments, where admin satisfies the
+ * check) and router.refresh() to repaint. A shared polite live region announces
+ * outcomes; an assertive region carries errors.
  */
 
 export type ReportItem = {
@@ -21,7 +24,8 @@ export type ReportItem = {
   createdAt: string;
 };
 
-export type ReportGroup = {
+export type PostReportGroup = {
+  kind: "post";
   postId: string;
   body: string;
   hidden: boolean;
@@ -30,6 +34,20 @@ export type ReportGroup = {
   displayName: string;
   reports: ReportItem[];
 };
+
+export type CommentReportGroup = {
+  kind: "comment";
+  commentId: string;
+  body: string;
+  hidden: boolean;
+  hiddenReason: string | null;
+  authorName: string;
+  authorHandle: string | null;
+  postBody: string;
+  reports: ReportItem[];
+};
+
+export type ReportGroup = PostReportGroup | CommentReportGroup;
 
 const REASON_LABEL: Record<string, string> = {
   spam: "Spam",
@@ -47,6 +65,10 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
   minute: "2-digit",
 });
+
+function groupKey(group: ReportGroup): string {
+  return group.kind === "post" ? group.postId : group.commentId;
+}
 
 export function ReportQueue({ groups }: { groups: ReportGroup[] }) {
   const [announcement, setAnnouncement] = useState("");
@@ -73,7 +95,7 @@ export function ReportQueue({ groups }: { groups: ReportGroup[] }) {
         <ul role="list" className="flex flex-col gap-5">
           {groups.map((group) => (
             <GroupCard
-              key={group.postId}
+              key={`${group.kind}:${groupKey(group)}`}
               group={group}
               onAnnounce={setAnnouncement}
               onError={setError}
@@ -114,11 +136,37 @@ function GroupCard({
     });
   };
 
+  const hide = () =>
+    group.kind === "post"
+      ? run(() => hidePost(group.postId, reason), "Post hidden.")
+      : run(() => moderateComment(group.commentId, true, reason), "Comment hidden.");
+
+  const restore = () =>
+    group.kind === "post"
+      ? run(() => unhidePost(group.postId), "Post restored.")
+      : run(() => moderateComment(group.commentId, false), "Comment restored.");
+
+  const kindLabel = group.kind === "post" ? "post" : "comment";
+
   return (
     <li className="rounded-card border border-line bg-surface p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-        <span className="font-semibold text-ink">{group.displayName}</span>
-        <span className="font-mono">@{group.handle}</span>
+        <span className="rounded-full border border-line bg-base px-2 py-0.5 font-semibold uppercase tracking-wide text-brand-cyan">
+          {kindLabel}
+        </span>
+        {group.kind === "post" ? (
+          <>
+            <span className="font-semibold text-ink">{group.displayName}</span>
+            <span className="font-mono">@{group.handle}</span>
+          </>
+        ) : (
+          <>
+            <span className="font-semibold text-ink">{group.authorName}</span>
+            {group.authorHandle && (
+              <span className="font-mono">@{group.authorHandle}</span>
+            )}
+          </>
+        )}
         <span>
           {group.reports.length} open report
           {group.reports.length === 1 ? "" : "s"}
@@ -129,6 +177,17 @@ function GroupCard({
           </span>
         )}
       </div>
+
+      {group.kind === "comment" && (
+        <div className="mt-3 rounded-card border border-dashed border-line bg-base/40 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+            On post
+          </p>
+          <div className="mt-1 text-sm text-ink-muted">
+            <PostBody body={group.postBody} />
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 rounded-card border border-line bg-base p-3">
         <PostBody body={group.body} />
@@ -191,13 +250,11 @@ function GroupCard({
           <button
             type="button"
             disabled={pending}
-            onClick={() =>
-              run(() => unhidePost(group.postId), "Post restored.")
-            }
+            onClick={restore}
             className="inline-flex h-11 items-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-ink hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
           >
             <Eye aria-hidden="true" className="h-4 w-4" />
-            Restore post
+            Restore {kindLabel}
           </button>
         ) : (
           <div className="flex flex-wrap items-end gap-3">
@@ -214,13 +271,11 @@ function GroupCard({
             <button
               type="button"
               disabled={pending}
-              onClick={() =>
-                run(() => hidePost(group.postId, reason), "Post hidden.")
-              }
+              onClick={hide}
               className="inline-flex h-11 items-center gap-2 rounded-card border border-signal-danger/60 px-4 text-sm font-semibold text-signal-danger hover:bg-signal-danger/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
             >
               <EyeOff aria-hidden="true" className="h-4 w-4" />
-              Hide post
+              Hide {kindLabel}
             </button>
           </div>
         )}

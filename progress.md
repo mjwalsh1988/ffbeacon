@@ -978,6 +978,91 @@ Three reviews (implementation, accessibility, security) over the 4a+4b diff.
   re-encode already mitigates).
 Commits (main, NOT pushed): 90f4634 (4a), b43e7d1 (4b), 4537173 (review fixes).
 
+### Signal - Phase 4c (comments) - completed
+Comments on Wall posts, written by ANY signed-in user (not just the profile
+owner), so signal_comments carries an explicit author_user_id and the rate limit
+is per author. Text only this sub-phase (GIF/emoji/reactions are d-f). The Wall
+stays DYNAMIC: comment writes never bust the cached signal:{handle} bundle (the
+mutations only router.refresh()). Reporting reuses the polymorphic signal_reports,
+the one report endpoint, and the one admin queue (now a post/comment union).
+T809 | completed | Migration 0072: signal_comments (post_id FK cascade,
+     author_user_id references auth.users, body 1..1000, hidden* moderation
+     columns service-role-only via column grants). Per-author rate-limit BEFORE
+     INSERT/UPDATE trigger (15s/10h/40d counting hidden rows, created_at forced
+     now(), link cap 2 on insert AND update, SECURITY DEFINER), a faithful port of
+     the hardened posts trigger (0067) keyed on author_user_id. AFTER DELETE
+     dangling-report trigger mirroring 0070 for target_type='comment'. RLS: public
+     read gated through comment+post+signal live; author select/update/delete own;
+     wall-owner select any state.
+     | files: supabase/migrations/0072_signal_comments.sql, lib/database.types.ts
+     | verified: yes (7 policies; INSERT/UPDATE column grants exclude hidden*;
+       rolled-back anon/auth sim, 10 checks: anon sees only visible-on-live, wall
+       owner sees hidden, other user sees 1, insert-on-live allowed, insert-on-
+       hidden-post blocked, cross-user update/delete 0 rows, own update 1 row,
+       hidden-column write denied, anon sees 0 after unpublish; probe data cleaned;
+       types regenerated, signal_comments present)
+T810 | completed | lib/signal.ts: COMMENT_BODY_MAX(1000)/COMMENT_LINKS_MAX(2),
+     reusing codePointLength/countLinks/graphemeLength.
+     | files: lib/signal.ts
+     | verified: yes (typecheck)
+T811 | completed | lib/signal-wall.ts: WallComment type + loadCommentsForPosts
+     (oldest-first, includeHidden gate, author identity resolved from signals with
+     a live-only @handle link), loadWallPosts now loads comments + new
+     includeHiddenComments param.
+     | files: lib/signal-wall.ts
+     | verified: yes (typecheck + build)
+T812 | completed | app/u/[handle]/comment-actions.ts: createComment/updateComment/
+     deleteComment (author, session client + author RLS, trigger-error mapping) +
+     moderateComment (re-validates owner-of-parent-signal OR admin, then writes
+     hidden* via admin client; hide resolves open comment reports to actioned).
+     No profile-cache revalidation (Wall is dynamic).
+     | files: app/u/[handle]/comment-actions.ts
+     | verified: yes (typecheck + build)
+T813 | completed | components/signal/comment-section.tsx: composer (grapheme
+     counter, code-point gate, aria-live) + comment list with author edit/delete
+     (confirm) and owner/admin hide/restore + Report. NVDA: labeled fields,
+     describedby counters, focus management on edit + delete-confirm, per-comment
+     article aria-label, 44px targets, AA contrast (ink-muted).
+     | files: components/signal/comment-section.tsx
+     | verified: yes (typecheck + build)
+T814 | completed | Wire-up: WallBlock renders CommentSection per post and threads
+     viewer context; /u/[handle] resolves viewer (userId + isAdmin) on both live
+     and owner-preview paths and gates includeHiddenComments on owner||admin; owner
+     editor WallPost mapping gets comments:[] (manager is posts-only).
+     | files: components/signal/wall.tsx, app/u/[handle]/page.tsx,
+       app/my-beacon/signal/page.tsx
+     | verified: yes (build; /u/[handle] still dynamic)
+T815 | completed | Report endpoint accepts target_type='comment' (comment-specific
+     live-gating join); admin queue is now a post/comment union (report-queue.tsx
+     discriminated groups + moderateComment for comment hide/restore); reports page
+     loads both targets + comment authors. ReportButton legend + trigger aria-label
+     vary by target type.
+     | files: app/api/signal/report/route.ts, components/admin/report-queue.tsx,
+       app/admin/signal/reports/page.tsx, components/signal/report-button.tsx
+     | verified: yes (typecheck + build)
+
+### Signal - Phase 4c sub-agent review (completed)
+Three reviews (implementation, accessibility, security) over the (c) diff.
+- Implementation: NO blockers/important. Trigger is a faithful per-author port of
+  0067; RLS + column grants + moderation authz + dynamic-wall cache model all
+  verified. Minor: endpoint does not block self-reporting (pre-existing posts
+  posture, capped by the unique constraint).
+- Security: NO blockers/important. RLS, SECURITY DEFINER trigger, moderateComment
+  re-validate-then-elevate authz (no IDOR), report endpoint gating, XSS (PostBody,
+  no dangerouslySetInnerHTML, handle CHECK blocks href breakout), no auth.users
+  exposure, dangling-report trigger all verified. Minor: hidden_reason has no DB
+  length CHECK (the action slices to 300; parity with signal_posts which also has
+  none); report rate-limit TOCTOU (capped by unique constraint, matches 0062/0070
+  decision).
+- Accessibility: 3 IMPORTANT fixed in-session: (1) helper/counter text moved off
+  ink-subtle to ink-muted for AA; (2) each comment row wrapped in an
+  article[aria-label="Comment by {author}, {date}"] so repeated Edit/Delete/Hide/
+  Report controls are announced in a named context; (3) delete-confirm now moves
+  focus to "Yes, delete" (group-labeled) and returns focus to the Delete trigger
+  on Keep. Also wired edit-textarea aria-describedby to its counters. Confirmed
+  clean: keyboard nav + visible focus, 44px public tap targets, decorative icons
+  aria-hidden, no data hidden at any breakpoint.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

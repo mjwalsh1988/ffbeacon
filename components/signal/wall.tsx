@@ -3,6 +3,7 @@ import { SignalBlock } from "@/components/signal/signal-block";
 import { PostBody } from "@/components/signal/post-body";
 import { PostImages } from "@/components/signal/post-images";
 import { ReportButton } from "@/components/signal/report-button";
+import { CommentSection } from "@/components/signal/comment-section";
 import type { WallPost } from "@/lib/signal-wall";
 
 /**
@@ -25,9 +26,15 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
 export function WallBlock({
   posts,
   ownerPreview,
+  viewerUserId,
+  viewerIsAdmin,
+  viewerIsWallOwner,
 }: {
   posts: WallPost[];
   ownerPreview: boolean;
+  viewerUserId: string | null;
+  viewerIsAdmin: boolean;
+  viewerIsWallOwner: boolean;
 }) {
   if (posts.length === 0) return null;
 
@@ -69,6 +76,15 @@ export function WallBlock({
                 {!ownerPreview && (
                   <ReportButton targetType="post" targetId={post.id} />
                 )}
+
+                <CommentSection
+                  postId={post.id}
+                  comments={post.comments}
+                  viewerUserId={viewerUserId}
+                  viewerIsAdmin={viewerIsAdmin}
+                  viewerIsWallOwner={viewerIsWallOwner}
+                  canComment={!ownerPreview && !post.hidden}
+                />
               </article>
             </li>
           );
