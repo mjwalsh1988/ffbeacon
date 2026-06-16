@@ -675,6 +675,119 @@ T777 | completed | Phase 1 review fixes: delete-on-replace switched to admin cli
      | verified: yes (typecheck + build pass after fixes)
      | reviews: implementation + accessibility + security sub-agents run. a11y verdict strong (landmarks, single-h1, fieldset/legend, labeled file inputs, live regions all correct); one AA contrast fix applied; site-wide ink-subtle/signal-danger token contrast flagged as a separate design-system pass (not changed in this phase). Security: 2 mediums (enumeration, pre-cap buffering) fixed; owner-folder scoping, RLS read gating, SECURITY DEFINER triggers, magic-byte+sharp, CSRF header all verified sound.
 
+### Signal - Phase 2 (featured boards + leagues by reference, SignalBlock, public board view, caching, OG, sitemap) - completed
+No schema change this phase: signal_league_ids is a new jsonb key on the
+existing user_preferences.sleeper_league_settings, and profile_top_n + the
+featured-board public-read RLS already shipped in Phase 0 (migration 0064). So
+no types regen. Public read paths use createAdminClient (cookie-free, cacheable)
+with explicit published+public+not-hidden gating in app code; migration 0064
+anon RLS remains as defense-in-depth for direct anon API access (verified in
+Phase 0 T767).
+T778 | completed | lib/sleeper-league-settings.ts: added ordered signal_league_ids
+     string[] to the typed settings + parse (de-dupe, drop non-strings). merge
+     helper already key-agnostic.
+     | files: lib/sleeper-league-settings.ts
+     | verified: yes (typecheck)
+T779 | completed | lib/signal-profile.ts: server-only cached data layer.
+     loadProfileBundle(handle) tagged signal:{handle} (signal row any-state via
+     admin + featured-board metadata + featured-league cards); loadBoardTopN
+     keyed board_id+updated_at+limit tagged board:{id} (tag, not key, is the
+     real invalidator since player-only edits don't bump updated_at);
+     loadPublicBoard tagged board:{id}; resolveHistoricalHandle. League cards
+     never call Sleeper; leader resolved from league_power_rankings_cache via
+     the default source. isProfileLive gate.
+     | files: lib/signal-profile.ts
+     | verified: yes (typecheck + build)
+T780 | completed | components/signal/signal-block.tsx: shared SignalBlock section
+     wrapper + FeaturedBoardsBlock (Top-N by reference, parallel per-board cached
+     reads, empty board skipped) + FeaturedLeaguesBlock (synced-only cards,
+     unsynced ids skipped). No player values, no raw source slugs.
+     | files: components/signal/signal-block.tsx
+     | verified: yes (build)
+T781 | completed | app/u/[handle]/page.tsx rewritten: live path is cookie-free
+     (cacheable; reads only loadProfileBundle), owner-preview path reads cookies
+     and re-checks ownership; historical 301; casing canonicalization; OG image
+     wired to /api/og/signal/[handle]; ISR revalidate=3600. Blocks appended.
+     | files: app/u/[handle]/page.tsx
+     | verified: yes (build; route renders dynamic because owner-preview branch
+       reads cookies, but the heavy DB reads are tag-cached so anon hits are
+       served from the data cache - deliberate split per handoff item 5)
+T782 | completed | app/u/[handle]/rankings/[boardId]/page.tsx: public read-only
+     board view. loadPublicBoard gates on owner live + profile_visible; tier
+     grouping with continuous numbering; canonical-handle 301; noindex when not
+     resolvable.
+     | files: app/u/[handle]/rankings/[boardId]/page.tsx
+     | verified: yes (build)
+T783 | completed | app/api/og/signal/[handle]/route.tsx: 1200x630 brand-locked OG
+     (accent gradient, avatar, name, @handle, headline). nodejs runtime, s-maxage
+     3600 + swr 86400. Non-live profiles return a generic branded fallback (never
+     leak existence). No DPC gold / #0c0c18.
+     | files: app/api/og/signal/[handle]/route.tsx
+     | verified: yes (build)
+T784 | completed | app/sitemap.ts: core static pages + only live (published+
+     public+not-hidden) /u/{handle}; revalidate hourly.
+     | files: app/sitemap.ts
+     | verified: yes (build; /sitemap.xml prerendered, 1h revalidate)
+T785 | completed | Caching invalidation wiring. signal editor actions now
+     revalidateTag(signal:{handle}) on claim/rename(both old+new)/identity/publish
+     + saveSignalLeagues. New app/my-beacon/rankings/actions.ts: revalidateBoardCache
+     (re-verifies board ownership, busts board:{id} + owner signal tag) called by
+     board-editor on every save path; revalidateMySignal called by the boards
+     manager after every curation write.
+     | files: app/my-beacon/signal/actions.ts, app/my-beacon/rankings/actions.ts,
+       app/my-beacon/rankings/[boardId]/board-editor.tsx
+     | verified: yes (typecheck + build)
+T786 | completed | profile_top_n control on the boards manager (per featured
+     board <select>: Default(10/5) or Top 5/10/15/20/25/50), writes via browser
+     client under owner RLS then revalidateMySignal. page.tsx loads profile_top_n.
+     | files: app/my-beacon/rankings/profile-boards-manager.tsx, app/my-beacon/rankings/page.tsx
+     | verified: yes (typecheck + build)
+T787 | completed | Featured-leagues editor in My Signal: server resolves the
+     owner's synced leagues (saved Sleeper username -> getSleeperUser -> league_users
+     -> leagues; editor MAY call Sleeper, public page never does), client manager
+     features/removes/reorders, saveSignalLeagues persists ordered ids (digit-only,
+     deduped, capped 12) + revalidates.
+     | files: app/my-beacon/signal/page.tsx, app/my-beacon/signal/signal-leagues-manager.tsx, app/my-beacon/signal/actions.ts
+     | verified: yes (typecheck + build)
+T788 | completed | Phase 2 review fixes (implementation + a11y + security sub-agents).
+     | fixes:
+       - BLOCKER (impl): avatar/banner edits never busted the profile cache. Added
+         a shared revalidateProfileCaches(supabase, userId) in lib/signal-profile.ts
+         (busts signal:{handle} AND every board:{id} for the user) and call it from
+         the media route POST+DELETE.
+       - WARNING (security): loadPublicBoard was tagged board:{id} only, so an
+         unpublish (busts signal tag) left a board view cached up to 1h = a
+         time-bounded leak after going private; and featuring a previously-hidden
+         board left its cached-null view 404ing up to 1h. Fixed by routing publish
+         state, handle rename, identity (display_name shows on board view), featured
+         leagues, and the boards-manager curation through revalidateProfileCaches so
+         board caches are busted too.
+       - NIT (security): replaced unicode ellipsis with "..." in the OG clip (rule 6).
+       - NIT (impl): dropped max-age=300 from the signal OG cache-control to match
+         the handoff spec (s-maxage only).
+       - WARNING (a11y): ink-subtle -> ink-muted (AA) for board rank numbers, player
+         position/team metadata, and tier section headings on the public board view +
+         FeaturedBoardsBlock. Replaced the middle-dot position/team separator with a
+         comma (rule 6).
+     | files: lib/signal-profile.ts, app/my-beacon/signal/actions.ts,
+       app/my-beacon/rankings/actions.ts, app/api/signal/media/route.ts,
+       app/api/og/signal/[handle]/route.tsx, components/signal/signal-block.tsx,
+       app/u/[handle]/rankings/[boardId]/page.tsx
+     | verified: yes (typecheck + build green after fixes)
+     | reviews summary: impl review PASS after BLOCKER fix (cache coverage,
+       no-Sleeper-in-public-path, skip-on-missing-reference, no source/format leak,
+       naming, OG brand all confirmed). security review: no BLOCKER; the one real
+       WARNING (unpublish/feature board stale-cache) fixed; IDOR/enumeration,
+       OG/sitemap non-live gating, server-side input validation, secret-key
+       isolation, no XSS, no open-redirect all verified. a11y review: no BLOCKER;
+       single-h1/landmarks/aria-live/44px targets/focus-visible all correct; the
+       four contrast+separator WARNINGs fixed. Known carryover: site-wide
+       ink-subtle/signal-danger token contrast is a separate design-system pass.
+     | deferred (non-blocking): public full-board view caps at 1000 players
+       (Supabase default; fantasy boards rarely exceed a few hundred); loadPublicBoard
+       relies on tag invalidation rather than an updated_at key (now comprehensively
+       covered by revalidateProfileCaches).
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

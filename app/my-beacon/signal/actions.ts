@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   normalizeHandle,
@@ -9,6 +9,11 @@ import {
   HEADLINE_MAX,
   BIO_MAX,
 } from "@/lib/signal";
+import { signalTag, revalidateProfileCaches } from "@/lib/signal-profile";
+import {
+  parseSleeperLeagueSettings,
+  mergeSleeperLeagueSettings,
+} from "@/lib/sleeper-league-settings";
 
 /**
  * Server actions for the My Signal editor. All writes go through the caller's
@@ -140,6 +145,7 @@ export async function claimHandle(raw: string): Promise<ActionResult> {
   if (error) return { ok: false, error: mapHandleError(error) };
 
   revalidatePath("/my-beacon/signal");
+  await revalidateProfileCaches(supabase, user.id);
   return { ok: true };
 }
 
@@ -154,6 +160,14 @@ export async function updateHandle(raw: string): Promise<ActionResult> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "You need to be signed in." };
 
+  // Capture the old handle so we can bust its cached profile bundle too: after
+  // a rename the old handle should 301, not serve a stale profile.
+  const { data: before } = await supabase
+    .from("signals")
+    .select("handle")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("signals")
     .update({ handle, updated_at: new Date().toISOString() })
@@ -161,6 +175,13 @@ export async function updateHandle(raw: string): Promise<ActionResult> {
   if (error) return { ok: false, error: mapHandleError(error) };
 
   revalidatePath("/my-beacon/signal");
+  // Bust the old handle's bundle so it 301s instead of serving the old profile,
+  // then bust the new handle + all the user's board caches (board views embed
+  // the owner handle).
+  if (before?.handle && before.handle !== handle) {
+    revalidateTag(signalTag(before.handle));
+  }
+  await revalidateProfileCaches(supabase, user.id);
   return { ok: true };
 }
 
@@ -200,6 +221,8 @@ export async function saveIdentity(input: {
   if (error) return { ok: false, error: "Could not save your details. Please try again." };
 
   revalidatePath("/my-beacon/signal");
+  // display_name also appears on the public board view, so bust board caches too.
+  await revalidateProfileCaches(supabase, user.id);
   return { ok: true };
 }
 
@@ -238,6 +261,58 @@ export async function setPublishState(input: {
   if (error) return { ok: false, error: "Could not update visibility. Please try again." };
 
   revalidatePath("/my-beacon/signal");
-  revalidatePath(`/u/${current.handle}`);
+  // Unpublishing must also invalidate the public board views, which are gated
+  // on this profile being live; otherwise a board stays viewable until the ISR
+  // window lapses.
+  await revalidateProfileCaches(supabase, user.id);
+  return { ok: true };
+}
+
+/**
+ * Persist the ordered set of Sleeper leagues featured on the public Signal
+ * profile. Stored under user_preferences.sleeper_league_settings.signal_league_ids.
+ * We sanity-cap the list and store only valid-looking ids; the public page
+ * renders only those already synced into the leagues table.
+ */
+export async function saveSignalLeagues(
+  orderedSleeperLeagueIds: string[],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You need to be signed in." };
+
+  // Keep only digit ids (Sleeper league ids are numeric strings), de-duplicate
+  // preserving order, and cap the count.
+  const seen = new Set<string>();
+  const cleaned = orderedSleeperLeagueIds
+    .filter((id) => typeof id === "string" && /^[0-9]{1,32}$/.test(id))
+    .filter((id) => (seen.has(id) ? false : (seen.add(id), true)))
+    .slice(0, 12);
+
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("sleeper_league_settings")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const current = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
+  const merged = mergeSleeperLeagueSettings(current, {
+    signal_league_ids: cleaned,
+  });
+
+  const { error } = await supabase
+    .from("user_preferences")
+    .upsert(
+      { user_id: user.id, sleeper_league_settings: merged },
+      { onConflict: "user_id" },
+    );
+  if (error) {
+    return { ok: false, error: "Could not save your featured leagues. Please try again." };
+  }
+
+  revalidatePath("/my-beacon/signal");
+  await revalidateProfileCaches(supabase, user.id);
   return { ok: true };
 }

@@ -21,6 +21,7 @@ import {
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
+import { revalidateBoardCache } from "../actions";
 import {
   MAX_BOARD_NAME_LENGTH,
   MAX_TIERS,
@@ -118,6 +119,7 @@ export function BoardEditor({
         if (error) throw error;
       }
       setSaveState("saved");
+      void revalidateBoardCache(boardId);
     } catch {
       // Re-queue the removals we pulled so they aren't lost on a transient error.
       removals.forEach((id) => pendingRemovals.current.add(id));
@@ -245,6 +247,7 @@ export function BoardEditor({
       }
 
       setSaveState("saved");
+      void revalidateBoardCache(boardId);
       setAnnouncement(
         `Imported ${next.length} player${next.length === 1 ? "" : "s"} from rankings${
           importedTiers ? ` into ${nextTierCount} tiers` : ""
@@ -267,6 +270,7 @@ export function BoardEditor({
           .update({ ...patch, updated_at: new Date().toISOString() })
           .eq("id", boardId);
         setSaveState(error ? "error" : "saved");
+        if (!error) void revalidateBoardCache(boardId);
       }, SAVE_DEBOUNCE_MS);
     },
     [supabase, boardId],

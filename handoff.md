@@ -1,69 +1,78 @@
-# Handoff: FF Beacon Phase B7 (AI signal wiring)
+# Handoff: Signal feature, Phase 2 complete
 
-Resume by starting a fresh session and saying "continue B7".
+Phases 0, 1, and 2 are done and committed to `main` (NOT pushed). Read CLAUDE.md
+and the "Signal" sections of progress.md before continuing.
 
-## Current clean state (nothing broken)
-- `@anthropic-ai/sdk` installed (`^0.104.1`, in package.json dependencies). Additive only.
-- `npm run typecheck` and `npm run build` pass. All B0-B6 work shipped.
-- `source_registry.ffbeacon.is_active` = FALSE (do not flip; owner reviews all 9 formats first).
-- AI is OFF: `beacon_settings.ai_enabled` = false, `beacon_signal_weights` row `ai_adjust` is_enabled = false.
-- Latest migration applied: 0050. Next numbers: 0051, 0052.
-- The whole board is computed across all 9 formats (5363 value rows, 180 picks, trends 10710 combos).
+## Where things stand
 
-## Confirmed decisions (from the claude-api skill + owner)
-- TypeScript project => use the OFFICIAL `@anthropic-ai/sdk` (NOT raw fetch). `import Anthropic from "@anthropic-ai/sdk"`; `new Anthropic()` reads ANTHROPIC_API_KEY from env (present in .env.local).
-- Model: `claude-haiku-4-5` (exact alias, NO date suffix). Already the seeded default `ai_model` in beacon_settings. Haiku 4.5 does NOT support the `effort` param or `max` effort — do not send effort/thinking for Haiku; keep the call simple (max_tokens ~256).
-- Strict JSON out: use `output_config: { format: { type: "json_schema", schema: {...} } }` on `messages.create` (Haiku 4.5 supports structured outputs), then JSON.parse the text block. Avoid zod (not installed) — raw json_schema with additionalProperties:false.
-- OWNER REQUIREMENT (hard): every AI prompt must be visible + EDITABLE in the admin AI settings sub-page. Nothing hardcoded. Store the system prompt as `beacon_settings.ai_system_prompt` (category 'ai'); the engine reads it live and substitutes a `{bound}` placeholder with the live `ai_adjustment_bound`. Code default is only a fallback when the row is absent.
+- Phase 0 (commit 3e7fdca): schema, RLS, abuse triggers. Migrations 0059-0067.
+- Phase 1 (commit 4b6cb6f): handle lifecycle (0068), My Signal identity editor,
+  image-hardening route, minimal Layout A public profile at /u/[handle].
+- Phase 2 (this commit): featured boards + featured leagues BY REFERENCE, shared
+  <SignalBlock> renderer, public read-only board view, tag-based caching, OG
+  image, sitemap. Tasks T778-T788 in progress.md.
 
-## Remaining B7 work (in order)
+NOTE: this commit also includes the T760/T761 foundation it builds on
+(profile-display controls on user_ranking_boards): migration
+0058_ranking_board_profile_display.sql plus the edits to
+app/my-beacon/rankings/page.tsx and profile-boards-manager.tsx. 0058 is a hard
+dependency of the already-committed 0064, and Phase 2 scope explicitly wires
+profile_top_n into the boards manager, so they are committed together rather
+than left dangling. `.claude/settings.local.json` is intentionally NOT committed.
 
-### 1. Migration 0051 — beacon_ai_cache
-Cache AI responses by input-hash so re-runs / unchanged inputs never re-bill.
-```
-create table public.beacon_ai_cache (
-  input_hash text primary key,
-  player_id uuid,
-  adjustment_pct numeric not null,
-  confidence numeric not null,
-  rationale text,
-  model text not null,
-  created_at timestamptz not null default now()
-);
--- RLS: enable; service_role_all only. No client access.
-```
-Save supabase/migrations/0051_beacon_ai_cache.sql + apply via MCP. Regenerate lib/database.types.ts after (new table) so the producer is typed.
+## Phase 2 architecture (for the next session)
 
-### 2. Migration 0052 — AI settings into beacon_settings (category 'ai')
-All admin-editable on /admin/beacon/settings. Insert (on conflict do nothing):
-- `ai_system_prompt` (value_type 'string', category 'ai', label "AI system prompt", description "Instructions sent to the model. {bound} is replaced with the AI adjustment bound at runtime.") — DEFAULT TEXT: conservative analyst prompt instructing STRICT JSON only `{"adjustment_pct": number, "confidence": number, "rationale": string}` with adjustment_pct in [-{bound}, {bound}], confidence 0..1, rationale <= 20 words, "be conservative; the market already prices most info."
-- `ai_max_calls` (number, default 60) — per-run cap on live API calls (cost control).
-- `ai_min_spread` (number, default 0.15) — candidate gate: normalized cross-source disagreement >= this.
-- `ai_min_mover` (number, default 0.05) — candidate gate: abs(stat_performance adjustment) >= this.
-(ai_enabled / ai_model / ai_adjustment_bound already exist from migration 0037.)
+- Data layer: lib/signal-profile.ts. loadProfileBundle(handle) is the
+  cookie-free, admin-client, unstable_cache bundle tagged signal:{handle}
+  (signal row any-state + featured-board metadata + featured-league cards).
+  loadBoardTopN(boardId, updatedAt, limit) and loadPublicBoard(boardId) are
+  tagged board:{id}. revalidateProfileCaches(supabase, userId) busts
+  signal:{handle} AND every board:{id} for that user; call it from any server
+  action / route that changes publish state, handle, identity, avatar/banner,
+  featured leagues, or featured-board curation.
+- Public profile: app/u/[handle]/page.tsx. Live path reads NO cookies (cacheable
+  via the bundle's data cache + ISR revalidate=3600). Owner-preview path reads
+  cookies and re-checks ownership; it is the only way a non-live profile renders.
+  The route shows as Dynamic in the build because of that branch, but anon hits
+  are served from the tag-cached data layer.
+- Public board view: app/u/[handle]/rankings/[boardId]/page.tsx (gated on owner
+  live + board profile_visible).
+- OG: app/api/og/signal/[handle]/route.tsx (brand-locked, non-live = generic
+  fallback). Sitemap: app/sitemap.ts (live profiles only).
+- Featured boards render no player values and no source slugs (ordering is the
+  owner's opinion). League cards show name/season/teams/format display name +
+  power-ranking leader from league_power_rankings_cache via the default source;
+  the public page NEVER calls Sleeper or pulseLeague.
+- Editors: My Signal (/my-beacon/signal) has a Featured-leagues section
+  (signal-leagues-manager.tsx + saveSignalLeagues, stores ordered
+  signal_league_ids in user_preferences.sleeper_league_settings). The boards
+  manager has a per-board Top-N control (profile_top_n).
 
-### 3. lib/beacon/signals/ai-adjust.ts (the producer)
-- `export interface AiCandidate { playerId: string; payload: Record<string, unknown>; }`
-- `export interface AiResult { adjustmentPct: number; confidence: number; rationale: string; cached: boolean; }`
-- `export async function callClaudeForAdjustment(payload, { model, bound, systemPrompt }): Promise<{adjustment_pct,confidence,rationale}|null>` — single SDK call; system = systemPrompt.replace('{bound}', String(bound)); user content = JSON.stringify(payload); output_config json_schema; clamp adjustment_pct to [-bound,bound], confidence to [0,1]. Export so the smoke test calls it directly.
-- `export async function gatherAiAdjustments(supabase, candidates, { model, bound, systemPrompt, maxCalls }): Promise<{ map: Map<string, AiResult>; calls: number }>` — hash each payload (node:crypto sha256 of JSON+model+bound), batch-check beacon_ai_cache (.in input_hash), for misses call Claude up to maxCalls, upsert cache, return map + calls.
+## Reviews
 
-### 4. Orchestrator wiring (lib/calculate-beacon-values.ts)
-- After perf gather, before the format loop: if settings.aiEnabled AND ai_adjust weight is_enabled AND process.env.ANTHROPIC_API_KEY present:
-  - Build candidates from the FLAGSHIP format (dynasty-ppr-sflex) skill players: gate by (normalized source spread >= ai_min_spread) OR (abs(perfByPlayer adjustmentPct) >= ai_min_mover), cap at ai_max_calls. Load player names for candidate ids (one query). Payload: name, position, consensus_value (flagship normalized), per-source raw values, source_spread, perf_adjustment_pct.
-  - aiResultByPlayer = gatherAiAdjustments(...). Track aiCalls.
-- In the SKILL emit (not K/DEF): append AI to adjustInputs alongside stat_performance:
-  `{ adjustmentPct: ai.adjustmentPct, weight: aiWeight, confidence: ai.confidence }`, aiWeight = findWeight(weights,'ai_adjust',null).weight. extraMeta.ai_adjust = { adjustment_pct, confidence, rationale, cached }.
-- Set beacon_value_runs.ai_calls (column exists). Add ai_calls to CalculateBeaconResult + return + finalize update.
-- The global factor clamp [0.5,1.5] already bounds the combined (perf+ai) adjustment — verify, no extra clamp needed.
+Implementation + accessibility + security sub-agents run; all findings fixed
+(see progress.md T788). No outstanding blockers.
 
-### 5. SettingField textarea (components/admin/setting-field.tsx)
-Render a <textarea> instead of <input> when value_type==='string' AND (setting.key.includes('prompt') OR String(value).length > 60). Keep label/description/save/aria-live identical. Makes ai_system_prompt editable on /admin/beacon/settings (already groups under category 'ai').
+## Not yet built (likely next phases per the Signal plan)
 
-### 6. Smoke test + leave OFF
-- scripts/beacon-ai-smoke.ts: one sample candidate payload, read ai_system_prompt + ai_model + ai_adjustment_bound from beacon_settings, call callClaudeForAdjustment once, print parsed/clamped result. Add npm script "beacon:ai-smoke". Run ONCE (one Haiku call ~$0.0001) to prove integration + JSON parse + clamp + valid model id.
-- Do NOT flip ai_enabled. Do NOT flip is_active. Leave both false.
-- Typecheck + build must pass. Update progress.md (add B7 tasks) at the boundary.
+- Wall / signal_posts UI (schema + abuse triggers exist from Phase 0; report
+  endpoint + rate-limit enforcement still to wire).
+- signal_follows / For You feed UI (graph + follower_count trigger exist).
+- Additional profile layouts (B/C) reusing <SignalBlock>.
+- Root-level /[handle] alias (Phase 7).
+- Accent picker + favorite team/player on the public profile.
 
-## After B7
-Owner reviews all 9 formats via /admin/beacon/rankings, tunes live (Recompute now), then authorizes the is_active flip + the recalculate-beacon cron goes live. Enable AI later to test effectiveness against the established non-AI baseline.
+## Carryover / known deferred
+
+- Site-wide token contrast: ink-subtle (#6B6B7D) fails AA for body text;
+  signal-danger misses AAA. Whole-app design-system pass, decide with owner.
+- Public full-board view caps at 1000 players (Supabase default; fantasy boards
+  rarely exceed a few hundred). Page with .range() if that ever changes.
+- Per-user upload rate-limiting on /api/signal/media (size-capped + auth-gated,
+  no throttle yet).
+
+## Verification gate (every session)
+
+`npm run typecheck` then `npm run build`. Lint is not configured. No em-dashes /
+AI-tell punctuation anywhere. One shell command per tool call. Commit to main,
+do not push until the session is complete. Close with the three sub-agent reviews.

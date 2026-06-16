@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { revalidateProfileCaches } from "@/lib/signal-profile";
 
 /**
  * POST /api/signal/media  (avatar / banner upload for the owner's Signal)
@@ -175,6 +176,10 @@ export async function POST(req: Request) {
     );
   }
 
+  // The avatar/banner is part of the cached profile bundle + OG card, so bust
+  // the profile caches now rather than waiting for the ISR window.
+  await revalidateProfileCaches(supabase, user.id);
+
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return NextResponse.json({ ok: true, kind, path, url: pub.publicUrl });
 }
@@ -216,6 +221,8 @@ export async function DELETE(req: Request) {
   if (updateError) {
     return NextResponse.json({ error: "Could not remove the image." }, { status: 500 });
   }
+
+  await revalidateProfileCaches(supabase, user.id);
 
   return NextResponse.json({ ok: true, kind });
 }

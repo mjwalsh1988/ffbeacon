@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
+import { getSleeperUser } from "@/lib/sleeper";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { HandleManager } from "./handle-manager";
 import { IdentityForm } from "./identity-form";
 import { MediaUploader } from "./media-uploader";
 import { PublishControls } from "./publish-controls";
+import {
+  SignalLeaguesManager,
+  type SignalLeagueOption,
+} from "./signal-leagues-manager";
 
 export const metadata: Metadata = {
   title: "My Signal",
@@ -30,6 +36,43 @@ export default async function MySignalPage() {
 
   const publicUrlFor = (path: string | null) =>
     path ? supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl : null;
+
+  // Featured-league picker data: the owner's already-synced leagues. We resolve
+  // their Sleeper user id from the saved username and match synced league_users
+  // rows. (This editor page MAY call Sleeper; the public profile never does.)
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("sleeper_league_settings")
+    .eq("user_id", user!.id)
+    .maybeSingle();
+  const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
+
+  let leagueOptions: SignalLeagueOption[] = [];
+  if (signal && settings.username) {
+    const sleeperUser = await getSleeperUser(settings.username);
+    if (sleeperUser) {
+      const { data: memberships } = await supabase
+        .from("league_users")
+        .select("league_id")
+        .eq("sleeper_user_id", sleeperUser.user_id);
+      const leagueIds = Array.from(
+        new Set((memberships ?? []).map((m) => m.league_id)),
+      );
+      if (leagueIds.length > 0) {
+        const { data: leagueRows } = await supabase
+          .from("leagues")
+          .select("id, sleeper_league_id, name, season, total_rosters")
+          .in("id", leagueIds)
+          .order("season", { ascending: false });
+        leagueOptions = (leagueRows ?? []).map((l) => ({
+          sleeperLeagueId: l.sleeper_league_id,
+          name: l.name,
+          season: l.season,
+          totalRosters: l.total_rosters,
+        }));
+      }
+    }
+  }
 
   return (
     <div className="space-y-12">
@@ -104,6 +147,26 @@ export default async function MySignalPage() {
             <div className="mt-4 grid max-w-2xl gap-4 sm:grid-cols-2">
               <MediaUploader kind="avatar" initialUrl={publicUrlFor(signal.avatar_path)} />
               <MediaUploader kind="banner" initialUrl={publicUrlFor(signal.banner_path)} />
+            </div>
+          </section>
+
+          <section aria-labelledby="signal-leagues-heading">
+            <h2
+              id="signal-leagues-heading"
+              className="text-lg font-semibold tracking-tight text-ink"
+            >
+              Featured leagues
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+              Show off your Sleeper leagues on your profile. Only leagues you
+              have already opened in League Pulse appear here, and visitors see
+              clean summary cards, never your private data.
+            </p>
+            <div className="mt-4 max-w-2xl">
+              <SignalLeaguesManager
+                leagues={leagueOptions}
+                initialFeaturedIds={settings.signal_league_ids ?? []}
+              />
             </div>
           </section>
 

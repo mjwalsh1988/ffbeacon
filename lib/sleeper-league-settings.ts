@@ -10,13 +10,20 @@
  *   {
  *     username?: string,                  // linked Sleeper handle
  *     featured_league_id?: string | null, // sleeper_league_id pinned to profile
- *     shown_league_ids?: string[]         // sleeper_league_ids visible on profile
+ *     shown_league_ids?: string[],        // sleeper_league_ids visible on profile
+ *     signal_league_ids?: string[]        // ordered sleeper_league_ids featured on
+ *                                         // the public Signal profile (/u/[handle]).
+ *                                         // Order is the display order; only ids
+ *                                         // already synced into the leagues table
+ *                                         // render (the public page never calls
+ *                                         // Sleeper).
  *   }
  */
 export type SleeperLeagueSettings = {
   username?: string | null;
   featured_league_id?: string | null;
   shown_league_ids?: string[];
+  signal_league_ids?: string[];
 };
 
 /**
@@ -46,6 +53,20 @@ export function parseSleeperLeagueSettings(value: unknown): SleeperLeagueSetting
   if (Array.isArray(record.shown_league_ids)) {
     out.shown_league_ids = record.shown_league_ids.filter(
       (id): id is string => typeof id === "string" && id.length > 0,
+    );
+  }
+
+  if (Array.isArray(record.signal_league_ids)) {
+    // De-duplicate while preserving the first occurrence's order.
+    const seen = new Set<string>();
+    out.signal_league_ids = record.signal_league_ids.filter(
+      (id): id is string => {
+        if (typeof id !== "string" || id.length === 0 || seen.has(id)) {
+          return false;
+        }
+        seen.add(id);
+        return true;
+      },
     );
   }
 

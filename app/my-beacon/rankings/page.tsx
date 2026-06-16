@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ListOrdered, Layers } from "lucide-react";
+import { ArrowRight, ListOrdered, Layers, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
   isBoardScope,
@@ -10,6 +10,10 @@ import {
 } from "@/lib/ranking-boards";
 import { CreateBoardForm } from "./create-board-form";
 import { DeleteBoardButton } from "./delete-board-button";
+import {
+  ProfileBoardsManager,
+  type ProfileBoard,
+} from "./profile-boards-manager";
 
 export const metadata: Metadata = {
   title: "My Rankings",
@@ -24,6 +28,10 @@ type BoardSummary = {
   tiers_enabled: boolean;
   playerCount: number;
   updated_at: string;
+  profileVisible: boolean;
+  profileIsPrimary: boolean;
+  profileSort: number;
+  profileTopN: number | null;
 };
 
 export default async function MyRankingsPage() {
@@ -35,7 +43,7 @@ export default async function MyRankingsPage() {
   const { data } = await supabase
     .from("user_ranking_boards")
     .select(
-      "id, name, scope, tiers_enabled, updated_at, user_ranking_board_players(count)",
+      "id, name, scope, tiers_enabled, updated_at, profile_visible, profile_is_primary, profile_sort, profile_top_n, user_ranking_board_players(count)",
     )
     .eq("user_id", user!.id)
     .order("created_at", { ascending: true });
@@ -51,8 +59,23 @@ export default async function MyRankingsPage() {
       tiers_enabled: row.tiers_enabled,
       playerCount: countRel?.[0]?.count ?? 0,
       updated_at: row.updated_at,
+      profileVisible: row.profile_visible,
+      profileIsPrimary: row.profile_is_primary,
+      profileSort: row.profile_sort,
+      profileTopN: row.profile_top_n,
     };
   });
+
+  const profileBoards: ProfileBoard[] = boards.map((board) => ({
+    id: board.id,
+    name: board.name,
+    scope: board.scope,
+    playerCount: board.playerCount,
+    profileVisible: board.profileVisible,
+    profileIsPrimary: board.profileIsPrimary,
+    profileSort: board.profileSort,
+    profileTopN: board.profileTopN,
+  }));
 
   return (
     <div className="space-y-12">
@@ -118,8 +141,20 @@ export default async function MyRankingsPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
-                      {scopeLabel(board.scope)}
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
+                        {scopeLabel(board.scope)}
+                      </span>
+                      {board.profileIsPrimary ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-brand-purple/50 bg-brand-purple/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-purple">
+                          <Star aria-hidden="true" className="h-3 w-3 fill-current" />
+                          Primary
+                        </span>
+                      ) : board.profileVisible ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-line bg-base px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                          On profile
+                        </span>
+                      ) : null}
                     </span>
                     <h3 className="mt-3 truncate text-lg font-semibold text-ink">
                       {board.name}
@@ -162,6 +197,10 @@ export default async function MyRankingsPage() {
           </ul>
         )}
       </section>
+
+      {boards.length > 0 && (
+        <ProfileBoardsManager initialBoards={profileBoards} />
+      )}
     </div>
   );
 }
