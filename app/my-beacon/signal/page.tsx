@@ -13,7 +13,7 @@ import { MediaUploader } from "./media-uploader";
 import { PublishControls } from "./publish-controls";
 import { WallComposer } from "./wall-composer";
 import { WallManager } from "./wall-manager";
-import type { WallPost } from "@/lib/signal-wall";
+import type { WallPost, WallImage } from "@/lib/signal-wall";
 import type { SignalLink, PlayerSearchResult } from "./customization";
 import {
   SignalLeaguesManager,
@@ -103,7 +103,34 @@ export default async function MySignalPage() {
       .order("pinned", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(100);
-    wallPosts = (postRows ?? []).map((row) => ({
+    const rows = postRows ?? [];
+
+    // Images for these posts (owner RLS returns the owner's own), grouped by post.
+    const imagesByPost = new Map<string, WallImage[]>();
+    if (rows.length > 0) {
+      const { data: imageRows } = await supabase
+        .from("signal_post_images")
+        .select("post_id, storage_path, alt_text, width, height, ordinal")
+        .in(
+          "post_id",
+          rows.map((r) => r.id),
+        )
+        .order("ordinal", { ascending: true });
+      for (const img of imageRows ?? []) {
+        const url = publicUrlFor(img.storage_path);
+        if (!url) continue;
+        const list = imagesByPost.get(img.post_id) ?? [];
+        list.push({
+          url,
+          alt: img.alt_text,
+          width: img.width,
+          height: img.height,
+        });
+        imagesByPost.set(img.post_id, list);
+      }
+    }
+
+    wallPosts = rows.map((row) => ({
       id: row.id,
       body: row.body,
       pinned: row.pinned,
@@ -111,6 +138,7 @@ export default async function MySignalPage() {
       hiddenReason: row.hidden_reason,
       createdAt: row.created_at,
       editedAt: row.edited_at,
+      images: imagesByPost.get(row.id) ?? [],
     }));
   }
 

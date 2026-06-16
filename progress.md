@@ -920,6 +920,46 @@ T803 | completed | Admin moderation: /admin/signal index + /admin/signal/reports
        components/admin/report-queue.tsx, components/admin-nav.tsx
      | verified: yes (build)
 
+### Signal - Phase 4b (post images) - completed
+Up to 4 images per post, each with REQUIRED alt text. Reuses the signal-media
+bucket (owner-folder scoped) under "<uid>/posts/<uuid>.webp". The 4-image cap is
+structural (ordinal 0..3 + unique(post_id, ordinal)), no trigger needed. Images
+are creation-time only this phase; editing a post's images is deferred (delete +
+repost). IMAGES-XOR-GIF guard is a sub-phase (d) task (no gif column yet); both
+enforcement directions are specified in the 0071 header and the handoff.
+T804 | completed | Migration 0071: signal_post_images (post_id FK cascade, alt_text
+     CHECK 1..420, width/height > 0, ordinal 0..3 unique per post). RLS: public
+     SELECT join-gated through post + parent Signal live; owner SELECT/INSERT/DELETE
+     own via the same join; service_role ALL.
+     | files: supabase/migrations/0071_signal_post_images.sql, lib/database.types.ts
+     | verified: yes (rolled-back RLS sim: anon + other-user see image only while
+       parent live, owner sees own, anon sees 0 after unpublish, cross-user insert
+       blocked by RLS; types regenerated, signal_post_images present)
+T805 | completed | lib/signal/image-sniff.ts: shared magic-byte sniff extracted;
+     /api/signal/media refactored to import it (no duplication).
+     | files: lib/signal/image-sniff.ts, app/api/signal/media/route.ts
+     | verified: yes (typecheck + build)
+T806 | completed | /api/signal/post-image upload route: same-origin + auth +
+     Content-Length ceiling + size cap + sniff + sharp re-encode to WebP (fit
+     inside, longest edge 1600, withoutEnlargement, metadata stripped). Returns
+     path + public URL + dimensions; writes NO DB row (composer attaches on submit).
+     | files: app/api/signal/post-image/route.ts
+     | verified: yes (build)
+T807 | completed | createPost extended with images: server-side validation (<=4,
+     path must be inside caller's own "<uid>/posts/" + .webp, alt 1..420, positive
+     int dims); inserts signal_post_images with ordinal; rolls back the post if the
+     image insert fails so no half-posted text-only row remains.
+     | files: app/my-beacon/signal/wall-actions.ts
+     | verified: yes (typecheck + build)
+T808 | completed | Composer image UI (upload one at a time, required alt per image,
+     remove, submit gated until every image is described) + PostImages render grid
+     (1 full / 2+ two-col, creator alt, lazy) shown on public Wall + owner manager;
+     owner page + loadWallPosts load images.
+     | files: app/my-beacon/signal/wall-composer.tsx, components/signal/post-images.tsx,
+       components/signal/wall.tsx, app/my-beacon/signal/wall-manager.tsx,
+       lib/signal-wall.ts, app/my-beacon/signal/page.tsx
+     | verified: yes (typecheck + build)
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

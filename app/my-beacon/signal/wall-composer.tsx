@@ -1,8 +1,8 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Send } from "lucide-react";
+import { ImagePlus, Send, Trash2 } from "lucide-react";
 import {
   POST_BODY_MAX,
   POST_LINKS_MAX,
@@ -10,25 +10,41 @@ import {
   countLinks,
   graphemeLength,
 } from "@/lib/signal";
-import { createPost } from "./wall-actions";
+import { createPost, type PostImageInput } from "./wall-actions";
 
 /**
- * Composer for a new Wall post (owner only). The character counter shows a
- * grapheme-aware count for readability, but the over-limit gate uses
- * codePointLength so it agrees exactly with the database char_length CHECK (see
- * the note in lib/signal.ts). Link count mirrors the server max-3 cap. The submit
- * button is disabled while empty, over a limit, or pending. A polite live region
- * confirms success; an assertive region carries errors, including the friendly
- * rate-limit copy mapped from the DB trigger.
+ * Composer for a new Wall post (owner only). Text plus up to 4 images, each with
+ * REQUIRED alt text (creators and viewers may be blind). The character counter
+ * shows a grapheme-aware count for readability but the over-limit gate uses
+ * codePointLength so it agrees with the database char_length CHECK. Images upload
+ * one at a time through the hardening route; submit is blocked until every image
+ * has a description. Polite live region confirms success; assertive carries errors.
  */
+
+const IMAGES_MAX = 4;
+
+type DraftImage = {
+  key: string;
+  path: string;
+  url: string;
+  alt: string;
+  width: number;
+  height: number;
+};
+
+let imageKeySeq = 0;
+
 export function WallComposer() {
   const [body, setBody] = useState("");
+  const [images, setImages] = useState<DraftImage[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const fieldId = useId();
   const helpId = useId();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const codePoints = codePointLength(body);
   const graphemes = graphemeLength(body);
@@ -36,17 +52,84 @@ export function WallComposer() {
   const trimmedEmpty = body.trim().length === 0;
   const overLength = codePoints > POST_BODY_MAX;
   const overLinks = links > POST_LINKS_MAX;
-  const disabled = pending || trimmedEmpty || overLength || overLinks;
+  const missingAlt = images.some((img) => img.alt.trim().length === 0);
+  const disabled =
+    pending || uploading || trimmedEmpty || overLength || overLinks || missingAlt;
+
+  const onPickFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    if (images.length >= IMAGES_MAX) {
+      setError(`You can attach at most ${IMAGES_MAX} images.`);
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    setStatus("Uploading image...");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/signal/post-image", {
+        method: "POST",
+        headers: { "x-requested-with": "ff-beacon" },
+        body: form,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        path?: string;
+        url?: string;
+        width?: number;
+        height?: number;
+        error?: string;
+      };
+      if (res.ok && data.ok && data.path && data.url) {
+        setImages((prev) => [
+          ...prev,
+          {
+            key: `img-${imageKeySeq++}`,
+            path: data.path!,
+            url: data.url!,
+            alt: "",
+            width: data.width ?? 0,
+            height: data.height ?? 0,
+          },
+        ]);
+        setStatus("Image added. Add a description for it.");
+      } else {
+        setError(data.error ?? "Could not upload that image.");
+        setStatus("");
+      }
+    } catch {
+      setError("Could not upload that image.");
+      setStatus("");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const setAlt = (key: string, alt: string) =>
+    setImages((prev) => prev.map((img) => (img.key === key ? { ...img, alt } : img)));
+
+  const removeImage = (key: string) =>
+    setImages((prev) => prev.filter((img) => img.key !== key));
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     setStatus("");
     if (disabled) return;
+    const payload: PostImageInput[] = images.map((img) => ({
+      path: img.path,
+      alt: img.alt.trim(),
+      width: img.width,
+      height: img.height,
+    }));
     startTransition(async () => {
-      const res = await createPost(body.trim());
+      const res = await createPost(body.trim(), payload);
       if (res.ok) {
         setBody("");
+        setImages([]);
         setStatus("Post published.");
         router.refresh();
       } else {
@@ -64,9 +147,9 @@ export function WallComposer() {
         Write a post
       </label>
       <p id={helpId} className="mt-1 text-xs text-ink-subtle">
-        Up to {POST_BODY_MAX} characters and {POST_LINKS_MAX} links. Emoji can
-        count as several characters, so the limit is measured the way the server
-        stores it.
+        Up to {POST_BODY_MAX} characters, {POST_LINKS_MAX} links, and {IMAGES_MAX}{" "}
+        images. Emoji can count as several characters, so the limit is measured the
+        way the server stores it.
       </p>
       <textarea
         id={fieldId}
@@ -80,20 +163,64 @@ export function WallComposer() {
       />
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
-        <span
-          className={overLength ? "font-semibold text-signal-danger" : "text-ink-subtle"}
-        >
+        <span className={overLength ? "font-semibold text-signal-danger" : "text-ink-subtle"}>
           {graphemes} characters
           {overLength ? " (over the limit)" : ` of ${POST_BODY_MAX}`}
         </span>
-        <span
-          className={overLinks ? "font-semibold text-signal-danger" : "text-ink-subtle"}
-        >
+        <span className={overLinks ? "font-semibold text-signal-danger" : "text-ink-subtle"}>
           {links} of {POST_LINKS_MAX} links
         </span>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-4">
+      {images.length > 0 && (
+        <ul role="list" className="mt-4 flex flex-col gap-3">
+          {images.map((img, index) => (
+            <li
+              key={img.key}
+              className="flex gap-3 rounded-card border border-line bg-base p-3"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={img.url}
+                alt={img.alt.trim() ? img.alt : `Image ${index + 1}, awaiting a description`}
+                className="h-20 w-20 shrink-0 rounded-card object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <label className="block text-xs font-medium text-ink">
+                  Describe image {index + 1} (required)
+                  <input
+                    type="text"
+                    value={img.alt}
+                    maxLength={420}
+                    onChange={(e) => setAlt(img.key, e.target.value)}
+                    aria-invalid={img.alt.trim().length === 0}
+                    placeholder="Who or what is in this image?"
+                    className="mt-1 w-full rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink caret-brand-purple placeholder:text-ink-subtle focus:border-brand-purple focus:outline-none"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeImage(img.key)}
+                  className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-subtle hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+                  Remove image {index + 1}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={onPickFile}
+        className="sr-only"
+      />
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="submit"
           disabled={disabled}
@@ -102,10 +229,28 @@ export function WallComposer() {
           <Send aria-hidden="true" className="h-4 w-4" />
           {pending ? "Posting..." : "Post"}
         </button>
-        <p aria-live="polite" role="status" className="min-h-[1.25rem] text-sm text-signal-success">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={pending || uploading || images.length >= IMAGES_MAX}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+        >
+          <ImagePlus aria-hidden="true" className="h-4 w-4" />
+          {uploading ? "Uploading..." : "Add image"}
+        </button>
+        <span className="text-xs text-ink-subtle">
+          {images.length} of {IMAGES_MAX} images
+        </span>
+        <p aria-live="polite" role="status" className="min-h-[1.25rem] flex-1 text-sm text-signal-success">
           {status}
         </p>
       </div>
+
+      {missingAlt && images.length > 0 && (
+        <p className="mt-2 text-xs text-ink-muted">
+          Add a description to each image before posting.
+        </p>
+      )}
 
       <div aria-live="assertive" className="min-h-[1.25rem]">
         {error && (

@@ -11,6 +11,65 @@ import {
 } from "@/lib/signal";
 import type { ActionResult } from "./actions";
 
+export type PostImageInput = {
+  path: string;
+  alt: string;
+  width: number;
+  height: number;
+};
+
+const POST_IMAGES_MAX = 4;
+const ALT_MAX = 420;
+
+/** Validate the attached images: at most 4, each path must live inside the
+ * caller's own "<uid>/posts/" folder and be a .webp (so a guessed path on another
+ * user's folder or a non-image is rejected), each alt 1..420 chars, dimensions
+ * positive integers. Returns cleaned rows or an error string. */
+function validateImages(
+  raw: unknown,
+  userId: string,
+): { ok: true; images: PostImageInput[] } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, images: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: "Could not read your images." };
+  if (raw.length > POST_IMAGES_MAX) {
+    return { ok: false, error: `Posts can include at most ${POST_IMAGES_MAX} images.` };
+  }
+
+  const prefix = `${userId}/posts/`;
+  const cleaned: PostImageInput[] = [];
+  for (const item of raw) {
+    const path = typeof item?.path === "string" ? item.path : "";
+    const alt = typeof item?.alt === "string" ? item.alt.trim() : "";
+    const width = Number(item?.width);
+    const height = Number(item?.height);
+
+    if (
+      !path.startsWith(prefix) ||
+      !/^[0-9a-f-]{36}\.webp$/i.test(path.slice(prefix.length))
+    ) {
+      return { ok: false, error: "One of your images could not be attached." };
+    }
+    if (alt.length < 1 || alt.length > ALT_MAX) {
+      return {
+        ok: false,
+        error: `Each image needs a description of 1 to ${ALT_MAX} characters.`,
+      };
+    }
+    if (
+      !Number.isInteger(width) ||
+      !Number.isInteger(height) ||
+      width < 1 ||
+      height < 1 ||
+      width > 10000 ||
+      height > 10000
+    ) {
+      return { ok: false, error: "One of your images could not be attached." };
+    }
+    cleaned.push({ path, alt, width, height });
+  }
+  return { ok: true, images: cleaned };
+}
+
 /**
  * Owner-only server actions for the Signal Wall. Posts belong to the owner's
  * Signal (signal_posts has no author column; authorship is the parent signal's
@@ -77,7 +136,10 @@ async function getOwnerSignalId(): Promise<
   return { ok: true, userId: user.id, signalId: signal.id };
 }
 
-export async function createPost(rawBody: string): Promise<ActionResult> {
+export async function createPost(
+  rawBody: string,
+  images?: PostImageInput[],
+): Promise<ActionResult> {
   const body = typeof rawBody === "string" ? rawBody.trim() : "";
   const bodyError = validateBody(body);
   if (bodyError) return { ok: false, error: bodyError };
@@ -85,11 +147,36 @@ export async function createPost(rawBody: string): Promise<ActionResult> {
   const owner = await getOwnerSignalId();
   if (!owner.ok) return owner;
 
+  const imageCheck = validateImages(images, owner.userId);
+  if (!imageCheck.ok) return { ok: false, error: imageCheck.error };
+
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: post, error } = await supabase
     .from("signal_posts")
-    .insert({ signal_id: owner.signalId, body });
-  if (error) return { ok: false, error: mapPostError(error) };
+    .insert({ signal_id: owner.signalId, body })
+    .select("id")
+    .maybeSingle();
+  if (error || !post) return { ok: false, error: mapPostError(error ?? {}) };
+
+  if (imageCheck.images.length > 0) {
+    const rows = imageCheck.images.map((img, index) => ({
+      post_id: post.id,
+      storage_path: img.path,
+      alt_text: img.alt,
+      width: img.width,
+      height: img.height,
+      ordinal: index,
+    }));
+    const { error: imgError } = await supabase
+      .from("signal_post_images")
+      .insert(rows);
+    if (imgError) {
+      // The post exists but its images failed; remove the post so the creator
+      // can retry cleanly rather than leaving a text-only post they did not mean.
+      await supabase.from("signal_posts").delete().eq("id", post.id);
+      return { ok: false, error: "Could not attach your images. Please try again." };
+    }
+  }
 
   revalidatePath("/my-beacon/signal");
   await revalidateProfileCaches(supabase, owner.userId);

@@ -1830,6 +1830,47 @@ export type Database = {
           },
         ];
       };
+      signal_post_images: {
+        Row: {
+          alt_text: string;
+          created_at: string;
+          height: number;
+          id: string;
+          ordinal: number;
+          post_id: string;
+          storage_path: string;
+          width: number;
+        };
+        Insert: {
+          alt_text: string;
+          created_at?: string;
+          height: number;
+          id?: string;
+          ordinal: number;
+          post_id: string;
+          storage_path: string;
+          width: number;
+        };
+        Update: {
+          alt_text?: string;
+          created_at?: string;
+          height?: number;
+          id?: string;
+          ordinal?: number;
+          post_id?: string;
+          storage_path?: string;
+          width?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_post_images_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "signal_posts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       signal_posts: {
         Row: {
           body: string;

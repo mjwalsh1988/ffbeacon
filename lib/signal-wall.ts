@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
+import { signalMediaUrl } from "@/lib/signal-profile";
 
 /**
  * Server-only data layer for the Signal Wall (public posts on /u/[handle]).
@@ -19,6 +20,13 @@ import { createAdminClient } from "@/lib/supabase/server";
  * unless includeHidden is set, so a public render cannot leak a taken-down post.
  */
 
+export type WallImage = {
+  url: string;
+  alt: string;
+  width: number;
+  height: number;
+};
+
 export type WallPost = {
   id: string;
   body: string;
@@ -27,6 +35,7 @@ export type WallPost = {
   hiddenReason: string | null;
   createdAt: string;
   editedAt: string | null;
+  images: WallImage[];
 };
 
 /**
@@ -50,7 +59,13 @@ export async function loadWallPosts(
   if (!includeHidden) query = query.eq("hidden", false);
 
   const { data } = await query;
-  return (data ?? []).map((row) => ({
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  // Fetch all images for these posts in one query, grouped by post.
+  const imagesByPost = await loadImagesForPosts(rows.map((r) => r.id));
+
+  return rows.map((row) => ({
     id: row.id,
     body: row.body,
     pinned: row.pinned,
@@ -58,5 +73,33 @@ export async function loadWallPosts(
     hiddenReason: row.hidden_reason,
     createdAt: row.created_at,
     editedAt: row.edited_at,
+    images: imagesByPost.get(row.id) ?? [],
   }));
+}
+
+/**
+ * Load images for a set of posts, ordered within each post, keyed by post id.
+ * Shared by the public loader and the owner editor so both render the same shape.
+ */
+export async function loadImagesForPosts(
+  postIds: string[],
+): Promise<Map<string, WallImage[]>> {
+  const byPost = new Map<string, WallImage[]>();
+  if (postIds.length === 0) return byPost;
+
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("signal_post_images")
+    .select("post_id, storage_path, alt_text, width, height, ordinal")
+    .in("post_id", postIds)
+    .order("ordinal", { ascending: true });
+
+  for (const row of data ?? []) {
+    const url = signalMediaUrl(row.storage_path);
+    if (!url) continue;
+    const list = byPost.get(row.post_id) ?? [];
+    list.push({ url, alt: row.alt_text, width: row.width, height: row.height });
+    byPost.set(row.post_id, list);
+  }
+  return byPost;
 }
