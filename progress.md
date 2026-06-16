@@ -960,6 +960,24 @@ T808 | completed | Composer image UI (upload one at a time, required alt per ima
        lib/signal-wall.ts, app/my-beacon/signal/page.tsx
      | verified: yes (typecheck + build)
 
+### Signal - Phase 4 a/b sub-agent review (completed)
+Three reviews (implementation, accessibility, security) over the 4a+4b diff.
+- Security: NO blockers. RLS on signal_reports + signal_post_images verified sound
+  (join-gated public read cannot leak a draft/hidden parent; moderation columns
+  service-role-only; admin actions re-validate requireAdmin; report endpoint
+  IDOR/enumeration/rate-limit/CSRF correct; image route sniff + sharp re-encode +
+  path scoping correct; no dangerouslySetInnerHTML; secrets server-only).
+- Implementation: NO blockers. Cache model, polymorphic reports, dangling-report
+  trigger, and the structural 4-image cap all verified.
+- Accessibility: one BLOCKER fixed (report panel focus return) + 44px target bumps
+  + alt counter, all in commit 4537173.
+- Deferred (documented in handoff, consistent with the existing media-route
+  posture): report-endpoint rate-limit TOCTOU (unique constraint makes it
+  low-stakes); per-user image-upload throttle + orphan-object reaper; editing a
+  post's images (delete + repost for now); WebP FourCC sniff tightening (sharp
+  re-encode already mitigates).
+Commits (main, NOT pushed): 90f4634 (4a), b43e7d1 (4b), 4537173 (review fixes).
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

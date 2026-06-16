@@ -1,124 +1,127 @@
-# Handoff: Signal feature, Phase 3 complete
+# Handoff: Signal Phase 4 sub-phases (a) + (b) complete
 
-Phases 0, 1, 2, and 3 are done and committed to `main` (NOT pushed). Read
-CLAUDE.md and the "Signal" sections of progress.md before continuing.
+Phase 4 of Signal is being built in six sub-phases. THIS session shipped (a) text
+posts + moderation and (b) post images. (c) through (f) are NOT started. Read
+CLAUDE.md and the "Signal - Phase 4" sections of progress.md before continuing.
 
-## Where things stand
-
-- Phase 0 (commit 3e7fdca): schema, RLS, abuse triggers. Migrations 0059-0067.
-- Phase 1 (commit 4b6cb6f): handle lifecycle (0068), My Signal identity editor,
-  image-hardening route, minimal Layout A public profile at /u/[handle].
-- Phase 2 (commit 72b6567): featured boards + featured leagues BY REFERENCE,
-  shared <SignalBlock> renderer, public read-only board view, tag-based caching,
-  OG image, sitemap. Tasks T778-T788.
-- Phase 3 (commit 594b8b2): customization. Accent palette, custom links, favorite
-  team/player editors on /my-beacon/signal, plus public render on /u/[handle].
-  Tasks T789-T795. Migration 0069.
+Commits on `main` (NOT pushed):
+- 90f4634 Phase 4a Wall text posts + polymorphic moderation
+- b43e7d1 Phase 4b post images with required alt text
+- 4537173 Phase 4 review fixes (a11y focus + tap targets + alt counter)
 
 `.claude/settings.local.json` is intentionally NOT committed.
 
-## Phase 3 architecture (what the next session inherits)
+## Approved architecture decisions (carry these forward)
 
-- Accent palette: lib/signal/accents.ts is the single source of truth (fixed
-  10-slug AAA set, beacon default). HARD contrast rule is baked into the helpers:
-  accentFillStyle(slug) returns the LOCKED {backgroundColor, color:textOnFill}
-  pair (black text on fill, always; white-on-accent is impossible at call sites);
-  accentInkColor(slug) is the accent-as-text/border/icon-on-dark path;
-  accentGradient(slug) derives a decorative banner gradient from the single hex.
-  lib/signal.ts re-exports these for existing import sites. REUSE these helpers
-  for any new accent-colored chip in Phase 4 (e.g. Wall author accents).
-- DB: migration 0069 moved signals.accent to the new 10-slug CHECK and added a
-  function-backed links shape guard (signal_links_valid + signals_links_shape_check:
-  array <=10, each {label 1..40 string, url <=2048 string matching ^https://}).
-  No new columns, so database.types.ts was NOT regenerated.
-- Server actions (app/my-beacon/signal/actions.ts, "use server"): saveAccent,
-  saveLinks, saveFavorites, searchPlayers. Shared constants + types live in
-  app/my-beacon/signal/customization.ts because a "use server" file may only
-  export async functions. Every write calls revalidateProfileCaches().
-- Editors (client): accent-picker.tsx (native-radio radiogroup, arrow-key, live
-  preview, aria-live), links-editor.tsx (add/edit/remove + accessible move up/down
-  reusing the boards-manager pattern), favorites-editor.tsx (labeled team select +
-  WAI-ARIA combobox typeahead over searchPlayers, debounced, clear-to-null). Wired
-  into page.tsx as Appearance / Links / Favorites sections.
-- Public render: lib/signal-profile.ts loadProfileBundle now also returns links
-  (parsed, https-guarded on read) + resolved favorite team/player. signal-block.tsx
-  adds LinksBlock (rel=noopener noreferrer target=_blank, label-not-URL, new-tab
-  announced) + FavoritesBlock (accent-fill chips). Rendered in app/u/[handle]/page.tsx.
+1. DYNAMIC WALL. The public Wall is NOT folded into the cached signal:{handle}
+   bundle. /u/[handle] is `export const dynamic = "force-dynamic"`; the identity
+   bundle keeps its unstable_cache data cache; the Wall reads live via
+   lib/signal-wall.ts loadWallPosts (admin client, explicit live-gating). This is
+   deliberate so (c) comments + (f) reactions, written by arbitrary signed-in
+   users, never bust the owner's whole profile cache. Keep the Wall dynamic.
+2. POLYMORPHIC REPORTS. signal_reports(target_type in ('post','comment'),
+   target_id, ...) replaced the empty signal_post_reports (migration 0070). One
+   report endpoint (/api/signal/report) and one admin queue (/admin/signal/reports)
+   cover both targets. The endpoint currently rejects target_type='comment' with a
+   400; sub-phase (c) flips that on and reuses everything else.
+3. POSTS = up to 4 images OR (sub-phase d) 1 GIF, mutually exclusive. COMMENTS =
+   text + 1 GIF, NO image uploads. Comment body 1..1000, max 2 links.
+4. CODE-POINT body cap with a grapheme-aware DISPLAY counter (lib/signal.ts
+   codePointLength gates submit; graphemeLength is the friendly counter). Stated
+   honestly in composer helper text. Reuse the same approach for comments.
 
-## Phase 2 architecture (still load-bearing)
+## What shipped in (a) + (b)
 
-- Data layer: lib/signal-profile.ts. loadProfileBundle(handle) is the cookie-free,
-  admin-client, unstable_cache bundle tagged signal:{handle}. loadBoardTopN and
-  loadPublicBoard are tagged board:{id}. revalidateProfileCaches(supabase, userId)
-  busts signal:{handle} AND every board:{id} for that user; call it from ANY server
-  action / route that changes anything the public profile shows.
-- Public profile app/u/[handle]/page.tsx: live path reads NO cookies (cacheable +
-  ISR revalidate=3600); owner-preview path reads cookies and re-checks ownership.
-- Featured boards render no player values and no source slugs. League cards never
-  call Sleeper / pulseLeague; leader comes from league_power_rankings_cache via the
-  default source.
+DB (migrations + RLS verified via rolled-back anon/auth sims):
+- 0070 signal_reports (polymorphic) + AFTER DELETE trigger
+  signal_reports_dismiss_on_post_delete (auto-dismisses a deleted post's open
+  reports; no FK cascade because polymorphic). signal_post_reports dropped.
+- 0071 signal_post_images (alt_text CHECK 1..420, width/height > 0, ordinal 0..3
+  unique per post = structural 4-image cap, join-gated RLS through post + signals).
 
-## Phase 4 (next session): the Wall + reporting / moderation
+Code:
+- lib/signal.ts: POST_BODY_MAX/POST_LINKS_MAX + codePointLength/countLinks/
+  graphemeLength.
+- lib/signal-wall.ts: loadWallPosts (+ loadImagesForPosts), WallPost/WallImage.
+- lib/signal/image-sniff.ts: shared magic-byte sniff (media route now imports it).
+- app/my-beacon/signal/wall-actions.ts: createPost/updatePost/deletePost/
+  setPostPinned (owner, session client + owner RLS, trigger-error mapping). createPost
+  takes images and validates path is inside the caller's own "<uid>/posts/" folder.
+- /api/signal/post-image: hardened upload (sniff + sharp re-encode WebP, fit inside
+  1600, metadata stripped), returns path + url + dims, writes NO DB row.
+- /api/signal/report: same-origin + auth + per-reporter rate limit + target gating.
+- app/my-beacon/signal/{wall-composer,wall-manager}.tsx, components/signal/
+  {wall,post-body,post-images,report-button}.tsx, components/admin/report-queue.tsx,
+  app/admin/signal/{page,actions,reports}.
+- Wall wired into /u/[handle] (public) and /my-beacon/signal (owner editor).
 
-The schema is ALREADY built and hardened from Phase 0. Phase 4 is UI + endpoints.
+## Carryover / known deferred (do these where noted)
 
-- signal_posts (migration 0061): the Wall. Columns include moderation
-  hidden/hidden_reason/hidden_at/hidden_by (service_role only via column GRANTs).
-  A BEFORE INSERT trigger enforces rate limits (15s between posts, 10/hour,
-  40/day) and max 3 links per post; it is SECURITY DEFINER so hidden posts still
-  consume quota. created_at is forced to now() and the max-3-links cap also applies
-  on UPDATE (migration 0067). The trigger is the backstop; the post composer must
-  still validate client-side + server-side and surface the friendly rate-limit copy.
-- signal_post_reports (migration 0062): report/flag. Authenticated-only insert,
-  one row per (post, reporter) via unique constraint, admin queue via service_role.
-  The per-reporter rate limit (15s/10h/40d) is NOT in a trigger; it must be
-  enforced server-side in the report endpoint this phase builds.
-- signal_follows (migration 0063): graph + denormalized signals.follower_count via
-  AFTER trigger. The follow button + For You feed UI are likely a later phase, but
-  the follower_count is already public and could surface on the profile now.
+- IMAGES-XOR-GIF GUARD ships in sub-phase (d) migration 0073, BOTH directions.
+  Spec is in the 0071 header: (1) image-insert side = BEFORE INSERT trigger on
+  signal_post_images rejecting insert when the parent post has gif IS NOT NULL;
+  (2) gif-set side = BEFORE UPDATE guard on signal_posts rejecting a gif set when
+  the post already has signal_post_images rows. Do not forget direction (1).
+- Editing a post's images is not supported (delete + repost). Add if desired.
+- Report endpoint rate-limit is check-then-insert (TOCTOU). Low stakes given the
+  unique(target_type,target_id,reporter) constraint. Tighten with an atomic claim
+  if abused (see lib try_claim_league_refresh pattern).
+- No per-user throttle on /api/signal/post-image and no orphan-object reaper
+  (uploaded-but-never-attached WebPs). Same posture as the existing /api/signal/media
+  route. Add a light per-user upload window + a reaper before heavy launch.
 
-Suggested Phase 4 surface (confirm scope with owner before planning):
-1. Post composer on /my-beacon/signal (or a dedicated Wall editor): text + up to 3
-   links, client mirror of the trigger limits, aria-live on post/limit/error.
-2. Wall render block on /u/[handle] (reuse <SignalBlock>; hide hidden posts on the
-   public path; owner sees their own hidden posts flagged).
-3. Report endpoint (app/api/signal/report or a server action): same-origin/CSRF
-   guard + auth + per-reporter rate limit (mirror the league_refresh_attempts
-   pattern or the in-trigger window approach), generic error copy.
-4. Cache: posting / hiding a post must bust signal:{handle} (extend
-   revalidateProfileCaches or add a wall:{handle} tag).
-5. Admin moderation surface (hide/unhide) if in scope.
+## Remaining sub-phases (build in this order; one fresh session each is safest)
 
-## Reusable patterns to lean on
+(c) COMMENTS. New migration: signal_comments (post_id FK cascade, author_user_id
+    references auth.users, body 1..1000, gif jsonb added in d, hidden* moderation
+    columns service-role-only via column grants, created_at forced now(),
+    per-author rate-limit BEFORE INSERT/UPDATE trigger 15s/10h/40d counting hidden,
+    link cap 2 on insert AND update). RLS: public read gated through post + signal
+    live; author read/insert/update/delete own (non-moderation cols); owner-of-Wall
+    read own-wall comments any state. Comments-side dangling-report trigger
+    (mirror signal_reports_dismiss_on_post_delete for 'comment'). Moderation:
+    author hard-deletes own; Wall owner OR admin soft-hide via a moderateComment
+    server action that re-validates "owner of parent signal OR admin" then writes
+    hidden* with the admin client (do NOT try to express owner moderation in RLS).
+    Flip the report endpoint to accept target_type='comment'. Comment composer +
+    list under each post; reuse PostBody.
 
-- revalidateProfileCaches(supabase, userId) for all cache invalidation.
-- <SignalBlock> (components/signal/signal-block.tsx) for any new public profile
-  section: self-contained <section> + heading, returns null when empty.
-- Accessible move up/down + aria-live reorder: profile-boards-manager.tsx and the
-  new links-editor.tsx.
-- WAI-ARIA combobox: favorites-editor.tsx PlayerTypeahead (and tools/faab faab-form).
-- Accent chips: accentFillStyle / accentInkColor (NEVER hand-pick a foreground).
-- Server-side validation is authoritative; DB trigger/CHECK is the backstop; map
-  trigger RAISE tokens to friendly copy (see mapHandleError in signal actions).
+(d) TENOR GIFs in post + comment composers. TENOR_API_KEY server-only. Proxy route
+    /api/signal/gif/search (contentfilter=high LOCKED server-side, media_filter to
+    limit payload). Store gif jsonb {tenor_id, url, preview_url, alt, width, height}
+    on signal_posts AND signal_comments with a function-backed shape CHECK (mirror
+    signals_links_valid in 0069). Migration 0073 also adds BOTH images-xor-gif
+    guards (see carryover). Render: static preview by default, explicit play
+    control, NEVER autoplay, respect prefers-reduced-motion (we have hit this with
+    the branded loader before). Alt from Tenor content_description. "GIF via Tenor"
+    attribution. Picker fully keyboard operable, results labeled.
 
-## Carryover / known deferred
+(e) INLINE EMOJI picker in both composers. Self-hosted emoji set (no external CDN).
+    Inserts characters at the textarea cursor, no new storage. Distinct from
+    reactions. Body cap stays code-point based (already wired). Keyboard operable,
+    trigger labeled.
 
-- searchPlayers (Phase 3) has no server rate limit: session-gated, public player
-  data only, capped at 20 rows, client-debounced. Accepted low-risk; revisit if abused.
-- Per-user upload rate-limiting on /api/signal/media: size-capped + auth-gated, no
-  throttle yet.
-- Site-wide token contrast: ink-subtle (#6B6B7D) fails AA for body text;
-  signal-danger misses AAA. Whole-app design-system pass, decide with owner.
-- Public full-board view caps at 1000 players (Supabase default). Page with
-  .range() if a board ever exceeds that.
-- Phase 12 follow-ups (unrelated to Signal): real commissioner detection, edge
-  runtime for OG, Geist woff2 in OG cards, toast-style refresh feedback.
+(f) CUSTOM REACTIONS + admin catalog. Migrations: 0074 signal_reaction_types
+    (admin catalog: slug, label required, kind image|text, char or image_path,
+    display_order, is_active; public SELECT incl disabled for labeling historical
+    counts; service_role writes). 0075 signal_reactions (polymorphic target,
+    unique(target_type,target_id,reaction_type_id,user_id) so a user cannot apply
+    the same type twice) + signal_reaction_counts (denormalized, AFTER INSERT/DELETE
+    SECURITY DEFINER trigger, mirrors follower_count). New PUBLIC bucket
+    signal-reaction-emojis (admin-only writes, static only, sharp animated:false,
+    small cap). Admin catalog UI under /admin/signal (the index already anticipates
+    it). Reaction picker on posts + comments: keyboard operable, each reaction
+    announced by its label, image reactions MUST carry accessible text. Disabling a
+    type hides it from the picker but keeps historical counts shown + labeled
+    (FK on delete restrict prevents deleting a type with history).
 
 ## Verification gate (every session)
 
 `npm run typecheck` then `npm run build`. Lint is not configured. No em-dashes /
-AI-tell punctuation anywhere (CLAUDE.md rule 6). One shell command per tool call.
-Apply schema via MCP AND save the SQL to supabase/migrations; regenerate
-lib/database.types.ts after any DDL that changes columns/tables. Commit to main,
-do not push until the session is complete. Close with the three sub-agent reviews
-(implementation, accessibility, security).
+AI-tell punctuation anywhere (CLAUDE.md rule 6); plain ASCII. One shell command per
+tool call (no && chaining). Apply schema via MCP AND save SQL to
+supabase/migrations; regenerate lib/database.types.ts after any DDL (the generator
+output is JSON-wrapped and too large to read inline: extract .types with node,
+write the file, then `npx prettier --write`). Run anon/auth RLS verification for
+EVERY new table (rolled-back DO block with set local role + request.jwt.claims).
+Commit to main, do not push. Close with the three sub-agent reviews.
