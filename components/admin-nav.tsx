@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, History, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  History,
+  SlidersHorizontal,
+  Flag,
+  type LucideIcon,
+} from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -25,6 +31,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Player Values & Sources",
     icon: SlidersHorizontal,
     description: "Value engine control: sources, weights, bands, manual signals, and the full ranking review.",
+  },
+  {
+    href: "/admin/signal",
+    label: "Signal",
+    icon: Flag,
+    description: "Creator profile moderation: review reported Wall posts and take them down or restore them.",
   },
   {
     href: "/admin/crons",

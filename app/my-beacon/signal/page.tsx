@@ -11,6 +11,9 @@ import { LinksEditor } from "./links-editor";
 import { FavoritesEditor } from "./favorites-editor";
 import { MediaUploader } from "./media-uploader";
 import { PublishControls } from "./publish-controls";
+import { WallComposer } from "./wall-composer";
+import { WallManager } from "./wall-manager";
+import type { WallPost } from "@/lib/signal-wall";
 import type { SignalLink, PlayerSearchResult } from "./customization";
 import {
   SignalLeaguesManager,
@@ -56,7 +59,7 @@ export default async function MySignalPage() {
   const { data: signal } = await supabase
     .from("signals")
     .select(
-      "handle, display_name, headline, bio, avatar_path, banner_path, status, visibility, accent, links, favorite_team, favorite_player_id",
+      "id, handle, display_name, headline, bio, avatar_path, banner_path, status, visibility, accent, links, favorite_team, favorite_player_id",
     )
     .eq("user_id", user!.id)
     .maybeSingle();
@@ -88,6 +91,28 @@ export default async function MySignalPage() {
     ? signal.accent
     : DEFAULT_ACCENT;
   const initialLinks = parseLinks(signal?.links);
+
+  // Owner's own Wall posts, in any state. RLS signal_posts_select_own returns
+  // the owner's posts including hidden ones, so the manager can flag takedowns.
+  let wallPosts: WallPost[] = [];
+  if (signal) {
+    const { data: postRows } = await supabase
+      .from("signal_posts")
+      .select("id, body, pinned, hidden, hidden_reason, created_at, edited_at")
+      .eq("signal_id", signal.id)
+      .order("pinned", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(100);
+    wallPosts = (postRows ?? []).map((row) => ({
+      id: row.id,
+      body: row.body,
+      pinned: row.pinned,
+      hidden: row.hidden,
+      hiddenReason: row.hidden_reason,
+      createdAt: row.created_at,
+      editedAt: row.edited_at,
+    }));
+  }
 
   // Featured-league picker data: the owner's already-synced leagues. We resolve
   // their Sleeper user id from the saved username and match synced league_users
@@ -258,6 +283,24 @@ export default async function MySignalPage() {
                 leagues={leagueOptions}
                 initialFeaturedIds={settings.signal_league_ids ?? []}
               />
+            </div>
+          </section>
+
+          <section aria-labelledby="signal-wall-heading">
+            <h2
+              id="signal-wall-heading"
+              className="text-lg font-semibold tracking-tight text-ink"
+            >
+              Wall
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+              Post short updates to your public profile. Visitors see your posts
+              newest first, with any pinned post at the top. You can edit or
+              delete your posts at any time.
+            </p>
+            <div className="mt-4 max-w-2xl space-y-6">
+              <WallComposer />
+              <WallManager posts={wallPosts} />
             </div>
           </section>
 

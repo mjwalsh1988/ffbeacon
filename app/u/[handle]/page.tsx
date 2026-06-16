@@ -10,6 +10,7 @@ import {
   signalMediaUrl,
   type ProfileBundle,
 } from "@/lib/signal-profile";
+import { loadWallPosts, type WallPost } from "@/lib/signal-wall";
 import { ImageWithFallback } from "@/components/image-with-fallback";
 import {
   FeaturedBoardsBlock,
@@ -17,10 +18,13 @@ import {
   LinksBlock,
   FavoritesBlock,
 } from "@/components/signal/signal-block";
+import { WallBlock } from "@/components/signal/wall";
 
-// ISR: live profiles are served from the cache and revalidated by tag
-// (signal:{handle}) whenever the owner edits, publishes, or unpublishes.
-export const revalidate = 3600;
+// The Wall is read live (not cached) so new posts and moderation take effect
+// immediately, so this route renders dynamically. The heavy identity bundle is
+// still served from its own unstable_cache data cache (tagged signal:{handle}),
+// so a dynamic render only adds one indexed posts query per request.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -87,14 +91,15 @@ export default async function SignalProfilePage({
     permanentRedirect(`/u/${signal.handle}`);
   }
 
-  // Live path: fully anon-cacheable. Reads NO cookies so this render stays
-  // static/ISR.
+  // Live path: viewer-agnostic. The identity bundle comes from the data cache;
+  // only the Wall posts are read live (public posts, hidden excluded).
   if (isProfileLive(signal)) {
-    return <ProfileBody bundle={bundle} ownerPreview={false} />;
+    const posts = await loadWallPosts(signal.id);
+    return <ProfileBody bundle={bundle} ownerPreview={false} posts={posts} />;
   }
 
   // Not live: the only viewer allowed is the owner (preview). This path reads
-  // cookies, so it renders dynamically, but only for non-live handles.
+  // cookies and shows the owner's hidden posts flagged.
   const supabase = await createClient();
   const {
     data: { user },
@@ -103,15 +108,18 @@ export default async function SignalProfilePage({
     notFound();
   }
 
-  return <ProfileBody bundle={bundle} ownerPreview />;
+  const posts = await loadWallPosts(signal.id, { includeHidden: true });
+  return <ProfileBody bundle={bundle} ownerPreview posts={posts} />;
 }
 
 function ProfileBody({
   bundle,
   ownerPreview,
+  posts,
 }: {
   bundle: ProfileBundle;
   ownerPreview: boolean;
+  posts: WallPost[];
 }) {
   const signal = bundle.signal!;
   const avatar = signalMediaUrl(signal.avatar_path);
@@ -198,6 +206,7 @@ function ProfileBody({
       <FeaturedBoardsBlock handle={signal.handle} boards={bundle.boards} />
       <FeaturedLeaguesBlock leagues={bundle.leagues} />
       <LinksBlock links={bundle.links} accent={signal.accent} />
+      <WallBlock posts={posts} ownerPreview={ownerPreview} />
     </main>
   );
 }

@@ -78,6 +78,7 @@ export function signalMediaUrl(path: string | null): string | null {
 }
 
 export type SignalProfileRow = {
+  id: string;
   user_id: string;
   handle: string;
   display_name: string;
@@ -322,7 +323,7 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
   const { data: signalRow } = await supabase
     .from("signals")
     .select(
-      "user_id, handle, display_name, headline, bio, accent, avatar_path, banner_path, status, visibility, hidden, links, favorite_team, favorite_player_id",
+      "id, user_id, handle, display_name, headline, bio, accent, avatar_path, banner_path, status, visibility, hidden, links, favorite_team, favorite_player_id",
     )
     .eq("handle", handle)
     .maybeSingle();

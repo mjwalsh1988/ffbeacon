@@ -859,6 +859,67 @@ T795 | completed | Three sub-agent reviews (implementation + accessibility + sec
        aria-live confirmations, AAA fill-with-black-text everywhere, 44px targets,
        single-h1 hierarchy, no data hidden at any breakpoint.
 
+### Signal - Phase 4a (text posts + moderation) - completed
+The Wall ships as TEXT posts first. Architectural decision (owner-approved): the
+public Wall renders DYNAMICALLY (not folded into the cached signal:{handle}
+bundle). /u/[handle] is now force-dynamic; loadWallPosts reads live via the admin
+client with explicit live-gating, while the identity bundle keeps its
+unstable_cache data cache. This avoids stale posts and avoids stranger
+comments/reactions (sub-phase c onward) busting the owner's whole profile cache.
+Reporting is polymorphic from the start (posts + comments) so sub-phase c reuses
+the same endpoint + admin queue with no rework.
+T796 | completed | Migration 0070: polymorphic signal_reports (target_type post|comment,
+     target_id, reporter, reason, details, status, unique per target+reporter) +
+     drop empty signal_post_reports + AFTER DELETE trigger on signal_posts that
+     auto-resolves a deleted post's open reports to 'dismissed' (no FK cascade
+     because the table is polymorphic, so dangling reports are prevented by
+     trigger, keeping an audit trail). Per-reporter rate limit stays server-side.
+     | files: supabase/migrations/0070_signal_reports_polymorphic.sql, lib/database.types.ts
+     | verified: yes (RLS enabled + 3 policies; rolled-back anon/auth scoping sim:
+       anon sees 0, each user sees only own; trigger present; old table dropped;
+       types regenerated, signal_reports present + signal_post_reports gone)
+T797 | completed | lib/signal.ts: POST_BODY_MAX(2000)/POST_LINKS_MAX(3) +
+     codePointLength (matches Postgres char_length, the authoritative cap) +
+     countLinks (mirrors the trigger https?:// count) + graphemeLength (Intl.Segmenter,
+     friendly counter). Honest note: cap is CODE-POINT based, counter is grapheme-aware.
+     | files: lib/signal.ts
+     | verified: yes (typecheck)
+T798 | completed | lib/signal-wall.ts: server-only live Wall loader (loadWallPosts,
+     pinned-first, includeHidden gate so public never leaks a taken-down post).
+     | files: lib/signal-wall.ts
+     | verified: yes (typecheck)
+T799 | completed | Owner post server actions (createPost/updatePost/deletePost/
+     setPostPinned), session client + owner RLS, body+link validation mirror,
+     trigger RAISE -> friendly copy, revalidateProfileCaches on each write.
+     | files: app/my-beacon/signal/wall-actions.ts
+     | verified: yes (typecheck + build)
+T800 | completed | Composer + owner manager: WallComposer (grapheme counter,
+     code-point gate, aria-live), WallManager (edit/delete-with-confirm/pin,
+     hidden-by-moderator flag, aria-live), PostBody (safe linkify, no
+     dangerouslySetInnerHTML). Wired into /my-beacon/signal Wall section.
+     | files: app/my-beacon/signal/{wall-composer,wall-manager}.tsx,
+       components/signal/post-body.tsx, app/my-beacon/signal/page.tsx
+     | verified: yes (build)
+T801 | completed | Public Wall render: WallBlock on /u/[handle] (dynamic),
+     ReportButton (viewer-agnostic, resolves auth at submit). Page switched to
+     force-dynamic; signal id added to ProfileBundle for the live posts read.
+     | files: components/signal/{wall,report-button}.tsx, app/u/[handle]/page.tsx,
+       lib/signal-profile.ts
+     | verified: yes (build; /u/[handle] now ƒ dynamic)
+T802 | completed | Report endpoint /api/signal/report: same-origin header + auth +
+     per-reporter rate limit (15s/10h/40d) + target-publicly-reportable check +
+     unique-violation -> alreadyReported. Posts only this phase (comments rejected
+     until sub-phase c).
+     | files: app/api/signal/report/route.ts
+     | verified: yes (build)
+T803 | completed | Admin moderation: /admin/signal index + /admin/signal/reports
+     queue (grouped by post), hidePost/unhidePost/setReportStatus actions
+     (requireAdmin + service role), Signal nav entry. Hiding resolves open reports
+     to 'actioned' and busts the owner's profile caches.
+     | files: app/admin/signal/{page,actions}.tsx, app/admin/signal/reports/page.tsx,
+       components/admin/report-queue.tsx, components/admin-nav.tsx
+     | verified: yes (build)
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
