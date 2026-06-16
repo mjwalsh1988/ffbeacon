@@ -788,6 +788,77 @@ T788 | completed | Phase 2 review fixes (implementation + a11y + security sub-ag
        relies on tag invalidation rather than an updated_at key (now comprehensively
        covered by revalidateProfileCaches).
 
+### Signal - Phase 3 (customization: accent palette, custom links, favorites) - completed
+Accent picker, custom links, and favorite team/player editors on /my-beacon/signal,
+with matching public render on /u/[handle]. Every save path routes through
+revalidateProfileCaches(). One migration was needed after all (the accent CHECK had
+to move to the new 10-slug set and links gained a real DB shape guard); owner
+reviewed and approved 0069.
+T789 | completed | Migration 0069: accent CHECK -> Phase 3 fixed 10-slug palette
+     (beacon/violet/azure/cyan/mint/lime/amber/ember/rose/magenta) + function-backed
+     signals_links_shape_check (signal_links_valid: array <=10, each {label 1..40
+     string, url <=2048 string matching ^https://}). signals table empty so no
+     backfill. EXECUTE on the validator granted to authenticated+service_role,
+     revoked from anon/public (constraint is evaluated by the writing role).
+     | files: supabase/migrations/0069_signal_customization.sql
+     | verified: yes (both constraints live; validator returns correct booleans for
+       valid/empty-label/http/javascript/over-10 cases; authenticated can execute it;
+       no DDL adding columns so database.types.ts unchanged)
+T790 | completed | lib/signal/accents.ts: SIGNAL_ACCENTS source of truth (10 AAA
+     accents, every textOnFill #07070D) + SIGNAL_ACCENT_SLUGS + DEFAULT_ACCENT +
+     ACCENT_SPOKEN_NAME + helpers. accentFillStyle returns the LOCKED
+     {backgroundColor, color:textOnFill} pair so white-on-accent is impossible;
+     accentInkColor for accent-as-text/border/icon on dark; accentGradient derives a
+     decorative banner gradient from the single hex. lib/signal.ts re-exports these;
+     OG route updated to resolveAccent().hex (old accent.to gone).
+     | files: lib/signal/accents.ts, lib/signal.ts, app/api/og/signal/[handle]/route.tsx
+     | verified: yes (typecheck + build)
+T791 | completed | lib/nfl-teams.ts: canonical 32-team code+name list, exactly matching
+     the signals.favorite_team CHECK. NFL_TEAM_CODES set + isNflTeamCode + nflTeamName.
+     | files: lib/nfl-teams.ts
+     | verified: yes (32 codes byte-match the 0059 CHECK)
+T792 | completed | Server actions + shared constants. saveAccent (isSignalAccent
+     gate), saveLinks (https-only, URL parse, label 1..40, max 10), saveFavorites
+     (team in 32-list, player uuid + existence, null clears), searchPlayers
+     (session-gated typeahead, sanitized single .ilike, no .or interpolation). Constants
+     + types live in customization.ts because a "use server" file may only export async
+     functions. Every write calls revalidateProfileCaches().
+     | files: app/my-beacon/signal/actions.ts, app/my-beacon/signal/customization.ts
+     | verified: yes (typecheck + build)
+T793 | completed | Editor client components. accent-picker (native-radio radiogroup,
+     arrow-key, live preview using fill + ink helpers, aria-live); links-editor
+     (add/edit/remove + accessible move up/down reusing the boards-manager pattern,
+     client mirror of the https/label/max-10 validation, unsaved-changes hint);
+     favorites-editor (labeled team select + WAI-ARIA combobox typeahead with
+     aria-activedescendant, debounced searchPlayers, clear-to-null announced). Wired
+     into /my-beacon/signal as Appearance/Links/Favorites sections loading current values.
+     | files: app/my-beacon/signal/{accent-picker,links-editor,favorites-editor,page}.tsx
+     | verified: yes (typecheck + build; /my-beacon/signal 12.5 kB)
+T794 | completed | Public render. loadProfileBundle extended with links (parsed,
+     https-guarded on read) + resolved favorite team/player; LinksBlock (rel=noopener
+     noreferrer target=_blank, label-not-URL, "(opens in a new tab)") + FavoritesBlock
+     (accent-as-fill chips, black text always; player chip links to /players/[slug])
+     rendered on /u/[handle].
+     | files: lib/signal-profile.ts, components/signal/signal-block.tsx, app/u/[handle]/page.tsx
+     | verified: yes (typecheck + build)
+T795 | completed | Three sub-agent reviews (implementation + accessibility + security).
+     | result: zero BLOCKERs across all three.
+     | fixes applied:
+       - rule 6: replaced a pre-existing middle-dot separator in FeaturedLeaguesBlock
+         with a comma (file Phase 3 touched)
+       - a11y: non-option status rows ("Searching..."/"No players match") in the
+         combobox listbox given role="presentation"; clear() now also closes the listbox
+       - a11y: links-editor move announcement computed outside the setRows updater so
+         rapid moves announce reliably
+       - security: parseProfileLinks now drops any non-https url on the public read
+         path (defense in depth beyond the write-time + DB CHECK guards)
+     | accepted (non-blocking): searchPlayers has no server rate limit. It is
+       session-gated, returns only public player data, caps at 20 rows, and is
+       client-debounced; treated as low-risk read-only. Revisit if abused.
+     | a11y verified: radiogroup + combobox patterns, descriptive move/remove labels,
+       aria-live confirmations, AAA fill-with-black-text everywhere, 44px targets,
+       single-h1 hierarchy, no data hidden at any breakpoint.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

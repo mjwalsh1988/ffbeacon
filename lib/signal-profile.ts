@@ -7,6 +7,7 @@ import { getDefaultSourceSlug } from "@/lib/source";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import type { BoardScope } from "@/lib/ranking-boards";
 import { isBoardScope } from "@/lib/ranking-boards";
+import { nflTeamName } from "@/lib/nfl-teams";
 
 /**
  * Server-only data layer for the public Signal profile (/u/[handle]) and the
@@ -110,11 +111,50 @@ export type FeaturedLeagueCard = {
   leaderTeam: string | null;
 };
 
+export type SignalProfileLink = { label: string; url: string };
+
+export type ProfileFavorites = {
+  team: { code: string; name: string } | null;
+  player: {
+    slug: string;
+    name: string;
+    position: string;
+    team: string | null;
+  } | null;
+};
+
 export type ProfileBundle = {
   signal: SignalProfileRow | null;
   boards: FeaturedBoardMeta[];
   leagues: FeaturedLeagueCard[];
+  links: SignalProfileLink[];
+  favorites: ProfileFavorites;
 };
+
+const EMPTY_FAVORITES: ProfileFavorites = { team: null, player: null };
+
+/** Coerce signals.links jsonb into a shape-safe list. The DB shape guard
+ * (migration 0069) enforces this on write; we parse defensively on read. */
+function parseProfileLinks(value: unknown): SignalProfileLink[] {
+  if (!Array.isArray(value)) return [];
+  const out: SignalProfileLink[] = [];
+  for (const item of value) {
+    if (
+      item &&
+      typeof item === "object" &&
+      typeof (item as { label?: unknown }).label === "string" &&
+      typeof (item as { url?: unknown }).url === "string"
+    ) {
+      const label = (item as { label: string }).label;
+      const url = (item as { url: string }).url;
+      // Defense in depth: only https links reach an href on the public page,
+      // even if a row ever bypassed the write-time + DB CHECK guards.
+      if (!url.startsWith("https://")) continue;
+      out.push({ label, url });
+    }
+  }
+  return out;
+}
 
 export type BoardTopNPlayer = {
   rank: number;
@@ -282,13 +322,28 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
   const { data: signalRow } = await supabase
     .from("signals")
     .select(
-      "user_id, handle, display_name, headline, bio, accent, avatar_path, banner_path, status, visibility, hidden",
+      "user_id, handle, display_name, headline, bio, accent, avatar_path, banner_path, status, visibility, hidden, links, favorite_team, favorite_player_id",
     )
     .eq("handle", handle)
     .maybeSingle();
 
-  if (!signalRow) return { signal: null, boards: [], leagues: [] };
+  if (!signalRow) {
+    return {
+      signal: null,
+      boards: [],
+      leagues: [],
+      links: [],
+      favorites: EMPTY_FAVORITES,
+    };
+  }
   const signal = signalRow as SignalProfileRow;
+
+  const links = parseProfileLinks(signalRow.links);
+  const favorites = await resolveFavorites(
+    supabase,
+    signalRow.favorite_team,
+    signalRow.favorite_player_id,
+  );
 
   const { data: boardRows } = await supabase
     .from("user_ranking_boards")
@@ -327,7 +382,39 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
 
   const leagues = await loadFeaturedLeagueCards(signal.user_id);
 
-  return { signal, boards, leagues };
+  return { signal, boards, leagues, links, favorites };
+}
+
+/** Resolve the stored favorite team code + player id into display-ready data.
+ * The team name comes from the canonical list; the player from a single
+ * service-role lookup. Either may be null. */
+async function resolveFavorites(
+  supabase: AdminClient,
+  favoriteTeam: string | null,
+  favoritePlayerId: string | null,
+): Promise<ProfileFavorites> {
+  const teamName = nflTeamName(favoriteTeam);
+  const team =
+    favoriteTeam && teamName ? { code: favoriteTeam, name: teamName } : null;
+
+  let player: ProfileFavorites["player"] = null;
+  if (favoritePlayerId) {
+    const { data: p } = await supabase
+      .from("players")
+      .select("slug, full_name, first_name, last_name, position, team")
+      .eq("id", favoritePlayerId)
+      .maybeSingle();
+    if (p) {
+      player = {
+        slug: p.slug,
+        name: p.full_name || `${p.first_name} ${p.last_name}`.trim(),
+        position: p.position,
+        team: p.team,
+      };
+    }
+  }
+
+  return { team, player };
 }
 
 /**

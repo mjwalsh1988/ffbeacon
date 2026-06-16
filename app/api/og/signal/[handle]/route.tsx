@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/server";
-import { ACCENTS, accentGradient } from "@/lib/signal";
+import { resolveAccent, accentGradient } from "@/lib/signal";
 import { signalMediaUrl } from "@/lib/signal-profile";
 
 export const runtime = "nodejs";
@@ -50,7 +50,7 @@ export async function GET(
 
   if (!signal) return fallbackImage();
 
-  const accent = ACCENTS[signal.accent] ?? ACCENTS.beacon;
+  const accent = resolveAccent(signal.accent);
   const gradient = accentGradient(signal.accent);
   const avatar = signalMediaUrl(signal.avatar_path);
 
@@ -144,7 +144,7 @@ export async function GET(
             <p
               style={{
                 fontSize: 32,
-                color: accent.to,
+                color: accent.hex,
                 margin: "8px 0 0 0",
                 fontFamily: "monospace",
               }}

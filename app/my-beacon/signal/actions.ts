@@ -8,12 +8,22 @@ import {
   DISPLAY_NAME_MAX,
   HEADLINE_MAX,
   BIO_MAX,
+  isSignalAccent,
 } from "@/lib/signal";
+import type { Json } from "@/lib/database.types";
+import { isNflTeamCode } from "@/lib/nfl-teams";
 import { signalTag, revalidateProfileCaches } from "@/lib/signal-profile";
 import {
   parseSleeperLeagueSettings,
   mergeSleeperLeagueSettings,
 } from "@/lib/sleeper-league-settings";
+import {
+  LINK_LABEL_MAX,
+  LINK_URL_MAX,
+  LINKS_MAX,
+  type SignalLink,
+  type PlayerSearchResult,
+} from "./customization";
 
 /**
  * Server actions for the My Signal editor. All writes go through the caller's
@@ -147,6 +157,195 @@ export async function claimHandle(raw: string): Promise<ActionResult> {
   revalidatePath("/my-beacon/signal");
   await revalidateProfileCaches(supabase, user.id);
   return { ok: true };
+}
+
+/**
+ * Persist the profile accent. The slug is validated against the fixed Phase 3
+ * palette (SIGNAL_ACCENT_SLUGS, enforced by isSignalAccent) before the write;
+ * the signals.accent CHECK (migration 0069) is the database backstop. Never
+ * trust the client value.
+ */
+export async function saveAccent(accent: string): Promise<ActionResult> {
+  if (!isSignalAccent(accent)) {
+    return { ok: false, error: "That is not a valid accent." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You need to be signed in." };
+
+  const { error } = await supabase
+    .from("signals")
+    .update({ accent, updated_at: new Date().toISOString() })
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: "Could not save your accent. Please try again." };
+
+  revalidatePath("/my-beacon/signal");
+  await revalidateProfileCaches(supabase, user.id);
+  return { ok: true };
+}
+
+/**
+ * Persist the ordered custom-link list. Server-side validation (never trust the
+ * client): https web links only (http, javascript:, data:, mailto: all
+ * rejected), each URL must parse, labels are 1..40 chars after trimming, and at
+ * most 10 links. The signals.links shape guard (migration 0069) is the DB
+ * backstop.
+ */
+export async function saveLinks(input: SignalLink[]): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You need to be signed in." };
+
+  if (!Array.isArray(input)) {
+    return { ok: false, error: "Could not read your links." };
+  }
+  if (input.length > LINKS_MAX) {
+    return { ok: false, error: `You can add at most ${LINKS_MAX} links.` };
+  }
+
+  const cleaned: SignalLink[] = [];
+  for (const raw of input) {
+    const label = typeof raw?.label === "string" ? raw.label.trim() : "";
+    const url = typeof raw?.url === "string" ? raw.url.trim() : "";
+    if (label.length < 1 || label.length > LINK_LABEL_MAX) {
+      return {
+        ok: false,
+        error: `Each link needs a label of 1 to ${LINK_LABEL_MAX} characters.`,
+      };
+    }
+    if (url.length > LINK_URL_MAX) {
+      return { ok: false, error: "One of your links is too long." };
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return { ok: false, error: `"${label}" does not have a valid web address.` };
+    }
+    if (parsed.protocol !== "https:") {
+      return {
+        ok: false,
+        error: `"${label}" must be an https:// web address.`,
+      };
+    }
+    cleaned.push({ label, url: parsed.toString() });
+  }
+
+  const { error } = await supabase
+    .from("signals")
+    .update({
+      links: cleaned as unknown as Json,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: "Could not save your links. Please try again." };
+
+  revalidatePath("/my-beacon/signal");
+  await revalidateProfileCaches(supabase, user.id);
+  return { ok: true };
+}
+
+/**
+ * Persist favorite team and favorite player. The team code is validated against
+ * the canonical 32-team list (signals.favorite_team CHECK is the backstop); the
+ * player id must be a real players row (the FK is the backstop) or null to
+ * clear. Either may be null independently.
+ */
+export async function saveFavorites(input: {
+  favoriteTeam: string | null;
+  favoritePlayerId: string | null;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You need to be signed in." };
+
+  const favoriteTeam = input.favoriteTeam;
+  if (favoriteTeam !== null && !isNflTeamCode(favoriteTeam)) {
+    return { ok: false, error: "That is not a valid NFL team." };
+  }
+
+  const favoritePlayerId = input.favoritePlayerId;
+  if (favoritePlayerId !== null) {
+    if (
+      typeof favoritePlayerId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        favoritePlayerId,
+      )
+    ) {
+      return { ok: false, error: "That is not a valid player." };
+    }
+    const { data: player } = await supabase
+      .from("players")
+      .select("id")
+      .eq("id", favoritePlayerId)
+      .maybeSingle();
+    if (!player) return { ok: false, error: "We could not find that player." };
+  }
+
+  const { error } = await supabase
+    .from("signals")
+    .update({
+      favorite_team: favoriteTeam,
+      favorite_player_id: favoritePlayerId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id);
+  if (error) {
+    return { ok: false, error: "Could not save your favorites. Please try again." };
+  }
+
+  revalidatePath("/my-beacon/signal");
+  await revalidateProfileCaches(supabase, user.id);
+  return { ok: true };
+}
+
+/**
+ * Typeahead search over the players table for the favorite-player picker. Reads
+ * through the session client (players is public-read) and requires a session so
+ * the editor-only endpoint is not openly callable. The query is sanitized to a
+ * safe character set before the ilike, and we use a single .ilike (not .or) so
+ * there is no PostgREST filter-string injection surface.
+ */
+export async function searchPlayers(
+  rawQuery: string,
+): Promise<PlayerSearchResult[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // Keep letters, digits, spaces, and the few punctuation marks that appear in
+  // real names. Strip everything else (including % _ , ( ) * \ which have
+  // meaning in PostgREST filters) before building the pattern.
+  const q = rawQuery
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}\s'.-]/gu, "")
+    .trim()
+    .slice(0, 40);
+  if (q.length < 2) return [];
+
+  const { data } = await supabase
+    .from("players")
+    .select("id, slug, full_name, first_name, last_name, position, team")
+    .ilike("full_name", `%${q}%`)
+    .order("full_name", { ascending: true })
+    .limit(20);
+
+  return (data ?? []).map((p) => ({
+    id: p.id,
+    slug: p.slug,
+    name: p.full_name || `${p.first_name} ${p.last_name}`.trim(),
+    position: p.position,
+    team: p.team,
+  }));
 }
 
 export async function updateHandle(raw: string): Promise<ActionResult> {

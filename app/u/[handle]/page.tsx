@@ -14,6 +14,8 @@ import { ImageWithFallback } from "@/components/image-with-fallback";
 import {
   FeaturedBoardsBlock,
   FeaturedLeaguesBlock,
+  LinksBlock,
+  FavoritesBlock,
 } from "@/components/signal/signal-block";
 
 // ISR: live profiles are served from the cache and revalidated by tag
@@ -192,8 +194,10 @@ function ProfileBody({
         </section>
       )}
 
+      <FavoritesBlock favorites={bundle.favorites} accent={signal.accent} />
       <FeaturedBoardsBlock handle={signal.handle} boards={bundle.boards} />
       <FeaturedLeaguesBlock leagues={bundle.leagues} />
+      <LinksBlock links={bundle.links} accent={signal.accent} />
     </main>
   );
 }

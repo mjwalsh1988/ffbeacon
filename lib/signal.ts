@@ -34,23 +34,18 @@ export function validateHandleFormat(handle: string): string | null {
   return null;
 }
 
-/** Brand-safe accent options. The slug set matches the signals.accent CHECK.
- * Phase 1 renders the default ('beacon'); the picker lands in a later phase. */
-export const ACCENTS: Record<
-  string,
-  { label: string; from: string; to: string }
-> = {
-  beacon: { label: "Beacon", from: "#A855F7", to: "#22D3EE" },
-  purple: { label: "Purple", from: "#A855F7", to: "#7C3AED" },
-  cyan: { label: "Cyan", from: "#22D3EE", to: "#0EA5E9" },
-  emerald: { label: "Emerald", from: "#34D399", to: "#10B981" },
-  amber: { label: "Amber", from: "#FBBF24", to: "#F59E0B" },
-  rose: { label: "Rose", from: "#FB7185", to: "#F43F5E" },
-  sky: { label: "Sky", from: "#38BDF8", to: "#0EA5E9" },
-  slate: { label: "Slate", from: "#94A3B8", to: "#64748B" },
-};
-
-export function accentGradient(slug: string | null | undefined): string {
-  const a = ACCENTS[slug ?? "beacon"] ?? ACCENTS.beacon;
-  return `linear-gradient(135deg, ${a.from} 0%, ${a.to} 100%)`;
-}
+// The accent palette and its fill/ink/gradient helpers live in
+// lib/signal/accents.ts (the Phase 3 fixed set). Re-exported here so existing
+// "@/lib/signal" import sites keep working from one canonical source.
+export {
+  SIGNAL_ACCENTS,
+  SIGNAL_ACCENT_SLUGS,
+  DEFAULT_ACCENT,
+  ACCENT_SPOKEN_NAME,
+  isSignalAccent,
+  resolveAccent,
+  accentFillStyle,
+  accentInkColor,
+  accentGradient,
+  type SignalAccent,
+} from "./signal/accents";

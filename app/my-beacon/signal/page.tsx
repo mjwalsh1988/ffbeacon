@@ -3,14 +3,41 @@ import { createClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
 import { getSleeperUser } from "@/lib/sleeper";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { isSignalAccent, DEFAULT_ACCENT } from "@/lib/signal/accents";
 import { HandleManager } from "./handle-manager";
 import { IdentityForm } from "./identity-form";
+import { AccentPicker } from "./accent-picker";
+import { LinksEditor } from "./links-editor";
+import { FavoritesEditor } from "./favorites-editor";
 import { MediaUploader } from "./media-uploader";
 import { PublishControls } from "./publish-controls";
+import type { SignalLink, PlayerSearchResult } from "./customization";
 import {
   SignalLeaguesManager,
   type SignalLeagueOption,
 } from "./signal-leagues-manager";
+
+/** Coerce the signals.links jsonb into a typed, shape-safe list for the editor.
+ * The DB shape guard (migration 0069) already enforces this, but we parse
+ * defensively so a malformed row never crashes the page. */
+function parseLinks(value: unknown): SignalLink[] {
+  if (!Array.isArray(value)) return [];
+  const out: SignalLink[] = [];
+  for (const item of value) {
+    if (
+      item &&
+      typeof item === "object" &&
+      typeof (item as { label?: unknown }).label === "string" &&
+      typeof (item as { url?: unknown }).url === "string"
+    ) {
+      out.push({
+        label: (item as { label: string }).label,
+        url: (item as { url: string }).url,
+      });
+    }
+  }
+  return out;
+}
 
 export const metadata: Metadata = {
   title: "My Signal",
@@ -29,13 +56,38 @@ export default async function MySignalPage() {
   const { data: signal } = await supabase
     .from("signals")
     .select(
-      "handle, display_name, headline, bio, avatar_path, banner_path, status, visibility",
+      "handle, display_name, headline, bio, avatar_path, banner_path, status, visibility, accent, links, favorite_team, favorite_player_id",
     )
     .eq("user_id", user!.id)
     .maybeSingle();
 
   const publicUrlFor = (path: string | null) =>
     path ? supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl : null;
+
+  // Resolve the saved favorite player (if any) into the shape the typeahead
+  // renders for its initial selected state.
+  let favoritePlayer: PlayerSearchResult | null = null;
+  if (signal?.favorite_player_id) {
+    const { data: p } = await supabase
+      .from("players")
+      .select("id, slug, full_name, first_name, last_name, position, team")
+      .eq("id", signal.favorite_player_id)
+      .maybeSingle();
+    if (p) {
+      favoritePlayer = {
+        id: p.id,
+        slug: p.slug,
+        name: p.full_name || `${p.first_name} ${p.last_name}`.trim(),
+        position: p.position,
+        team: p.team,
+      };
+    }
+  }
+
+  const initialAccent = isSignalAccent(signal?.accent)
+    ? signal.accent
+    : DEFAULT_ACCENT;
+  const initialLinks = parseLinks(signal?.links);
 
   // Featured-league picker data: the owner's already-synced leagues. We resolve
   // their Sleeper user id from the saved username and match synced league_users
@@ -137,6 +189,18 @@ export default async function MySignalPage() {
             </div>
           </section>
 
+          <section aria-labelledby="signal-appearance-heading">
+            <h2
+              id="signal-appearance-heading"
+              className="text-lg font-semibold tracking-tight text-ink"
+            >
+              Appearance
+            </h2>
+            <div className="mt-4 max-w-2xl">
+              <AccentPicker initialAccent={initialAccent} />
+            </div>
+          </section>
+
           <section aria-labelledby="signal-images-heading">
             <h2
               id="signal-images-heading"
@@ -147,6 +211,33 @@ export default async function MySignalPage() {
             <div className="mt-4 grid max-w-2xl gap-4 sm:grid-cols-2">
               <MediaUploader kind="avatar" initialUrl={publicUrlFor(signal.avatar_path)} />
               <MediaUploader kind="banner" initialUrl={publicUrlFor(signal.banner_path)} />
+            </div>
+          </section>
+
+          <section aria-labelledby="signal-links-heading">
+            <h2
+              id="signal-links-heading"
+              className="text-lg font-semibold tracking-tight text-ink"
+            >
+              Links
+            </h2>
+            <div className="mt-4 max-w-2xl">
+              <LinksEditor initialLinks={initialLinks} />
+            </div>
+          </section>
+
+          <section aria-labelledby="signal-favorites-heading">
+            <h2
+              id="signal-favorites-heading"
+              className="text-lg font-semibold tracking-tight text-ink"
+            >
+              Favorites
+            </h2>
+            <div className="mt-4 max-w-2xl">
+              <FavoritesEditor
+                initialTeam={signal.favorite_team}
+                initialPlayer={favoritePlayer}
+              />
             </div>
           </section>
 
