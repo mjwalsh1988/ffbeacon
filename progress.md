@@ -648,6 +648,33 @@ T770 | completed | Migration 0067: trigger hardening from security + implementat
      | verified: yes (backdate overridden to now; 4-link UPDATE blocked, 3-link UPDATE allowed)
      | reviews: implementation + security + accessibility sub-agents run. a11y PASS (no UI shipped; Phase 1 obligations recorded). Security + impl findings (backdating, link-cap-on-update, doc drift) fixed in 0067 + 0060 header note.
 
+### Signal - Phase 1 (handle, identity editor, image hardening, public Layout A) - completed
+First user-facing Signal surface. Editor at /my-beacon/signal; public profile at
+/u/[handle]. signal-media bucket confirmed public-read (object URLs serve to anon;
+0065 only removed listing). Added sharp dependency.
+T771 | completed | Migration 0068: authoritative handle lifecycle triggers. BEFORE INSERT/UPDATE guard rejects reserved handles, blocks reclaim of another profile's historical handle (own-reclaim allowed), and rate-limits renames to one per 30 days. AFTER UPDATE records the old handle in signal_handle_history (301 source) and removes the now-active handle from history. SECURITY DEFINER, search_path includes extensions (citext operator), EXECUTE revoked.
+     | files: supabase/migrations/0068_signal_handle_lifecycle.sql
+     | verified: yes (7-case rolled-back sim: reserved block, valid claim, history record, rename rate limit, cross-profile reclaim block, own-reclaim allowed, active-handle removed from history)
+T772 | completed | lib/signal.ts: isomorphic helpers (handle format validation, normalize, length limits, accent slug->gradient map). Used by client editor and server actions.
+     | files: lib/signal.ts
+     | verified: yes (typecheck)
+T773 | completed | Server actions for the editor: checkHandleAvailability (service-role read so it sees draft handles; now requires a session per security review), claimHandle, updateHandle, saveIdentity, setPublishState (stamps published_at once). Writes go through the session client so owner RLS applies; DB triggers are the backstop; trigger errors mapped to friendly copy.
+     | files: app/my-beacon/signal/actions.ts
+     | verified: yes (typecheck + build)
+T774 | completed | POST/DELETE /api/signal/media image hardening route. Same-origin header + auth; Content-Length ceiling before buffering; magic-byte sniff (JPEG/PNG/WebP, SVG rejected, client Content-Type not trusted); per-kind size caps; sharp re-encode to WebP (EXIF/metadata stripped, .rotate() first); avatar 512x512, banner 1600x500 cover; delete-on-replace via admin client (bucket has no SELECT policy so list/remove needs service role, scoped to the caller's own folder); owner-folder upload via session client (RLS-enforced).
+     | files: app/api/signal/media/route.ts
+     | verified: yes (typecheck + build; bucket public-read confirmed)
+T775 | completed | My Signal editor page + client components: handle-manager (claim/change, debounced live availability, aria-live), identity-form (display name/headline/bio), media-uploader (avatar+banner, aria-live), publish-controls (publish toggle with aria-pressed + public/private radio fieldset, assertive announcement of the resulting state). Editor sections use h2 under the layout h1. My Signal nav entry added.
+     | files: app/my-beacon/signal/page.tsx, app/my-beacon/signal/{handle-manager,identity-form,media-uploader,publish-controls}.tsx, components/my-beacon-nav.tsx
+     | verified: yes (typecheck + build)
+T776 | completed | Public profile /u/[handle] (minimal Layout A): banner + avatar + display_name (single h1) + @handle + headline + bio. generateMetadata (title/description/canonical/OG/twitter; noindex for draft/private/hidden). 301 redirect for historical handles + casing canonicalization; notFound for missing; owner preview banner for draft/private/hidden (admin takedown surfaced). Renders inside root layout (global skip link -> main#main). Dynamic for now; caching is Phase 2.
+     | files: app/u/[handle]/page.tsx
+     | verified: yes (typecheck + build; RLS gates private/draft from non-owners)
+T777 | completed | Phase 1 review fixes: delete-on-replace switched to admin client (no bucket SELECT policy); checkHandleAvailability now requires a session (closes unauthenticated draft-handle enumeration); Content-Length ceiling on the media route; public page reads hidden and surfaces moderator takedown to the owner; public @handle contrast bumped ink-subtle->ink-muted (AA); removed redundant fieldset aria-describedby.
+     | files: app/api/signal/media/route.ts, app/my-beacon/signal/actions.ts, app/u/[handle]/page.tsx, app/my-beacon/signal/publish-controls.tsx
+     | verified: yes (typecheck + build pass after fixes)
+     | reviews: implementation + accessibility + security sub-agents run. a11y verdict strong (landmarks, single-h1, fieldset/legend, labeled file inputs, live regions all correct); one AA contrast fix applied; site-wide ink-subtle/signal-danger token contrast flagged as a separate design-system pass (not changed in this phase). Security: 2 mediums (enumeration, pre-cap buffering) fixed; owner-folder scoping, RLS read gating, SECURITY DEFINER triggers, magic-byte+sharp, CSRF header all verified sound.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

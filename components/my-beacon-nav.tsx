@@ -9,6 +9,7 @@ import {
   Trophy,
   Settings,
   UserCircle,
+  Radio,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +42,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "My Rankings",
     icon: ListOrdered,
     description: "Build and reorder your own custom player ranking boards.",
+  },
+  {
+    href: "/my-beacon/signal",
+    label: "My Signal",
+    icon: Radio,
+    description: "Build your public creator profile: handle, identity, and visibility.",
   },
   {
     href: "/my-beacon/sleeper-leagues",
