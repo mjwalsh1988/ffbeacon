@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Send, Trash2, Film } from "lucide-react";
+import { ImagePlus, Send, Trash2, Film, Smile } from "lucide-react";
 import {
   POST_BODY_MAX,
   POST_LINKS_MAX,
@@ -13,6 +13,9 @@ import {
 } from "@/lib/signal";
 import { GifPicker } from "@/components/signal/gif-picker";
 import { AnimatedGif } from "@/components/signal/animated-gif";
+import { EmojiPicker } from "@/components/signal/emoji-picker";
+import { insertAtCursor } from "@/lib/signal/insert-at-cursor";
+import type { EmojiEntry } from "@/lib/signal/emoji-data";
 import { createPost, type PostImageInput } from "./wall-actions";
 
 /**
@@ -42,6 +45,7 @@ export function WallComposer() {
   const [images, setImages] = useState<DraftImage[]>([]);
   const [gif, setGif] = useState<SignalGifInput | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -52,6 +56,7 @@ export function WallComposer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const gifButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
   const codePoints = codePointLength(body);
   const graphemes = graphemeLength(body);
@@ -144,6 +149,37 @@ export function WallComposer() {
     setGif(null);
     setStatus("GIF removed.");
     requestAnimationFrame(() => gifButtonRef.current?.focus());
+  };
+
+  // Opening one picker closes the other so the composer toolbar stays coherent.
+  const toggleGifPicker = () => {
+    setEmojiOpen(false);
+    setPickerOpen((open) => !open);
+  };
+  const toggleEmojiPicker = () => {
+    setPickerOpen(false);
+    setEmojiOpen((open) => !open);
+  };
+  const insertEmoji = (entry: EmojiEntry) => {
+    const { value: next, caret } = insertAtCursor(
+      textareaRef.current,
+      body,
+      entry.char,
+    );
+    setBody(next);
+    setEmojiOpen(false);
+    setStatus(`Added emoji ${entry.name}.`);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      }
+    });
+  };
+  const closeEmoji = () => {
+    setEmojiOpen(false);
+    requestAnimationFrame(() => emojiButtonRef.current?.focus());
   };
 
   const submit = (event: React.FormEvent) => {
@@ -279,6 +315,10 @@ export function WallComposer() {
         <GifPicker onInsert={insertGif} onClose={closePicker} />
       )}
 
+      {emojiOpen && (
+        <EmojiPicker onSelect={insertEmoji} onClose={closeEmoji} />
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -309,13 +349,24 @@ export function WallComposer() {
         <button
           ref={gifButtonRef}
           type="button"
-          onClick={() => setPickerOpen((open) => !open)}
+          onClick={toggleGifPicker}
           disabled={pending || uploading || hasImages || hasGif}
           aria-expanded={pickerOpen}
           className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
         >
           <Film aria-hidden="true" className="h-4 w-4" />
           {hasGif ? "GIF added" : "Add GIF"}
+        </button>
+        <button
+          ref={emojiButtonRef}
+          type="button"
+          onClick={toggleEmojiPicker}
+          disabled={pending}
+          aria-expanded={emojiOpen}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+        >
+          <Smile aria-hidden="true" className="h-4 w-4" />
+          Insert emoji
         </button>
         <span className="text-xs text-ink-muted">
           {images.length} of {IMAGES_MAX} images

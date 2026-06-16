@@ -13,6 +13,7 @@ import {
   EyeOff,
   Eye,
   Film,
+  Smile,
 } from "lucide-react";
 import {
   COMMENT_BODY_MAX,
@@ -25,7 +26,10 @@ import {
 import { PostBody } from "@/components/signal/post-body";
 import { GifPicker } from "@/components/signal/gif-picker";
 import { AnimatedGif } from "@/components/signal/animated-gif";
+import { EmojiPicker } from "@/components/signal/emoji-picker";
 import { ReportButton } from "@/components/signal/report-button";
+import { insertAtCursor } from "@/lib/signal/insert-at-cursor";
+import type { EmojiEntry } from "@/lib/signal/emoji-data";
 import type { WallComment, WallGif } from "@/lib/signal-wall";
 
 /** Convert a stored WallGif back into the insert-ready SignalGifInput shape so an
@@ -177,6 +181,7 @@ function Composer({
   const [body, setBody] = useState("");
   const [gif, setGif] = useState<SignalGifInput | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const fieldId = useId();
   const helpId = useId();
@@ -184,6 +189,7 @@ function Composer({
   const router = useRouter();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const gifButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
   const codePoints = codePointLength(body);
   const links = countLinks(body);
@@ -206,6 +212,36 @@ function Composer({
     setGif(null);
     onAnnounce("GIF removed.");
     requestAnimationFrame(() => gifButtonRef.current?.focus());
+  };
+  // Opening one picker closes the other so the composer toolbar stays coherent.
+  const toggleGifPicker = () => {
+    setEmojiOpen(false);
+    setPickerOpen((open) => !open);
+  };
+  const toggleEmojiPicker = () => {
+    setPickerOpen(false);
+    setEmojiOpen((open) => !open);
+  };
+  const insertEmoji = (entry: EmojiEntry) => {
+    const { value: next, caret } = insertAtCursor(
+      textareaRef.current,
+      body,
+      entry.char,
+    );
+    setBody(next);
+    setEmojiOpen(false);
+    onAnnounce(`Added emoji ${entry.name}.`);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      }
+    });
+  };
+  const closeEmoji = () => {
+    setEmojiOpen(false);
+    requestAnimationFrame(() => emojiButtonRef.current?.focus());
   };
 
   const submit = (event: React.FormEvent) => {
@@ -284,6 +320,8 @@ function Composer({
 
       {pickerOpen && <GifPicker onInsert={insertGif} onClose={closePicker} />}
 
+      {emojiOpen && <EmojiPicker onSelect={insertEmoji} onClose={closeEmoji} />}
+
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="submit"
@@ -296,13 +334,24 @@ function Composer({
         <button
           ref={gifButtonRef}
           type="button"
-          onClick={() => setPickerOpen((open) => !open)}
+          onClick={toggleGifPicker}
           disabled={pending || gif !== null}
           aria-expanded={pickerOpen}
           className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
         >
           <Film aria-hidden="true" className="h-4 w-4" />
           {gif ? "GIF added" : "Add GIF"}
+        </button>
+        <button
+          ref={emojiButtonRef}
+          type="button"
+          onClick={toggleEmojiPicker}
+          disabled={pending}
+          aria-expanded={emojiOpen}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+        >
+          <Smile aria-hidden="true" className="h-4 w-4" />
+          Insert emoji
         </button>
       </div>
     </form>
@@ -328,6 +377,7 @@ function CommentRow({
     comment.gif ? toGifInput(comment.gif) : null,
   );
   const [editPickerOpen, setEditPickerOpen] = useState(false);
+  const [editEmojiOpen, setEditEmojiOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -336,6 +386,7 @@ function CommentRow({
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const editGifButtonRef = useRef<HTMLButtonElement>(null);
+  const editEmojiButtonRef = useRef<HTMLButtonElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const confirmDeleteRef = useRef<HTMLButtonElement>(null);
 
@@ -343,12 +394,14 @@ function CommentRow({
     setDraft(comment.body);
     setGifDraft(comment.gif ? toGifInput(comment.gif) : null);
     setEditPickerOpen(false);
+    setEditEmojiOpen(false);
     setEditing(true);
   };
   const cancelEditing = () => {
     setDraft(comment.body);
     setGifDraft(comment.gif ? toGifInput(comment.gif) : null);
     setEditPickerOpen(false);
+    setEditEmojiOpen(false);
     setEditing(false);
     requestAnimationFrame(() => editButtonRef.current?.focus());
   };
@@ -366,6 +419,36 @@ function CommentRow({
     setGifDraft(null);
     onAnnounce("GIF removed.");
     requestAnimationFrame(() => editGifButtonRef.current?.focus());
+  };
+  // Opening one picker closes the other so the edit toolbar stays coherent.
+  const toggleEditGifPicker = () => {
+    setEditEmojiOpen(false);
+    setEditPickerOpen((open) => !open);
+  };
+  const toggleEditEmojiPicker = () => {
+    setEditPickerOpen(false);
+    setEditEmojiOpen((open) => !open);
+  };
+  const insertEditEmoji = (entry: EmojiEntry) => {
+    const { value: next, caret } = insertAtCursor(
+      editTextareaRef.current,
+      draft,
+      entry.char,
+    );
+    setDraft(next);
+    setEditEmojiOpen(false);
+    onAnnounce(`Added emoji ${entry.name}.`);
+    requestAnimationFrame(() => {
+      const el = editTextareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      }
+    });
+  };
+  const closeEditEmoji = () => {
+    setEditEmojiOpen(false);
+    requestAnimationFrame(() => editEmojiButtonRef.current?.focus());
   };
 
   const codePoints = codePointLength(draft);
@@ -484,6 +567,10 @@ function CommentRow({
               <GifPicker onInsert={insertEditGif} onClose={closeEditPicker} />
             )}
 
+            {editEmojiOpen && (
+              <EmojiPicker onSelect={insertEditEmoji} onClose={closeEditEmoji} />
+            )}
+
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -509,12 +596,23 @@ function CommentRow({
                 ref={editGifButtonRef}
                 type="button"
                 disabled={pending || gifDraft !== null}
-                onClick={() => setEditPickerOpen((open) => !open)}
+                onClick={toggleEditGifPicker}
                 aria-expanded={editPickerOpen}
                 className="inline-flex h-11 items-center gap-2 rounded-card border border-line px-4 text-sm font-medium text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
               >
                 <Film aria-hidden="true" className="h-4 w-4" />
                 {gifDraft ? "GIF added" : "Add GIF"}
+              </button>
+              <button
+                ref={editEmojiButtonRef}
+                type="button"
+                disabled={pending}
+                onClick={toggleEditEmojiPicker}
+                aria-expanded={editEmojiOpen}
+                className="inline-flex h-11 items-center gap-2 rounded-card border border-line px-4 text-sm font-medium text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+              >
+                <Smile aria-hidden="true" className="h-4 w-4" />
+                Insert emoji
               </button>
               <button
                 type="button"

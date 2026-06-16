@@ -1143,6 +1143,55 @@ Three reviews (security, accessibility, implementation) over the (d) diff.
   pattern, not changed to avoid divergence): error region uses aria-live wrapper +
   inner role="alert" (possible double-announce) across the Signal composer suite.
 
+### Signal - Phase 4e (inline emoji) - completed
+Inline emoji in the post and comment composers. Emoji are plain Unicode inserted
+into the existing body text: NO migration, NO new storage, NO schema change, and
+strictly distinct from the (f) custom-reaction system. The dataset is bundled
+in-app (no external CDN, no runtime fetch, no new npm dependency).
+T823 | completed | lib/signal/emoji-data.ts: bundled curated emoji dataset by
+     category (char + name; name doubles as the accessible label and search
+     keyword). Includes a sports/football-leaning Activities category.
+     | files: lib/signal/emoji-data.ts
+     | verified: yes (typecheck)
+T824 | completed | lib/signal/insert-at-cursor.ts: pure caret-insertion helper
+     (uses selectionStart/selectionEnd, replaces the active selection, returns the
+     caret offset after the inserted text).
+     | files: lib/signal/insert-at-cursor.ts
+     | verified: yes (typecheck)
+T825 | completed | components/signal/emoji-picker.tsx: NVDA-operable picker. Search
+     box (filters by name), category buttons (aria-pressed), and a roving-tabindex
+     emoji group (COLUMNS=6 matches grid-cols-6 so Up/Down moves one visual row;
+     Arrow/Home/End move, Enter/Space inserts; each cell labeled by emoji name with
+     the glyph aria-hidden). Focus to search on open; polite aria-live result count;
+     44px targets. Review fix: role="group" (not a malformed role="grid" without
+     row/gridcell); dead regionId removed; ref array reset each render.
+     | files: components/signal/emoji-picker.tsx
+     | verified: yes (typecheck + build)
+T826 | completed | Wire-up into BOTH composers AND comment edit: insertAtCursor +
+     setSelectionRange place the emoji at the caret and return focus to the textarea;
+     trigger labeled "Insert emoji" with aria-expanded; opening the emoji picker
+     closes the GIF picker and vice versa (coherent toolbar). Submit still gates on
+     codePointLength (matches the DB char_length CHECK); the counter stays
+     grapheme-aware; helper text does not imply a grapheme cap.
+     | files: app/my-beacon/signal/wall-composer.tsx, components/signal/comment-section.tsx
+     | verified: yes (typecheck + build green)
+
+### Signal - Phase 4e sub-agent review (completed)
+Three reviews (accessibility, implementation, security) over the (e) diff.
+- Security: CLEAN, no findings. Client-only feature; emoji ride the existing
+  create/update actions and the code-point body CHECK is authoritative server-side;
+  no new network call/CDN/secret, no dangerouslySetInnerHTML, no prototype-pollution
+  surface in insertAtCursor.
+- Implementation: CLEAN. No migration/storage; bundled dataset; cursor insertion;
+  three integration points; code-point gating preserved; coherent toolbar; same
+  controlled state. Emoji chars spot-checked valid.
+- Accessibility: one IMPORTANT fixed (role="grid" lacked required row/gridcell
+  structure -> switched to role="group", keeping the roving tabindex), plus minors
+  (removed a dead regionId; reset the ref array each render). Confirmed: keyboard +
+  NVDA roving grid, labeled trigger/search/categories, focus to search on open /
+  textarea after insert / trigger on close, polite live count, 44px targets, no data
+  hidden at any breakpoint, no em-dashes.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
