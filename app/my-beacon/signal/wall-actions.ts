@@ -8,6 +8,8 @@ import {
   POST_LINKS_MAX,
   codePointLength,
   countLinks,
+  validateGifInput,
+  type SignalGifInput,
 } from "@/lib/signal";
 import type { ActionResult } from "./actions";
 
@@ -139,6 +141,7 @@ async function getOwnerSignalId(): Promise<
 export async function createPost(
   rawBody: string,
   images?: PostImageInput[],
+  gifRaw?: unknown,
 ): Promise<ActionResult> {
   const body = typeof rawBody === "string" ? rawBody.trim() : "";
   const bodyError = validateBody(body);
@@ -150,10 +153,22 @@ export async function createPost(
   const imageCheck = validateImages(images, owner.userId);
   if (!imageCheck.ok) return { ok: false, error: imageCheck.error };
 
+  // A post is images XOR a GIF. The DB enforces this with triggers in both
+  // directions (migration 0073); we reject the combination here for friendly copy.
+  let gif: SignalGifInput | null = null;
+  if (gifRaw !== undefined && gifRaw !== null) {
+    if (imageCheck.images.length > 0) {
+      return { ok: false, error: "A post can have images or a GIF, not both." };
+    }
+    const gifCheck = validateGifInput(gifRaw);
+    if (!gifCheck.ok) return { ok: false, error: gifCheck.error };
+    gif = gifCheck.gif;
+  }
+
   const supabase = await createClient();
   const { data: post, error } = await supabase
     .from("signal_posts")
-    .insert({ signal_id: owner.signalId, body })
+    .insert({ signal_id: owner.signalId, body, gif })
     .select("id")
     .maybeSingle();
   if (error || !post) return { ok: false, error: mapPostError(error ?? {}) };

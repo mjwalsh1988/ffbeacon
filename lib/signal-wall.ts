@@ -27,6 +27,48 @@ export type WallImage = {
   height: number;
 };
 
+// A GIF (GIPHY) attached to a post or comment. previewUrl is the static still
+// shown by default; url is the animated rendition revealed on play. alt is always
+// present (the DB CHECK requires it). giphyId is carried so an editor can re-send
+// an existing GIF unchanged.
+export type WallGif = {
+  giphyId: string;
+  url: string;
+  previewUrl: string;
+  alt: string;
+  width: number;
+  height: number;
+};
+
+/**
+ * Parse the stored gif jsonb into a render-ready WallGif, or null. This re-checks
+ * the shape on the read path (defense in depth beyond the write-time validation and
+ * the DB CHECK): a malformed or non-https value, or one missing alt text, is
+ * dropped rather than rendered.
+ */
+export function parseWallGif(raw: unknown): WallGif | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const giphyId = typeof r.giphy_id === "string" ? r.giphy_id : "";
+  const url = typeof r.url === "string" ? r.url : "";
+  const previewUrl = typeof r.preview_url === "string" ? r.preview_url : "";
+  const alt = typeof r.alt === "string" ? r.alt : "";
+  const width = Number(r.width);
+  const height = Number(r.height);
+  if (giphyId.length === 0) return null;
+  if (!/^https:\/\//.test(url) || !/^https:\/\//.test(previewUrl)) return null;
+  if (alt.trim().length === 0) return null;
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width < 1 ||
+    height < 1
+  ) {
+    return null;
+  }
+  return { giphyId, url, previewUrl, alt, width, height };
+}
+
 export type WallComment = {
   id: string;
   postId: string;
@@ -42,6 +84,7 @@ export type WallComment = {
   hiddenReason: string | null;
   createdAt: string;
   editedAt: string | null;
+  gif: WallGif | null;
 };
 
 export type WallPost = {
@@ -53,6 +96,7 @@ export type WallPost = {
   createdAt: string;
   editedAt: string | null;
   images: WallImage[];
+  gif: WallGif | null;
   comments: WallComment[];
 };
 
@@ -73,7 +117,7 @@ export async function loadWallPosts(
   const supabase = createAdminClient();
   let query = supabase
     .from("signal_posts")
-    .select("id, body, pinned, hidden, hidden_reason, created_at, edited_at")
+    .select("id, body, pinned, hidden, hidden_reason, created_at, edited_at, gif")
     .eq("signal_id", signalId)
     .order("pinned", { ascending: false })
     .order("created_at", { ascending: false })
@@ -101,6 +145,7 @@ export async function loadWallPosts(
     createdAt: row.created_at,
     editedAt: row.edited_at,
     images: imagesByPost.get(row.id) ?? [],
+    gif: parseWallGif(row.gif),
     comments: commentsByPost.get(row.id) ?? [],
   }));
 }
@@ -127,7 +172,7 @@ export async function loadCommentsForPosts(
   let query = supabase
     .from("signal_comments")
     .select(
-      "id, post_id, author_user_id, body, hidden, hidden_reason, created_at, edited_at",
+      "id, post_id, author_user_id, body, hidden, hidden_reason, created_at, edited_at, gif",
     )
     .in("post_id", postIds)
     .order("created_at", { ascending: true })
@@ -167,6 +212,7 @@ export async function loadCommentsForPosts(
       hiddenReason: row.hidden_reason,
       createdAt: row.created_at,
       editedAt: row.edited_at,
+      gif: parseWallGif(row.gif),
     });
     byPost.set(row.post_id, list);
   }

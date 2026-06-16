@@ -2,14 +2,17 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Send, Trash2 } from "lucide-react";
+import { ImagePlus, Send, Trash2, Film } from "lucide-react";
 import {
   POST_BODY_MAX,
   POST_LINKS_MAX,
   codePointLength,
   countLinks,
   graphemeLength,
+  type SignalGifInput,
 } from "@/lib/signal";
+import { GifPicker } from "@/components/signal/gif-picker";
+import { AnimatedGif } from "@/components/signal/animated-gif";
 import { createPost, type PostImageInput } from "./wall-actions";
 
 /**
@@ -37,6 +40,8 @@ let imageKeySeq = 0;
 export function WallComposer() {
   const [body, setBody] = useState("");
   const [images, setImages] = useState<DraftImage[]>([]);
+  const [gif, setGif] = useState<SignalGifInput | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -45,6 +50,8 @@ export function WallComposer() {
   const fieldId = useId();
   const helpId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const gifButtonRef = useRef<HTMLButtonElement>(null);
 
   const codePoints = codePointLength(body);
   const graphemes = graphemeLength(body);
@@ -53,6 +60,9 @@ export function WallComposer() {
   const overLength = codePoints > POST_BODY_MAX;
   const overLinks = links > POST_LINKS_MAX;
   const missingAlt = images.some((img) => img.alt.trim().length === 0);
+  // A post is images XOR a GIF.
+  const hasImages = images.length > 0;
+  const hasGif = gif !== null;
   const disabled =
     pending || uploading || trimmedEmpty || overLength || overLinks || missingAlt;
 
@@ -60,6 +70,10 @@ export function WallComposer() {
     const file = event.target.files?.[0];
     event.target.value = ""; // allow re-selecting the same file later
     if (!file) return;
+    if (hasGif) {
+      setError("A post can have images or a GIF, not both. Remove the GIF first.");
+      return;
+    }
     if (images.length >= IMAGES_MAX) {
       setError(`You can attach at most ${IMAGES_MAX} images.`);
       return;
@@ -114,6 +128,24 @@ export function WallComposer() {
   const removeImage = (key: string) =>
     setImages((prev) => prev.filter((img) => img.key !== key));
 
+  const insertGif = (g: SignalGifInput) => {
+    setGif(g);
+    setPickerOpen(false);
+    setStatus("GIF added.");
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const closePicker = () => {
+    setPickerOpen(false);
+    requestAnimationFrame(() => gifButtonRef.current?.focus());
+  };
+
+  const removeGif = () => {
+    setGif(null);
+    setStatus("GIF removed.");
+    requestAnimationFrame(() => gifButtonRef.current?.focus());
+  };
+
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -126,10 +158,12 @@ export function WallComposer() {
       height: img.height,
     }));
     startTransition(async () => {
-      const res = await createPost(body.trim(), payload);
+      const res = await createPost(body.trim(), payload, gif ?? undefined);
       if (res.ok) {
         setBody("");
         setImages([]);
+        setGif(null);
+        setPickerOpen(false);
         setStatus("Post published.");
         router.refresh();
       } else {
@@ -146,13 +180,14 @@ export function WallComposer() {
       <label htmlFor={fieldId} className="block text-sm font-medium text-ink">
         Write a post
       </label>
-      <p id={helpId} className="mt-1 text-xs text-ink-subtle">
-        Up to {POST_BODY_MAX} characters, {POST_LINKS_MAX} links, and {IMAGES_MAX}{" "}
-        images. Emoji can count as several characters, so the limit is measured the
-        way the server stores it.
+      <p id={helpId} className="mt-1 text-xs text-ink-muted">
+        Up to {POST_BODY_MAX} characters, {POST_LINKS_MAX} links, and either{" "}
+        {IMAGES_MAX} images or one GIF. Emoji can count as several characters, so
+        the limit is measured the way the server stores it.
       </p>
       <textarea
         id={fieldId}
+        ref={textareaRef}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         aria-describedby={helpId}
@@ -163,11 +198,11 @@ export function WallComposer() {
       />
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
-        <span className={overLength ? "font-semibold text-signal-danger" : "text-ink-subtle"}>
+        <span className={overLength ? "font-semibold text-signal-danger" : "text-ink-muted"}>
           {graphemes} characters
           {overLength ? " (over the limit)" : ` of ${POST_BODY_MAX}`}
         </span>
-        <span className={overLinks ? "font-semibold text-signal-danger" : "text-ink-subtle"}>
+        <span className={overLinks ? "font-semibold text-signal-danger" : "text-ink-muted"}>
           {links} of {POST_LINKS_MAX} links
         </span>
       </div>
@@ -199,14 +234,14 @@ export function WallComposer() {
                     className="mt-1 w-full rounded-card border border-line bg-surface px-3 py-2 text-sm text-ink caret-brand-purple placeholder:text-ink-subtle focus:border-brand-purple focus:outline-none"
                   />
                 </label>
-                <p id={`alt-hint-${img.key}`} className="mt-1 text-xs text-ink-subtle">
+                <p id={`alt-hint-${img.key}`} className="mt-1 text-xs text-ink-muted">
                   {img.alt.trim().length} of 420 characters. This is read aloud to
                   people using a screen reader.
                 </p>
                 <button
                   type="button"
                   onClick={() => removeImage(img.key)}
-                  className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-subtle hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-muted hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
                   <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
                   Remove image {index + 1}
@@ -215,6 +250,33 @@ export function WallComposer() {
             </li>
           ))}
         </ul>
+      )}
+
+      {gif && (
+        <div className="mt-4 rounded-card border border-line bg-base p-3">
+          <AnimatedGif
+            gif={{
+              giphyId: gif.giphy_id,
+              url: gif.url,
+              previewUrl: gif.preview_url,
+              alt: gif.alt,
+              width: gif.width,
+              height: gif.height,
+            }}
+          />
+          <button
+            type="button"
+            onClick={removeGif}
+            className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-muted hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+            Remove GIF
+          </button>
+        </div>
+      )}
+
+      {pickerOpen && (
+        <GifPicker onInsert={insertGif} onClose={closePicker} />
       )}
 
       <input
@@ -238,13 +300,24 @@ export function WallComposer() {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={pending || uploading || images.length >= IMAGES_MAX}
+          disabled={pending || uploading || hasGif || images.length >= IMAGES_MAX}
           className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
         >
           <ImagePlus aria-hidden="true" className="h-4 w-4" />
           {uploading ? "Uploading..." : "Add image"}
         </button>
-        <span className="text-xs text-ink-subtle">
+        <button
+          ref={gifButtonRef}
+          type="button"
+          onClick={() => setPickerOpen((open) => !open)}
+          disabled={pending || uploading || hasImages || hasGif}
+          aria-expanded={pickerOpen}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+        >
+          <Film aria-hidden="true" className="h-4 w-4" />
+          {hasGif ? "GIF added" : "Add GIF"}
+        </button>
+        <span className="text-xs text-ink-muted">
           {images.length} of {IMAGES_MAX} images
         </span>
         <p aria-live="polite" role="status" className="min-h-[1.25rem] flex-1 text-sm text-signal-success">

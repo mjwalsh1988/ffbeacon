@@ -12,6 +12,7 @@ import {
   Check,
   EyeOff,
   Eye,
+  Film,
 } from "lucide-react";
 import {
   COMMENT_BODY_MAX,
@@ -19,10 +20,38 @@ import {
   codePointLength,
   countLinks,
   graphemeLength,
+  type SignalGifInput,
 } from "@/lib/signal";
 import { PostBody } from "@/components/signal/post-body";
+import { GifPicker } from "@/components/signal/gif-picker";
+import { AnimatedGif } from "@/components/signal/animated-gif";
 import { ReportButton } from "@/components/signal/report-button";
-import type { WallComment } from "@/lib/signal-wall";
+import type { WallComment, WallGif } from "@/lib/signal-wall";
+
+/** Convert a stored WallGif back into the insert-ready SignalGifInput shape so an
+ * edit can re-send an unchanged GIF. */
+function toGifInput(gif: WallGif): SignalGifInput {
+  return {
+    giphy_id: gif.giphyId,
+    url: gif.url,
+    preview_url: gif.previewUrl,
+    alt: gif.alt,
+    width: gif.width,
+    height: gif.height,
+  };
+}
+
+/** Render-ready WallGif from an insert-ready SignalGifInput (for live preview). */
+function toWallGif(gif: SignalGifInput): WallGif {
+  return {
+    giphyId: gif.giphy_id,
+    url: gif.url,
+    previewUrl: gif.preview_url,
+    alt: gif.alt,
+    width: gif.width,
+    height: gif.height,
+  };
+}
 import {
   createComment,
   updateComment,
@@ -146,11 +175,15 @@ function Composer({
   onError: (msg: string | null) => void;
 }) {
   const [body, setBody] = useState("");
+  const [gif, setGif] = useState<SignalGifInput | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const fieldId = useId();
   const helpId = useId();
   const countId = useId();
   const router = useRouter();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const gifButtonRef = useRef<HTMLButtonElement>(null);
 
   const codePoints = codePointLength(body);
   const links = countLinks(body);
@@ -159,14 +192,32 @@ function Composer({
   const disabled =
     pending || body.trim().length === 0 || overLength || overLinks;
 
+  const insertGif = (g: SignalGifInput) => {
+    setGif(g);
+    setPickerOpen(false);
+    onAnnounce("GIF added to your comment.");
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+  const closePicker = () => {
+    setPickerOpen(false);
+    requestAnimationFrame(() => gifButtonRef.current?.focus());
+  };
+  const removeGif = () => {
+    setGif(null);
+    onAnnounce("GIF removed.");
+    requestAnimationFrame(() => gifButtonRef.current?.focus());
+  };
+
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     onError(null);
     if (disabled) return;
     startTransition(async () => {
-      const res = await createComment(postId, body.trim());
+      const res = await createComment(postId, body.trim(), gif ?? undefined);
       if (res.ok) {
         setBody("");
+        setGif(null);
+        setPickerOpen(false);
         onAnnounce("Comment posted.");
         router.refresh();
       } else {
@@ -181,12 +232,13 @@ function Composer({
         Add a comment
       </label>
       <p id={helpId} className="mt-1 text-xs text-ink-muted">
-        Up to {COMMENT_BODY_MAX} characters and {COMMENT_LINKS_MAX} links. Emoji
-        can count as several characters, so the limit is measured the way the
-        server stores it.
+        Up to {COMMENT_BODY_MAX} characters, {COMMENT_LINKS_MAX} links, and one
+        optional GIF. Emoji can count as several characters, so the limit is
+        measured the way the server stores it.
       </p>
       <textarea
         id={fieldId}
+        ref={textareaRef}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         aria-describedby={`${helpId} ${countId}`}
@@ -215,7 +267,24 @@ function Composer({
           {links} of {COMMENT_LINKS_MAX} links
         </span>
       </div>
-      <div className="mt-3">
+
+      {gif && (
+        <div className="mt-3 rounded-card border border-line bg-surface p-3">
+          <AnimatedGif gif={toWallGif(gif)} />
+          <button
+            type="button"
+            onClick={removeGif}
+            className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-muted hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+            Remove GIF
+          </button>
+        </div>
+      )}
+
+      {pickerOpen && <GifPicker onInsert={insertGif} onClose={closePicker} />}
+
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="submit"
           disabled={disabled}
@@ -223,6 +292,17 @@ function Composer({
         >
           <Send aria-hidden="true" className="h-4 w-4" />
           {pending ? "Posting..." : "Comment"}
+        </button>
+        <button
+          ref={gifButtonRef}
+          type="button"
+          onClick={() => setPickerOpen((open) => !open)}
+          disabled={pending || gif !== null}
+          aria-expanded={pickerOpen}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-card border border-line px-4 text-sm font-semibold text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+        >
+          <Film aria-hidden="true" className="h-4 w-4" />
+          {gif ? "GIF added" : "Add GIF"}
         </button>
       </div>
     </form>
@@ -244,14 +324,49 @@ function CommentRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
+  const [gifDraft, setGifDraft] = useState<SignalGifInput | null>(
+    comment.gif ? toGifInput(comment.gif) : null,
+  );
+  const [editPickerOpen, setEditPickerOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const editFieldId = useId();
   const editCountId = useId();
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const editButtonRef = useRef<HTMLButtonElement>(null);
+  const editGifButtonRef = useRef<HTMLButtonElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const confirmDeleteRef = useRef<HTMLButtonElement>(null);
+
+  const startEditing = () => {
+    setDraft(comment.body);
+    setGifDraft(comment.gif ? toGifInput(comment.gif) : null);
+    setEditPickerOpen(false);
+    setEditing(true);
+  };
+  const cancelEditing = () => {
+    setDraft(comment.body);
+    setGifDraft(comment.gif ? toGifInput(comment.gif) : null);
+    setEditPickerOpen(false);
+    setEditing(false);
+    requestAnimationFrame(() => editButtonRef.current?.focus());
+  };
+  const insertEditGif = (g: SignalGifInput) => {
+    setGifDraft(g);
+    setEditPickerOpen(false);
+    onAnnounce("GIF added.");
+    requestAnimationFrame(() => editTextareaRef.current?.focus());
+  };
+  const closeEditPicker = () => {
+    setEditPickerOpen(false);
+    requestAnimationFrame(() => editGifButtonRef.current?.focus());
+  };
+  const removeEditGif = () => {
+    setGifDraft(null);
+    onAnnounce("GIF removed.");
+    requestAnimationFrame(() => editGifButtonRef.current?.focus());
+  };
 
   const codePoints = codePointLength(draft);
   const links = countLinks(draft);
@@ -319,6 +434,7 @@ function CommentRow({
             </label>
             <textarea
               id={editFieldId}
+              ref={editTextareaRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               aria-describedby={editCountId}
@@ -350,13 +466,31 @@ function CommentRow({
                 {links} of {COMMENT_LINKS_MAX} links
               </span>
             </div>
+            {gifDraft && (
+              <div className="mt-2 rounded-card border border-line bg-surface p-3">
+                <AnimatedGif gif={toWallGif(gifDraft)} />
+                <button
+                  type="button"
+                  onClick={removeEditGif}
+                  className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-muted hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+                  Remove GIF
+                </button>
+              </div>
+            )}
+
+            {editPickerOpen && (
+              <GifPicker onInsert={insertEditGif} onClose={closeEditPicker} />
+            )}
+
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={pending || draftInvalid}
                 onClick={() =>
                   run(
-                    () => updateComment(comment.id, draft.trim()),
+                    () => updateComment(comment.id, draft.trim(), gifDraft),
                     "Comment updated.",
                     () => {
                       setEditing(false);
@@ -372,13 +506,20 @@ function CommentRow({
                 Save changes
               </button>
               <button
+                ref={editGifButtonRef}
+                type="button"
+                disabled={pending || gifDraft !== null}
+                onClick={() => setEditPickerOpen((open) => !open)}
+                aria-expanded={editPickerOpen}
+                className="inline-flex h-11 items-center gap-2 rounded-card border border-line px-4 text-sm font-medium text-brand-cyan hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
+              >
+                <Film aria-hidden="true" className="h-4 w-4" />
+                {gifDraft ? "GIF added" : "Add GIF"}
+              </button>
+              <button
                 type="button"
                 disabled={pending}
-                onClick={() => {
-                  setDraft(comment.body);
-                  setEditing(false);
-                  requestAnimationFrame(() => editButtonRef.current?.focus());
-                }}
+                onClick={cancelEditing}
                 className="inline-flex h-11 items-center gap-2 rounded-card border border-line px-4 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <X aria-hidden="true" className="h-4 w-4" />
@@ -389,6 +530,7 @@ function CommentRow({
         ) : (
           <div className="mt-2">
             <PostBody body={comment.body} />
+            {comment.gif && <AnimatedGif gif={comment.gif} />}
           </div>
         )}
 
@@ -399,10 +541,7 @@ function CommentRow({
                 ref={editButtonRef}
                 type="button"
                 disabled={pending}
-                onClick={() => {
-                  setDraft(comment.body);
-                  setEditing(true);
-                }}
+                onClick={startEditing}
                 className="inline-flex h-11 items-center gap-1.5 rounded-card px-2 text-xs font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-40"
               >
                 <Pencil aria-hidden="true" className="h-3.5 w-3.5" />

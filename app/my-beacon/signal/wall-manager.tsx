@@ -12,6 +12,7 @@ import {
 } from "@/lib/signal";
 import { PostBody } from "@/components/signal/post-body";
 import { PostImages } from "@/components/signal/post-images";
+import { AnimatedGif } from "@/components/signal/animated-gif";
 import type { WallPost } from "@/lib/signal-wall";
 import { updatePost, deletePost, setPostPinned } from "./wall-actions";
 
@@ -193,6 +194,7 @@ function PostRow({
         <div className="mt-3">
           <PostBody body={post.body} />
           <PostImages images={post.images} />
+          {post.gif && <AnimatedGif gif={post.gif} />}
         </div>
       )}
 

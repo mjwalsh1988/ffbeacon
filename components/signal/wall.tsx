@@ -2,6 +2,7 @@ import { Pin } from "lucide-react";
 import { SignalBlock } from "@/components/signal/signal-block";
 import { PostBody } from "@/components/signal/post-body";
 import { PostImages } from "@/components/signal/post-images";
+import { AnimatedGif } from "@/components/signal/animated-gif";
 import { ReportButton } from "@/components/signal/report-button";
 import { CommentSection } from "@/components/signal/comment-section";
 import type { WallPost } from "@/lib/signal-wall";
@@ -72,6 +73,8 @@ export function WallBlock({
                 </div>
 
                 <PostImages images={post.images} />
+
+                {post.gif && <AnimatedGif gif={post.gif} />}
 
                 {!ownerPreview && (
                   <ReportButton targetType="post" targetId={post.id} />

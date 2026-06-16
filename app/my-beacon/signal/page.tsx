@@ -13,7 +13,7 @@ import { MediaUploader } from "./media-uploader";
 import { PublishControls } from "./publish-controls";
 import { WallComposer } from "./wall-composer";
 import { WallManager } from "./wall-manager";
-import type { WallPost, WallImage } from "@/lib/signal-wall";
+import { parseWallGif, type WallPost, type WallImage } from "@/lib/signal-wall";
 import type { SignalLink, PlayerSearchResult } from "./customization";
 import {
   SignalLeaguesManager,
@@ -98,7 +98,7 @@ export default async function MySignalPage() {
   if (signal) {
     const { data: postRows } = await supabase
       .from("signal_posts")
-      .select("id, body, pinned, hidden, hidden_reason, created_at, edited_at")
+      .select("id, body, pinned, hidden, hidden_reason, created_at, edited_at, gif")
       .eq("signal_id", signal.id)
       .order("pinned", { ascending: false })
       .order("created_at", { ascending: false })
@@ -139,6 +139,7 @@ export default async function MySignalPage() {
       createdAt: row.created_at,
       editedAt: row.edited_at,
       images: imagesByPost.get(row.id) ?? [],
+      gif: parseWallGif(row.gif),
       // The owner editor manages posts only; comments are moderated on the public
       // Wall (where the owner gets inline hide/restore controls).
       comments: [],

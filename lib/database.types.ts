@@ -1792,6 +1792,7 @@ export type Database = {
           body: string;
           created_at: string;
           edited_at: string | null;
+          gif: Json | null;
           hidden: boolean;
           hidden_at: string | null;
           hidden_by: string | null;
@@ -1805,6 +1806,7 @@ export type Database = {
           body: string;
           created_at?: string;
           edited_at?: string | null;
+          gif?: Json | null;
           hidden?: boolean;
           hidden_at?: string | null;
           hidden_by?: string | null;
@@ -1818,6 +1820,7 @@ export type Database = {
           body?: string;
           created_at?: string;
           edited_at?: string | null;
+          gif?: Json | null;
           hidden?: boolean;
           hidden_at?: string | null;
           hidden_by?: string | null;
@@ -1926,6 +1929,7 @@ export type Database = {
           body: string;
           created_at: string;
           edited_at: string | null;
+          gif: Json | null;
           hidden: boolean;
           hidden_at: string | null;
           hidden_by: string | null;
@@ -1939,6 +1943,7 @@ export type Database = {
           body: string;
           created_at?: string;
           edited_at?: string | null;
+          gif?: Json | null;
           hidden?: boolean;
           hidden_at?: string | null;
           hidden_by?: string | null;
@@ -1952,6 +1957,7 @@ export type Database = {
           body?: string;
           created_at?: string;
           edited_at?: string | null;
+          gif?: Json | null;
           hidden?: boolean;
           hidden_at?: string | null;
           hidden_by?: string | null;
@@ -2412,6 +2418,7 @@ export type Database = {
         }[];
       };
       set_default_source: { Args: { target_slug: string }; Returns: undefined };
+      signal_gif_valid: { Args: { gif: Json }; Returns: boolean };
       signal_links_valid: { Args: { links: Json }; Returns: boolean };
       try_claim_league_refresh: {
         Args: {

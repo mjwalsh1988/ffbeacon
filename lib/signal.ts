@@ -35,6 +35,79 @@ export const POST_LINKS_MAX = 3;
 export const COMMENT_BODY_MAX = 1000;
 export const COMMENT_LINKS_MAX = 2;
 
+// GIF (GIPHY) value attached to a post or comment. The jsonb column stores these
+// snake_case keys exactly (migration 0073 signal_gif_valid guards the shape):
+//   { giphy_id, url, preview_url, alt, width, height }
+// url is an ANIMATED rendition, preview_url is a STATIC still, and alt is REQUIRED
+// (never store a GIF without accessible text). This type is the validated,
+// insert-ready shape used by the post and comment server actions.
+export type SignalGifInput = {
+  giphy_id: string;
+  url: string;
+  preview_url: string;
+  alt: string;
+  width: number;
+  height: number;
+};
+
+export const GIF_ALT_MAX = 420;
+const GIF_ID_MAX = 64;
+const GIF_URL_MAX = 2048;
+const GIF_DIM_MAX = 10000;
+
+/** Validate an untrusted gif payload against the same rules the DB CHECK enforces
+ * (migration 0073). Returns the cleaned, insert-ready row or an error string. The
+ * resolved alt must be non-empty: a GIF with no accessible text is never stored. */
+export function validateGifInput(
+  raw: unknown,
+): { ok: true; gif: SignalGifInput } | { ok: false; error: string } {
+  if (raw === null || typeof raw !== "object") {
+    return { ok: false, error: "That GIF could not be added." };
+  }
+  const r = raw as Record<string, unknown>;
+  const giphyId = typeof r.giphy_id === "string" ? r.giphy_id : "";
+  const url = typeof r.url === "string" ? r.url : "";
+  const previewUrl = typeof r.preview_url === "string" ? r.preview_url : "";
+  const alt = typeof r.alt === "string" ? r.alt.trim() : "";
+  const width = Number(r.width);
+  const height = Number(r.height);
+
+  if (giphyId.length < 1 || giphyId.length > GIF_ID_MAX) {
+    return { ok: false, error: "That GIF could not be added." };
+  }
+  if (
+    !/^https:\/\//.test(url) ||
+    url.length > GIF_URL_MAX ||
+    !/^https:\/\//.test(previewUrl) ||
+    previewUrl.length > GIF_URL_MAX
+  ) {
+    return { ok: false, error: "That GIF could not be added." };
+  }
+  if (alt.length < 1) {
+    return { ok: false, error: "Add a short description for the GIF." };
+  }
+  if (alt.length > GIF_ALT_MAX) {
+    return {
+      ok: false,
+      error: `The GIF description must be ${GIF_ALT_MAX} characters or fewer.`,
+    };
+  }
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width < 1 ||
+    height < 1 ||
+    width > GIF_DIM_MAX ||
+    height > GIF_DIM_MAX
+  ) {
+    return { ok: false, error: "That GIF could not be added." };
+  }
+  return {
+    ok: true,
+    gif: { giphy_id: giphyId, url, preview_url: previewUrl, alt, width, height },
+  };
+}
+
 /** Code-point length, matching Postgres char_length (NOT String.prototype.length,
  * which counts UTF-16 code units, and NOT grapheme count). This is the value the
  * 1..2000 body CHECK is evaluated against, so submit gating uses it. */

@@ -7,6 +7,8 @@ import {
   COMMENT_LINKS_MAX,
   codePointLength,
   countLinks,
+  validateGifInput,
+  type SignalGifInput,
 } from "@/lib/signal";
 
 /**
@@ -71,9 +73,22 @@ function validateBody(body: string): string | null {
 
 const HIDDEN_REASON_MAX = 300;
 
+/** Resolve an untrusted gif payload to an insert-ready value. A comment is text
+ * plus an OPTIONAL single GIF (comments have no image uploads), so an absent or
+ * null gif is valid and resolves to null. */
+function resolveGif(
+  gifRaw: unknown,
+): { ok: true; gif: SignalGifInput | null } | { ok: false; error: string } {
+  if (gifRaw === undefined || gifRaw === null) return { ok: true, gif: null };
+  const check = validateGifInput(gifRaw);
+  if (!check.ok) return { ok: false, error: check.error };
+  return { ok: true, gif: check.gif };
+}
+
 export async function createComment(
   postId: string,
   rawBody: string,
+  gifRaw?: unknown,
 ): Promise<CommentActionResult> {
   if (typeof postId !== "string" || postId.length === 0) {
     return { ok: false, error: "Could not find that post." };
@@ -81,6 +96,9 @@ export async function createComment(
   const body = typeof rawBody === "string" ? rawBody.trim() : "";
   const bodyError = validateBody(body);
   if (bodyError) return { ok: false, error: bodyError };
+
+  const gifCheck = resolveGif(gifRaw);
+  if (!gifCheck.ok) return { ok: false, error: gifCheck.error };
 
   const supabase = await createClient();
   const {
@@ -95,6 +113,7 @@ export async function createComment(
     post_id: postId,
     author_user_id: user.id,
     body,
+    gif: gifCheck.gif,
   });
   if (error) return { ok: false, error: mapCommentError(error) };
 
@@ -104,6 +123,7 @@ export async function createComment(
 export async function updateComment(
   commentId: string,
   rawBody: string,
+  gifRaw?: unknown,
 ): Promise<CommentActionResult> {
   if (typeof commentId !== "string" || commentId.length === 0) {
     return { ok: false, error: "Could not find that comment." };
@@ -111,6 +131,9 @@ export async function updateComment(
   const body = typeof rawBody === "string" ? rawBody.trim() : "";
   const bodyError = validateBody(body);
   if (bodyError) return { ok: false, error: bodyError };
+
+  const gifCheck = resolveGif(gifRaw);
+  if (!gifCheck.ok) return { ok: false, error: gifCheck.error };
 
   const supabase = await createClient();
   const {
@@ -123,9 +146,10 @@ export async function updateComment(
   const nowIso = new Date().toISOString();
   // RLS update-own scopes this to the caller's own comments; match
   // author_user_id too so a guessed id on someone else's comment affects 0 rows.
+  // The edit form holds the full GIF state, so an absent GIF clears it.
   const { data, error } = await supabase
     .from("signal_comments")
-    .update({ body, edited_at: nowIso, updated_at: nowIso })
+    .update({ body, gif: gifCheck.gif, edited_at: nowIso, updated_at: nowIso })
     .eq("id", commentId)
     .eq("author_user_id", user.id)
     .select("id")

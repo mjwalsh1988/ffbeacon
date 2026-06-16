@@ -1063,6 +1063,86 @@ Three reviews (implementation, accessibility, security) over the (c) diff.
   clean: keyboard nav + visible focus, 44px public tap targets, decorative icons
   aria-hidden, no data hidden at any breakpoint.
 
+### Signal - Phase 4d (GIFs via GIPHY) - completed
+GIFs on Wall posts and comments via a server-side GIPHY proxy. Provider change
+from the original handoff: Tenor is discontinued (closed to new API clients Jan
+2026, service ends June 30 2026), so this uses GIPHY. GIPHY_API_KEY is server-only
+(read only in the proxy route, never forwarded to the client). We are on a GIPHY
+BETA key; a PRODUCTION key must be applied for before public launch (the required
+"Powered by GIPHY" attribution is already built in to pass review).
+T816 | completed | Migration 0073: gif jsonb (nullable) on signal_posts AND
+     signal_comments + function-backed signal_gif_valid CHECK ({giphy_id, url,
+     preview_url, alt, width, height}; alt REQUIRED 1..420; https-only urls; dims
+     1..10000), mirroring signals_links_valid (0069). IMAGES-XOR-GIF in BOTH
+     directions: Direction A = BEFORE INSERT OR UPDATE trigger on signal_posts
+     (signal_posts_block_gif_when_images) rejects a gif when the post has images;
+     Direction B = BEFORE INSERT trigger on signal_post_images
+     (signal_post_images_block_when_gif) rejects an image when the post has a gif.
+     Both SECURITY DEFINER, EXECUTE revoked from anon/auth/public. Column grants:
+     insert(gif) on posts; insert(gif)+update(gif) on comments.
+     | files: supabase/migrations/0073_signal_gif.sql, lib/database.types.ts
+     | verified: yes (rolled-back DO block, 8 checks: valid gif ok, empty-alt
+       rejected on BOTH tables, Direction A blocked, Direction B blocked, comment
+       valid gif ok, anon sees gif on live post=1, anon sees 0 after unpublish;
+       types regenerated, gif present on both tables + signal_gif_valid fn)
+T817 | completed | lib/signal.ts: SignalGifInput type + GIF_ALT_MAX + validateGifInput
+     (https-only urls, giphy_id 1..64, alt required 1..420, integer dims 1..10000).
+     | files: lib/signal.ts
+     | verified: yes (typecheck)
+T818 | completed | lib/signal/giphy.ts: normalizeGiphySearch -> {id, url, preview_url,
+     alt, width, height} + hasMore. url = animated rendition, preview_url = STATIC
+     still, PAIRED from the same rendition family so stored dims match the still. alt
+     = alt_text else title else "". Raw GIPHY payload never reaches the client.
+     | files: lib/signal/giphy.ts
+     | verified: yes (typecheck + build)
+T819 | completed | GET /api/signal/gif/search: GIPHY_API_KEY server-only; rating=g
+     LOCKED server-side (never from client); same-origin + session gate; light
+     best-effort per-user throttle (in-memory, with eviction); offset paging capped
+     at 200; 8s timeout; search-on-query only (no trending endpoint).
+     | files: app/api/signal/gif/search/route.ts
+     | verified: yes (build; route compiled)
+T820 | completed | components/signal/animated-gif.tsx: static preview by default for
+     everyone (honors prefers-reduced-motion), explicit labeled play/pause (aria-
+     pressed, never autoplay), alt always present, visible + SR "Powered by GIPHY"
+     on every GIF. 44px control.
+     | files: components/signal/animated-gif.tsx
+     | verified: yes (build)
+T821 | completed | components/signal/gif-picker.tsx: NVDA-operable picker. Search-on-
+     query (debounced), labeled search box, result buttons labeled by description,
+     aria-live status, focus to search on open / textarea on insert / trigger on
+     close, optional alt field (required when empty), "Powered by GIPHY" attribution,
+     offset paging (Show more).
+     | files: components/signal/gif-picker.tsx
+     | verified: yes (build)
+T822 | completed | Wire-up: lib/signal-wall.ts WallGif (+giphyId) + parseWallGif read-
+     path + gif on WallPost/WallComment selects/maps; wall-actions createPost gif
+     (images-XOR-gif app guard + revalidateProfileCaches); comment-actions create/
+     update gif (resolveGif; Wall stays dynamic, no profile-cache revalidation);
+     WallComposer + comment Composer + comment edit get the picker; AnimatedGif
+     rendered in wall.tsx, comment-section, wall-manager, owner page mapping.
+     | files: lib/signal-wall.ts, app/my-beacon/signal/{wall-actions.ts,wall-composer.tsx,
+       wall-manager.tsx,page.tsx}, app/u/[handle]/comment-actions.ts,
+       components/signal/{comment-section.tsx,wall.tsx}
+     | verified: yes (typecheck + build green)
+
+### Signal - Phase 4d sub-agent review (completed)
+Three reviews (security, accessibility, implementation) over the (d) diff.
+- Security: CLEAN, no blocker/important. Confirmed GIPHY_API_KEY server-only,
+  rating=g locked server-side, same-origin+auth+throttle, https-only at write
+  (validateGifInput) + DB CHECK + read (parseWallGif), no dangerouslySetInnerHTML,
+  fixed-host fetch (no SSRF), images-xor-gif enforced at DB both directions,
+  accessible-text invariant has no bypass. Applied minors: throttle-map eviction +
+  offset/hasMore cap.
+- Implementation: CLEAN. Applied minor: paired the still rendition to the chosen
+  animated family so stored dims match the still (CLS); two comment rewordings.
+- Accessibility: no blockers. Fixed one IMPORTANT: load-bearing ink-subtle ->
+  ink-muted (AA) in wall-composer (help/counters/alt-hint/remove buttons/image
+  counter). Confirmed: keyboard + NVDA picker, focus management, 44px targets,
+  default-static GIF + labeled play/pause, "Powered by GIPHY" on every GIF, no data
+  hidden at any breakpoint, no em-dashes. Known carryover (pre-existing suite-wide
+  pattern, not changed to avoid divergence): error region uses aria-live wrapper +
+  inner role="alert" (possible double-announce) across the Signal composer suite.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
