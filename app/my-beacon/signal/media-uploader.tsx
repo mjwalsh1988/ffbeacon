@@ -24,11 +24,11 @@ async function readResult(
   try {
     return text ? JSON.parse(text) : {};
   } catch {
+    // Non-JSON body: an HTML error page from the server or the hosting platform.
+    // Do NOT assume this is a size problem (our own route reports size as JSON);
+    // surface the HTTP status so the real cause is identifiable.
     return {
-      error:
-        res.status === 413
-          ? "That image is too large. Choose one under 4 MB."
-          : "Upload failed. Please try again with a smaller image.",
+      error: `Upload failed (server error ${res.status || "unknown"}). Please try again, or send this code to support if it keeps happening.`,
     };
   }
 }
