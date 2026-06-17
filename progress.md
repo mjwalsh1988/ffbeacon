@@ -1192,6 +1192,101 @@ Three reviews (accessibility, implementation, security) over the (e) diff.
   textarea after insert / trigger on close, polite live count, 44px targets, no data
   hidden at any breakpoint, no em-dashes.
 
+### Signal - Phase 4f COMMIT 1 (custom reactions data layer + admin catalog) - completed
+The final Phase 4 sub-phase, split into two commits to stay within budget. COMMIT 1
+is the data layer plus the admin reaction catalog. COMMIT 2 (public reaction picker
++ counts on posts and comments) is STILL PENDING (see handoff.md).
+T827 | completed | Migration 0074: signal_reaction_types (admin catalog) +
+     signal-reaction-emojis public bucket. slug unique (lowercase kebab, 1..40),
+     label required 1..60, kind in ('image','text'), char required+1..32 when text,
+     image_path required+1..400 when image (payload-matches-kind CHECK enforces the
+     xor), display_order, is_active, timestamps. RLS: public SELECT incl disabled
+     rows (so historical counts stay labeled) + service_role ALL, NO client write
+     path. Bucket: public, image/webp only, 256 KB cap (defense in depth over the
+     route's ~100 KB), no LIST policy (public reads via object URL, service-role
+     writes only), matching signal-media post-0065 posture.
+     | files: supabase/migrations/0074_signal_reaction_types.sql, lib/database.types.ts
+     | verified: yes (applied via MCP; pg_policies shows public SELECT + service ALL;
+       bucket confirmed public/webp/256KB; RLS enabled)
+T828 | completed | Migration 0075: signal_reactions + signal_reaction_counts +
+     SECURITY DEFINER count trigger + signal_target_publicly_viewable helper.
+     signal_reactions(target_type post|comment, target_id, reaction_type_id FK ON
+     DELETE RESTRICT, user_id FK auth.users cascade, unique(target_type,target_id,
+     reaction_type_id,user_id)). signal_reaction_counts(PK (target_type,target_id,
+     reaction_type_id), count; reaction_type_id FK ON DELETE CASCADE for zeroed-row
+     cleanup). AFTER INSERT/DELETE trigger upserts count +1 / floored -1, mirroring
+     follower_count (0063). RLS: reactions authenticated SELECT (own OR target
+     publicly viewable), INSERT own (target publicly viewable AND reaction type
+     active), DELETE own, NO UPDATE, service_role ALL; counts public SELECT GATED on
+     signal_target_publicly_viewable (review fix: prevents enumerating engagement
+     metadata for hidden/draft/private targets), service_role ALL.
+     signal_target_publicly_viewable(text,uuid): SECURITY DEFINER, search_path pinned,
+     STABLE, EXECUTE granted to anon/authenticated/service_role (required for use
+     inside RLS), revoked from public; predicate matches the 0071/0072 public-read
+     gating.
+     | files: supabase/migrations/0075_signal_reactions.sql, lib/database.types.ts
+     | verified: yes (rolled-back DO block, 15 checks all PASS: react own active on
+       public post/comment, duplicate blocked by unique, inactive-type blocked,
+       hidden-post blocked, impersonation blocked, own+public SELECT scope, no UPDATE
+       (0 rows), cross-user delete 0 rows, anon sees 0 reactions, anon reads public
+       counts, anon counts-write blocked, trigger +1/-1; plus a focused gate check:
+       anon sees counts for a public target, 0 for a hidden target. All probe rows
+       rolled back, zero leakage)
+T829 | completed | Admin reaction-emoji upload route + shared catalog helper.
+     POST /api/admin/signal/reaction-emoji: same-origin header + getIsAdmin (never
+     trusts client) + Content-Length ceiling + size cap + magic-byte sniff (reuses
+     lib/signal/image-sniff, rejects SVG) + sharp animated:false STATIC re-encode to
+     WebP (<=256x256, metadata stripped, quality step-down to ~100 KB) + service-role
+     upload to signal-reaction-emojis. lib/signal/reactions.ts: isomorphic helper
+     (ReactionType type, reactionImageUrl, validateReactionType mirroring the DB
+     CHECKs; image_path validated to the strict ^reactions/<uuidv4>.webp$ shape so a
+     reaction can never point at an arbitrary object).
+     | files: app/api/admin/signal/reaction-emoji/route.ts, lib/signal/reactions.ts
+     | verified: yes (typecheck + build)
+T830 | completed | Admin catalog UI /admin/signal/reactions + server actions.
+     actions.ts (all requireAdmin -> service role): createReactionType/
+     updateReactionType (return the persisted row so optimistic UI uses real ids),
+     setReactionTypeActive, moveReactionType (display-order swap with tie-break,
+     mirrors moveSource), deleteReactionType (ON DELETE RESTRICT backstop -> friendly
+     "disable instead" message; cleans up the bucket object on delete/replace).
+     reactions-manager.tsx: list (label, slug, kind, preview, position), role="switch"
+     active toggle, keyboard up/down reorder with shared aria-live, add/edit form
+     (label, slug, kind radio fieldset, char input OR image upload via the admin
+     route), disable vs delete with inline confirm. page.tsx + the Reactions card on
+     the /admin/signal index.
+     | files: app/admin/signal/reactions/actions.ts, components/admin/reactions-manager.tsx,
+       app/admin/signal/reactions/page.tsx, app/admin/signal/page.tsx
+     | verified: yes (typecheck + build; /admin/signal/reactions 9.27 kB route)
+
+### Signal - Phase 4f COMMIT 1 sub-agent review (completed)
+Three reviews (implementation, accessibility, security) over the commit-1 diff.
+- Implementation: NO blockers. Count trigger +/-1, on-conflict upsert, reorder
+  tie-break, create/update-returns-row, validateReactionType mirror all verified.
+- Security: NO blockers. The one real IMPORTANT (signal_reaction_counts public
+  SELECT leaked engagement metadata for hidden/draft/private targets) FIXED by
+  gating the counts SELECT on signal_target_publicly_viewable (migration 0075 +
+  live DB). Tightened image_path regex to a strict UUID shape. Upload hardening,
+  RLS posture, SECURITY DEFINER search_path pinning, FK RESTRICT/CASCADE strategy,
+  no secret exposure, no XSS all verified sound.
+- Accessibility: one BLOCKER fixed (form preview <img> had alt="" with no adjacent
+  label -> alt="Reaction image preview"); IMPORTANT fixed (useId() so duplicated
+  form field ids cannot mis-associate labels); MINOR fixed (focus moves to "Yes,
+  delete" on confirm open and back to the Delete trigger on Keep; delete eligibility
+  copy made accurate). Verified clean: role="switch"+aria-checked, fieldset/legend
+  radios, labeled inputs, keyboard reorder, 44px action targets, decorative icons
+  aria-hidden, no data hidden at any breakpoint, no em-dashes.
+- Accepted / consistent-with-existing (not changed, to avoid diverging a single
+  component from the already-reviewed sources-manager): the 28px switch hit area,
+  the verbose switch aria-label, and the single-string aria-live region are the
+  established admin pattern (components/admin/sources-manager.tsx). The suite-wide
+  44px-switch and live-region-nonce questions belong to a deliberate suite pass, not
+  a one-component divergence here.
+- Advisor: get_advisors(security) flags signal_target_publicly_viewable as
+  anon/authenticated EXECUTE-able SECURITY DEFINER. EXPECTED and required: the
+  function is referenced inside RLS policies, so the querying roles MUST have
+  EXECUTE. search_path is pinned; it returns only a boolean matching the public-read
+  gating; same accepted posture as the pre-existing try_claim_league_refresh.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

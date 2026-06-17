@@ -1977,6 +1977,109 @@ export type Database = {
           },
         ];
       };
+      signal_reaction_counts: {
+        Row: {
+          count: number;
+          reaction_type_id: string;
+          target_id: string;
+          target_type: string;
+        };
+        Insert: {
+          count?: number;
+          reaction_type_id: string;
+          target_id: string;
+          target_type: string;
+        };
+        Update: {
+          count?: number;
+          reaction_type_id?: string;
+          target_id?: string;
+          target_type?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_reaction_counts_reaction_type_id_fkey";
+            columns: ["reaction_type_id"];
+            isOneToOne: false;
+            referencedRelation: "signal_reaction_types";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      signal_reaction_types: {
+        Row: {
+          char: string | null;
+          created_at: string;
+          display_order: number;
+          id: string;
+          image_path: string | null;
+          is_active: boolean;
+          kind: string;
+          label: string;
+          slug: string;
+          updated_at: string;
+        };
+        Insert: {
+          char?: string | null;
+          created_at?: string;
+          display_order?: number;
+          id?: string;
+          image_path?: string | null;
+          is_active?: boolean;
+          kind: string;
+          label: string;
+          slug: string;
+          updated_at?: string;
+        };
+        Update: {
+          char?: string | null;
+          created_at?: string;
+          display_order?: number;
+          id?: string;
+          image_path?: string | null;
+          is_active?: boolean;
+          kind?: string;
+          label?: string;
+          slug?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      signal_reactions: {
+        Row: {
+          created_at: string;
+          id: string;
+          reaction_type_id: string;
+          target_id: string;
+          target_type: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          reaction_type_id: string;
+          target_id: string;
+          target_type: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          reaction_type_id?: string;
+          target_id?: string;
+          target_type?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_reactions_reaction_type_id_fkey";
+            columns: ["reaction_type_id"];
+            isOneToOne: false;
+            referencedRelation: "signal_reaction_types";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       signal_reports: {
         Row: {
           created_at: string;
@@ -2420,6 +2523,10 @@ export type Database = {
       set_default_source: { Args: { target_slug: string }; Returns: undefined };
       signal_gif_valid: { Args: { gif: Json }; Returns: boolean };
       signal_links_valid: { Args: { links: Json }; Returns: boolean };
+      signal_target_publicly_viewable: {
+        Args: { t_id: string; t_type: string };
+        Returns: boolean;
+      };
       try_claim_league_refresh: {
         Args: {
           p_league_id: string;
