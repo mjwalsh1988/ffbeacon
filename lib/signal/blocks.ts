@@ -13,20 +13,24 @@
 // the public page (never error, never leak). The shapes here carry only ids; the
 // resolver attaches the live data.
 
-export type ProfileLayout = "feed" | "sidebar";
+export type ProfileLayout = "feed" | "sidebar" | "spotlight";
 
 /** Layout A = "feed" (single column). Layout B = "sidebar" (full-width header
- * above two columns). The signals.layout CHECK also permits "spotlight", which
- * Phase 5 does not implement; isProfileLayout clamps any other value to "feed". */
+ * above two columns). Layout C = "spotlight" (centered landing page: editorial
+ * hero, beacon-card stack, stats strip, Wall behind a disclosure). All three are
+ * permitted by the signals.layout CHECK (migration 0059).
+ *
+ * PROFILE_LAYOUTS is the set offered in the builder; the builder exposes Layout C
+ * in Phase 6.3, so spotlight joins this list there. isProfileLayout / resolveLayout
+ * already accept spotlight so a stored value renders correctly. */
 export const PROFILE_LAYOUTS: readonly ProfileLayout[] = ["feed", "sidebar"];
 export const DEFAULT_LAYOUT: ProfileLayout = "feed";
 
 export function isProfileLayout(value: unknown): value is ProfileLayout {
-  return value === "feed" || value === "sidebar";
+  return value === "feed" || value === "sidebar" || value === "spotlight";
 }
 
-/** Coerce any stored layout value (incl. the unused "spotlight") to a Phase 5
- * layout, defaulting to Layout A. */
+/** Coerce any stored layout value to a known layout, defaulting to Layout A. */
 export function resolveLayout(value: unknown): ProfileLayout {
   return isProfileLayout(value) ? value : DEFAULT_LAYOUT;
 }

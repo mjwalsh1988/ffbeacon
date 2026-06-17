@@ -30,6 +30,8 @@ import {
 } from "@/components/signal/signal-block";
 import { WallBlock } from "@/components/signal/wall";
 import { SidebarShell } from "@/components/signal/sidebar-shell";
+import { BeaconCard } from "@/components/signal/beacon-card";
+import { WallDisclosure } from "@/components/signal/wall-disclosure";
 
 // The Wall is read live (not cached) so new posts and moderation take effect
 // immediately, so this route renders dynamically. The heavy identity bundle is
@@ -204,7 +206,13 @@ function ProfileBody({
   const banner = signalMediaUrl(signal.banner_path);
   const gradient = accentGradient(signal.accent);
   const isSidebar = bundle.layout === "sidebar";
+  const isSpotlight = bundle.layout === "spotlight";
   const headerWidth = isSidebar ? "max-w-6xl" : "max-w-3xl";
+  // Spotlight centers the hero (avatar, name, headline) like a landing page;
+  // Layouts A and B keep the avatar-left, text-right header.
+  const heroInner = isSpotlight
+    ? "-mt-12 flex flex-col items-center gap-4 pb-8 text-center sm:-mt-14"
+    : "-mt-12 flex flex-col gap-4 pb-8 sm:-mt-14 sm:flex-row sm:items-end";
 
   // The Wall is fixed below the blocks in the main column (Layout A and B alike):
   // it is not a builder block and is never reorderable.
@@ -253,7 +261,7 @@ function ProfileBody({
         )}
 
         <div className={`mx-auto ${headerWidth} px-4 sm:px-6`}>
-          <div className="-mt-12 flex flex-col gap-4 pb-8 sm:-mt-14 sm:flex-row sm:items-end">
+          <div className={heroInner}>
             <div className="rounded-full ring-4 ring-base">
               <ImageWithFallback
                 src={avatar}
@@ -261,7 +269,7 @@ function ProfileBody({
                 size={112}
               />
             </div>
-            <div className="min-w-0 flex-1">
+            <div className={isSpotlight ? "min-w-0" : "min-w-0 flex-1"}>
               <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
                 {signal.display_name}
               </h1>
@@ -278,7 +286,20 @@ function ProfileBody({
         </div>
       </header>
 
-      {isSidebar ? (
+      {isSpotlight ? (
+        <SpotlightLayout
+          handle={signal.handle}
+          accent={signal.accent}
+          blocks={bundle.blocks}
+          wall={wall}
+          stats={{
+            boards: bundle.boards.length,
+            leagues: bundle.leagues.length,
+            favoriteTeam: bundle.favorites.team?.name ?? null,
+            posts: posts.length,
+          }}
+        />
+      ) : isSidebar ? (
         <SidebarLayout
           handle={signal.handle}
           accent={signal.accent}
@@ -391,5 +412,121 @@ function SidebarLayout({
         </div>
       )}
     </div>
+  );
+}
+
+type SpotlightStats = {
+  boards: number;
+  leagues: number;
+  favoriteTeam: string | null;
+  posts: number;
+};
+
+/**
+ * Layout C "Spotlight": a centered, single-column landing page. The about block
+ * (if present) becomes a centered editorial lede under the hero; every other
+ * block renders, in the owner's order, inside a luminous BeaconCard; a wrapping
+ * stats strip summarizes the profile; and the Wall sits behind a labeled
+ * disclosure rather than running as a feed.
+ *
+ * It reads the same resolved bundle.blocks as Layouts A and B (one presentational
+ * path, existing block components, caches, and graceful degrade all reused). DOM
+ * order equals visual order because there is exactly one column.
+ */
+function SpotlightLayout({
+  handle,
+  accent,
+  blocks,
+  wall,
+  stats,
+}: {
+  handle: string;
+  accent: string;
+  blocks: ResolvedBlock[];
+  wall: React.ReactNode;
+  stats: SpotlightStats;
+}) {
+  const aboutBlock = blocks.find((b) => b.type === "about");
+  const lede = aboutBlock?.type === "about" ? aboutBlock.bio : null;
+  const cardBlocks = blocks.filter((b) => b.type !== "about");
+
+  return (
+    <div className="mx-auto max-w-2xl px-4 sm:px-6">
+      {lede && (
+        <p className="mx-auto max-w-prose py-6 text-center text-lg leading-relaxed text-ink">
+          {lede}
+        </p>
+      )}
+
+      <StatsStrip stats={stats} />
+
+      {cardBlocks.length > 0 && (
+        <div className="flex flex-col gap-6 py-2">
+          {cardBlocks.map((block) => (
+            <BeaconCard key={block.id} accent={accent}>
+              {renderBlock(block, handle, accent)}
+            </BeaconCard>
+          ))}
+        </div>
+      )}
+
+      {stats.posts > 0 && (
+        <div className="mt-2">
+          <WallDisclosure postCount={stats.posts}>{wall}</WallDisclosure>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Spotlight stats strip: a wrapping (never horizontally scrolling) row of static
+ * tiles built entirely from data already in the profile bundle, so it adds no
+ * query. Renders nothing when there is nothing to show.
+ */
+function StatsStrip({ stats }: { stats: SpotlightStats }) {
+  const items: { label: string; value: string }[] = [];
+  if (stats.boards > 0) {
+    items.push({
+      label: stats.boards === 1 ? "Ranking board" : "Ranking boards",
+      value: String(stats.boards),
+    });
+  }
+  if (stats.leagues > 0) {
+    items.push({
+      label: stats.leagues === 1 ? "League" : "Leagues",
+      value: String(stats.leagues),
+    });
+  }
+  if (stats.favoriteTeam) {
+    items.push({ label: "Favorite team", value: stats.favoriteTeam });
+  }
+  if (stats.posts > 0) {
+    items.push({
+      label: stats.posts === 1 ? "Wall post" : "Wall posts",
+      value: String(stats.posts),
+    });
+  }
+  if (items.length === 0) return null;
+
+  return (
+    <section aria-labelledby="signal-spotlight-stats" className="py-6">
+      <h2 id="signal-spotlight-stats" className="sr-only">
+        Profile stats
+      </h2>
+      <dl className="flex flex-wrap justify-center gap-3">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="min-w-24 rounded-card border border-line bg-base/50 px-4 py-3 text-center"
+          >
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+              {item.label}
+            </dt>
+            <dd className="mt-1 text-lg font-semibold text-ink">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
