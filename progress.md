@@ -1387,6 +1387,91 @@ T835 | completed | SWEEP 2: reconcile the two admin list managers to one shared 
        blockers/important; quick impl + security pass confirmed no behavior/visual
        regression and no new security surface)
 
+### Signal - Phase 5 (profile block builder: composable blocks + Layout A/B) - completed
+The public profile becomes a composable, owner-arranged set of blocks driven by
+the existing signals.layout_config jsonb + signals.layout column. MIGRATION-FREE
+(both columns shipped in 0059; the owner-writable column grants already include
+layout + layout_config, verified). Approved plan persisted at docs/phase5-plan.md
+(committed first so a context reset cannot wipe it again). Block types: about
+(renders the bio), text (own copy), links, favorites, board_top_n, league_card.
+value_movers + recent_posts were cut. The Wall stays FIXED below the blocks in the
+main column (not a block, not reorderable). Built 5.1 -> 5.6, one commit each,
+typecheck + build green at every step, not pushed.
+T836 | completed | 5.1 block data layer + graceful-degrade resolver
+     | files: lib/signal/blocks.ts (new), lib/signal-profile.ts
+     | detail: isomorphic SignalBlock model, coercion (shape + singleton uniqueness
+       + id dedupe + MAX_BLOCKS cap), Layout A/B helpers, type-based column
+       auto-placement (blockColumn), (de)serialization, seedBlocksFromProfile.
+       resolveProfileBlocks resolves blocks against the cached bundle and DROPS any
+       block whose referenced entity is gone or no longer public (board no longer
+       profile_visible, league un-synced, empty bio/links/favorites), so missing
+       references render nothing, never error, never leak. Seeds defaults only when
+       never configured.
+     | verified: yes (typecheck + build)
+T837 | completed | 5.2 public render (Layout A feed + Layout B sidebar)
+     | files: app/u/[handle]/page.tsx, components/signal/signal-block.tsx
+     | detail: render bundle.blocks in order; refactored to one-per-entity blocks
+       (AboutBlock renders bio replacing the inline bio, TextBlock headingless
+       prose, FeaturedBoardBlock + FeaturedLeagueBlock single-entity, kept
+       LinksBlock + FavoritesBlock). SignalBlock no longer owns width/padding (the
+       page column does). Layout A single column + Wall at bottom. Layout B
+       full-width header over a two-col grid, blocks auto-placed by type (boards +
+       leagues main, about/text/links/favorites sidebar), Wall fixed at the bottom
+       of main. DOM order = main then aside = visual order; columns stack on mobile,
+       nothing hidden.
+     | verified: yes (typecheck + build)
+T838 | completed | 5.3 builder shell (add/remove/reorder + Layout A/B switch)
+     | files: app/my-beacon/signal/layout-builder.tsx (new)
+     | detail: single reorderable list, accessible move up/down (focus follows the
+       moved block; shifts to the sibling button at an end so focus is never
+       dropped), remove, Layout A/B fieldset radios, add-menu with about/links/
+       favorites as singletons disabled with a spoken reason. Text block inline
+       textarea + counter. Shared single re-announcing live region
+       (useAdminAnnouncer); assertive role="alert" for save errors (no
+       double-announce). Not mounted yet.
+     | verified: yes (typecheck + build)
+T839 | completed | 5.4 board + league pickers
+     | files: app/my-beacon/signal/layout-builder.tsx
+     | detail: accessible disclosure pickers in the add-menu. Board picker lists
+       only profile_visible boards; league picker lists only featured synced
+       leagues; picking adds a reference and NEVER mutates the entity (no implicit
+       visibility flip). Each entity referenced by at most one block; placed
+       entities drop out; trigger disables with a spoken reason when empty.
+       fieldset/legend list of buttons (not an ARIA menu), opens focus on first
+       item, Escape closes + returns focus to trigger, post-pick focus returns to
+       trigger (or Save when the trigger disables).
+     | verified: yes (typecheck + build)
+T840 | completed | 5.5 persistence + mount
+     | files: app/my-beacon/signal/actions.ts, app/my-beacon/signal/page.tsx
+     | detail: saveLayout (session client + owner RLS) validates layout, coerces
+       blocks, and filters board/league references to the owner's own featured
+       entities (profile_visible boards + signal_league_ids leagues), then
+       revalidateProfileCaches. Mounted LayoutBuilder under a new Profile layout
+       section; the page loads the picker option lists and seeds the builder's
+       initial state from current data when never configured, so the builder
+       mirrors exactly what the public resolver renders.
+     | verified: yes (typecheck + build)
+T841 | completed | 5.6 review (a11y primary) + fixes + docs
+     | files: lib/signal/blocks.ts, lib/signal-profile.ts, app/my-beacon/signal/page.tsx,
+       app/my-beacon/signal/layout-builder.tsx, progress.md, handoff.md
+     | review: inline review (accessibility primary, plus implementation +
+       security). Accessibility PASS: public single h1 + h2 blocks + aside landmark
+       only in Layout B, DOM order = visual order, nothing hidden at any breakpoint;
+       builder fully keyboard/NVDA-operable (fieldset radios, labeled move/remove,
+       focus management, disclosure pickers with Escape + focus return, single
+       re-announcing live region, 44px targets, AA ink-muted). Security PASS:
+       owner-RLS writes (layout + layout_config in the 0059 owner-writable grants,
+       verified), untrusted input coerced + references filtered to the owner's own
+       entities (no IDOR/leak), plain-text render (no XSS), generic error copy.
+       Implementation PASS after one fix.
+     | fix: an intentionally-empty saved layout was indistinguishable from
+       never-configured and would wrongly re-seed defaults on the public page.
+       Added hasStoredBlocks (a stored layout always carries a blocks array) so the
+       resolver + editor seed ONLY when never configured and respect an empty
+       layout as empty.
+     | verified: yes (typecheck + build green; migration-free, so no schema/RLS
+       regen needed; signals RLS unchanged from prior phases)
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

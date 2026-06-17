@@ -12,6 +12,7 @@ import {
   type ProfileLayout,
   DEFAULT_LAYOUT,
   parseLayoutConfig,
+  hasStoredBlocks,
   resolveLayout,
   seedBlocksFromProfile,
 } from "@/lib/signal/blocks";
@@ -448,8 +449,10 @@ function resolveProfileBlocks(
   const hasFavorites = !!(data.favorites.team || data.favorites.player);
   const bio = signal.bio?.trim() ?? "";
 
+  // Seed defaults ONLY for an un-customized profile. A configured-but-empty
+  // layout (the owner removed every block) is respected as empty, not re-seeded.
   let blocks = parseLayoutConfig(rawLayoutConfig);
-  if (blocks.length === 0) {
+  if (!hasStoredBlocks(rawLayoutConfig)) {
     blocks = seedBlocksFromProfile({
       hasBio: bio.length > 0,
       hasFavorites,

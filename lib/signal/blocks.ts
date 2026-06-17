@@ -177,6 +177,22 @@ export function parseLayoutConfig(value: unknown): SignalBlock[] {
   return coerceBlocks((value as { blocks?: unknown }).blocks);
 }
 
+/**
+ * Whether the stored layout_config has ever been configured. A configured layout
+ * always carries a `blocks` array (serializeLayoutConfig writes one), even when
+ * empty. This distinguishes an owner who intentionally removed every block (an
+ * empty `blocks` array, which must render nothing) from an un-customized profile
+ * (the default `{}` with no `blocks` key, which seeds defaults). Without this an
+ * intentionally-empty layout would wrongly re-seed.
+ */
+export function hasStoredBlocks(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Array.isArray((value as { blocks?: unknown }).blocks)
+  );
+}
+
 /** Build the jsonb payload to persist for a block list. */
 export function serializeLayoutConfig(blocks: SignalBlock[]): LayoutConfig {
   return { version: LAYOUT_CONFIG_VERSION, blocks: coerceBlocks(blocks) };

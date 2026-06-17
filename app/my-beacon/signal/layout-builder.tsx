@@ -40,11 +40,12 @@ import { useAdminAnnouncer } from "@/components/admin/admin-controls";
  * text owns its own copy (edited inline here). The public resolver drops any block
  * whose reference is gone, so removing a block here only removes the reference.
  *
- * Persistence (onSave) and the board/league pickers are provided by the parent;
- * this component owns only local state, reordering, and announcements. It uses the
- * shared single re-announcing live region (useAdminAnnouncer) so identical
- * consecutive messages still speak, and a separate assertive role="alert" for save
- * errors (no nested live regions, so no double-announce).
+ * The parent provides the persistence action (onSave) and the option lists for
+ * the board/league pickers (the owner's profile_visible boards and featured
+ * synced leagues); all interaction, reordering, and announcements live here. It
+ * uses the shared single re-announcing live region (useAdminAnnouncer) so
+ * identical consecutive messages still speak, and a separate assertive
+ * role="alert" for save errors (no nested live regions, so no double-announce).
  */
 
 export type BuilderBoardOption = { id: string; name: string };

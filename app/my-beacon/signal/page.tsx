@@ -24,6 +24,7 @@ import { saveLayout } from "./actions";
 import {
   type SignalBlock,
   parseLayoutConfig,
+  hasStoredBlocks,
   resolveLayout,
   seedBlocksFromProfile,
 } from "@/lib/signal/blocks";
@@ -223,7 +224,7 @@ export default async function MySignalPage() {
   // "what you arrange" equals "what is live".
   const initialLayout = resolveLayout(signal?.layout);
   let initialBlocks: SignalBlock[] = parseLayoutConfig(signal?.layout_config);
-  if (initialBlocks.length === 0 && signal) {
+  if (signal && !hasStoredBlocks(signal.layout_config)) {
     initialBlocks = seedBlocksFromProfile({
       hasBio: !!(signal.bio && signal.bio.trim()),
       hasFavorites: !!(signal.favorite_team || signal.favorite_player_id),
