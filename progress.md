@@ -1727,6 +1727,62 @@ T607 | completed | Phase 7 three sub-agent reviews (security primary + impl + a1
      | PHASE 7 FULLY REVIEWED + COMPLETE. Root /{handle} is canonical; /u 308s
        forever; no route can collide with a handle (build-guarded).
 
+### Signal - Phase 8 (following) - COMPLETE
+Wires UI to the EXISTING follow data layer from Phase 0 (no migration): the
+signal_follows graph (PK (follower, followee), self-follow CHECK, RLS anon-none /
+authed-select-all / insert+delete-own / service-all) and the denormalized
+signals.follower_count maintained by the signal_follows_sync_count AFTER trigger
+(migration 0063). The For You feed stays DEFERRED (not built). Confirmed clean git
+status + the data layer before building.
+
+T608 | completed | Follow read layer + server actions
+     | files: lib/signal-follow.ts (new), app/u/[handle]/follow-actions.ts (new)
+     | detail: loadFollowState(profileUserId, viewerUserId) reads follower_count
+       FRESH (denormalized counter, not from the cached bundle) + the viewer's own
+       follow row, via the admin client fed the session-resolved viewer id (mirrors
+       loadReactionsForTargets). follow-actions: followProfile/unfollowProfile use
+       the session client + own-row RLS (follower_user_id ALWAYS = auth.uid(), never
+       client-supplied); 23505 (dup) -> idempotent no-op success, 23514 (self-follow
+       CHECK) + 23503 (FK) + 42501 (RLS) -> friendly copy; needsAuth when logged out;
+       light best-effort in-memory throttle (12 / 10s per user, consistent with the
+       GIF route; durable state is bounded by the PK regardless). loadFollowList
+       (authed-only; needsAuth otherwise) returns only LIVE public profiles (private/
+       draft handles never exposed via the graph), capped at 100, recency-ordered.
+       NO profile-cache bust (a stranger's follow must not bust the owner bundle).
+     | depends on: Phase 0 (0063 signal_follows + counter trigger)
+     | verified: yes (typecheck + build green)
+T609 | completed | Follow control + list modal UI + profile wiring
+     | files: components/signal/follow-control.tsx (new),
+       components/signal/follow-list-modal.tsx (new),
+       components/signal/profile-view.tsx (header + ProfileBody props + both viewer
+       paths thread loadFollowState)
+     | detail: FollowControl renders the public count always (button -> list dialog
+       for authed viewers, plain text for anon); Follow/Unfollow toggle only for a
+       signed-in non-owner (aria-pressed, visible label IS the accessible name, no
+       aria-label override -> Label-in-Name safe); anon non-owner gets a "Sign in to
+       follow" link (never a broken button); owner sees count + list, no follow
+       button (self-follow has no UI path). Derives display from props + router
+       .refresh() after a write (no local optimistic-state footgun; no cache bust),
+       matching reaction-bar. Single polite success region + single assertive error
+       region (no nested role=alert, post-sweep pattern). 44px targets. FollowList
+       Modal reuses the mobile-menu focus model (portal, role=dialog aria-modal, Tab
+       trap both directions, Escape, body scroll lock, focus return guarded on
+       isConnected); two aria-pressed tabs (Followers/Following) fetch via
+       loadFollowList on open/tab-change with a request-sequence guard against slow
+       responses; polite live region announces the loaded count; entries link to
+       /{handle}.
+     | depends on: T608
+     | verified: yes (typecheck + build green; /[handle] 10.6 kB)
+T610 | completed | RLS + trigger verification (anon/auth follow read/write)
+     | detail: against real users (owner 5d99293a "mjwalsh" count 0, other dbdeffcf):
+       trigger INCREMENT 0->1 on insert; DECREMENT 1->0 on delete; self-follow blocked
+       (CHECK 23514) even for the owner; follow-on-behalf-of blocked (RLS 42501, acting
+       as one user with follower_user_id = someone else); legit own follow ALLOWED
+       under RLS with_check; anon SELECT on signal_follows returns 0 rows even with a
+       row present (list is authenticated-only). DB left clean (0 rows, count 0).
+     | depends on: T608
+     | verified: yes
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

@@ -35,8 +35,10 @@ import {
   type WallPost,
   type WallReactions,
 } from "@/lib/signal-wall";
+import { loadFollowState } from "@/lib/signal-follow";
 import { blockColumn } from "@/lib/signal/blocks";
 import { ImageWithFallback } from "@/components/image-with-fallback";
+import { FollowControl } from "@/components/signal/follow-control";
 import {
   AboutBlock,
   TextBlock,
@@ -142,6 +144,9 @@ export async function ProfileView({
       collectReactionTargets(posts),
       user?.id ?? null,
     );
+    // Follow state is read fresh (not from the cached bundle): the follower
+    // count is the denormalized counter and the viewer's follow row is their own.
+    const follow = await loadFollowState(signal.user_id, user?.id ?? null);
     return (
       <ProfileBody
         bundle={bundle}
@@ -151,6 +156,8 @@ export async function ProfileView({
         viewerIsAdmin={isAdmin}
         viewerIsWallOwner={isWallOwner}
         reactions={reactions}
+        followerCount={follow.followerCount}
+        viewerIsFollowing={follow.viewerIsFollowing}
       />
     );
   }
@@ -173,6 +180,7 @@ export async function ProfileView({
     collectReactionTargets(posts),
     user.id,
   );
+  const follow = await loadFollowState(signal.user_id, user.id);
   return (
     <ProfileBody
       bundle={bundle}
@@ -182,6 +190,8 @@ export async function ProfileView({
       viewerIsAdmin={false}
       viewerIsWallOwner
       reactions={reactions}
+      followerCount={follow.followerCount}
+      viewerIsFollowing={follow.viewerIsFollowing}
     />
   );
 }
@@ -208,6 +218,8 @@ function ProfileBody({
   viewerIsAdmin,
   viewerIsWallOwner,
   reactions,
+  followerCount,
+  viewerIsFollowing,
 }: {
   bundle: ProfileBundle;
   ownerPreview: boolean;
@@ -216,6 +228,8 @@ function ProfileBody({
   viewerIsAdmin: boolean;
   viewerIsWallOwner: boolean;
   reactions: WallReactions;
+  followerCount: number;
+  viewerIsFollowing: boolean;
 }) {
   const signal = bundle.signal!;
   const avatar = signalMediaUrl(signal.avatar_path);
@@ -297,6 +311,16 @@ function ProfileBody({
                   {signal.headline}
                 </p>
               )}
+              <div className={isSpotlight ? "flex justify-center" : ""}>
+                <FollowControl
+                  profileUserId={signal.user_id}
+                  displayName={signal.display_name}
+                  isOwnProfile={viewerIsWallOwner}
+                  viewerUserId={viewerUserId}
+                  followerCount={followerCount}
+                  viewerIsFollowing={viewerIsFollowing}
+                />
+              </div>
             </div>
           </div>
         </div>
