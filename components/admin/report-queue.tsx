@@ -79,11 +79,12 @@ export function ReportQueue({ groups }: { groups: ReportGroup[] }) {
       <p aria-live="polite" role="status" className="sr-only">
         {announcement}
       </p>
+      {/* Single assertive live region for errors: the wrapper IS the live
+          region, so the inner paragraph must not also carry role="alert" (that
+          nests two live regions and double-announces on NVDA). */}
       <div aria-live="assertive">
         {error && (
-          <p role="alert" className="mb-4 text-sm text-signal-danger">
-            {error}
-          </p>
+          <p className="mb-4 text-sm text-signal-danger">{error}</p>
         )}
       </div>
 

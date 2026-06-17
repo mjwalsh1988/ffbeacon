@@ -6,6 +6,7 @@ import {
   setDefaultSource,
   moveSource,
 } from "@/app/admin/beacon/actions";
+import { AdminSwitch, useAdminAnnouncer } from "@/components/admin/admin-controls";
 
 export type ManagedSource = {
   slug: string;
@@ -18,9 +19,10 @@ export type ManagedSource = {
 /**
  * Sources management: active on/off, the site-wide default (exactly one), and
  * display order. Screen-reader-first:
- *   - one shared aria-live region announces every state change (activation,
- *     default promotion, reorder with the new position),
- *   - active is a role="switch" with aria-checked,
+ *   - one shared, re-announcing aria-live region (useAdminAnnouncer) announces
+ *     every state change (activation, default promotion, reorder with the new
+ *     position),
+ *   - active is a shared AdminSwitch (role="switch" + aria-checked, 44px target),
  *   - default is a "Set as default" button per source (the current default shows
  *     a static badge instead); inactive sources can't be promoted because the
  *     default must be active,
@@ -32,10 +34,8 @@ export function SourcesManager({ sources }: { sources: ManagedSource[] }) {
   const [list, setList] = useState(() =>
     [...sources].sort((a, b) => a.priority - b.priority),
   );
-  const [status, setStatus] = useState("");
+  const { announce, region } = useAdminAnnouncer();
   const [pending, startTransition] = useTransition();
-
-  const announce = (msg: string) => setStatus(msg);
 
   const onToggleActive = (slug: string, next: boolean) => {
     const src = list.find((s) => s.slug === slug);
@@ -97,9 +97,7 @@ export function SourcesManager({ sources }: { sources: ManagedSource[] }) {
 
   return (
     <div>
-      <p aria-live="polite" className="sr-only">
-        {status}
-      </p>
+      {region}
       <ol role="list" className="grid gap-3">
         {list.map((s, i) => (
           <li
@@ -124,24 +122,12 @@ export function SourcesManager({ sources }: { sources: ManagedSource[] }) {
               </div>
 
               {/* Active switch */}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={s.is_active}
-                aria-label={`${s.display_name}: ${s.is_active ? "active, click to deactivate" : "inactive, click to activate"}`}
+              <AdminSwitch
+                checked={s.is_active}
                 disabled={pending}
-                onClick={() => onToggleActive(s.slug, !s.is_active)}
-                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60 ${
-                  s.is_active ? "border-brand-cyan bg-brand-cyan/30" : "border-line bg-base"
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`inline-block h-5 w-5 transform rounded-full bg-ink transition-transform ${
-                    s.is_active ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
+                label={`${s.display_name}: ${s.is_active ? "active, click to deactivate" : "inactive, click to activate"}`}
+                onChange={(next) => onToggleActive(s.slug, next)}
+              />
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">

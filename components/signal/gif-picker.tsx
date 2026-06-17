@@ -172,11 +172,12 @@ export function GifPicker({
       >
         {status}
       </p>
+      {/* Single assertive live region for errors: the wrapper IS the live
+          region, so the inner paragraph must not also carry role="alert" (that
+          nests two live regions and double-announces on NVDA). */}
       <div aria-live="assertive">
         {error && (
-          <p role="alert" className="mt-2 text-sm text-signal-danger">
-            {error}
-          </p>
+          <p className="mt-2 text-sm text-signal-danger">{error}</p>
         )}
       </div>
 

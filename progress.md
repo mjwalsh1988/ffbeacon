@@ -1352,6 +1352,41 @@ Three reviews (implementation, accessibility, security) over the commit-2 diff.
   durable state and RLS is authoritative; a per-user reaction limiter is a future
   option if abuse appears.
 
+### Signal - Accessibility cleanup (the two deferred suite-wide sweeps) - completed
+Dedicated a11y session, no feature work. Both deferred carry-forwards from the
+Phase 4 handoff are now done; the GIPHY production-key item remains the only
+carry-forward.
+T834 | completed | SWEEP 1: double-announce fix. The Signal surfaces wrapped errors
+     in an aria-live="assertive" <div> that ALSO contained an inner <p role="alert">;
+     role="alert" is an implicit assertive live region, so the nesting double-announced
+     on NVDA. Fix applied identically to all four occurrences: keep the wrapper as the
+     single live region, drop role="alert" from the inner paragraph (the error text
+     and danger styling are unchanged). Separate polite role="status" success regions
+     left untouched. Inventory was grep-driven so the fix is comprehensive.
+     | files: components/signal/reaction-bar.tsx, components/signal/comment-section.tsx,
+       components/signal/gif-picker.tsx, components/admin/report-queue.tsx
+     | verified: yes (typecheck + build; a11y sub-agent confirmed one error live region
+       per surface, polite regions not doubled)
+T835 | completed | SWEEP 2: reconcile the two admin list managers to one shared a11y
+     pattern. New components/admin/admin-controls.tsx exports AdminSwitch (role="switch"
+     + aria-checked toggle whose CLICKABLE button is a 44x44 px hit target wrapping the
+     same compact, now aria-hidden, visual pill; previously each manager had a 28px
+     switch that was both visual and hit area) and useAdminAnnouncer (returns { announce,
+     region }; region is two sr-only aria-live="polite" paragraphs and announce
+     alternates which one carries the text so identical consecutive messages still
+     re-announce, which a single fixed region would not). sources-manager.tsx and
+     reactions-manager.tsx refactored to use both; aria-label wording, activation and
+     "moved to position N of M" reorder announcements preserved. Removed dead local
+     `refresh` in reactions-manager while there. Extracted shared primitives (rather
+     than fixing inline) so future admin managers inherit the correct pattern instead
+     of re-diverging; other admin managers (manual-signals-list, recompute-bar) can
+     adopt them in a future pass, out of scope here.
+     | files: components/admin/admin-controls.tsx (new),
+       components/admin/sources-manager.tsx, components/admin/reactions-manager.tsx
+     | verified: yes (typecheck + build green; a11y sub-agent review CLEAN, no
+       blockers/important; quick impl + security pass confirmed no behavior/visual
+       regression and no new security surface)
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

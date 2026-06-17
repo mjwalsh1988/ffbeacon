@@ -9,6 +9,7 @@ import {
   moveReactionType,
   deleteReactionType,
 } from "@/app/admin/signal/reactions/actions";
+import { AdminSwitch, useAdminAnnouncer } from "@/components/admin/admin-controls";
 import {
   reactionImageUrl,
   REACTION_LABEL_MAX,
@@ -20,10 +21,10 @@ import {
 
 /**
  * Admin manager for the Signal custom-reaction catalog. Screen-reader-first,
- * reusing the SourcesManager pattern:
- *   - one shared aria-live region announces every change (create, edit, activate,
- *     reorder with the new position, delete),
- *   - is_active is a role="switch" with aria-checked,
+ * reusing the shared admin primitives (AdminSwitch + useAdminAnnouncer):
+ *   - one shared, re-announcing aria-live region announces every change (create,
+ *     edit, activate, reorder with the new position, delete),
+ *   - is_active is a shared AdminSwitch (role="switch" + aria-checked, 44px target),
  *   - reorder is keyboard up/down buttons (no drag), disabled at the ends,
  *   - disable (is_active=false) keeps the type and its historical counts; delete is
  *     only possible when no reaction references the type (the DB RESTRICT enforces
@@ -38,7 +39,7 @@ export function ReactionsManager({ initial }: { initial: ReactionType[] }) {
   const [list, setList] = useState<ReactionType[]>(() =>
     [...initial].sort((a, b) => a.display_order - b.display_order),
   );
-  const [status, setStatus] = useState("");
+  const { announce, region } = useAdminAnnouncer();
   const [editing, setEditing] = useState<EditingState>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -59,11 +60,6 @@ export function ReactionsManager({ initial }: { initial: ReactionType[] }) {
       lastConfirm.current = null;
     }
   }, [confirmingDelete]);
-
-  const announce = (msg: string) => setStatus(msg);
-
-  const refresh = (next: ReactionType[]) =>
-    setList([...next].sort((a, b) => a.display_order - b.display_order));
 
   const onToggleActive = (rt: ReactionType, next: boolean) => {
     const prev = list;
@@ -128,9 +124,7 @@ export function ReactionsManager({ initial }: { initial: ReactionType[] }) {
 
   return (
     <div>
-      <p aria-live="polite" className="sr-only">
-        {status}
-      </p>
+      {region}
 
       {list.length === 0 ? (
         <p className="rounded-card border border-line bg-surface/60 p-4 text-sm text-ink-muted">
@@ -174,24 +168,12 @@ export function ReactionsManager({ initial }: { initial: ReactionType[] }) {
                     </div>
 
                     {/* Active switch */}
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={rt.is_active}
-                      aria-label={`${rt.label}: ${rt.is_active ? "active, click to disable" : "disabled, click to activate"}`}
+                    <AdminSwitch
+                      checked={rt.is_active}
                       disabled={pending}
-                      onClick={() => onToggleActive(rt, !rt.is_active)}
-                      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60 ${
-                        rt.is_active ? "border-brand-cyan bg-brand-cyan/30" : "border-line bg-base"
-                      }`}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`inline-block h-5 w-5 transform rounded-full bg-ink transition-transform ${
-                          rt.is_active ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
-                    </button>
+                      label={`${rt.label}: ${rt.is_active ? "active, click to disable" : "disabled, click to activate"}`}
+                      onChange={(next) => onToggleActive(rt, next)}
+                    />
                   </div>
 
                   {confirmingDelete === rt.id ? (

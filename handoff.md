@@ -26,19 +26,36 @@ Commits on `main` (NOT pushed):
    launch. The required "Powered by GIPHY" attribution is already built in (in the
    GIF picker near results AND on every rendered GIF) so we pass review. Treat that
    attribution as permanent UI, not chrome.
-2. DOUBLE-ANNOUNCE a11y sweep (from c/d/f): the Signal composer suite AND the new
-   reaction-bar use an aria-live wrapper AND an inner role="alert" on their error
-   regions, which can double-announce on some screen readers. If you sweep it, do the
-   WHOLE suite at once (keep the wrapper live region, drop the inner role="alert", or
-   vice versa). Not started. Do NOT do it piecemeal. reaction-bar.tsx now follows the
-   same pattern deliberately so the sweep catches it together with the composers.
-3. SUITE-WIDE admin a11y polish (from 4f COMMIT 1 review, deferred on purpose):
-   the admin switch (components/admin/sources-manager.tsx AND reactions-manager.tsx)
-   uses a 28px-tall role="switch" hit area and a single-string aria-live region.
-   These are the established, already-reviewed admin pattern. If you want strict 44px
-   switches and a re-announcing (nonce/queue) live region, do it as ONE deliberate
-   admin-suite pass across sources-manager + reactions-manager, not by diverging a
-   single component.
+
+The two a11y carry-forwards (double-announce sweep + suite-wide admin a11y polish)
+are DONE as of the accessibility cleanup session below. See "What shipped in the
+accessibility cleanup".
+
+## What shipped in the accessibility cleanup (the two deferred a11y sweeps)
+
+Dedicated a11y-only session, no feature work. Both deferred a11y carry-forwards are
+now resolved. Verified with typecheck + build green and a CLEAN accessibility
+sub-agent review (no blockers/important) plus a quick impl + security pass.
+
+- SWEEP 1 (double-announce): the Signal error surfaces wrapped the error in an
+  `aria-live="assertive"` <div> that ALSO held an inner `<p role="alert">`. Since
+  role="alert" is an implicit assertive live region, the nesting double-announced on
+  NVDA. Chosen mechanism, applied identically everywhere: keep the wrapper as the
+  single live region, drop role="alert" from the inner paragraph (text + danger
+  styling unchanged). Fixed in components/signal/reaction-bar.tsx,
+  components/signal/comment-section.tsx, components/signal/gif-picker.tsx, and
+  components/admin/report-queue.tsx. Standalone single-region role="alert" elsewhere
+  (e.g. league-load-error.tsx, refresh-button.tsx, the reaction form error) was NOT
+  the double pattern and was left alone.
+- SWEEP 2 (admin manager reconciliation): new components/admin/admin-controls.tsx
+  exports AdminSwitch (role="switch" + aria-checked toggle with a 44x44 px hit target
+  wrapping the same compact aria-hidden pill; previously a 28px switch) and
+  useAdminAnnouncer (returns { announce, region }; a re-announcing double-region
+  live area so identical consecutive messages still speak). sources-manager.tsx and
+  reactions-manager.tsx both now use these shared primitives. Extracted on purpose so
+  future admin managers inherit the correct pattern; manual-signals-list.tsx and
+  recompute-bar.tsx still have their own inline live regions and can adopt the shared
+  primitives in a future pass (out of scope for this session).
 
 ## What shipped in (f) COMMIT 2 - public reaction picker + counts
 
