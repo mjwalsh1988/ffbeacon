@@ -1596,6 +1596,34 @@ T603 | completed | 6.4 three sub-agent reviews + fixes + ship
      | verified: yes (typecheck + build green after fixes). PHASE 6 FULLY REVIEWED
        + COMPLETE.
 
+### Signal - Phase 7 (root /{handle} alias) - in progress
+Adds ffbeacon.com/{handle} as the public-facing URL for a Signal so a profile
+reads as a standalone website. Profiles live today at /u/{handle}; this phase
+makes root /{handle} canonical, 301s /u/{handle} -> /{handle}, and keeps /u
+forever as a 301 shim. Pure routing/URL layer: the public render, RLS gating,
+layouts, and Wall are untouched. Resolution is a root dynamic segment
+app/[handle], NOT a middleware rewrite: Next.js route precedence (literal
+segments beat the dynamic segment) means a handle can never shadow a real route
+at runtime. Built in three staged commits.
+
+T604 | completed | Stage A: reservation seed + single-source collision guard
+     | files: supabase/migrations/0076_signal_reserve_route_segments.sql,
+       lib/signal/reserved-routes.ts, scripts/check-reserved-routes.ts,
+       package.json
+     | detail: 0076 seeds the 5 remaining top-level route segments (players,
+       guides, join, auth, actions) into signal_reserved_handles; the 0059 seed
+       already covered the rest. lib/signal/reserved-routes.ts is the ONE source
+       of truth for route segments (RESERVED_ROUTE_SEGMENTS, 17 entries) +
+       isReservedRouteSegment for the runtime resolver. scripts/check-reserved-
+       routes.ts is the build-time collision guard wired into prebuild (so
+       `npm run build` fails on drift): leg 1 (always) asserts every top-level
+       app/ folder is in the constant; leg 2 (when Supabase creds present)
+       asserts every constant entry is seeded in signal_reserved_handles. Data-
+       only migration, so database.types.ts unchanged.
+     | depends on: Phase 0 (signal_reserved_handles), Phase 6
+     | verified: yes (guard reports 17 folders covered + seeded; typecheck +
+       build green; build triggers the prebuild guard)
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

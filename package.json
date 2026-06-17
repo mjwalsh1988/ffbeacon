@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "tsx scripts/check-reserved-routes.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "check:routes": "tsx scripts/check-reserved-routes.ts",
     "sync:players": "tsx --env-file=.env.local scripts/sync-sleeper-players.ts",
     "pulse:league": "tsx --env-file=.env.local scripts/pulse-league.ts",
     "sync:ktc": "tsx --env-file=.env.local scripts/sync-ktc.ts",
