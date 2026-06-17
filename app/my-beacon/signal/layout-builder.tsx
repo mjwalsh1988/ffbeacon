@@ -6,8 +6,16 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ListOrdered,
+  Plus,
+  Trophy,
+  Trash2,
+} from "lucide-react";
 import {
   type ProfileLayout,
   type SignalBlock,
@@ -79,6 +87,7 @@ export function LayoutBuilder({
   const [blocks, setBlocks] = useState<SignalBlock[]>(initialBlocks);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openPicker, setOpenPicker] = useState<"board" | "league" | null>(null);
   const { announce, region } = useAdminAnnouncer();
 
   const boardName = useRef(
@@ -94,6 +103,12 @@ export function LayoutBuilder({
   const moveBtnRef = useRef(new Map<string, HTMLButtonElement>());
   const pendingFocus = useRef<string | null>(null);
 
+  // Refs so a pick can return focus to the picker trigger (or the Save button
+  // when the trigger disables because nothing is left to add).
+  const boardTriggerRef = useRef<HTMLButtonElement>(null);
+  const leagueTriggerRef = useRef<HTMLButtonElement>(null);
+  const saveRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     const key = pendingFocus.current;
     if (!key) return;
@@ -103,6 +118,22 @@ export function LayoutBuilder({
 
   const presentSingletons = new Set(
     blocks.filter((b) => isSingletonBlockType(b.type)).map((b) => b.type),
+  );
+
+  // A board or league can be referenced by at most one block (a second block for
+  // the same entity is redundant), so the pickers offer only entities not already
+  // placed. The picker lists are the profile_visible boards and synced featured
+  // leagues passed by the parent; selecting one never mutates the entity (it does
+  // not flip a board's visibility), it only adds a reference block here.
+  const referencedBoardIds = new Set(
+    blocks.flatMap((b) => (b.type === "board_top_n" ? [b.boardId] : [])),
+  );
+  const referencedLeagueIds = new Set(
+    blocks.flatMap((b) => (b.type === "league_card" ? [b.sleeperLeagueId] : [])),
+  );
+  const availableBoards = boardOptions.filter((b) => !referencedBoardIds.has(b.id));
+  const availableLeagues = leagueOptions.filter(
+    (l) => !referencedLeagueIds.has(l.sleeperLeagueId),
   );
 
   function labelFor(block: SignalBlock): string {
@@ -131,6 +162,32 @@ export function LayoutBuilder({
             : { id: newBlockId(), type: "favorites" };
     setBlocks((prev) => [...prev, block]);
     announce(`Added ${TYPE_LABEL[type]} block.`);
+  }
+
+  function addBoardBlock(boardId: string) {
+    if (blocks.length >= MAX_BLOCKS || referencedBoardIds.has(boardId)) return;
+    setBlocks((prev) => [...prev, { id: newBlockId(), type: "board_top_n", boardId }]);
+    setOpenPicker(null);
+    announce(`Added ${boardName.get(boardId) ?? "ranking board"} block.`);
+    // After the last board is placed the trigger disables, so send focus to Save.
+    focusAfterRender(
+      availableBoards.length <= 1 ? saveRef.current : boardTriggerRef.current,
+    );
+  }
+
+  function addLeagueBlock(sleeperLeagueId: string) {
+    if (blocks.length >= MAX_BLOCKS || referencedLeagueIds.has(sleeperLeagueId)) {
+      return;
+    }
+    setBlocks((prev) => [
+      ...prev,
+      { id: newBlockId(), type: "league_card", sleeperLeagueId },
+    ]);
+    setOpenPicker(null);
+    announce(`Added ${leagueName.get(sleeperLeagueId) ?? "league"} block.`);
+    focusAfterRender(
+      availableLeagues.length <= 1 ? saveRef.current : leagueTriggerRef.current,
+    );
   }
 
   function removeBlock(block: SignalBlock) {
@@ -240,7 +297,68 @@ export function LayoutBuilder({
             </button>
           );
         })}
+
+        <PickerTrigger
+          triggerRef={boardTriggerRef}
+          icon={<ListOrdered aria-hidden="true" className="h-4 w-4 text-brand-purple" />}
+          label="Ranking board"
+          panelId="signal-board-picker"
+          open={openPicker === "board"}
+          disabled={availableBoards.length === 0}
+          disabledLabel={
+            boardOptions.length === 0
+              ? "No featured ranking boards to add. Feature a board in My Rankings first."
+              : "All your featured boards are already on your profile"
+          }
+          onToggle={() =>
+            setOpenPicker((cur) => (cur === "board" ? null : "board"))
+          }
+        />
+        <PickerTrigger
+          triggerRef={leagueTriggerRef}
+          icon={<Trophy aria-hidden="true" className="h-4 w-4 text-brand-cyan" />}
+          label="League"
+          panelId="signal-league-picker"
+          open={openPicker === "league"}
+          disabled={availableLeagues.length === 0}
+          disabledLabel={
+            leagueOptions.length === 0
+              ? "No featured leagues to add. Feature a league above first."
+              : "All your featured leagues are already on your profile"
+          }
+          onToggle={() =>
+            setOpenPicker((cur) => (cur === "league" ? null : "league"))
+          }
+        />
       </div>
+
+      {openPicker === "board" && (
+        <PickerPanel
+          id="signal-board-picker"
+          legend="Add a ranking board"
+          items={availableBoards.map((b) => ({ key: b.id, label: b.name }))}
+          onPick={addBoardBlock}
+          onClose={() => {
+            setOpenPicker(null);
+            focusAfterRender(boardTriggerRef.current);
+          }}
+        />
+      )}
+      {openPicker === "league" && (
+        <PickerPanel
+          id="signal-league-picker"
+          legend="Add a league"
+          items={availableLeagues.map((l) => ({
+            key: l.sleeperLeagueId,
+            label: `${l.name}, ${l.season}`,
+          }))}
+          onPick={addLeagueBlock}
+          onClose={() => {
+            setOpenPicker(null);
+            focusAfterRender(leagueTriggerRef.current);
+          }}
+        />
+      )}
 
       {/* Block list */}
       {blocks.length === 0 ? (
@@ -306,6 +424,7 @@ export function LayoutBuilder({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
+          ref={saveRef}
           onClick={save}
           disabled={saving}
           className="inline-flex min-h-11 items-center rounded-card bg-brand-cyan px-4 py-2 text-sm font-semibold text-base transition-colors hover:bg-brand-cyan/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60"
@@ -358,6 +477,105 @@ function MoveButton({
     >
       <Icon aria-hidden="true" className="h-4 w-4" />
     </button>
+  );
+}
+
+/** Focus an element after React has committed the next render (the picker panel
+ * has unmounted by then), so keyboard focus is never dropped to the body. */
+function focusAfterRender(el: HTMLButtonElement | null) {
+  if (!el) return;
+  requestAnimationFrame(() => el.focus());
+}
+
+function PickerTrigger({
+  triggerRef,
+  icon,
+  label,
+  panelId,
+  open,
+  disabled,
+  disabledLabel,
+  onToggle,
+}: {
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  icon: ReactNode;
+  label: string;
+  panelId: string;
+  open: boolean;
+  disabled: boolean;
+  disabledLabel: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      ref={triggerRef}
+      onClick={onToggle}
+      disabled={disabled}
+      aria-haspopup="true"
+      aria-expanded={open}
+      aria-controls={open ? panelId : undefined}
+      aria-label={disabled ? disabledLabel : `Add ${label} block`}
+      title={disabled ? disabledLabel : undefined}
+      className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/**
+ * An inline disclosure panel listing the entities available to add. Opens with
+ * focus on the first item; Escape closes and returns focus to the trigger. It is
+ * a fieldset/legend (a labeled group of add buttons), not an ARIA menu widget, so
+ * each option is a plain, individually reachable button.
+ */
+function PickerPanel({
+  id,
+  legend,
+  items,
+  onPick,
+  onClose,
+}: {
+  id: string;
+  legend: string;
+  items: { key: string; label: string }[];
+  onPick: (key: string) => void;
+  onClose: () => void;
+}) {
+  const firstRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    firstRef.current?.focus();
+  }, []);
+  return (
+    <fieldset
+      id={id}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+      className="rounded-card border border-line bg-base/40 p-3"
+    >
+      <legend className="px-1 text-sm font-semibold text-ink">{legend}</legend>
+      <ul role="list" className="mt-2 flex flex-col gap-1">
+        {items.map((item, index) => (
+          <li key={item.key}>
+            <button
+              type="button"
+              ref={index === 0 ? firstRef : undefined}
+              onClick={() => onPick(item.key)}
+              className="flex min-h-11 w-full items-center gap-2 rounded-card px-3 py-2 text-left text-sm text-ink hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-brand-cyan" />
+              {item.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
   );
 }
 
