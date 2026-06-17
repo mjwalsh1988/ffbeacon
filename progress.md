@@ -1624,6 +1624,42 @@ T604 | completed | Stage A: reservation seed + single-source collision guard
      | verified: yes (guard reports 17 folders covered + seeded; typecheck +
        build green; build triggers the prebuild guard)
 
+T605 | completed | Stage B: shared render extracted + root /{handle} routes
+     | files: components/signal/profile-view.tsx (new),
+       components/signal/board-view.tsx (new), app/u/[handle]/page.tsx,
+       app/u/[handle]/rankings/[boardId]/page.tsx, app/[handle]/page.tsx (new),
+       app/[handle]/rankings/[boardId]/page.tsx (new)
+     | detail: the profile and board renders moved verbatim into
+       components/signal/{profile-view,board-view}.tsx, each exporting a
+       buildXMetadata(handle, {canonicalBase}) + an async <XView> server
+       component. canonicalBase parameterizes ONLY the canonical URL + the
+       casing/handle-history 301 targets. /u/[handle] and /u/[handle]/rankings/
+       [boardId] are now thin wrappers (canonicalBase "/u", still canonical).
+       New root app/[handle] + app/[handle]/rankings/[boardId] delegate to the
+       same renders (also canonicalBase "/u" in Stage B, so root SERVES but /u
+       stays canonical). Root routes add two in-process guards before any load:
+       validateHandleFormat (non-handle paths incl. dotted/file-like 404) and
+       isReservedRouteSegment (defense in depth). Resolution is a root dynamic
+       segment, NOT middleware: middleware untouched.
+     | depends on: T604
+     | verified: yes (typecheck + build green; prebuild guard ran; runtime
+       smoke test on `next start`:
+         - literal routes WITH a page (/about,/rankings,/tools,/guides,/join,
+           /privacy,/terms,/login,/my-beacon,/admin) serve their REAL content,
+           never the handle route -> no working route shadowed;
+         - /players and /leagues have only dynamic children (no index page), so
+           they fall through to [handle]; both names are reserved so the route
+           returns a noindex not-found, never a profile (this is why the guard
+           must reserve EVERY top-level folder);
+         - OAuth /?code= still 307s to /auth/callback;
+         - root /{handle} renders byte-identical to /u/{handle} except the
+           per-route page chunk filename; not-found sets robots noindex,nofollow
+           on both.
+     | known characteristic (pre-existing, flagged for review): nonexistent
+       handles + the /players,/leagues fall-throughs render the not-found UI with
+       HTTP 200 (soft 404), the same force-dynamic behavior /u/[handle] and
+       /leagues/[league_id] already have. noindex is applied, so no index leak.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
