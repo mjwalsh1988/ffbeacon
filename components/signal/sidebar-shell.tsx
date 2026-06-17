@@ -41,7 +41,6 @@ export function SidebarShell({
   const [open, setOpen] = useState(false);
   const [entered, setEntered] = useState(false);
 
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const labelId = useId();
@@ -111,7 +110,11 @@ export function SidebarShell({
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
-      previouslyFocused?.focus?.();
+      // On a resize-to-desktop close the trigger has unmounted, so only restore
+      // focus when the previously focused element is still in the document;
+      // otherwise leave focus where the browser placed it rather than focusing a
+      // detached node.
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [open]);
 
@@ -133,12 +136,15 @@ export function SidebarShell({
     <div>
       <div className="mb-6">
         <button
-          ref={triggerRef}
           type="button"
           aria-haspopup="dialog"
           aria-expanded={open}
-          aria-controls="profile-info-panel"
-          aria-label="Open profile info"
+          // The dialog is portalled and only mounted while open, so reference it
+          // only when it exists (avoids a dangling IDREF). aria-haspopup +
+          // aria-expanded still convey the relationship while closed. The visible
+          // text "Profile info / Bio, links, and more" is the accessible name, so
+          // there is no aria-label clobbering the hint.
+          aria-controls={open ? "profile-info-panel" : undefined}
           onClick={() => setOpen(true)}
           className="flex min-h-11 w-full items-center gap-2 rounded-card border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >

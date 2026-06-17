@@ -1505,6 +1505,97 @@ T842 | completed | 5.6 dedicated three-sub-agent review pass (impl + a11y + secu
      | verified: yes (typecheck + build green after fixes). PHASE 5 FULLY REVIEWED
        + COMPLETE.
 
+### Signal - Phase 6 (mobile sidebar drawer + Layout C "Spotlight") - completed
+
+Two parts. Part 1 changes Layout B's mobile behavior: below the lg breakpoint
+the secondary sidebar (about, text, links, favorites) collapses into an
+accessible "Profile info" drawer behind a top-bar trigger instead of stacking
+below the main column (an intentional change from the Phase 5 "nothing hidden"
+stacking; Layout A is unchanged, it has no sidebar). Part 2 makes Layout C
+("spotlight") render: a centered landing page reusing the same resolved
+bundle.blocks as A/B (one presentational path).
+
+T600 | completed | 6.1 mobile profile-info drawer (Layout B)
+     | files: components/signal/sidebar-shell.tsx (new),
+       app/u/[handle]/page.tsx
+     | SidebarShell renders the sidebar blocks exactly once, switching the whole
+       subtree on mount + breakpoint state (matchMedia max-width:1023px, matching
+       the lg grid split) rather than CSS, so the hard-coded block ids
+       (signal-favorites-heading, ...) never appear twice in the DOM. Progressive
+       enhancement: SSR / first client render / no-JS renders the inline
+       two-column tree (sidebar stacks, nothing lost without JS); JS collapses it
+       into the drawer on mount. Drawer reuses the mobile-menu focus model:
+       portal to document.body, role=dialog + aria-modal, Tab focus trap, Escape,
+       body scroll lock (save/restore prevOverflow), focus return. Slide is
+       motion-safe only.
+     | depends on: Phase 5
+     | verified: yes (typecheck + build green)
+
+T601 | completed | 6.2 Spotlight (Layout C) render layer
+     | files: lib/signal/blocks.ts, components/signal/beacon-card.tsx (new),
+       components/signal/wall-disclosure.tsx (new), app/u/[handle]/page.tsx
+     | ProfileLayout union gains "spotlight" (isProfileLayout / resolveLayout
+       accept it; the signals.layout CHECK already permitted it, so
+       MIGRATION-FREE, no types regen). SpotlightLayout: centered hero
+       (avatar/name/headline centered), the about block as a centered editorial
+       lede (excluded from cards, no double render), every other block in owner
+       order inside a luminous BeaconCard, a wrapping StatsStrip from
+       already-loaded bundle data (no new query), and the Wall behind a labeled
+       disclosure. Reuses existing block components, caches (loadBoardTopN), and
+       graceful degrade. DOM order = visual order (single column). Beacon glow is
+       FULLY STATIC (accent box-shadow + aria-hidden hairline, no keyframes), so
+       reduced motion has nothing to disable and contrast is unaffected.
+       WallDisclosure is SSR-expanded and collapses on mount via the hidden
+       attribute: collapsed it leaves the tab order + a11y tree (keyboard user
+       skips past without expanding); expanded its controls sit in natural,
+       untrapped tab order; aria-expanded/controls correct, region id always in
+       the DOM, no hydration mismatch. Mounted only when posts > 0.
+     | depends on: T600
+     | verified: yes (typecheck + build green)
+
+T602 | completed | 6.3 expose Layout C in the builder
+     | files: lib/signal/blocks.ts, app/my-beacon/signal/layout-builder.tsx
+     | Added spotlight to PROFILE_LAYOUTS so the builder offers a third radio
+       ("Layout C (spotlight)"), updated the helper copy to describe all three
+       layouts (incl. the mobile Profile info panel for B), and a spoken
+       confirmation via the existing single re-announcing live region
+       (LAYOUT_ANNOUNCE map). saveLayout already validates via isProfileLayout.
+     | depends on: T601
+     | verified: yes (typecheck + build green)
+
+T603 | completed | 6.4 three sub-agent reviews + fixes + ship
+     | reviews: accessibility (primary), implementation, security over the full
+       Phase 6 diff (4a23567..555b21a).
+     | security: PASS, CLEAN at every severity. Presentational diff reusing the
+       existing gated bundle + owner-only saveLayout write path. BeaconCard inline
+       style hex comes only from accentInkColor -> fixed palette (unknown slug
+       falls back to default), no attacker-controlled CSS; lede/stats are
+       React-escaped text from the gated bundle; no dangerouslySetInnerHTML, no
+       new network/secret/redirect/SSRF; client effects all clean up listeners +
+       body style. DB CHECK confirmed allows 'spotlight' (migration-free claim
+       verified).
+     | accessibility (primary): no blockers. Two IMPORTANT fixed in
+       sidebar-shell.tsx - (1) aria-controls on the trigger was a dangling IDREF
+       while the portal dialog is closed, now conditional on open; (2) focus
+       return on a resize-to-desktop-while-open could target a detached node, now
+       guarded with isConnected. One MINOR fixed - the trigger aria-label clobbered
+       the visible "Bio, links, and more" hint, removed so the visible text is the
+       accessible name. Confirmed: focus trap both directions, Escape, scroll lock,
+       no duplicate ids, single h1, h2 hierarchy (no double Wall heading), static
+       glow, hidden-attribute Wall disclosure skip-past/natural-order, 44px
+       targets, contrast (no white-on-accent), fieldset radios + single announcer.
+     | implementation: no blockers. Same aria-controls IMPORTANT (fixed) + a dead
+       triggerRef (removed). Confirmed: RSC pattern (async server blocks passed as
+       children/props into client SidebarShell/WallDisclosure + server BeaconCard),
+       breakpoint matches the grid, no-sidebar fallback preserves prior B, about
+       extracted once, WallDisclosure gated on posts>0 (agrees with WallBlock's
+       null-on-zero), stats from bundle w/ no new query, all PROFILE_LAYOUTS
+       consumers consistent, no em-dashes / AI-tell punctuation, Layout A + desktop
+       B non-regression.
+     | files: components/signal/sidebar-shell.tsx
+     | verified: yes (typecheck + build green after fixes). PHASE 6 FULLY REVIEWED
+       + COMPLETE.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
