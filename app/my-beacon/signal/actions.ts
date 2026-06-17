@@ -14,6 +14,11 @@ import type { Json } from "@/lib/database.types";
 import { isNflTeamCode } from "@/lib/nfl-teams";
 import { signalTag, revalidateProfileCaches } from "@/lib/signal-profile";
 import {
+  isProfileLayout,
+  coerceBlocks,
+  serializeLayoutConfig,
+} from "@/lib/signal/blocks";
+import {
   parseSleeperLeagueSettings,
   mergeSleeperLeagueSettings,
 } from "@/lib/sleeper-league-settings";
@@ -509,6 +514,74 @@ export async function saveSignalLeagues(
     );
   if (error) {
     return { ok: false, error: "Could not save your featured leagues. Please try again." };
+  }
+
+  revalidatePath("/my-beacon/signal");
+  await revalidateProfileCaches(supabase, user.id);
+  return { ok: true };
+}
+
+/**
+ * Persist the profile layout (Layout A "feed" vs Layout B "sidebar") and the
+ * ordered block list (signals.layout_config). Input is untrusted: the layout is
+ * validated against the allowed set and the blocks are coerced (shape, singleton
+ * uniqueness, id dedupe, MAX_BLOCKS cap). Board and league references are then
+ * filtered to the entities the owner has actually featured (profile_visible
+ * boards and signal_league_ids leagues), so layout_config never stores a
+ * reference the owner cannot use. The public resolver also degrades gracefully if
+ * a stored reference later becomes unavailable.
+ */
+export async function saveLayout(
+  layout: string,
+  blocks: unknown,
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "You need to be signed in." };
+
+  if (!isProfileLayout(layout)) {
+    return { ok: false, error: "That is not a valid layout." };
+  }
+
+  const cleaned = coerceBlocks(blocks);
+
+  const { data: boardRows } = await supabase
+    .from("user_ranking_boards")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("profile_visible", true);
+  const allowedBoardIds = new Set((boardRows ?? []).map((b) => b.id));
+
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("sleeper_league_settings")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const allowedLeagueIds = new Set(
+    parseSleeperLeagueSettings(prefs?.sleeper_league_settings).signal_league_ids ??
+      [],
+  );
+
+  const filtered = cleaned.filter((block) => {
+    if (block.type === "board_top_n") return allowedBoardIds.has(block.boardId);
+    if (block.type === "league_card") {
+      return allowedLeagueIds.has(block.sleeperLeagueId);
+    }
+    return true;
+  });
+
+  const { error } = await supabase
+    .from("signals")
+    .update({
+      layout,
+      layout_config: serializeLayoutConfig(filtered) as unknown as Json,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id);
+  if (error) {
+    return { ok: false, error: "Could not save your layout. Please try again." };
   }
 
   revalidatePath("/my-beacon/signal");

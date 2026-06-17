@@ -19,6 +19,14 @@ import {
   SignalLeaguesManager,
   type SignalLeagueOption,
 } from "./signal-leagues-manager";
+import { LayoutBuilder } from "./layout-builder";
+import { saveLayout } from "./actions";
+import {
+  type SignalBlock,
+  parseLayoutConfig,
+  resolveLayout,
+  seedBlocksFromProfile,
+} from "@/lib/signal/blocks";
 
 /** Coerce the signals.links jsonb into a typed, shape-safe list for the editor.
  * The DB shape guard (migration 0069) already enforces this, but we parse
@@ -59,7 +67,7 @@ export default async function MySignalPage() {
   const { data: signal } = await supabase
     .from("signals")
     .select(
-      "id, handle, display_name, headline, bio, avatar_path, banner_path, status, visibility, accent, links, favorite_team, favorite_player_id",
+      "id, handle, display_name, headline, bio, avatar_path, banner_path, status, visibility, accent, layout, layout_config, links, favorite_team, favorite_player_id",
     )
     .eq("user_id", user!.id)
     .maybeSingle();
@@ -181,6 +189,48 @@ export default async function MySignalPage() {
         }));
       }
     }
+  }
+
+  // Layout builder inputs (only meaningful once a Signal exists). The board
+  // picker lists the owner's profile_visible boards; the league picker lists the
+  // featured (signal_league_ids) leagues that are actually synced, in order.
+  let profileBoardOptions: { id: string; name: string }[] = [];
+  if (signal) {
+    const { data: boardRows } = await supabase
+      .from("user_ranking_boards")
+      .select("id, name, profile_is_primary, profile_sort")
+      .eq("user_id", user!.id)
+      .eq("profile_visible", true)
+      .order("profile_is_primary", { ascending: false })
+      .order("profile_sort", { ascending: true });
+    profileBoardOptions = (boardRows ?? []).map((b) => ({ id: b.id, name: b.name }));
+  }
+
+  const leagueBySleeperId = new Map(
+    leagueOptions.map((l) => [l.sleeperLeagueId, l]),
+  );
+  const featuredLeagueOptions = (settings.signal_league_ids ?? [])
+    .map((id) => leagueBySleeperId.get(id))
+    .filter((l): l is SignalLeagueOption => !!l)
+    .map((l) => ({
+      sleeperLeagueId: l.sleeperLeagueId,
+      name: l.name,
+      season: l.season,
+    }));
+
+  // The builder's initial state mirrors what the public resolver renders: parse
+  // the stored layout_config, or seed from current data when none exists yet, so
+  // "what you arrange" equals "what is live".
+  const initialLayout = resolveLayout(signal?.layout);
+  let initialBlocks: SignalBlock[] = parseLayoutConfig(signal?.layout_config);
+  if (initialBlocks.length === 0 && signal) {
+    initialBlocks = seedBlocksFromProfile({
+      hasBio: !!(signal.bio && signal.bio.trim()),
+      hasFavorites: !!(signal.favorite_team || signal.favorite_player_id),
+      hasLinks: initialLinks.length > 0,
+      boardIds: profileBoardOptions.map((b) => b.id),
+      sleeperLeagueIds: featuredLeagueOptions.map((l) => l.sleeperLeagueId),
+    });
   }
 
   return (
@@ -314,6 +364,29 @@ export default async function MySignalPage() {
               <SignalLeaguesManager
                 leagues={leagueOptions}
                 initialFeaturedIds={settings.signal_league_ids ?? []}
+              />
+            </div>
+          </section>
+
+          <section aria-labelledby="signal-layout-heading">
+            <h2
+              id="signal-layout-heading"
+              className="text-lg font-semibold tracking-tight text-ink"
+            >
+              Profile layout
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+              Choose your layout and arrange the blocks visitors see. Removing a
+              block here only takes it off your layout; it never deletes your
+              boards, leagues, links, or favorites. The Wall always stays below.
+            </p>
+            <div className="mt-4 max-w-2xl">
+              <LayoutBuilder
+                initialLayout={initialLayout}
+                initialBlocks={initialBlocks}
+                boardOptions={profileBoardOptions}
+                leagueOptions={featuredLeagueOptions}
+                onSave={saveLayout}
               />
             </div>
           </section>
