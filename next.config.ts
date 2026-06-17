@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
     SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
   },
   typedRoutes: false,
+  // sharp is a native module used by the Signal image-upload routes
+  // (/api/signal/media, /api/signal/post-image, /api/admin/signal/reaction-emoji).
+  // Mark it external so Next traces and ships its native binary with the
+  // serverless function instead of bundling it; a bundled native binding fails
+  // to load on Vercel and crashes the function at import time with
+  // FUNCTION_INVOCATION_FAILED before any handler code (or its try/catch) runs.
+  serverExternalPackages: ["sharp"],
   // The League Sync tool was renamed to League Pulse. Keep old shared links
   // and bookmarks working by redirecting the legacy path to the new one.
   async redirects() {
