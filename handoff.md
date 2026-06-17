@@ -1,134 +1,143 @@
-# Handoff: Signal Phase 6 COMPLETE (mobile sidebar drawer + Layout C "Spotlight")
+# Handoff: Signal Phase 7 COMPLETE (root /{handle} canonical alias)
 
-Phase 6 of Signal is shipped. Two parts:
+Phase 7 is shipped and fully reviewed. A Signal profile now reads as a standalone
+website: the public-facing canonical URL is ffbeacon.com/{handle}. The old
+/u/{handle} paths are kept forever as permanent 308 redirects. This was purely a
+routing/URL layer: the public render, RLS gating, layouts, and Wall are untouched
+(the render was relocated verbatim into shared components).
 
-1. PART 1 (Layout B mobile): below the lg breakpoint, Layout B's secondary
-   sidebar (about, text, links, favorites) now collapses into an accessible
-   "Profile info" drawer behind a top-bar trigger instead of stacking below the
-   main column. This is an intentional change from the Phase 5 "nothing hidden"
-   stacking rule, resolved as hidden-but-accessible. Layout A is unchanged (it
-   has no sidebar; its blocks are the primary timeline). Desktop Layout B (lg+)
-   is unchanged.
-2. PART 2 (Layout C): signals.layout = "spotlight" now renders a centered
-   landing page reusing the same resolved bundle.blocks as A/B.
-
-Read CLAUDE.md, docs/phase5-plan.md (the Phase 5 block model is the foundation),
-and the "Signal - Phase 6" section of progress.md before continuing.
+Read CLAUDE.md and the "Signal - Phase 7" section of progress.md (T604-T607)
+before continuing.
 
 Commits on `main` (NOT pushed), in order:
-- 5221536 6.1 mobile profile-info drawer (Layout B)
-- 0870217 6.2 Spotlight (Layout C) render layer
-- 555b21a 6.3 expose Layout C in the builder
-- (this session) 6.4 sub-agent review fixes + progress/handoff
+- 57bb6ea  7.A reserve route segments + build-time collision guard
+- bec2bb6  7.B root /{handle} alias via shared render (additive)
+- df86b16  7.C flip canonical to root + 308 /u shims
+- (this session) review fixes (handle hint + em-dash) + progress/handoff
 
 `.claude/settings.local.json` is intentionally NOT committed.
 
-## What Phase 6 delivers
+## What Phase 7 delivers
 
-PART 1 - mobile sidebar drawer (Layout B only):
-- components/signal/sidebar-shell.tsx (new, client): owns the Layout B body. It
-  renders the sidebar blocks EXACTLY ONCE, switching the whole subtree on mount +
-  breakpoint state (matchMedia "(max-width: 1023px)", matching the
-  lg:grid-cols-[2fr_1fr] split) rather than CSS. Rendering twice (a desktop aside
-  plus a CSS-hidden mobile drawer) would put duplicate hard-coded ids in the DOM
-  (signal-favorites-heading, signal-links-heading, ...) and break aria-labelledby.
-- Progressive enhancement: SSR / first client render / no-JS renders the inline
-  two-column tree exactly as Phase 5 (sidebar stacks below on small screens, so
-  nothing is lost without JS). After mount, below lg, it collapses into the
-  drawer; desktop keeps the inline aside.
-- The drawer reuses the proven mobile-menu focus model: portal to document.body,
-  role=dialog + aria-modal, Tab focus trap (both directions), Escape, body scroll
-  lock (saves/restores prevOverflow), focus return. Focus is deferred 80ms so a
-  screen reader does not land on an off-screen panel. The slide is motion-safe
-  only (reduced motion = instant). aria-controls is conditional on open (the
-  portal dialog only exists while open, so it is never a dangling IDREF). The
-  trigger's visible text "Profile info / Bio, links, and more" is its accessible
-  name (no aria-label clobbering the hint).
+RESOLUTION MECHANISM: a root dynamic segment, NOT a middleware rewrite.
+- app/[handle]/page.tsx and app/[handle]/rankings/[boardId]/page.tsx are thin
+  wrappers: they normalize the handle, reject it via validateHandleFormat (non-
+  handle / dotted / file-like paths) and isReservedRouteSegment (defense in
+  depth), then delegate to the shared render. Middleware (middleware.ts) was NOT
+  touched: it still only does the OAuth ?code= forward + updateSession.
+- WHY this is safe from shadowing: Next.js route precedence. Every literal
+  top-level route with a page (/rankings, /about, /tools, /guides, /join,
+  /login, /my-beacon, /privacy, /terms, /admin, ...) is matched by its own
+  folder and never reaches [handle]. Folders with ONLY dynamic children and no
+  index page (/players -> players/[slug], /leagues -> leagues/[league_id], /u,
+  /auth, /api, /author, /actions) DO fall through to [handle]; every one of
+  those names is reserved, so the route returns a noindex not-found, never a
+  profile. This is exactly why the collision guard reserves EVERY top-level
+  folder, not just ones with a page.
 
-PART 2 - Layout C "Spotlight":
-- ProfileLayout union now includes "spotlight" (lib/signal/blocks.ts). The
-  signals.layout CHECK already permitted it (migration 0059), so Phase 6 is
-  MIGRATION-FREE: no schema change, no types regen, no new RLS to verify.
-  isProfileLayout / resolveLayout accept it; PROFILE_LAYOUTS includes it so the
-  builder offers a third radio.
-- app/u/[handle]/page.tsx SpotlightLayout: centered hero (avatar/name/headline
-  centered via heroInner), the about block rendered as a centered editorial lede
-  (extracted from blocks and EXCLUDED from the card list, so no double render),
-  every other block in the owner's order wrapped in a BeaconCard, a wrapping
-  StatsStrip (boards/leagues/favorite team/Wall post counts from already-loaded
-  bundle data, no new query), and the Wall behind a labeled disclosure.
-- components/signal/beacon-card.tsx (new, server): luminous card chrome wrapping
-  any existing block component without changing its semantics. The glow is FULLY
-  STATIC (accent box-shadow + an aria-hidden top hairline, no keyframes), so
-  reduced motion has nothing to disable and contrast is unaffected (text inside
-  keeps its own colors; the accent is decorative only).
-- components/signal/wall-disclosure.tsx (new, client): SSR-expanded, collapses on
-  mount. Toggles the HTML `hidden` attribute on a stable useId region. Collapsed:
-  the region (composer, comment, reaction controls) leaves the tab order + a11y
-  tree, so a keyboard user tabs the single toggle and skips past without
-  expanding. Expanded: the controls sit in natural, untrapped tab order.
-  aria-expanded/controls track state; the region id is always in the DOM (no
-  dangling ref); no hydration mismatch (first client render == SSR). Mounted only
-  when posts > 0 (WallBlock returns null on 0 posts, so the guards agree).
-- It reads the SAME resolved bundle.blocks as A/B (one presentational path):
-  existing block components, caches (loadBoardTopN tagged board:{id}), and
-  graceful degrade are all reused. DOM order = visual order (single column).
+SHARED RENDER (byte-identical /u and root):
+- components/signal/profile-view.tsx exports buildProfileMetadata(handle,
+  {canonicalBase}) + async <ProfileView rawHandle canonicalBase>. It is a
+  verbatim relocation of the old app/u/[handle]/page.tsx body.
+- components/signal/board-view.tsx exports buildBoardMetadata + <BoardView>,
+  a verbatim relocation of the old board page.
+- canonicalBase is the ONLY behavioral parameter. It prefixes the canonical
+  <link>, the casing 301 target, the handle-history 301 target, and (board view)
+  the back-to-profile links. Root passes "" (canonical). The historical "/u"
+  value is no longer passed by any route (the /u pages were deleted).
+
+COLLISION SAFETY (single source of truth + build guard):
+- lib/signal/reserved-routes.ts RESERVED_ROUTE_SEGMENTS is the canonical list of
+  the 17 top-level route segments + isReservedRouteSegment() for the runtime
+  resolver.
+- Migration 0076 seeded the 5 that were missing from the 0059 seed (players,
+  guides, join, auth, actions) into signal_reserved_handles (the table the 0068
+  claim-time trigger enforces). Data-only INSERT, types unchanged.
+- scripts/check-reserved-routes.ts runs as `prebuild`, so `npm run build` FAILS
+  if (leg 1, always) any top-level app/ folder is missing from
+  RESERVED_ROUTE_SEGMENTS, or (leg 2, when Supabase creds present) any constant
+  entry is missing from signal_reserved_handles. Adding app/blog/ later cannot
+  ship until 'blog' is added to the constant AND seeded.
+
+CANONICAL + REDIRECTS:
+- Root /{handle} is canonical. generateMetadata canonical, OG url, sitemap, and
+  every internal link point at root.
+- /u/{handle} and /u/{handle}/rankings/{boardId} are permanent 308 redirects to
+  root, defined in next.config.ts redirects() (NOT a page shim). A streamed page
+  component's permanentRedirect emits a soft 200 + meta-refresh, which would
+  weaken the canonical signal, so the config-level redirect (real 308, runs
+  before routing) is the correct mechanism. permanent:true (308) matches the
+  existing /tools/league-sync redirect convention; SEO-equivalent to 301.
 
 ## Key files
 
-- components/signal/sidebar-shell.tsx: Layout B shell + mobile drawer.
-- components/signal/beacon-card.tsx: Spotlight static-glow card wrapper.
-- components/signal/wall-disclosure.tsx: Spotlight Wall disclosure.
-- app/u/[handle]/page.tsx: ProfileBody (isSpotlight hero), SpotlightLayout,
-  StatsStrip, SidebarLayout now delegating to SidebarShell.
-- lib/signal/blocks.ts: ProfileLayout gains "spotlight"; PROFILE_LAYOUTS,
-  isProfileLayout, resolveLayout updated.
-- app/my-beacon/signal/layout-builder.tsx: Layout C radio + helper copy +
-  LAYOUT_ANNOUNCE.
+- app/[handle]/page.tsx, app/[handle]/rankings/[boardId]/page.tsx: root wrappers
+  (format + reserved gate, delegate to shared view, canonicalBase "").
+- components/signal/profile-view.tsx, components/signal/board-view.tsx: the
+  shared renders (verbatim relocation + canonicalBase).
+- lib/signal/reserved-routes.ts: RESERVED_ROUTE_SEGMENTS + isReservedRouteSegment.
+- scripts/check-reserved-routes.ts: prebuild collision guard.
+- supabase/migrations/0076_signal_reserve_route_segments.sql: reserved seed.
+- next.config.ts: the two /u -> root 308 redirects.
+- app/u/[handle]/: now holds ONLY comment-actions.ts + reaction-actions.ts (Wall
+  server actions, still imported by components). The page files were deleted.
+- Flipped to root: app/sitemap.ts, components/signal/signal-block.tsx,
+  components/signal/comment-section.tsx, app/my-beacon/signal/page.tsx,
+  app/my-beacon/signal/publish-controls.tsx, app/my-beacon/signal/handle-manager.tsx.
 
-## Review (6.4)
+## Review (three sub-agents over 2c0d2e6..df86b16, security primary)
 
-Three sub-agents over the full Phase 6 diff (4a23567..555b21a). No blockers.
-- Security: PASS, CLEAN at every severity. Presentational, reuses the gated
-  bundle + owner-only saveLayout write path. BeaconCard inline-style hex comes
-  only from the fixed accent palette (unknown slug -> default), no
-  attacker-controlled CSS; lede/stats are React-escaped text from the gated
-  bundle; no dangerouslySetInnerHTML, no new network/secret/redirect/SSRF; client
-  effects all clean up. DB CHECK confirmed allows 'spotlight'.
-- Accessibility (primary): two IMPORTANT fixed in sidebar-shell.tsx (dangling
-  aria-controls -> conditional on open; focus return on resize-while-open ->
-  isConnected guard) plus one MINOR (trigger aria-label clobbered the visible
-  hint -> removed). Everything else PASS.
-- Implementation: same aria-controls IMPORTANT (fixed) + a dead triggerRef
-  (removed). RSC pattern, breakpoint match, no-sidebar fallback, about extracted
-  once, stats with no new query, all confirmed. Layout A + desktop B
-  non-regression confirmed.
+- Security: PASS, no blockers/important. Route-collision defense, preserved RLS
+  gating (verbatim extraction), no open redirect, 0076 data-only, safe catch-all
+  input handling, no secret/XSS/CSRF/IDOR. One pre-existing em-dash noted.
+- Implementation: PASS. Byte-identical relocation, canonicalBase correct (no
+  double slash), guard + constant + prebuild + 0076 all correct, no dead code
+  beyond the kept action files.
+- Accessibility: one IMPORTANT fixed. Render a11y structure byte-identical; no
+  new interactive elements; no data hidden at any breakpoint.
+- Fixes applied: handle-manager.tsx:109 hint /u/your-handle -> /your-handle
+  (static string the /u/ grep missed); next.config.ts:14 em-dash -> comma.
 
 ## Verification gate (every session)
 
-`npm run typecheck` then `npm run build`. Lint is not configured. No em-dashes /
-AI-tell punctuation (CLAUDE.md rule 6); plain ASCII. One shell command per tool
-call (no && chaining). Schema via MCP + saved migration + types regen + anon/auth
-RLS verification (none needed this phase: migration-free). Commit to main, do not
-push.
+`npm run typecheck` then `npm run build`. The build runs the prebuild collision
+guard automatically. Lint is not configured. No em-dashes / AI-tell punctuation
+(CLAUDE.md rule 6); plain ASCII. One shell command per tool call (no && chaining).
+Schema via MCP + saved migration + types regen + anon/auth RLS verification (this
+phase: one data-only seed, no DDL, so types unchanged). Commit to main, do not push.
+
+## Known characteristics (pre-existing, documented, not bugs)
+
+1. Nonexistent root handles and the /players,/leagues fall-throughs render the
+   not-found UI with HTTP 200 (soft 404), the same force-dynamic behavior
+   /u/[handle] and /leagues/[league_id] already had. robots noindex,nofollow is
+   applied, so there is no index leak. If a hard 404 status is wanted later, it
+   would need a non-streaming approach (out of Phase 7 scope).
+2. The in-page casing + handle-history redirects at root keep Phase 1's soft
+   (200 + meta-refresh) redirect behavior because they fire mid-stream in a
+   force-dynamic page. The canonical <link> still points at the correct root URL,
+   so SEO is preserved. Only the new /u migration uses a hard 308 (config).
+   Could not be exercised live in dev (signals table is empty: no published
+   profile to trigger a casing/history redirect); the logic is a verbatim port
+   of the Phase 1 code with canonicalBase "".
 
 ## Carry-forwards (unchanged)
 
 1. GIPHY PRODUCTION KEY: still on a GIPHY BETA key. Apply for a production key
    before public launch. The "Powered by GIPHY" attribution is built in.
 
-## Possible later enhancements (NOT Phase 6)
+## How to verify Phase 7 live (when a published profile exists)
 
-- Manual column assignment in Layout B (today placement is by type via
-  lib/signal/blocks.ts blockColumn).
-- A live layout preview in the builder (Spotlight, like A/B, has none today).
-- Re-introducing value_movers (belongs with a future source/format-context
-  decision) and recent_posts blocks.
-- In Spotlight, the about block becomes a lede with no "About" heading/landmark
-  (deliberate editorial hero, flagged as a MINOR parity divergence from A/B).
+Run `npm run build` then `PORT=3100 npm run start` and check:
+- /u/{handle} -> 308 -> /{handle}; /u/{handle}/rankings/{boardId} -> 308 -> root.
+- /{handle} canonical <link> is the root URL; OG image still /api/og/signal/...
+- /u/{Mixed} and a historical handle redirect to the canonical root handle.
+- /rankings, /players, /about, /tools, /sitemap.xml all 200 and serve real pages.
+- /?code=test still 307 -> /auth/callback.
+- A reserved-but-pageless path (/players, /leagues) renders noindex not-found.
 
-## Next up
+## Next milestone (unchanged)
 
-The next milestone items are at the bottom of progress.md ("Next milestone"):
-news pipeline, vote matchups, weekly content cron, IndexNow + sitemap, AdSense
-readiness, and the Phase 12 follow-ups.
+News pipeline, vote matchups, weekly content cron, IndexNow + sitemap, AdSense
+readiness, and the Phase 12 follow-ups (real commissioner detection, edge runtime
+for OG, Geist woff2 in OG cards, toast-style refresh feedback).

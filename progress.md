@@ -1696,6 +1696,37 @@ T606 | completed | Stage C: flip canonical to root + 301 (308) /u shims
        preserving) matches the existing /tools/league-sync redirect convention; it
        is SEO-equivalent to 301.
 
+T607 | completed | Phase 7 three sub-agent reviews (security primary + impl + a11y)
+     | over the full Phase 7 diff (2c0d2e6..df86b16). Spawned as agents, not
+       reviewed inline.
+     | security: PASS, no blockers/important. Verified route-collision defense
+       (router precedence + format gate + reserved set + build guard + seed
+       migration), RLS gating preserved verbatim in the extracted views, no open
+       redirect (all targets are canonicalBase "" + DB-validated handle/board id),
+       0076 data-only, catch-all input safely format-gated (dotted/encoded/over-
+       length -> notFound), no secret/XSS/CSRF/IDOR, guard script dev/build-only.
+     | implementation: PASS. Byte-identical relocation confirmed (diffed against
+       2c0d2e6 originals), canonicalBase path-building correct (no double slash),
+       guard folder-filter + 17-segment constant + prebuild wiring correct, 0076
+       applied + all 17 seeded, next.config single-segment redirects correct, dead
+       code only the kept action files.
+     | accessibility: one IMPORTANT (now fixed). Otherwise PASS: render a11y
+       structure byte-identical (single h1, landmarks, status banner, sr-only
+       stats, tier sections), no new interactive elements, no data hidden at any
+       breakpoint, no AI-tell punctuation in Phase 7 additions.
+     | fixes applied (review-fixes commit):
+       - app/my-beacon/signal/handle-manager.tsx:109 stale handle-input hint still
+         read "{SITE.url}/u/your-handle" (a static string my /u/ grep missed); a
+         screen-reader user claiming a handle heard the legacy address. Flipped to
+         "{SITE.url}/your-handle" so the announced/visible public address matches
+         the new canonical root URL. (Flagged IMPORTANT by a11y, MINOR by impl.)
+       - next.config.ts:14 pre-existing em-dash in a Phase-7-touched file (rule 6);
+         rewritten with a comma.
+     | verified: yes (typecheck + build green after fixes; prebuild guard ran;
+       git grep "/u/" clean except action-file imports + redirect source patterns)
+     | PHASE 7 FULLY REVIEWED + COMPLETE. Root /{handle} is canonical; /u 308s
+       forever; no route can collide with a handle (build-guarded).
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live

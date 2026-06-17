@@ -106,7 +106,7 @@ export function HandleManager({ currentHandle }: { currentHandle: string | null 
         {isClaim ? "Choose your handle" : "Your handle"}
       </label>
       <p id={hintId} className="mt-1 text-xs text-ink-subtle">
-        Your public address is {SITE.url}/u/your-handle. 3 to {HANDLE_MAX} lowercase
+        Your public address is {SITE.url}/your-handle. 3 to {HANDLE_MAX} lowercase
         letters, numbers, or underscores.
       </p>
 
