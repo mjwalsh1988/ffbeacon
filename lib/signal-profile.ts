@@ -8,6 +8,13 @@ import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import type { BoardScope } from "@/lib/ranking-boards";
 import { isBoardScope } from "@/lib/ranking-boards";
 import { nflTeamName } from "@/lib/nfl-teams";
+import {
+  type ProfileLayout,
+  DEFAULT_LAYOUT,
+  parseLayoutConfig,
+  resolveLayout,
+  seedBlocksFromProfile,
+} from "@/lib/signal/blocks";
 
 /**
  * Server-only data layer for the public Signal profile (/u/[handle]) and the
@@ -90,6 +97,7 @@ export type SignalProfileRow = {
   status: "draft" | "published";
   visibility: "public" | "private";
   hidden: boolean;
+  layout: ProfileLayout;
 };
 
 export type FeaturedBoardMeta = {
@@ -124,8 +132,28 @@ export type ProfileFavorites = {
   } | null;
 };
 
+/**
+ * A render-ready profile block: the layout_config block resolved against the
+ * loaded bundle data. The resolver omits any block whose referenced entity is
+ * gone or no longer public (graceful degrade), so the public page can render
+ * `blocks` directly without re-checking visibility. `about` carries the bio,
+ * `text` its own copy, and the reference blocks carry the live entity.
+ */
+export type ResolvedBlock =
+  | { id: string; type: "about"; bio: string }
+  | { id: string; type: "text"; text: string }
+  | { id: string; type: "links"; links: SignalProfileLink[] }
+  | { id: string; type: "favorites"; favorites: ProfileFavorites }
+  | { id: string; type: "board_top_n"; board: FeaturedBoardMeta }
+  | { id: string; type: "league_card"; league: FeaturedLeagueCard };
+
 export type ProfileBundle = {
   signal: SignalProfileRow | null;
+  layout: ProfileLayout;
+  /** Resolved, ordered, gracefully-degraded blocks. Render these directly. */
+  blocks: ResolvedBlock[];
+  // The raw entity collections are retained for the OG route, sitemap, and any
+  // consumer that wants the full set rather than the block-ordered view.
   boards: FeaturedBoardMeta[];
   leagues: FeaturedLeagueCard[];
   links: SignalProfileLink[];
@@ -323,7 +351,7 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
   const { data: signalRow } = await supabase
     .from("signals")
     .select(
-      "id, user_id, handle, display_name, headline, bio, accent, avatar_path, banner_path, status, visibility, hidden, links, favorite_team, favorite_player_id",
+      "id, user_id, handle, display_name, headline, bio, accent, avatar_path, banner_path, status, visibility, hidden, layout, layout_config, links, favorite_team, favorite_player_id",
     )
     .eq("handle", handle)
     .maybeSingle();
@@ -331,13 +359,16 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
   if (!signalRow) {
     return {
       signal: null,
+      layout: DEFAULT_LAYOUT,
+      blocks: [],
       boards: [],
       leagues: [],
       links: [],
       favorites: EMPTY_FAVORITES,
     };
   }
-  const signal = signalRow as SignalProfileRow;
+  const layout = resolveLayout(signalRow.layout);
+  const signal = { ...(signalRow as SignalProfileRow), layout } satisfies SignalProfileRow;
 
   const links = parseProfileLinks(signalRow.links);
   const favorites = await resolveFavorites(
@@ -383,7 +414,94 @@ async function buildProfileBundle(handle: string): Promise<ProfileBundle> {
 
   const leagues = await loadFeaturedLeagueCards(signal.user_id);
 
-  return { signal, boards, leagues, links, favorites };
+  const blocks = resolveProfileBlocks(signal, signalRow.layout_config, {
+    boards,
+    leagues,
+    links,
+    favorites,
+  });
+
+  return { signal, layout, blocks, boards, leagues, links, favorites };
+}
+
+/**
+ * Resolve the stored layout_config blocks against the loaded bundle data into an
+ * ordered, render-ready list. GRACEFUL DEGRADE: a block is dropped when its
+ * referenced entity is absent from the bundle, which is exactly the set of
+ * entities that are publicly available right now (boards = profile_visible only,
+ * leagues = synced + featured only, links/favorites/bio = present and non-empty).
+ * So a board later made private or a league later un-synced renders nothing,
+ * never errors, and never leaks. When layout_config has no blocks yet (an
+ * un-customized profile), the default seed is produced so existing live profiles
+ * keep showing their content until the owner customizes.
+ */
+function resolveProfileBlocks(
+  signal: SignalProfileRow,
+  rawLayoutConfig: unknown,
+  data: {
+    boards: FeaturedBoardMeta[];
+    leagues: FeaturedLeagueCard[];
+    links: SignalProfileLink[];
+    favorites: ProfileFavorites;
+  },
+): ResolvedBlock[] {
+  const hasFavorites = !!(data.favorites.team || data.favorites.player);
+  const bio = signal.bio?.trim() ?? "";
+
+  let blocks = parseLayoutConfig(rawLayoutConfig);
+  if (blocks.length === 0) {
+    blocks = seedBlocksFromProfile({
+      hasBio: bio.length > 0,
+      hasFavorites,
+      hasLinks: data.links.length > 0,
+      boardIds: data.boards.map((b) => b.id),
+      sleeperLeagueIds: data.leagues.map((l) => l.sleeperLeagueId),
+    });
+  }
+
+  const boardById = new Map(data.boards.map((b) => [b.id, b]));
+  const leagueById = new Map(data.leagues.map((l) => [l.sleeperLeagueId, l]));
+
+  const resolved: ResolvedBlock[] = [];
+  for (const block of blocks) {
+    switch (block.type) {
+      case "about":
+        if (bio.length > 0) resolved.push({ id: block.id, type: "about", bio });
+        break;
+      case "text": {
+        const text = block.text.trim();
+        if (text.length > 0) resolved.push({ id: block.id, type: "text", text });
+        break;
+      }
+      case "links":
+        if (data.links.length > 0) {
+          resolved.push({ id: block.id, type: "links", links: data.links });
+        }
+        break;
+      case "favorites":
+        if (hasFavorites) {
+          resolved.push({
+            id: block.id,
+            type: "favorites",
+            favorites: data.favorites,
+          });
+        }
+        break;
+      case "board_top_n": {
+        const board = boardById.get(block.boardId);
+        if (board) resolved.push({ id: block.id, type: "board_top_n", board });
+        break;
+      }
+      case "league_card": {
+        const league = leagueById.get(block.sleeperLeagueId);
+        if (league) {
+          resolved.push({ id: block.id, type: "league_card", league });
+        }
+        break;
+      }
+    }
+  }
+  return resolved;
 }
 
 /** Resolve the stored favorite team code + player id into display-ready data.
