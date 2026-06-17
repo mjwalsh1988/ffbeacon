@@ -1782,6 +1782,51 @@ T610 | completed | RLS + trigger verification (anon/auth follow read/write)
        row present (list is authenticated-only). DB left clean (0 rows, count 0).
      | depends on: T608
      | verified: yes
+T611 | completed | Phase 8 three sub-agent reviews (security primary + impl + a11y)
+     | over the full Phase 8 diff (f1e16cf..72c4184). Spawned as agents, not
+       reviewed inline. All three PASS, zero blockers/important.
+     | security: PASS. follower_user_id always = auth.uid() (never client), own-row
+       RLS backstop, delete pinned to caller; self-follow blocked (CHECK) + no UI
+       path; error codes mapped to friendly copy (no raw leak); loadFollowList
+       session-gated before the admin read + live-only filter (no private/draft
+       handle leak); count read off the denormalized column; NO cache bust; no
+       XSS/secret/open-redirect/SSRF. One MINOR: distinct-user follow-bombing is
+       only soft-throttled (accepted; durable per-user cap belongs with the For You
+       feed, which is deferred).
+     | implementation: PASS. Fresh count read, idempotent toggle, scoped unfollow,
+       request-sequence guard, live-only list w/ preserved order, props-derived
+       display + router.refresh (reaction-bar parity), both viewer paths wired,
+       database.types.ts unchanged. One MINOR (optimistic announcement count) +
+       2 NITs.
+     | accessibility: PASS. aria-pressed label-in-name toggle, aria-busy over
+       disabled, single polite + single assertive region (no nested role=alert),
+       anon sign-in link, owner has no follow button, count exposed to all, full
+       focus-trap dialog (focus return guarded on isConnected), decorative avatars,
+       no competing heading, AAA/AA contrast, 44px targets, no data hidden at any
+       breakpoint, no AI-tell punctuation. One MINOR + 2 NITs.
+     | fixes applied (this commit):
+       - follow-control.tsx: the success announcement no longer includes an
+         optimistic "+1" count (could overstate by one on a stale re-follow or a
+         concurrent follow); it now announces the action only ("Following X." /
+         "Unfollowed X."), and the authoritative count stays on the count button
+         after router.refresh(). Flagged MINOR by both impl and a11y.
+       - follow-list-modal.tsx: modal tab buttons bumped h-10 -> h-11 for full 44px
+         tap-target consistency with the close button and list rows (a11y NIT).
+     | accepted / not fixed (documented): the soft follow throttle (revisit with a
+       durable cap when the For You feed ships); the "Showing 1 following" wording
+       (grammatically fine, by design).
+     | verified: yes (typecheck + build green after fixes; prebuild guard ran)
+     | PHASE 8 FULLY REVIEWED + COMPLETE.
+
+### SIGNAL BUILD COMPLETE (Phases 0-8)
+The Signal creator-profile feature is complete end to end: schema/RLS/moderation
+(0), handles + identity + image hardening + public Layout A (1), featured boards +
+leagues + caching + OG + sitemap (2), customization: accent/links/favorites (3),
+the full Wall: text + images + comments + GIFs + emoji + reactions + moderation
+(4), the profile block builder + Layout A/B (5), mobile sidebar drawer + Layout C
+Spotlight (6), root /{handle} canonical URLs (7), and following (8). The For You
+feed remains intentionally DEFERRED (the follow graph that would power it is live;
+only the feed UI is out of scope).
 
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)

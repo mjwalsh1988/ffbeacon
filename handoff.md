@@ -1,143 +1,119 @@
-# Handoff: Signal Phase 7 COMPLETE (root /{handle} canonical alias)
+# Handoff: Signal Phase 8 COMPLETE (following) - SIGNAL BUILD COMPLETE
 
-Phase 7 is shipped and fully reviewed. A Signal profile now reads as a standalone
-website: the public-facing canonical URL is ffbeacon.com/{handle}. The old
-/u/{handle} paths are kept forever as permanent 308 redirects. This was purely a
-routing/URL layer: the public render, RLS gating, layouts, and Wall are untouched
-(the render was relocated verbatim into shared components).
+Phase 8 (following) is shipped and fully reviewed. With it, the entire Signal
+creator-profile feature (Phases 0-8) is COMPLETE. The For You feed remains
+intentionally DEFERRED: the follow graph that would power it is live, only the
+feed UI is out of scope.
 
-Read CLAUDE.md and the "Signal - Phase 7" section of progress.md (T604-T607)
-before continuing.
+Read CLAUDE.md and the "Signal - Phase 8" + "SIGNAL BUILD COMPLETE" sections of
+progress.md (T608-T611) before continuing.
 
 Commits on `main` (NOT pushed), in order:
-- 57bb6ea  7.A reserve route segments + build-time collision guard
-- bec2bb6  7.B root /{handle} alias via shared render (additive)
-- df86b16  7.C flip canonical to root + 308 /u shims
-- (this session) review fixes (handle hint + em-dash) + progress/handoff
+- 72c4184  feat(signal): Phase 8 following (follow button + count + list modal)
+- (this session) Phase 8 sub-agent review fixes + progress/handoff
 
 `.claude/settings.local.json` is intentionally NOT committed.
 
-## What Phase 7 delivers
+## What Phase 8 delivers
 
-RESOLUTION MECHANISM: a root dynamic segment, NOT a middleware rewrite.
-- app/[handle]/page.tsx and app/[handle]/rankings/[boardId]/page.tsx are thin
-  wrappers: they normalize the handle, reject it via validateHandleFormat (non-
-  handle / dotted / file-like paths) and isReservedRouteSegment (defense in
-  depth), then delegate to the shared render. Middleware (middleware.ts) was NOT
-  touched: it still only does the OAuth ?code= forward + updateSession.
-- WHY this is safe from shadowing: Next.js route precedence. Every literal
-  top-level route with a page (/rankings, /about, /tools, /guides, /join,
-  /login, /my-beacon, /privacy, /terms, /admin, ...) is matched by its own
-  folder and never reaches [handle]. Folders with ONLY dynamic children and no
-  index page (/players -> players/[slug], /leagues -> leagues/[league_id], /u,
-  /auth, /api, /author, /actions) DO fall through to [handle]; every one of
-  those names is reserved, so the route returns a noindex not-found, never a
-  profile. This is exactly why the collision guard reserves EVERY top-level
-  folder, not just ones with a page.
+No migration: it wires UI to the EXISTING Phase 0 data layer (migration 0063):
+the signal_follows graph (PK (follower, followee), CHECK follower <> followee, RLS
+anon-none / authed-select-all / insert+delete-own where auth.uid()=follower /
+service-all) and the denormalized signals.follower_count maintained by the
+SECURITY DEFINER AFTER INSERT/DELETE trigger signal_follows_sync_count.
 
-SHARED RENDER (byte-identical /u and root):
-- components/signal/profile-view.tsx exports buildProfileMetadata(handle,
-  {canonicalBase}) + async <ProfileView rawHandle canonicalBase>. It is a
-  verbatim relocation of the old app/u/[handle]/page.tsx body.
-- components/signal/board-view.tsx exports buildBoardMetadata + <BoardView>,
-  a verbatim relocation of the old board page.
-- canonicalBase is the ONLY behavioral parameter. It prefixes the canonical
-  <link>, the casing 301 target, the handle-history 301 target, and (board view)
-  the back-to-profile links. Root passes "" (canonical). The historical "/u"
-  value is no longer passed by any route (the /u pages were deleted).
+- Follow / unfollow on the public profile (root /{handle} and the /u 308 alias):
+  aria-pressed toggle, signed-in non-owners only. Anonymous non-owners get a
+  "Sign in to follow" link (never a broken button). The owner sees the count +
+  list but no follow button (self-follow has no UI path and is blocked by the DB
+  CHECK).
+- Follower COUNT is public, read FRESH from the denormalized follower_count (never
+  a live row count), so it is not baked into the cached profile bundle and a
+  stranger's follow never busts the owner's cache.
+- Follower / following LIST is AUTHENTICATED-ONLY (anon sees the count, not the
+  list), surfaced in a focus-trapped modal dialog opened from the count. It
+  returns only LIVE public profiles, so a private/draft handle is never exposed
+  through the graph. Capped at 100, recency-ordered.
+- Writes go through session-gated server actions; follower_user_id is ALWAYS the
+  authenticated user (never client-supplied). Idempotent toggle; light best-effort
+  in-memory throttle (durable state is bounded by the PK regardless). NO profile-
+  cache bust; the client repaints with router.refresh() (Wall-reactions decision).
 
-COLLISION SAFETY (single source of truth + build guard):
-- lib/signal/reserved-routes.ts RESERVED_ROUTE_SEGMENTS is the canonical list of
-  the 17 top-level route segments + isReservedRouteSegment() for the runtime
-  resolver.
-- Migration 0076 seeded the 5 that were missing from the 0059 seed (players,
-  guides, join, auth, actions) into signal_reserved_handles (the table the 0068
-  claim-time trigger enforces). Data-only INSERT, types unchanged.
-- scripts/check-reserved-routes.ts runs as `prebuild`, so `npm run build` FAILS
-  if (leg 1, always) any top-level app/ folder is missing from
-  RESERVED_ROUTE_SEGMENTS, or (leg 2, when Supabase creds present) any constant
-  entry is missing from signal_reserved_handles. Adding app/blog/ later cannot
-  ship until 'blog' is added to the constant AND seeded.
+## Key files (Phase 8)
 
-CANONICAL + REDIRECTS:
-- Root /{handle} is canonical. generateMetadata canonical, OG url, sitemap, and
-  every internal link point at root.
-- /u/{handle} and /u/{handle}/rankings/{boardId} are permanent 308 redirects to
-  root, defined in next.config.ts redirects() (NOT a page shim). A streamed page
-  component's permanentRedirect emits a soft 200 + meta-refresh, which would
-  weaken the canonical signal, so the config-level redirect (real 308, runs
-  before routing) is the correct mechanism. permanent:true (308) matches the
-  existing /tools/league-sync redirect convention; SEO-equivalent to 301.
+- lib/signal-follow.ts: loadFollowState(profileUserId, viewerUserId) - fresh count
+  + the viewer's own follow row (admin client, fed the session-resolved viewer id).
+- app/u/[handle]/follow-actions.ts: followProfile / unfollowProfile / loadFollowList
+  server actions.
+- components/signal/follow-control.tsx: public count + Follow/Unfollow toggle +
+  list trigger + sign-in link.
+- components/signal/follow-list-modal.tsx: authed-only follower/following dialog
+  (mobile-menu focus-trap model, two aria-pressed tabs, request-sequence guard).
+- components/signal/profile-view.tsx: threads loadFollowState into the header on
+  BOTH the live path and the owner-preview path.
 
-## Key files
+## Review (three sub-agents over f1e16cf..72c4184, security primary)
 
-- app/[handle]/page.tsx, app/[handle]/rankings/[boardId]/page.tsx: root wrappers
-  (format + reserved gate, delegate to shared view, canonicalBase "").
-- components/signal/profile-view.tsx, components/signal/board-view.tsx: the
-  shared renders (verbatim relocation + canonicalBase).
-- lib/signal/reserved-routes.ts: RESERVED_ROUTE_SEGMENTS + isReservedRouteSegment.
-- scripts/check-reserved-routes.ts: prebuild collision guard.
-- supabase/migrations/0076_signal_reserve_route_segments.sql: reserved seed.
-- next.config.ts: the two /u -> root 308 redirects.
-- app/u/[handle]/: now holds ONLY comment-actions.ts + reaction-actions.ts (Wall
-  server actions, still imported by components). The page files were deleted.
-- Flipped to root: app/sitemap.ts, components/signal/signal-block.tsx,
-  components/signal/comment-section.tsx, app/my-beacon/signal/page.tsx,
-  app/my-beacon/signal/publish-controls.tsx, app/my-beacon/signal/handle-manager.tsx.
+All three PASS, zero blockers/important.
+- Security: PASS. Ownership anchored to the session, no impersonation, no raw
+  error leak, list session-gated + live-only, no cache-bust abuse, no XSS/secret/
+  redirect/SSRF. MINOR: follow-bombing distinct users is only soft-throttled
+  (accepted; durable cap belongs with the deferred For You feed).
+- Implementation: PASS. Fresh count, idempotent toggle, scoped unfollow,
+  request-sequence guard, reaction-bar parity, both viewer paths wired, types
+  unchanged. MINOR (optimistic count) + 2 NITs.
+- Accessibility: PASS. aria-pressed label-in-name toggle, aria-busy over disabled,
+  single polite + single assertive region (no nested role=alert), full focus-trap
+  dialog, 44px targets, AAA/AA contrast, no data hidden at any breakpoint.
+- Fixes applied: dropped the optimistic "+1" from the success announcement (now
+  announces the action only; the count button is authoritative after refresh);
+  bumped the modal tab buttons to a full 44px.
 
-## Review (three sub-agents over 2c0d2e6..df86b16, security primary)
+## RLS + trigger verification (Phase 8, via MCP, against real users)
 
-- Security: PASS, no blockers/important. Route-collision defense, preserved RLS
-  gating (verbatim extraction), no open redirect, 0076 data-only, safe catch-all
-  input handling, no secret/XSS/CSRF/IDOR. One pre-existing em-dash noted.
-- Implementation: PASS. Byte-identical relocation, canonicalBase correct (no
-  double slash), guard + constant + prebuild + 0076 all correct, no dead code
-  beyond the kept action files.
-- Accessibility: one IMPORTANT fixed. Render a11y structure byte-identical; no
-  new interactive elements; no data hidden at any breakpoint.
-- Fixes applied: handle-manager.tsx:109 hint /u/your-handle -> /your-handle
-  (static string the /u/ grep missed); next.config.ts:14 em-dash -> comma.
+owner 5d99293a "mjwalsh" (count 0), other dbdeffcf:
+- trigger INCREMENT 0 -> 1 on insert; DECREMENT 1 -> 0 on delete.
+- self-follow blocked (CHECK 23514) even for the owner.
+- follow-on-behalf-of blocked (RLS 42501) when follower_user_id != the caller.
+- legit own follow ALLOWED under RLS with_check.
+- anon SELECT on signal_follows returns 0 rows even with a row present (list is
+  authenticated-only).
+- DB left clean (0 follow rows, count 0).
 
 ## Verification gate (every session)
 
 `npm run typecheck` then `npm run build`. The build runs the prebuild collision
-guard automatically. Lint is not configured. No em-dashes / AI-tell punctuation
-(CLAUDE.md rule 6); plain ASCII. One shell command per tool call (no && chaining).
-Schema via MCP + saved migration + types regen + anon/auth RLS verification (this
-phase: one data-only seed, no DDL, so types unchanged). Commit to main, do not push.
+guard (scripts/check-reserved-routes.ts) automatically. Lint is not configured.
+No em-dashes / AI-tell punctuation (CLAUDE.md rule 6); plain ASCII. One shell
+command per tool call (no && chaining). Schema via MCP + saved migration + types
+regen + anon/auth RLS verification (Phase 8 added NO migration; no types regen).
+Commit to main, do not push.
 
-## Known characteristics (pre-existing, documented, not bugs)
-
-1. Nonexistent root handles and the /players,/leagues fall-throughs render the
-   not-found UI with HTTP 200 (soft 404), the same force-dynamic behavior
-   /u/[handle] and /leagues/[league_id] already had. robots noindex,nofollow is
-   applied, so there is no index leak. If a hard 404 status is wanted later, it
-   would need a non-streaming approach (out of Phase 7 scope).
-2. The in-page casing + handle-history redirects at root keep Phase 1's soft
-   (200 + meta-refresh) redirect behavior because they fire mid-stream in a
-   force-dynamic page. The canonical <link> still points at the correct root URL,
-   so SEO is preserved. Only the new /u migration uses a hard 308 (config).
-   Could not be exercised live in dev (signals table is empty: no published
-   profile to trigger a casing/history redirect); the logic is a verbatim port
-   of the Phase 1 code with canonicalBase "".
-
-## Carry-forwards (unchanged)
+## Carry-forwards
 
 1. GIPHY PRODUCTION KEY: still on a GIPHY BETA key. Apply for a production key
    before public launch. The "Powered by GIPHY" attribution is built in.
+2. LIVE-PROFILE MANUAL TEST (from Phase 7, still pending): the dev signals table
+   has had no published+public profile, so the following flow, the root-canonical
+   casing/handle-history redirects, and the OG cards have only been exercised via
+   RLS/trigger simulation and route-level checks, not against a real live profile
+   end to end. When a published profile exists, manually verify:
+   - follow/unfollow toggles aria-pressed + the count updates after refresh;
+   - the follower/following modal lists live profiles and traps focus;
+   - anon sees the count but not the list, and gets the sign-in link;
+   - the owner sees no follow button on their own profile;
+   - /u/{handle} -> 308 -> /{handle}; casing + historical handles redirect to root.
 
-## How to verify Phase 7 live (when a published profile exists)
+## Possible later enhancements (NOT built)
 
-Run `npm run build` then `PORT=3100 npm run start` and check:
-- /u/{handle} -> 308 -> /{handle}; /u/{handle}/rankings/{boardId} -> 308 -> root.
-- /{handle} canonical <link> is the root URL; OG image still /api/og/signal/...
-- /u/{Mixed} and a historical handle redirect to the canonical root handle.
-- /rankings, /players, /about, /tools, /sitemap.xml all 200 and serve real pages.
-- /?code=test still 307 -> /auth/callback.
-- A reserved-but-pageless path (/players, /leagues) renders noindex not-found.
+- For You feed (the follow graph is live; only the feed UI is deferred). When it
+  ships, add a durable per-user follow cap (the current throttle is best-effort
+  in-memory only) and revisit follow-bomb protection.
+- Follower/following list pagination beyond the first 100 (recency-ordered today).
 
 ## Next milestone (unchanged)
 
-News pipeline, vote matchups, weekly content cron, IndexNow + sitemap, AdSense
-readiness, and the Phase 12 follow-ups (real commissioner detection, edge runtime
-for OG, Geist woff2 in OG cards, toast-style refresh feedback).
+News pipeline (RSS -> news_items, AI summary via Claude), vote matchups
+(/vs/[a]-vs-[b]), weekly content cron, IndexNow + sitemap generation, AdSense
+readiness sweep, and the Phase 12 follow-ups (real commissioner detection, edge
+runtime for OG, Geist woff2 in OG cards, toast-style refresh feedback).

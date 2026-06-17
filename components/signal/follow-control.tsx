@@ -61,12 +61,14 @@ export function FollowControl({
         ? await unfollowProfile(profileUserId)
         : await followProfile(profileUserId);
       if (res.ok) {
+        // Announce the action only, not a count. The follow is idempotent
+        // server-side (a stale re-follow is a no-op), and other users may follow
+        // concurrently, so an optimistic "N+1" could overstate; the authoritative
+        // count is carried by the count button after router.refresh() re-reads it.
         setAnnouncement(
           wasFollowing
             ? `Unfollowed ${displayName}.`
-            : `Following ${displayName}. ${(followerCount + 1).toLocaleString()} ${
-                followerCount + 1 === 1 ? "follower" : "followers"
-              }.`,
+            : `Following ${displayName}.`,
         );
         router.refresh();
       } else {

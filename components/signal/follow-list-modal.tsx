@@ -182,7 +182,7 @@ export function FollowListModal({
               type="button"
               aria-pressed={kind === k}
               onClick={() => setKind(k)}
-              className={`inline-flex h-10 min-w-[44px] items-center justify-center rounded-[inherit] px-4 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+              className={`inline-flex h-11 min-w-[44px] items-center justify-center rounded-[inherit] px-4 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
                 kind === k
                   ? "bg-brand-purple/15 text-ink"
                   : "text-ink-muted hover:text-ink"
