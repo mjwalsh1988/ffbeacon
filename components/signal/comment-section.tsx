@@ -28,9 +28,22 @@ import { GifPicker } from "@/components/signal/gif-picker";
 import { AnimatedGif } from "@/components/signal/animated-gif";
 import { EmojiPicker } from "@/components/signal/emoji-picker";
 import { ReportButton } from "@/components/signal/report-button";
+import { ReactionBar } from "@/components/signal/reaction-bar";
 import { insertAtCursor } from "@/lib/signal/insert-at-cursor";
 import type { EmojiEntry } from "@/lib/signal/emoji-data";
-import type { WallComment, WallGif } from "@/lib/signal-wall";
+import type {
+  ReactionTargetData,
+  WallComment,
+  WallGif,
+} from "@/lib/signal-wall";
+import type { ReactionType } from "@/lib/signal/reactions";
+
+// The empty per-target default, inlined here so this client component never pulls
+// the server-only signal-wall module into the browser bundle.
+const EMPTY_REACTION_TARGET: ReactionTargetData = {
+  counts: [],
+  viewerReactionTypeIds: [],
+};
 
 /** Convert a stored WallGif back into the insert-ready SignalGifInput shape so an
  * edit can re-send an unchanged GIF. */
@@ -91,6 +104,8 @@ export function CommentSection({
   viewerIsAdmin,
   viewerIsWallOwner,
   canComment,
+  reactionTypes,
+  commentReactions,
 }: {
   postId: string;
   comments: WallComment[];
@@ -98,6 +113,8 @@ export function CommentSection({
   viewerIsAdmin: boolean;
   viewerIsWallOwner: boolean;
   canComment: boolean;
+  reactionTypes: ReactionType[];
+  commentReactions: Record<string, ReactionTargetData>;
 }) {
   const [announcement, setAnnouncement] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +155,12 @@ export function CommentSection({
               canModerate={viewerIsWallOwner || viewerIsAdmin}
               isAuthor={
                 viewerUserId !== null && viewerUserId === comment.authorUserId
+              }
+              viewerUserId={viewerUserId}
+              canReact={canComment && !comment.hidden}
+              reactionTypes={reactionTypes}
+              reactionData={
+                commentReactions[comment.id] ?? EMPTY_REACTION_TARGET
               }
               onAnnounce={setAnnouncement}
               onError={setError}
@@ -362,12 +385,20 @@ function CommentRow({
   comment,
   canModerate,
   isAuthor,
+  viewerUserId,
+  canReact,
+  reactionTypes,
+  reactionData,
   onAnnounce,
   onError,
 }: {
   comment: WallComment;
   canModerate: boolean;
   isAuthor: boolean;
+  viewerUserId: string | null;
+  canReact: boolean;
+  reactionTypes: ReactionType[];
+  reactionData: ReactionTargetData;
   onAnnounce: (msg: string) => void;
   onError: (msg: string | null) => void;
 }) {
@@ -630,6 +661,17 @@ function CommentRow({
             <PostBody body={comment.body} />
             {comment.gif && <AnimatedGif gif={comment.gif} />}
           </div>
+        )}
+
+        {!editing && (
+          <ReactionBar
+            targetType="comment"
+            targetId={comment.id}
+            activeTypes={reactionTypes}
+            data={reactionData}
+            viewerUserId={viewerUserId}
+            canReact={canReact}
+          />
         )}
 
         {!editing && (

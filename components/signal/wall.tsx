@@ -5,7 +5,14 @@ import { PostImages } from "@/components/signal/post-images";
 import { AnimatedGif } from "@/components/signal/animated-gif";
 import { ReportButton } from "@/components/signal/report-button";
 import { CommentSection } from "@/components/signal/comment-section";
-import type { WallPost } from "@/lib/signal-wall";
+import { ReactionBar } from "@/components/signal/reaction-bar";
+import {
+  EMPTY_REACTION_TARGET,
+  reactionTargetKey,
+  type ReactionTargetData,
+  type WallPost,
+  type WallReactions,
+} from "@/lib/signal-wall";
 
 /**
  * Public Wall block on /u/[handle]. Renders the Signal's posts, pinned first then
@@ -30,12 +37,14 @@ export function WallBlock({
   viewerUserId,
   viewerIsAdmin,
   viewerIsWallOwner,
+  reactions,
 }: {
   posts: WallPost[];
   ownerPreview: boolean;
   viewerUserId: string | null;
   viewerIsAdmin: boolean;
   viewerIsWallOwner: boolean;
+  reactions: WallReactions;
 }) {
   if (posts.length === 0) return null;
 
@@ -44,6 +53,17 @@ export function WallBlock({
       <ol role="list" className="flex flex-col gap-4">
         {posts.map((post) => {
           const created = new Date(post.createdAt);
+          const postReactions =
+            reactions.byTarget.get(reactionTargetKey("post", post.id)) ??
+            EMPTY_REACTION_TARGET;
+          // Reaction data for this post's comments, keyed by comment id.
+          const commentReactions: Record<string, ReactionTargetData> = {};
+          for (const comment of post.comments) {
+            commentReactions[comment.id] =
+              reactions.byTarget.get(
+                reactionTargetKey("comment", comment.id),
+              ) ?? EMPTY_REACTION_TARGET;
+          }
           return (
             <li
               key={post.id}
@@ -76,6 +96,15 @@ export function WallBlock({
 
                 {post.gif && <AnimatedGif gif={post.gif} />}
 
+                <ReactionBar
+                  targetType="post"
+                  targetId={post.id}
+                  activeTypes={reactions.activeTypes}
+                  data={postReactions}
+                  viewerUserId={viewerUserId}
+                  canReact={!ownerPreview && !post.hidden}
+                />
+
                 {!ownerPreview && (
                   <ReportButton targetType="post" targetId={post.id} />
                 )}
@@ -87,6 +116,8 @@ export function WallBlock({
                   viewerIsAdmin={viewerIsAdmin}
                   viewerIsWallOwner={viewerIsWallOwner}
                   canComment={!ownerPreview && !post.hidden}
+                  reactionTypes={reactions.activeTypes}
+                  commentReactions={commentReactions}
                 />
               </article>
             </li>

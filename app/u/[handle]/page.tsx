@@ -11,7 +11,12 @@ import {
   signalMediaUrl,
   type ProfileBundle,
 } from "@/lib/signal-profile";
-import { loadWallPosts, type WallPost } from "@/lib/signal-wall";
+import {
+  loadWallPosts,
+  loadReactionsForTargets,
+  type WallPost,
+  type WallReactions,
+} from "@/lib/signal-wall";
 import { ImageWithFallback } from "@/components/image-with-fallback";
 import {
   FeaturedBoardsBlock,
@@ -110,6 +115,10 @@ export default async function SignalProfilePage({
     const posts = await loadWallPosts(signal.id, {
       includeHiddenComments: canModerate,
     });
+    const reactions = await loadReactionsForTargets(
+      collectReactionTargets(posts),
+      user?.id ?? null,
+    );
     return (
       <ProfileBody
         bundle={bundle}
@@ -118,6 +127,7 @@ export default async function SignalProfilePage({
         viewerUserId={user?.id ?? null}
         viewerIsAdmin={isAdmin}
         viewerIsWallOwner={isWallOwner}
+        reactions={reactions}
       />
     );
   }
@@ -136,6 +146,10 @@ export default async function SignalProfilePage({
     includeHidden: true,
     includeHiddenComments: true,
   });
+  const reactions = await loadReactionsForTargets(
+    collectReactionTargets(posts),
+    user.id,
+  );
   return (
     <ProfileBody
       bundle={bundle}
@@ -144,8 +158,23 @@ export default async function SignalProfilePage({
       viewerUserId={user.id}
       viewerIsAdmin={false}
       viewerIsWallOwner
+      reactions={reactions}
     />
   );
+}
+
+/** Flatten loaded posts (and their comments) into the reaction target list. */
+function collectReactionTargets(
+  posts: WallPost[],
+): { type: "post" | "comment"; id: string }[] {
+  const targets: { type: "post" | "comment"; id: string }[] = [];
+  for (const post of posts) {
+    targets.push({ type: "post", id: post.id });
+    for (const comment of post.comments) {
+      targets.push({ type: "comment", id: comment.id });
+    }
+  }
+  return targets;
 }
 
 function ProfileBody({
@@ -155,6 +184,7 @@ function ProfileBody({
   viewerUserId,
   viewerIsAdmin,
   viewerIsWallOwner,
+  reactions,
 }: {
   bundle: ProfileBundle;
   ownerPreview: boolean;
@@ -162,6 +192,7 @@ function ProfileBody({
   viewerUserId: string | null;
   viewerIsAdmin: boolean;
   viewerIsWallOwner: boolean;
+  reactions: WallReactions;
 }) {
   const signal = bundle.signal!;
   const avatar = signalMediaUrl(signal.avatar_path);
@@ -254,6 +285,7 @@ function ProfileBody({
         viewerUserId={viewerUserId}
         viewerIsAdmin={viewerIsAdmin}
         viewerIsWallOwner={viewerIsWallOwner}
+        reactions={reactions}
       />
     </main>
   );

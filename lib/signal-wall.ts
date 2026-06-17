@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
 import { signalMediaUrl } from "@/lib/signal-profile";
+import type { ReactionType } from "@/lib/signal/reactions";
 
 /**
  * Server-only data layer for the Signal Wall (public posts on /u/[handle]).
@@ -244,4 +245,156 @@ export async function loadImagesForPosts(
     byPost.set(row.post_id, list);
   }
   return byPost;
+}
+
+/**
+ * Reaction data for the Wall picker + counts (Phase 4f COMMIT 2).
+ *
+ * Counts are read straight off the denormalized signal_reaction_counts table; we
+ * never tally signal_reactions rows live on a request. A count may reference a
+ * reaction type that has since been disabled (is_active=false): we still surface
+ * that historical count, labeled, so taking a reaction out of the catalog does not
+ * erase the tallies it already earned. The active catalog drives the picker; the
+ * full catalog (active + disabled) is loaded only to label those historical counts.
+ *
+ * This loader uses the service-role admin client, so it bypasses the
+ * signal_reaction_counts visibility gate. That is fine: the page only ever asks
+ * for targets it is already rendering (visible posts/comments, or the owner's own
+ * preview), so no hidden engagement metadata leaks through here.
+ */
+export type ReactionCountEntry = { type: ReactionType; count: number };
+
+export type ReactionTargetData = {
+  // Every reaction type with a positive count on this target, ordered by the
+  // catalog display order. Entries may be disabled types (entry.type.is_active
+  // === false) whose historical counts are still shown, labeled.
+  counts: ReactionCountEntry[];
+  // reaction_type_ids the signed-in viewer has applied to this target. Drives
+  // aria-pressed and the toggle. Empty for anonymous viewers.
+  viewerReactionTypeIds: string[];
+};
+
+export type WallReactions = {
+  // The active catalog, ordered, used to render the picker toolbar. Shared by
+  // every target on the page.
+  activeTypes: ReactionType[];
+  byTarget: Map<string, ReactionTargetData>;
+};
+
+export const EMPTY_REACTION_TARGET: ReactionTargetData = {
+  counts: [],
+  viewerReactionTypeIds: [],
+};
+
+/** Stable key for the per-target reaction map. */
+export function reactionTargetKey(
+  targetType: "post" | "comment",
+  targetId: string,
+): string {
+  return `${targetType}:${targetId}`;
+}
+
+/**
+ * Load the reaction catalog, denormalized counts, and the viewer's own reactions
+ * for a set of Wall targets (posts and comments) in a handful of indexed queries.
+ */
+export async function loadReactionsForTargets(
+  targets: { type: "post" | "comment"; id: string }[],
+  viewerUserId: string | null,
+): Promise<WallReactions> {
+  const supabase = createAdminClient();
+
+  // The whole catalog (admin-curated, small). Active rows render the picker;
+  // disabled rows are kept only to label historical counts.
+  const { data: typeRows } = await supabase
+    .from("signal_reaction_types")
+    .select("id, slug, label, kind, char, image_path, display_order, is_active")
+    .order("display_order", { ascending: true })
+    .order("slug", { ascending: true });
+
+  const allTypes: ReactionType[] = (typeRows ?? []).map((t) => ({
+    id: t.id,
+    slug: t.slug,
+    label: t.label,
+    kind: t.kind === "image" ? "image" : "text",
+    char: t.char,
+    image_path: t.image_path,
+    display_order: t.display_order,
+    is_active: t.is_active,
+  }));
+  const typeById = new Map(allTypes.map((t) => [t.id, t] as const));
+  const orderIndex = new Map(allTypes.map((t, i) => [t.id, i] as const));
+  const activeTypes = allTypes.filter((t) => t.is_active);
+
+  const byTarget = new Map<string, ReactionTargetData>();
+  if (targets.length === 0) return { activeTypes, byTarget };
+
+  // Seed an entry for every requested target so the UI can render an empty
+  // picker on targets that have no reactions yet.
+  for (const t of targets) {
+    byTarget.set(reactionTargetKey(t.type, t.id), {
+      counts: [],
+      viewerReactionTypeIds: [],
+    });
+  }
+
+  const postIds = targets.filter((t) => t.type === "post").map((t) => t.id);
+  const commentIds = targets
+    .filter((t) => t.type === "comment")
+    .map((t) => t.id);
+
+  const loadCounts = async (
+    targetType: "post" | "comment",
+    ids: string[],
+  ): Promise<void> => {
+    if (ids.length === 0) return;
+    const { data } = await supabase
+      .from("signal_reaction_counts")
+      .select("target_id, reaction_type_id, count")
+      .eq("target_type", targetType)
+      .in("target_id", ids);
+    for (const row of data ?? []) {
+      if (row.count <= 0) continue;
+      const type = typeById.get(row.reaction_type_id);
+      if (!type) continue;
+      const entry = byTarget.get(reactionTargetKey(targetType, row.target_id));
+      if (!entry) continue;
+      entry.counts.push({ type, count: row.count });
+    }
+  };
+
+  const loadViewer = async (
+    targetType: "post" | "comment",
+    ids: string[],
+  ): Promise<void> => {
+    if (!viewerUserId || ids.length === 0) return;
+    const { data } = await supabase
+      .from("signal_reactions")
+      .select("target_id, reaction_type_id")
+      .eq("target_type", targetType)
+      .eq("user_id", viewerUserId)
+      .in("target_id", ids);
+    for (const row of data ?? []) {
+      const entry = byTarget.get(reactionTargetKey(targetType, row.target_id));
+      if (!entry) continue;
+      entry.viewerReactionTypeIds.push(row.reaction_type_id);
+    }
+  };
+
+  await Promise.all([
+    loadCounts("post", postIds),
+    loadCounts("comment", commentIds),
+    loadViewer("post", postIds),
+    loadViewer("comment", commentIds),
+  ]);
+
+  // Stable chip order: follow the catalog display order within each target.
+  for (const entry of byTarget.values()) {
+    entry.counts.sort(
+      (a, b) =>
+        (orderIndex.get(a.type.id) ?? 0) - (orderIndex.get(b.type.id) ?? 0),
+    );
+  }
+
+  return { activeTypes, byTarget };
 }

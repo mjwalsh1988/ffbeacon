@@ -1287,6 +1287,71 @@ Three reviews (implementation, accessibility, security) over the commit-1 diff.
   EXECUTE. search_path is pinned; it returns only a boolean matching the public-read
   gating; same accepted posture as the pre-existing try_claim_league_refresh.
 
+### Signal - Phase 4f COMMIT 2 (public reaction picker + counts) - completed
+The final piece of Phase 4. No schema changes (tables shipped in COMMIT 1); pure
+read layer + public server actions + UI. Phase 4 (Wall) is now COMPLETE.
+T831 | completed | Reaction read layer on the public Wall loader. lib/signal-wall.ts
+     loadReactionsForTargets(targets, viewerUserId): admin client; loads the full
+     catalog (active drives the picker, disabled kept only to label historical
+     counts), reads denormalized signal_reaction_counts (never tallies rows live),
+     and the viewer's own signal_reactions for aria-pressed/toggle. Returns
+     WallReactions { activeTypes, byTarget: Map<key, { counts, viewerReactionTypeIds }> };
+     reactionTargetKey + EMPTY_REACTION_TARGET exported. Counts sorted by catalog
+     display_order; only count>0 surfaced; disabled types labeled via the catalog.
+     | files: lib/signal-wall.ts
+     | verified: yes (typecheck + build; loader uses service role so it bypasses the
+       counts visibility gate, only ever fed already-gated targets)
+T832 | completed | Public reaction server actions. app/u/[handle]/reaction-actions.ts
+     addReaction/removeReaction: session client + own-row RLS (insert sets user_id =
+     the authenticated user, never the client; delete is user_id-scoped on top of
+     RLS). Maps 23505 (unique) to a no-op success so the toggle is idempotent, 42501/
+     row-level-security to friendly copy, everything else to a generic retry (no raw
+     DB message leaks). No profile-cache bust (router.refresh() only, per the Wall
+     dynamic decision).
+     | files: app/u/[handle]/reaction-actions.ts
+     | verified: yes (rolled-back DO block, 14 end-to-end checks all PASS: react
+       active on public post/comment + count trigger +1, duplicate blocked by unique,
+       inactive-type blocked, hidden-post blocked, anon reads public counts but 0
+       reaction rows and 0 counts on a hidden target, cross-user SELECT of a public
+       reaction, un-react own + count floored to 0, and un-react a now-disabled type
+       you own still allowed so nobody is stuck. All probe rows rolled back)
+T833 | completed | Reaction picker + counts UI wired into posts and comments.
+     components/signal/reaction-bar.tsx: keyboard-operable role="toolbar" with roving
+     tabindex (Arrow/Home/End), one toggle button per ACTIVE type, aria-pressed =
+     viewer state, aria-label = catalog label, image reactions as <img alt=""> inside
+     the labeled button (never image-only), polite aria-live "Reacted with X, N total"
+     / "Removed X" + assertive error region. Disabled-but-counted types render as
+     labeled read-only chips. Anon/view-only (hidden post/comment, owner preview) see
+     counts read-only; anon gets a "Sign in to react" link. 44px toggle targets.
+     Wired into wall.tsx (posts) and comment-section.tsx (comments); page.tsx loads
+     reactions for every post + comment target and threads WallReactions through
+     ProfileBody -> WallBlock.
+     | files: components/signal/reaction-bar.tsx, components/signal/wall.tsx,
+       components/signal/comment-section.tsx, app/u/[handle]/page.tsx
+     | verified: yes (typecheck + build; /u/[handle] 7.92 kB)
+
+### Signal - Phase 4f COMMIT 2 sub-agent review (completed)
+Three reviews (implementation, accessibility, security) over the commit-2 diff.
+- Implementation: NO blockers/important. Counts-from-denormalized-table, active-only
+  picker, disabled-labeled chips, idempotent toggle, no cache bust, service-role
+  loader fed only gated targets, schema untouched all verified. MINORs (disabled-type
+  un-react not exposed in UI, optimistic announce number) accepted as by-design.
+- Accessibility: one IMPORTANT FIXED - toolbar buttons used disabled={pending}, which
+  drops focus mid-toggle and strands keyboard/SR users. Fixed by keeping buttons
+  enabled (focus retained) and guarding double-fire with an `if (pending) return`
+  in toggle() (the write is idempotent); swapped to aria-busy={pending}, added a
+  Math.min clamp on the roving tab stop. Verified clean: toolbar roving tabindex,
+  labeled buttons + image-inside-button alt, aria-pressed, live regions, anon
+  sign-in path, read-only labeled chips, no data hidden at any breakpoint, no
+  em-dashes. The assertive-wrapper + inner role="alert" double-announce is the KNOWN
+  deferred suite-wide item (consistent with comment-section), not changed here.
+- Security: NO blockers/important. Server-side re-auth (user_id never from client),
+  own-scoped delete, parameterized queries, no error-detail leak, loader gate posture
+  sound, no secret/XSS, CSRF covered by server-action posture. MINORs (no reaction
+  rate limiting, no id-shape validation) accepted: the unique constraint bounds
+  durable state and RLS is authoritative; a per-user reaction limiter is a future
+  option if abuse appears.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
