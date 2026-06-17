@@ -271,7 +271,7 @@ export function FavoritesBlock({
       <dl className="flex flex-wrap gap-x-10 gap-y-5">
         {team && (
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
               Favorite team
             </dt>
             <dd className="mt-1.5">
@@ -288,7 +288,7 @@ export function FavoritesBlock({
 
         {player && (
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
               Favorite player
             </dt>
             <dd className="mt-1.5">

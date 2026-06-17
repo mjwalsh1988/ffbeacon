@@ -228,7 +228,9 @@ export default async function MySignalPage() {
     initialBlocks = seedBlocksFromProfile({
       hasBio: !!(signal.bio && signal.bio.trim()),
       hasFavorites: !!(signal.favorite_team || signal.favorite_player_id),
-      hasLinks: initialLinks.length > 0,
+      // Mirror the public resolver, which counts only https links (parseProfileLinks
+      // drops non-https rows), so the seeded builder state equals what is live.
+      hasLinks: initialLinks.some((l) => l.url.startsWith("https://")),
       boardIds: profileBoardOptions.map((b) => b.id),
       sleeperLeagueIds: featuredLeagueOptions.map((l) => l.sleeperLeagueId),
     });

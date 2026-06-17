@@ -153,8 +153,8 @@ export type ProfileBundle = {
   layout: ProfileLayout;
   /** Resolved, ordered, gracefully-degraded blocks. Render these directly. */
   blocks: ResolvedBlock[];
-  // The raw entity collections are retained for the OG route, sitemap, and any
-  // consumer that wants the full set rather than the block-ordered view.
+  // The raw entity collections are retained for any consumer that wants the full
+  // set rather than the block-ordered view. The public page renders only `blocks`.
   boards: FeaturedBoardMeta[];
   leagues: FeaturedLeagueCard[];
   links: SignalProfileLink[];

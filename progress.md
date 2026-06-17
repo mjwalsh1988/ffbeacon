@@ -1471,6 +1471,39 @@ T841 | completed | 5.6 review (a11y primary) + fixes + docs
        layout as empty.
      | verified: yes (typecheck + build green; migration-free, so no schema/RLS
        regen needed; signals RLS unchanged from prior phases)
+T842 | completed | 5.6 dedicated three-sub-agent review pass (impl + a11y + security)
+     | over the full Phase 5 diff (3b0a379..f91482b).
+     | security: PASS, CLEAN. saveLayout session-gated + owner-scoped, input
+       coerced, board/league refs filtered to the owner's own featured entities;
+       no IDOR/cross-tenant leak reachable (resolver matches only the owner's own
+       profile_visible boards + synced featured leagues, double-layered with the
+       write-time filter); empty-vs-unset fix holds; plain-text render (no XSS);
+       links https-gated 3 ways; no SSRF/redirect/injection/secret exposure.
+     | accessibility: one IMPORTANT fixed - FavoritesBlock dt labels used
+       text-ink-subtle (#6B6B7D ~3.4:1, fails AA); switched to text-ink-muted
+       (~7.8:1). Everything else PASS: builder reorder focus management, singleton
+       disabling with spoken reason, picker disclosure semantics + focus return,
+       fieldset radios, single re-announcing live region + single assertive
+       save-error region; Layout B single h1 + h2 blocks + labeled aside, DOM order
+       = visual order, nothing hidden at any breakpoint, 44px targets, accent fills
+       lock near-black text.
+     | implementation: one IMPORTANT fixed - hasLinks SeedInput mismatch (resolver
+       counted https-filtered links, the editor counted unfiltered), so a profile
+       with only legacy non-https links would seed the builder differently from the
+       public render; the editor now applies the same https filter. Everything else
+       PASS: graceful degrade verified for all six block types (double-layered on
+       boards/leagues), hasStoredBlocks seeding fix consistent on both paths, Layout
+       A non-regression, coercion (singletons/id dedupe/cap/league-id regex),
+       blockColumn auto-placement matches SidebarLayout.
+     | minors accepted/noted (not blocking): visible save-success confirmation is
+       polite-live-only; signal-danger error text is AA not AAA; Layout B reading
+       order places the Wall before the sidebar About (matches the DOM=visual
+       contract, flagged for a future product call); ProfileBundle raw-collections
+       comment corrected.
+     | files: components/signal/signal-block.tsx, app/my-beacon/signal/page.tsx,
+       lib/signal-profile.ts
+     | verified: yes (typecheck + build green after fixes). PHASE 5 FULLY REVIEWED
+       + COMPLETE.
 
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
