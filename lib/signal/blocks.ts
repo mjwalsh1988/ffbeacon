@@ -20,10 +20,13 @@ export type ProfileLayout = "feed" | "sidebar" | "spotlight";
  * hero, beacon-card stack, stats strip, Wall behind a disclosure). All three are
  * permitted by the signals.layout CHECK (migration 0059).
  *
- * PROFILE_LAYOUTS is the set offered in the builder; the builder exposes Layout C
- * in Phase 6.3, so spotlight joins this list there. isProfileLayout / resolveLayout
- * already accept spotlight so a stored value renders correctly. */
-export const PROFILE_LAYOUTS: readonly ProfileLayout[] = ["feed", "sidebar"];
+ * PROFILE_LAYOUTS is the set offered in the builder. isProfileLayout /
+ * resolveLayout accept any of them so a stored value renders correctly. */
+export const PROFILE_LAYOUTS: readonly ProfileLayout[] = [
+  "feed",
+  "sidebar",
+  "spotlight",
+];
 export const DEFAULT_LAYOUT: ProfileLayout = "feed";
 
 export function isProfileLayout(value: unknown): value is ProfileLayout {

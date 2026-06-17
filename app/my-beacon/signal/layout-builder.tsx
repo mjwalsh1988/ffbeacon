@@ -68,6 +68,13 @@ const TYPE_LABEL: Record<SignalBlockType, string> = {
  * (wired by the parent), so they are not plain add buttons here. */
 const ADD_MENU_TYPES: SignalBlockType[] = ["about", "text", "links", "favorites"];
 
+/** Spoken confirmation when the layout changes (single re-announcing region). */
+const LAYOUT_ANNOUNCE: Record<ProfileLayout, string> = {
+  feed: "Layout A, single column, selected.",
+  sidebar: "Layout B, with a sidebar, selected.",
+  spotlight: "Layout C, spotlight landing page, selected.",
+};
+
 export function LayoutBuilder({
   initialLayout,
   initialBlocks,
@@ -250,8 +257,11 @@ export function LayoutBuilder({
       <fieldset>
         <legend className="text-sm font-semibold text-ink">Profile layout</legend>
         <p className="mt-1 text-sm text-ink-muted">
-          Layout B adds a sidebar: rankings and leagues stay in the main column,
-          while about, text, links, and favorites move to the sidebar.
+          Layout A is a single column. Layout B adds a sidebar: rankings and
+          leagues stay in the main column while about, text, links, and favorites
+          move to the sidebar (on phones the sidebar collapses into a Profile info
+          panel). Layout C is a centered landing page that shows your blocks as
+          spotlight cards with the Wall behind a show or hide control.
         </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:gap-4">
           {PROFILE_LAYOUTS.map((value) => (
@@ -261,11 +271,7 @@ export function LayoutBuilder({
               checked={layout === value}
               onChange={() => {
                 setLayout(value);
-                announce(
-                  value === "sidebar"
-                    ? "Layout B, with a sidebar, selected."
-                    : "Layout A, single column, selected.",
-                );
+                announce(LAYOUT_ANNOUNCE[value]);
               }}
             />
           ))}
@@ -590,7 +596,11 @@ function LayoutRadio({
   onChange: () => void;
 }) {
   const label =
-    value === "sidebar" ? "Layout B (sidebar)" : "Layout A (single column)";
+    value === "sidebar"
+      ? "Layout B (sidebar)"
+      : value === "spotlight"
+        ? "Layout C (spotlight)"
+        : "Layout A (single column)";
   return (
     <label
       className={`flex flex-1 cursor-pointer items-center gap-2 rounded-card border px-3 py-2.5 text-sm font-medium transition-colors ${
