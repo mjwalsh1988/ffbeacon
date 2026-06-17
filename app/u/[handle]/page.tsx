@@ -10,6 +10,7 @@ import {
   isProfileLive,
   signalMediaUrl,
   type ProfileBundle,
+  type ResolvedBlock,
 } from "@/lib/signal-profile";
 import {
   loadWallPosts,
@@ -17,10 +18,13 @@ import {
   type WallPost,
   type WallReactions,
 } from "@/lib/signal-wall";
+import { blockColumn } from "@/lib/signal/blocks";
 import { ImageWithFallback } from "@/components/image-with-fallback";
 import {
-  FeaturedBoardsBlock,
-  FeaturedLeaguesBlock,
+  AboutBlock,
+  TextBlock,
+  FeaturedBoardBlock,
+  FeaturedLeagueBlock,
   LinksBlock,
   FavoritesBlock,
 } from "@/components/signal/signal-block";
@@ -198,6 +202,21 @@ function ProfileBody({
   const avatar = signalMediaUrl(signal.avatar_path);
   const banner = signalMediaUrl(signal.banner_path);
   const gradient = accentGradient(signal.accent);
+  const isSidebar = bundle.layout === "sidebar";
+  const headerWidth = isSidebar ? "max-w-6xl" : "max-w-3xl";
+
+  // The Wall is fixed below the blocks in the main column (Layout A and B alike):
+  // it is not a builder block and is never reorderable.
+  const wall = (
+    <WallBlock
+      posts={posts}
+      ownerPreview={ownerPreview}
+      viewerUserId={viewerUserId}
+      viewerIsAdmin={viewerIsAdmin}
+      viewerIsWallOwner={viewerIsWallOwner}
+      reactions={reactions}
+    />
+  );
 
   return (
     <main id="main">
@@ -232,7 +251,7 @@ function ProfileBody({
           />
         )}
 
-        <div className="mx-auto max-w-3xl px-4 sm:px-6">
+        <div className={`mx-auto ${headerWidth} px-4 sm:px-6`}>
           <div className="-mt-12 flex flex-col gap-4 pb-8 sm:-mt-14 sm:flex-row sm:items-end">
             <div className="rounded-full ring-4 ring-base">
               <ImageWithFallback
@@ -258,35 +277,107 @@ function ProfileBody({
         </div>
       </header>
 
-      {signal.bio && (
-        <section
-          aria-labelledby="signal-about-heading"
-          className="mx-auto max-w-3xl px-4 py-8 sm:px-6"
-        >
-          <h2
-            id="signal-about-heading"
-            className="text-sm font-semibold uppercase tracking-[0.14em] text-brand-cyan"
-          >
-            About
-          </h2>
-          <p className="mt-3 whitespace-pre-line text-base leading-relaxed text-ink">
-            {signal.bio}
-          </p>
-        </section>
+      {isSidebar ? (
+        <SidebarLayout
+          handle={signal.handle}
+          accent={signal.accent}
+          blocks={bundle.blocks}
+          wall={wall}
+        />
+      ) : (
+        <FeedLayout
+          handle={signal.handle}
+          accent={signal.accent}
+          blocks={bundle.blocks}
+          wall={wall}
+        />
       )}
-
-      <FavoritesBlock favorites={bundle.favorites} accent={signal.accent} />
-      <FeaturedBoardsBlock handle={signal.handle} boards={bundle.boards} />
-      <FeaturedLeaguesBlock leagues={bundle.leagues} />
-      <LinksBlock links={bundle.links} accent={signal.accent} />
-      <WallBlock
-        posts={posts}
-        ownerPreview={ownerPreview}
-        viewerUserId={viewerUserId}
-        viewerIsAdmin={viewerIsAdmin}
-        viewerIsWallOwner={viewerIsWallOwner}
-        reactions={reactions}
-      />
     </main>
+  );
+}
+
+/** Render one resolved block. The block has already been gated by the resolver,
+ * so every branch here is safe to render. */
+function renderBlock(
+  block: ResolvedBlock,
+  handle: string,
+  accent: string,
+): React.ReactNode {
+  switch (block.type) {
+    case "about":
+      return <AboutBlock key={block.id} bio={block.bio} />;
+    case "text":
+      return <TextBlock key={block.id} text={block.text} />;
+    case "links":
+      return <LinksBlock key={block.id} links={block.links} accent={accent} />;
+    case "favorites":
+      return (
+        <FavoritesBlock key={block.id} favorites={block.favorites} accent={accent} />
+      );
+    case "board_top_n":
+      return (
+        <FeaturedBoardBlock key={block.id} handle={handle} board={block.board} />
+      );
+    case "league_card":
+      return <FeaturedLeagueBlock key={block.id} league={block.league} />;
+  }
+}
+
+/** Layout A: a single column. Every block renders in list order, then the Wall. */
+function FeedLayout({
+  handle,
+  accent,
+  blocks,
+  wall,
+}: {
+  handle: string;
+  accent: string;
+  blocks: ResolvedBlock[];
+  wall: React.ReactNode;
+}) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 sm:px-6">
+      {blocks.map((block) => renderBlock(block, handle, accent))}
+      {wall}
+    </div>
+  );
+}
+
+/**
+ * Layout B: a full-width header (rendered above) over two columns. Blocks are
+ * auto-placed by type (board_top_n and league_card in the main column; about,
+ * text, links, and favorites in the sidebar) and otherwise keep their list order.
+ * DOM order is main column then sidebar, which matches the left-to-right /
+ * stacked visual order, so screen-reader order equals visual order. Nothing is
+ * hidden at any breakpoint: the columns simply stack on small screens.
+ */
+function SidebarLayout({
+  handle,
+  accent,
+  blocks,
+  wall,
+}: {
+  handle: string;
+  accent: string;
+  blocks: ResolvedBlock[];
+  wall: React.ReactNode;
+}) {
+  const mainBlocks = blocks.filter((b) => blockColumn(b.type) === "main");
+  const sidebarBlocks = blocks.filter((b) => blockColumn(b.type) === "sidebar");
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 sm:px-6">
+      <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
+        <div>
+          {mainBlocks.map((block) => renderBlock(block, handle, accent))}
+          {wall}
+        </div>
+        {sidebarBlocks.length > 0 && (
+          <aside aria-label="More about this profile">
+            {sidebarBlocks.map((block) => renderBlock(block, handle, accent))}
+          </aside>
+        )}
+      </div>
+    </div>
   );
 }
