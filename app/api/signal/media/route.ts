@@ -28,21 +28,53 @@ export const runtime = "nodejs";
 
 const BUCKET = "signal-media";
 
+// Per-kind input caps. These are kept safely UNDER the hosting platform's
+// serverless request-body limit (Vercel functions cap request bodies at ~4.5 MB
+// and reject larger ones with an HTML error page BEFORE this handler runs, which
+// the route cannot catch). The stored output is a downscaled WebP a few tens of
+// KB regardless, so 4 MB of input is ample for any reasonable photo.
 const KINDS = {
-  avatar: { width: 512, height: 512, maxBytes: 5 * 1024 * 1024 },
-  banner: { width: 1600, height: 500, maxBytes: 8 * 1024 * 1024 },
+  avatar: { width: 512, height: 512, maxBytes: 4 * 1024 * 1024 },
+  banner: { width: 1600, height: 500, maxBytes: 4 * 1024 * 1024 },
 } as const;
 type Kind = keyof typeof KINDS;
 
-// Hard ceiling rejected before the body is buffered, regardless of kind: the
-// largest per-kind cap (banner 8 MB) plus a little multipart overhead.
-const MAX_UPLOAD_BYTES = 9 * 1024 * 1024;
+// Hard ceiling rejected before the body is buffered: the per-kind cap (4 MB)
+// plus a little multipart overhead, staying under the ~4.5 MB platform limit.
+const MAX_UPLOAD_BYTES = Math.round(4.4 * 1024 * 1024);
 
 function isSameOrigin(req: Request): boolean {
   return req.headers.get("x-requested-with") === "ff-beacon";
 }
 
+// Thin wrappers so an unexpected throw becomes a clean JSON error (the client
+// parses JSON; an HTML 500 page would surface as "Unexpected token '<'") and the
+// real cause is logged server-side.
 export async function POST(req: Request) {
+  try {
+    return await postImpl(req);
+  } catch (err) {
+    console.error("signal media POST failed:", err);
+    return NextResponse.json(
+      { error: "Upload failed. Please try again." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    return await deleteImpl(req);
+  } catch (err) {
+    console.error("signal media DELETE failed:", err);
+    return NextResponse.json(
+      { error: "Could not remove the image." },
+      { status: 500 },
+    );
+  }
+}
+
+async function postImpl(req: Request) {
   if (!isSameOrigin(req)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 403 });
   }
@@ -156,7 +188,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true, kind, path, url: pub.publicUrl });
 }
 
-export async function DELETE(req: Request) {
+async function deleteImpl(req: Request) {
   if (!isSameOrigin(req)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 403 });
   }

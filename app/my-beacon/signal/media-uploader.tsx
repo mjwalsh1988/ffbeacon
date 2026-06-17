@@ -5,6 +5,34 @@ import { useRouter } from "next/navigation";
 import { Upload, Trash2 } from "lucide-react";
 import { ImageWithFallback } from "@/components/image-with-fallback";
 
+// Kept in sync with the per-kind cap in app/api/signal/media/route.ts, which is
+// held under the hosting platform's ~4.5 MB request-body limit. Checking here
+// first means an oversized file gets an accessible message instead of being
+// rejected by the platform with an uncatchable HTML error page.
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Read a fetch Response as JSON without throwing on a non-JSON body. If the
+ * platform returns an HTML error page (e.g. an oversized request rejected before
+ * our route runs, or a gateway timeout), blindly calling res.json() would throw
+ * "Unexpected token '<'". This returns a meaningful message instead.
+ */
+async function readResult(
+  res: Response,
+): Promise<{ ok?: boolean; url?: string; error?: string }> {
+  const text = await res.text().catch(() => "");
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {
+      error:
+        res.status === 413
+          ? "That image is too large. Choose one under 4 MB."
+          : "Upload failed. Please try again with a smaller image.",
+    };
+  }
+}
+
 /**
  * Avatar or banner uploader for the owner's Signal. The file is POSTed to
  * /api/signal/media, which validates magic bytes, re-encodes to WebP (stripping
@@ -30,10 +58,17 @@ export function MediaUploader({
   const isAvatar = kind === "avatar";
   const label = isAvatar ? "Avatar" : "Banner";
   const hint = isAvatar
-    ? "JPG, PNG, or WebP. Max 5 MB. Cropped to a square."
-    : "JPG, PNG, or WebP. Max 8 MB. Cropped to a wide banner.";
+    ? "JPG, PNG, or WebP. Max 4 MB. Cropped to a square."
+    : "JPG, PNG, or WebP. Max 4 MB. Cropped to a wide banner.";
 
   const send = (file: File) => {
+    if (file.size > MAX_FILE_BYTES) {
+      setStatus({
+        kind: "error",
+        message: `That ${label.toLowerCase()} is too large. Choose an image under 4 MB.`,
+      });
+      return;
+    }
     startTransition(async () => {
       setStatus({ kind: "working" });
       try {
@@ -45,7 +80,7 @@ export function MediaUploader({
           headers: { "x-requested-with": "ff-beacon" },
           body,
         });
-        const json = (await res.json()) as { ok?: boolean; url?: string; error?: string };
+        const json = await readResult(res);
         if (!res.ok || !json.ok) {
           throw new Error(json.error ?? "Upload failed.");
         }
@@ -69,7 +104,7 @@ export function MediaUploader({
           method: "DELETE",
           headers: { "x-requested-with": "ff-beacon" },
         });
-        const json = (await res.json()) as { ok?: boolean; error?: string };
+        const json = await readResult(res);
         if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not remove.");
         setPreviewUrl(null);
         setStatus({ kind: "success", message: `${label} removed.` });
