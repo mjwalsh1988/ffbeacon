@@ -29,6 +29,7 @@ import {
   FavoritesBlock,
 } from "@/components/signal/signal-block";
 import { WallBlock } from "@/components/signal/wall";
+import { SidebarShell } from "@/components/signal/sidebar-shell";
 
 // The Wall is read live (not cached) so new posts and moderation take effect
 // immediately, so this route renders dynamically. The heavy identity bundle is
@@ -347,9 +348,14 @@ function FeedLayout({
  * Layout B: a full-width header (rendered above) over two columns. Blocks are
  * auto-placed by type (board_top_n and league_card in the main column; about,
  * text, links, and favorites in the sidebar) and otherwise keep their list order.
- * DOM order is main column then sidebar, which matches the left-to-right /
- * stacked visual order, so screen-reader order equals visual order. Nothing is
- * hidden at any breakpoint: the columns simply stack on small screens.
+ * DOM order is main column then sidebar, which matches the left-to-right visual
+ * order, so screen-reader order equals visual order.
+ *
+ * At the compact breakpoint (below lg), the sidebar collapses into an accessible
+ * "Profile info" drawer instead of stacking below the main column (Phase 6, an
+ * intentional change from the Phase 5 stacking). SidebarShell owns that switch
+ * and renders the sidebar blocks exactly once. When there are no sidebar blocks
+ * the shell is skipped and the main column stands alone, unchanged.
  */
 function SidebarLayout({
   handle,
@@ -365,19 +371,25 @@ function SidebarLayout({
   const mainBlocks = blocks.filter((b) => blockColumn(b.type) === "main");
   const sidebarBlocks = blocks.filter((b) => blockColumn(b.type) === "sidebar");
 
+  const main = (
+    <>
+      {mainBlocks.map((block) => renderBlock(block, handle, accent))}
+      {wall}
+    </>
+  );
+
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6">
-      <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-        <div>
-          {mainBlocks.map((block) => renderBlock(block, handle, accent))}
-          {wall}
+      {sidebarBlocks.length > 0 ? (
+        <SidebarShell
+          main={main}
+          sidebar={sidebarBlocks.map((block) => renderBlock(block, handle, accent))}
+        />
+      ) : (
+        <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
+          <div>{main}</div>
         </div>
-        {sidebarBlocks.length > 0 && (
-          <aside aria-label="More about this profile">
-            {sidebarBlocks.map((block) => renderBlock(block, handle, accent))}
-          </aside>
-        )}
-      </div>
+      )}
     </div>
   );
 }
