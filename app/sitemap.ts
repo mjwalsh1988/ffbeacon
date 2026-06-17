@@ -42,7 +42,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   for (const profile of profiles ?? []) {
     entries.push({
-      url: `${SITE.url}/u/${profile.handle}`,
+      url: `${SITE.url}/${profile.handle}`,
       lastModified: profile.updated_at ? new Date(profile.updated_at) : now,
       changeFrequency: "weekly",
       priority: 0.6,

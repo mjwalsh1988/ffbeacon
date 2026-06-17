@@ -13,8 +13,8 @@ import { buildBoardMetadata, BoardView } from "@/components/signal/board-view";
 // profile route (format + reserved) before any board load.
 export const revalidate = 3600;
 
-// Stage B: /u is still canonical (see app/[handle]/page.tsx). Stage C flips "".
-const CANONICAL_BASE = "/u";
+// Stage C: root is canonical (see app/[handle]/page.tsx).
+const CANONICAL_BASE = "";
 
 export async function generateMetadata({
   params,

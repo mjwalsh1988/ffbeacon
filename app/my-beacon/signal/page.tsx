@@ -423,7 +423,7 @@ export default async function MySignalPage() {
               <PublishControls
                 initialStatus={signal.status as "draft" | "published"}
                 initialVisibility={signal.visibility as "public" | "private"}
-                publicUrl={`${SITE.url}/u/${signal.handle}`}
+                publicUrl={`${SITE.url}/${signal.handle}`}
               />
             </div>
           </section>

@@ -80,7 +80,7 @@ export function HandleManager({ currentHandle }: { currentHandle: string | null 
         setResult({
           kind: "saved",
           message: isClaim
-            ? `Your handle is set. Your profile lives at ${SITE.url}/u/${normalized}.`
+            ? `Your handle is set. Your profile lives at ${SITE.url}/${normalized}.`
             : `Handle updated to ${normalized}.`,
         });
         router.refresh();

@@ -27,6 +27,24 @@ const nextConfig: NextConfig = {
         destination: "/tools/league-pulse",
         permanent: true,
       },
+      // Signal profiles moved to the canonical root /{handle} (Phase 7). The
+      // legacy /u/{handle} paths are kept forever as permanent redirects so old
+      // shared links and OG cards keep working. These run in the routing layer
+      // before any page render, so they emit a real permanent 3xx (308) rather
+      // than the soft client-side redirect a streamed page component would
+      // produce. The root route then handles casing canonicalization and
+      // handle-history resolution. `:handle` matches a single segment, so the
+      // board redirect below is matched independently.
+      {
+        source: "/u/:handle/rankings/:boardId",
+        destination: "/:handle/rankings/:boardId",
+        permanent: true,
+      },
+      {
+        source: "/u/:handle",
+        destination: "/:handle",
+        permanent: true,
+      },
     ];
   },
 };

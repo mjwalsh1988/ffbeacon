@@ -22,9 +22,10 @@ import { buildProfileMetadata, ProfileView } from "@/components/signal/profile-v
 //      never attempts a profile load even if reached.
 export const dynamic = "force-dynamic";
 
-// Stage B: /u is still canonical, so root renders with canonicalBase "/u" (root
-// serves the same page, /u stays the canonical URL). Stage C flips this to "".
-const CANONICAL_BASE = "/u";
+// Stage C: root is canonical. The canonical URL, the casing 301, and the
+// handle-history 301 all anchor at root (canonicalBase ""). /u/{handle} is a
+// 301 shim to here.
+const CANONICAL_BASE = "";
 
 export async function generateMetadata({
   params,

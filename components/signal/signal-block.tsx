@@ -147,7 +147,7 @@ export async function FeaturedBoardBlock({
 
       {board.playerCount > players.length && (
         <Link
-          href={`/u/${handle}/rankings/${board.id}`}
+          href={`/${handle}/rankings/${board.id}`}
           className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           aria-label={`View the full ${board.name} board`}
         >

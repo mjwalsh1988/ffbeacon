@@ -104,7 +104,7 @@ export function PublishControls({
         <p className="mt-4 text-sm text-ink-muted">
           Live at{" "}
           <Link
-            href={`/u/${publicUrl.split("/u/")[1] ?? ""}`}
+            href={new URL(publicUrl).pathname}
             className="inline-flex items-center gap-1 font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             {publicUrl}

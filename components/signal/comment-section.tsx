@@ -517,7 +517,7 @@ function CommentRow({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
           {comment.authorHandle ? (
             <Link
-              href={`/u/${comment.authorHandle}`}
+              href={`/${comment.authorHandle}`}
               className="font-semibold text-ink hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               {comment.authorName}

@@ -1660,6 +1660,42 @@ T605 | completed | Stage B: shared render extracted + root /{handle} routes
        HTTP 200 (soft 404), the same force-dynamic behavior /u/[handle] and
        /leagues/[league_id] already have. noindex is applied, so no index leak.
 
+T606 | completed | Stage C: flip canonical to root + 301 (308) /u shims
+     | files: app/[handle]/page.tsx, app/[handle]/rankings/[boardId]/page.tsx,
+       next.config.ts, app/sitemap.ts, components/signal/signal-block.tsx,
+       components/signal/comment-section.tsx, app/my-beacon/signal/page.tsx,
+       app/my-beacon/signal/publish-controls.tsx,
+       app/my-beacon/signal/handle-manager.tsx; removed app/u/[handle]/page.tsx
+       + app/u/[handle]/rankings/[boardId]/page.tsx (action files kept)
+     | HARD GATE (ran first): SELECT from signals where handle in the 17 route
+       segments returned 0 rows, so no existing profile is shadowed by the flip.
+     | detail: root routes now pass canonicalBase "" (root is canonical: the
+       canonical <link>, casing 301, and handle-history 301 anchor at root). The
+       /u -> root permanent redirect is done in next.config.ts redirects() (runs
+       before routing, emits a real 308) rather than a page shim, because a
+       streamed page component's permanentRedirect emits a soft 200 + meta-
+       refresh, which would undermine the canonical signal. The two /u page
+       files were deleted (the config redirect supersedes them); the Wall server-
+       action files in app/u/[handle]/ stay (imported by components). Internal
+       links flipped to root: FeaturedBoardBlock "view full board", comment
+       author handle, sitemap profile URLs, the editor publicUrl (now derived via
+       new URL(publicUrl).pathname), and the handle-manager confirmation copy.
+     | depends on: T605
+     | verified: yes (typecheck + build green; runtime smoke on `next start`:
+         - /u/{handle} -> 308 -> /{handle}; /u/{handle}/rankings/{boardId} ->
+           308 -> /{handle}/rankings/{boardId} (real HTTP 308, Location correct);
+         - root /{handle} canonical metadata anchors at root; nonexistent root
+           handle is robots noindex,nofollow;
+         - /about,/rankings,/players,/leagues,/tools all 200;
+         - OAuth /?code= still 307 -> /auth/callback.
+     | known characteristic (parity, pre-existing): the in-page casing + handle-
+       history redirects at root keep Phase 1's soft (200 + meta-refresh) behavior
+       because they fire mid-stream in a force-dynamic page; the canonical <link>
+       still points at the correct root URL, so SEO is preserved. Only the new
+       /u migration uses a hard 308 (config). Using permanent:true (308, method-
+       preserving) matches the existing /tools/league-sync redirect convention; it
+       is SEO-equivalent to 301.
+
 ## Next milestone
 - News pipeline (RSS ingestion -> news_items, AI summary via Claude)
 - Vote matchups (/vs/[a]-vs-[b]) live
