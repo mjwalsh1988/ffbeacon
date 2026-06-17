@@ -158,7 +158,19 @@
       "Bash(npm audit *)",
       "Bash(sed 's/=$//')",
       "PowerShell(npx tsc --noEmit)",
-      "PowerShell(git restore *)"
+      "PowerShell(git restore *)",
+      "Bash(python3 *)",
+      "Bash(npx --yes prettier@3 --write \"lib/database.types.ts\")",
+      "Bash(echo \"rc1=$?\")",
+      "Bash(echo \"rc2=$?\")",
+      "Bash(npx prettier *)",
+      "Bash(python -c ' *)",
+      "Bash(rm changed_tmp.txt)",
+      "Bash(PORT=3100 npm run start)",
+      "Bash(tasklist)",
+      "Bash(PORT=3101 npm run start)",
+      "Bash(curl -s -o /dev/null \"http://localhost:3101/\")",
+      "Bash(:)"
     ]
   },
   "enabledMcpjsonServers": [
