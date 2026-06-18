@@ -16,6 +16,7 @@ import { AnimatedGif } from "@/components/signal/animated-gif";
 import { EmojiPicker } from "@/components/signal/emoji-picker";
 import { insertAtCursor } from "@/lib/signal/insert-at-cursor";
 import type { EmojiEntry } from "@/lib/signal/emoji-data";
+import { createClient } from "@/lib/supabase/client";
 import { createPost, type PostImageInput } from "./wall-actions";
 
 /**
@@ -28,6 +29,13 @@ import { createPost, type PostImageInput } from "./wall-actions";
  */
 
 const IMAGES_MAX = 4;
+const IMAGE_MAX_BYTES = 8 * 1024 * 1024; // matches the signal-media bucket limit
+const IMAGE_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+const POST_BUCKET = "signal-media";
 
 type DraftImage = {
   key: string;
@@ -83,44 +91,70 @@ export function WallComposer() {
       setError(`You can attach at most ${IMAGES_MAX} images.`);
       return;
     }
+    const ext = IMAGE_EXT[file.type];
+    if (!ext) {
+      setError("Use a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > IMAGE_MAX_BYTES) {
+      setError("Image must be 8 MB or smaller.");
+      return;
+    }
     setError(null);
     setUploading(true);
     setStatus("Uploading image...");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/signal/post-image", {
-        method: "POST",
-        headers: { "x-requested-with": "ff-beacon" },
-        body: form,
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        path?: string;
-        url?: string;
-        width?: number;
-        height?: number;
-        error?: string;
-      };
-      if (res.ok && data.ok && data.path && data.url) {
-        setImages((prev) => [
-          ...prev,
-          {
-            key: `img-${imageKeySeq++}`,
-            path: data.path!,
-            url: data.url!,
-            alt: "",
-            width: data.width ?? 0,
-            height: data.height ?? 0,
-          },
-        ]);
-        setStatus("Image added. Add a description for it.");
-      } else {
-        setError(data.error ?? "Could not upload that image.");
+      // Direct browser upload to the signal-media bucket (no server route, no
+      // native image library). Dimensions are read in the browser; the bucket's
+      // owner-folder RLS authorizes the write to "<uid>/posts/...".
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setError("You need to be signed in.");
         setStatus("");
+        return;
       }
-    } catch {
-      setError("Could not upload that image.");
+
+      let width = 0;
+      let height = 0;
+      try {
+        const bitmap = await createImageBitmap(file);
+        width = bitmap.width;
+        height = bitmap.height;
+        bitmap.close();
+      } catch {
+        setError("That image could not be read.");
+        setStatus("");
+        return;
+      }
+
+      const path = `${user.id}/posts/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from(POST_BUCKET)
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: pub } = supabase.storage.from(POST_BUCKET).getPublicUrl(path);
+
+      setImages((prev) => [
+        ...prev,
+        {
+          key: `img-${imageKeySeq++}`,
+          path,
+          url: pub.publicUrl,
+          alt: "",
+          width,
+          height,
+        },
+      ]);
+      setStatus("Image added. Add a description for it.");
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Could not upload that image.",
+      );
       setStatus("");
     } finally {
       setUploading(false);

@@ -47,7 +47,7 @@ function validateImages(
 
     if (
       !path.startsWith(prefix) ||
-      !/^[0-9a-f-]{36}\.webp$/i.test(path.slice(prefix.length))
+      !/^[0-9a-f-]{36}\.(webp|jpe?g|png)$/i.test(path.slice(prefix.length))
     ) {
       return { ok: false, error: "One of your images could not be attached." };
     }
