@@ -3,43 +3,32 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Trash2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { ImageWithFallback } from "@/components/image-with-fallback";
-
-// Kept in sync with the per-kind cap in app/api/signal/media/route.ts, which is
-// held under the hosting platform's ~4.5 MB request-body limit. Checking here
-// first means an oversized file gets an accessible message instead of being
-// rejected by the platform with an uncatchable HTML error page.
-const MAX_FILE_BYTES = 4 * 1024 * 1024;
+import { revalidateMySignal } from "@/app/my-beacon/rankings/actions";
 
 /**
- * Read a fetch Response as JSON without throwing on a non-JSON body. If the
- * platform returns an HTML error page (e.g. an oversized request rejected before
- * our route runs, or a gateway timeout), blindly calling res.json() would throw
- * "Unexpected token '<'". This returns a meaningful message instead.
+ * Avatar or banner uploader for the owner's Signal.
+ *
+ * The image is uploaded DIRECTLY from the browser to the public signal-media
+ * Supabase Storage bucket (no server route, no native image library), exactly
+ * like the profile avatar uploader. The bucket's owner-folder RLS ("<uid>/...")
+ * authorizes the write, and the bucket itself enforces the allowed types
+ * (JPG/PNG/WebP) and size cap. After a successful change we update the signals
+ * row and bust the cached public profile via revalidateMySignal().
+ *
+ * Server-side cropping/resizing/metadata-stripping was removed deliberately; a
+ * pure-JS in-browser version can be added later. For now this is a plain upload.
  */
-async function readResult(
-  res: Response,
-): Promise<{ ok?: boolean; url?: string; error?: string }> {
-  const text = await res.text().catch(() => "");
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    // Non-JSON body: an HTML error page from the server or the hosting platform.
-    // Do NOT assume this is a size problem (our own route reports size as JSON);
-    // surface the HTTP status so the real cause is identifiable.
-    return {
-      error: `Upload failed (server error ${res.status || "unknown"}). Please try again, or send this code to support if it keeps happening.`,
-    };
-  }
-}
 
-/**
- * Avatar or banner uploader for the owner's Signal. The file is POSTed to
- * /api/signal/media, which validates magic bytes, re-encodes to WebP (stripping
- * metadata), enforces dimensions, and stores it in the public signal-media
- * bucket. This component only previews and reports status; all hardening lives
- * server-side. Status is announced via a polite live region (errors assertive).
- */
+const BUCKET = "signal-media";
+const MAX_BYTES = 8 * 1024 * 1024; // matches the bucket's file_size_limit
+const ACCEPTED: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
 export function MediaUploader({
   kind,
   initialUrl,
@@ -58,39 +47,78 @@ export function MediaUploader({
   const isAvatar = kind === "avatar";
   const label = isAvatar ? "Avatar" : "Banner";
   const hint = isAvatar
-    ? "JPG, PNG, or WebP. Max 4 MB. Cropped to a square."
-    : "JPG, PNG, or WebP. Max 4 MB. Cropped to a wide banner.";
+    ? "JPG, PNG, or WebP. Max 8 MB."
+    : "JPG, PNG, or WebP. Max 8 MB. Shown as a wide banner.";
+
+  // Remove any existing files of THIS kind in the user's folder so a replace
+  // never leaves an orphan and avatar/banner do not clobber each other.
+  const removeExisting = async (
+    supabase: ReturnType<typeof createClient>,
+    userId: string,
+  ) => {
+    const { data: listed, error } = await supabase.storage
+      .from(BUCKET)
+      .list(userId, { limit: 100 });
+    if (error) throw error;
+    const paths = (listed ?? [])
+      .filter((item) => item.name.startsWith(`${kind}-`))
+      .map((item) => `${userId}/${item.name}`);
+    if (paths.length > 0) {
+      const { error: removeError } = await supabase.storage
+        .from(BUCKET)
+        .remove(paths);
+      if (removeError) throw removeError;
+    }
+  };
 
   const send = (file: File) => {
-    if (file.size > MAX_FILE_BYTES) {
-      setStatus({
-        kind: "error",
-        message: `That ${label.toLowerCase()} is too large. Choose an image under 4 MB.`,
-      });
+    const ext = ACCEPTED[file.type];
+    if (!ext) {
+      setStatus({ kind: "error", message: "Use a JPG, PNG, or WebP image." });
       return;
     }
+    if (file.size > MAX_BYTES) {
+      setStatus({ kind: "error", message: "Image must be 8 MB or smaller." });
+      return;
+    }
+
     startTransition(async () => {
       setStatus({ kind: "working" });
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setStatus({ kind: "error", message: "You need to be signed in." });
+        return;
+      }
+
       try {
-        const body = new FormData();
-        body.set("kind", kind);
-        body.set("file", file);
-        const res = await fetch("/api/signal/media", {
-          method: "POST",
-          headers: { "x-requested-with": "ff-beacon" },
-          body,
-        });
-        const json = await readResult(res);
-        if (!res.ok || !json.ok) {
-          throw new Error(json.error ?? "Upload failed.");
-        }
-        setPreviewUrl(json.url ?? null);
+        await removeExisting(supabase, user.id);
+        const path = `${user.id}/${kind}-${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, file, { contentType: file.type, upsert: true });
+        if (uploadError) throw uploadError;
+
+        const patch =
+          kind === "avatar" ? { avatar_path: path } : { banner_path: path };
+        const { error: updateError } = await supabase
+          .from("signals")
+          .update({ ...patch, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id);
+        if (updateError) throw updateError;
+
+        await revalidateMySignal();
+        const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+        setPreviewUrl(pub.publicUrl);
         setStatus({ kind: "success", message: `${label} updated.` });
         router.refresh();
       } catch (error) {
         setStatus({
           kind: "error",
-          message: error instanceof Error ? error.message : "Upload failed. Try again.",
+          message:
+            error instanceof Error ? error.message : "Upload failed. Try again.",
         });
       }
     });
@@ -99,20 +127,33 @@ export function MediaUploader({
   const remove = () => {
     startTransition(async () => {
       setStatus({ kind: "working" });
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setStatus({ kind: "error", message: "You need to be signed in." });
+        return;
+      }
       try {
-        const res = await fetch(`/api/signal/media?kind=${kind}`, {
-          method: "DELETE",
-          headers: { "x-requested-with": "ff-beacon" },
-        });
-        const json = await readResult(res);
-        if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not remove.");
+        await removeExisting(supabase, user.id);
+        const patch =
+          kind === "avatar" ? { avatar_path: null } : { banner_path: null };
+        const { error: updateError } = await supabase
+          .from("signals")
+          .update({ ...patch, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id);
+        if (updateError) throw updateError;
+
+        await revalidateMySignal();
         setPreviewUrl(null);
         setStatus({ kind: "success", message: `${label} removed.` });
         router.refresh();
       } catch (error) {
         setStatus({
           kind: "error",
-          message: error instanceof Error ? error.message : "Could not remove.",
+          message:
+            error instanceof Error ? error.message : "Could not remove.",
         });
       }
     });
