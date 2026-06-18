@@ -116,11 +116,11 @@ export const SOCIAL_LINKS: Array<{
   /** Hide the actual navigation while the social account isn't claimed yet. */
   disabled?: boolean;
 }> = [
-  { label: "Instagram", href: "https://instagram.com/ffbeacon", external: true },
+  { label: "Discord", href: "/join", external: true },
   { label: "X", href: "https://x.com/ffbeacon", external: true },
   { label: "TikTok", href: "https://tiktok.com/@ffbeacon", external: true },
   { label: "YouTube", href: "https://www.youtube.com/@FFBeacon", external: true },
-  { label: "Discord", href: "/join", external: true },
+  { label: "Instagram", href: "https://instagram.com/ffbeacon", external: true },
 ];
 
 export const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
