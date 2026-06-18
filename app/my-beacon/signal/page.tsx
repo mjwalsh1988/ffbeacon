@@ -1,63 +1,37 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  Radio,
+  Users,
+  AtSign,
+  IdCard,
+  LayoutPanelTop,
+  Globe,
+  ArrowRight,
+  Check,
+  CircleDashed,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { SITE } from "@/lib/site";
-import { getSleeperUser } from "@/lib/sleeper";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
-import { isSignalAccent, DEFAULT_ACCENT } from "@/lib/signal/accents";
+import {
+  loadOwnerSignal,
+  computeStepCompletion,
+  type OwnerSignal,
+  type StepCompletion,
+} from "@/lib/signal/editor-data";
+import {
+  SIGNAL_SUBPAGES,
+  type SignalSubpage,
+} from "@/lib/signal/editor-nav";
+import { SignalEditorSubNav } from "@/components/signal/signal-editor-subnav";
 import { HandleManager } from "./handle-manager";
-import { IdentityForm } from "./identity-form";
-import { AccentPicker } from "./accent-picker";
-import { LinksEditor } from "./links-editor";
-import { FavoritesEditor } from "./favorites-editor";
-import { MediaUploader } from "./media-uploader";
-import { PublishControls } from "./publish-controls";
-import { WallComposer } from "./wall-composer";
-import { WallManager } from "./wall-manager";
-import { parseWallGif, type WallPost, type WallImage } from "@/lib/signal-wall";
-import type { SignalLink, PlayerSearchResult } from "./customization";
-import {
-  SignalLeaguesManager,
-  type SignalLeagueOption,
-} from "./signal-leagues-manager";
-import { LayoutBuilder } from "./layout-builder";
-import { saveLayout } from "./actions";
-import {
-  type SignalBlock,
-  parseLayoutConfig,
-  hasStoredBlocks,
-  resolveLayout,
-  seedBlocksFromProfile,
-} from "@/lib/signal/blocks";
-
-/** Coerce the signals.links jsonb into a typed, shape-safe list for the editor.
- * The DB shape guard (migration 0069) already enforces this, but we parse
- * defensively so a malformed row never crashes the page. */
-function parseLinks(value: unknown): SignalLink[] {
-  if (!Array.isArray(value)) return [];
-  const out: SignalLink[] = [];
-  for (const item of value) {
-    if (
-      item &&
-      typeof item === "object" &&
-      typeof (item as { label?: unknown }).label === "string" &&
-      typeof (item as { url?: unknown }).url === "string"
-    ) {
-      out.push({
-        label: (item as { label: string }).label,
-        url: (item as { url: string }).url,
-      });
-    }
-  }
-  return out;
-}
 
 export const metadata: Metadata = {
   title: "My Signal",
   description:
-    "Build your public FF Beacon creator profile: handle, identity, avatar, banner, and visibility.",
+    "Set up your public FF Beacon creator profile: claim a handle, build it out step by step, and publish when you are ready.",
 };
-
-const BUCKET = "signal-media";
 
 export default async function MySignalPage() {
   const supabase = await createClient();
@@ -65,373 +39,508 @@ export default async function MySignalPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: signal } = await supabase
-    .from("signals")
-    .select(
-      "id, handle, display_name, headline, bio, avatar_path, banner_path, status, visibility, accent, layout, layout_config, links, favorite_team, favorite_player_id",
-    )
-    .eq("user_id", user!.id)
-    .maybeSingle();
+  const signal = await loadOwnerSignal(supabase, user!.id);
 
-  const publicUrlFor = (path: string | null) =>
-    path ? supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl : null;
+  // No handle yet: the only thing to do is claim one. Nothing else is shown
+  // until a Signal exists.
+  if (!signal) return <ClaimView />;
 
-  // Resolve the saved favorite player (if any) into the shape the typeahead
-  // renders for its initial selected state.
-  let favoritePlayer: PlayerSearchResult | null = null;
-  if (signal?.favorite_player_id) {
-    const { data: p } = await supabase
-      .from("players")
-      .select("id, slug, full_name, first_name, last_name, position, team")
-      .eq("id", signal.favorite_player_id)
-      .maybeSingle();
-    if (p) {
-      favoritePlayer = {
-        id: p.id,
-        slug: p.slug,
-        name: p.full_name || `${p.first_name} ${p.last_name}`.trim(),
-        position: p.position,
-        team: p.team,
-      };
-    }
-  }
+  const steps = await computeStepCompletion(supabase, user!.id, signal);
+  const launched = signal.published_at !== null;
 
-  const initialAccent = isSignalAccent(signal?.accent)
-    ? signal.accent
-    : DEFAULT_ACCENT;
-  const initialLinks = parseLinks(signal?.links);
-
-  // Owner's own Wall posts, in any state. RLS signal_posts_select_own returns
-  // the owner's posts including hidden ones, so the manager can flag takedowns.
-  let wallPosts: WallPost[] = [];
-  if (signal) {
-    const { data: postRows } = await supabase
-      .from("signal_posts")
-      .select("id, body, pinned, hidden, hidden_reason, created_at, edited_at, gif")
-      .eq("signal_id", signal.id)
-      .order("pinned", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(100);
-    const rows = postRows ?? [];
-
-    // Images for these posts (owner RLS returns the owner's own), grouped by post.
-    const imagesByPost = new Map<string, WallImage[]>();
-    if (rows.length > 0) {
-      const { data: imageRows } = await supabase
-        .from("signal_post_images")
-        .select("post_id, storage_path, alt_text, width, height, ordinal")
-        .in(
-          "post_id",
-          rows.map((r) => r.id),
-        )
-        .order("ordinal", { ascending: true });
-      for (const img of imageRows ?? []) {
-        const url = publicUrlFor(img.storage_path);
-        if (!url) continue;
-        const list = imagesByPost.get(img.post_id) ?? [];
-        list.push({
-          url,
-          alt: img.alt_text,
-          width: img.width,
-          height: img.height,
-        });
-        imagesByPost.set(img.post_id, list);
-      }
-    }
-
-    wallPosts = rows.map((row) => ({
-      id: row.id,
-      body: row.body,
-      pinned: row.pinned,
-      hidden: row.hidden,
-      hiddenReason: row.hidden_reason,
-      createdAt: row.created_at,
-      editedAt: row.edited_at,
-      images: imagesByPost.get(row.id) ?? [],
-      gif: parseWallGif(row.gif),
-      // The owner editor manages posts only; comments are moderated on the public
-      // Wall (where the owner gets inline hide/restore controls).
-      comments: [],
-    }));
-  }
-
-  // Featured-league picker data: the owner's already-synced leagues. We resolve
-  // their Sleeper user id from the saved username and match synced league_users
-  // rows. (This editor page MAY call Sleeper; the public profile never does.)
-  const { data: prefs } = await supabase
-    .from("user_preferences")
-    .select("sleeper_league_settings")
-    .eq("user_id", user!.id)
-    .maybeSingle();
-  const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
-
-  let leagueOptions: SignalLeagueOption[] = [];
-  if (signal && settings.username) {
-    const sleeperUser = await getSleeperUser(settings.username);
-    if (sleeperUser) {
-      const { data: memberships } = await supabase
-        .from("league_users")
-        .select("league_id")
-        .eq("sleeper_user_id", sleeperUser.user_id);
-      const leagueIds = Array.from(
-        new Set((memberships ?? []).map((m) => m.league_id)),
-      );
-      if (leagueIds.length > 0) {
-        const { data: leagueRows } = await supabase
-          .from("leagues")
-          .select("id, sleeper_league_id, name, season, total_rosters")
-          .in("id", leagueIds)
-          .order("season", { ascending: false });
-        leagueOptions = (leagueRows ?? []).map((l) => ({
-          sleeperLeagueId: l.sleeper_league_id,
-          name: l.name,
-          season: l.season,
-          totalRosters: l.total_rosters,
-        }));
-      }
-    }
-  }
-
-  // Layout builder inputs (only meaningful once a Signal exists). The board
-  // picker lists the owner's profile_visible boards; the league picker lists the
-  // featured (signal_league_ids) leagues that are actually synced, in order.
-  let profileBoardOptions: { id: string; name: string }[] = [];
-  if (signal) {
-    const { data: boardRows } = await supabase
-      .from("user_ranking_boards")
-      .select("id, name, profile_is_primary, profile_sort")
-      .eq("user_id", user!.id)
-      .eq("profile_visible", true)
-      .order("profile_is_primary", { ascending: false })
-      .order("profile_sort", { ascending: true });
-    profileBoardOptions = (boardRows ?? []).map((b) => ({ id: b.id, name: b.name }));
-  }
-
-  const leagueBySleeperId = new Map(
-    leagueOptions.map((l) => [l.sleeperLeagueId, l]),
+  return launched ? (
+    <HubGrid signal={signal} steps={steps} />
+  ) : (
+    <WizardView steps={steps} />
   );
-  const featuredLeagueOptions = (settings.signal_league_ids ?? [])
-    .map((id) => leagueBySleeperId.get(id))
-    .filter((l): l is SignalLeagueOption => !!l)
-    .map((l) => ({
-      sleeperLeagueId: l.sleeperLeagueId,
-      name: l.name,
-      season: l.season,
-    }));
+}
 
-  // The builder's initial state mirrors what the public resolver renders: parse
-  // the stored layout_config, or seed from current data when none exists yet, so
-  // "what you arrange" equals "what is live".
-  const initialLayout = resolveLayout(signal?.layout);
-  let initialBlocks: SignalBlock[] = parseLayoutConfig(signal?.layout_config);
-  if (signal && !hasStoredBlocks(signal.layout_config)) {
-    initialBlocks = seedBlocksFromProfile({
-      hasBio: !!(signal.bio && signal.bio.trim()),
-      hasFavorites: !!(signal.favorite_team || signal.favorite_player_id),
-      // Mirror the public resolver, which counts only https links (parseProfileLinks
-      // drops non-https rows), so the seeded builder state equals what is live.
-      hasLinks: initialLinks.some((l) => l.url.startsWith("https://")),
-      boardIds: profileBoardOptions.map((b) => b.id),
-      sleeperLeagueIds: featuredLeagueOptions.map((l) => l.sleeperLeagueId),
-    });
-  }
+/* ---------- State 1: claim ---------- */
 
+function ClaimView() {
   return (
-    <div className="space-y-12">
-      <section aria-labelledby="signal-intro-heading">
-        <SectionEyebrow>Your Signal</SectionEyebrow>
-        <h2
-          id="signal-intro-heading"
-          className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
-        >
-          Your public creator profile.
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          Your Signal is a shareable landing page for your fantasy presence. Claim
-          a handle, set up your identity, then publish when you are ready. It stays
-          private until you publish it.
-        </p>
+    <div className="mx-auto max-w-2xl space-y-6">
+      {/* Intro: branded header card so the page opens with a clear anchor
+          instead of loose text. */}
+      <section
+        aria-labelledby="signal-claim-intro"
+        className="relative overflow-hidden rounded-modal border border-line bg-surface/60 p-6 sm:p-7"
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-px"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(168, 85, 247, 0.14) 0%, transparent 70%)",
+          }}
+        />
+        <div className="relative">
+          <div className="flex items-center gap-3">
+            <ClaimEmblem />
+            <SectionEyebrow>My Signal</SectionEyebrow>
+          </div>
+          <h2
+            id="signal-claim-intro"
+            className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl"
+          >
+            Ready to boost your signal?
+          </h2>
+          <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+            Your Signal is your home base on FF Beacon: one shareable page that
+            pulls your rankings, leagues, links, and a Wall together so you can
+            boost your signal and grow your audience. Claiming your handle is the
+            first step, and nothing goes public until you hit publish.
+          </p>
+
+          <ul role="list" className="mt-6 grid gap-3 sm:grid-cols-2">
+            <ClaimPoint
+              icon={Radio}
+              title="For creators"
+              body="Showcase your boards and leagues, link your channels, and boost your signal to a following."
+            />
+            <ClaimPoint
+              icon={Users}
+              title="For everyone"
+              body="Get a public profile so people can follow you and join the conversation on your Wall."
+            />
+          </ul>
+        </div>
       </section>
 
-      {!signal ? (
-        <section aria-labelledby="signal-claim-heading">
+      {/* Step 1: the claim panel, highlighted so it reads as the action. */}
+      <section
+        id="claim-handle"
+        aria-labelledby="signal-claim-heading"
+        className="scroll-mt-24 rounded-modal border border-brand-purple/40 bg-brand-purple/[0.05] p-6 sm:p-7"
+      >
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-brand-purple/40 bg-base text-brand-purple"
+          >
+            <AtSign className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-purple">
+              Step 1
+            </p>
+            <h2
+              id="signal-claim-heading"
+              className="text-lg font-semibold tracking-tight text-ink"
+            >
+              Claim your handle
+            </h2>
+          </div>
+        </div>
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+          This is your public address, the short link you hand out to boost your
+          signal. It cannot be one of our reserved words, and you can change it
+          once every 30 days.
+        </p>
+        <div className="mt-4">
+          <HandleManager currentHandle={null} />
+        </div>
+      </section>
+
+      {/* What comes after, so the single step has context. */}
+      <section aria-labelledby="signal-next-heading">
+        <div className="flex items-center gap-2">
+          <Sparkles aria-hidden="true" className="h-4 w-4 text-brand-purple" />
           <h2
-            id="signal-claim-heading"
+            id="signal-next-heading"
             className="text-lg font-semibold tracking-tight text-ink"
           >
-            Claim your handle to get started.
+            What comes next
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            This is your public address and cannot be one of our reserved words.
-            You can change it later (once every 30 days).
-          </p>
-          <div className="mt-4 max-w-2xl">
-            <HandleManager currentHandle={null} />
-          </div>
-        </section>
-      ) : (
-        <>
-          <section aria-labelledby="signal-handle-heading">
-            <h2
-              id="signal-handle-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Handle
-            </h2>
-            <div className="mt-4 max-w-2xl">
-              <HandleManager currentHandle={signal.handle} />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-identity-heading">
-            <h2
-              id="signal-identity-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Identity
-            </h2>
-            <div className="mt-4 max-w-2xl">
-              <IdentityForm
-                initialDisplayName={signal.display_name ?? ""}
-                initialHeadline={signal.headline ?? ""}
-                initialBio={signal.bio ?? ""}
-              />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-appearance-heading">
-            <h2
-              id="signal-appearance-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Appearance
-            </h2>
-            <div className="mt-4 max-w-2xl">
-              <AccentPicker initialAccent={initialAccent} />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-images-heading">
-            <h2
-              id="signal-images-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Images
-            </h2>
-            <div className="mt-4 grid max-w-2xl gap-4 sm:grid-cols-2">
-              <MediaUploader kind="avatar" initialUrl={publicUrlFor(signal.avatar_path)} />
-              <MediaUploader kind="banner" initialUrl={publicUrlFor(signal.banner_path)} />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-links-heading">
-            <h2
-              id="signal-links-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Links
-            </h2>
-            <div className="mt-4 max-w-2xl">
-              <LinksEditor initialLinks={initialLinks} />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-favorites-heading">
-            <h2
-              id="signal-favorites-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Favorites
-            </h2>
-            <div className="mt-4 max-w-2xl">
-              <FavoritesEditor
-                initialTeam={signal.favorite_team}
-                initialPlayer={favoritePlayer}
-              />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-leagues-heading">
-            <h2
-              id="signal-leagues-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Featured leagues
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              Show off your Sleeper leagues on your profile. Only leagues you
-              have already opened in League Pulse appear here, and visitors see
-              clean summary cards, never your private data.
-            </p>
-            <div className="mt-4 max-w-2xl">
-              <SignalLeaguesManager
-                leagues={leagueOptions}
-                initialFeaturedIds={settings.signal_league_ids ?? []}
-              />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-layout-heading">
-            <h2
-              id="signal-layout-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Profile layout
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              Choose your layout and arrange the blocks visitors see. Removing a
-              block here only takes it off your layout; it never deletes your
-              boards, leagues, links, or favorites. The Wall always stays below.
-            </p>
-            <div className="mt-4 max-w-2xl">
-              <LayoutBuilder
-                initialLayout={initialLayout}
-                initialBlocks={initialBlocks}
-                boardOptions={profileBoardOptions}
-                leagueOptions={featuredLeagueOptions}
-                onSave={saveLayout}
-              />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-wall-heading">
-            <h2
-              id="signal-wall-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Wall
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              Post short updates to your public profile. Visitors see your posts
-              newest first, with any pinned post at the top. You can edit or
-              delete your posts at any time.
-            </p>
-            <div className="mt-4 max-w-2xl space-y-6">
-              <WallComposer />
-              <WallManager posts={wallPosts} />
-            </div>
-          </section>
-
-          <section aria-labelledby="signal-publish-heading">
-            <h2
-              id="signal-publish-heading"
-              className="text-lg font-semibold tracking-tight text-ink"
-            >
-              Visibility
-            </h2>
-            <div className="mt-4 max-w-2xl">
-              <PublishControls
-                initialStatus={signal.status as "draft" | "published"}
-                initialVisibility={signal.visibility as "public" | "private"}
-                publicUrl={`${SITE.url}/${signal.handle}`}
-              />
-            </div>
-          </section>
-        </>
-      )}
+        </div>
+        <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+          Once your handle is set, you will build out the rest, step by step.
+        </p>
+        <ol role="list" className="mt-4 grid gap-3 sm:grid-cols-3">
+          <NextStep
+            n={2}
+            icon={IdCard}
+            title="Build your profile"
+            body="Add your identity, avatar, links, and favorites."
+          />
+          <NextStep
+            n={3}
+            icon={LayoutPanelTop}
+            title="Arrange your page"
+            body="Feature your ranking boards and leagues."
+          />
+          <NextStep
+            n={4}
+            icon={Globe}
+            title="Publish and share"
+            body="Go live and start growing your audience."
+          />
+        </ol>
+      </section>
     </div>
   );
 }
+
+/** Branded round emblem for the claim intro (mirrors the hero card's mark). */
+function ClaimEmblem() {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-beacon text-black shadow-md shadow-brand-purple/30"
+    >
+      <Radio className="h-6 w-6" />
+    </span>
+  );
+}
+
+function ClaimPoint({
+  icon: Icon,
+  title,
+  body,
+}: {
+  icon: LucideIcon;
+  title: string;
+  body: string;
+}) {
+  return (
+    <li className="flex items-start gap-3 rounded-card border border-line bg-base/60 p-4">
+      <span
+        aria-hidden="true"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-ink">{title}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">
+          {body}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+function NextStep({
+  n,
+  icon: Icon,
+  title,
+  body,
+}: {
+  n: number;
+  icon: LucideIcon;
+  title: string;
+  body: string;
+}) {
+  return (
+    <li className="rounded-card border border-line bg-surface/60 p-4">
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+          Step {n}
+        </span>
+      </div>
+      <h3 className="mt-2 text-sm font-semibold text-ink">{title}</h3>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
+    </li>
+  );
+}
+
+/* ---------- State 2: wizard (claimed, never published) ---------- */
+
+function WizardView({ steps }: { steps: StepCompletion }) {
+  const doneCount = SIGNAL_SUBPAGES.filter((p) => steps[p.key]).length;
+  const total = SIGNAL_SUBPAGES.length;
+  // The first incomplete step (in order) is the suggested next action. Handle is
+  // always complete here, so this lands on the first real piece of setup.
+  const nextKey = SIGNAL_SUBPAGES.find((p) => !steps[p.key])?.key ?? null;
+
+  return (
+    <div className="space-y-8">
+      <SignalEditorSubNav />
+
+      <header>
+        <SectionEyebrow>Setup</SectionEyebrow>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Build your Signal, step by step.
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
+          Work through the steps below in any order. Each one is optional except
+          your handle, which you already have. When you are happy with it, the
+          last step publishes your profile to the web.
+        </p>
+        <p className="mt-3 text-sm font-medium text-ink">
+          <span className="text-brand-cyan">{doneCount}</span> of {total} steps
+          started.
+        </p>
+      </header>
+
+      <ol role="list" className="space-y-3">
+        {SIGNAL_SUBPAGES.map((page, i) => (
+          <WizardStep
+            key={page.key}
+            page={page}
+            index={i + 1}
+            done={steps[page.key]}
+            isNext={page.key === nextKey}
+          />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function WizardStep({
+  page,
+  index,
+  done,
+  isNext,
+}: {
+  page: SignalSubpage;
+  index: number;
+  done: boolean;
+  isNext: boolean;
+}) {
+  return (
+    <li
+      className={`rounded-card border bg-surface/60 p-5 transition-colors ${
+        isNext ? "border-brand-purple/60 bg-brand-purple/[0.06]" : "border-line"
+      }`}
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            aria-hidden="true"
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
+              done
+                ? "border-signal-success/40 bg-signal-success/10 text-signal-success"
+                : "border-line bg-base text-ink-muted"
+            }`}
+          >
+            {done ? <Check className="h-4 w-4" /> : index}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-semibold text-ink">
+                {page.wizardTitle}
+              </h3>
+              {done ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-signal-success/40 bg-signal-success/10 px-2 py-0.5 text-[11px] font-semibold text-signal-success">
+                  <Check aria-hidden="true" className="h-3 w-3" />
+                  Started
+                </span>
+              ) : isNext ? (
+                <span className="rounded-full border border-brand-purple/50 bg-brand-purple/10 px-2 py-0.5 text-[11px] font-semibold text-brand-purple">
+                  Start here
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+              {page.wizardBody}
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href={page.href}
+          aria-label={
+            done
+              ? `Edit ${page.label}. Already started. ${page.summary}`
+              : isNext
+                ? `Start here. ${page.cta}. ${page.summary}`
+                : `${page.cta}. ${page.summary}`
+          }
+          className={`inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-card px-4 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+            isNext
+              ? "bg-beacon text-black transition-opacity hover:opacity-90"
+              : "border border-line bg-base text-ink transition-colors hover:border-line-accent"
+          }`}
+        >
+          {done ? "Edit" : page.cta}
+          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </li>
+  );
+}
+
+/* ---------- State 3: card hub (launched) ---------- */
+
+function HubGrid({
+  signal,
+  steps,
+}: {
+  signal: OwnerSignal;
+  steps: StepCompletion;
+}) {
+  return (
+    <div className="space-y-8">
+      <SignalEditorSubNav />
+
+      <header>
+        <div className="flex items-center gap-2">
+          <Sparkles aria-hidden="true" className="h-4 w-4 text-brand-purple" />
+          <SectionEyebrow>Your Signal</SectionEyebrow>
+        </div>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Manage your profile.
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
+          Your Signal is live. Jump into any section to update it. Changes save
+          as you go and appear on your public profile right away.
+        </p>
+      </header>
+
+      <ul role="list" className="grid gap-3 sm:grid-cols-2">
+        {SIGNAL_SUBPAGES.map((page) => (
+          <HubCard
+            key={page.key}
+            page={page}
+            done={steps[page.key]}
+            signal={signal}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function HubCard({
+  page,
+  done,
+  signal,
+}: {
+  page: SignalSubpage;
+  done: boolean;
+  signal: OwnerSignal;
+}) {
+  const Icon = page.icon;
+  const status = hubCardStatus(page, done, signal);
+
+  return (
+    <li>
+      <Link
+        href={page.href}
+        aria-label={`${page.label}. ${page.summary} Status: ${status.srLabel}.`}
+        className="group flex h-full items-start gap-4 rounded-card border border-line bg-surface/60 p-5 transition-colors hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        <span
+          aria-hidden="true"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        >
+          <Icon className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-ink">{page.label}</span>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${status.tone}`}
+            >
+              {status.withCheck && (
+                <Check aria-hidden="true" className="h-3 w-3" />
+              )}
+              {!status.withCheck && !status.solid && (
+                <CircleDashed aria-hidden="true" className="h-3 w-3" />
+              )}
+              {status.label}
+            </span>
+          </span>
+          <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
+            {page.summary}
+          </span>
+        </span>
+        <ArrowRight
+          aria-hidden="true"
+          className="mt-1 h-4 w-4 shrink-0 text-ink-subtle transition-colors group-hover:text-brand-cyan"
+        />
+      </Link>
+    </li>
+  );
+}
+
+/** Per-card status pill. The visibility card mirrors the live/private/draft
+ * state; every other card shows a simple set-up indicator. */
+function hubCardStatus(
+  page: SignalSubpage,
+  done: boolean,
+  signal: OwnerSignal,
+): {
+  label: string;
+  srLabel: string;
+  tone: string;
+  withCheck: boolean;
+  solid: boolean;
+} {
+  if (page.key === "visibility") {
+    const isLive =
+      signal.status === "published" && signal.visibility === "public";
+    if (isLive) {
+      return {
+        label: "Live",
+        srLabel: "live and public",
+        tone: "border-signal-success/40 bg-signal-success/10 text-signal-success",
+        withCheck: true,
+        solid: true,
+      };
+    }
+    if (signal.status === "published") {
+      return {
+        label: "Private",
+        srLabel: "published but private",
+        tone: "border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan",
+        withCheck: false,
+        solid: true,
+      };
+    }
+    return {
+      label: "Draft",
+      srLabel: "in draft",
+      tone: "border-line bg-base text-ink-muted",
+      withCheck: false,
+      solid: true,
+    };
+  }
+
+  if (page.key === "handle") {
+    return {
+      label: "Claimed",
+      srLabel: "claimed",
+      tone: "border-signal-success/40 bg-signal-success/10 text-signal-success",
+      withCheck: true,
+      solid: true,
+    };
+  }
+
+  return done
+    ? {
+        label: "Set up",
+        srLabel: "set up",
+        tone: "border-signal-success/40 bg-signal-success/10 text-signal-success",
+        withCheck: true,
+        solid: true,
+      }
+    : {
+        label: "Optional",
+        srLabel: "not set up yet",
+        tone: "border-line bg-base text-ink-muted",
+        withCheck: false,
+        solid: false,
+      };
+}
+
+/* ---------- Shared ---------- */
 
 function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (

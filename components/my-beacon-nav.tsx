@@ -44,16 +44,16 @@ const NAV_ITEMS: NavItem[] = [
     description: "Build and reorder your own custom player ranking boards.",
   },
   {
-    href: "/my-beacon/signal",
-    label: "My Signal",
-    icon: Radio,
-    description: "Build your public creator profile: handle, identity, and visibility.",
-  },
-  {
     href: "/my-beacon/sleeper-leagues",
     label: "My Sleeper Leagues",
     icon: Trophy,
     description: "Saved Sleeper username and every active league synced from it.",
+  },
+  {
+    href: "/my-beacon/signal",
+    label: "My Signal",
+    icon: Radio,
+    description: "Build your public creator profile: handle, identity, and visibility.",
   },
   {
     href: "/my-beacon/account",
