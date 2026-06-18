@@ -164,6 +164,7 @@ async function postImpl(req: Request) {
     .from(BUCKET)
     .upload(path, outBuf, { contentType: "image/webp", upsert: true });
   if (uploadError) {
+    console.error("[signal media] storage upload error:", uploadError);
     return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
   }
 
@@ -174,6 +175,7 @@ async function postImpl(req: Request) {
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("user_id", user.id);
   if (updateError) {
+    console.error("[signal media] signals update error:", updateError);
     return NextResponse.json(
       { error: "Saved the image but could not update your profile." },
       { status: 500 },
