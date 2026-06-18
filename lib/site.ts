@@ -105,7 +105,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
  * route serves an OG-branded landing page and then forwards the visitor.
  */
 export const SOCIAL_LINKS: Array<{
-  label: "Instagram" | "X" | "TikTok" | "Discord";
+  label: "Instagram" | "X" | "TikTok" | "YouTube" | "Discord";
   href: string;
   /** Whether the link opens in a new tab. The footer renderer reads this
    * flag to set target="_blank" + rel="noopener noreferrer" and to append
@@ -119,6 +119,7 @@ export const SOCIAL_LINKS: Array<{
   { label: "Instagram", href: "https://instagram.com/ffbeacon", external: true },
   { label: "X", href: "https://x.com/ffbeacon", external: true },
   { label: "TikTok", href: "https://tiktok.com/@ffbeacon", external: true },
+  { label: "YouTube", href: "https://www.youtube.com/@FFBeacon", external: true },
   { label: "Discord", href: "/join", external: true },
 ];
 
