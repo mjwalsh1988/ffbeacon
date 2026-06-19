@@ -7,6 +7,7 @@ import {
   History,
   SlidersHorizontal,
   Flag,
+  HelpCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Signal",
     icon: Flag,
     description: "Creator profile moderation: review reported Wall posts and take them down or restore them.",
+  },
+  {
+    href: "/admin/signal-guide",
+    label: "Signal Guide",
+    icon: HelpCircle,
+    description: "Per-page help content: manage the questions and terms shown to visitors.",
   },
   {
     href: "/admin/crons",

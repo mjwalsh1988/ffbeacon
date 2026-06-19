@@ -1,0 +1,91 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { HelpCircle } from "lucide-react";
+import { resolveGuidePageKey } from "@/lib/guide/registry";
+import type { GuidePageContent } from "@/lib/guide/types";
+import { GuidePanel } from "./guide-panel";
+
+/**
+ * Site-wide Signal Guide launcher. Mounted once in the root layout.
+ *
+ * On every navigation it resolves the current pathname to a guide page_key and
+ * fetches that page's published content. The floating "?" button only renders
+ * when the page actually has published entries, so a page with no guide content
+ * shows nothing at all (per the product rule). Anchored bottom-LEFT so it never
+ * collides with the Discord CTA (bottom-right).
+ */
+export function SignalGuideMount() {
+  const pathname = usePathname();
+  const [content, setContent] = useState<GuidePageContent | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const pageKey = pathname ? resolveGuidePageKey(pathname) : null;
+    // Reset on navigation so the previous page's button never lingers.
+    setContent(null);
+    setPanelOpen(false);
+    if (!pageKey) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(`/api/guide/${pageKey}`, { signal: controller.signal });
+        if (!res.ok) return;
+        const data = (await res.json()) as Partial<GuidePageContent> & {
+          page: GuidePageContent["page"] | null;
+        };
+        if (cancelled) return;
+        if (
+          data.page &&
+          ((data.questions?.length ?? 0) > 0 || (data.terms?.length ?? 0) > 0)
+        ) {
+          setContent({
+            page: data.page,
+            questions: data.questions ?? [],
+            terms: data.terms ?? [],
+          });
+        }
+      } catch {
+        // Network error or aborted navigation: leave the button hidden.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [pathname]);
+
+  if (!content) return null;
+
+  return (
+    <>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-start px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setPanelOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={panelOpen}
+          aria-label={`Open the Signal Guide for ${content.page.title}: help and definitions for this page`}
+          className="pointer-events-auto inline-flex min-h-[44px] items-center gap-2 rounded-full border border-brand-cyan/40 bg-surface/95 py-2 pl-2 pr-3 text-sm font-semibold text-ink shadow-lg backdrop-blur transition-transform hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-brand-purple to-brand-cyan text-black">
+            <HelpCircle aria-hidden="true" className="h-4 w-4" />
+          </span>
+          <span>Guide</span>
+        </button>
+      </div>
+
+      <GuidePanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        content={content}
+      />
+    </>
+  );
+}

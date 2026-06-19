@@ -640,6 +640,83 @@ export type Database = {
         };
         Relationships: [];
       };
+      guide_entries: {
+        Row: {
+          body: string;
+          created_at: string;
+          display_order: number;
+          heading: string;
+          id: string;
+          is_published: boolean;
+          kind: string;
+          page_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          body: string;
+          created_at?: string;
+          display_order?: number;
+          heading: string;
+          id?: string;
+          is_published?: boolean;
+          kind: string;
+          page_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          body?: string;
+          created_at?: string;
+          display_order?: number;
+          heading?: string;
+          id?: string;
+          is_published?: boolean;
+          kind?: string;
+          page_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guide_entries_page_id_fkey";
+            columns: ["page_id"];
+            isOneToOne: false;
+            referencedRelation: "guide_pages";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      guide_pages: {
+        Row: {
+          created_at: string;
+          description: string | null;
+          display_order: number;
+          id: string;
+          page_key: string;
+          route_example: string | null;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          description?: string | null;
+          display_order?: number;
+          id?: string;
+          page_key: string;
+          route_example?: string | null;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          description?: string | null;
+          display_order?: number;
+          id?: string;
+          page_key?: string;
+          route_example?: string | null;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       league_drafts: {
         Row: {
           created_at: string;

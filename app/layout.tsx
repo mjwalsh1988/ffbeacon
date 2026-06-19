@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { Analytics } from "@vercel/analytics/next";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { DiscordCta } from "@/components/discord-cta";
+import { SignalGuideMount } from "@/components/signal-guide/signal-guide-mount";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -51,6 +53,8 @@ export default function RootLayout({
           <SiteFooter />
         </div>
         <DiscordCta />
+        <SignalGuideMount />
+        <Analytics />
       </body>
     </html>
   );
