@@ -8,6 +8,7 @@ import {
   GuideEntriesManager,
   GuidePageMetaForm,
 } from "@/components/admin/guide-entries-manager";
+import { GuideSubmissionAcceptForm } from "@/components/admin/guide-submission-accept-form";
 import type { GuideEntry, GuideEntryKind } from "@/lib/guide/types";
 
 export const dynamic = "force-dynamic";
@@ -35,12 +36,40 @@ export async function generateMetadata({
  * add/edit/reorder/publish/delete its questions and terms. Reads via the
  * service-role client so unpublished entries are visible to the admin.
  */
+function toEntry(r: {
+  id: string;
+  page_id: string;
+  kind: string;
+  heading: string;
+  body: string;
+  display_order: number;
+  is_published: boolean;
+  is_global: boolean;
+}): GuideEntry {
+  return {
+    id: r.id,
+    page_id: r.page_id,
+    kind: r.kind as GuideEntryKind,
+    heading: r.heading,
+    body: r.body,
+    display_order: r.display_order,
+    is_published: r.is_published,
+    is_global: r.is_global,
+  };
+}
+
+const ENTRY_COLUMNS =
+  "id, page_id, kind, heading, body, display_order, is_published, is_global";
+
 export default async function AdminSignalGuidePageManage({
   params,
+  searchParams,
 }: {
   params: Promise<{ pageKey: string }>;
+  searchParams: Promise<{ submission?: string }>;
 }) {
   const { pageKey } = await params;
+  const { submission: submissionId } = await searchParams;
   await requireAdmin(`/admin/signal-guide/${pageKey}`);
 
   const admin = createAdminClient();
@@ -51,25 +80,49 @@ export default async function AdminSignalGuidePageManage({
     .maybeSingle();
   if (!page) notFound();
 
-  const { data: rows } = await admin
-    .from("guide_entries")
-    .select("id, page_id, kind, heading, body, display_order, is_published")
-    .eq("page_id", page.id)
-    .order("display_order", { ascending: true })
-    .order("created_at", { ascending: true });
+  // Page-specific entries (this page only) and global entries (shown everywhere)
+  // are managed in separate sections. Also load the page list for the accept form's
+  // destination picker, and the in-flight submission when accepting one.
+  const [{ data: ownRows }, { data: globalRows }, { data: allPages }, { data: pendingSub }] =
+    await Promise.all([
+      admin
+        .from("guide_entries")
+        .select(ENTRY_COLUMNS)
+        .eq("page_id", page.id)
+        .eq("is_global", false)
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+      admin
+        .from("guide_entries")
+        .select(ENTRY_COLUMNS)
+        .eq("is_global", true)
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+      admin
+        .from("guide_pages")
+        .select("page_key, title")
+        .order("display_order", { ascending: true })
+        .order("title", { ascending: true }),
+      submissionId
+        ? admin
+            .from("guide_question_submissions")
+            .select("id, name, email, question, status")
+            .eq("id", submissionId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
-  const entries: GuideEntry[] = (rows ?? []).map((r) => ({
-    id: r.id,
-    page_id: r.page_id,
-    kind: r.kind as GuideEntryKind,
-    heading: r.heading,
-    body: r.body,
-    display_order: r.display_order,
-    is_published: r.is_published,
-  }));
+  const ownEntries = (ownRows ?? []).map(toEntry);
+  const globalEntries = (globalRows ?? []).map(toEntry);
 
-  const questions = entries.filter((e) => e.kind === "question");
-  const terms = entries.filter((e) => e.kind === "term");
+  const questions = ownEntries.filter((e) => e.kind === "question");
+  const terms = ownEntries.filter((e) => e.kind === "term");
+  const globalQuestions = globalEntries.filter((e) => e.kind === "question");
+  const globalTerms = globalEntries.filter((e) => e.kind === "term");
+
+  // Only surface the accept form for a submission that is still pending.
+  const acceptSubmission =
+    pendingSub && pendingSub.status === "pending" ? pendingSub : null;
 
   return (
     <div>
@@ -92,18 +145,49 @@ export default async function AdminSignalGuidePageManage({
       </p>
 
       <div className="mt-8 space-y-10">
+        {acceptSubmission && (
+          <GuideSubmissionAcceptForm
+            submissionId={acceptSubmission.id}
+            submitterName={acceptSubmission.name}
+            submitterEmail={acceptSubmission.email}
+            questionText={acceptSubmission.question}
+            defaultPageKey={page.page_key}
+            pages={allPages ?? [{ page_key: page.page_key, title: page.title }]}
+          />
+        )}
+
         <GuidePageMetaForm
           pageKey={page.page_key}
           initialTitle={page.title}
           initialDescription={page.description ?? ""}
         />
 
-        <GuideEntriesManager
-          pageKey={page.page_key}
-          kind="question"
-          initial={questions}
-        />
+        <GuideEntriesManager pageKey={page.page_key} kind="question" initial={questions} />
         <GuideEntriesManager pageKey={page.page_key} kind="term" initial={terms} />
+
+        {(globalQuestions.length > 0 || globalTerms.length > 0) && (
+          <div className="space-y-10 rounded-modal border border-brand-purple/30 bg-brand-purple/5 p-4 sm:p-5">
+            <div>
+              <h2 className="text-lg font-semibold text-ink">Global guide content</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-muted">
+                Shown in the guide on every page, including this one. Changes here affect
+                all pages.
+              </p>
+            </div>
+            <GuideEntriesManager
+              pageKey={page.page_key}
+              kind="question"
+              initial={globalQuestions}
+              scope="global"
+            />
+            <GuideEntriesManager
+              pageKey={page.page_key}
+              kind="term"
+              initial={globalTerms}
+              scope="global"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

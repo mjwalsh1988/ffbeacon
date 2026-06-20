@@ -647,6 +647,7 @@ export type Database = {
           display_order: number;
           heading: string;
           id: string;
+          is_global: boolean;
           is_published: boolean;
           kind: string;
           page_id: string;
@@ -658,6 +659,7 @@ export type Database = {
           display_order?: number;
           heading: string;
           id?: string;
+          is_global?: boolean;
           is_published?: boolean;
           kind: string;
           page_id: string;
@@ -669,6 +671,7 @@ export type Database = {
           display_order?: number;
           heading?: string;
           id?: string;
+          is_global?: boolean;
           is_published?: boolean;
           kind?: string;
           page_id?: string;
@@ -716,6 +719,59 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      guide_question_submissions: {
+        Row: {
+          created_at: string;
+          email: string | null;
+          id: string;
+          ip_hash: string | null;
+          name: string;
+          page_key: string;
+          question: string;
+          resolved_at: string | null;
+          resolved_entry_id: string | null;
+          status: string;
+          submitted_user_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          ip_hash?: string | null;
+          name: string;
+          page_key: string;
+          question: string;
+          resolved_at?: string | null;
+          resolved_entry_id?: string | null;
+          status?: string;
+          submitted_user_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          ip_hash?: string | null;
+          name?: string;
+          page_key?: string;
+          question?: string;
+          resolved_at?: string | null;
+          resolved_entry_id?: string | null;
+          status?: string;
+          submitted_user_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guide_question_submissions_resolved_entry_id_fkey";
+            columns: ["resolved_entry_id"];
+            isOneToOne: false;
+            referencedRelation: "guide_entries";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       league_drafts: {
         Row: {

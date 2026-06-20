@@ -25,6 +25,8 @@ export type GuideEntry = {
   body: string;
   display_order: number;
   is_published: boolean;
+  /** When true the entry shows on every page's guide panel, not just its owner page. */
+  is_global: boolean;
 };
 
 /** What the public panel needs: page meta plus its published entries split by kind. */
@@ -44,4 +46,30 @@ export const GUIDE_SECTION_LABEL: Record<GuideEntryKind, string> = {
 export const GUIDE_KIND_NOUN: Record<GuideEntryKind, { one: string; many: string }> = {
   question: { one: "question", many: "questions" },
   term: { one: "term", many: "terms" },
+};
+
+export type GuideSubmissionStatus = "pending" | "accepted" | "denied";
+
+/** One community-submitted question awaiting (or past) admin review. */
+export type GuideSubmission = {
+  id: string;
+  page_key: string;
+  name: string;
+  email: string | null;
+  question: string;
+  status: GuideSubmissionStatus;
+  submitted_user_id: string | null;
+  resolved_entry_id: string | null;
+  resolved_at: string | null;
+  created_at: string;
+};
+
+/** What the public submit form sends to the server. */
+export type GuideSubmissionInput = {
+  pageKey: string;
+  name: string;
+  email: string;
+  question: string;
+  /** Honeypot: must be empty. A non-empty value means a bot filled a hidden field. */
+  company: string;
 };

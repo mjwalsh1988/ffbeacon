@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Globe } from "lucide-react";
 import { AdminSwitch, useAdminAnnouncer } from "@/components/admin/admin-controls";
 import {
   createEntry,
@@ -43,14 +45,28 @@ export function GuideEntriesManager({
   pageKey,
   kind,
   initial,
+  scope = "page",
 }: {
   pageKey: string;
   kind: GuideEntryKind;
   initial: GuideEntry[];
+  /**
+   * "page" lists this page's own entries (default). "global" lists entries shown
+   * on every page; those rows are badged and edits warn that they affect all
+   * pages. The form's "Show on all pages" toggle defaults to match the scope.
+   */
+  scope?: "page" | "global";
 }) {
+  const isGlobalScope = scope === "global";
+  const router = useRouter();
   const [list, setList] = useState<GuideEntry[]>(() =>
     [...initial].sort((a, b) => a.display_order - b.display_order),
   );
+  // Re-seed when the server sends fresh data (e.g. after a scope-crossing save
+  // triggers router.refresh()).
+  useEffect(() => {
+    setList([...initial].sort((a, b) => a.display_order - b.display_order));
+  }, [initial]);
   const { announce, region } = useAdminAnnouncer();
   const [editing, setEditing] = useState<EditingState>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
@@ -125,6 +141,21 @@ export function GuideEntriesManager({
   };
 
   const onSaved = (saved: GuideEntry, isNew: boolean) => {
+    const belongsHere = saved.is_global === isGlobalScope;
+    if (!belongsHere) {
+      // The save flipped the global flag, so the row now lives in the other list.
+      setList((l) => l.filter((e) => e.id !== saved.id));
+      announce(
+        saved.is_global
+          ? `${noun.one} saved and is now shown on every page.`
+          : `${noun.one} saved and is now shown only on this page.`,
+      );
+      setEditing(null);
+      addButtonRef.current?.focus();
+      // Pull fresh server data so the destination list reflects the moved row.
+      router.refresh();
+      return;
+    }
     if (isNew) {
       setList((l) => [...l, saved]);
       announce(`${noun.one} added.`);
@@ -140,10 +171,19 @@ export function GuideEntriesManager({
     <section aria-labelledby={headingId}>
       <h2
         id={headingId}
-        className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan"
+        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan"
       >
+        {isGlobalScope && <Globe aria-hidden="true" className="h-4 w-4" />}
         {GUIDE_SECTION_LABEL[kind]} ({noun.many})
+        {isGlobalScope && <span className="text-ink-subtle">on every page</span>}
       </h2>
+
+      {isGlobalScope && (
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+          These {noun.many} appear in the guide on <strong className="text-ink">every page</strong>.
+          Editing, reordering, unpublishing, or deleting one here changes it everywhere.
+        </p>
+      )}
 
       <div className="mt-3">
         {region}
@@ -162,6 +202,7 @@ export function GuideEntriesManager({
                     kind={kind}
                     bodyLabel={bodyLabel}
                     initial={entry}
+                    defaultGlobal={entry.is_global}
                     submitLabel="Save changes"
                     onCancel={() => setEditing(null)}
                     onSubmit={(input) => updateEntry(entry.id, pageKey, input)}
@@ -171,7 +212,15 @@ export function GuideEntriesManager({
                   <>
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <p className="font-semibold text-ink">{entry.heading}</p>
+                        <p className="flex flex-wrap items-center gap-2 font-semibold text-ink">
+                          {entry.heading}
+                          {entry.is_global && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-brand-purple/50 bg-brand-purple/10 px-2 py-0.5 text-xs font-medium text-ink">
+                              <Globe aria-hidden="true" className="h-3 w-3 text-brand-cyan" />
+                              Global
+                            </span>
+                          )}
+                        </p>
                         <p className="mt-0.5 text-sm text-ink-muted">
                           <span>
                             Position {i + 1} of {list.length}.{" "}
@@ -278,11 +327,14 @@ export function GuideEntriesManager({
         <div className="mt-4">
           {editing?.mode === "create" ? (
             <div className="rounded-card border border-brand-purple/40 bg-surface p-4">
-              <h3 className="text-base font-semibold text-ink">Add a {noun.one}</h3>
+              <h3 className="text-base font-semibold text-ink">
+                Add a {isGlobalScope ? `global ${noun.one}` : noun.one}
+              </h3>
               <GuideEntryForm
                 key="create"
                 kind={kind}
                 bodyLabel={bodyLabel}
+                defaultGlobal={isGlobalScope}
                 submitLabel={`Add ${noun.one}`}
                 onCancel={() => setEditing(null)}
                 onSubmit={(input) => createEntry(pageKey, input)}
@@ -300,7 +352,7 @@ export function GuideEntriesManager({
               }}
               className="inline-flex min-h-[44px] items-center rounded-card border border-brand-cyan bg-brand-cyan/10 px-4 text-sm font-semibold text-ink hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50"
             >
-              Add a {noun.one}
+              Add a {isGlobalScope ? `global ${noun.one}` : noun.one}
             </button>
           )}
         </div>
@@ -313,6 +365,7 @@ function GuideEntryForm({
   kind,
   bodyLabel,
   initial,
+  defaultGlobal,
   submitLabel,
   onCancel,
   onSubmit,
@@ -321,12 +374,14 @@ function GuideEntryForm({
   kind: GuideEntryKind;
   bodyLabel: string;
   initial?: GuideEntry;
+  defaultGlobal: boolean;
   submitLabel: string;
   onCancel: () => void;
   onSubmit: (input: {
     kind: GuideEntryKind;
     heading: string;
     body: string;
+    isGlobal: boolean;
   }) => Promise<{ ok: true; row: GuideEntry } | { ok: false; error: string }>;
   onSaved: (saved: GuideEntry) => void;
 }) {
@@ -334,6 +389,7 @@ function GuideEntryForm({
   const headingLabel = isQuestion ? "Question" : "Term or metric";
   const [heading, setHeading] = useState(initial?.heading ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
+  const [isGlobal, setIsGlobal] = useState(defaultGlobal);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const headingRef = useRef<HTMLInputElement>(null);
@@ -351,7 +407,12 @@ function GuideEntryForm({
       return;
     }
     startTransition(async () => {
-      const res = await onSubmit({ kind, heading: heading.trim(), body: body.trim() });
+      const res = await onSubmit({
+        kind,
+        heading: heading.trim(),
+        body: body.trim(),
+        isGlobal,
+      });
       if (!res.ok) {
         setError(res.error);
         headingRef.current?.focus();
@@ -399,6 +460,27 @@ function GuideEntryForm({
           onChange={(e) => setBody(e.target.value)}
           className="min-h-[88px] rounded-card border border-line bg-base px-3 py-2 text-sm leading-relaxed text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         />
+      </div>
+
+      <div className="flex items-start gap-3 rounded-card border border-line bg-base/60 p-3">
+        <AdminSwitch
+          checked={isGlobal}
+          disabled={pending}
+          label={
+            isGlobal
+              ? "Shown on all pages, click to limit to this page only"
+              : "Shown on this page only, click to show on all pages"
+          }
+          onChange={setIsGlobal}
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">Show on all pages</p>
+          <p className="mt-0.5 text-sm leading-relaxed text-ink-muted">
+            {isGlobal
+              ? "This appears in the guide on every page. Edits here change it everywhere."
+              : "This appears only in this page's guide."}
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

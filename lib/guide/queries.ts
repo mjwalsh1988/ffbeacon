@@ -16,7 +16,7 @@ type Client = SupabaseClient<Database>;
 
 const PAGE_COLUMNS = "id, page_key, title, description, route_example, display_order";
 const ENTRY_COLUMNS =
-  "id, page_id, kind, heading, body, display_order, is_published";
+  "id, page_id, kind, heading, body, display_order, is_published, is_global";
 
 function toEntry(r: {
   id: string;
@@ -26,6 +26,7 @@ function toEntry(r: {
   body: string;
   display_order: number;
   is_published: boolean;
+  is_global: boolean;
 }): GuideEntry {
   return {
     id: r.id,
@@ -35,6 +36,7 @@ function toEntry(r: {
     body: r.body,
     display_order: r.display_order,
     is_published: r.is_published,
+    is_global: r.is_global,
   };
 }
 
@@ -54,15 +56,30 @@ export async function getPublishedGuideContent(
     .maybeSingle();
   if (!page) return null;
 
-  const { data: rows } = await client
-    .from("guide_entries")
-    .select(ENTRY_COLUMNS)
-    .eq("page_id", page.id)
-    .eq("is_published", true)
-    .order("display_order", { ascending: true })
-    .order("created_at", { ascending: true });
+  // A page's panel shows its own page-specific entries PLUS every published global
+  // entry. Fetch both: page-owned (is_global = false) and all globals. Ordering
+  // within a kind keeps page-specific entries first, then globals, each by their
+  // own display_order. (A global entry authored on this very page still appears
+  // once, in the global group, because the page-owned query excludes globals.)
+  const [{ data: ownRows }, { data: globalRows }] = await Promise.all([
+    client
+      .from("guide_entries")
+      .select(ENTRY_COLUMNS)
+      .eq("page_id", page.id)
+      .eq("is_global", false)
+      .eq("is_published", true)
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+    client
+      .from("guide_entries")
+      .select(ENTRY_COLUMNS)
+      .eq("is_global", true)
+      .eq("is_published", true)
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+  ]);
 
-  const entries = (rows ?? []).map(toEntry);
+  const entries = [...(ownRows ?? []), ...(globalRows ?? [])].map(toEntry);
   if (entries.length === 0) return null;
 
   return {

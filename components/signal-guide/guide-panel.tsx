@@ -2,24 +2,32 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, HelpCircle, Search, Sparkles, X } from "lucide-react";
+import {
+  ChevronDown,
+  HelpCircle,
+  MessageCirclePlus,
+  Search,
+  Sparkles,
+  X,
+} from "lucide-react";
 import {
   GUIDE_SECTION_LABEL,
   type GuideEntry,
   type GuidePageContent,
 } from "@/lib/guide/types";
+import { SubmitQuestionForm } from "./submit-question-form";
 
 /**
- * The Signal Guide panel. A page-scoped, searchable knowledge base.
+ * The Signal Guide panel. A page-scoped, searchable knowledge base with a second
+ * pane for submitting a question when the answer isn't here.
  *
  * Layout: slides UP from the bottom on mobile and IN from the right on desktop,
  * reusing the focus-trap / Esc / scroll-lock / portal pattern established by
- * components/slide-up-dialog.tsx. Two sections render the page's content:
- *   - "Understand the Signal" (questions)
- *   - "Metrics & Terms Decoded" (terms)
- * Each entry is a real disclosure button (aria-expanded + aria-controls) whose
- * body reveals with a grid-rows height animation. A search box filters both
- * sections live and announces the result count to screen readers.
+ * components/slide-up-dialog.tsx. The body is a two-pane horizontal track: the
+ * guide pane (search + content + "ask the team" CTA) and the submit pane (the
+ * question form). Clicking the CTA slides the guide pane LEFT out and the form
+ * pane IN from the right; "Back" reverses it. The off-screen pane is `inert` so
+ * keyboard focus and screen readers only ever reach the visible pane.
  */
 export function GuidePanel({
   open,
@@ -35,9 +43,11 @@ export function GuidePanel({
   const searchId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const ctaRef = useRef<HTMLButtonElement>(null);
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"guide" | "submit">("guide");
   // Debounced count announced to screen readers so fast typing doesn't flood the
   // live region with one message per keystroke.
   const [liveCount, setLiveCount] = useState("");
@@ -55,6 +65,7 @@ export function GuidePanel({
     if (!open) {
       setEntered(false);
       setQuery("");
+      setView("guide");
       return;
     }
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -68,9 +79,12 @@ export function GuidePanel({
         event.preventDefault();
         onClose();
       } else if (event.key === "Tab" && panelRef.current) {
-        const focusables = panelRef.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
+        const focusables = Array.from(
+          panelRef.current.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+          // Skip anything inside the off-screen (inert) pane.
+        ).filter((el) => !el.closest("[data-pane-inert='true']"));
         if (focusables.length === 0) return;
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
@@ -125,11 +139,19 @@ export function GuidePanel({
     return () => window.clearTimeout(t);
   }, [q, resultCount, query]);
 
+  const goToSubmit = () => setView("submit");
+  const backToGuide = () => {
+    setView("guide");
+    window.setTimeout(() => ctaRef.current?.focus(), 320);
+  };
+
   if (!mounted || !open) return null;
 
   const panelTransform = entered
     ? "translate-y-0 sm:translate-x-0"
     : "translate-y-full sm:translate-y-0 sm:translate-x-full";
+
+  const onSubmitView = view === "submit";
 
   const portal = (
     <div
@@ -143,13 +165,13 @@ export function GuidePanel({
         type="button"
         aria-label="Close the Signal Guide by tapping outside it"
         onClick={onClose}
-        className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${
+        className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none ${
           entered ? "opacity-100" : "opacity-0"
         }`}
       />
       <div
         ref={panelRef}
-        className={`relative flex w-full max-w-2xl flex-col rounded-t-modal border border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out sm:h-full sm:max-w-md sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-r-0 ${panelTransform}`}
+        className={`relative flex w-full max-w-2xl flex-col rounded-t-modal border border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-w-md sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-r-0 ${panelTransform}`}
         style={{ maxHeight: "85vh" }}
       >
         {/* Mobile drag handle (decorative). */}
@@ -181,47 +203,105 @@ export function GuidePanel({
           </button>
         </div>
 
-        {/* Search */}
-        <div className="shrink-0 border-b border-line px-5 py-3">
-          <label htmlFor={searchId} className="sr-only">
-            Search this page's guide
-          </label>
-          <div className="relative">
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle"
-            />
-            <input
-              ref={searchRef}
-              id={searchId}
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search questions and terms"
-              className="min-h-[44px] w-full rounded-card border border-line bg-base pl-9 pr-3 text-sm text-ink placeholder:text-ink-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            />
-          </div>
-          <p aria-live="polite" className="sr-only">
-            {liveCount}
-          </p>
-        </div>
+        {/* Two-pane sliding viewport */}
+        <div className="relative flex-1 overflow-hidden">
+          <div
+            className={`flex h-full w-[200%] transition-transform duration-300 ease-out motion-reduce:transition-none ${
+              onSubmitView ? "-translate-x-1/2" : "translate-x-0"
+            }`}
+          >
+            {/* Pane 1: guide content */}
+            <div
+              data-pane-inert={onSubmitView ? "true" : undefined}
+              inert={onSubmitView || undefined}
+              className="flex h-full w-1/2 flex-col"
+            >
+              {/* Search */}
+              <div className="shrink-0 border-b border-line px-5 py-3">
+                <label htmlFor={searchId} className="sr-only">
+                  Search this page&apos;s guide
+                </label>
+                <div className="relative">
+                  <Search
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+                  />
+                  <input
+                    ref={searchRef}
+                    id={searchId}
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search questions and terms"
+                    className="min-h-[44px] w-full rounded-card border border-line bg-base pl-9 pr-3 text-sm text-ink placeholder:text-ink-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  />
+                </div>
+                <p aria-live="polite" className="sr-only">
+                  {liveCount}
+                </p>
+              </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">
-          {resultCount === 0 ? (
-            <p className="rounded-card border border-line bg-surface/60 p-4 text-sm text-ink-muted">
-              No matches for {`"${query.trim()}"`}. Try a different word.
-            </p>
-          ) : (
-            <div className="space-y-7">
-              <GuideSection
-                icon="question"
-                title={GUIDE_SECTION_LABEL.question}
-                entries={questions}
-              />
-              <GuideSection icon="term" title={GUIDE_SECTION_LABEL.term} entries={terms} />
+              {/* Scrollable content */}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+                {resultCount === 0 ? (
+                  <p className="rounded-card border border-line bg-surface/60 p-4 text-sm text-ink-muted">
+                    No matches for {`"${query.trim()}"`}. Try a different word.
+                  </p>
+                ) : (
+                  <div className="space-y-7">
+                    <GuideSection
+                      icon="question"
+                      title={GUIDE_SECTION_LABEL.question}
+                      entries={questions}
+                    />
+                    <GuideSection
+                      icon="term"
+                      title={GUIDE_SECTION_LABEL.term}
+                      entries={terms}
+                    />
+                  </div>
+                )}
+
+                {/* "Didn't find it?" CTA */}
+                <div className="mt-7 rounded-card border border-brand-purple/30 bg-gradient-to-br from-brand-purple/10 to-brand-cyan/10 p-4">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <MessageCirclePlus
+                      aria-hidden="true"
+                      className="h-4 w-4 text-brand-cyan"
+                    />
+                    Not finding what you&apos;re looking for?
+                  </h2>
+                  <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+                    Send us your question and we&apos;ll get it added to the Signal knowledge
+                    base.
+                  </p>
+                  <button
+                    ref={ctaRef}
+                    type="button"
+                    onClick={goToSubmit}
+                    className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-card border border-brand-cyan bg-brand-cyan/10 px-4 text-sm font-semibold text-ink transition-colors hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  >
+                    <MessageCirclePlus aria-hidden="true" className="h-4 w-4" />
+                    Submit a question
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
+
+            {/* Pane 2: submit form */}
+            <div
+              data-pane-inert={!onSubmitView ? "true" : undefined}
+              inert={!onSubmitView || undefined}
+              className="h-full w-1/2"
+            >
+              <SubmitQuestionForm
+                pageKey={content.page.page_key}
+                pageTitle={content.page.title}
+                active={onSubmitView}
+                onBack={backToGuide}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -279,7 +359,7 @@ function GuideDisclosure({ entry }: { entry: GuideEntry }) {
           <span>{entry.heading}</span>
           <ChevronDown
             aria-hidden="true"
-            className={`h-4 w-4 shrink-0 text-ink-subtle transition-transform duration-200 ${
+            className={`h-4 w-4 shrink-0 text-ink-subtle transition-transform duration-200 motion-reduce:transition-none ${
               open ? "rotate-180" : ""
             }`}
           />
@@ -287,7 +367,7 @@ function GuideDisclosure({ entry }: { entry: GuideEntry }) {
       </h3>
       {/* grid-rows height animation: 0fr (collapsed) -> 1fr (expanded). */}
       <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+        className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${
           open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
         }`}
       >

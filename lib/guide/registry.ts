@@ -135,3 +135,8 @@ export function resolveGuidePageKey(pathname: string): GuidePageKey | null {
   }
   return null;
 }
+
+/** Human title for a guide page_key, falling back to the key itself when unknown. */
+export function guidePageTitle(pageKey: string): string {
+  return GUIDE_PAGES.find((d) => d.key === pageKey)?.title ?? pageKey;
+}
