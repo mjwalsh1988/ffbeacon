@@ -67,17 +67,6 @@ export const SIGNAL_SUBPAGES: readonly SignalSubpage[] = [
     cta: "Set up identity",
   },
   {
-    key: "showcase",
-    href: "/my-beacon/signal/showcase",
-    label: "Showcase",
-    icon: Star,
-    summary: "Links, favorite team and player, and featured Sleeper leagues.",
-    wizardTitle: "Show what you are about",
-    wizardBody:
-      "Add links to your other channels, call out your favorite team and player, and feature any Sleeper leagues you have opened in League Pulse. All optional, all easy to change.",
-    cta: "Add showcase items",
-  },
-  {
     key: "layout",
     href: "/my-beacon/signal/layout",
     label: "Layout",
@@ -87,6 +76,17 @@ export const SIGNAL_SUBPAGES: readonly SignalSubpage[] = [
     wizardBody:
       "Pick a layout and drag your blocks into the order you want. Removing a block here only takes it off the page, it never deletes the underlying boards, leagues, links, or favorites. Build ranking boards under My Rankings first, then feature them here.",
     cta: "Arrange layout",
+  },
+  {
+    key: "showcase",
+    href: "/my-beacon/signal/showcase",
+    label: "Showcase",
+    icon: Star,
+    summary: "Links, favorite team and player, and featured Sleeper leagues.",
+    wizardTitle: "Show what you are about",
+    wizardBody:
+      "Add links to your other channels, call out your favorite team and player, and feature any Sleeper leagues you have opened in League Pulse. All optional, all easy to change.",
+    cta: "Add showcase items",
   },
   {
     key: "wall",

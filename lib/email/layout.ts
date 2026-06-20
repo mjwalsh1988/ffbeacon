@@ -188,6 +188,37 @@ export function emailHeading(text: string): string {
   return `<h1 style="margin:22px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3;color:${C.ink};">${esc(text)}</h1>`;
 }
 
+/**
+ * A numbered step list (badge + title + body + link). `body` is raw HTML so a step
+ * can include an inline link; pass only trusted static copy there. `title` and
+ * `linkLabel` are escaped.
+ */
+export function emailStepList(
+  steps: Array<{ title: string; body: string; linkLabel: string; href: string }>,
+): string {
+  return steps
+    .map(
+      (s, i) => `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0;">
+      <tr>
+        <td valign="top" width="42" style="width:42px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" valign="middle" width="30" height="30" bgcolor="${C.purple}" style="width:30px;height:30px;border-radius:15px;background-color:${C.purple};color:${C.white};font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;line-height:30px;">${i + 1}</td>
+            </tr>
+          </table>
+        </td>
+        <td valign="top">
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:${C.ink};">${esc(s.title)}</p>
+          <p style="margin:5px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:${C.inkBody};">${s.body}</p>
+          <p style="margin:7px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;"><a href="${esc(s.href)}" target="_blank" style="color:${C.purple};font-weight:bold;text-decoration:none;">${esc(s.linkLabel)}</a></p>
+        </td>
+      </tr>
+    </table>`,
+    )
+    .join("");
+}
+
 /** A tinted "quote" card with a purple accent rule, echoing the visitor's input. */
 export function emailQuoteCard(rows: Array<{ label: string; value: string }>): string {
   const body = rows

@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { after } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/email/send";
+import { buildSignalWelcomeEmail } from "@/lib/email/signal-emails";
 import {
   normalizeHandle,
   validateHandleFormat,
@@ -161,6 +164,32 @@ export async function claimHandle(raw: string): Promise<ActionResult> {
 
   revalidatePath("/my-beacon/signal");
   await revalidateProfileCaches(supabase, user.id);
+
+  // Welcome the new creator. This runs only on a first claim (the guard above
+  // errors if a Signal already exists), so renames never re-trigger it. Sent after
+  // the response via after() so a slow email provider never delays the claim, and
+  // a delivery failure never fails it. Name priority matches the other emails:
+  // profile first/last name, then the account display name, else no name.
+  if (user.email) {
+    const { data: prefs } = await supabase
+      .from("user_preferences")
+      .select("first_name, last_name")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const welcomeName =
+      [prefs?.first_name, prefs?.last_name].filter(Boolean).join(" ").trim() || metaName;
+    const welcome = buildSignalWelcomeEmail({ name: welcomeName || null, handle });
+    const to = user.email;
+    after(() =>
+      sendEmail({
+        to,
+        subject: `Welcome @${handle}! Let's start boosting your signal!`,
+        html: welcome.html,
+        text: welcome.text,
+      }),
+    );
+  }
+
   return { ok: true };
 }
 
