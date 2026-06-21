@@ -171,8 +171,7 @@ export function GuidePanel({
       />
       <div
         ref={panelRef}
-        className={`relative flex w-full max-w-2xl flex-col rounded-t-modal border border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-w-md sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-r-0 ${panelTransform}`}
-        style={{ maxHeight: "85vh" }}
+        className={`relative flex h-[85vh] w-full max-w-2xl flex-col rounded-t-modal border border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-w-md sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-r-0 ${panelTransform}`}
       >
         {/* Mobile drag handle (decorative). */}
         <div className="flex justify-center pt-2 sm:hidden">
@@ -203,7 +202,10 @@ export function GuidePanel({
           </button>
         </div>
 
-        {/* Two-pane sliding viewport */}
+        {/* Two-pane sliding viewport. The panel has a definite height (85vh on
+            mobile, full height on desktop), so the h-full / flex-1 chain below
+            resolves and each pane's inner overflow-y-auto scrolls when its
+            content (expanded FAQ/term accordions, long form) overflows. */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <div
             className={`flex h-full w-[200%] transition-transform duration-300 ease-out motion-reduce:transition-none ${
