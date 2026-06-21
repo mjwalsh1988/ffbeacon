@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { getRecomputeStatus } from "@/lib/beacon-admin";
 import { BeaconPageShell } from "@/components/admin/beacon-page-shell";
 import { SettingField, type SettingRow } from "@/components/admin/setting-field";
+import { AiModelField } from "@/components/admin/ai-model-field";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
@@ -46,13 +47,17 @@ export default async function BeaconSettingsPage() {
               <h3 id={`grp-${g.category}`} className="text-lg font-semibold tracking-tight text-ink">{g.title}</h3>
               <p className="mt-1 mb-4 text-sm text-ink-muted">{g.description}</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                {items.map((s) => (
-                  <SettingField
-                    key={s.key}
-                    setting={s}
-                    options={s.key === "normalization_method" ? ["quantile_median", "p99_scale"] : undefined}
-                  />
-                ))}
+                {items.map((s) =>
+                  s.key === "ai_model" ? (
+                    <AiModelField key={s.key} setting={s} />
+                  ) : (
+                    <SettingField
+                      key={s.key}
+                      setting={s}
+                      options={s.key === "normalization_method" ? ["quantile_median", "p99_scale"] : undefined}
+                    />
+                  ),
+                )}
               </div>
             </section>
           );
