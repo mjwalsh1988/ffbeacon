@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { POSITIONS } from "@/lib/site";
 import {
   BarChart3,
   Workflow,
@@ -85,15 +84,6 @@ const FEATURED_TOOLS: FeaturedTool[] = [
   },
 ];
 
-const POSITION_LABEL: Record<string, string> = {
-  QB: "Quarterbacks",
-  RB: "Running Backs",
-  WR: "Wide Receivers",
-  TE: "Tight Ends",
-  K: "Kickers",
-  DEF: "Defenses",
-};
-
 export default async function HomePage() {
   const supabase = await createClient();
 
@@ -115,7 +105,6 @@ export default async function HomePage() {
     <main id="main">
       <Hero />
       <ToolsSection />
-      <PositionsSection />
       <FormatsSection formats={formats ?? []} />
       <ArticlesSection articles={articles ?? []} />
       <CtaSection />
@@ -311,46 +300,6 @@ function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
         />
       </span>
     </Link>
-  );
-}
-
-/* ---------- Jump by position ---------- */
-
-function PositionsSection() {
-  return (
-    <section
-      aria-labelledby="positions-heading"
-      className="border-b border-line bg-surface/30"
-    >
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <SectionEyebrow>Jump by position</SectionEyebrow>
-        <h2
-          id="positions-heading"
-          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          One tap to the bench you actually care about.
-        </h2>
-
-        <ul className="mt-8 flex flex-wrap gap-2" role="list">
-          {POSITIONS.map((position) => (
-            <li key={position}>
-              <Link
-                href={`/rankings?position=${position}`}
-                className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-base px-4 py-2 text-sm transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan"
-              >
-                <span
-                  className="font-mono text-xs text-brand-cyan"
-                  aria-hidden="true"
-                >
-                  {position}
-                </span>
-                <span>{POSITION_LABEL[position]}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
   );
 }
 
