@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import {
   BarChart3,
@@ -196,7 +197,7 @@ function Hero() {
           role="list"
           aria-label="What sets FF Beacon apart"
         >
-          <HeroStat value="8" label="Active league formats" />
+          <HeroStat value="All" label="League formats, our own value" logo />
           <HeroStat value="Multi" label="Source-agnostic data" />
           <HeroStat value="AAA" label="WCAG contrast target" />
           <HeroStat value="Free" label="No paywall" />
@@ -206,17 +207,37 @@ function Hero() {
   );
 }
 
-function HeroStat({ value, label }: { value: string; label: string }) {
+function HeroStat({
+  value,
+  label,
+  logo = false,
+}: {
+  value: string;
+  label: string;
+  logo?: boolean;
+}) {
   return (
     <li className="rounded-card border border-line bg-surface/60 p-4">
-      <p
-        className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
-        style={{
-          backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-        }}
-      >
-        {value}
-      </p>
+      <div className="flex items-center gap-2">
+        {logo && (
+          <Image
+            src="/img/ff-beacon-logo.png"
+            alt=""
+            aria-hidden="true"
+            width={32}
+            height={32}
+            className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+          />
+        )}
+        <p
+          className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
+          style={{
+            backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+          }}
+        >
+          {value}
+        </p>
+      </div>
       <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
         {label}
       </p>
@@ -399,13 +420,7 @@ function SourcesFormatsSection({
           Where the numbers come from
         </h3>
 
-        {beacon && (
-          <FeaturedSourceCard
-            source={beacon}
-            coverage={coverageCount(beacon, activeFormatSlugs)}
-            totalFormats={formats.length}
-          />
-        )}
+        {beacon && <FeaturedSourceCard source={beacon} />}
 
         {otherSources.length > 0 && (
           <ul
@@ -487,16 +502,8 @@ function sourceMetaPills(source: SourceRow, coverage: number) {
   );
 }
 
-/** The FF Beacon source, given prominence: our own blended ranking. */
-function FeaturedSourceCard({
-  source,
-  coverage,
-  totalFormats,
-}: {
-  source: SourceRow;
-  coverage: number;
-  totalFormats: number;
-}) {
+/** The FF Beacon source, given prominence: our own proprietary ranking. */
+function FeaturedSourceCard({ source }: { source: SourceRow }) {
   return (
     <Link
       href={`/rankings?source=${source.slug}`}
@@ -542,9 +549,7 @@ function FeaturedSourceCard({
             source.update_cadence.slice(1)}{" "}
           updates
         </MetaPill>
-        <MetaPill>
-          Covers {coverage} of {totalFormats} formats
-        </MetaPill>
+        <MetaPill>Supports all league formats</MetaPill>
         <MetaPill>
           {source.data_type.includes("draft_pick_values")
             ? "Player and pick values"
