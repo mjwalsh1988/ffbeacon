@@ -48,7 +48,7 @@ export function LeagueDetailSheet({
       onClose={onClose}
       label={`${league.name} details`}
     >
-      <div className="flex max-h-[80vh] flex-col">
+      <div className="flex h-full flex-col">
         {/* Header — name + close. The close button is the first focusable
             element so screen reader users can dismiss without tab-trawling. */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6 sm:py-5">
@@ -82,7 +82,7 @@ export function LeagueDetailSheet({
 
         {/* Scrollable body — stays inside the sheet so the header and
             footer remain visible on small viewports. */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+        <div className="beacon-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
           <dl className="grid grid-cols-3 gap-3">
             <FactCard
               icon={Users}

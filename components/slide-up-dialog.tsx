@@ -110,7 +110,7 @@ export function SlideUpDialog({
       />
       <div
         ref={sheetRef}
-        className={`relative w-full max-w-2xl rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out sm:rounded-modal sm:border ${
+        className={`relative flex w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out sm:rounded-modal sm:border ${
           entered ? "translate-y-0" : "translate-y-full"
         }`}
         style={{
@@ -120,13 +120,18 @@ export function SlideUpDialog({
           maxHeight: "min(90vh, 720px)",
         }}
       >
-        <div className="flex justify-center pt-2 sm:hidden">
+        <div className="flex shrink-0 justify-center pt-2 sm:hidden">
           <span
             aria-hidden="true"
             className="h-1.5 w-12 rounded-full bg-beacon opacity-60"
           />
         </div>
-        {children}
+        {/* Scroll content that outgrows the capped panel height. Callers that
+            manage their own internal scroll (fixed header + scrollable body)
+            still work: their region caps smaller, so this wrapper stays put. */}
+        <div className="beacon-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {children}
+        </div>
       </div>
     </div>
   );

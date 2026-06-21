@@ -112,20 +112,24 @@ export function BottomSheet({
       />
       <div
         ref={sheetRef}
-        className={`relative w-full max-w-2xl rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out ${
+        className={`relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out ${
           entered ? "translate-y-0" : "translate-y-full"
         }`}
         style={{
           paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
         }}
       >
-        <div className="flex justify-center pt-2">
+        <div className="flex shrink-0 justify-center pt-2">
           <span
             aria-hidden="true"
             className="h-1.5 w-12 rounded-full bg-beacon opacity-60"
           />
         </div>
-        {children}
+        {/* Scroll the content if it outgrows the sheet so nothing is clipped
+            below the viewport. The drag handle above stays pinned. */}
+        <div className="beacon-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {children}
+        </div>
       </div>
     </div>
   );

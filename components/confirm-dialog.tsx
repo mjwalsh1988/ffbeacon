@@ -119,7 +119,7 @@ export function ConfirmDialog({
       />
       <div
         ref={dialogRef}
-        className={`relative w-full max-w-md rounded-t-modal border border-line bg-surface-elevated p-6 shadow-2xl shadow-black/50 sm:rounded-modal motion-safe:transition-all motion-safe:duration-200 motion-safe:ease-out ${
+        className={`beacon-scroll relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-modal border border-line bg-surface-elevated p-6 shadow-2xl shadow-black/50 sm:rounded-modal motion-safe:transition-all motion-safe:duration-200 motion-safe:ease-out ${
           shown
             ? "translate-y-0 opacity-100 sm:scale-100"
             : "translate-y-full opacity-0 sm:translate-y-2 sm:scale-95"

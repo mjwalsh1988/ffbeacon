@@ -18,3 +18,41 @@
     border-radius: 4px;
   }
 }
+
+@layer utilities {
+  /**
+   * Branded scrollbar for scrollable regions (modals, sheets, drawers).
+   * Thin, rounded, beacon purple->cyan gradient thumb on a transparent
+   * track so it reads as part of the FF Beacon palette instead of the
+   * default chrome scrollbar. Apply `beacon-scroll` to any overflow
+   * container that should show a styled bar.
+   */
+  .beacon-scroll {
+    scrollbar-width: thin;
+    /* Firefox can't render a gradient thumb; fall back to brand purple. */
+    scrollbar-color: #A855F7 transparent;
+  }
+
+  .beacon-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .beacon-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .beacon-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #A855F7, #22D3EE);
+    border-radius: 9999px;
+    /* Transparent border + padding-box clip insets the thumb so it looks
+       slim and floats off the track edge. */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .beacon-scroll::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #C084FC, #67E8F9);
+    background-clip: padding-box;
+  }
+}

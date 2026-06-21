@@ -204,7 +204,7 @@ export function GuidePanel({
         </div>
 
         {/* Two-pane sliding viewport */}
-        <div className="relative flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <div
             className={`flex h-full w-[200%] transition-transform duration-300 ease-out motion-reduce:transition-none ${
               onSubmitView ? "-translate-x-1/2" : "translate-x-0"
@@ -214,7 +214,7 @@ export function GuidePanel({
             <div
               data-pane-inert={onSubmitView ? "true" : undefined}
               inert={onSubmitView || undefined}
-              className="flex h-full w-1/2 flex-col"
+              className="flex h-full w-1/2 min-h-0 flex-col"
             >
               {/* Search */}
               <div className="shrink-0 border-b border-line px-5 py-3">
@@ -242,7 +242,7 @@ export function GuidePanel({
               </div>
 
               {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+              <div className="beacon-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
                 {resultCount === 0 ? (
                   <p className="rounded-card border border-line bg-surface/60 p-4 text-sm text-ink-muted">
                     No matches for {`"${query.trim()}"`}. Try a different word.

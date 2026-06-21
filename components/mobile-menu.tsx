@@ -120,7 +120,7 @@ export function MobileMenu({
             ref={dialogRef}
             className="relative ml-auto flex h-full w-80 max-w-full flex-col bg-surface-elevated p-6"
           >
-            <div className="mb-6 flex items-center justify-between">
+            <div className="mb-6 flex shrink-0 items-center justify-between">
               <h2 id={labelId} className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
                 Menu
               </h2>
@@ -134,6 +134,11 @@ export function MobileMenu({
                 <span aria-hidden="true">✕</span>
               </button>
             </div>
+            {/* Scroll the nav + controls if they outgrow the drawer (small
+                screens, long nav, on-screen keyboard). Header stays pinned.
+                Negative margin keeps the scrollbar at the drawer edge while
+                preserving the panel's padding. */}
+            <div className="beacon-scroll -mx-6 flex min-h-0 flex-1 flex-col overflow-y-auto px-6">
             <nav
               aria-label="Mobile primary"
               className="flex flex-col divide-y divide-line/60 border-y border-line/60"
@@ -266,6 +271,7 @@ export function MobileMenu({
                   </Link>
                 )}
               </div>
+            </div>
             </div>
           </div>
         </div>,

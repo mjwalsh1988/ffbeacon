@@ -200,7 +200,7 @@ export function FollowListModal({
         <ul
           role="list"
           aria-label={`${noun} of ${displayName}`}
-          className="mt-2 flex min-h-0 flex-col gap-1 overflow-y-auto"
+          className="beacon-scroll mt-2 flex min-h-0 flex-col gap-1 overflow-y-auto"
         >
           {entries.map((entry) => (
             <li key={entry.handle}>

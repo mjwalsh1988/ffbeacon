@@ -175,7 +175,7 @@ export function SidebarShell({
             />
             <div
               ref={dialogRef}
-              className={`relative ml-auto flex h-full w-80 max-w-full flex-col overflow-y-auto bg-surface-elevated p-6 motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out ${
+              className={`beacon-scroll relative ml-auto flex h-full w-80 max-w-full flex-col overflow-y-auto bg-surface-elevated p-6 motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out ${
                 entered ? "translate-x-0" : "translate-x-full"
               }`}
             >
