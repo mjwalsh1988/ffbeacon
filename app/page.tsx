@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Radar,
   Layers,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -151,7 +152,7 @@ function Hero() {
         {/* aria-label gives the h1 a single accessible name covering the
             entire headline, so heading navigation announces it as one piece
             even though the gradient is achieved via a nested span. We
-            intentionally do NOT aria-hide the inner content — that would
+            intentionally do NOT aria-hide the inner content, which would
             remove the text from the accessibility tree and break
             mouse-hover-to-read features. */}
         <h1
@@ -171,8 +172,8 @@ function Hero() {
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
           Rankings, calculators, and Sleeper league insights that read clearly
-          by eye or by ear. Pick a format, pick a source, get answers — without
-          the jargon tax or the unlabeled-chart shutdown.
+          by eye or by ear. Tell us how your league scores, pick a source you
+          trust, and get straight answers with none of the jargon.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
@@ -250,13 +251,13 @@ function ToolsSection() {
         }}
       />
       <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <SectionEyebrow>Start here</SectionEyebrow>
+        <SectionEyebrow>Free tools, no signup</SectionEyebrow>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
           <h2
             id="tools-heading"
             className="text-3xl font-semibold tracking-tight sm:text-4xl"
           >
-            Three tools that turn the noise into a clear call.
+            Rank your players, read your league, win your waivers.
           </h2>
           <Link
             href="/tools"
@@ -375,18 +376,19 @@ function SourcesFormatsSection({
   return (
     <section aria-labelledby="data-heading" className="border-b border-line">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <SectionEyebrow>Sources and formats</SectionEyebrow>
+        <SectionEyebrow>Rankings for your league</SectionEyebrow>
         <h2
           id="data-heading"
           className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
         >
-          Every source we trust. Every format you play.
+          However your league scores, we have rankings to match.
         </h2>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-          {sources.length} ranking source{sources.length === 1 ? "" : "s"} to
-          compare side by side, plus our own FF Beacon value when you just want
-          one number to trust, across {formats.length} scoring formats. Pick the
-          combination you play and the whole site follows along.
+          Compare {sources.length} trusted ranking source
+          {sources.length === 1 ? "" : "s"} side by side, or just trust our own
+          FF Beacon number. Every set of rankings is tuned to your exact scoring,
+          across {formats.length} league types. Pick yours once and the whole
+          site follows along.
         </p>
 
         {/* --- Sources --- */}
@@ -394,7 +396,7 @@ function SourcesFormatsSection({
           id="sources-subheading"
           className="mt-12 text-xs font-semibold uppercase tracking-[0.18em] text-ink-subtle"
         >
-          Ranking sources
+          Where the numbers come from
         </h3>
 
         {beacon && (
@@ -427,7 +429,7 @@ function SourcesFormatsSection({
           id="formats-subheading"
           className="mt-14 text-xs font-semibold uppercase tracking-[0.18em] text-ink-subtle"
         >
-          Scoring formats ({formats.length})
+          Pick your scoring ({formats.length} league types)
         </h3>
         <ul
           className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
@@ -610,6 +612,14 @@ type ArticleRow = {
   published_at: string | null;
 };
 
+function formatArticleDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
   return (
     <section
@@ -617,56 +627,80 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
       className="border-b border-line bg-surface/30"
     >
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="max-w-2xl">
-            <SectionEyebrow>Latest analysis</SectionEyebrow>
-            <h2
-              id="articles-heading"
-              className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-            >
-              Plain-English breakdowns of the stats that matter.
-            </h2>
-          </div>
+        <SectionEyebrow>Guides for beginners and beyond</SectionEyebrow>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+          <h2
+            id="articles-heading"
+            className="text-3xl font-semibold tracking-tight sm:text-4xl"
+          >
+            New to this? We explain the stats that matter, no jargon.
+          </h2>
           <Link
             href="/guides"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            All guides
+            See all guides
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </div>
 
         {articles.length === 0 ? (
-          <p className="mt-10 rounded-card border border-dashed border-line bg-base/40 p-6 text-sm text-ink-muted">
-            Fresh analysis is on the way. Rankings, the FAAB calculator, and
-            league sync are live and updating in the meantime.
-          </p>
+          <div className="mt-10 flex flex-col items-center rounded-modal border border-dashed border-line bg-base/40 px-6 py-12 text-center">
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+            >
+              <BookOpen className="h-6 w-6" />
+            </span>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
+              Fresh breakdowns are on the way. In the meantime the rankings, the
+              FAAB calculator, and league sync are live and updating daily.
+            </p>
+          </div>
         ) : (
-          <ul className="mt-10 grid gap-4 md:grid-cols-2" role="list">
+          <ul className="mt-10 grid gap-5 md:grid-cols-2" role="list">
             {articles.map((article) => (
               <li key={article.slug}>
-                <Link
-                  href={`/articles/${article.slug}`}
-                  className="block rounded-card border border-line bg-surface p-6 transition-colors hover:border-brand-purple/60"
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-cyan">
-                    {article.article_type.replace("_", " ")}
-                  </p>
-                  <h3 className="mt-2 text-lg font-semibold text-ink">
-                    {article.title}
-                  </h3>
-                  {article.tl_dr && (
-                    <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                      {article.tl_dr}
-                    </p>
-                  )}
-                </Link>
+                <ArticleCard article={article} />
               </li>
             ))}
           </ul>
         )}
       </div>
     </section>
+  );
+}
+
+function ArticleCard({ article }: { article: ArticleRow }) {
+  return (
+    <Link
+      href={`/articles/${article.slug}`}
+      className="group flex h-full flex-col rounded-card border border-line bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-brand-purple/60 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
+          {article.article_type.replace(/_/g, " ")}
+        </span>
+        {article.published_at && (
+          <span className="text-xs text-ink-subtle">
+            {formatArticleDate(article.published_at)}
+          </span>
+        )}
+      </div>
+      <h3 className="mt-3 text-lg font-semibold text-ink">{article.title}</h3>
+      {article.tl_dr && (
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+          {article.tl_dr}
+        </p>
+      )}
+      <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-semibold text-brand-cyan transition-colors group-hover:text-brand-purple">
+        Read the breakdown
+        <ArrowRight
+          aria-hidden="true"
+          className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none"
+        />
+      </span>
+    </Link>
   );
 }
 
@@ -677,45 +711,57 @@ function CtaSection() {
     <section aria-labelledby="cta-heading">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div
-          className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-12"
+          className="relative overflow-hidden rounded-modal border border-line bg-surface-elevated p-8 shadow-xl shadow-black/30 sm:p-12"
           style={{
             backgroundImage:
-              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
+              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.16) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.16) 0%, transparent 55%)",
           }}
         >
-          <SectionEyebrow>Two minutes in</SectionEyebrow>
-          <h2
-            id="cta-heading"
-            className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
-          >
-            Bring your league. Or skim the rankings. Both work by ear.
-          </h2>
-          <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-            No signup to browse. Sign in only when you want to save your
-            source, your format, and your linked Sleeper username — and read
-            the privacy policy first if you want.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/tools/league-pulse"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          {/* Beacon hairline across the top of the card. Decorative. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-px"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+            }}
+          />
+          <div className="relative">
+            <SectionEyebrow>Ready when you are</SectionEyebrow>
+            <h2
+              id="cta-heading"
+              className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
             >
-              Pulse a Sleeper league
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
-            <Link
-              href="/rankings"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              Explore the rankings
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
-            <Link
-              href="/about"
-              className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-ink-muted hover:text-ink"
-            >
-              Read about the project
-            </Link>
+              Sync your league, or just browse the rankings. Start free.
+            </h2>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
+              Browse everything with no signup and no paywall. Make an account
+              only when you want your source, your format, and your Sleeper
+              username saved, so the whole site remembers you the next time you
+              drop in.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link
+                href="/tools/league-pulse"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Pulse a Sleeper league
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+              <Link
+                href="/rankings"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Explore the rankings
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+              <Link
+                href="/about"
+                className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-ink-muted hover:text-ink"
+              >
+                Read about the project
+              </Link>
+            </div>
           </div>
         </div>
       </div>
