@@ -54,6 +54,7 @@ type FeaturedTool = {
   href: string;
   title: string;
   description: string;
+  cta: string;
   icon: LucideIcon;
 };
 
@@ -62,21 +63,24 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     href: "/rankings",
     title: "Rankings Board",
     description:
-      "Sortable, filterable rankings across redraft, dynasty, superflex, and TE-premium. Switch sources without losing your place.",
+      "See exactly where every player ranks today, sorted and filtered the way you think. Switch between scoring formats and ranking sites without ever losing your spot.",
+    cta: "Open the rankings",
     icon: BarChart3,
   },
   {
     href: "/tools/league-pulse",
     title: "Sleeper League Pulse",
     description:
-      "Paste your Sleeper username, get every league back with real rosters, real transactions, real draft slots, and power rankings calibrated to your scoring.",
+      "Type in your Sleeper username and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
+    cta: "Sync a league",
     icon: Workflow,
   },
   {
     href: "/tools/faab",
     title: "FAAB Calculator",
     description:
-      "Market value plus your real need, weighted into a bid range. Top-100 overall? You'll get told to dump it.",
+      "Heading into waivers and not sure what to spend? Get a recommended bid range that weighs a player's real value against how badly your roster needs them, in plain English.",
+    cta: "Run a bid",
     icon: Calculator,
   },
 ];
@@ -224,30 +228,49 @@ function HeroStat({ value, label }: { value: string; label: string }) {
 
 function ToolsSection() {
   return (
-    <section aria-labelledby="tools-heading" className="border-b border-line">
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="max-w-2xl">
-            <SectionEyebrow>What you can do here</SectionEyebrow>
-            <h2
-              id="tools-heading"
-              className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-            >
-              Three tools that respect your time and your reader.
-            </h2>
-          </div>
+    <section
+      aria-labelledby="tools-heading"
+      className="relative overflow-hidden border-b border-line"
+    >
+      {/* Ambient beacon glow that lifts the elevated cards off the page and makes
+          this first content section read as the starting point. Decorative. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-24 left-1/2 h-[380px] w-[760px] -translate-x-1/2"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.12) 0%, rgba(34, 211, 238, 0.07) 45%, transparent 72%)",
+        }}
+      />
+      <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <SectionEyebrow>Start here</SectionEyebrow>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+          <h2
+            id="tools-heading"
+            className="text-3xl font-semibold tracking-tight sm:text-4xl"
+          >
+            Three tools that turn the noise into a clear call.
+          </h2>
           <Link
             href="/tools"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            All tools
+            See all tools
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </div>
 
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {FEATURED_TOOLS.map((tool) => (
-            <ToolCard key={tool.href} {...tool} />
+        <div className="mt-12 grid gap-5 md:grid-cols-3">
+          {FEATURED_TOOLS.map((tool, i) => (
+            <ToolCard key={tool.href} tool={tool} index={i} />
           ))}
         </div>
       </div>
@@ -255,28 +278,39 @@ function ToolsSection() {
   );
 }
 
-function ToolCard({ href, title, description, icon: Icon }: FeaturedTool) {
+function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
+  const { href, title, description, cta, icon: Icon } = tool;
   return (
-    <article className="flex flex-col rounded-card border border-line bg-surface p-6 transition-colors hover:border-brand-purple/60">
-      <span
-        aria-hidden="true"
-        className="flex h-11 w-11 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-      >
-        <Icon className="h-5 w-5" />
-      </span>
-      <h3 className="mt-4 text-lg font-semibold text-ink">{title}</h3>
+    <Link
+      href={href}
+      className="group relative flex flex-col rounded-card border border-line bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-brand-purple/60 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+    >
+      <div className="flex items-center justify-between">
+        <span
+          aria-hidden="true"
+          className="flex h-12 w-12 items-center justify-center rounded-card bg-beacon text-black"
+        >
+          <Icon className="h-6 w-6" />
+        </span>
+        <span
+          aria-hidden="true"
+          className="font-mono text-sm font-semibold tracking-[0.2em] text-ink-subtle"
+        >
+          {String(index + 1).padStart(2, "0")}
+        </span>
+      </div>
+      <h3 className="mt-5 text-xl font-semibold text-ink">{title}</h3>
       <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">
         {description}
       </p>
-      <Link
-        href={href}
-        className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple"
-        aria-label={`Open ${title}`}
-      >
-        Open
-        <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-      </Link>
-    </article>
+      <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
+        {cta}
+        <ArrowRight
+          aria-hidden="true"
+          className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none"
+        />
+      </span>
+    </Link>
   );
 }
 
