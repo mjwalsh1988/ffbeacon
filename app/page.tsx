@@ -6,6 +6,8 @@ import {
   Workflow,
   Calculator,
   ArrowRight,
+  Radar,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -87,25 +89,33 @@ const FEATURED_TOOLS: FeaturedTool[] = [
 export default async function HomePage() {
   const supabase = await createClient();
 
-  const [{ data: articles }, { data: formats }] = await Promise.all([
-    supabase
-      .from("articles")
-      .select("slug, title, tl_dr, article_type, published_at")
-      .eq("status", "published")
-      .order("published_at", { ascending: false })
-      .limit(4),
-    supabase
-      .from("format_configs")
-      .select("slug, display_name, league_type, scoring_type, is_superflex, te_premium_bonus")
-      .eq("is_active", true)
-      .order("display_order"),
-  ]);
+  const [{ data: articles }, { data: formats }, { data: sources }] =
+    await Promise.all([
+      supabase
+        .from("articles")
+        .select("slug, title, tl_dr, article_type, published_at")
+        .eq("status", "published")
+        .order("published_at", { ascending: false })
+        .limit(4),
+      supabase
+        .from("format_configs")
+        .select("slug, display_name, league_type, scoring_type, is_superflex, te_premium_bonus")
+        .eq("is_active", true)
+        .order("display_order"),
+      supabase
+        .from("source_registry")
+        .select(
+          "slug, display_name, description, data_type, update_cadence, supported_format_slugs, is_default",
+        )
+        .eq("is_active", true)
+        .order("priority"),
+    ]);
 
   return (
     <main id="main">
       <Hero />
       <ToolsSection />
-      <FormatsSection formats={formats ?? []} />
+      <SourcesFormatsSection formats={formats ?? []} sources={sources ?? []} />
       <ArticlesSection articles={articles ?? []} />
       <CtaSection />
     </main>
@@ -303,7 +313,7 @@ function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
   );
 }
 
-/* ---------- Rankings for every format ---------- */
+/* ---------- Sources and formats ---------- */
 
 type FormatRow = {
   slug: string;
@@ -314,37 +324,133 @@ type FormatRow = {
   te_premium_bonus: number;
 };
 
-function FormatsSection({ formats }: { formats: FormatRow[] }) {
+type SourceRow = {
+  slug: string;
+  display_name: string;
+  description: string | null;
+  data_type: string[];
+  update_cadence: string;
+  supported_format_slugs: string[] | null;
+  is_default: boolean;
+};
+
+const BEACON_SOURCE_SLUG = "ffbeacon";
+
+/** How many of the currently active formats a source actually publishes for.
+ *  A null supported list means "every active format" (see source_registry). */
+function coverageCount(source: SourceRow, activeFormatSlugs: Set<string>): number {
+  if (!source.supported_format_slugs) return activeFormatSlugs.size;
+  return source.supported_format_slugs.filter((s) => activeFormatSlugs.has(s)).length;
+}
+
+/** Plain-English expansion of a format's abbreviations, for sighted and
+ *  screen-reader users alike (SF becomes Superflex, TEP becomes TE premium). */
+function describeFormat(f: FormatRow): string {
+  const parts: string[] = [];
+  if (f.slug.startsWith("bestball")) parts.push("Best Ball");
+  parts.push(f.league_type === "dynasty" ? "Dynasty" : "Redraft");
+  parts.push(
+    f.scoring_type === "ppr"
+      ? "PPR"
+      : f.scoring_type === "half_ppr"
+        ? "Half PPR"
+        : "Standard",
+  );
+  if (f.is_superflex) parts.push("Superflex");
+  if (Number(f.te_premium_bonus) > 0) parts.push("TE premium");
+  return parts.join(", ");
+}
+
+function SourcesFormatsSection({
+  formats,
+  sources,
+}: {
+  formats: FormatRow[];
+  sources: SourceRow[];
+}) {
+  const activeFormatSlugs = new Set(formats.map((f) => f.slug));
+  const beacon = sources.find((s) => s.slug === BEACON_SOURCE_SLUG) ?? null;
+  const otherSources = sources.filter((s) => s.slug !== BEACON_SOURCE_SLUG);
+
   return (
-    <section aria-labelledby="formats-heading" className="border-b border-line">
+    <section aria-labelledby="data-heading" className="border-b border-line">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <SectionEyebrow>Pick the league you actually play</SectionEyebrow>
+        <SectionEyebrow>Sources and formats</SectionEyebrow>
         <h2
-          id="formats-heading"
+          id="data-heading"
           className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
         >
-          Redraft, dynasty, superflex, TE premium — values adjust to match.
+          Every source we trust. Every format you play.
         </h2>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-          Eight active formats covered today, with more on the way as the data
-          sources we trust publish them. Every format is also gated to the
-          sources that actually publish for it, so you never see an empty board.
+          {sources.length} ranking source{sources.length === 1 ? "" : "s"} to
+          compare side by side, plus our own FF Beacon value when you just want
+          one number to trust, across {formats.length} scoring formats. Pick the
+          combination you play and the whole site follows along.
         </p>
 
-        <ul className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="list">
+        {/* --- Sources --- */}
+        <h3
+          id="sources-subheading"
+          className="mt-12 text-xs font-semibold uppercase tracking-[0.18em] text-ink-subtle"
+        >
+          Ranking sources
+        </h3>
+
+        {beacon && (
+          <FeaturedSourceCard
+            source={beacon}
+            coverage={coverageCount(beacon, activeFormatSlugs)}
+            totalFormats={formats.length}
+          />
+        )}
+
+        {otherSources.length > 0 && (
+          <ul
+            className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            role="list"
+            aria-label="Other ranking sources"
+          >
+            {otherSources.map((source) => (
+              <li key={source.slug}>
+                <SourceCard
+                  source={source}
+                  coverage={coverageCount(source, activeFormatSlugs)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* --- Formats --- */}
+        <h3
+          id="formats-subheading"
+          className="mt-14 text-xs font-semibold uppercase tracking-[0.18em] text-ink-subtle"
+        >
+          Scoring formats ({formats.length})
+        </h3>
+        <ul
+          className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          role="list"
+          aria-labelledby="formats-subheading"
+        >
           {formats.map((format) => (
             <li key={format.slug}>
               <Link
                 href={`/rankings?format=${format.slug}`}
-                className="flex flex-col rounded-card border border-line bg-surface p-4 transition-colors hover:border-brand-cyan/60"
+                className="group flex h-full flex-col rounded-card border border-line bg-surface p-4 transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                <span className="text-base font-medium text-ink">
-                  {format.display_name}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-base font-medium text-ink">
+                    {format.display_name}
+                  </span>
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 shrink-0 text-ink-subtle transition-all group-hover:translate-x-0.5 group-hover:text-brand-cyan motion-reduce:transition-none"
+                  />
                 </span>
-                <span className="mt-1 text-xs uppercase tracking-wide text-ink-subtle">
-                  {format.league_type} • {format.scoring_type.replace("_", " ")}
-                  {format.is_superflex ? " • superflex" : ""}
-                  {Number(format.te_premium_bonus) > 0 ? " • TEP" : ""}
+                <span className="mt-1 text-xs text-ink-muted">
+                  {describeFormat(format)}
                 </span>
               </Link>
             </li>
@@ -352,6 +458,145 @@ function FormatsSection({ formats }: { formats: FormatRow[] }) {
         </ul>
       </div>
     </section>
+  );
+}
+
+/** Small rounded chip used for source metadata (cadence, coverage, data type). */
+function MetaPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-line bg-base px-2.5 py-0.5 text-[11px] font-medium text-ink-muted">
+      {children}
+    </span>
+  );
+}
+
+function sourceMetaPills(source: SourceRow, coverage: number) {
+  const cadence =
+    source.update_cadence.charAt(0).toUpperCase() + source.update_cadence.slice(1);
+  const hasPicks = source.data_type.includes("draft_pick_values");
+  return (
+    <>
+      <MetaPill>{cadence} updates</MetaPill>
+      <MetaPill>
+        {coverage} format{coverage === 1 ? "" : "s"}
+      </MetaPill>
+      <MetaPill>{hasPicks ? "Player and pick values" : "Player values"}</MetaPill>
+    </>
+  );
+}
+
+/** The FF Beacon source, given prominence: our own blended ranking. */
+function FeaturedSourceCard({
+  source,
+  coverage,
+  totalFormats,
+}: {
+  source: SourceRow;
+  coverage: number;
+  totalFormats: number;
+}) {
+  return (
+    <Link
+      href={`/rankings?source=${source.slug}`}
+      className="group relative mt-4 flex flex-col overflow-hidden rounded-modal border border-brand-purple/40 bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-purple/70 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-8"
+    >
+      {/* Beacon glow wash in the corner. Decorative. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
+        style={{
+          background:
+            "radial-gradient(circle, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 50%, transparent 72%)",
+        }}
+      />
+      <div className="relative flex flex-wrap items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-12 w-12 items-center justify-center rounded-card bg-beacon text-black"
+        >
+          <Radar className="h-6 w-6" />
+        </span>
+        <div>
+          <span className="inline-flex items-center rounded-full border border-brand-purple/50 bg-brand-purple/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-purple">
+            Our secret sauce
+          </span>
+          <h4 className="mt-1 text-xl font-semibold text-ink">
+            {source.display_name} value
+          </h4>
+        </div>
+      </div>
+
+      <p className="relative mt-4 max-w-2xl text-sm leading-relaxed text-ink-muted">
+        Our own number, and we keep the recipe behind the counter. A proprietary
+        model does the heavy number-crunching, AI-powered analytics sweat the
+        close calls, and our founder and team add the human read that pure math
+        always misses. What you get is a single FF Beacon value, tuned to cut
+        through the noise instead of echoing it.
+      </p>
+
+      <div className="relative mt-5 flex flex-wrap items-center gap-2">
+        <MetaPill>
+          {source.update_cadence.charAt(0).toUpperCase() +
+            source.update_cadence.slice(1)}{" "}
+          updates
+        </MetaPill>
+        <MetaPill>
+          Covers {coverage} of {totalFormats} formats
+        </MetaPill>
+        <MetaPill>
+          {source.data_type.includes("draft_pick_values")
+            ? "Player and pick values"
+            : "Player values"}
+        </MetaPill>
+      </div>
+
+      <span className="relative mt-6 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
+        See the FF Beacon board
+        <ArrowRight
+          aria-hidden="true"
+          className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none"
+        />
+      </span>
+    </Link>
+  );
+}
+
+/** A third-party ranking source rendered from its source_registry row. */
+function SourceCard({
+  source,
+  coverage,
+}: {
+  source: SourceRow;
+  coverage: number;
+}) {
+  return (
+    <Link
+      href={`/rankings?source=${source.slug}`}
+      className="group flex h-full flex-col rounded-card border border-line bg-surface p-5 transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    >
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        >
+          <Layers className="h-4 w-4" />
+        </span>
+        <h4 className="text-base font-semibold text-ink">{source.display_name}</h4>
+        {source.is_default && (
+          <span className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
+            Default
+          </span>
+        )}
+      </div>
+      {source.description && (
+        <p className="mt-3 flex-1 text-sm leading-relaxed text-ink-muted">
+          {source.description}
+        </p>
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {sourceMetaPills(source, coverage)}
+      </div>
+    </Link>
   );
 }
 
