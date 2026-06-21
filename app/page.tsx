@@ -72,7 +72,7 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     title: "Sleeper League Pulse",
     description:
       "Type in your Sleeper username and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
-    cta: "Sync a league",
+    cta: "Check your league's pulse",
     icon: Workflow,
   },
   {
