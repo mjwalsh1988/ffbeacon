@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import {
   BarChart3,
@@ -197,7 +196,7 @@ function Hero() {
           role="list"
           aria-label="What sets FF Beacon apart"
         >
-          <HeroStat value="All" label="League formats, our own value" logo />
+          <HeroStat value="All" label="League formats" />
           <HeroStat value="Multi" label="Source-agnostic data" />
           <HeroStat value="AAA" label="WCAG contrast target" />
           <HeroStat value="Free" label="No paywall" />
@@ -207,37 +206,17 @@ function Hero() {
   );
 }
 
-function HeroStat({
-  value,
-  label,
-  logo = false,
-}: {
-  value: string;
-  label: string;
-  logo?: boolean;
-}) {
+function HeroStat({ value, label }: { value: string; label: string }) {
   return (
     <li className="rounded-card border border-line bg-surface/60 p-4">
-      <div className="flex items-center gap-2">
-        {logo && (
-          <Image
-            src="/img/ff-beacon-logo.png"
-            alt=""
-            aria-hidden="true"
-            width={32}
-            height={32}
-            className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
-          />
-        )}
-        <p
-          className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
-          style={{
-            backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-          }}
-        >
-          {value}
-        </p>
-      </div>
+      <p
+        className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+        }}
+      >
+        {value}
+      </p>
       <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
         {label}
       </p>
