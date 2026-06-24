@@ -21,7 +21,9 @@ export type CronJobName =
   | "sync-dynastyprocess"
   | "recalculate-beacon"
   | "recalculate-derived"
-  | "sync-sleeper-stats";
+  | "sync-sleeper-stats"
+  | "beacon-brief-curate"
+  | "beacon-brief-worker";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
 
@@ -43,7 +45,8 @@ export const CRON_JOBS: ReadonlyArray<{
     label: "KTC value sync",
     schedule: "0 7 * * *",
     scheduleHuman: "Daily, 07:00 UTC",
-    description: "Scrapes KeepTradeCut and writes player_value_history + draft_pick_values.",
+    description:
+      "Scrapes KeepTradeCut and writes player_value_history + draft_pick_values.",
   },
   {
     name: "sync-fantasycalc",
@@ -57,28 +60,48 @@ export const CRON_JOBS: ReadonlyArray<{
     label: "DynastyProcess value sync",
     schedule: "0 9 * * *",
     scheduleHuman: "Daily, 09:00 UTC",
-    description: "Pulls DynastyProcess FantasyPros-derived dynasty values into player_value_history.",
+    description:
+      "Pulls DynastyProcess FantasyPros-derived dynasty values into player_value_history.",
   },
   {
     name: "recalculate-beacon",
     label: "FF Beacon value recalc",
     schedule: "30 9 * * *",
     scheduleHuman: "Daily, 09:30 UTC",
-    description: "Recomputes FF Beacon proprietary values (all signals) into player_value_history + draft_pick_values, after the source syncs and before the derived recalc.",
+    description:
+      "Recomputes FF Beacon proprietary values (all signals) into player_value_history + draft_pick_values, after the source syncs and before the derived recalc.",
   },
   {
     name: "recalculate-derived",
     label: "Rankings + trends recalc",
     schedule: "0 10 * * *",
     scheduleHuman: "Daily, 10:00 UTC",
-    description: "Rebuilds the global rankings and player_value_trends tables from the latest values.",
+    description:
+      "Rebuilds the global rankings and player_value_trends tables from the latest values.",
   },
   {
     name: "sync-sleeper-stats",
     label: "Sleeper stats sync",
     schedule: "0 9 * 1,2,8,9,10,11,12 *",
     scheduleHuman: "Daily 09:00 UTC, NFL months only",
-    description: "Refreshes current-season player_stats from Sleeper. Skips in the off-season.",
+    description:
+      "Refreshes current-season player_stats from Sleeper. Skips in the off-season.",
+  },
+  {
+    name: "beacon-brief-curate",
+    label: "Beacon Brief curation",
+    schedule: "*/5 * * * *",
+    scheduleHuman: "Every 5 minutes",
+    description:
+      "Ingests new source posts, scores/categorizes them, and enqueues Discord + article work (fast path only).",
+  },
+  {
+    name: "beacon-brief-worker",
+    label: "Beacon Brief queue worker",
+    schedule: "* * * * *",
+    scheduleHuman: "Every minute",
+    description:
+      "Drains the Beacon Brief queue: Discord posts/patches, article writing, and deletion checks, with throttle and backoff.",
   },
 ];
 
@@ -111,7 +134,10 @@ export async function recordCronRun<T>(
       .single();
     runId = data?.id ?? null;
   } catch (err) {
-    console.warn(`[cron-runs] could not record start for ${jobName}:`, errMsg(err));
+    console.warn(
+      `[cron-runs] could not record start for ${jobName}:`,
+      errMsg(err),
+    );
   }
 
   const finalize = async (
@@ -135,7 +161,10 @@ export async function recordCronRun<T>(
           .insert({ job_name: jobName, started_at: startedAt, ...payload });
       }
     } catch (err) {
-      console.warn(`[cron-runs] could not record finish for ${jobName}:`, errMsg(err));
+      console.warn(
+        `[cron-runs] could not record finish for ${jobName}:`,
+        errMsg(err),
+      );
     }
   };
 
@@ -160,7 +189,9 @@ function errMsg(err: unknown): string {
  * value pairs for compact display. Unknown shapes return an empty list so the
  * UI can fall back to the raw JSON.
  */
-export function summarizeCronResult(result: Json | null): Array<{ label: string; value: string }> {
+export function summarizeCronResult(
+  result: Json | null,
+): Array<{ label: string; value: string }> {
   if (!result || typeof result !== "object" || Array.isArray(result)) return [];
   const r = result as Record<string, unknown>;
   const pairs: Array<{ label: string; value: string }> = [];
@@ -180,6 +211,7 @@ export function summarizeCronResult(result: Json | null): Array<{ label: string;
   push("Inserted", "inserted");
   push("Updated", "updated");
   if (r.skipped === true) pairs.push({ label: "Skipped", value: "yes" });
-  if (typeof r.reason === "string") pairs.push({ label: "Reason", value: r.reason });
+  if (typeof r.reason === "string")
+    pairs.push({ label: "Reason", value: r.reason });
   return pairs;
 }

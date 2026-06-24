@@ -8,6 +8,8 @@ import {
   SlidersHorizontal,
   Flag,
   HelpCircle,
+  Newspaper,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 
@@ -31,19 +33,35 @@ const NAV_ITEMS: NavItem[] = [
     href: "/admin/beacon",
     label: "Player Values & Sources",
     icon: SlidersHorizontal,
-    description: "Value engine control: sources, weights, bands, manual signals, and the full ranking review.",
+    description:
+      "Value engine control: sources, weights, bands, manual signals, and the full ranking review.",
+  },
+  {
+    href: "/admin/beacon-brief",
+    label: "The Beacon Brief",
+    icon: Newspaper,
+    description:
+      "News curation: sources, categories, articles, moderation, logs, and settings.",
+  },
+  {
+    href: "/admin/system",
+    label: "System Settings",
+    icon: Settings,
+    description: "System-wide configuration, including Discord webhooks.",
   },
   {
     href: "/admin/signal",
     label: "Signal",
     icon: Flag,
-    description: "Creator profile moderation: review reported Wall posts and take them down or restore them.",
+    description:
+      "Creator profile moderation: review reported Wall posts and take them down or restore them.",
   },
   {
     href: "/admin/signal-guide",
     label: "Signal Guide",
     icon: HelpCircle,
-    description: "Per-page help content: manage the questions and terms shown to visitors.",
+    description:
+      "Per-page help content: manage the questions and terms shown to visitors.",
   },
   {
     href: "/admin/crons",
@@ -57,7 +75,10 @@ export function AdminNav() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Admin sections" className="border-b border-line bg-surface/40">
+    <nav
+      aria-label="Admin sections"
+      className="border-b border-line bg-surface/40"
+    >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="-mb-px flex gap-1 overflow-x-auto">
           {NAV_ITEMS.map((item) => {
@@ -65,7 +86,8 @@ export function AdminNav() {
             const active =
               item.href === "/admin"
                 ? pathname === "/admin"
-                : pathname?.startsWith(item.href) ?? false;
+                : pathname === item.href ||
+                  (pathname?.startsWith(item.href + "/") ?? false);
             return (
               <Link
                 key={item.href}
@@ -81,7 +103,9 @@ export function AdminNav() {
                 <Icon
                   aria-hidden="true"
                   className={`h-4 w-4 transition-colors ${
-                    active ? "text-brand-cyan" : "text-ink-subtle group-hover:text-ink"
+                    active
+                      ? "text-brand-cyan"
+                      : "text-ink-subtle group-hover:text-ink"
                   }`}
                 />
                 {item.label}

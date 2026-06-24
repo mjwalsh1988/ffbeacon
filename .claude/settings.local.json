@@ -170,7 +170,10 @@
       "Bash(tasklist)",
       "Bash(PORT=3101 npm run start)",
       "Bash(curl -s -o /dev/null \"http://localhost:3101/\")",
-      "Bash(:)"
+      "Bash(:)",
+      "Bash(sort -t T -k2 -n)",
+      "PowerShell(npx prettier --write lib/beacon-brief/worker.ts lib/beacon-brief/settings.ts lib/beacon-brief/curate.ts app/admin/beacon-brief/logs/page.tsx app/admin/beacon-brief/actions.ts app/admin/beacon-brief/settings/page.tsx components/admin/beacon-brief/articles-manager.tsx components/admin/beacon-brief/log-payloads.tsx)",
+      "PowerShell(npx prettier --write lib/database.types.ts)"
     ]
   },
   "enabledMcpjsonServers": [

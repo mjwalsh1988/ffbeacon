@@ -1836,3 +1836,178 @@ only the feed UI is out of scope).
 - AdSense readiness sweep
 - Phase 12 follow-ups: real commissioner detection, edge runtime for OG,
   Geist woff2 fetch in OG cards, toast-style refresh feedback
+
+---
+
+## Phase 13 - The Beacon Brief (News Curation)
+Scope: ONLY the Beacon Brief section of plan.md. Source-agnostic news curation
+(X first) -> Anthropic score/categorize/tag -> create article when context_score=1
+-> post original content to Discord via "Beacon Relay" webhook. Two crons
+(curation every 5 min, worker every 1 min) + beacon_brief_queue. Migrations begin
+at 0081 (latest pre-existing was 0080). Task IDs continue from T842.
+
+### Migrations + types (one each, RLS in same migration, types regen after each)
+T843 | completed | Migration 0081 discord_webhooks (table ONLY, no seed; secret URL inserted via MCP later). RLS service-role-only.
+     | files: supabase/migrations/0081_discord_webhooks.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; pg_policies shows rls_enabled=true + discord_webhooks_service_role_all; no anon/authed policy; types regen contains discord_webhooks)
+T844 | completed | Migration 0082 news_sources (admin_label, source_type default 'x' CHECK, handle, external_account_id, last_cursor, last_polled_at, last_poll_status/error, metadata; unique(source_type,handle)). RLS service-role-only.
+     | files: supabase/migrations/0082_news_sources.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; pg_policies shows rls_enabled=true + news_sources_service_role_all only; types contain news_sources)
+T845 | completed | Migration 0083 news_categories (slug unique, name, description, discord_role_ids[], display_order, is_active). RLS service-role-only (public read deferred with public reader).
+     | files: supabase/migrations/0083_news_categories.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; pg_policies rls_enabled=true + service_role_all only; types contain news_categories)
+T846 | completed | Migration 0084 teams (+seed 32 NFL; abbreviation unique matches Sleeper players.team, conference/division CHECK, discord_role_ids[]). Public SELECT + service-role write.
+     | files: supabase/migrations/0084_teams.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; rls_enabled=true; teams_select_public anon+authed read + teams_service_role_all; team_count=32, conferences=2; types contain teams)
+T847 | completed | Migration 0085 article_teams join (article_id+team_id PK, cascade FKs, mirrors article_players). Public SELECT + service-role write.
+     | files: supabase/migrations/0085_article_teams.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; rls_enabled=true; article_teams_select_public + service_role_all; types contain article_teams)
+T848 | completed | Migration 0086 news_ingestions (UUID PK identity; UNIQUE(source_id, source_external_id) dedup net; media/quoted/retweeted jsonb; is_revision + self-FK; ai_result; context_score; status CHECK incl 'deleted'; article_id/discord_webhook_id/discord_message_id; metadata raw; source_id FK cascade). RLS service-role-only.
+     | files: supabase/migrations/0086_news_ingestions.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; rls_enabled=true; only service_role policy; unique_constraints=1; types contain news_ingestions)
+T849 | completed | Migration 0087 beacon_brief_queue (job_type CHECK, payload, status CHECK, attempts, run_after, last_error; partial claim index where status='pending' ordered run_after). RLS service-role-only.
+     | files: supabase/migrations/0087_beacon_brief_queue.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; rls_enabled=true; service_role_all only; 3 indexes incl partial claim idx; types contain beacon_brief_queue)
+T850 | completed | Migration 0088 beacon_brief_moderation (ingestion_id cascade FK, article_id set-null FK, type 'deletion', status pending/approved/rejected, detail jsonb, resolved_by). RLS service-role-only.
+     | files: supabase/migrations/0088_beacon_brief_moderation.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; rls_enabled=true; service_role_all only; types contain beacon_brief_moderation)
+T851 | completed | Migration 0089 article_revisions (article_id cascade FK, unique(article_id, revision_number), title/content_md/tags/category_id snapshot, change_summary, source_ingestion_id). RLS service-role-only.
+     | files: supabase/migrations/0089_article_revisions.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; rls_enabled=true; service_role_all only; types contain article_revisions)
+T852 | completed | Migration 0090 beacon_brief_logs (ingestion_id/source_id set-null FKs, stage CHECK 10 stages, level CHECK, message, request_payload/response_payload jsonb, model, token_usage, duration_ms; 4 indexes). RLS service-role-only.
+     | files: supabase/migrations/0090_beacon_brief_logs.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; rls_enabled=true; service_role_all only; types contain beacon_brief_logs)
+T853 | completed | Migration 0091 articles extension (add metadata jsonb default {}, tags text[] default {}, category_id FK->news_categories set-null, origin text default 'manual' CHECK in (manual,beacon_brief); idx on category_id + origin). article_type kept. RLS unchanged from 0005.
+     | files: supabase/migrations/0091_articles_beacon_brief_extension.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; information_schema confirms metadata/tags/category_id/origin present; types regen)
+T854 | completed | Migration 0092 beacon_settings bb_* rows (category 'beacon_brief'): bb_enabled, bb_discord_enabled, bb_web_search_enabled, bb_autopublish, bb_context_threshold, bb_followup_lookback_days, bb_queue_max_attempts, bb_discord_jobs_per_run, bb_model_article (sonnet-4-6), bb_model_triage (haiku-4-5), bb_webhook_id, + 6 editable prompts. Plain-ASCII prompts.
+     | files: supabase/migrations/0092_beacon_brief_settings.sql, lib/database.types.ts
+     | verified: yes (MCP apply ok; 17 bb_ rows = 4 toggles + 6 prompts + 4 numbers + 3 strings; npm run typecheck PASS)
+     | NOTE: ALL 12 MIGRATIONS (0081-0092) COMPLETE. typecheck green.
+
+### Post-migration manual step
+T855 | completed | Inserted "News & Injuries" discord_webhooks row via MCP execute_sql (URL kept out of version control; not in any migration). Wired bb_webhook_id to webhook id 2de0121c-e0b0-475e-8446-ca7031550dfc. Idempotent insert (guarded by label).
+     | files: none committed (data-only via MCP; secret URL not stored in repo)
+     | verified: yes (bb_webhook_id = 2de0121c...; 1 active webhook row)
+
+### Libs
+T856 | completed | lib/beacon-brief/types.ts (BeaconBriefSourceItem contract + CategorizeResult, ArticleResult, RevisionRewriteResult, QueueJobType/Payload)
+     | files: lib/beacon-brief/types.ts
+     | verified: yes (typecheck deferred to end of libs batch)
+T857 | completed | lib/x.ts (X v2 client; safeFetch mirror of lib/sleeper.ts; bearer auth; getXUserByUsername, getXUserTweets since_id+expansions, getXTweetsByIds for deletion check). null-on-failure.
+     | files: lib/x.ts
+     | verified: typecheck deferred to end of libs batch
+T858 | completed | lib/discord.ts (postWebhookMessage ?wait=true returns msg id + patchWebhookMessage; Beacon Relay username + logo avatar on create; allowed_mentions parse:[] roles-only; DiscordResult carries status + retryAfterMs for 429 backoff).
+     | files: lib/discord.ts
+     | verified: typecheck deferred to end of libs batch
+T859 | completed | lib/beacon-brief/ai.ts (logBeaconBrief shared logger; runStructuredCall strict-JSON via output_config.format; runWebSearchResearch web_search_20260209 free-text; both log exact request/response/model/usage; null on failure) + lib/beacon-brief/settings.ts (loadBeaconBriefSettings, BEACON_BRIEF_DEFAULTS).
+     | files: lib/beacon-brief/ai.ts, lib/beacon-brief/settings.ts
+     | verified: typecheck deferred to end of libs batch (note: confirm web_search_20260209 tool literal accepted by @anthropic-ai/sdk 0.104.1)
+T860 | completed | lib/beacon-brief/ingest-x.ts (normalizeTimeline maps X v2 -> BeaconBriefSourceItem incl media/quoted/retweeted + native-edit chain; fetchSourceItems resolves account id, pulls since cursor, returns items+newestId+ok). Dedupe + AI follow-up detection happen in curate.
+     | files: lib/beacon-brief/ingest-x.ts
+     | verified: typecheck deferred to end of libs batch
+T861 | completed | lib/beacon-brief/curate.ts (runCuration: per active source fetch+dedupe; native-edit + AI follow-up revision detection; inline categorize/context-score; resolveRefs maps names->category/player/team ids + role ids; routes by context_score and revision-critical -> enqueues discord_post/discord_patch/article_write; advances cursor + last_poll status; NO inline Discord/article writing). Team token sanitized for PostgREST or().
+     | files: lib/beacon-brief/curate.ts
+     | verified: typecheck deferred to end of libs batch
+T862 | completed | lib/beacon-brief/worker.ts (runWorker: claims via bb_claim_jobs RPC FOR UPDATE SKIP LOCKED, discord jobs capped at settings.discordJobsPerRun + others separate; handlers for discord_post/discord_patch[+retract]/article_write[create 2-step web-search research+structuring | rewrite]/deletion_check; unique slug +5char; autopublish gate; links article_players/article_teams; snapshots article_revisions; schedules deletion_check; shadow-mode skip; failOrRetry backoff + email at max attempts). REQUIRED migration 0093_bb_claim_jobs (service_role-only SKIP LOCKED claim fn) applied + types regen.
+     | files: lib/beacon-brief/worker.ts, supabase/migrations/0093_bb_claim_jobs.sql, lib/database.types.ts
+     | verified: yes (npm run typecheck PASS; bb_claim_jobs in types; prettier-formatted)
+T863 | completed | lib/beacon-brief/deletion.ts (handleDeletionCheck: re-verify source post via getXTweetsByIds, open pending moderation if gone, re-enqueue within 7d horizon; approveDeletion: archive article + status 'deleted' + enqueue discord_patch retract + close moderation; rejectDeletion: close as rejected. Nothing auto-deleted).
+     | files: lib/beacon-brief/deletion.ts (worker imports handleDeletionCheck; admin Moderation action will use approve/reject)
+     | verified: yes (typecheck PASS)
+
+### Crons + CLI
+T864 | completed | app/api/cron/beacon-brief/route.ts (nodejs, force-dynamic, maxDuration 300; Bearer CRON_SECRET; recordCronRun "beacon-brief-curate" -> runCuration). Matches sync-ktc pattern.
+     | files: app/api/cron/beacon-brief/route.ts | verified: typecheck PASS
+T865 | completed | app/api/cron/beacon-brief-worker/route.ts (same auth; recordCronRun "beacon-brief-worker" -> runWorker).
+     | files: app/api/cron/beacon-brief-worker/route.ts | verified: typecheck PASS
+T866 | completed | Added beacon-brief-curate + beacon-brief-worker to CronJobName union + CRON_JOBS registry (lib/cron-runs.ts); added both crons to vercel.json (curation */5 * * * *, worker * * * * *).
+     | files: lib/cron-runs.ts, vercel.json | verified: typecheck PASS
+T867 | completed | scripts/beacon-brief.ts (tsx; getServiceClient; runs curation then worker, or curate|worker arg) + npm run beacon-brief. SMOKE TEST PASSED at runtime (0 sources/0 jobs no-op; confirms tsx @/ alias resolution + bb_claim_jobs RPC + settings load + DB connectivity).
+     | files: scripts/beacon-brief.ts, package.json | verified: yes (ran npm run beacon-brief; clean no-op output)
+
+### Email
+T868 | completed | lib/beacon-brief/email.ts sendBeaconBriefFailureEmail (reuses lib/email/layout buildBrandedEmail + lib/email/send; to michael@ffbeacon.com via BEACON_BRIEF_ALERT_TO; describes job type/id/attempts/error + button to /admin/beacon-brief/logs). Built early since worker depends on it.
+     | files: lib/beacon-brief/email.ts
+     | verified: yes (typecheck PASS)
+
+### Admin UI (requireAdmin, colocated actions.ts, ActionResult/fail, screen-reader-first)
+T869 | completed | admin-nav: added "The Beacon Brief" (/admin/beacon-brief) + "System Settings" (/admin/system) NAV_ITEMS; fixed active-check to path-boundary match so /admin/beacon no longer matches /admin/beacon-brief. lib/beacon-brief-admin-nav.ts (6 subpages) + components/admin/beacon-brief-subnav.tsx + beacon-brief-page-shell.tsx.
+     | files: components/admin-nav.tsx, lib/beacon-brief-admin-nav.ts, components/admin/beacon-brief-subnav.tsx, components/admin/beacon-brief-page-shell.tsx
+     | verified: typecheck PASS
+T870 | completed | System Settings webhooks: app/admin/system/page.tsx (redirect -> /webhooks), app/admin/system/webhooks/page.tsx (masks URL to last-6 hint, never ships secret to client), app/admin/system/actions.ts (create/update[url optional=keep]/toggle/delete, https discord URL validation, created_by), components/admin/beacon-brief/webhooks-manager.tsx (add/edit/toggle/delete, aria-live, 44px, confirm on delete).
+     | files: app/admin/system/page.tsx, app/admin/system/webhooks/page.tsx, app/admin/system/actions.ts, components/admin/beacon-brief/webhooks-manager.tsx
+     | verified: typecheck PASS. SECURITY: webhook URL never sent to client (hint only).
+T-actions | completed | app/admin/beacon-brief/actions.ts (sources/categories/articles assignments+content/moderation approve+reject via deletion lib). requireAdmin + ActionResult/fail + service-role + revalidatePath.
+     | files: app/admin/beacon-brief/actions.ts | verified: typecheck PASS
+T871 | completed | app/admin/beacon-brief/page.tsx Overview (stat cards: active sources, published articles, queue pending/failed, pending moderation; last curate+worker cron runs; recent 15 logs). 
+     | files: app/admin/beacon-brief/page.tsx | verified: typecheck PASS
+T871 | pending | /admin/beacon-brief (Overview)
+T872 | completed | /admin/beacon-brief/sources/page.tsx + components/admin/beacon-brief/sources-manager.tsx (add/edit/toggle/delete; shows last_poll_status + last_polled_at + error per source; source_type select defaults X).
+     | files: app/admin/beacon-brief/sources/page.tsx, components/admin/beacon-brief/sources-manager.tsx | verified: typecheck PASS
+T873 | completed | /admin/beacon-brief/categories/page.tsx + components/admin/beacon-brief/categories-manager.tsx (add/edit/toggle/delete; discord_role_ids as comma list; display_order; shows slug).
+     | files: app/admin/beacon-brief/categories/page.tsx, components/admin/beacon-brief/categories-manager.tsx | verified: typecheck PASS
+T874 | completed | /admin/beacon-brief/articles/page.tsx + articles-manager.tsx (filters: status, category, player/team text -> article ids; per-article expandable editor: content via updateArticleContent + assignments via updateArticleAssignments; teams as 32 checkboxes; players via searchPlayers add/remove; revision history via getArticleDetail). Added searchPlayers + getArticleDetail read actions.
+     | files: app/admin/beacon-brief/articles/page.tsx, components/admin/beacon-brief/articles-manager.tsx, app/admin/beacon-brief/actions.ts | verified: build PASS
+T875 | completed | /admin/beacon-brief/moderation/page.tsx + moderation-manager.tsx (pending deletion reviews; approve -> approveModeration / reject -> rejectModeration; confirm on approve).
+     | files: app/admin/beacon-brief/moderation/page.tsx, components/admin/beacon-brief/moderation-manager.tsx | verified: build PASS
+T876 | completed | /admin/beacon-brief/logs/page.tsx (data-heavy; GET-form filters stage+level; native <details> disclosure for request/response payloads = keyboard accessible; per-entry cards (no data hidden on mobile); link to Settings for prompt editing).
+     | files: app/admin/beacon-brief/logs/page.tsx | verified: build PASS
+T877 | completed | /admin/beacon-brief/settings/page.tsx (reuses SettingField + updateBeaconSetting for bb_* in fixed order; bb_webhook_id via custom WebhookSelectField populated from discord_webhooks).
+     | files: app/admin/beacon-brief/settings/page.tsx, components/admin/beacon-brief/webhook-select-field.tsx | verified: build PASS
+     | NOTE: ALL CODING COMPLETE. npm run typecheck + npm run build PASS. Smoke test (npm run beacon-brief) green.
+
+### Final review (Beacon-Brief-scoped only)
+T878 | completed | 4 independent read-only sub-agents ran (implementation, security, performance, accessibility), each scoped to Beacon Brief only. NO Blockers from any. Implementation: matches plan (2 minor deviations: no "Run now" UI [CLI only]; Logs filters stage+level not source+ingestion). Security: strong, no Blocker/Important (minor: .or() blocklist sanitize, non-constant-time cron compare; nit: webhook host regex narrow). Performance: 2 Important (curation serial inline AI per item, no per-run item budget + cursor advances only at source-end; missing pg_trgm index on players.full_name/teams.name + per-name N+1 in resolveRefs), minor (logs loads full jsonb x100; heavy-bucket hardcoded 25). Accessibility: 4 Important (h4 heading skip in articles editor; moderation no link to view article; player search results not aria-live announced; dead source-type select), minors (checkbox group labels, x button 44px, errors not assertive).
+     | verified: reviews complete; findings surfaced to owner for fix decisions (no silent auto-fix of major items).
+
+## Phase 13b - Review-driven fixes + curation safeguards (owner-approved)
+T879 | completed | Curation safeguard (one coherent change): migration 0094 adds bb_backfill_count(0), bb_max_items_per_run(50), bb_max_post_age_minutes(180), bb_article_jobs_per_run(5) + sets bb_enabled=false (system stays OFF). curate.ts: cold-start (uninitialized = null cursor -> watch from now, process only backfillCount newest; 0 = nothing); per-run shared item budget; incremental per-item cursor advance (persist after each item, reconcile at end); age cutoff (stale posts ingested as dropped_no_context, never routed). settings.ts + Settings page ORDER updated. unique(source_id, source_external_id) still backstops.
+     | files: supabase/migrations/0094_*, lib/beacon-brief/curate.ts, lib/beacon-brief/settings.ts, app/admin/beacon-brief/settings/page.tsx | verified: typecheck + build PASS
+T880 | completed | Performance: migration 0095 pg_trgm + GIN indexes on players.full_name & teams.name; resolveRefs batched (teams loaded once + matched in JS, players single ilike-any query); worker heavy bucket now uses bb_article_jobs_per_run.
+     | files: supabase/migrations/0095_*, lib/beacon-brief/curate.ts, lib/beacon-brief/worker.ts | verified: build PASS
+T881 | completed | Security minors: constant-time CRON_SECRET compare (timingSafeEqual) in both cron routes; widened webhook host regex (discord.com/ptb/canary/discordapp.com).
+     | files: app/api/cron/beacon-brief/route.ts, app/api/cron/beacon-brief-worker/route.ts, app/admin/system/actions.ts | verified: build PASS
+T882 | completed | Accessibility: articles editor h4->h3 (heading skip); moderation now shows article slug + "Open in Articles to review" link before destructive approve; player search results wrapped in aria-live polite + "No players found" empty state; sources source-type select disabled (no longer a dead control).
+     | files: components/admin/beacon-brief/{articles-manager,moderation-manager,sources-manager}.tsx | verified: build PASS
+     | DEFERRED (lower-priority, noted to owner): Logs jsonb lazy-load (perf minor 4); a11y minors (player remove "x" 44px hit area, team/player checkbox group fieldset/legend, assertive role=alert for error statuses), Discord inter-send pacing (perf minor 6).
+T883 | completed | Re-review (3 independent agents, Phase-13b-scoped). NO Blockers. Impl: all 8 safeguard reqs MET, cursor logic verified (no skips/reprocess), system OFF confirmed. Perf: prior (a)(b)(c) resolved; 1 Important (batched player OR substring over-match + limit truncation) -> FIXED (limit scales with token count; substring accepted since prompt returns full names + admin-editable). A11y: 3 fixes verified correct, no regressions. typecheck PASS.
+     | files: lib/beacon-brief/curate.ts | verified: typecheck PASS
+     | ACCEPTED / DEFERRED (surfaced to owner): cold-start backfill capped at 20 by X page size (doc note); worker has no wall-clock deadline / no stale-'processing' reaper (minor); redundant last_cursor in final source UPDATE (nit); failed item advances cursor past itself (won't retry that item - nit); logs jsonb lazy-load; a11y minors (x button 44px, checkbox group fieldset/legend, assertive error roles); Discord inter-send pacing; h1->h3 (could be h2).
+
+## Phase 13c - Deferred minor fixes (owner-approved this session)
+T884 | completed | Curate cursor fixes: (1) failed item no longer advances the cursor past itself - on a processItem throw the source stops for the run (logs a warn) so the next poll re-fetches from the last success and retries the failed item (unique constraint dedupes already-ingested ones); (2) removed the redundant final last_cursor write - the per-item incremental advance already persists it, so the end-of-source UPDATE only writes poll status, and sets last_cursor solely in the cold-start-with-nothing-to-process case (advance to newestId / watch forward).
+     | files: lib/beacon-brief/curate.ts | depends on: T879 | verified: typecheck + build PASS
+T885 | completed | Articles editor a11y minors: (1) player remove "x" button is now a 44x44 tap target (h-11 w-11 flex-centered; chip min-h-[44px]) with a focus-visible ring; (2) Teams + Players control groups are now <fieldset>/<legend> so each is announced as a labeled group (Tailwind preflight zeroes the default fieldset border/padding); (3) action status uses two live regions - success announces politely (role=status), failures announce assertively (role=alert / aria-live=assertive); (4) Revision history heading h3 -> h2 (it follows the page h1 directly, no skipped level).
+     | files: components/admin/beacon-brief/articles-manager.tsx | verified: typecheck + build PASS
+T886 | completed | Logs page jsonb lazy-load: the list query no longer selects request_payload/response_payload (a 100-row page could otherwise ship up to 200 large blobs). It now selects metadata only plus two existence-only probes (select id where payload is not null, constrained to the page ids) to know which disclosures to render. New client component LogPayloads fetches the actual jsonb once, on first expand, via a new getBeaconBriefLogPayload(id) server action (admin-guarded). aria-busy/aria-live on the loading pre.
+     | files: app/admin/beacon-brief/logs/page.tsx, components/admin/beacon-brief/log-payloads.tsx, app/admin/beacon-brief/actions.ts | verified: typecheck + build PASS
+T887 | completed | Worker reliability + Discord pacing (one coherent change): migration 0096 adds bb_worker_max_runtime_ms(50000), bb_stale_processing_minutes(10), bb_discord_pace_ms(1000) - data rows only, no schema change, no type regen. worker.ts: (1) stale-processing reaper at run start reclaims jobs left in processing past the window (worker crash/timeout) via the existing failOrRetry path (attempts++, retry-or-fail+email) so a poison job cannot loop; (2) soft wall-clock deadline stops processing when the runtime budget is hit and releases claimed-but-unreached jobs back to pending (run_after=now) so the next run grabs them immediately; (3) Discord inter-send pacing (delay between consecutive discord sends, never past the deadline) so a burst stays under the webhook limit. discord jobs are ordered first so pacing covers the contiguous batch. settings.ts (interface/defaults/loader) + Settings page ORDER updated. WorkerSummary gains reaped/released counts. System stays OFF (bb_enabled=false verified).
+     | files: supabase/migrations/0096_*, lib/beacon-brief/worker.ts, lib/beacon-brief/settings.ts, app/admin/beacon-brief/settings/page.tsx | depends on: T862 | verified: typecheck + build PASS; migration 0096 applied + rows confirmed; bb_enabled still false
+T888 | completed | Review (a11y + perf sub-agents, scoped to ONLY the T884-T887 changes). NO Blockers. Fixed the 2 a11y Important + 1 perf Important + 1 nit: (a) log-payloads <pre> now tabIndex=0 + aria-label so keyboard users can scroll tall JSON; (b) dropped the misleading aria-live on that <pre> (kept aria-busy; native <details> conveys state); (c) added an error state to LogPayloads so a failed fetch no longer shows "Loading..." forever; (d) worker failOrRetry now guards every transition with status='processing' (+ stale cutoff for the reaper path) and reports "lost" when a concurrent run already handled the job, closing the reap-vs-reclaim double-attempt/double-email race; reaper select bounded with order+limit(200). typecheck + build PASS.
+     | files: components/admin/beacon-brief/log-payloads.tsx, lib/beacon-brief/worker.ts | verified: typecheck + build PASS
+     | ACCEPTED / DOCUMENTED (reviewers rated acceptable, not fixed): poison item that throws every run permanently stalls its source (cursor never advances past it) - bounded because processItem swallows most soft failures (only an uncaught DB/network error throws); a future per-item attempt cap on news_ingestions would quarantine it. Also left as-is: two id-only existence probes on the logs page (one extra round trip, bounded to 100 ids); per-item cursor UPDATE fires on pure dedupes (N small no-op writes per run).
+
+## Phase 13d - Confident reference matching + match moderation (owner-approved this session)
+GOAL: never auto-link a guessed player/team. Only auto-link an exact, unambiguous match; everything non-confident opens a moderation row (with ranked candidate suggestions) and emails a per-run digest for manual resolution.
+T889 | completed | Migration 0097: extend beacon_brief_moderation for reference-match review. type CHECK now allows 'deletion','player_match','team_match' (type encodes the ref kind, no separate ref_kind col); added raw_name text + candidates jsonb (default '[]') columns; added idx_beacon_brief_moderation_type_status. article_id already nullable FK (set once the worker writes the article). RLS unchanged (service_role-only). Types regenerated.
+     | files: supabase/migrations/0097_beacon_brief_reference_moderation.sql, lib/database.types.ts | verified: migration applied; constraint name confirmed before alter; types regen + prettier
+T890 | completed | Migration 0098: bb_player_match_candidates(p_name, p_limit, p_threshold) RPC. plpgsql/stable; uses set_config('pg_trgm.similarity_threshold', local) + the % operator (GIN trigram index from 0095) so it is index-assisted; ranks by similarity desc, active-first on ties; returns id, full_name, status, team, pos, sim. Output col 'pos' (not 'position', which is reserved in RETURNS TABLE). service_role execute only (revoked from public/anon/authenticated). Smoke-tested with 'Josh Allen' (exact at sim 1.0 + near-misses). Types regenerated.
+     | files: supabase/migrations/0098_bb_player_match_candidates.sql, lib/database.types.ts | verified: migration applied; RPC smoke test PASS; types regen
+T891 | completed | Migration 0099: settings rows bb_match_similarity_threshold(0.3) + bb_match_candidate_limit(8) (data rows, no schema change/no type regen). These only affect the moderation candidate SUGGESTION list; auto-linking always requires an exact normalized match, never fuzzy.
+     | files: supabase/migrations/0099_beacon_brief_match_settings.sql | verified: migration applied; rows inserted
+T892 | completed | lib/beacon-brief/match.ts: the confident reference matcher. normalizeName (lowercase, strip punctuation, collapse whitespace, drop trailing generational suffix jr/sr/ii-v). Category: exact active slug. Teams: exact normalized abbreviation OR name only (no substring); else moderation with dice-bigram-ranked team suggestions. Players: exactly ONE current (active/ir) player whose normalized full_name == normalized AI name -> auto-link; multiple current exacts -> disambiguate by a referenced team (one match -> link, else moderation); no current exact -> never auto-link, moderation with top trigram candidates (via bb_player_match_candidates RPC). Returns confident ids + roleIds + pending[] for review. settings.ts gains matchSimilarityThreshold/matchCandidateLimit; types.ts gains MatchCandidate/PendingReferenceMatch/ReferenceMatchResult; Settings page ORDER updated.
+     | files: lib/beacon-brief/match.ts, lib/beacon-brief/types.ts, lib/beacon-brief/settings.ts, app/admin/beacon-brief/settings/page.tsx | depends on: T890, T891 | verified: typecheck PASS
+T893 | completed | curate.ts rewired: replaced the old substring resolveRefs with matchReferences. Stores ai_result.resolved (same shape the worker reads) + ai_result.pending (audit). When an article is created, openMatchModeration inserts one beacon_brief_moderation row per non-confident ref (type player_match/team_match, raw_name, candidates jsonb, article_id null) and collects them; one batched digest email per run via sendBeaconBriefMatchDigestEmail. Confident refs still auto-link unchanged.
+     | files: lib/beacon-brief/curate.ts | depends on: T889, T892, T895 | verified: typecheck PASS
+T894 | completed | worker.ts: after creating a Beacon Brief article, backfill article_id onto this ingestion's pending player_match/team_match moderation rows (where article_id is null) so one-click resolution can write the join. Confident joins unchanged.
+     | files: lib/beacon-brief/worker.ts | depends on: T889 | verified: typecheck PASS
+T895 | completed | lib/beacon-brief/email.ts: sendBeaconBriefMatchDigestEmail - ONE batched digest per run (not per name) to BEACON_BRIEF_ALERT_TO (michael@ffbeacon.com) listing each unmatched ref (kind + raw name + candidate count, capped at 25 shown + overflow note) with a button to the Moderation page. Reuses the existing branded email shell + Resend sender (no-ops if RESEND unset).
+     | files: lib/beacon-brief/email.ts | verified: typecheck PASS
+T896 | completed | Resolution lib + actions. lib/beacon-brief/match-resolution.ts: resolveReferenceMatch (validate pending + correct type + article_id present + chosen id exists; upsert article_players/article_teams ignoreDuplicates; close row approved with resolved_ref_id in detail) and dismissReferenceMatch (close row rejected, no link); both guard status='pending'. actions.ts: resolveMatch(moderationId, chosenId) + dismissMatch(moderationId) server actions (requireAdmin -> userId, wrap lib, revalidate). Reuses existing searchPlayers for the player picker; teams loaded server-side on the page.
+     | files: lib/beacon-brief/match-resolution.ts, app/admin/beacon-brief/actions.ts | depends on: T889 | verified: typecheck + build PASS
+T897 | completed | Moderation UI for reference matches. moderation-manager.tsx now renders a discriminated union (deletion vs player_match/team_match). MatchResolver shows the raw name, article context + readiness note, ranked candidate buttons (one-click Link), a player search (reuses searchPlayers, aria-live results + empty state) for player rows or a labeled team <select> for team rows, and a Dismiss button. Shared dual status regions (polite success + assertive role=alert errors). All controls >=44px; fieldset/legend on the suggestions group. moderation/page.tsx fetches the union (type, raw_name, candidates, article_id, articles join) + all teams and maps to the typed items.
+     | files: components/admin/beacon-brief/moderation-manager.tsx, app/admin/beacon-brief/moderation/page.tsx | depends on: T896 | verified: typecheck + build PASS; bb_enabled still false; moderation columns confirmed
+T898 | completed | Review (impl + perf + a11y sub-agents, scoped to ONLY the T889-T897 change). NO Blockers. Fixed all 3 Important + 3 cheap Minors: (1 perf) migration 0100 adds an exact case-insensitive tie-break to bb_player_match_candidates ORDER BY so a true exact match is never crowded out of the top-N by a common surname (verified: 'Josh Allen' returns exact first at sim 1.0); (2 a11y) player-search result "Link X" buttons now use btnClass (real 44x44 target, not a bare underline) + aria-busy on the results region while searching; (3 impl) worker failOrRetry now closes (rejects) an ingestion's pending null-article player_match/team_match moderation rows when its article_write job is marked failed, so they never strand unresolvable; (minor) dedupeNames keys on normalizeName ("Mahomes"/"Mahomes II" collapse); (minor) moderation page pending query bounded with .limit(500). Verified article_players/article_teams have composite PKs backing the resolution upsert onConflict (impl Important #4 - no change needed). typecheck + build PASS; bb_enabled still false.
+     | files: supabase/migrations/0100_bb_player_match_candidates_exact_first.sql, lib/beacon-brief/worker.ts, lib/beacon-brief/match.ts, components/admin/beacon-brief/moderation-manager.tsx, app/admin/beacon-brief/moderation/page.tsx | verified: typecheck + build PASS; RPC tie-break smoke-tested
+     | ACCEPTED / DOCUMENTED (reviewers rated Minor, not fixed): focus is not restored after an item resolves and disappears (announcement still fires; matches the existing articles-manager pattern - candidate for a future focused a11y pass); one sequential RPC round-trip per unique player name (index-assisted, fine at the 5-min cron cadence; batch later only if post volume grows).

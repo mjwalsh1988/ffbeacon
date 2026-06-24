@@ -24,6 +24,14 @@
     {
       "path": "/api/cron/sync-sleeper-stats",
       "schedule": "0 9 * 1,2,8,9,10,11,12 *"
+    },
+    {
+      "path": "/api/cron/beacon-brief",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/beacon-brief-worker",
+      "schedule": "* * * * *"
     }
   ]
 }

@@ -1057,3 +1057,358 @@ they're playing in. Strong fit with the accessibility mission too —
 fewer cognitive translation steps between "my league" and "what the
 site is telling me".
 - Soft launch to Michael's audience
+
+
+---
+
+
+## The Beacon Brief (News Curation System)
+
+A source-agnostic news curation system. It ingests posts from external
+sources (X first), uses the Anthropic API to score, categorize, and tag
+each post, creates a Beacon Brief article on the site when a post has
+enough context, and posts the original source content into Discord from
+our "Beacon Relay" bot (webhook). All slow work runs through a queue so
+the ingest path stays fast and Discord rate limits are respected.
+
+
+### A. Locked decisions
+
+- Revisions = native X edits (deterministic, via `edit_history_tweet_ids`)
+  PLUS AI-linked same-account follow-ups (a Claude classification call
+  links a new post to a recently published story).
+- X access = Pro tier.
+- AI article grounding = web search enabled.
+- Scope this phase = admin area + full pipeline + data layer only. The
+  public `/articles/[slug]` reader (the existing dangling home-page link)
+  is deferred to a Phase 2.
+- Scheduling = native Vercel cron only. No external pinger, no QStash,
+  no cron-job.org.
+- Curation cron cadence = every 5 minutes (`*/5 * * * *`).
+- Queue worker cadence = every 1 minute (`* * * * *`).
+- Discord can be toggled off (shadow/test mode) without stopping the rest
+  of the pipeline.
+- Failures send an admin email alert.
+- No source trust tiers anywhere in this system.
+
+
+### B. Architecture overview (two crons + a queue)
+
+1. Curation cron (every 5 min), the fast path only. For each active
+   source it ingests new posts, normalizes them to the
+   `BeaconBriefSourceItem` shape, runs the Anthropic context-score and
+   categorization call, decides routing, and drops downstream work onto
+   the queue. It makes NO inline Discord calls and NO inline AI-article
+   writing calls. Lightweight classification (context score, revision
+   triage, follow-up linking) is allowed inline; the heavy work (web-search
+   grounded article writing, Discord posting/patching) is queued.
+
+2. `beacon_brief_queue` table, the durable work buffer between the two
+   crons.
+
+3. Queue worker cron (every 1 min). It claims a small batch of pending
+   jobs with `SELECT ... FOR UPDATE SKIP LOCKED` so overlapping worker
+   runs can never grab the same job (this removes any need for a separate
+   concurrency lock), executes them, and applies throttling, backoff, and
+   failure alerting.
+
+
+### C. Database schema (new migrations, numbered after the latest existing)
+
+Every table ships its RLS policies in the same migration (service-role
+only for writes, per project rules). All ingestion tables include a
+`metadata` jsonb preserving the raw source object.
+
+```
+discord_webhooks                 (System Settings area; NOT seeded by migration)
+  id uuid PK, label text, url text, is_active bool,
+  created_by uuid, created_at, updated_at
+  -- Migration creates the TABLE ONLY. The webhook row (label
+  --   "News & Injuries") is inserted manually via MCP after migration,
+  --   so the secret URL never lives in a committed migration file.
+
+news_sources
+  id uuid PK, admin_label text, source_type text default 'x'
+    (CHECK list, extensible), handle text, external_account_id text,
+  is_active bool, last_cursor text (since_id), last_polled_at,
+  last_poll_status text, last_poll_error text, metadata jsonb,
+  created_at, updated_at
+
+news_categories
+  id uuid PK, slug text unique, name text, description text,
+  discord_role_ids text[] (groups to mention in Discord),
+  display_order int, is_active bool, created_at, updated_at
+
+teams                            (no teams table exists today)
+  id uuid PK, abbreviation text unique, name text, conference text,
+  division text, discord_role_ids text[], created_at
+  -- Seed all 32 NFL teams in the migration.
+
+article_teams                    (mirrors existing article_players)
+  article_id uuid FK, team_id uuid FK, PK(article_id, team_id)
+
+news_ingestions                  (one row per ingested source post)
+  id uuid PK (gen_random_uuid)        -- OUR identity; every downstream
+                                      --   stage references this UUID
+  source_id uuid FK, source_type text,
+  source_external_id text,            -- the source's native post id
+  external_url text, author_handle text, text text,
+  media jsonb, quoted jsonb, retweeted jsonb,
+  is_revision bool, revision_of_ingestion_id uuid FK,
+  ai_result jsonb, context_score int,
+  status text ('new','processing','published','dropped_no_context',
+               'revised','deleted','error'),
+  article_id uuid FK (nullable), discord_webhook_id uuid FK,
+  discord_message_id text, metadata jsonb (raw source object),
+  created_at, processed_at
+  -- UNIQUE (source_id, source_external_id): safety net so the same
+  --   source post can never be inserted twice (cursor hiccups, source
+  --   re-adds). A row is inserted only AFTER a source emits its
+  --   normalized JSON into the pipeline.
+
+beacon_brief_queue               (generic async job buffer)
+  id uuid PK, job_type text
+    ('discord_post','discord_patch','article_write','deletion_check'),
+  payload jsonb (references ingestion UUID + job-specific data),
+  status text ('pending','processing','done','failed'),
+  attempts int default 0, run_after timestamptz default now(),
+  last_error text, created_at, updated_at
+  -- Worker selects: status='pending' AND run_after<=now()
+  --   ORDER BY run_after FOR UPDATE SKIP LOCKED LIMIT <batch>.
+
+beacon_brief_moderation          (deletion review, nothing auto-deleted)
+  id uuid PK, ingestion_id uuid FK, article_id uuid FK,
+  type text ('deletion'), status text ('pending','approved','rejected'),
+  detail jsonb, created_at, resolved_at, resolved_by uuid
+
+article_revisions                (powers "view revision history")
+  id uuid PK, article_id uuid FK, revision_number int, title text,
+  content_md text, tags text[], category_id uuid, change_summary text,
+  source_ingestion_id uuid FK, created_at
+
+beacon_brief_logs                (the full Logs tab feed)
+  id uuid PK, ingestion_id uuid FK (nullable), source_id uuid FK (nullable),
+  stage text ('ingest','dedupe','revision_link','revision_triage',
+              'categorize','article_write','discord_post','discord_patch',
+              'deletion_check','error'),
+  level text ('info','warn','error'), message text,
+  request_payload jsonb (exact prompt sent to Claude),
+  response_payload jsonb (raw AI response), model text,
+  token_usage jsonb, duration_ms int, created_at
+```
+
+Extend `articles`: add `metadata jsonb default '{}'` (it now ingests
+external data), `tags text[]`, `category_id uuid FK -> news_categories`,
+`origin text` (`'beacon_brief'` vs `'manual'`). Keep `article_type` for
+back-compat. Regenerate `lib/database.types.ts` via MCP after every
+migration.
+
+
+### D. Normalized source contract (source-agnostic)
+
+`lib/beacon-brief/types.ts` defines `BeaconBriefSourceItem`: source_type,
+source_id, source_external_id, external_url, author_handle, text, media[],
+quoted?, retweeted?, is_native_edit, edit_of_external_id?, created_at, raw.
+Any future source (Facebook, etc.) only has to emit this shape; every
+stage after ingestion is unchanged.
+
+
+### E. Pipeline stages
+
+Stage 1, Curation cron (`lib/x.ts` + `lib/beacon-brief/ingest-x.ts` +
+`lib/beacon-brief/curate.ts`), fast path only:
+- `lib/x.ts`: new X v2 client mirroring `lib/sleeper.ts` `safeFetch`
+  (AbortController timeout, null-on-failure), `Authorization: Bearer
+  ${X_BEARER_TOKEN}`. Pulls `GET /2/users/:id/tweets?since_id=<cursor>`
+  with media, referenced_tweets (quote/retweet), author, and
+  `edit_history_tweet_ids` expansions.
+- Normalize to `BeaconBriefSourceItem[]`. Dedupe against the
+  `(source_id, source_external_id)` unique constraint. Insert the
+  `news_ingestions` row only after normalization.
+- Revision detection: native edit = `edit_history_tweet_ids` references a
+  post we already ingested (deterministic). Follow-up = a cheap Claude
+  classification call (`bb_followup_link_prompt`) links a new non-edit
+  post to that source's articles from the last `bb_followup_lookback_days`.
+- Context score and categorization: one Anthropic structured call
+  (`bb_categorize_prompt`, no web search) returns the context-score object
+  plus category, players[], teams[], tags[], suggested title/slug.
+- Decide routing and enqueue (no inline Discord, no inline article writing):
+  - New post, context_score 0: enqueue `discord_post` only.
+  - New post, context_score 1: enqueue `discord_post` AND `article_write`.
+  - Revision: run `bb_revision_triage_prompt` inline ({critical}); always
+    enqueue `discord_patch`; if critical, enqueue `article_write` in
+    rewrite mode (payload carries the existing article_id + new content).
+- Update each source's `last_cursor`, `last_polled_at`, `last_poll_status`
+  (feeds the Sources "recent runs" view). Wrap the run in
+  `recordCronRun("beacon-brief-curate", ...)`.
+
+Stage 2, Worker cron (`lib/beacon-brief/worker.ts`):
+- Claim a batch via `SELECT ... FOR UPDATE SKIP LOCKED`, set `processing`.
+- `article_write`: when web search is enabled, two calls (citations from
+  web search are incompatible with strict `output_config.format`, so they
+  cannot share one call): (A) a web-search-grounded research call to
+  gather current facts, then (B) a strict-schema structuring call that
+  returns the article body. Creates the article (unique slug, append a
+  5-char suffix on collision; auto-publish gated by `bb_autopublish`),
+  links article_players / article_teams, writes an `article_revisions`
+  snapshot. In rewrite mode it merges new info into the existing article.
+- `discord_post` / `discord_patch`: send/patch via `lib/discord.ts`.
+  Skipped entirely when `bb_discord_enabled` is off (shadow mode), the job
+  is marked done so the rest of the pipeline still completes.
+- Discord throttle: process at most ~25 Discord jobs per worker run to
+  stay safely under the 30-per-minute webhook limit.
+- Failure/backoff: on error or HTTP 429, increment `attempts`, push
+  `run_after` out (exponential backoff), record `last_error`. After N
+  attempts mark the job `failed`, which triggers the admin email alert.
+
+Deletion handling (`deletion_check` job type):
+- When an article is created, enqueue a `deletion_check` with a future
+  `run_after`; the worker re-fetches the source post. If it is gone, write
+  a `beacon_brief_moderation` row (status `pending`) and re-enqueue the
+  next check. Nothing is auto-deleted.
+- In the admin Moderation view I either approve the deletion (unpublish
+  the article and patch the Discord message to a retracted state via a
+  queued `discord_patch`) or reject it (keep the article, close the
+  moderation row).
+
+
+### F. Context score (clarification)
+
+The context score is a field inside the Anthropic JSON response that
+determines whether a post has enough context to become an article:
+- Not enough context: the item is sent to Discord only.
+- Enough context (1): the item is sent to Discord AND a new Beacon Brief
+  article is created.
+
+
+### G. AI calls and models
+
+- Inline (curation): categorize/context-score, revision triage, follow-up
+  linking. Cheap classification, no web search.
+- Queued (worker): `article_write` (web-search grounded, two-step).
+- Defaults: Sonnet 4.6 for article writing/rewrite, Haiku 4.5 for triage
+  and follow-up linking. All models, the web-search toggle, and every
+  prompt are stored in `beacon_settings` and editable in the Settings tab.
+- Web search tool version `web_search_20260209`. Adaptive thinking on the
+  writing calls.
+- Every Claude call routes through `lib/beacon-brief/ai.ts`, which loads
+  the prompt + model from settings and logs the exact request, response,
+  model, and token usage to `beacon_brief_logs`.
+
+
+### H. Discord integration (`lib/discord.ts`, greenfield)
+
+- `postWebhookMessage` (uses `?wait=true` to capture the message id, stored
+  on the ingestion) and `patchWebhookMessage`.
+- Every send sets `username: "Beacon Relay"` and `avatar_url` = our main
+  logo asset.
+- The message carries the original source post content and media; quoted /
+  retweeted content is included as an embed so context travels with it.
+- "Tag groups in Discord" = role mentions built from the `discord_role_ids`
+  on the resolved category and teams, injected as `<@&ROLE_ID>` with a
+  locked-down `allowed_mentions` (roles only, never @everyone).
+- All sends honor the `bb_discord_enabled` shadow-mode toggle.
+
+
+### I. Admin UI
+
+New top-level tab "The Beacon Brief" in `components/admin-nav.tsx`
+`NAV_ITEMS` -> `/admin/beacon-brief`, with a sub-nav (new
+`lib/beacon-brief-admin-nav.ts` + subnav component), mirroring the existing
+Beacon section:
+- Overview: counts, last curation/worker run, recent activity, queue depth.
+- Sources: add/edit/delete/toggle `news_sources`; form is admin_label +
+  source_type (select, default X) + handle; per-source last-poll status and
+  recent run history.
+- Categories: CRUD `news_categories` including `discord_role_ids`, order,
+  active toggle.
+- Articles: list filterable by status, category, player, team; edit
+  category / players / teams / tags and the markdown body; view
+  `article_revisions` history.
+- Moderation: pending deletion reviews; approve (unpublish + retract in
+  Discord) or reject.
+- Logs: full `beacon_brief_logs` feed filtered by stage / level / source /
+  ingestion, showing the exact prompt sent and response received per AI
+  call, the Discord payloads, the queue outcomes, and which players /
+  teams / category each article received, with a link to edit prompts in
+  Settings.
+- Settings: all `bb_*` settings including editable prompt textareas, model
+  pickers, web-search toggle, autopublish, context threshold, follow-up
+  lookback, Discord shadow-mode toggle, and the Discord webhook selector
+  (populated from `discord_webhooks`).
+
+Separate "System Settings" area at `/admin/system/webhooks` (new top-level
+tab) for the `discord_webhooks` CRUD, reusable beyond the Beacon Brief.
+
+All pages use `requireAdmin()`; all writes go through colocated
+`actions.ts` Server Actions with the `ActionResult` / `fail()` convention,
+service-role client, and `revalidatePath`. Screen-reader-first throughout:
+44px targets, `aria-live` announcers, no data hidden at any breakpoint.
+
+
+### J. Cron registration
+
+- `app/api/cron/beacon-brief/route.ts` (curation, `CRON_SECRET` bearer
+  auth, wraps `recordCronRun("beacon-brief-curate", ...)`).
+- `app/api/cron/beacon-brief-worker/route.ts` (worker, same auth, wraps
+  `recordCronRun("beacon-brief-worker", ...)`).
+- Add both to the `CRON_JOBS` registry in `lib/cron-runs.ts` and to
+  `vercel.json`:
+  - curation: `*/5 * * * *`
+  - worker:   `* * * * *`
+- `npm run beacon-brief` (tsx CLI) for manual curation runs.
+
+
+### K. Failure email alerting
+
+On a failed queue job (after N attempts) or any pipeline error, send an
+admin email to michael@ffbeacon.com via the existing email system
+(`lib/email/`, Resend), using the same email design/template as our other
+emails. The email describes what failed and includes a direct link to log
+in and inspect the failing item (Logs or Moderation).
+
+
+### L. Security / RLS
+
+- Every new table is RLS service-role-only for writes.
+- The Discord webhook URL and X token stay server-side only; the webhook
+  row is inserted via MCP, never committed in a migration.
+- All pipeline and queue code runs under the service-role client; admin
+  pages are gated by `requireAdmin()` and every Server Action re-checks.
+- `allowed_mentions` prevents mention abuse; the manual "Run now" control
+  is rate-limited.
+
+
+### M. Atomic task breakdown (for progress.md)
+
+```
+Migrations + types (one task each): discord_webhooks (table only);
+  news_sources; news_categories; teams (+seed 32); article_teams;
+  news_ingestions (with the source-id unique constraint); beacon_brief_queue;
+  beacon_brief_moderation; article_revisions; beacon_brief_logs;
+  articles extension; beacon_settings bb_* rows.
+Post-migration manual step: insert the "News & Injuries" webhook row via MCP.
+Libs: lib/x.ts; lib/discord.ts; lib/beacon-brief/{types,ai,ingest-x,
+  curate,worker,revision,deletion}.ts.
+Crons + CLI: curation route; worker route; CRON_JOBS + vercel.json;
+  npm run beacon-brief.
+Email: failure-alert email template (reusing lib/email/) + send hook.
+Admin: admin-nav entry; beacon-brief subnav; Overview / Sources /
+  Categories / Articles / Moderation / Logs / Settings pages + actions.ts
+  each; System/Webhooks page.
+Each task verified: RLS confirmed, a11y audited, security reviewed.
+```
+
+
+### N. Post-build review phase (final phase, after all coding)
+
+After implementation is complete, spawn multiple independent sub-agents,
+each reviewing a completely separate concern in an unbiased manner:
+- Implementation review: verify the build matches this plan exactly.
+- Security review: audit RLS, secret handling, the queue, the webhook, and
+  all new endpoints.
+- Performance review: push back on any potential performance issues across
+  the system.
+- Accessibility review: audit accessibility across the entire system (NVDA,
+  keyboard operability, AA/AAA contrast, aria-live), with particular
+  attention to the data-heavy admin Logs page.

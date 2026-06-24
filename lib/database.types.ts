@@ -44,22 +44,117 @@ export type Database = {
           },
         ];
       };
+      article_revisions: {
+        Row: {
+          article_id: string;
+          category_id: string | null;
+          change_summary: string | null;
+          content_md: string | null;
+          created_at: string;
+          id: string;
+          revision_number: number;
+          source_ingestion_id: string | null;
+          tags: string[] | null;
+          title: string | null;
+        };
+        Insert: {
+          article_id: string;
+          category_id?: string | null;
+          change_summary?: string | null;
+          content_md?: string | null;
+          created_at?: string;
+          id?: string;
+          revision_number: number;
+          source_ingestion_id?: string | null;
+          tags?: string[] | null;
+          title?: string | null;
+        };
+        Update: {
+          article_id?: string;
+          category_id?: string | null;
+          change_summary?: string | null;
+          content_md?: string | null;
+          created_at?: string;
+          id?: string;
+          revision_number?: number;
+          source_ingestion_id?: string | null;
+          tags?: string[] | null;
+          title?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "article_revisions_article_id_fkey";
+            columns: ["article_id"];
+            isOneToOne: false;
+            referencedRelation: "articles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "article_revisions_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "news_categories";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "article_revisions_source_ingestion_id_fkey";
+            columns: ["source_ingestion_id"];
+            isOneToOne: false;
+            referencedRelation: "news_ingestions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      article_teams: {
+        Row: {
+          article_id: string;
+          team_id: string;
+        };
+        Insert: {
+          article_id: string;
+          team_id: string;
+        };
+        Update: {
+          article_id?: string;
+          team_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "article_teams_article_id_fkey";
+            columns: ["article_id"];
+            isOneToOne: false;
+            referencedRelation: "articles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "article_teams_team_id_fkey";
+            columns: ["team_id"];
+            isOneToOne: false;
+            referencedRelation: "teams";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       articles: {
         Row: {
           article_type: string;
           author_id: string | null;
           canonical_url: string | null;
+          category_id: string | null;
           content_md: string | null;
           created_at: string;
           format_config_id: string | null;
           id: string;
           last_updated: string;
           meta_description: string | null;
+          metadata: Json;
+          origin: string;
           published_at: string | null;
           schema_jsonld: Json | null;
           season: number | null;
           slug: string;
           status: string;
+          tags: string[];
           title: string;
           tl_dr: string | null;
           view_count: number;
@@ -69,17 +164,21 @@ export type Database = {
           article_type: string;
           author_id?: string | null;
           canonical_url?: string | null;
+          category_id?: string | null;
           content_md?: string | null;
           created_at?: string;
           format_config_id?: string | null;
           id?: string;
           last_updated?: string;
           meta_description?: string | null;
+          metadata?: Json;
+          origin?: string;
           published_at?: string | null;
           schema_jsonld?: Json | null;
           season?: number | null;
           slug: string;
           status?: string;
+          tags?: string[];
           title: string;
           tl_dr?: string | null;
           view_count?: number;
@@ -89,23 +188,34 @@ export type Database = {
           article_type?: string;
           author_id?: string | null;
           canonical_url?: string | null;
+          category_id?: string | null;
           content_md?: string | null;
           created_at?: string;
           format_config_id?: string | null;
           id?: string;
           last_updated?: string;
           meta_description?: string | null;
+          metadata?: Json;
+          origin?: string;
           published_at?: string | null;
           schema_jsonld?: Json | null;
           season?: number | null;
           slug?: string;
           status?: string;
+          tags?: string[];
           title?: string;
           tl_dr?: string | null;
           view_count?: number;
           week?: number | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "articles_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "news_categories";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "articles_format_config_id_fkey";
             columns: ["format_config_id"];
@@ -152,6 +262,159 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      beacon_brief_logs: {
+        Row: {
+          created_at: string;
+          duration_ms: number | null;
+          id: string;
+          ingestion_id: string | null;
+          level: string;
+          message: string | null;
+          model: string | null;
+          request_payload: Json | null;
+          response_payload: Json | null;
+          source_id: string | null;
+          stage: string;
+          token_usage: Json | null;
+        };
+        Insert: {
+          created_at?: string;
+          duration_ms?: number | null;
+          id?: string;
+          ingestion_id?: string | null;
+          level?: string;
+          message?: string | null;
+          model?: string | null;
+          request_payload?: Json | null;
+          response_payload?: Json | null;
+          source_id?: string | null;
+          stage: string;
+          token_usage?: Json | null;
+        };
+        Update: {
+          created_at?: string;
+          duration_ms?: number | null;
+          id?: string;
+          ingestion_id?: string | null;
+          level?: string;
+          message?: string | null;
+          model?: string | null;
+          request_payload?: Json | null;
+          response_payload?: Json | null;
+          source_id?: string | null;
+          stage?: string;
+          token_usage?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "beacon_brief_logs_ingestion_id_fkey";
+            columns: ["ingestion_id"];
+            isOneToOne: false;
+            referencedRelation: "news_ingestions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "beacon_brief_logs_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "news_sources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      beacon_brief_moderation: {
+        Row: {
+          article_id: string | null;
+          candidates: Json;
+          created_at: string;
+          detail: Json;
+          id: string;
+          ingestion_id: string | null;
+          raw_name: string | null;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          status: string;
+          type: string;
+        };
+        Insert: {
+          article_id?: string | null;
+          candidates?: Json;
+          created_at?: string;
+          detail?: Json;
+          id?: string;
+          ingestion_id?: string | null;
+          raw_name?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          status?: string;
+          type?: string;
+        };
+        Update: {
+          article_id?: string | null;
+          candidates?: Json;
+          created_at?: string;
+          detail?: Json;
+          id?: string;
+          ingestion_id?: string | null;
+          raw_name?: string | null;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+          status?: string;
+          type?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "beacon_brief_moderation_article_id_fkey";
+            columns: ["article_id"];
+            isOneToOne: false;
+            referencedRelation: "articles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "beacon_brief_moderation_ingestion_id_fkey";
+            columns: ["ingestion_id"];
+            isOneToOne: false;
+            referencedRelation: "news_ingestions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      beacon_brief_queue: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          id: string;
+          job_type: string;
+          last_error: string | null;
+          payload: Json;
+          run_after: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          id?: string;
+          job_type: string;
+          last_error?: string | null;
+          payload?: Json;
+          run_after?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          id?: string;
+          job_type?: string;
+          last_error?: string | null;
+          payload?: Json;
+          run_after?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       beacon_custom_formats: {
         Row: {
@@ -538,6 +801,36 @@ export type Database = {
           result?: Json | null;
           started_at?: string;
           status?: string;
+        };
+        Relationships: [];
+      };
+      discord_webhooks: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          is_active: boolean;
+          label: string;
+          updated_at: string;
+          url: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          is_active?: boolean;
+          label: string;
+          updated_at?: string;
+          url: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          is_active?: boolean;
+          label?: string;
+          updated_at?: string;
+          url?: string;
         };
         Relationships: [];
       };
@@ -1112,6 +1405,143 @@ export type Database = {
           },
         ];
       };
+      news_categories: {
+        Row: {
+          created_at: string;
+          description: string | null;
+          discord_role_ids: string[];
+          display_order: number;
+          id: string;
+          is_active: boolean;
+          name: string;
+          slug: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          description?: string | null;
+          discord_role_ids?: string[];
+          display_order?: number;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          slug: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          description?: string | null;
+          discord_role_ids?: string[];
+          display_order?: number;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          slug?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      news_ingestions: {
+        Row: {
+          ai_result: Json | null;
+          article_id: string | null;
+          author_handle: string | null;
+          context_score: number | null;
+          created_at: string;
+          discord_message_id: string | null;
+          discord_webhook_id: string | null;
+          external_url: string | null;
+          id: string;
+          is_revision: boolean;
+          media: Json | null;
+          metadata: Json;
+          processed_at: string | null;
+          quoted: Json | null;
+          retweeted: Json | null;
+          revision_of_ingestion_id: string | null;
+          source_external_id: string;
+          source_id: string;
+          source_type: string;
+          status: string;
+          text: string | null;
+        };
+        Insert: {
+          ai_result?: Json | null;
+          article_id?: string | null;
+          author_handle?: string | null;
+          context_score?: number | null;
+          created_at?: string;
+          discord_message_id?: string | null;
+          discord_webhook_id?: string | null;
+          external_url?: string | null;
+          id?: string;
+          is_revision?: boolean;
+          media?: Json | null;
+          metadata?: Json;
+          processed_at?: string | null;
+          quoted?: Json | null;
+          retweeted?: Json | null;
+          revision_of_ingestion_id?: string | null;
+          source_external_id: string;
+          source_id: string;
+          source_type?: string;
+          status?: string;
+          text?: string | null;
+        };
+        Update: {
+          ai_result?: Json | null;
+          article_id?: string | null;
+          author_handle?: string | null;
+          context_score?: number | null;
+          created_at?: string;
+          discord_message_id?: string | null;
+          discord_webhook_id?: string | null;
+          external_url?: string | null;
+          id?: string;
+          is_revision?: boolean;
+          media?: Json | null;
+          metadata?: Json;
+          processed_at?: string | null;
+          quoted?: Json | null;
+          retweeted?: Json | null;
+          revision_of_ingestion_id?: string | null;
+          source_external_id?: string;
+          source_id?: string;
+          source_type?: string;
+          status?: string;
+          text?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "news_ingestions_article_id_fkey";
+            columns: ["article_id"];
+            isOneToOne: false;
+            referencedRelation: "articles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "news_ingestions_discord_webhook_id_fkey";
+            columns: ["discord_webhook_id"];
+            isOneToOne: false;
+            referencedRelation: "discord_webhooks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "news_ingestions_revision_of_ingestion_id_fkey";
+            columns: ["revision_of_ingestion_id"];
+            isOneToOne: false;
+            referencedRelation: "news_ingestions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "news_ingestions_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "news_sources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       news_items: {
         Row: {
           ai_summary: string | null;
@@ -1161,6 +1591,54 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      news_sources: {
+        Row: {
+          admin_label: string;
+          created_at: string;
+          external_account_id: string | null;
+          handle: string;
+          id: string;
+          is_active: boolean;
+          last_cursor: string | null;
+          last_poll_error: string | null;
+          last_poll_status: string | null;
+          last_polled_at: string | null;
+          metadata: Json;
+          source_type: string;
+          updated_at: string;
+        };
+        Insert: {
+          admin_label: string;
+          created_at?: string;
+          external_account_id?: string | null;
+          handle: string;
+          id?: string;
+          is_active?: boolean;
+          last_cursor?: string | null;
+          last_poll_error?: string | null;
+          last_poll_status?: string | null;
+          last_polled_at?: string | null;
+          metadata?: Json;
+          source_type?: string;
+          updated_at?: string;
+        };
+        Update: {
+          admin_label?: string;
+          created_at?: string;
+          external_account_id?: string | null;
+          handle?: string;
+          id?: string;
+          is_active?: boolean;
+          last_cursor?: string | null;
+          last_poll_error?: string | null;
+          last_poll_status?: string | null;
+          last_polled_at?: string | null;
+          metadata?: Json;
+          source_type?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       player_stats: {
         Row: {
@@ -2383,6 +2861,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      teams: {
+        Row: {
+          abbreviation: string;
+          conference: string;
+          created_at: string;
+          discord_role_ids: string[];
+          division: string;
+          id: string;
+          name: string;
+        };
+        Insert: {
+          abbreviation: string;
+          conference: string;
+          created_at?: string;
+          discord_role_ids?: string[];
+          division: string;
+          id?: string;
+          name: string;
+        };
+        Update: {
+          abbreviation?: string;
+          conference?: string;
+          created_at?: string;
+          discord_role_ids?: string[];
+          division?: string;
+          id?: string;
+          name?: string;
+        };
+        Relationships: [];
+      };
       user_preferences: {
         Row: {
           avatar_path: string | null;
@@ -2641,6 +3149,37 @@ export type Database = {
     };
     Functions: {
       account_has_password: { Args: never; Returns: boolean };
+      bb_claim_jobs: {
+        Args: { p_job_types?: string[]; p_limit: number };
+        Returns: {
+          attempts: number;
+          created_at: string;
+          id: string;
+          job_type: string;
+          last_error: string | null;
+          payload: Json;
+          run_after: string;
+          status: string;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "beacon_brief_queue";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      bb_player_match_candidates: {
+        Args: { p_limit?: number; p_name: string; p_threshold?: number };
+        Returns: {
+          full_name: string;
+          id: string;
+          pos: string;
+          sim: number;
+          status: string;
+          team: string;
+        }[];
+      };
       get_my_active_sessions: {
         Args: never;
         Returns: {
@@ -2654,6 +3193,8 @@ export type Database = {
         }[];
       };
       set_default_source: { Args: { target_slug: string }; Returns: undefined };
+      show_limit: { Args: never; Returns: number };
+      show_trgm: { Args: { "": string }; Returns: string[] };
       signal_gif_valid: { Args: { gif: Json }; Returns: boolean };
       signal_links_valid: { Args: { links: Json }; Returns: boolean };
       signal_target_publicly_viewable: {
