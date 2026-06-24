@@ -29,9 +29,18 @@ export interface DiscordEmbed {
   title?: string;
   description?: string;
   url?: string;
+  /** Left-bar accent color (decimal). Use the FF Beacon purple for post cards. */
+  color?: number;
   image?: { url: string };
   author?: { name: string };
   footer?: { text: string };
+}
+
+/** A binary file uploaded with the message (multipart). */
+export interface DiscordAttachment {
+  filename: string;
+  data: Uint8Array;
+  contentType: string;
 }
 
 export interface DiscordMessageInput {
@@ -39,6 +48,11 @@ export interface DiscordMessageInput {
   embeds?: DiscordEmbed[];
   /** Role ids permitted to be mentioned (others in content are not pinged). */
   allowedRoleIds?: string[];
+  /**
+   * Files uploaded with the message. When present the request is sent as
+   * multipart/form-data (payload_json + files[n]); otherwise it is plain JSON.
+   */
+  attachments?: DiscordAttachment[];
 }
 
 export type DiscordResult =
@@ -64,6 +78,43 @@ function buildBody(
   return body;
 }
 
+/**
+ * Build the fetch body + headers for a message. When attachments are present we
+ * send multipart/form-data (payload_json + files[n]) and let fetch set the
+ * boundary header itself; otherwise plain JSON. The `attachments` array in
+ * payload_json maps each uploaded file (by index) to a filename.
+ */
+function buildRequest(
+  input: DiscordMessageInput,
+  withIdentity: boolean,
+): { body: BodyInit; headers: Record<string, string> } {
+  const payload = buildBody(input, withIdentity);
+  const files = input.attachments ?? [];
+  // Reflect a caller-supplied attachments array (even empty) so an edit replaces
+  // or CLEARS existing files; leaving it absent keeps existing attachments.
+  if (input.attachments !== undefined) {
+    payload.attachments = files.map((f, i) => ({ id: i, filename: f.filename }));
+  }
+  if (files.length === 0) {
+    return {
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" },
+    };
+  }
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify(payload));
+  files.forEach((f, i) => {
+    form.append(
+      `files[${i}]`,
+      // A Uint8Array is a valid BlobPart at runtime; cast past TS's narrowed view type.
+      new Blob([f.data as BlobPart], { type: f.contentType }),
+      f.filename,
+    );
+  });
+  // No explicit Content-Type: fetch derives the multipart boundary from FormData.
+  return { body: form, headers: {} };
+}
+
 function retryAfterMs(res: Response, json: unknown): number | null {
   // Discord sends retry_after (seconds, float) in the JSON body on 429, and also
   // a Retry-After header. Prefer the body.
@@ -83,10 +134,11 @@ export async function postWebhookMessage(
   input: DiscordMessageInput,
 ): Promise<DiscordResult> {
   try {
+    const req = buildRequest(input, true);
     const res = await fetch(`${webhookUrl}?wait=true`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildBody(input, true)),
+      headers: req.headers,
+      body: req.body,
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     });
     const json = await res.json().catch(() => null);
@@ -117,12 +169,13 @@ export async function patchWebhookMessage(
   input: DiscordMessageInput,
 ): Promise<DiscordResult> {
   try {
+    const req = buildRequest(input, false);
     const res = await fetch(
       `${webhookUrl}/messages/${encodeURIComponent(messageId)}`,
       {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(input, false)),
+        headers: req.headers,
+        body: req.body,
         signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
       },
     );

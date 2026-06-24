@@ -19,6 +19,7 @@ import type { Database, Json } from "@/lib/database.types";
 import {
   patchWebhookMessage,
   postWebhookMessage,
+  type DiscordAttachment,
   type DiscordEmbed,
   type DiscordMessageInput,
 } from "@/lib/discord";
@@ -130,19 +131,106 @@ function resolvedFrom(ingestion: Ingestion): {
   };
 }
 
+// FF Beacon brand purple (#A855F7) as the card's left-bar accent.
+const BEACON_CARD_COLOR = 0xa855f7;
+// Title shown when a post has no AI-suggested headline yet.
+const DEFAULT_DISCORD_TITLE = "News Update";
+// Discord allows up to 10 files; X posts carry at most 4 media.
+const MAX_DISCORD_ATTACHMENTS = 4;
+// Cap per-image bytes well under Discord's upload limit (twitter images are small).
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const MEDIA_FETCH_TIMEOUT_MS = 10_000;
+
+/** The headline for the Discord card: the AI-suggested title, or a default. */
+function articleTitleFor(ingestion: Ingestion): string {
+  const ai = (ingestion.ai_result ?? {}) as Record<string, unknown>;
+  const t =
+    typeof ai.suggested_title === "string" ? ai.suggested_title.trim() : "";
+  return t || DEFAULT_DISCORD_TITLE;
+}
+
+/** Map a content-type to a file extension for the uploaded attachment name. */
+function extForContentType(contentType: string): string {
+  if (contentType.includes("png")) return "png";
+  if (contentType.includes("gif")) return "gif";
+  if (contentType.includes("webp")) return "webp";
+  return "jpg";
+}
+
+/**
+ * Download one media URL into an uploadable attachment. Images only (videos and
+ * gifs resolve to their thumbnail image at ingest time). Returns null on any
+ * failure, an oversized file, or a non-image response so a bad URL never blocks
+ * the post.
+ */
+async function fetchMediaAttachment(
+  url: string,
+  index: number,
+): Promise<DiscordAttachment | null> {
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(MEDIA_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const contentType = (
+      res.headers.get("content-type") ?? "image/jpeg"
+    ).toLowerCase();
+    if (!contentType.startsWith("image/")) return null;
+    const data = new Uint8Array(await res.arrayBuffer());
+    if (data.byteLength === 0 || data.byteLength > MAX_ATTACHMENT_BYTES)
+      return null;
+    return {
+      filename: `media-${index + 1}.${extForContentType(contentType)}`,
+      data,
+      contentType,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch a post's images as Discord attachments (capped, order preserved). */
+async function buildMediaAttachments(
+  ingestion: Ingestion,
+): Promise<DiscordAttachment[]> {
+  const media = (ingestion.media ?? []) as unknown as BeaconBriefMedia[];
+  const out: DiscordAttachment[] = [];
+  for (const m of media) {
+    if (out.length >= MAX_DISCORD_ATTACHMENTS) break;
+    if (!m?.url) continue;
+    const att = await fetchMediaAttachment(m.url, out.length);
+    if (att) out.push(att);
+  }
+  return out;
+}
+
+/**
+ * Build the Discord message as a branded card: role mentions (the only pinging
+ * content) above a purple-accented embed carrying the headline + post text, an
+ * optional quoted/retweeted embed, and the post's images as real file
+ * attachments. The card's title bar makes back-to-back posts easy to tell apart.
+ * The direct link to the source post is deliberately omitted.
+ */
 function buildDiscordMessage(
   ingestion: Ingestion,
   roleIds: string[],
+  attachments: DiscordAttachment[],
 ): DiscordMessageInput {
-  const mentions = roleIds.map((id) => `<@&${id}>`).join(" ");
-  const parts: string[] = [];
-  if (mentions) parts.push(mentions);
-  if (ingestion.text) parts.push(ingestion.text);
-  if (ingestion.external_url) parts.push(ingestion.external_url);
-  let content = parts.join("\n");
-  if (content.length > 1900) content = content.slice(0, 1900) + "...";
+  // Mentions live in content so they actually ping; nothing else goes here.
+  const content = roleIds.map((id) => `<@&${id}>`).join(" ");
 
-  const embeds: DiscordEmbed[] = [];
+  const bodyText = (ingestion.text ?? "").trim();
+  const card: DiscordEmbed = {
+    color: BEACON_CARD_COLOR,
+    title: articleTitleFor(ingestion),
+    author: ingestion.author_handle
+      ? { name: `@${ingestion.author_handle}` }
+      : undefined,
+    description: bodyText ? bodyText.slice(0, 4000) : undefined,
+    footer: { text: "The Beacon Brief" },
+  };
+  const embeds: DiscordEmbed[] = [card];
+
   const quoted = (ingestion.quoted ??
     ingestion.retweeted) as unknown as BeaconBriefQuoted | null;
   if (quoted?.text) {
@@ -153,13 +241,8 @@ function buildDiscordMessage(
       description: quoted.text.slice(0, 2000),
     });
   }
-  const media = (ingestion.media ?? []) as unknown as BeaconBriefMedia[];
-  for (const m of media) {
-    if ((m.type === "photo" || m.type === "gif") && embeds.length < 4) {
-      embeds.push({ image: { url: m.url } });
-    }
-  }
-  return { content, embeds, allowedRoleIds: roleIds };
+
+  return { content, embeds, allowedRoleIds: roleIds, attachments };
 }
 
 async function loadIngestion(
@@ -336,9 +419,10 @@ async function handleDiscordPost(
   const roleIds = Array.isArray(payload.role_ids)
     ? (payload.role_ids as string[])
     : resolvedFrom(ingestion).roleIds;
+  const attachments = await buildMediaAttachments(ingestion);
   const res = await postWebhookMessage(
     url,
-    buildDiscordMessage(ingestion, roleIds),
+    buildDiscordMessage(ingestion, roleIds, attachments),
   );
   await logBeaconBrief(admin, {
     stage: "discord_post",
@@ -391,8 +475,13 @@ async function handleDiscordPatch(
           "This story has been retracted. The original source post was removed.",
         embeds: [],
         allowedRoleIds: [],
+        attachments: [],
       }
-    : buildDiscordMessage(newIngestion, resolvedFrom(target).roleIds);
+    : buildDiscordMessage(
+        newIngestion,
+        resolvedFrom(target).roleIds,
+        await buildMediaAttachments(newIngestion),
+      );
   const res = await patchWebhookMessage(
     url,
     target.discord_message_id,
