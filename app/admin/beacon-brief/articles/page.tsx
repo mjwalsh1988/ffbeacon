@@ -98,7 +98,51 @@ export default async function BeaconBriefArticlesPage({
     );
   }
   const { data } = await query;
-  const articles: ArticleRow[] = (data ?? []).map((a) => ({
+  const rows = data ?? [];
+  const ids = rows.map((a) => a.id);
+
+  // Assigned teams + players for the listed articles, so the row can show them at
+  // a glance without opening the editor.
+  const teamsByArticle = new Map<
+    string,
+    { id: string; abbreviation: string }[]
+  >();
+  const playersByArticle = new Map<
+    string,
+    { id: string; full_name: string }[]
+  >();
+  if (ids.length > 0) {
+    const [{ data: atRows }, { data: apRows }] = await Promise.all([
+      admin
+        .from("article_teams")
+        .select("article_id, teams(id, abbreviation)")
+        .in("article_id", ids),
+      admin
+        .from("article_players")
+        .select("article_id, players(id, full_name)")
+        .in("article_id", ids),
+    ]);
+    for (const r of atRows ?? []) {
+      const t = (r as { teams?: { id?: string; abbreviation?: string } | null })
+        .teams;
+      if (t?.id && typeof t.abbreviation === "string") {
+        const list = teamsByArticle.get(r.article_id) ?? [];
+        list.push({ id: t.id, abbreviation: t.abbreviation });
+        teamsByArticle.set(r.article_id, list);
+      }
+    }
+    for (const r of apRows ?? []) {
+      const p = (r as { players?: { id?: string; full_name?: string } | null })
+        .players;
+      if (p?.id && typeof p.full_name === "string") {
+        const list = playersByArticle.get(r.article_id) ?? [];
+        list.push({ id: p.id, full_name: p.full_name });
+        playersByArticle.set(r.article_id, list);
+      }
+    }
+  }
+
+  const articles: ArticleRow[] = rows.map((a) => ({
     id: a.id,
     title: a.title,
     slug: a.slug,
@@ -108,6 +152,12 @@ export default async function BeaconBriefArticlesPage({
     tl_dr: a.tl_dr,
     meta_description: a.meta_description,
     content_md: a.content_md,
+    assignedTeams: (teamsByArticle.get(a.id) ?? []).sort((x, y) =>
+      x.abbreviation.localeCompare(y.abbreviation),
+    ),
+    assignedPlayers: (playersByArticle.get(a.id) ?? []).sort((x, y) =>
+      x.full_name.localeCompare(y.full_name),
+    ),
   }));
 
   return (

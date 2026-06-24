@@ -21,6 +21,10 @@ export interface ArticleRow {
   tl_dr: string | null;
   meta_description: string | null;
   content_md: string | null;
+  /** Teams currently linked to the article, shown at a glance on the row. */
+  assignedTeams: { id: string; abbreviation: string }[];
+  /** Players currently linked to the article, shown at a glance on the row. */
+  assignedPlayers: { id: string; full_name: string }[];
 }
 
 export interface CategoryOption {
@@ -416,10 +420,28 @@ export function ArticlesManager({
                   <span className="rounded-full border border-line px-2 py-0.5">
                     {a.status}
                   </span>{" "}
-                  <span className="ml-1">{categoryName(a.category_id)}</span>
+                  <span className="ml-1">
+                    <span className="font-medium text-ink-muted">Category:</span>{" "}
+                    {categoryName(a.category_id)}
+                  </span>
                   {a.tags.length > 0 ? (
-                    <span className="ml-1">| {a.tags.join(", ")}</span>
+                    <span className="ml-2">
+                      <span className="font-medium text-ink-muted">Tags:</span>{" "}
+                      {a.tags.join(", ")}
+                    </span>
                   ) : null}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  <span className="font-medium text-ink-subtle">Teams:</span>{" "}
+                  {a.assignedTeams.length > 0
+                    ? a.assignedTeams.map((t) => t.abbreviation).join(", ")
+                    : "none"}
+                  <span className="ml-3 font-medium text-ink-subtle">
+                    Players:
+                  </span>{" "}
+                  {a.assignedPlayers.length > 0
+                    ? a.assignedPlayers.map((p) => p.full_name).join(", ")
+                    : "none"}
                 </p>
               </div>
               <button
