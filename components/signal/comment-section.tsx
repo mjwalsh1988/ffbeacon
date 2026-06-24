@@ -29,6 +29,7 @@ import { AnimatedGif } from "@/components/signal/animated-gif";
 import { EmojiPicker } from "@/components/signal/emoji-picker";
 import { ReportButton } from "@/components/signal/report-button";
 import { ReactionBar } from "@/components/signal/reaction-bar";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 import { insertAtCursor } from "@/lib/signal/insert-at-cursor";
 import type { EmojiEntry } from "@/lib/signal/emoji-data";
 import type {
@@ -95,6 +96,8 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   hour: "numeric",
   minute: "2-digit",
+  timeZone: SITE_TIME_ZONE,
+  timeZoneName: "short",
 });
 
 export function CommentSection({

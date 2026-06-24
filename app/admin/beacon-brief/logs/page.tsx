@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { BeaconBriefPageShell } from "@/components/admin/beacon-brief-page-shell";
 import { LogPayloads } from "@/components/admin/beacon-brief/log-payloads";
+import { formatEastern } from "@/lib/datetime";
 
 export const metadata: Metadata = { title: "Logs" };
 export const dynamic = "force-dynamic";
@@ -123,7 +124,7 @@ export default async function BeaconBriefLogsPage({
                 >
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <span className="font-mono text-xs text-ink-subtle">
-                      {new Date(l.created_at).toLocaleString()}
+                      {formatEastern(l.created_at)}
                     </span>
                     <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">
                       {l.stage}

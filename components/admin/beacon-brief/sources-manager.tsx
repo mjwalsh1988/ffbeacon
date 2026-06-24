@@ -7,6 +7,7 @@ import {
   toggleSource,
   updateSource,
 } from "@/app/admin/beacon-brief/actions";
+import { formatEastern } from "@/lib/datetime";
 
 export interface SourceView {
   id: string;
@@ -190,7 +191,7 @@ export function SourcesManager({ sources }: { sources: SourceView[] }) {
                             }
                           >
                             {s.last_poll_status ?? "unknown"} at{" "}
-                            {new Date(s.last_polled_at).toLocaleString()}
+                            {formatEastern(s.last_polled_at)}
                             {s.last_poll_error ? ` (${s.last_poll_error})` : ""}
                           </span>
                         ) : (

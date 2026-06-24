@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { CRON_JOBS, summarizeCronResult, type CronJobName } from "@/lib/cron-runs";
 import { CronStatusBadge } from "@/components/cron-status-badge";
 import { AdminHero } from "@/components/admin/admin-hero";
-import { formatRelative, formatUtc, formatDuration } from "@/lib/datetime";
+import { formatRelative, formatEastern, formatDuration } from "@/lib/datetime";
 import type { Json } from "@/lib/database.types";
 
 export const metadata: Metadata = { title: "Overview" };
@@ -235,7 +235,7 @@ function CronHealthRow({
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
         <Field label="Last run">
           {run ? (
-            <span title={formatUtc(run.started_at)}>
+            <span title={formatEastern(run.started_at)}>
               {formatRelative(run.started_at, nowMs)}
             </span>
           ) : (
@@ -307,7 +307,7 @@ function RecentLeaguesSection({
                   {lg.total_rosters ? `, ${lg.total_rosters} teams` : ""}
                 </p>
               </div>
-              <p className="text-xs text-ink-muted" title={formatUtc(lg.last_pulsed_at)}>
+              <p className="text-xs text-ink-muted" title={formatEastern(lg.last_pulsed_at)}>
                 {lg.last_pulsed_at
                   ? `Pulsed ${formatRelative(lg.last_pulsed_at, nowMs)}`
                   : "Never pulsed"}

@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { CRON_JOBS } from "@/lib/cron-runs";
 import { CronStatusBadge } from "@/components/cron-status-badge";
-import { formatRelative, formatUtc } from "@/lib/datetime";
+import { formatRelative, formatEastern } from "@/lib/datetime";
 import { BeaconPageShell } from "@/components/admin/beacon-page-shell";
 
 export const metadata: Metadata = { title: "Runs & monitoring" };
@@ -50,7 +50,7 @@ export default async function BeaconRunsPage() {
                 return (
                   <li key={r.id} className="rounded-card border border-line bg-surface/60 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-ink" title={formatUtc(r.started_at)}>{formatRelative(r.started_at, nowMs)}</p>
+                      <p className="text-sm font-semibold text-ink" title={formatEastern(r.started_at)}>{formatRelative(r.started_at, nowMs)}</p>
                       <CronStatusBadge status={r.status} />
                     </div>
                     <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">

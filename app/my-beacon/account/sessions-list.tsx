@@ -4,6 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Monitor, Smartphone, Globe } from "lucide-react";
 import { revokeOtherSessions } from "./actions";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 export type SessionRow = {
   id: string;
@@ -189,6 +190,7 @@ function formatAbsolute(iso: string | null): string {
     return new Intl.DateTimeFormat("en-US", {
       dateStyle: "medium",
       timeStyle: "short",
+      timeZone: SITE_TIME_ZONE,
     }).format(new Date(iso));
   } catch {
     return iso;

@@ -6,6 +6,7 @@ import { IdentityManager, type IdentityRow } from "./identity-manager";
 import { PasswordForm } from "./password-form";
 import { EmailForm } from "./email-form";
 import { SessionsList, type SessionRow } from "./sessions-list";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 export const metadata: Metadata = {
   title: "Account Settings",
@@ -323,6 +324,7 @@ function formatShortDate(iso: string | null): string {
       month: "short",
       day: "numeric",
       year: "numeric",
+      timeZone: SITE_TIME_ZONE,
     }).format(new Date(iso));
   } catch {
     return "—";

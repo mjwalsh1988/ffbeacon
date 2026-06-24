@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { BeaconBriefPageShell } from "@/components/admin/beacon-brief-page-shell";
+import { formatEastern } from "@/lib/datetime";
 
 export const metadata: Metadata = { title: "The Beacon Brief" };
 export const dynamic = "force-dynamic";
@@ -89,7 +90,7 @@ export default async function BeaconBriefOverviewPage() {
     data: { status: string; started_at: string } | null;
   }) =>
     r.data
-      ? `${r.data.status} at ${new Date(r.data.started_at).toLocaleString()}`
+      ? `${r.data.status} at ${formatEastern(r.data.started_at)}`
       : "no runs yet";
 
   const logs = recentLogs.data ?? [];
@@ -168,7 +169,7 @@ export default async function BeaconBriefOverviewPage() {
                   className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-3 text-sm"
                 >
                   <span className="font-mono text-xs text-ink-subtle">
-                    {new Date(l.created_at).toLocaleString()}
+                    {formatEastern(l.created_at)}
                   </span>
                   <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">
                     {l.stage}

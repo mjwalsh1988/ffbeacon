@@ -11,6 +11,7 @@ import {
   BookOpen,
   type LucideIcon,
 } from "lucide-react";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 // Homepage description, drawn from the hero subtitle below. Kept to ~150
 // characters so search engines and social cards show it without truncation.
@@ -601,6 +602,7 @@ function formatArticleDate(iso: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: SITE_TIME_ZONE,
   });
 }
 

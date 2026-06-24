@@ -15,6 +15,7 @@ import { PostImages } from "@/components/signal/post-images";
 import { AnimatedGif } from "@/components/signal/animated-gif";
 import type { WallPost } from "@/lib/signal-wall";
 import { updatePost, deletePost, setPostPinned } from "./wall-actions";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 const dateFmt = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -22,6 +23,8 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   hour: "numeric",
   minute: "2-digit",
+  timeZone: SITE_TIME_ZONE,
+  timeZoneName: "short",
 });
 
 /**

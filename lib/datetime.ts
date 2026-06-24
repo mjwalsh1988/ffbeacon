@@ -1,24 +1,31 @@
 /**
- * Small date/time formatting helpers for server-rendered admin surfaces.
- * Times are rendered in UTC because the crons are scheduled and reasoned about
- * in UTC; mixing in a viewer-local zone would make "did the 07:00 run fire?"
- * harder to answer.
+ * Small date/time formatting helpers.
+ *
+ * Every timestamp shown anywhere on the site is rendered in America/New_York so
+ * the displayed time is consistent for all viewers regardless of their device's
+ * zone. This is a DISPLAY concern only: stored timestamps stay in UTC. The zone
+ * label (EST/EDT) is included on time-of-day displays so the zone is explicit.
  */
+
+/** The single display timezone for the whole site (front-end only). */
+export const SITE_TIME_ZONE = "America/New_York";
 
 const NA = "n/a";
 
-/** "Jun 12, 2026, 7:30 AM UTC" or n/a. */
-export function formatUtc(iso: string | null | undefined): string {
+/** "Jun 12, 2026, 7:30 AM EDT" in America/New_York, or n/a. */
+export function formatEastern(iso: string | null | undefined): string {
   if (!iso) return NA;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return NA;
-  return (
-    new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "UTC",
-    }).format(d) + " UTC"
-  );
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: SITE_TIME_ZONE,
+    timeZoneName: "short",
+  }).format(d);
 }
 
 /** "3 hours ago", "in 5 minutes", "yesterday", relative to nowMs. */

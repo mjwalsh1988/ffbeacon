@@ -8,6 +8,7 @@ import {
   GuideSubmissionsManager,
   type PendingSubmission,
 } from "@/components/admin/guide-submissions-manager";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 export const metadata: Metadata = { title: "Community Questions | Signal Guide" };
 export const dynamic = "force-dynamic";
@@ -34,6 +35,8 @@ export default async function AdminSignalGuideSubmissionsPage() {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: SITE_TIME_ZONE,
+    timeZoneName: "short",
   });
 
   const submissions: PendingSubmission[] = (rows ?? []).map((r) => ({

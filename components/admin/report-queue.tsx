@@ -6,6 +6,7 @@ import { EyeOff, Eye } from "lucide-react";
 import { PostBody } from "@/components/signal/post-body";
 import { hidePost, unhidePost, setReportStatus } from "@/app/admin/signal/actions";
 import { moderateComment } from "@/app/u/[handle]/comment-actions";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 /**
  * Interactive moderation queue. Renders one card per reported target (post or
@@ -64,6 +65,8 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   hour: "numeric",
   minute: "2-digit",
+  timeZone: SITE_TIME_ZONE,
+  timeZoneName: "short",
 });
 
 function groupKey(group: ReportGroup): string {

@@ -15,6 +15,7 @@ import { getActiveFormats, getAvailableSources } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { shortFormatName } from "@/lib/format-display";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -149,6 +150,7 @@ export default async function MyBeaconDashboardPage() {
     ? new Intl.DateTimeFormat("en-US", {
         month: "short",
         year: "numeric",
+        timeZone: SITE_TIME_ZONE,
       }).format(new Date(user.created_at))
     : "—";
 

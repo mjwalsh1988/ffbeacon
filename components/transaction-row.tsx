@@ -4,6 +4,7 @@ import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { BeaconValue, BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 export type TransactionRowData = {
   /** Sleeper transaction id (used in trade share links). */
@@ -640,10 +641,11 @@ function formatTypeLabel(type: string): string {
 function formatDateLabel(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: SITE_TIME_ZONE,
   });
 }
 

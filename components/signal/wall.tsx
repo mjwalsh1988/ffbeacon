@@ -13,6 +13,7 @@ import {
   type WallPost,
   type WallReactions,
 } from "@/lib/signal-wall";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
 
 /**
  * Public Wall block on /u/[handle]. Renders the Signal's posts, pinned first then
@@ -29,6 +30,7 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
+  timeZone: SITE_TIME_ZONE,
 });
 
 export function WallBlock({

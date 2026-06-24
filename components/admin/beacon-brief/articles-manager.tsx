@@ -9,6 +9,7 @@ import {
   type ArticleDetail,
   type PlayerOption,
 } from "@/app/admin/beacon-brief/actions";
+import { formatEastern } from "@/lib/datetime";
 
 export interface ArticleRow {
   id: string;
@@ -367,7 +368,7 @@ function ArticleEditor({
                 <span className="font-mono text-ink-subtle">
                   #{r.revision_number}
                 </span>{" "}
-                {new Date(r.created_at).toLocaleString()}
+                {formatEastern(r.created_at)}
                 {r.change_summary ? ` - ${r.change_summary}` : ""}
               </li>
             ))}

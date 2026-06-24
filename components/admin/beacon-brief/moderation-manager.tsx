@@ -9,6 +9,7 @@ import {
   searchPlayers,
   type PlayerOption,
 } from "@/app/admin/beacon-brief/actions";
+import { formatEastern } from "@/lib/datetime";
 
 export interface DeletionItem {
   type: "deletion";
@@ -80,7 +81,7 @@ function DeletionRow({
         state, or reject to keep the article as is.
       </p>
       <p className="mt-1 text-xs text-ink-subtle">
-        Detected {new Date(item.created_at).toLocaleString()}
+        Detected {formatEastern(item.created_at)}
         {item.detail ? ` | ${item.detail}` : ""}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -182,7 +183,7 @@ function MatchResolver({
         </p>
       )}
       <p className="mt-1 text-xs text-ink-subtle">
-        Flagged {new Date(item.created_at).toLocaleString()}
+        Flagged {formatEastern(item.created_at)}
       </p>
 
       {item.candidates.length > 0 && (

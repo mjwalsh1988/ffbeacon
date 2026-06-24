@@ -195,6 +195,20 @@ Status values: pending | in_progress | blocked | completed
 - Database types: /lib/database.types.ts (generated, do not edit by hand)
 
 
+## Time Display (Non-Negotiable)
+
+ABSOLUTE RULE: Every timestamp shown ANYWHERE on the front end (public pages, the admin panel, the Beacon Brief admin, OG images, emails, anything a human reads) MUST be displayed in the America/New_York timezone, regardless of the viewer's device zone or the server's zone (Vercel runs UTC). This is a DISPLAY concern only: stored timestamps stay in UTC, the database is never changed for display.
+
+How to comply:
+- Use the helpers in `lib/datetime.ts`. `formatEastern(iso)` renders a full date + time with the zone label (for example "Jun 12, 2026, 7:30 AM EDT"). The exported `SITE_TIME_ZONE` constant is `"America/New_York"`.
+- NEVER call `new Date(x).toLocaleString()` / `toLocaleDateString()` / `toLocaleTimeString()` or construct a bare `new Intl.DateTimeFormat(...)` without a `timeZone`. In a client component a bare call uses the browser's zone; on the server it uses UTC. Both are wrong.
+- For any custom `Intl.DateTimeFormat` or `toLocale*` formatter, pass `timeZone: SITE_TIME_ZONE`. When the output includes a time of day, also pass `timeZoneName: "short"` so the zone (EST/EDT) is visible. Note: `timeZoneName` cannot be combined with `dateStyle`/`timeStyle`, so use explicit component options (year/month/day/hour/minute) when you want the label.
+- The label auto-switches between EST and EDT with daylight saving, do not hardcode "ET"/"EST"/"EDT".
+- Relative formatters ("3 hours ago") are zone-independent and need no change.
+
+Sub-agent reviews of any UI that renders a date or time must verify it resolves through `lib/datetime.ts` or carries an explicit `timeZone: SITE_TIME_ZONE`.
+
+
 ## Source and Format Sync Requirements
 
 The site has two global preferences that flow through the user experience: data source (KTC, future: FantasyCalc, ffbeacon native, etc.) and league format (Redraft PPR, Dynasty Superflex, etc.).

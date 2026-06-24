@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { CRON_JOBS, summarizeCronResult, type CronJobName } from "@/lib/cron-runs";
 import { CronStatusBadge } from "@/components/cron-status-badge";
-import { formatRelative, formatUtc, formatDuration } from "@/lib/datetime";
+import { formatRelative, formatEastern, formatDuration } from "@/lib/datetime";
 import type { Json } from "@/lib/database.types";
 
 export const metadata: Metadata = { title: "Cron Logs" };
@@ -134,12 +134,12 @@ function RunCard({ run, nowMs }: { run: RunRow; nowMs: number }) {
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
         <Field label="Started">
-          <span title={formatUtc(run.started_at)}>
+          <span title={formatEastern(run.started_at)}>
             {formatRelative(run.started_at, nowMs)}
           </span>
         </Field>
         <Field label="Finished">
-          <span title={formatUtc(run.finished_at)}>
+          <span title={formatEastern(run.finished_at)}>
             {run.finished_at ? formatRelative(run.finished_at, nowMs) : "Not finished"}
           </span>
         </Field>
