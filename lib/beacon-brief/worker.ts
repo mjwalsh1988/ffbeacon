@@ -189,15 +189,65 @@ async function fetchMediaAttachment(
   }
 }
 
-/** Fetch a post's images as Discord attachments (capped, order preserved). */
+/**
+ * Order the candidate images for the Discord card before the attachment cap is
+ * applied. The post's primary content leads (for a retweet that is the retweeted
+ * original's media; for everything else the post's own media), then the referenced
+ * (quoted/retweeted) context media. When BOTH primary and context media exist, one
+ * cap slot is reserved for the first context image so a quote that piles on its own
+ * images cannot crowd out the original's picture (F3). Deduped by URL, order
+ * preserved. Returns the full ordered list (not truncated) so the caller can fall
+ * through to later candidates if an earlier download fails.
+ */
+export function orderMediaForDiscord(
+  own: BeaconBriefMedia[],
+  quotedMedia: BeaconBriefMedia[],
+  retweetedMedia: BeaconBriefMedia[],
+  isRetweet: boolean,
+  cap: number,
+): BeaconBriefMedia[] {
+  const primary = isRetweet ? retweetedMedia : own;
+  const context = isRetweet ? own : [...quotedMedia, ...retweetedMedia];
+  const reserve = primary.length > 0 && context.length > 0 ? 1 : 0;
+  const lead = Math.max(0, cap - reserve);
+  const ordered = [
+    ...primary.slice(0, lead),
+    ...context,
+    ...primary.slice(lead),
+  ];
+  const out: BeaconBriefMedia[] = [];
+  const seen = new Set<string>();
+  for (const m of ordered) {
+    if (!m?.url || seen.has(m.url)) continue;
+    seen.add(m.url);
+    out.push(m);
+  }
+  return out;
+}
+
+/**
+ * Fetch a post's images as Discord attachments, capped at MAX_DISCORD_ATTACHMENTS.
+ * Ordering (own + quoted/retweeted context, with a reserved context slot) comes
+ * from orderMediaForDiscord so a retweet or quote of an image post still carries
+ * the right picture.
+ */
 async function buildMediaAttachments(
   ingestion: Ingestion,
 ): Promise<DiscordAttachment[]> {
-  const media = (ingestion.media ?? []) as unknown as BeaconBriefMedia[];
+  const own = (ingestion.media ?? []) as unknown as BeaconBriefMedia[];
+  const quoted = ingestion.quoted as unknown as BeaconBriefQuoted | null;
+  const retweeted = ingestion.retweeted as unknown as BeaconBriefQuoted | null;
+  const ordered = orderMediaForDiscord(
+    own,
+    quoted?.media ?? [],
+    retweeted?.media ?? [],
+    retweeted !== null,
+    MAX_DISCORD_ATTACHMENTS,
+  );
   const out: DiscordAttachment[] = [];
-  for (const m of media) {
+  for (const m of ordered) {
     if (out.length >= MAX_DISCORD_ATTACHMENTS) break;
-    if (!m?.url) continue;
+    if (!m.url) continue;
     const att = await fetchMediaAttachment(m.url, out.length);
     if (att) out.push(att);
   }
@@ -220,25 +270,44 @@ function buildDiscordMessage(
   const content = roleIds.map((id) => `<@&${id}>`).join(" ");
 
   const bodyText = (ingestion.text ?? "").trim();
+
+  // Attribution: a retweet shows the original author (with the relaying source in
+  // parentheses) because the promoted body text is the original author's words; a
+  // normal post or a quote keeps the relaying account as the author.
+  const retweeted = ingestion.retweeted as unknown as BeaconBriefQuoted | null;
+  // A retweet ref wins even if a quote ref is also present, matching how the
+  // normalizer promotes the retweeted text (F4).
+  const isRetweet = retweeted !== null;
+  const sourceHandle = ingestion.author_handle;
+  let authorName: string | undefined;
+  if (isRetweet && retweeted?.author_handle) {
+    authorName = sourceHandle
+      ? `@${retweeted.author_handle} (via @${sourceHandle})`
+      : `@${retweeted.author_handle}`;
+  } else if (sourceHandle) {
+    authorName = `@${sourceHandle}`;
+  }
+
   const card: DiscordEmbed = {
     color: BEACON_CARD_COLOR,
     title: articleTitleFor(ingestion),
-    author: ingestion.author_handle
-      ? { name: `@${ingestion.author_handle}` }
-      : undefined,
+    author: authorName ? { name: authorName } : undefined,
     description: bodyText ? bodyText.slice(0, 4000) : undefined,
     footer: { text: "The Beacon Brief" },
   };
   const embeds: DiscordEmbed[] = [card];
 
-  const quoted = (ingestion.quoted ??
+  // Secondary embed carries the quoted/retweeted original's text for context.
+  // Skip it when that text was already promoted into the card body (retweets), so
+  // the same words never appear twice.
+  const context = (ingestion.quoted ??
     ingestion.retweeted) as unknown as BeaconBriefQuoted | null;
-  if (quoted?.text) {
+  if (context?.text && context.text.trim() !== bodyText) {
     embeds.push({
-      author: quoted.author_handle
-        ? { name: `@${quoted.author_handle}` }
+      author: context.author_handle
+        ? { name: `@${context.author_handle}` }
         : undefined,
-      description: quoted.text.slice(0, 2000),
+      description: context.text.slice(0, 2000),
     });
   }
 
@@ -396,6 +465,27 @@ async function reapStaleJobs(
 
 // -------- job handlers (return true on success) --------
 
+/**
+ * Persist the Discord message id, retrying a few times so a single transient DB
+ * error does not strand the id (which would block patches and risk a duplicate
+ * repost on a job retry). Returns false if it never lands.
+ */
+async function recordDiscordMessageId(
+  admin: Admin,
+  ingestionId: string,
+  messageId: string | null,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error } = await admin
+      .from("news_ingestions")
+      .update({ discord_message_id: messageId })
+      .eq("id", ingestionId);
+    if (!error) return true;
+    await sleep(200 * (attempt + 1));
+  }
+  return false;
+}
+
 async function handleDiscordPost(
   admin: Admin,
   job: QueueRow,
@@ -413,8 +503,47 @@ async function handleDiscordPost(
     });
     return { ok: true };
   }
+
+  // Idempotency guard 1: a prior attempt already recorded the message id (the job
+  // just never got marked done, e.g. a crash right after success). Do not repost.
+  if (ingestion.discord_message_id) {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      ingestionId: ingestion.id,
+      message: "already posted (message id present); skipping repost",
+    });
+    return { ok: true };
+  }
+  // Idempotency guard 2: a prior attempt set the pre-post sentinel (webhook id)
+  // but never recorded a message id, meaning it most likely posted and then
+  // crashed before saving the id. Reposting would duplicate the card, so stop. The
+  // card exists on Discord but cannot be patched; logged loudly for visibility (F10).
+  if (ingestion.discord_webhook_id) {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      level: "error",
+      ingestionId: ingestion.id,
+      message:
+        "prior post attempt did not record a message id; not reposting to avoid a duplicate card",
+    });
+    return { ok: true };
+  }
+
   const url = await activeWebhookUrl(admin, settings);
   if (!url) return { ok: false, error: "no active Discord webhook configured" };
+
+  // Pre-post sentinel: record the target webhook BEFORE sending so a crash between
+  // the send and the id-write cannot cause a duplicate repost (guard 2 above). On a
+  // clean send failure we clear it again so a legitimate retry can repost.
+  const { error: sentinelErr } = await admin
+    .from("news_ingestions")
+    .update({ discord_webhook_id: settings.webhookId })
+    .eq("id", ingestion.id);
+  if (sentinelErr)
+    return {
+      ok: false,
+      error: `failed to set pre-post sentinel: ${sentinelErr.message}`,
+    };
 
   const roleIds = Array.isArray(payload.role_ids)
     ? (payload.role_ids as string[])
@@ -431,16 +560,25 @@ async function handleDiscordPost(
     message: res.ok ? "posted" : res.error,
     responsePayload: res as unknown as Json,
   });
-  if (!res.ok)
+  if (!res.ok) {
+    // The send did not create a message; clear the sentinel so a retry can repost.
+    await admin
+      .from("news_ingestions")
+      .update({ discord_webhook_id: null })
+      .eq("id", ingestion.id);
     return { ok: false, retryAfterMs: res.retryAfterMs, error: res.error };
+  }
 
-  await admin
-    .from("news_ingestions")
-    .update({
-      discord_message_id: res.id,
-      discord_webhook_id: settings.webhookId,
-    })
-    .eq("id", ingestion.id);
+  const recorded = await recordDiscordMessageId(admin, ingestion.id, res.id);
+  if (!recorded) {
+    await logBeaconBrief(admin, {
+      stage: "discord_post",
+      level: "error",
+      ingestionId: ingestion.id,
+      message:
+        "posted but failed to persist discord_message_id after retries; not reposting (card may not be patchable)",
+    });
+  }
   return { ok: true };
 }
 
@@ -463,7 +601,42 @@ async function handleDiscordPatch(
     });
     return { ok: true };
   }
-  if (!target.discord_message_id) return { ok: true }; // original was never posted (e.g. shadow); nothing to patch
+  if (!target.discord_message_id) {
+    // The original post may simply not have landed YET (its discord_post is still
+    // queued or in flight). Distinguish "pending post" (retry the patch so the
+    // revision is not silently lost, F8) from "never going to post" (give up).
+    // Array read + limit(1), not maybeSingle(): if two discord_post rows ever
+    // exist for one target (retry/release churn), maybeSingle() errors and would
+    // be read as "no pending post", silently dropping the revision (F8 hardening).
+    const { data: pendingPosts } = await admin
+      .from("beacon_brief_queue")
+      .select("id")
+      .eq("job_type", "discord_post")
+      .in("status", ["pending", "processing"])
+      .filter("payload->>ingestion_id", "eq", targetId)
+      .limit(1);
+    if (pendingPosts && pendingPosts.length > 0) {
+      await logBeaconBrief(admin, {
+        stage: "discord_patch",
+        level: "warn",
+        ingestionId: newIngestion.id,
+        message:
+          "target original not posted yet (discord_post still pending); will retry",
+      });
+      return {
+        ok: false,
+        error: "awaiting original discord_post (no message id yet)",
+      };
+    }
+    await logBeaconBrief(admin, {
+      stage: "discord_patch",
+      level: "warn",
+      ingestionId: newIngestion.id,
+      message:
+        "target original has no message id and no pending post; nothing to patch",
+    });
+    return { ok: true };
+  }
   const url = await activeWebhookUrl(admin, settings);
   if (!url) return { ok: false, error: "no active Discord webhook configured" };
 

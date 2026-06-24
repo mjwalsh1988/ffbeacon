@@ -26,6 +26,7 @@
     "beacon:board": "tsx --env-file=.env.local scripts/beacon-board-audit.ts",
     "beacon:ai-smoke": "tsx --env-file=.env.local scripts/beacon-ai-smoke.ts",
     "beacon-brief": "tsx --env-file=.env.local scripts/beacon-brief.ts",
+    "beacon-brief:tests": "tsx scripts/beacon-brief-ingest-tests.ts",
     "sync:stats": "tsx --env-file=.env.local scripts/sync-sleeper-stats.ts",
     "seed:rankings": "tsx --env-file=.env.local scripts/seed-rankings.ts",
     "calculate:trends": "tsx --env-file=.env.local scripts/calculate-trends.ts",

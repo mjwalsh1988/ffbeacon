@@ -268,6 +268,16 @@ export async function runCuration(admin: Admin): Promise<CurationSummary> {
       continue;
     }
 
+    if (fetched.truncatedByPageBudget) {
+      await logBeaconBrief(admin, {
+        stage: "ingest",
+        level: "warn",
+        sourceId: source.id,
+        message:
+          "source exceeded the per-poll page budget; oldest new posts deferred to a later run",
+      });
+    }
+
     const uninitialized = !source.last_cursor;
     // Oldest first so the cursor advances monotonically and revisions link to
     // prior ingestions.
@@ -488,48 +498,53 @@ async function processItem(
 
   const isRevision = revisionOfIngestionId !== null;
 
-  // Insert the ingestion row (our UUID identity). Guarded by the unique
-  // constraint against a race; skip if a concurrent run beat us to it.
-  const { data: inserted, error: insErr } = await admin
-    .from("news_ingestions")
-    .insert({
-      source_id: source.id,
-      source_type: item.source_type,
-      source_external_id: item.source_external_id,
-      external_url: item.external_url,
-      author_handle: item.author_handle,
-      text: item.text,
-      media: item.media as unknown as Json,
-      quoted: (item.quoted as unknown as Json) ?? null,
-      retweeted: (item.retweeted as unknown as Json) ?? null,
-      is_revision: isRevision,
-      revision_of_ingestion_id: revisionOfIngestionId,
-      status: "processing",
-      metadata: (item.raw as Json) ?? {},
-    })
-    .select("id")
-    .single();
-
-  if (insErr || !inserted) {
-    await logBeaconBrief(admin, {
-      stage: "ingest",
-      level: "warn",
-      sourceId: source.id,
-      message: `insert skipped (${insErr?.message ?? "no row"})`,
-    });
-    return;
-  }
-  const ingestionId = inserted.id;
-  summary.ingested += 1;
-  await logBeaconBrief(admin, {
-    stage: "ingest",
-    sourceId: source.id,
-    ingestionId,
-    message: `ingested ${item.source_external_id}`,
-  });
+  // The common ingestion row payload (our UUID identity). Built once and reused by
+  // both insert paths below.
+  const baseRow = {
+    source_id: source.id,
+    source_type: item.source_type,
+    source_external_id: item.source_external_id,
+    external_url: item.external_url,
+    author_handle: item.author_handle,
+    text: item.text,
+    media: item.media as unknown as Json,
+    quoted: (item.quoted as unknown as Json) ?? null,
+    retweeted: (item.retweeted as unknown as Json) ?? null,
+    metadata: (item.raw as Json) ?? {},
+  };
 
   if (isRevision && revisionOfIngestionId) {
+    // Revisions insert immediately: the patch job needs the row id, and there is
+    // no inline AI gate that could fail before the row is needed.
+    const { data: inserted, error: insErr } = await admin
+      .from("news_ingestions")
+      .insert({
+        ...baseRow,
+        is_revision: true,
+        revision_of_ingestion_id: revisionOfIngestionId,
+        status: "processing",
+      })
+      .select("id")
+      .single();
+    if (insErr || !inserted) {
+      await logBeaconBrief(admin, {
+        stage: "ingest",
+        level: "warn",
+        sourceId: source.id,
+        message: `insert skipped (${insErr?.message ?? "no row"})`,
+      });
+      return;
+    }
+    const ingestionId = inserted.id;
+    summary.ingested += 1;
     summary.revisions += 1;
+    await logBeaconBrief(admin, {
+      stage: "ingest",
+      sourceId: source.id,
+      ingestionId,
+      message: `ingested ${item.source_external_id} (revision)`,
+    });
+
     // Always patch the existing Discord message with the new content.
     await enqueue(admin, "discord_patch", {
       ingestion_id: ingestionId,
@@ -577,7 +592,13 @@ async function processItem(
     return;
   }
 
-  // New post: categorize + context score inline.
+  // New post: classify + context score BEFORE inserting the row. A transient AI
+  // failure throws, so the caller leaves the cursor untouched and the item is
+  // retried next run rather than being permanently inserted and downgraded to
+  // Discord-only with no article (F9). Because no row exists yet, the retry
+  // re-runs classification cleanly (the dedup net only matches inserted rows). A
+  // persistently failing item self-bounds: once it ages past the max-age cutoff it
+  // takes the skipStale path above instead, so it cannot block the source forever.
   const ai = await runStructuredCall<CategorizeResult>({
     admin,
     stage: "categorize",
@@ -588,23 +609,14 @@ async function processItem(
     ),
     userContent: JSON.stringify(compactItem(item)),
     schema: CATEGORIZE_SCHEMA as unknown as Record<string, unknown>,
-    ingestionId,
+    ingestionId: null,
     sourceId: source.id,
     maxTokens: 1024,
   });
-
   if (!ai) {
-    // Classification failed: post to Discord but do not fabricate an article.
-    await enqueue(admin, "discord_post", { ingestion_id: ingestionId });
-    summary.discordQueued += 1;
-    await admin
-      .from("news_ingestions")
-      .update({
-        status: "dropped_no_context",
-        processed_at: new Date().toISOString(),
-      })
-      .eq("id", ingestionId);
-    return;
+    throw new Error(
+      `categorize failed for ${item.source_external_id}; leaving cursor for retry`,
+    );
   }
 
   // Resolve references with confidence: only exact, unambiguous matches auto-link.
@@ -620,12 +632,56 @@ async function processItem(
     resolved,
     pending: refs.pending,
   } as unknown as Json;
-  const makeArticle = (ai.context_score ?? 0) >= settings.contextThreshold;
 
-  await admin
+  // A retweet whose original could not be resolved carries only the truncated
+  // "RT @user:" stub as its text, so it never becomes an article (F2): we still
+  // post it to Discord, but force Discord-only regardless of context score.
+  const meetsThreshold = (ai.context_score ?? 0) >= settings.contextThreshold;
+  const makeArticle = meetsThreshold && !item.retweet_unresolved;
+
+  // New post insert, now carrying the AI result. Guarded by the unique constraint
+  // against a race; skip if a concurrent run beat us to it.
+  const { data: inserted, error: insErr } = await admin
     .from("news_ingestions")
-    .update({ ai_result: aiStored, context_score: ai.context_score ?? 0 })
-    .eq("id", ingestionId);
+    .insert({
+      ...baseRow,
+      is_revision: false,
+      revision_of_ingestion_id: null,
+      ai_result: aiStored,
+      context_score: ai.context_score ?? 0,
+      status: makeArticle ? "processing" : "dropped_no_context",
+      processed_at: makeArticle ? null : new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (insErr || !inserted) {
+    await logBeaconBrief(admin, {
+      stage: "ingest",
+      level: "warn",
+      sourceId: source.id,
+      message: `insert skipped (${insErr?.message ?? "no row"})`,
+    });
+    return;
+  }
+  const ingestionId = inserted.id;
+  summary.ingested += 1;
+  await logBeaconBrief(admin, {
+    stage: "ingest",
+    sourceId: source.id,
+    ingestionId,
+    message: `ingested ${item.source_external_id}`,
+  });
+
+  if (meetsThreshold && item.retweet_unresolved) {
+    await logBeaconBrief(admin, {
+      stage: "categorize",
+      level: "warn",
+      sourceId: source.id,
+      ingestionId,
+      message:
+        "retweet original unresolved; posting to Discord only and skipping article to avoid stub text",
+    });
+  }
 
   // Always post the original content to Discord (with resolved role mentions).
   await enqueue(admin, "discord_post", {
@@ -644,13 +700,5 @@ async function processItem(
     // Non-confident names open moderation rows (article_id backfilled by the
     // worker once the article exists); confident refs auto-link via resolved.
     await openMatchModeration(admin, ingestionId, refs.pending, reviews);
-  } else {
-    await admin
-      .from("news_ingestions")
-      .update({
-        status: "dropped_no_context",
-        processed_at: new Date().toISOString(),
-      })
-      .eq("id", ingestionId);
   }
 }

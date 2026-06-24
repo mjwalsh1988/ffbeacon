@@ -35,6 +35,13 @@ export interface BeaconBriefSourceItem {
   media: BeaconBriefMedia[];
   quoted: BeaconBriefQuoted | null;
   retweeted: BeaconBriefQuoted | null;
+  /**
+   * True when this post is a retweet whose original could NOT be resolved (the
+   * referenced tweet was deleted, withheld, or not returned by the API even after
+   * hydration). In that state `text` is only the truncated "RT @user:" stub, so
+   * the item must never be turned into an article (it would publish stub text).
+   */
+  retweet_unresolved: boolean;
   /** True when this post is a native source edit of an earlier post. */
   is_native_edit: boolean;
   /** The earlier post id this natively edits, if any. */

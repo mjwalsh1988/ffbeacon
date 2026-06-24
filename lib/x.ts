@@ -118,17 +118,27 @@ export async function getXUserByUsername(
 
 /**
  * Pull a user's recent tweets, newest first, optionally only those after
- * sinceId. Excludes replies and retweets-as-RTs at the API level so we ingest
- * original posts and quotes. Returns the raw v2 response (with includes) or null.
+ * sinceId. Excludes replies at the API level but KEEPS retweets and quotes, so a
+ * source that breaks news by retweeting a colleague (or quote-tweeting) is still
+ * ingested with full context. Returns the raw v2 response (with includes) or null.
  */
 export async function getXUserTweets(
   userId: string,
-  opts: { sinceId?: string | null; maxResults?: number } = {},
+  opts: {
+    sinceId?: string | null;
+    maxResults?: number;
+    paginationToken?: string | null;
+  } = {},
 ): Promise<XTimelineResponse | null> {
   const params = new URLSearchParams();
   params.set("max_results", String(opts.maxResults ?? 20));
-  params.set("exclude", "replies,retweets");
+  params.set("exclude", "replies");
   if (opts.sinceId) params.set("since_id", opts.sinceId);
+  // Walk older pages within the same since_id window (used by the curator to drain
+  // more than one page of backlog in a single poll). The token comes from a prior
+  // response's meta.next_token.
+  if (opts.paginationToken)
+    params.set("pagination_token", opts.paginationToken);
   return safeFetch<XTimelineResponse>(
     `/users/${userId}/tweets?${params.toString()}&${TWEET_QUERY}`,
   );
