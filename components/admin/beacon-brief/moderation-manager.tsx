@@ -11,6 +11,16 @@ import {
 } from "@/app/admin/beacon-brief/actions";
 import { formatEastern } from "@/lib/datetime";
 
+/** The ingested source post a moderation item refers to, shown for context. */
+export interface IngestedPost {
+  authorHandle: string | null;
+  text: string;
+  externalUrl: string | null;
+  media: { type: string; url: string }[];
+  quoted: { authorHandle: string | null; text: string } | null;
+  retweeted: { authorHandle: string | null; text: string } | null;
+}
+
 export interface DeletionItem {
   type: "deletion";
   id: string;
@@ -18,6 +28,7 @@ export interface DeletionItem {
   articleTitle: string | null;
   articleSlug: string | null;
   detail: string;
+  post: IngestedPost | null;
 }
 
 export interface MatchItem {
@@ -29,6 +40,7 @@ export interface MatchItem {
   articleTitle: string | null;
   articleSlug: string | null;
   articleReady: boolean;
+  post: IngestedPost | null;
 }
 
 export type ModerationItem = DeletionItem | MatchItem;
@@ -49,6 +61,66 @@ const btnClass =
   "min-h-[44px] rounded-card border border-line bg-base px-3 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan disabled:opacity-50";
 const inputClass =
   "min-h-[44px] w-full rounded-card border border-line bg-base px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-cyan";
+
+/**
+ * The ingested source post this item is about, so the reviewer has the full
+ * context (text, quoted/retweeted content, attachments, link) needed to decide
+ * which player/team to link or whether to approve a deletion.
+ */
+function PostContext({ post }: { post: IngestedPost | null }) {
+  if (!post) return null;
+  const context = post.retweeted ?? post.quoted;
+  // Skip the quoted/retweeted block when its text is the same as the main text
+  // (a retweet promotes the original text into the body), to avoid showing it twice.
+  const showContext =
+    context !== null && context.text.trim() !== post.text.trim();
+  const contextLabel = post.retweeted ? "Retweeted post" : "Quoted post";
+
+  return (
+    <figure className="mb-3 rounded-card border border-line bg-base/60 p-3">
+      <figcaption className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-subtle">
+        <span className="font-semibold text-ink-muted">Post being moderated</span>
+        {post.authorHandle ? (
+          <span className="font-mono">@{post.authorHandle}</span>
+        ) : null}
+        {post.externalUrl ? (
+          <a
+            href={post.externalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-brand-cyan underline"
+            aria-label="View the original post on X (opens in a new tab)"
+          >
+            View on X
+          </a>
+        ) : null}
+      </figcaption>
+      {post.text ? (
+        <p className="whitespace-pre-wrap text-sm text-ink">{post.text}</p>
+      ) : (
+        <p className="text-sm text-ink-subtle">(this post has no text)</p>
+      )}
+      {showContext && context ? (
+        <div className="mt-2 border-l-2 border-line pl-3">
+          <p className="text-xs text-ink-subtle">
+            {contextLabel}
+            {context.authorHandle ? ` from @${context.authorHandle}` : ""}
+          </p>
+          <p className="whitespace-pre-wrap text-sm text-ink-muted">
+            {context.text}
+          </p>
+        </div>
+      ) : null}
+      {post.media.length > 0 ? (
+        <p className="mt-2 text-xs text-ink-subtle">
+          {post.media.length}{" "}
+          {post.media.length === 1 ? "attachment" : "attachments"} (
+          {post.media.map((m) => m.type).join(", ")}). Open the post to view.
+        </p>
+      ) : null}
+    </figure>
+  );
+}
 
 function DeletionRow({
   item,
@@ -361,6 +433,7 @@ export function ModerationManager({
             key={m.id}
             className="rounded-card border border-line bg-surface/60 p-4"
           >
+            <PostContext post={m.post} />
             {m.type === "deletion" ? (
               <DeletionRow item={m} pending={pending} run={run} />
             ) : (

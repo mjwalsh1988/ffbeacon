@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { BeaconBriefPageShell } from "@/components/admin/beacon-brief-page-shell";
 import {
   ModerationManager,
+  type IngestedPost,
   type ModerationItem,
   type TeamOption,
 } from "@/components/admin/beacon-brief/moderation-manager";
@@ -13,6 +14,50 @@ export const dynamic = "force-dynamic";
 
 type Candidate = { id: string; label: string };
 
+type EmbeddedQuoted = {
+  author_handle?: string | null;
+  text?: string | null;
+} | null;
+
+type EmbeddedIngestion = {
+  text?: string | null;
+  author_handle?: string | null;
+  external_url?: string | null;
+  media?: unknown;
+  quoted?: EmbeddedQuoted;
+  retweeted?: EmbeddedQuoted;
+} | null;
+
+function toQuoted(q: EmbeddedQuoted): IngestedPost["quoted"] {
+  if (!q || typeof q.text !== "string") return null;
+  return {
+    authorHandle: typeof q.author_handle === "string" ? q.author_handle : null,
+    text: q.text,
+  };
+}
+
+/** Shape the embedded news_ingestions row into the post-context the UI renders. */
+function toIngestedPost(ing: EmbeddedIngestion): IngestedPost | null {
+  if (!ing) return null;
+  const media = Array.isArray(ing.media)
+    ? (ing.media as Array<{ type?: unknown; url?: unknown }>)
+        .filter((m) => m && typeof m.url === "string")
+        .map((m) => ({
+          type: typeof m.type === "string" ? m.type : "media",
+          url: m.url as string,
+        }))
+    : [];
+  return {
+    authorHandle:
+      typeof ing.author_handle === "string" ? ing.author_handle : null,
+    text: typeof ing.text === "string" ? ing.text : "",
+    externalUrl: typeof ing.external_url === "string" ? ing.external_url : null,
+    media,
+    quoted: toQuoted(ing.quoted ?? null),
+    retweeted: toQuoted(ing.retweeted ?? null),
+  };
+}
+
 export default async function BeaconBriefModerationPage() {
   await requireAdmin("/admin/beacon-brief/moderation");
   const admin = createAdminClient();
@@ -20,7 +65,7 @@ export default async function BeaconBriefModerationPage() {
     admin
       .from("beacon_brief_moderation")
       .select(
-        "id, created_at, type, raw_name, candidates, article_id, detail, articles(title, slug)",
+        "id, created_at, type, raw_name, candidates, article_id, detail, articles(title, slug), news_ingestions(text, author_handle, external_url, media, quoted, retweeted)",
       )
       .eq("status", "pending")
       .order("created_at", { ascending: false })
@@ -33,6 +78,9 @@ export default async function BeaconBriefModerationPage() {
       .articles;
     const articleTitle = art?.title ?? null;
     const articleSlug = art?.slug ?? null;
+    const post = toIngestedPost(
+      (m as { news_ingestions?: EmbeddedIngestion }).news_ingestions ?? null,
+    );
 
     if (m.type === "player_match" || m.type === "team_match") {
       const candidates = Array.isArray(m.candidates)
@@ -49,6 +97,7 @@ export default async function BeaconBriefModerationPage() {
         articleTitle,
         articleSlug,
         articleReady: Boolean(m.article_id),
+        post,
       };
     }
 
@@ -62,6 +111,7 @@ export default async function BeaconBriefModerationPage() {
       detail: detail?.source_external_id
         ? `source post ${detail.source_external_id}`
         : "",
+      post,
     };
   });
 
