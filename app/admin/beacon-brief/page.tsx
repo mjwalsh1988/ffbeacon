@@ -10,10 +10,12 @@ export const dynamic = "force-dynamic";
 function StatCard({
   label,
   value,
+  hint,
   tone,
 }: {
   label: string;
   value: number;
+  hint?: string;
   tone?: "danger";
 }) {
   return (
@@ -26,6 +28,7 @@ function StatCard({
       >
         {value}
       </p>
+      {hint ? <p className="mt-1 text-xs text-ink-subtle">{hint}</p> : null}
     </div>
   );
 }
@@ -37,7 +40,8 @@ export default async function BeaconBriefOverviewPage() {
   const [
     activeSources,
     publishedArticles,
-    pendingJobs,
+    pendingWork,
+    pendingDeletionChecks,
     failedJobs,
     pendingModeration,
     curateRun,
@@ -56,7 +60,13 @@ export default async function BeaconBriefOverviewPage() {
     admin
       .from("beacon_brief_queue")
       .select("*", { count: "exact", head: true })
-      .eq("status", "pending"),
+      .eq("status", "pending")
+      .neq("job_type", "deletion_check"),
+    admin
+      .from("beacon_brief_queue")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending")
+      .eq("job_type", "deletion_check"),
     admin
       .from("beacon_brief_queue")
       .select("*", { count: "exact", head: true })
@@ -105,22 +115,38 @@ export default async function BeaconBriefOverviewPage() {
           <h2 id="bb-stats" className="sr-only">
             Counts
           </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <StatCard label="Active sources" value={activeSources.count ?? 0} />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <StatCard
-              label="Published articles"
-              value={publishedArticles.count ?? 0}
+              label="Active sources"
+              value={activeSources.count ?? 0}
+              hint="accounts we watch"
             />
-            <StatCard label="Queue pending" value={pendingJobs.count ?? 0} />
             <StatCard
-              label="Queue failed"
+              label="Published"
+              value={publishedArticles.count ?? 0}
+              hint="live articles"
+            />
+            <StatCard
+              label="Queued tasks"
+              value={pendingWork.count ?? 0}
+              hint="posts and articles waiting"
+            />
+            <StatCard
+              label="Deletion checks"
+              value={pendingDeletionChecks.count ?? 0}
+              hint="auto source re-checks, normal"
+            />
+            <StatCard
+              label="Failed tasks"
               value={failedJobs.count ?? 0}
               tone="danger"
+              hint="need attention"
             />
             <StatCard
-              label="Pending moderation"
+              label="Needs review"
               value={pendingModeration.count ?? 0}
               tone="danger"
+              hint="waiting on you"
             />
           </div>
         </section>
