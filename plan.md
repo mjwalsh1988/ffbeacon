@@ -1412,3 +1412,139 @@ each reviewing a completely separate concern in an unbiased manner:
 - Accessibility review: audit accessibility across the entire system (NVDA,
   keyboard operability, AA/AAA contrast, aria-live), with particular
   attention to the data-heavy admin Logs page.
+
+## Signal Check / Beacon Verdict (Trade Analyzer) (added 2026-06-25)
+
+FF Beacon's own trade evaluation tool. Public name: "Signal Check". Result
+name: "Beacon Verdict". A user builds a two-sided trade (players, plus draft
+picks in dynasty formats) and gets a deterministic verdict: who wins, the
+percentage margin, the trade shape, a confidence level, and a plain-language
+explanation. Powered by FF Beacon Values only in V1 (no public source
+selector). Results can be frozen and shared via an unguessable permalink with a
+branded OG image. Admins tune behavior via DB-backed settings, a versioned
+calibration rules engine, and a regression test set.
+
+Deep engineering reference: `docs/signal-check.md` (read that for exact math,
+file map, and extension guide). This section is the plan-level summary.
+
+### A. Locked decisions
+
+- V1 value source = FF Beacon (`ffbeacon`) ONLY. No public source selector.
+  Pick values use `ffbeacon`, falling back to KTC only if a dynasty format has
+  no ffbeacon pick rows.
+- Draft picks are dynasty-only. `format_configs.league_type === 'dynasty'` is
+  the single gate (redraft and bestball-redraft formats never carry picks).
+- All analysis is computed server-side. The client submits only asset
+  references + a format slug; no client value/total/margin/verdict is trusted.
+- Deterministic, trace-first engine. No LLM per analysis; explanations come
+  from structured trace templates.
+- Privacy via a `public_payload` column (RLS is row-level, not column-level):
+  public surfaces render only that safe object, never the private/debug columns.
+- Reproducibility = the frozen analysis row (no separate snapshot table in V1).
+- Lightweight abuse protection only (bounded inputs, min query length, debounce,
+  result clamp, header checks, cached Sleeper). No custom rate-limit table.
+- Zod for all rule/settings/input validation. Vitest for the math/rules tests.
+- Supported formats = whatever FF Beacon publishes values for (so
+  redraft-half/standard/ppr-tep are not selectable in V1).
+
+### B. Architecture (deterministic pipeline)
+
+`lib/signal-check/pipeline.ts runPipeline()`:
+
+```
+priceSides (value-engine)  -> per-asset FF Beacon base value + trace
+applyCalibration           -> post_format_calibration rules (compounding,
+                              stackability, max-adjustment), side totals (pre)
+applyTradeShape            -> pile-on (built-in, once/side, capped) + one_side
+                              rules + trade-shape detection, side totals (post)
+computeVerdict             -> margin = abs(A-B)/(A+B); neutral + blowout
+computeConfidence          -> factor-weighted score -> low/medium/high
+buildExplanation           -> plain-language sentences from the trace
+```
+
+FF Beacon values are already format-specific, so "format weighting" is value
+resolution + provenance, not a math transform. Phases never mix (separate
+modules, separate traces).
+
+### C. Database (migrations 0100-0104; settings in beacon_settings)
+
+```
+signal_check_rulesets        versioned calibration container; one is_active
+                             (partial unique index). service-role only.
+signal_check_rules           structured JSON rules (condition/action), editable
+                             only while ruleset status='draft'. service-role only.
+signal_check_analyses        frozen reproducible results. Private columns
+                             (user_id, sleeper_context, raw_values,
+                             adjusted_values, side_totals_*, rule_trace) PLUS a
+                             public_payload jsonb. RLS: owner SELECT own +
+                             service-role; NO anon / NO public SELECT.
+signal_check_regression_cases known trades + expected outcomes. service-role only.
+signal_check_audit_log       append-only admin audit. service-role only.
+beacon_settings              new rows, categories signal_check / _verdict /
+                             _pileon / _shape / _confidence / _format.
+```
+
+### D. Math knobs (admin-configurable, defaults)
+
+- Margin precision 1; neutral threshold 2.5% (applied to the UNROUNDED margin);
+  blowout threshold 20%.
+- Pile-on: enabled, top K = 2, curve base 0.9, max penalty 25% of the side,
+  min assets 3. Applied once per side; never boosts the other side.
+- Compounding mode `sequential` (vs `against_base`). Matching uses base values;
+  application moves the running value.
+- Confidence thresholds low <= 40, high >= 70.
+- Trade shapes: consolidation, depth, stud_swap, win_now, rebuild, pick_heavy,
+  roster_clog, format_driven, near_even (each with an editable label).
+
+### E. Public + admin surface
+
+- Public: `/tools/signal-check` (builder), `/tools/signal-check/v/[shareId]`
+  (frozen share), `/tools/signal-check/import` (auth-gated Sleeper import),
+  `GET /api/signal-check/search` (public autocomplete, safe fields only, min
+  length 4, no values), `GET /api/og/signal-check/[shareId]` (OG, public_payload
+  only, FF Beacon brand).
+- Server actions: `runSignalCheck`; import (`listImportLeagues`,
+  `listLeagueTrades`, `importAndAnalyze`); admin (`updateSignalCheckSetting`,
+  `createDraftRuleset`, `saveRule`, `deleteRule`, `publishRuleset`,
+  `rollbackRuleset`, `upsertRegressionCase`, `deleteRegressionCase`,
+  `runRegression`).
+- Admin: `/admin/signal-check` (settings), `/rules` (draft rulesets, rule CRUD,
+  publish, rollback, history), `/regression` (cases + run with flip/drift
+  flags). Every mutation re-checks `requireAdmin` and writes an audit row.
+
+### F. Security / privacy
+
+- RLS verified: no anon SELECT on any signal_check table; analyses are
+  owner-read + service-role; rules/regression/audit are service-role only.
+- public_payload is the only public-exposed field set; share + OG read it
+  server-side via the service role and only when `is_public`.
+- Sleeper import is an association to the saved username, not proven account
+  ownership; imported context stays private unless explicitly shared.
+- Zod-validated rule JSON; deterministic interpreter (no eval/Function).
+- Unguessable `crypto.randomUUID` share ids; share pages set robots noindex.
+
+### G. Sleeper import
+
+Logged-in only. Reuses `pulseLeague` (cached) to load league trades, maps
+`adds` to two sides, maps players via `players.external_ids->>sleeper` (blocks
+on any unmatched player), auto-detects the format with evidence
+(`deriveLeagueFormat` + `mapToFormatSlug`), includes dynasty picks (slot
+unknown -> generic value) or drops them in redraft with a notice, runs the
+pipeline with `formatAutoDetected: true`. Two-team trades only in V1.
+
+### H. Versioning / reproducibility
+
+Each frozen analysis pins `value_engine_version`, `rule_interpreter_version`,
+`ruleset_version`, the format, raw + adjusted values, pre/post totals, full
+trace, and `value_captured_at`. Published rulesets are immutable; rollback
+re-points `is_active`. Permalinks render the frozen `public_payload` and never
+recompute.
+
+### I. Tests
+
+Vitest in `lib/signal-check/*.test.ts` (run `npm test`): margin, neutral/blowout,
+compounding (both modes), pile-on (once/side, capped, no opposite boost),
+no double-counting, stackability, confidence, shape detection, schema
+validation, redraft-rejects-picks, dynasty-allows-picks, generic pick fallback,
+missing values, frozen reproducibility, public_payload privacy,
+rules-through-pipeline. The regression set doubles as a calibration fixture.
