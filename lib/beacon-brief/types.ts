@@ -54,6 +54,8 @@ export interface BeaconBriefSourceItem {
 
 /** Strict JSON returned by the inline categorize + context-score call. */
 export interface CategorizeResult {
+  /** 1 = not about football (filtered to review); 0 = football, continue. */
+  non_football: number;
   /** 0 = not enough context for an article (Discord only); 1 = make an article. */
   context_score: number;
   category_slug: string | null;

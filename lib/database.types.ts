@@ -1451,6 +1451,8 @@ export type Database = {
           discord_message_id: string | null;
           discord_webhook_id: string | null;
           external_url: string | null;
+          filter_detail: Json | null;
+          filter_reason: string | null;
           id: string;
           is_revision: boolean;
           media: Json | null;
@@ -1474,6 +1476,8 @@ export type Database = {
           discord_message_id?: string | null;
           discord_webhook_id?: string | null;
           external_url?: string | null;
+          filter_detail?: Json | null;
+          filter_reason?: string | null;
           id?: string;
           is_revision?: boolean;
           media?: Json | null;
@@ -1497,6 +1501,8 @@ export type Database = {
           discord_message_id?: string | null;
           discord_webhook_id?: string | null;
           external_url?: string | null;
+          filter_detail?: Json | null;
+          filter_reason?: string | null;
           id?: string;
           is_revision?: boolean;
           media?: Json | null;

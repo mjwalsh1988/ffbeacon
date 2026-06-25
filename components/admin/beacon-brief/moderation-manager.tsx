@@ -67,7 +67,13 @@ const inputClass =
  * context (text, quoted/retweeted content, attachments, link) needed to decide
  * which player/team to link or whether to approve a deletion.
  */
-function PostContext({ post }: { post: IngestedPost | null }) {
+export function PostContext({
+  post,
+  label = "Post being moderated",
+}: {
+  post: IngestedPost | null;
+  label?: string;
+}) {
   if (!post) return null;
   const context = post.retweeted ?? post.quoted;
   // Skip the quoted/retweeted block when its text is the same as the main text
@@ -79,7 +85,7 @@ function PostContext({ post }: { post: IngestedPost | null }) {
   return (
     <figure className="mb-3 rounded-card border border-line bg-base/60 p-3">
       <figcaption className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-subtle">
-        <span className="font-semibold text-ink-muted">Post being moderated</span>
+        <span className="font-semibold text-ink-muted">{label}</span>
         {post.authorHandle ? (
           <span className="font-mono">@{post.authorHandle}</span>
         ) : null}

@@ -44,6 +44,7 @@ export default async function BeaconBriefOverviewPage() {
     pendingDeletionChecks,
     failedJobs,
     pendingModeration,
+    filteredPosts,
     curateRun,
     workerRun,
     recentLogs,
@@ -75,6 +76,10 @@ export default async function BeaconBriefOverviewPage() {
       .from("beacon_brief_moderation")
       .select("*", { count: "exact", head: true })
       .eq("status", "pending"),
+    admin
+      .from("news_ingestions")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "filtered"),
     admin
       .from("cron_runs")
       .select("status, started_at")
@@ -115,7 +120,7 @@ export default async function BeaconBriefOverviewPage() {
           <h2 id="bb-stats" className="sr-only">
             Counts
           </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
             <StatCard
               label="Active sources"
               value={activeSources.count ?? 0}
@@ -147,6 +152,11 @@ export default async function BeaconBriefOverviewPage() {
               value={pendingModeration.count ?? 0}
               tone="danger"
               hint="waiting on you"
+            />
+            <StatCard
+              label="Filtered"
+              value={filteredPosts.count ?? 0}
+              hint="non-football, held back"
             />
           </div>
         </section>

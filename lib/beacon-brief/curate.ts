@@ -16,6 +16,7 @@ import { fetchSourceItems } from "./ingest-x";
 import { logBeaconBrief, runStructuredCall } from "./ai";
 import { loadBeaconBriefSettings } from "./settings";
 import { matchReferences } from "./match";
+import { matchBlockedKeywords, parseBlocklist } from "./keyword-filter";
 import { sendBeaconBriefMatchDigestEmail } from "./email";
 import type {
   BeaconBriefSourceItem,
@@ -26,12 +27,14 @@ import type {
 } from "./types";
 
 type NewsSource = Database["public"]["Tables"]["news_sources"]["Row"];
+type Ingestion = Database["public"]["Tables"]["news_ingestions"]["Row"];
 type Admin = SupabaseClient<Database>;
 
 const CATEGORIZE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
+    "non_football",
     "context_score",
     "category_slug",
     "players",
@@ -41,6 +44,7 @@ const CATEGORIZE_SCHEMA = {
     "suggested_slug",
   ],
   properties: {
+    non_football: { type: "integer" },
     context_score: { type: "integer" },
     category_slug: { type: "string" },
     players: { type: "array", items: { type: "string" } },
@@ -195,6 +199,7 @@ interface CurationSummary {
   articlesQueued: number;
   discordQueued: number;
   revisions: number;
+  filtered: number;
   errors: number;
   skipped?: boolean;
   reason?: string;
@@ -210,6 +215,7 @@ export async function runCuration(admin: Admin): Promise<CurationSummary> {
       articlesQueued: 0,
       discordQueued: 0,
       revisions: 0,
+      filtered: 0,
       errors: 0,
       skipped: true,
       reason: "bb_enabled is off",
@@ -227,6 +233,7 @@ export async function runCuration(admin: Admin): Promise<CurationSummary> {
     articlesQueued: 0,
     discordQueued: 0,
     revisions: 0,
+    filtered: 0,
     errors: 0,
   };
   if (!sources || sources.length === 0) return summary;
@@ -592,6 +599,42 @@ async function processItem(
     return;
   }
 
+  // Gate 1 (keyword pre-filter): a new post containing any blocked keyword is
+  // diverted to the Filtered review queue BEFORE the AI call, so non-football
+  // noise never reaches Discord or an article and we skip the AI cost. New posts
+  // only (revisions returned above). Force-push from the review queue bypasses
+  // this gate, so a forced post can never loop back into filtered.
+  if (settings.keywordFilterEnabled) {
+    const blocklist = parseBlocklist(settings.keywordFilter);
+    const haystack = [item.text, item.quoted?.text, item.retweeted?.text]
+      .filter(Boolean)
+      .join("\n");
+    const matched = matchBlockedKeywords(haystack, blocklist);
+    if (matched.length > 0) {
+      const { data: inserted } = await admin
+        .from("news_ingestions")
+        .insert({
+          ...baseRow,
+          is_revision: false,
+          revision_of_ingestion_id: null,
+          status: "filtered",
+          filter_reason: "keyword",
+          filter_detail: { matched_terms: matched } as unknown as Json,
+          processed_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      summary.filtered += 1;
+      await logBeaconBrief(admin, {
+        stage: "ingest",
+        sourceId: source.id,
+        ingestionId: inserted?.id ?? null,
+        message: `filtered (keyword: ${matched.join(", ")})`,
+      });
+      return;
+    }
+  }
+
   // New post: classify + context score BEFORE inserting the row. A transient AI
   // failure throws, so the caller leaves the cursor untouched and the item is
   // retried next run rather than being permanently inserted and downgraded to
@@ -617,6 +660,35 @@ async function processItem(
     throw new Error(
       `categorize failed for ${item.source_external_id}; leaving cursor for retry`,
     );
+  }
+
+  // Gate 2 (AI non-football flag): the classifier flags posts that are not about
+  // football (other sports, unrelated topics). These divert to the Filtered
+  // review queue: no Discord, no article. The AI result is kept for the reviewer.
+  // Force-push from the review queue bypasses this gate.
+  if (settings.nonFootballFilterEnabled && (ai.non_football ?? 0) === 1) {
+    const { data: inserted } = await admin
+      .from("news_ingestions")
+      .insert({
+        ...baseRow,
+        is_revision: false,
+        revision_of_ingestion_id: null,
+        ai_result: ai as unknown as Json,
+        context_score: ai.context_score ?? 0,
+        status: "filtered",
+        filter_reason: "ai_non_football",
+        processed_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    summary.filtered += 1;
+    await logBeaconBrief(admin, {
+      stage: "categorize",
+      sourceId: source.id,
+      ingestionId: inserted?.id ?? null,
+      message: "filtered (AI flagged non-football)",
+    });
+    return;
   }
 
   // Resolve references with confidence: only exact, unambiguous matches auto-link.
@@ -701,4 +773,148 @@ async function processItem(
     // worker once the article exists); confident refs auto-link via resolved.
     await openMatchModeration(admin, ingestionId, refs.pending, reviews);
   }
+}
+
+/** Compact, model-facing view rebuilt from a stored ingestion row (force-push). */
+function compactFromRow(row: Ingestion) {
+  const media = Array.isArray(row.media)
+    ? (row.media as Array<{ type?: unknown }>).map((m) =>
+        m && typeof m.type === "string" ? m.type : "media",
+      )
+    : [];
+  const quoted = row.quoted as {
+    text?: string;
+    author_handle?: string | null;
+  } | null;
+  const retweeted = row.retweeted as {
+    text?: string;
+    author_handle?: string | null;
+  } | null;
+  return {
+    text: row.text ?? "",
+    author_handle: row.author_handle ?? "",
+    media,
+    quoted:
+      quoted && typeof quoted.text === "string"
+        ? { text: quoted.text, author_handle: quoted.author_handle ?? null }
+        : null,
+    retweeted:
+      retweeted && typeof retweeted.text === "string"
+        ? {
+            text: retweeted.text,
+            author_handle: retweeted.author_handle ?? null,
+          }
+        : null,
+  };
+}
+
+/** Does a stored ai_result already carry the categorize fields we can reuse? */
+function hasCategorizeFields(ai: unknown): ai is CategorizeResult {
+  return (
+    !!ai &&
+    typeof ai === "object" &&
+    "suggested_title" in (ai as Record<string, unknown>)
+  );
+}
+
+/**
+ * Force a filtered post back through the pipeline (admin action from the Filtered
+ * review queue). Bypasses BOTH filter gates so a forced post can never loop back
+ * into 'filtered': it does NOT re-run the keyword check and it IGNORES
+ * non_football. An AI-filtered post reuses its stored categorize result; a
+ * keyword-filtered post (never classified) is classified now. It then enqueues
+ * discord_post and, when the post meets the context threshold, article_write,
+ * exactly like a normal new post.
+ */
+export async function forcePushFilteredPost(
+  admin: Admin,
+  ingestionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: row } = await admin
+    .from("news_ingestions")
+    .select("*")
+    .eq("id", ingestionId)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "post not found" };
+  if (row.status !== "filtered")
+    return { ok: false, error: "post is not in the filtered state" };
+
+  const settings = await loadBeaconBriefSettings(admin);
+
+  // Reuse the stored classification when present (AI-filtered); otherwise classify
+  // now (keyword-filtered posts were never classified). Either way non_football is
+  // ignored here so the forced post is not re-filtered.
+  let ai: CategorizeResult | null = hasCategorizeFields(row.ai_result)
+    ? (row.ai_result as CategorizeResult)
+    : null;
+  if (!ai) {
+    const categorySlugs = await activeCategorySlugs(admin);
+    ai = await runStructuredCall<CategorizeResult>({
+      admin,
+      stage: "categorize",
+      model: settings.modelTriage,
+      system: (settings.prompts.categorize || "").replace(
+        "{categories}",
+        categorySlugs,
+      ),
+      userContent: JSON.stringify(compactFromRow(row)),
+      schema: CATEGORIZE_SCHEMA as unknown as Record<string, unknown>,
+      ingestionId,
+      sourceId: row.source_id,
+      maxTokens: 1024,
+    });
+    if (!ai) return { ok: false, error: "classification failed; try again" };
+  }
+
+  const refs = await matchReferences(admin, ai, settings);
+  const aiStored = {
+    ...ai,
+    resolved: {
+      categoryId: refs.categoryId,
+      playerIds: refs.playerIds,
+      teamIds: refs.teamIds,
+      roleIds: refs.roleIds,
+    },
+    pending: refs.pending,
+  } as unknown as Json;
+
+  const makeArticle = (ai.context_score ?? 0) >= settings.contextThreshold;
+
+  await admin
+    .from("news_ingestions")
+    .update({
+      ai_result: aiStored,
+      context_score: ai.context_score ?? 0,
+      status: makeArticle ? "processing" : "dropped_no_context",
+      filter_reason: null,
+      filter_detail: null,
+      processed_at: makeArticle ? null : new Date().toISOString(),
+    })
+    .eq("id", ingestionId);
+
+  // Always post the original content to Discord (with resolved role mentions).
+  await enqueue(admin, "discord_post", {
+    ingestion_id: ingestionId,
+    role_ids: refs.roleIds,
+  });
+
+  if (makeArticle) {
+    await enqueue(admin, "article_write", {
+      ingestion_id: ingestionId,
+      mode: "create",
+    });
+    // Non-confident names open moderation rows once the article exists (no digest
+    // email for a manual force-push, so pass an empty review list).
+    await openMatchModeration(admin, ingestionId, refs.pending, []);
+  }
+
+  await logBeaconBrief(admin, {
+    stage: "ingest",
+    level: "info",
+    sourceId: row.source_id,
+    ingestionId,
+    message: "force-pushed from the filtered review queue",
+  });
+
+  return { ok: true };
 }

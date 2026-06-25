@@ -28,6 +28,9 @@ export interface BeaconBriefSettings {
   discordPaceMs: number;
   matchSimilarityThreshold: number;
   matchCandidateLimit: number;
+  keywordFilterEnabled: boolean;
+  keywordFilter: string;
+  nonFootballFilterEnabled: boolean;
   modelArticle: string;
   modelTriage: string;
   webhookId: string;
@@ -59,6 +62,10 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   discordPaceMs: 1000,
   matchSimilarityThreshold: 0.3,
   matchCandidateLimit: 8,
+  keywordFilterEnabled: true,
+  keywordFilter:
+    "nba, basketball, world cup, fifa, soccer, golf, pga, mlb, baseball, nhl, hockey, tennis, ufc, boxing, olympics, cricket, formula 1, f1, nascar, wnba, march madness",
+  nonFootballFilterEnabled: true,
   modelArticle: "claude-sonnet-4-6",
   modelTriage: "claude-haiku-4-5",
   webhookId: "",
@@ -149,6 +156,15 @@ export async function loadBeaconBriefSettings(
     matchCandidateLimit: asNum(
       map.get("bb_match_candidate_limit"),
       d.matchCandidateLimit,
+    ),
+    keywordFilterEnabled: asBool(
+      map.get("bb_keyword_filter_enabled"),
+      d.keywordFilterEnabled,
+    ),
+    keywordFilter: asStr(map.get("bb_keyword_filter"), d.keywordFilter),
+    nonFootballFilterEnabled: asBool(
+      map.get("bb_non_football_filter_enabled"),
+      d.nonFootballFilterEnabled,
     ),
     modelArticle: asStr(map.get("bb_model_article"), d.modelArticle),
     modelTriage: asStr(map.get("bb_model_triage"), d.modelTriage),

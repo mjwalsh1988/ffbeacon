@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { approveDeletion, rejectDeletion } from "@/lib/beacon-brief/deletion";
+import { forcePushFilteredPost } from "@/lib/beacon-brief/curate";
 import {
   dismissReferenceMatch,
   resolveReferenceMatch,
@@ -399,5 +400,60 @@ export async function dismissMatch(
     return fail(err instanceof Error ? err.message : "dismiss failed");
   }
   revalidatePath(`${BB}/moderation`);
+  return { ok: true };
+}
+
+// -------- Filtered review queue --------
+
+const FILTERED = `${BB}/filtered`;
+
+/**
+ * Force a filtered post back through the pipeline. Bypasses both filter gates so
+ * it cannot loop back into filtered: classifies if needed, then enqueues the
+ * Discord post and (when it meets the context threshold) the article.
+ */
+export async function forcePushFiltered(
+  ingestionId: string,
+): Promise<ActionResult> {
+  await requireAdmin(FILTERED);
+  const admin = createAdminClient();
+  try {
+    const res = await forcePushFilteredPost(admin, ingestionId);
+    if (!res.ok) return fail(res.error ?? "force push failed");
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : "force push failed");
+  }
+  revalidatePath(FILTERED);
+  return { ok: true };
+}
+
+/**
+ * Permanently delete a filtered post from the system. Guarded to status
+ * 'filtered' so it can never remove a live article's ingestion: the delete runs
+ * FIRST and only if it actually removed a filtered row do we clean up any stray
+ * queue jobs, so a mistaken non-filtered id can never drop a live post's pending
+ * jobs. Moderation rows cascade and logs keep with their ingestion_id set null.
+ */
+export async function deleteFilteredPost(
+  ingestionId: string,
+): Promise<ActionResult> {
+  await requireAdmin(FILTERED);
+  const admin = createAdminClient();
+  const { data: deleted, error } = await admin
+    .from("news_ingestions")
+    .delete()
+    .eq("id", ingestionId)
+    .eq("status", "filtered")
+    .select("id");
+  if (error) return fail(error.message);
+  if (!deleted || deleted.length === 0)
+    return fail("Post not found or not in the filtered state.");
+  // The deleted post was confirmed filtered (so it enqueued nothing), but clean
+  // up defensively now that we know the id resolved to a filtered row.
+  await admin
+    .from("beacon_brief_queue")
+    .delete()
+    .filter("payload->>ingestion_id", "eq", ingestionId);
+  revalidatePath(FILTERED);
   return { ok: true };
 }

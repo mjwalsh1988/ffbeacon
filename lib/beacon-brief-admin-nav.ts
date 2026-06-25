@@ -30,6 +30,12 @@ export const BEACON_BRIEF_SUBPAGES = [
       "Review detected source-post deletions and approve or reject the retraction.",
   },
   {
+    href: "/admin/beacon-brief/filtered",
+    label: "Filtered",
+    description:
+      "Posts held back as non-football by the keyword or AI filter. Delete them or force them through the pipeline.",
+  },
+  {
     href: "/admin/beacon-brief/logs",
     label: "Logs",
     description:
