@@ -93,7 +93,10 @@ function buildRequest(
   // Reflect a caller-supplied attachments array (even empty) so an edit replaces
   // or CLEARS existing files; leaving it absent keeps existing attachments.
   if (input.attachments !== undefined) {
-    payload.attachments = files.map((f, i) => ({ id: i, filename: f.filename }));
+    payload.attachments = files.map((f, i) => ({
+      id: i,
+      filename: f.filename,
+    }));
   }
   if (files.length === 0) {
     return {
@@ -158,6 +161,43 @@ export async function postWebhookMessage(
       status: 0,
       retryAfterMs: null,
       error: err instanceof Error ? err.message : "discord post failed",
+    };
+  }
+}
+
+/**
+ * Delete an existing webhook message. A 204 is success; a 404 (or Discord code
+ * 10008 "Unknown Message") means the message is already gone, which is the same
+ * desired end state, so we report ok in that case too.
+ */
+export async function deleteWebhookMessage(
+  webhookUrl: string,
+  messageId: string,
+): Promise<DiscordResult> {
+  try {
+    const res = await fetch(
+      `${webhookUrl}/messages/${encodeURIComponent(messageId)}`,
+      {
+        method: "DELETE",
+        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      },
+    );
+    if (res.ok || res.status === 404) return { ok: true, id: messageId };
+    const json = await res.json().catch(() => null);
+    if ((json as { code?: number } | null)?.code === 10008)
+      return { ok: true, id: messageId };
+    return {
+      ok: false,
+      status: res.status,
+      retryAfterMs: retryAfterMs(res, json),
+      error: `Discord delete ${res.status}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      retryAfterMs: null,
+      error: err instanceof Error ? err.message : "discord delete failed",
     };
   }
 }

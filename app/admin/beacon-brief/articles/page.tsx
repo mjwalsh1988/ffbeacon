@@ -111,17 +111,29 @@ export default async function BeaconBriefArticlesPage({
     string,
     { id: string; full_name: string }[]
   >();
+  // Articles whose source-post ingestion carries a live Discord message id, so the
+  // delete UI can offer the "also delete the Discord post" toggle.
+  const articlesWithDiscord = new Set<string>();
   if (ids.length > 0) {
-    const [{ data: atRows }, { data: apRows }] = await Promise.all([
-      admin
-        .from("article_teams")
-        .select("article_id, teams(id, abbreviation)")
-        .in("article_id", ids),
-      admin
-        .from("article_players")
-        .select("article_id, players(id, full_name)")
-        .in("article_id", ids),
-    ]);
+    const [{ data: atRows }, { data: apRows }, { data: ingRows }] =
+      await Promise.all([
+        admin
+          .from("article_teams")
+          .select("article_id, teams(id, abbreviation)")
+          .in("article_id", ids),
+        admin
+          .from("article_players")
+          .select("article_id, players(id, full_name)")
+          .in("article_id", ids),
+        admin
+          .from("news_ingestions")
+          .select("article_id, discord_message_id")
+          .in("article_id", ids),
+      ]);
+    for (const r of ingRows ?? []) {
+      if (r.article_id && r.discord_message_id)
+        articlesWithDiscord.add(r.article_id);
+    }
     for (const r of atRows ?? []) {
       const t = (r as { teams?: { id?: string; abbreviation?: string } | null })
         .teams;
@@ -158,6 +170,7 @@ export default async function BeaconBriefArticlesPage({
     assignedPlayers: (playersByArticle.get(a.id) ?? []).sort((x, y) =>
       x.full_name.localeCompare(y.full_name),
     ),
+    hasDiscordPost: articlesWithDiscord.has(a.id),
   }));
 
   return (

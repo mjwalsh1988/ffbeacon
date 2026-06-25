@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { approveDeletion, rejectDeletion } from "@/lib/beacon-brief/deletion";
 import { forcePushFilteredPost } from "@/lib/beacon-brief/curate";
+import { loadBeaconBriefSettings } from "@/lib/beacon-brief/settings";
+import { deleteWebhookMessage } from "@/lib/discord";
 import {
   dismissReferenceMatch,
   resolveReferenceMatch,
@@ -242,6 +244,110 @@ export async function updateArticleAssignments(
   }
   revalidatePath(`${BB}/articles`);
   return { ok: true };
+}
+
+export type DeleteArticleResult =
+  | { ok: true; warning?: string }
+  | { ok: false; error: string };
+
+/** Resolve a Discord webhook URL by id. Ignores is_active: an admin may still
+ *  need to delete a message posted through a webhook later marked inactive. */
+async function resolveWebhookUrl(
+  admin: ReturnType<typeof createAdminClient>,
+  webhookId: string | null,
+): Promise<string | null> {
+  if (!webhookId) return null;
+  const { data } = await admin
+    .from("discord_webhooks")
+    .select("url")
+    .eq("id", webhookId)
+    .maybeSingle();
+  return data?.url ?? null;
+}
+
+/**
+ * Permanently delete an article and everything tied to it. Player/team links and
+ * revision history cascade with the row. The linked source-post ingestion is KEPT
+ * but marked status='deleted' (it is the dedup guard that stops the same source
+ * post from being re-ingested into a fresh article). Pending queue jobs and
+ * moderation rows for that ingestion are removed so nothing points at a gone
+ * article. When deleteDiscordPost is set, the linked Discord message is deleted
+ * too; if that fails the article is STILL deleted and a warning is returned.
+ */
+export async function deleteArticle(
+  articleId: string,
+  options: { deleteDiscordPost: boolean },
+): Promise<DeleteArticleResult> {
+  await requireAdmin(`${BB}/articles`);
+  const admin = createAdminClient();
+
+  // The source-post ingestion(s) that produced this article carry the Discord
+  // message id + webhook id.
+  const { data: ingestions } = await admin
+    .from("news_ingestions")
+    .select("id, discord_message_id, discord_webhook_id")
+    .eq("article_id", articleId);
+  const ingestionIds = (ingestions ?? []).map((i) => i.id);
+
+  let discordWarning: string | undefined;
+  let discordCleared = false;
+  if (options.deleteDiscordPost) {
+    const targets = (ingestions ?? []).filter((i) => i.discord_message_id);
+    if (targets.length > 0) {
+      const settings = await loadBeaconBriefSettings(admin);
+      let allOk = true;
+      for (const t of targets) {
+        const url = await resolveWebhookUrl(
+          admin,
+          t.discord_webhook_id ?? settings.webhookId,
+        );
+        const res = url
+          ? await deleteWebhookMessage(url, t.discord_message_id as string)
+          : null;
+        if (!res || !res.ok) allOk = false;
+      }
+      discordCleared = allOk;
+      if (!allOk)
+        discordWarning =
+          "Article deleted, but the Discord post could not be deleted. Remove it manually if needed.";
+    }
+  }
+
+  // Delete the article: cascades article_players, article_teams, article_revisions.
+  const { error: delErr } = await admin
+    .from("articles")
+    .delete()
+    .eq("id", articleId);
+  if (delErr) return { ok: false, error: delErr.message };
+
+  // Remove anything that still points at the now-deleted article's ingestion.
+  for (const id of ingestionIds) {
+    await admin
+      .from("beacon_brief_queue")
+      .delete()
+      .filter("payload->>ingestion_id", "eq", id);
+  }
+  if (ingestionIds.length > 0) {
+    await admin
+      .from("beacon_brief_moderation")
+      .delete()
+      .in("ingestion_id", ingestionIds);
+    // Keep the source-post record (dedup guard + audit), mark it deleted, and when
+    // the Discord post was removed drop the now-stale message pointers.
+    const update: {
+      status: string;
+      discord_message_id?: null;
+      discord_webhook_id?: null;
+    } = { status: "deleted" };
+    if (discordCleared) {
+      update.discord_message_id = null;
+      update.discord_webhook_id = null;
+    }
+    await admin.from("news_ingestions").update(update).in("id", ingestionIds);
+  }
+
+  revalidatePath(`${BB}/articles`);
+  return discordWarning ? { ok: true, warning: discordWarning } : { ok: true };
 }
 
 export interface PlayerOption {

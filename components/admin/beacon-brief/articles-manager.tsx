@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import {
+  deleteArticle,
   getArticleDetail,
   searchPlayers,
   updateArticleAssignments,
@@ -25,6 +26,9 @@ export interface ArticleRow {
   assignedTeams: { id: string; abbreviation: string }[];
   /** Players currently linked to the article, shown at a glance on the row. */
   assignedPlayers: { id: string; full_name: string }[];
+  /** True when the article's source post has a live Discord message that can be
+   *  deleted alongside it. */
+  hasDiscordPost: boolean;
 }
 
 export interface CategoryOption {
@@ -46,12 +50,15 @@ function ArticleEditor({
   article,
   categories,
   teams,
+  onDeleted,
 }: {
   article: ArticleRow;
   categories: CategoryOption[];
   teams: TeamOption[];
+  onDeleted: (warning?: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [deleteDiscord, setDeleteDiscord] = useState(false);
   const [status, setStatus] = useState<{ msg: string; error: boolean } | null>(
     null,
   );
@@ -379,6 +386,62 @@ function ArticleEditor({
           </ul>
         )}
       </section>
+
+      <section
+        aria-labelledby={`danger-${article.id}`}
+        className="rounded-card border border-signal-danger/40 p-4"
+      >
+        <h2
+          id={`danger-${article.id}`}
+          className="text-sm font-semibold text-signal-danger"
+        >
+          Danger zone
+        </h2>
+        <p className="mt-1 text-xs text-ink-muted">
+          Permanently delete this article along with its player and team links
+          and its revision history. This cannot be undone.
+        </p>
+        {article.hasDiscordPost ? (
+          <label className="mt-3 flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={deleteDiscord}
+              onChange={(e) => setDeleteDiscord(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <span>Also delete the linked Discord post</span>
+          </label>
+        ) : (
+          <p className="mt-3 text-xs text-ink-subtle">
+            No Discord post is linked to this article.
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={pending}
+          className={`${btnClass} mt-3 hover:border-signal-danger`}
+          onClick={() => {
+            const willDeleteDiscord = article.hasDiscordPost && deleteDiscord;
+            const msg = willDeleteDiscord
+              ? "Delete this article AND its Discord post? This cannot be undone."
+              : "Delete this article? This cannot be undone. The Discord post, if any, is left in place.";
+            if (!confirm(msg)) return;
+            startTransition(async () => {
+              setStatus(null);
+              const res = await deleteArticle(article.id, {
+                deleteDiscordPost: willDeleteDiscord,
+              });
+              if (res.ok) {
+                onDeleted(res.warning);
+              } else {
+                setStatus({ msg: `Failed: ${res.error}`, error: true });
+              }
+            });
+          }}
+        >
+          Delete article permanently
+        </button>
+      </section>
     </div>
   );
 }
@@ -393,79 +456,103 @@ export function ArticlesManager({
   teams: TeamOption[];
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
+  const [notice, setNotice] = useState<string | null>(null);
   const categoryName = (id: string | null) =>
     categories.find((c) => c.id === id)?.name ?? "Uncategorized";
 
-  if (articles.length === 0) {
-    return (
-      <p className="text-sm text-ink-muted">
-        No articles match the current filters.
-      </p>
-    );
-  }
+  const handleDeleted = (id: string, warning?: string) => {
+    setDeletedIds((prev) => new Set(prev).add(id));
+    setOpenId((cur) => (cur === id ? null : cur));
+    setNotice(warning ? `Article deleted. ${warning}` : "Article deleted.");
+  };
+
+  const visible = articles.filter((a) => !deletedIds.has(a.id));
 
   return (
-    <ul className="space-y-3">
-      {articles.map((a) => {
-        const open = openId === a.id;
-        return (
-          <li
-            key={a.id}
-            className="rounded-card border border-line bg-surface/60 p-4"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="font-medium text-ink">{a.title}</p>
-                <p className="mt-1 text-xs text-ink-subtle">
-                  <span className="rounded-full border border-line px-2 py-0.5">
-                    {a.status}
-                  </span>{" "}
-                  <span className="ml-1">
-                    <span className="font-medium text-ink-muted">Category:</span>{" "}
-                    {categoryName(a.category_id)}
-                  </span>
-                  {a.tags.length > 0 ? (
-                    <span className="ml-2">
-                      <span className="font-medium text-ink-muted">Tags:</span>{" "}
-                      {a.tags.join(", ")}
-                    </span>
-                  ) : null}
-                </p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  <span className="font-medium text-ink-subtle">Teams:</span>{" "}
-                  {a.assignedTeams.length > 0
-                    ? a.assignedTeams.map((t) => t.abbreviation).join(", ")
-                    : "none"}
-                  <span className="ml-3 font-medium text-ink-subtle">
-                    Players:
-                  </span>{" "}
-                  {a.assignedPlayers.length > 0
-                    ? a.assignedPlayers.map((p) => p.full_name).join(", ")
-                    : "none"}
-                </p>
-              </div>
-              <button
-                type="button"
-                className={btnClass}
-                aria-expanded={open}
-                aria-controls={`editor-${a.id}`}
-                onClick={() => setOpenId(open ? null : a.id)}
+    <div className="space-y-3">
+      <p
+        role="status"
+        aria-live="polite"
+        className="min-h-[1.25rem] text-sm text-ink-muted"
+      >
+        {notice ?? ""}
+      </p>
+      {visible.length === 0 ? (
+        <p className="text-sm text-ink-muted">
+          No articles match the current filters.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {visible.map((a) => {
+            const open = openId === a.id;
+            return (
+              <li
+                key={a.id}
+                className="rounded-card border border-line bg-surface/60 p-4"
               >
-                {open ? "Close" : "Edit"}
-              </button>
-            </div>
-            {open && (
-              <div id={`editor-${a.id}`}>
-                <ArticleEditor
-                  article={a}
-                  categories={categories}
-                  teams={teams}
-                />
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-ink">{a.title}</p>
+                    <p className="mt-1 text-xs text-ink-subtle">
+                      <span className="rounded-full border border-line px-2 py-0.5">
+                        {a.status}
+                      </span>{" "}
+                      <span className="ml-1">
+                        <span className="font-medium text-ink-muted">
+                          Category:
+                        </span>{" "}
+                        {categoryName(a.category_id)}
+                      </span>
+                      {a.tags.length > 0 ? (
+                        <span className="ml-2">
+                          <span className="font-medium text-ink-muted">
+                            Tags:
+                          </span>{" "}
+                          {a.tags.join(", ")}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      <span className="font-medium text-ink-subtle">
+                        Teams:
+                      </span>{" "}
+                      {a.assignedTeams.length > 0
+                        ? a.assignedTeams.map((t) => t.abbreviation).join(", ")
+                        : "none"}
+                      <span className="ml-3 font-medium text-ink-subtle">
+                        Players:
+                      </span>{" "}
+                      {a.assignedPlayers.length > 0
+                        ? a.assignedPlayers.map((p) => p.full_name).join(", ")
+                        : "none"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={btnClass}
+                    aria-expanded={open}
+                    aria-controls={`editor-${a.id}`}
+                    onClick={() => setOpenId(open ? null : a.id)}
+                  >
+                    {open ? "Close" : "Edit"}
+                  </button>
+                </div>
+                {open && (
+                  <div id={`editor-${a.id}`}>
+                    <ArticleEditor
+                      article={a}
+                      categories={categories}
+                      teams={teams}
+                      onDeleted={(warning) => handleDeleted(a.id, warning)}
+                    />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
