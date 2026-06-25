@@ -177,26 +177,17 @@ export interface ActiveRuleset {
   rules: ParsedRule[];
 }
 
-/**
- * Load the single active published ruleset and its enabled rules, parsed and
- * validated. Corrupt rows are skipped (logged) rather than failing the whole
- * analysis. Returns an empty ruleset when none is active.
- */
-export async function loadActiveRuleset(supabase: Client): Promise<ActiveRuleset> {
-  const { data: ruleset } = await supabase
-    .from("signal_check_rulesets")
-    .select("id, version")
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (!ruleset) return { version: null, rules: [] };
-
+async function loadRulesFor(
+  supabase: Client,
+  rulesetId: string,
+  version: number,
+): Promise<ParsedRule[]> {
   const { data: rows } = await supabase
     .from("signal_check_rules")
     .select(
       "id, scope, phase, sort_order, condition, action, stackable, stack_group, max_adjustment, admin_label, public_explanation_template, enabled",
     )
-    .eq("ruleset_id", ruleset.id)
+    .eq("ruleset_id", rulesetId)
     .order("sort_order", { ascending: true });
 
   const rules: ParsedRule[] = [];
@@ -209,7 +200,7 @@ export async function loadActiveRuleset(supabase: Client): Promise<ActiveRuleset
     const r = parsed.data;
     rules.push({
       id: r.id,
-      rulesetVersion: ruleset.version,
+      rulesetVersion: version,
       scope: r.scope,
       phase: r.phase,
       sortOrder: r.sort_order,
@@ -223,5 +214,32 @@ export async function loadActiveRuleset(supabase: Client): Promise<ActiveRuleset
       enabled: r.enabled,
     });
   }
-  return { version: ruleset.version, rules };
+  return rules;
+}
+
+/**
+ * Load the single active published ruleset and its enabled rules, parsed and
+ * validated. Corrupt rows are skipped (logged) rather than failing the whole
+ * analysis. Returns an empty ruleset when none is active.
+ */
+export async function loadActiveRuleset(supabase: Client): Promise<ActiveRuleset> {
+  const { data: ruleset } = await supabase
+    .from("signal_check_rulesets")
+    .select("id, version")
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!ruleset) return { version: null, rules: [] };
+  return { version: ruleset.version, rules: await loadRulesFor(supabase, ruleset.id, ruleset.version) };
+}
+
+/** Load a specific ruleset's rules by id (for regression preview against a
+ * draft or a prior version). Returns an empty ruleset when the id is unknown. */
+export async function loadRulesetById(supabase: Client, rulesetId: string): Promise<ActiveRuleset> {
+  const { data: ruleset } = await supabase
+    .from("signal_check_rulesets")
+    .select("id, version")
+    .eq("id", rulesetId)
+    .maybeSingle();
+  if (!ruleset) return { version: null, rules: [] };
+  return { version: ruleset.version, rules: await loadRulesFor(supabase, ruleset.id, ruleset.version) };
 }

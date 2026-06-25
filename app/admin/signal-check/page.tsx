@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SettingField, type SettingRow } from "@/components/admin/setting-field";
+import { SignalCheckSubnav } from "@/components/admin/signal-check-subnav";
 import { updateSignalCheckSetting } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +33,10 @@ export default async function SignalCheckAdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Signal Check</h1>
+    <>
+      <SignalCheckSubnav />
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Signal Check</h1>
       <p className="mt-2 max-w-2xl text-sm text-ink-muted">
         Tune the public Signal Check trade analyzer. Changes apply immediately and are recorded in
         the Signal Check audit log. Calibration rules and the regression set are managed separately.
@@ -61,7 +64,8 @@ export default async function SignalCheckAdminPage() {
             </section>
           );
         })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
