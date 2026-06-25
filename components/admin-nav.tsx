@@ -10,6 +10,7 @@ import {
   HelpCircle,
   Newspaper,
   Settings,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +43,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: Newspaper,
     description:
       "News curation: sources, categories, articles, moderation, logs, and settings.",
+  },
+  {
+    href: "/admin/signal-check",
+    label: "Signal Check",
+    icon: Scale,
+    description:
+      "Trade analyzer settings: verdict thresholds, pile-on, trade shape, confidence, and format policy.",
   },
   {
     href: "/admin/system",

@@ -553,7 +553,7 @@ function scaledPoints(whole: number | undefined, decimal: number | undefined): n
  *   - null/undefined
  * Normalize to a plain array. See CLAUDE.md gotchas.
  */
-function normalizeDraftPicks(input: unknown): unknown[] {
+export function normalizeDraftPicks(input: unknown): unknown[] {
   if (input == null) return [];
   if (Array.isArray(input)) return input;
   if (typeof input === "object") return Object.values(input as Record<string, unknown>);

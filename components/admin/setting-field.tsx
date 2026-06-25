@@ -12,8 +12,22 @@ export type SettingRow = {
   description: string | null;
 };
 
-/** One admin-editable beacon_settings row (number / boolean / string). */
-export function SettingField({ setting, options }: { setting: SettingRow; options?: string[] }) {
+type SaveAction = (key: string, raw: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+
+/**
+ * One admin-editable beacon_settings row (number / boolean / string).
+ * By default it saves via updateBeaconSetting; pass `action` to route the save
+ * through a different audited server action (e.g. Signal Check settings).
+ */
+export function SettingField({
+  setting,
+  options,
+  action,
+}: {
+  setting: SettingRow;
+  options?: string[];
+  action?: SaveAction;
+}) {
   const id = useId();
   const initial = String(setting.value ?? "");
   const [value, setValue] = useState(initial);
@@ -30,7 +44,7 @@ export function SettingField({ setting, options }: { setting: SettingRow; option
   const save = () =>
     startTransition(async () => {
       setStatus(null);
-      const res = await updateBeaconSetting(setting.key, value);
+      const res = await (action ?? updateBeaconSetting)(setting.key, value);
       setStatus(res.ok ? "Saved." : `Failed: ${res.error}`);
     });
 

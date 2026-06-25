@@ -4,6 +4,7 @@ import {
   BarChart3,
   Workflow,
   Calculator,
+  Scale,
   ArrowRight,
   Accessibility,
   BookOpen,
@@ -89,7 +90,7 @@ function Hero() {
 
 type Tool = {
   icon: LucideIcon;
-  href: "/rankings" | "/tools/league-pulse" | "/tools/faab";
+  href: "/rankings" | "/tools/signal-check" | "/tools/league-pulse" | "/tools/faab";
   eyebrow: string;
   title: string;
   pitch: string;
@@ -112,6 +113,21 @@ const TOOLS: Tool[] = [
       "Supports redraft, dynasty, superflex, and TE-premium formats",
     ],
     cta: "Open the rankings",
+  },
+  {
+    icon: Scale,
+    href: "/tools/signal-check",
+    eyebrow: "Trade analysis",
+    title: "Signal Check",
+    pitch:
+      "Build any trade and get the Beacon Verdict: who wins, by how much, and why. Powered by FF Beacon Values and weighted for your league format, with a plain-language reason for every call.",
+    bullets: [
+      "Add players and, in dynasty, draft picks to either side",
+      "FF Beacon Values weighted to your exact league format",
+      "A clear margin and a near-even guard so tiny edges aren't oversold",
+      "Freeze and share a clean public verdict link",
+    ],
+    cta: "Analyze a trade",
   },
   {
     icon: Workflow,

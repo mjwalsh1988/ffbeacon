@@ -12,6 +12,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check:routes": "tsx scripts/check-reserved-routes.ts",
     "sync:players": "tsx --env-file=.env.local scripts/sync-sleeper-players.ts",
     "pulse:league": "tsx --env-file=.env.local scripts/pulse-league.ts",
@@ -49,7 +51,8 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22",
@@ -59,6 +62,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.9"
   }
 }
