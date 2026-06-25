@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Trash2 } from "lucide-react";
 import {
   deleteArticle,
   getArticleDetail,
@@ -10,6 +11,7 @@ import {
   type ArticleDetail,
   type PlayerOption,
 } from "@/app/admin/beacon-brief/actions";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatEastern } from "@/lib/datetime";
 
 export interface ArticleRow {
@@ -59,9 +61,24 @@ function ArticleEditor({
 }) {
   const [pending, startTransition] = useTransition();
   const [deleteDiscord, setDeleteDiscord] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [status, setStatus] = useState<{ msg: string; error: boolean } | null>(
     null,
   );
+
+  const willDeleteDiscord = article.hasDiscordPost && deleteDiscord;
+  const performDelete = () =>
+    startTransition(async () => {
+      setStatus(null);
+      const res = await deleteArticle(article.id, {
+        deleteDiscordPost: willDeleteDiscord,
+      });
+      if (res.ok) {
+        onDeleted(res.warning);
+      } else {
+        setStatus({ msg: `Failed: ${res.error}`, error: true });
+      }
+    });
 
   // Content state
   const [title, setTitle] = useState(article.title);
@@ -419,29 +436,43 @@ function ArticleEditor({
         <button
           type="button"
           disabled={pending}
-          className={`${btnClass} mt-3 hover:border-signal-danger`}
-          onClick={() => {
-            const willDeleteDiscord = article.hasDiscordPost && deleteDiscord;
-            const msg = willDeleteDiscord
-              ? "Delete this article AND its Discord post? This cannot be undone."
-              : "Delete this article? This cannot be undone. The Discord post, if any, is left in place.";
-            if (!confirm(msg)) return;
-            startTransition(async () => {
-              setStatus(null);
-              const res = await deleteArticle(article.id, {
-                deleteDiscordPost: willDeleteDiscord,
-              });
-              if (res.ok) {
-                onDeleted(res.warning);
-              } else {
-                setStatus({ msg: `Failed: ${res.error}`, error: true });
-              }
-            });
-          }}
+          className={`${btnClass} mt-3 inline-flex items-center gap-2 hover:border-signal-danger`}
+          onClick={() => setConfirmOpen(true)}
         >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
           Delete article permanently
         </button>
       </section>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          icon={Trash2}
+          tone="danger"
+          title="Delete this article?"
+          description={
+            <>
+              This permanently deletes{" "}
+              <span className="font-semibold text-ink">{article.title}</span>{" "}
+              along with its player and team links and its revision history.
+              This cannot be undone.
+              {article.hasDiscordPost ? (
+                <span className="mt-3 block">
+                  {willDeleteDiscord
+                    ? "The linked Discord post will also be deleted."
+                    : "The linked Discord post will be left in place."}
+                </span>
+              ) : null}
+            </>
+          }
+          confirmLabel="Delete article"
+          cancelLabel="Cancel"
+          onConfirm={() => {
+            setConfirmOpen(false);
+            performDelete();
+          }}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }
