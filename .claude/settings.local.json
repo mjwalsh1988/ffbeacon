@@ -174,7 +174,8 @@
       "Bash(sort -t T -k2 -n)",
       "PowerShell(npx prettier --write lib/beacon-brief/worker.ts lib/beacon-brief/settings.ts lib/beacon-brief/curate.ts app/admin/beacon-brief/logs/page.tsx app/admin/beacon-brief/actions.ts app/admin/beacon-brief/settings/page.tsx components/admin/beacon-brief/articles-manager.tsx components/admin/beacon-brief/log-payloads.tsx)",
       "PowerShell(npx prettier --write lib/database.types.ts)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(npx vitest *)"
     ]
   },
   "enabledMcpjsonServers": [
