@@ -13,6 +13,7 @@ import {
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { RankingsTable, type RankingsRow } from "@/components/rankings-table";
+import { ScrollToRankings } from "./scroll-to-rankings";
 import { POSITIONS } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -32,6 +33,14 @@ export default async function RankingsPage({
 }) {
   const params = await searchParams;
   const positionFilter = readPosition(params.position);
+
+  // When the page loads with any filter param in the URL (a position chip,
+  // format, or source selection), we smooth-scroll the user down to the board
+  // so a filter click never feels like it bounced them to the top. A bare
+  // /rankings visit (no params) leaves the reader at the hero.
+  const hasActiveFilter = Boolean(
+    params.position || params.format || params.source,
+  );
 
   const supabase = await createClient();
 
@@ -326,9 +335,17 @@ export default async function RankingsPage({
         </div>
       </header>
       <section
+        id="rankings-board"
         aria-labelledby="rankings-board-heading"
-        className="border-b border-line bg-surface/30"
+        className="border-b border-line bg-surface/30 scroll-mt-4"
       >
+        {hasActiveFilter && (
+          <ScrollToRankings
+            key={`${formatSlug}-${positionFilter ?? "all"}-${rankingsResolution.source ?? "none"}`}
+            targetId="rankings-board"
+            headingId="rankings-board-heading"
+          />
+        )}
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
           <div className="mb-8">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
@@ -433,6 +450,9 @@ function FilterLink({
   return (
     <Link
       href={href}
+      // Suppress the App Router's snap-to-top on navigation; ScrollToRankings
+      // owns the scroll so a position click glides down to the board instead.
+      scroll={false}
       aria-current={active ? "page" : undefined}
       className={`inline-flex min-h-11 items-center rounded-card border px-4 text-sm font-medium transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
         active
