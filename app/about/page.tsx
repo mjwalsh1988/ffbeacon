@@ -55,6 +55,15 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
+      {/* Second cyan glow anchored bottom-right for depth. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-40 right-0 h-[360px] w-[520px]"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
+        }}
+      />
       <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           About FF Beacon
@@ -104,7 +113,11 @@ function StatStrip() {
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <li className="rounded-card border border-line bg-surface/60 p-4">
+    <li
+      className="group relative overflow-hidden rounded-card border border-line bg-surface/60 p-4 transition-colors hover:border-line-accent"
+      style={{ boxShadow: "0 0 48px -40px rgba(168, 85, 247, 0.6)" }}
+    >
+      <AccentStrip />
       <p
         className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
         style={{
@@ -174,24 +187,33 @@ function GapCard({
   const accentColor = accent === "purple" ? "#A855F7" : "#22D3EE";
   return (
     <article
-      className="relative overflow-hidden rounded-card border border-line bg-surface p-6"
+      className="group relative overflow-hidden rounded-modal border border-line bg-surface p-6 transition-colors hover:border-line-accent sm:p-7"
       style={{
-        boxShadow: `0 0 48px -32px ${accentColor}80`,
+        boxShadow: `0 0 64px -40px ${accentColor}99`,
       }}
     >
+      {/* Top hairline tinted to the card's accent so the two cards read as a
+          deliberate purple/cyan pair. */}
       <span
         aria-hidden="true"
-        className="flex h-11 w-11 items-center justify-center rounded-card"
+        className="absolute inset-x-0 top-0 h-px"
         style={{
-          backgroundColor: `${accentColor}1A`,
-          border: `1px solid ${accentColor}55`,
-          color: accentColor,
+          backgroundImage: `linear-gradient(90deg, transparent 0%, ${accentColor} 50%, transparent 100%)`,
         }}
-      >
-        <Icon className="h-5 w-5" />
-      </span>
-      <h3 className="mt-4 text-xl font-semibold text-ink">{title}</h3>
-      <p className="mt-2 text-base leading-relaxed text-ink-muted">{body}</p>
+      />
+      {/* Corner glow blob, matching the Signal Check result hero. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full"
+        style={{
+          background: `radial-gradient(circle, ${accentColor}29 0%, ${accentColor}0F 50%, transparent 75%)`,
+        }}
+      />
+      <div className="relative">
+        <IconBadge icon={Icon} accent={accent} size="lg" />
+        <h3 className="mt-4 text-xl font-semibold text-ink">{title}</h3>
+        <p className="mt-2 text-base leading-relaxed text-ink-muted">{body}</p>
+      </div>
     </article>
   );
 }
@@ -202,7 +224,7 @@ function PrinciplesSection() {
   return (
     <section
       aria-labelledby="principles-heading"
-      className="border-b border-line"
+      className="relative border-b border-line bg-surface/20"
     >
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>How we build</SectionEyebrow>
@@ -216,21 +238,25 @@ function PrinciplesSection() {
         <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" role="list">
           <PrincipleCard
             icon={Accessibility}
+            accent="cyan"
             title="Accessibility first"
             body="Every component is keyboard-tested and screen-reader-checked before it ships."
           />
           <PrincipleCard
             icon={BookOpen}
+            accent="purple"
             title="Plain-English analytics"
             body="Define the metric in the same view where you use it. No assumed vocabulary."
           />
           <PrincipleCard
             icon={Users}
+            accent="cyan"
             title="Sleeper-native"
             body="Real league sync, real transactions, real draft slots. Not a screenshot."
           />
           <PrincipleCard
             icon={Database}
+            accent="purple"
             title="Source-agnostic"
             body="KTC, FantasyCalc, more on the way. Pick the values you trust and the format you actually play."
           />
@@ -244,19 +270,17 @@ function PrincipleCard({
   icon: Icon,
   title,
   body,
+  accent,
 }: {
   icon: LucideIcon;
   title: string;
   body: string;
+  accent: "purple" | "cyan";
 }) {
   return (
-    <li className="rounded-card border border-line bg-base/60 p-5 transition-colors hover:border-line-accent">
-      <span
-        aria-hidden="true"
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-brand-cyan"
-      >
-        <Icon className="h-4 w-4" />
-      </span>
+    <li className="group relative overflow-hidden rounded-card border border-line bg-base/60 p-5 transition-colors hover:border-line-accent motion-safe:transition-transform motion-safe:hover:-translate-y-0.5">
+      <AccentStrip />
+      <IconBadge icon={Icon} accent={accent} size="md" rounded />
       <h3 className="mt-4 text-base font-semibold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{body}</p>
     </li>
@@ -269,8 +293,18 @@ function FeaturesSection() {
   return (
     <section
       aria-labelledby="features-heading"
-      className="border-b border-line bg-surface/30"
+      className="relative overflow-hidden border-b border-line bg-surface/30"
     >
+      {/* Beacon hairline pinned to the top edge of the section to set it apart
+          from the neighbouring panels. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+        }}
+      />
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionEyebrow>What you can do here</SectionEyebrow>
         <h2
@@ -283,6 +317,7 @@ function FeaturesSection() {
         <div className="mt-10 grid gap-4 md:grid-cols-3">
           <FeatureCard
             icon={BarChart3}
+            accent="cyan"
             title="Rankings Board"
             body="See who's worth what across every major league type, from standard redraft to dynasty superflex. Filter by position, sort the way you think, and switch between ranking sites without losing your spot."
             href="/rankings"
@@ -290,6 +325,7 @@ function FeaturesSection() {
           />
           <FeatureCard
             icon={Workflow}
+            accent="purple"
             title="Sleeper League Pulse"
             body="Drop in your Sleeper username and pull up every league you're in. Real rosters, recent trades, draft pick values, and a power ranking tuned to your league's actual scoring settings."
             href="/tools/league-pulse"
@@ -297,6 +333,7 @@ function FeaturesSection() {
           />
           <FeatureCard
             icon={Calculator}
+            accent="cyan"
             title="FAAB Calculator"
             body="Not sure how much to bid on a waiver pickup? Tell us the player and your league setup, and you'll get a suggested bid range that factors in the player's value and your roster's needs."
             href="/tools/faab"
@@ -314,30 +351,44 @@ function FeatureCard({
   body,
   href,
   cta,
+  accent,
 }: {
   icon: LucideIcon;
   title: string;
   body: string;
   href: string;
   cta: string;
+  accent: "purple" | "cyan";
 }) {
+  const accentColor = accent === "purple" ? "#A855F7" : "#22D3EE";
   return (
-    <article className="flex flex-col rounded-card border border-line bg-surface p-6">
+    <article
+      className="group relative flex flex-col overflow-hidden rounded-modal border border-line bg-surface p-6 transition-colors hover:border-line-accent motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
+      style={{ boxShadow: `0 0 64px -44px ${accentColor}99` }}
+    >
+      {/* Corner glow for depth, tinted to the card accent. */}
       <span
         aria-hidden="true"
-        className="flex h-11 w-11 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-      >
-        <Icon className="h-5 w-5" />
-      </span>
-      <h3 className="mt-4 text-lg font-semibold text-ink">{title}</h3>
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">{body}</p>
-      <Link
-        href={href}
-        className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple"
-      >
-        {cta}
-        <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-      </Link>
+        className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full"
+        style={{
+          background: `radial-gradient(circle, ${accentColor}24 0%, transparent 70%)`,
+        }}
+      />
+      <div className="relative flex flex-1 flex-col">
+        <IconBadge icon={Icon} accent={accent} size="lg" />
+        <h3 className="mt-4 text-lg font-semibold text-ink">{title}</h3>
+        <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">{body}</p>
+        <Link
+          href={href}
+          className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan transition-colors hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          {cta}
+          <ArrowRight
+            aria-hidden="true"
+            className="h-3.5 w-3.5 transition-transform motion-safe:group-hover:translate-x-0.5"
+          />
+        </Link>
+      </div>
     </article>
   );
 }
@@ -359,15 +410,41 @@ function FounderSection() {
           Why this project, why now.
         </h2>
 
-        <div className="mt-10 flex flex-col items-start gap-8 rounded-card border border-line bg-surface p-6 sm:flex-row sm:items-center sm:gap-10 sm:p-8">
+        <div
+          className="relative mt-10 flex flex-col items-start gap-8 overflow-hidden rounded-modal border border-line bg-surface p-6 sm:flex-row sm:items-center sm:gap-10 sm:p-8"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.10) 0%, transparent 55%)",
+          }}
+        >
+          {/* Left accent strip ties the founder panel into the card system. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-0 w-px"
+            style={{
+              backgroundImage:
+                "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+            }}
+          />
           <Link
             href="/author/michael"
             aria-label="Read Michael's full story on the author page"
-            className="flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-cyan"
+            className="group relative flex-shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-cyan"
           >
-            <AuthorPortrait size={144} />
+            {/* Beacon gradient ring around the portrait. */}
+            <span
+              aria-hidden="true"
+              className="block rounded-full p-[2px]"
+              style={{
+                backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+              }}
+            >
+              <span className="block rounded-full bg-surface p-1">
+                <AuthorPortrait size={144} />
+              </span>
+            </span>
           </Link>
-          <div className="min-w-0">
+          <div className="relative min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle">
               Michael — Founder, FF Beacon
             </p>
@@ -380,7 +457,7 @@ function FounderSection() {
             </p>
             <Link
               href="/author/michael"
-              className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan hover:text-brand-purple"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-cyan transition-colors hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               Read the full story
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
@@ -405,31 +482,42 @@ function CtaSection() {
               "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
           }}
         >
-          <h2
-            id="cta-heading"
-            className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-          >
-            Bring your league. Or skim the rankings. Both work by ear.
-          </h2>
-          <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
-            No signup needed to browse. Sign in only when you want to save your
-            source, your format, and your linked Sleeper username.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/rankings"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          {/* Top hairline so the closing panel feels like a lit beacon. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-px"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+            }}
+          />
+          <div className="relative">
+            <h2
+              id="cta-heading"
+              className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
             >
-              Explore the rankings
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
-            <Link
-              href="/tools/league-pulse"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              Pulse a Sleeper league
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
+              Bring your league. Or skim the rankings. Both work by ear.
+            </h2>
+            <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
+              No signup needed to browse. Sign in only when you want to save your
+              source, your format, and your linked Sleeper username.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href="/rankings"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Explore the rankings
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+              <Link
+                href="/tools/league-pulse"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Pulse a Sleeper league
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -444,5 +532,53 @@ function SectionEyebrow({ children }: { children: React.ReactNode }) {
     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
       {children}
     </p>
+  );
+}
+
+/* Left-edge vertical gradient accent strip, the shared card motif used across
+   the rankings status tiles and Signal Check. */
+function AccentStrip() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute inset-y-0 left-0 w-px"
+      style={{
+        backgroundImage:
+          "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+      }}
+    />
+  );
+}
+
+/* Tinted icon chip. Decorative: the icon is aria-hidden and the surrounding
+   heading carries the accessible name. */
+function IconBadge({
+  icon: Icon,
+  accent,
+  size = "md",
+  rounded = false,
+}: {
+  icon: LucideIcon;
+  accent: "purple" | "cyan";
+  size?: "md" | "lg";
+  rounded?: boolean;
+}) {
+  const c = accent === "purple" ? "#A855F7" : "#22D3EE";
+  const box = size === "lg" ? "h-11 w-11" : "h-10 w-10";
+  const glyph = size === "lg" ? "h-5 w-5" : "h-4 w-4";
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex ${box} items-center justify-center border ${
+        rounded ? "rounded-full" : "rounded-card"
+      }`}
+      style={{
+        backgroundImage: `linear-gradient(135deg, ${c}26 0%, ${c}0D 100%)`,
+        borderColor: `${c}59`,
+        color: c,
+      }}
+    >
+      <Icon className={glyph} />
+    </span>
   );
 }
