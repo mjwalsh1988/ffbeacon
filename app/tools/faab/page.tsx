@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   resolveSourceForFormat,
   getAvailableSources,
   describeSource,
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
+import { loadFaabSettings } from "@/lib/faab/settings";
 import { FaabForm, type FaabPlayer } from "./faab-form";
 
 export const metadata: Metadata = {
@@ -23,8 +24,15 @@ export default async function FaabPage({
 }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const formatResolution = await resolveFormatSlug(supabase, params.format);
-  const sourceResolution = await resolveSourceSlug(supabase, params.source);
+  // Settings are service-role-only (RLS); read them server-side with the admin
+  // client, same as Signal Check. loadFaabSettings never throws and falls back
+  // to safe code defaults, so the calculator renders even if the row is absent.
+  // The three are independent, so resolve them in parallel.
+  const [settings, formatResolution, sourceResolution] = await Promise.all([
+    loadFaabSettings(createAdminClient()),
+    resolveFormatSlug(supabase, params.format),
+    resolveSourceSlug(supabase, params.source),
+  ]);
   const formatSlug = formatResolution.slug;
   const requestedSourceSlug = sourceResolution.slug;
   const { data: format } = await supabase
@@ -91,7 +99,7 @@ export default async function FaabPage({
         }).players;
         const slug = player.slug;
         // Sleeper id lives on players.external_ids.sleeper. May be missing
-        // for older / non-Sleeper-resolved players — headshot falls back to
+        // for older / non-Sleeper-resolved players - headshot falls back to
         // the position badge in that case.
         const sleeperExt = player.external_ids?.sleeper;
         const sleeper_id =
@@ -145,8 +153,35 @@ export default async function FaabPage({
 
   return (
     <main id="main">
-      <header className="border-b border-line">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <header className="relative overflow-hidden border-b border-line">
+        {/* Beacon gradient accent bar pinned to the very top. */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+          }}
+        />
+        {/* Soft ambient glow behind the headline. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 left-1/2 h-[360px] w-[820px] -translate-x-1/2"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
+          }}
+        />
+        {/* Second cyan glow anchored bottom-right for depth. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-40 right-0 h-[320px] w-[480px]"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
+          }}
+        />
+        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
           {fallbackBanner && (
             <p
               role="status"
@@ -157,22 +192,38 @@ export default async function FaabPage({
               {format?.display_name ?? "this format"}. Showing {fallbackBanner.actual} data instead.
             </p>
           )}
-          <p className="mb-2 text-sm font-medium uppercase tracking-wider text-brand-cyan">Tools</p>
-          <h1 className="text-4xl font-semibold tracking-tight">FAAB Calculator</h1>
-          <p className="mt-3 text-ink-muted">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+            Tools
+          </p>
+          <h1
+            aria-label="FAAB Calculator"
+            className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
+          >
+            FAAB{" "}
+            <span
+              className="bg-clip-text text-transparent forced-colors:text-ink"
+              style={{
+                backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+              }}
+            >
+              Calculator
+            </span>
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
             Type in the player you are bidding on, your remaining FAAB budget, and how badly you
             need the position. We recommend a bid range using market value and need-weighted
             heuristics.
           </p>
         </div>
       </header>
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
         <FaabForm
           players={players}
           formatName={format?.display_name ?? "default format"}
           rankingsSourceName={rankingsSourceName}
           valueSourceName={valueSourceName}
           valueSourceIsBeacon={valueSourceIsBeacon}
+          settings={settings}
         />
       </div>
     </main>

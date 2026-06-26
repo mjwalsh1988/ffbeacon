@@ -11,6 +11,7 @@ import {
   Newspaper,
   Settings,
   Scale,
+  Coins,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +51,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: Scale,
     description:
       "Trade analyzer settings: verdict thresholds, pile-on, trade shape, confidence, and format policy.",
+  },
+  {
+    href: "/admin/faab",
+    label: "FAAB Calculator",
+    icon: Coins,
+    description:
+      "Waiver bid calculator settings: bid curve, league depth, need multipliers, dump mechanic, value normalization, and copy.",
   },
   {
     href: "/admin/system",
