@@ -85,8 +85,28 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.15) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
         }}
       />
+      {/* Second cyan glow anchored bottom-right for depth, matching About. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-40 right-0 h-[340px] w-[480px]"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
+        }}
+      />
       <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-16 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
-        <AuthorPortrait size={176} />
+        {/* Beacon gradient ring around the portrait. */}
+        <span
+          aria-hidden="true"
+          className="block shrink-0 rounded-full p-[2px]"
+          style={{
+            backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+          }}
+        >
+          <span className="block rounded-full bg-surface p-1">
+            <AuthorPortrait size={176} />
+          </span>
+        </span>
         <div className="min-w-0 flex-1">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
             Author
@@ -116,7 +136,11 @@ function Hero() {
 
 function HeroStat({ value, label }: { value: string; label: string }) {
   return (
-    <li className="rounded-card border border-line bg-surface/60 px-3 py-2">
+    <li
+      className="group relative overflow-hidden rounded-card border border-line bg-surface/60 px-3 py-2 transition-colors hover:border-line-accent"
+      style={{ boxShadow: "0 0 40px -36px rgba(168, 85, 247, 0.6)" }}
+    >
+      <AccentStrip />
       <p
         className="bg-clip-text font-mono text-xl font-bold tabular-nums text-transparent sm:text-2xl"
         style={{
@@ -151,7 +175,8 @@ function StorySection() {
               How I learned to play fantasy stats-first.
             </h2>
           </div>
-          <div className="space-y-5 text-lg leading-relaxed text-ink-muted">
+          <div className="relative space-y-5 text-lg leading-relaxed text-ink-muted md:pl-8">
+            <ProseRule />
             <p>
               I&rsquo;ve been playing fantasy football since 2006 — twenty
               seasons. For most of those years I ran one or two leagues. In 2023
@@ -185,8 +210,9 @@ function WhySection() {
   return (
     <section
       aria-labelledby="why-heading"
-      className="border-b border-line bg-surface/30"
+      className="relative border-b border-line bg-surface/30"
     >
+      <BeaconHairline />
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
           <div>
@@ -198,7 +224,8 @@ function WhySection() {
               The product I wish existed when I started.
             </h2>
           </div>
-          <div className="space-y-5 text-lg leading-relaxed text-ink-muted">
+          <div className="relative space-y-5 text-lg leading-relaxed text-ink-muted md:pl-8">
+            <ProseRule />
             <p>
               Two things were obvious. First, there&rsquo;s a massive gap in
               fantasy resources for people who don&rsquo;t already speak
@@ -245,21 +272,25 @@ function AtAGlanceSection() {
         >
           <FactCard
             icon={Trophy}
+            accent="cyan"
             value="20 seasons"
             label="Of fantasy football, starting 2006"
           />
           <FactCard
             icon={Layers}
+            accent="purple"
             value="Multi-format"
             label="Redraft, dynasty, best ball, chop/guillotine, auction/contract, and exploring more on the daily."
           />
           <FactCard
             icon={Calendar}
+            accent="cyan"
             value="20+ seasons in fantasy"
             label="Drafted my first team on dial-up. Still chasing the edge."
           />
           <FactCard
             icon={Briefcase}
+            accent="purple"
             value="Marketing + dev"
             label="Day-job background powering the build"
           />
@@ -273,19 +304,20 @@ function FactCard({
   icon: Icon,
   value,
   label,
+  accent,
 }: {
   icon: LucideIcon;
   value: string;
   label: string;
+  accent: "purple" | "cyan";
 }) {
   return (
-    <li className="rounded-card border border-line bg-surface p-4">
-      <span
-        aria-hidden="true"
-        className="flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-      >
-        <Icon className="h-4 w-4" />
-      </span>
+    <li
+      className="group relative overflow-hidden rounded-card border border-line bg-surface p-4 transition-colors hover:border-line-accent motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
+      style={{ boxShadow: "0 0 48px -42px rgba(168, 85, 247, 0.6)" }}
+    >
+      <AccentStrip />
+      <IconBadge icon={Icon} accent={accent} size="md" />
       <p className="mt-3 text-base font-semibold text-ink">{value}</p>
       <p className="mt-1 text-xs leading-relaxed text-ink-muted">{label}</p>
     </li>
@@ -298,8 +330,9 @@ function ToolsSection() {
   return (
     <section
       aria-labelledby="tools-heading"
-      className="border-b border-line bg-surface/30"
+      className="relative border-b border-line bg-surface/30"
     >
+      <BeaconHairline />
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <SectionEyebrow>Tools I rely on</SectionEyebrow>
         <h2
@@ -318,16 +351,19 @@ function ToolsSection() {
         >
           <ToolCard
             icon={Sparkles}
+            accent="purple"
             title="Sleeper"
             body="Where my leagues live. Public APIs make it the only host worth syncing against."
           />
           <ToolCard
             icon={Headphones}
+            accent="cyan"
             title="NVDA"
             body="My daily driver across every interface. Free, open-source, and built by the community that actually depends on it."
           />
           <ToolCard
             icon={Mic}
+            accent="purple"
             title="Podcasts & tape shows"
             body="A daily rotation of redraft, dynasty, and best ball shows because tape breakdowns travel better by ear than by chart."
           />
@@ -341,21 +377,32 @@ function ToolCard({
   icon: Icon,
   title,
   body,
+  accent,
 }: {
   icon: LucideIcon;
   title: string;
   body: string;
+  accent: "purple" | "cyan";
 }) {
+  const accentColor = accent === "purple" ? "#A855F7" : "#22D3EE";
   return (
-    <li className="flex flex-col rounded-card border border-line bg-surface p-5">
+    <li
+      className="group relative flex flex-col overflow-hidden rounded-modal border border-line bg-surface p-5 transition-colors hover:border-line-accent motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
+      style={{ boxShadow: `0 0 64px -46px ${accentColor}99` }}
+    >
+      {/* Corner glow tinted to the card accent. */}
       <span
         aria-hidden="true"
-        className="flex h-10 w-10 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-      <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
-      <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{body}</p>
+        className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full"
+        style={{
+          background: `radial-gradient(circle, ${accentColor}24 0%, transparent 70%)`,
+        }}
+      />
+      <div className="relative flex flex-1 flex-col">
+        <IconBadge icon={Icon} accent={accent} size="md" />
+        <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
+        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{body}</p>
+      </div>
     </li>
   );
 }
@@ -408,10 +455,10 @@ function PlaceholderCard({
   body: string;
 }) {
   return (
-    <article className="rounded-card border border-dashed border-line bg-base/40 p-5">
+    <article className="group relative overflow-hidden rounded-card border border-dashed border-line bg-base/40 p-5 transition-colors hover:border-line-accent">
       <span
         aria-hidden="true"
-        className="flex h-10 w-10 items-center justify-center rounded-card border border-line bg-surface text-ink-muted"
+        className="flex h-10 w-10 items-center justify-center rounded-card border border-dashed border-line bg-surface text-ink-muted transition-colors group-hover:text-brand-cyan"
       >
         <Icon className="h-4 w-4" />
       </span>
@@ -434,26 +481,37 @@ function ConnectSection() {
               "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
           }}
         >
-          <SectionEyebrow>Connect</SectionEyebrow>
-          <h2
-            id="connect-heading"
-            className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-          >
-            Want to talk about accessibility, fantasy, or analytics?
-          </h2>
-          <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
-            Email is the fastest way through. The social accounts in the footer
-            will start posting as the site grows.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <EmailReveal />
-            <Link
-              href="/about"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          {/* Top hairline so the closing panel feels like a lit beacon. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-px"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+            }}
+          />
+          <div className="relative">
+            <SectionEyebrow>Connect</SectionEyebrow>
+            <h2
+              id="connect-heading"
+              className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
             >
-              Read about FF Beacon
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
+              Want to talk about accessibility, fantasy, or analytics?
+            </h2>
+            <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
+              Email is the fastest way through. The social accounts in the footer
+              will start posting as the site grows.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <EmailReveal />
+              <Link
+                href="/about"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Read about FF Beacon
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -468,5 +526,83 @@ function SectionEyebrow({ children }: { children: React.ReactNode }) {
     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
       {children}
     </p>
+  );
+}
+
+/* Beacon gradient hairline pinned to the top edge of a section, used to set
+   the tinted-background panels apart from their neighbours. */
+function BeaconHairline() {
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute inset-x-0 top-0 h-px"
+      style={{
+        backgroundImage:
+          "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+      }}
+    />
+  );
+}
+
+/* Left-edge vertical gradient accent strip, the shared card motif used across
+   the rankings status tiles and Signal Check. */
+function AccentStrip() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute inset-y-0 left-0 w-px"
+      style={{
+        backgroundImage:
+          "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+      }}
+    />
+  );
+}
+
+/* Vertical gradient rule that runs alongside a prose column on desktop. Adds
+   the beacon accent to the long-form sections without altering the copy. */
+function ProseRule() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute inset-y-1 left-0 hidden w-px md:block"
+      style={{
+        backgroundImage:
+          "linear-gradient(180deg, transparent 0%, #A855F7 20%, #22D3EE 80%, transparent 100%)",
+      }}
+    />
+  );
+}
+
+/* Tinted icon chip. Decorative: the icon is aria-hidden and the surrounding
+   heading carries the accessible name. */
+function IconBadge({
+  icon: Icon,
+  accent,
+  size = "md",
+  rounded = false,
+}: {
+  icon: LucideIcon;
+  accent: "purple" | "cyan";
+  size?: "md" | "lg";
+  rounded?: boolean;
+}) {
+  const c = accent === "purple" ? "#A855F7" : "#22D3EE";
+  const box = size === "lg" ? "h-11 w-11" : "h-10 w-10";
+  const glyph = size === "lg" ? "h-5 w-5" : "h-4 w-4";
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex ${box} items-center justify-center border ${
+        rounded ? "rounded-full" : "rounded-card"
+      }`}
+      style={{
+        backgroundImage: `linear-gradient(135deg, ${c}26 0%, ${c}0D 100%)`,
+        borderColor: `${c}59`,
+        color: c,
+      }}
+    >
+      <Icon className={glyph} />
+    </span>
   );
 }
