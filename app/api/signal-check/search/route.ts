@@ -69,41 +69,45 @@ async function autocompleteMinLength(
 
 /**
  * Loose pick suggestions for the trade builder. Picks surface as soon as a year
- * is present, so users do not have to know the exact "2027 1st" syntax:
- *   "2027"                 -> every round that year (slot-agnostic)
- *   "2027 2" / "2027 2nd"  -> that round, plus its early/mid/late slots
- *   "2027 2 early"         -> just that one slotted pick
- * A bucket typed without a round applies across every generated round.
+ * is present, and every suggestion is an explicit early/mid/late slot so each
+ * option carries its own distinct value (the slot-agnostic "whole round" option
+ * is intentionally not offered, since it has no unique value of its own):
+ *   "2027"          -> all four rounds, each as early/mid/late (12 options)
+ *   "2027 1"        -> 2027 1st Early, Mid, Late
+ *   "2027 1 early"  -> just that one slotted pick
+ * A bucket typed without a round applies across every round.
+ *
+ * The data carries only early/mid/late buckets per (season, round) for every
+ * season. There are no exact pick slots (e.g. 1.01) in the system, so even the
+ * current draft year is offered as buckets, not numbered picks.
  */
 function buildPickResults(query: string): PickResult[] {
   const yearMatch = query.match(/\b(20\d{2})\b/);
   if (!yearMatch) return [];
   const season = Number(yearMatch[1]);
 
-  // Drop the year before scanning for a round so a bare round digit (the "2" in
-  // "2027 2") cannot collide with the four-digit year.
+  // Drop the year before scanning for a round so a bare round digit (the "1" in
+  // "2027 1") cannot collide with the four-digit year.
   const rest = query.replace(yearMatch[0], " ");
   const bucketMatch = rest.toLowerCase().match(/\b(early|mid|late)\b/);
-  const bucket = (bucketMatch?.[1] as PickBucket | undefined) ?? null;
-  // A round is a 1-7 digit with an optional ordinal suffix: "2" or "2nd".
+  const oneBucket = (bucketMatch?.[1] as PickBucket | undefined) ?? null;
+  // A round is a 1-7 digit with an optional ordinal suffix: "1" or "1st".
   const roundMatch = rest.match(/\b([1-7])(?:st|nd|rd|th)?\b/i);
-  const round = roundMatch ? Number(roundMatch[1]) : null;
+  const oneRound = roundMatch ? Number(roundMatch[1]) : null;
 
-  const generic = (r: number): PickResult => ({
-    kind: "pick", season, round: r, pickPosition: null, label: `${season} ${ordinalFor(r)}`,
-  });
-  const slotted = (r: number, b: PickBucket): PickResult => ({
-    kind: "pick", season, round: r, pickPosition: b, label: `${season} ${ordinalFor(r)} (${b})`,
-  });
+  const rounds =
+    oneRound !== null ? [oneRound] : Array.from({ length: GENERATED_ROUNDS }, (_, i) => i + 1);
+  const buckets = oneBucket ? [oneBucket] : PICK_BUCKETS;
 
-  // A specific round: that round, optionally narrowed to a single slot.
-  if (round !== null) {
-    return bucket ? [slotted(round, bucket)] : [generic(round), ...PICK_BUCKETS.map((b) => slotted(round, b))];
-  }
-
-  // Year only: one entry per round (carrying the bucket if the user typed one).
-  const rounds = Array.from({ length: GENERATED_ROUNDS }, (_, i) => i + 1);
-  return bucket ? rounds.map((r) => slotted(r, bucket)) : rounds.map((r) => generic(r));
+  return rounds.flatMap((round) =>
+    buckets.map((bucket) => ({
+      kind: "pick" as const,
+      season,
+      round,
+      pickPosition: bucket,
+      label: `${season} ${ordinalFor(round)} (${bucket[0].toUpperCase()}${bucket.slice(1)})`,
+    })),
+  );
 }
 
 export async function GET(req: Request) {
