@@ -5,6 +5,7 @@ import {
   BarChart3,
   Workflow,
   Calculator,
+  Scale,
   ArrowRight,
   Radar,
   Layers,
@@ -69,6 +70,14 @@ const FEATURED_TOOLS: FeaturedTool[] = [
       "See exactly where every player ranks today, sorted and filtered the way you think. Switch between scoring formats and ranking sites without ever losing your spot.",
     cta: "Open the rankings",
     icon: BarChart3,
+  },
+  {
+    href: "/tools/signal-check",
+    title: "Signal Check",
+    description:
+      "Thinking about a trade? Build both sides and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
+    cta: "Analyze a trade",
+    icon: Scale,
   },
   {
     href: "/tools/league-pulse",
@@ -269,7 +278,7 @@ function ToolsSection() {
           </Link>
         </div>
 
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
+        <div className="mt-12 grid gap-5 md:grid-cols-2">
           {FEATURED_TOOLS.map((tool, i) => (
             <ToolCard key={tool.href} tool={tool} index={i} />
           ))}

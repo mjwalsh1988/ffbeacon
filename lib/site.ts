@@ -43,6 +43,11 @@ export const TOOLS_NAV: NavChild[] = [
     description: "Sortable player values, tiers, and trends",
   },
   {
+    label: "Signal Check",
+    href: "/tools/signal-check",
+    description: "Grade any trade with the Beacon Verdict",
+  },
+  {
     label: "Sleeper League Pulse",
     href: "/tools/league-pulse",
     description: "Sync and analyze your Sleeper leagues",
@@ -75,6 +80,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
     heading: "Tools",
     links: [
       { label: "Rankings Board", href: "/rankings" },
+      { label: "Signal Check", href: "/tools/signal-check" },
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
       { label: "FAAB Calculator", href: "/tools/faab" },
     ],
