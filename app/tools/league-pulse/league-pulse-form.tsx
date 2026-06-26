@@ -21,7 +21,12 @@ export function LeaguePulseForm({
     event.preventDefault();
     if (!username.trim()) return;
     const params = new URLSearchParams({ username: username.trim(), season });
-    startTransition(() => router.push(`/tools/league-pulse?${params.toString()}`));
+    // scroll: false stops the App Router from snapping back to the top after the
+    // navigation. ScrollToResults then owns the scroll so the user is taken to
+    // their leagues on every search, not just on a hard refresh.
+    startTransition(() =>
+      router.push(`/tools/league-pulse?${params.toString()}`, { scroll: false }),
+    );
   };
 
   return (

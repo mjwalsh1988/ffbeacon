@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Workflow, Sparkles, Lock, ArrowRight } from "lucide-react";
 import { LeaguePulseForm } from "./league-pulse-form";
 import { LeagueResults } from "./league-results";
+import { ScrollToResults } from "./scroll-to-results";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
@@ -97,9 +98,15 @@ export default async function LeaguePulsePage({
 
       {user && (
         <section
+          id="league-results"
           aria-labelledby="results-heading"
-          className="border-b border-line"
+          className="border-b border-line scroll-mt-4"
         >
+          <ScrollToResults
+            key={`${user.user_id}-${season}`}
+            targetId="league-results"
+            headingId="results-heading"
+          />
           <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
