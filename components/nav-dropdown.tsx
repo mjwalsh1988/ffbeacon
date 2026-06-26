@@ -34,7 +34,30 @@ export function NavDropdown({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuId = useId();
+
+  // Hover open/close with a short grace period. Closing on a timer (rather than
+  // instantly on mouseleave) keeps the menu open across the small travel gap
+  // between the trigger and the panel, and tolerates a brief overshoot, so the
+  // user doesn't have to re-hover "Tools" to reach the items.
+  const cancelClose = () => {
+    if (closeTimer.current !== null) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const openNow = () => {
+    cancelClose();
+    setOpen(true);
+  };
+  const closeSoon = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 140);
+  };
+
+  // Clear any pending close timer on unmount.
+  useEffect(() => cancelClose, []);
 
   const isActive = (h: string) =>
     pathname === h || (pathname?.startsWith(`${h}/`) ?? false);
@@ -70,6 +93,7 @@ export function NavDropdown({
   };
 
   const openAndFocus = (index: number) => {
+    cancelClose();
     setOpen(true);
     // The menu mounts in this same commit; wait a frame before moving focus.
     requestAnimationFrame(() => focusItemAt(index));
@@ -132,8 +156,8 @@ export function NavDropdown({
     <div
       ref={containerRef}
       className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={openNow}
+      onMouseLeave={closeSoon}
     >
       <button
         ref={buttonRef}
@@ -159,8 +183,13 @@ export function NavDropdown({
       {open && (
         <div
           id={menuId}
-          className="absolute left-0 top-full z-40 mt-1 w-72 rounded-card border border-line bg-surface-elevated p-2 shadow-lg"
+          // Outer wrapper sits flush against the trigger (top-full) and uses
+          // top padding instead of margin so the visual gap stays part of the
+          // hoverable area. This removes the dead zone that closed the menu
+          // mid-travel. The inner div carries the visible panel styling.
+          className="absolute left-0 top-full z-40 w-72 pt-1"
         >
+          <div className="rounded-card border border-line bg-surface-elevated p-2 shadow-lg">
           <ul role="list" className="flex flex-col gap-0.5">
             {entries.map((entry, index) => {
               const entryActive = isActive(entry.href);
@@ -188,6 +217,7 @@ export function NavDropdown({
               );
             })}
           </ul>
+          </div>
         </div>
       )}
     </div>
