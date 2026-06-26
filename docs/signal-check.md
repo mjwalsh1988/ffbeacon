@@ -69,13 +69,16 @@ lib/signal-check/
 
 app/tools/signal-check/
   page.tsx                       Public builder page (server)
-  signal-check-builder.tsx       Builder client (sides, format, run, share, ResultPanel)
+  signal-check-builder.tsx       Builder client (steps, sides, run, empty/loading states)
+  league-format-selector.tsx     Prominent radiogroup format picker (cards)
+  asset-avatar.tsx               Player headshot / pick-round badge avatar
+  trade-margin-graph.tsx         Pure value-balance bars (client + server safe)
+  trade-result.tsx               Shared TradeResult (hero, margin, sides, explainers, share)
   asset-autocomplete.tsx         Accessible combobox (players + dynasty picks)
+  sleeper-import-panel.tsx       Inline auth-aware Sleeper import (league + trade cards)
   actions.ts                     runSignalCheck server action
+  import-actions.ts              listImportLeagues, listLeagueTrades, importAndAnalyze
   v/[shareId]/page.tsx           Public share page (reads public_payload only)
-  import/page.tsx                Sleeper import page (auth-gated, server)
-  import/import-wizard.tsx       Import wizard client
-  import/actions.ts              listImportLeagues, listLeagueTrades, importAndAnalyze
 
 app/api/signal-check/search/route.ts        Public autocomplete endpoint
 app/api/og/signal-check/[shareId]/route.tsx OG share image (public_payload only)
@@ -308,8 +311,16 @@ leak that secret (or raw points) into `public_payload`.
 
 ## Sleeper import (logged-in)
 
-`/tools/signal-check/import` (auth-gated). Uses the user's saved Sleeper
-username (`user_preferences.sleeper_league_settings.username`). This is an
+The Sleeper import lives INLINE on the main builder page, not a separate route.
+`sleeper-import-panel.tsx` (`#sleeper-import`) is an auth-aware client panel:
+signed-out users see a sign-in notice; signed-in users with no saved username get
+a small inline save-username form (writes `user_preferences.sleeper_league_settings`
+via the owner RLS policy from the browser client); signed-in users with a username
+get a league dropdown plus a scrollable list of trade cards (week + both teams +
+asset counts). Selecting a card imports and analyzes the trade in place via the
+shared `TradeResult`. Server logic is in `import-actions.ts`. It uses the user's
+saved Sleeper username
+(`user_preferences.sleeper_league_settings.username`). This is an
 ASSOCIATION, not cryptographic ownership verification. The flow:
 `listImportLeagues()` -> `listLeagueTrades(leagueId)` (verifies the league
 belongs to the saved username, runs `pulseLeague` (cached), reads `trade`

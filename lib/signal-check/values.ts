@@ -25,6 +25,7 @@ import {
   PICK_FALLBACK_SOURCE_SLUG,
   PICK_FALLBACK_SOURCE_DISPLAY,
 } from "./format";
+import { readSleeperId } from "@/lib/ranking-boards";
 
 type Client = SupabaseClient<Database>;
 
@@ -53,6 +54,7 @@ interface PlayerEntry {
   name: string;
   position: string | null;
   team: string | null;
+  sleeperId: string | null;
   value: number | null;
   capturedAt: string | null;
 }
@@ -81,13 +83,14 @@ export async function buildValueResolver(
   for (const ids of chunk(playerIds, 200)) {
     const { data } = await supabase
       .from("players")
-      .select("id, full_name, first_name, last_name, position, team")
+      .select("id, full_name, first_name, last_name, position, team, external_ids")
       .in("id", ids);
     for (const row of data ?? []) {
       players.set(row.id, {
         name: playerName(row),
         position: row.position ?? null,
         team: row.team ?? null,
+        sleeperId: readSleeperId(row.external_ids as Record<string, unknown> | null),
         value: null,
         capturedAt: null,
       });
@@ -165,6 +168,7 @@ export async function buildValueResolver(
         name: entry.name,
         position: entry.position,
         team: entry.team,
+        sleeperId: entry.sleeperId,
         value: entry.value,
         capturedAt: entry.capturedAt,
       };

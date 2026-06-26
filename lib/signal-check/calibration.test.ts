@@ -11,6 +11,7 @@ function player(assetId: string, baseValue: number, position = "WR"): PricedAsse
     name: assetId,
     position,
     team: "FA",
+    sleeperId: null,
     baseValue,
     noValue: false,
   };

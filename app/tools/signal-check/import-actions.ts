@@ -11,8 +11,13 @@ import {
 } from "@/lib/sleeper";
 import { pulseLeague, normalizeDraftPicks } from "@/lib/league-pulse";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
-import { deriveLeagueFormat, mapToFormatSlug } from "@/lib/sleeper-to-format";
-import { resolveFormat } from "@/lib/signal-check/format";
+import {
+  deriveLeagueFormat,
+  mapToFormatSlug,
+  describeDerivedFormat,
+  pickClosestSupportedFormat,
+} from "@/lib/sleeper-to-format";
+import { resolveFormat, supportedFormatCandidates } from "@/lib/signal-check/format";
 import { buildValueResolver } from "@/lib/signal-check/values";
 import { loadSignalCheckSettings, loadActiveRuleset } from "@/lib/signal-check/settings";
 import { runPipeline } from "@/lib/signal-check/pipeline";
@@ -29,10 +34,25 @@ export interface ImportLeague {
   season: string;
 }
 
+export interface ImportTradeTeam {
+  rosterId: number;
+  teamName: string;
+  playerCount: number;
+  pickCount: number;
+}
+
 export interface ImportTrade {
   sleeperTransactionId: string;
-  label: string;
   week: number | null;
+  teams: ImportTradeTeam[];
+  label: string;
+}
+
+/** Per-asset headshot metadata aligned by index to the result's side assets. */
+export interface ImportAssetMeta {
+  kind: "player" | "pick";
+  sleeperId: string | null;
+  round: number | null;
 }
 
 export type ListLeaguesResult =
@@ -47,6 +67,7 @@ export type ImportAnalyzeResult =
   | {
       ok: true;
       view: BuilderView;
+      assetMeta: Record<SideKey, ImportAssetMeta[]>;
       evidence: string[];
       notices: string[];
       shareUrl: string | null;
@@ -169,13 +190,20 @@ export async function listLeagueTrades(sleeperLeagueId: string): Promise<ListTra
   const labels = rosterLabelMap(rosters ?? [], users ?? []);
   const trades: ImportTrade[] = (txRows ?? []).map((t) => {
     const picks = normalizeDraftPicks(t.draft_picks);
-    const involved = tradeRosters(t.adds as Record<string, number> | null, picks);
-    const teamNames = involved.map((r) => labels.get(r) ?? `Team ${r}`);
+    const adds = (t.adds as Record<string, number> | null) ?? {};
+    const involved = tradeRosters(adds, picks);
+    const teams: ImportTradeTeam[] = involved.map((rid) => ({
+      rosterId: rid,
+      teamName: labels.get(rid) ?? `Team ${rid}`,
+      playerCount: Object.values(adds).filter((r) => Number(r) === rid).length,
+      pickCount: picks.filter((p) => Number((p as { owner_id?: unknown }).owner_id) === rid).length,
+    }));
     const weekLabel = t.week != null ? `Week ${t.week}: ` : "";
     return {
       sleeperTransactionId: t.sleeper_transaction_id,
       week: t.week ?? null,
-      label: `${weekLabel}${teamNames.join(" and ") || "Trade"}`,
+      teams,
+      label: `${weekLabel}${teams.map((x) => x.teamName).join(" and ") || "Trade"}`,
     };
   });
 
@@ -257,18 +285,29 @@ export async function importAndAnalyze(args: {
   if (!tx || tx.type !== "trade") return { ok: false, error: "That trade could not be found." };
 
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
-  const formatSlug = mapToFormatSlug(deriveLeagueFormat(sleeperLeague));
-  if (!formatSlug) {
-    return {
-      ok: false,
-      error: "This league's format is not yet supported by FF Beacon Values for Signal Check.",
-    };
+  const derived = deriveLeagueFormat(sleeperLeague);
+  const notices: string[] = [];
+
+  // Resolve the league's format. Prefer the exact derived format; if FF Beacon
+  // does not publish values for it yet, fall back to the closest SUPPORTED
+  // format (never crossing redraft/dynasty) and note that values may differ,
+  // rather than dead-ending the user with a denial.
+  const exactSlug = mapToFormatSlug(derived);
+  let format = exactSlug ? await resolveFormat(admin, exactSlug) : null;
+  if (!format) {
+    const candidates = await supportedFormatCandidates(admin, settings);
+    const closest = pickClosestSupportedFormat(derived, candidates);
+    format = closest ? await resolveFormat(admin, closest.slug) : null;
+    if (format) {
+      notices.push(
+        `Heads up: your league looks like ${describeDerivedFormat(derived)}, which FF Beacon does not have its own values for yet. We used the closest format we do support, ${format.display}, so a few values may be slightly off. We are actively building out more formats.`,
+      );
+    }
   }
-  const format = await resolveFormat(admin, formatSlug);
   if (!format) {
     return {
       ok: false,
-      error: "FF Beacon does not currently publish values for this league's format.",
+      error: "FF Beacon does not publish values for this league's format yet.",
     };
   }
 
@@ -292,13 +331,16 @@ export async function importAndAnalyze(args: {
     };
   }
 
-  const notices: string[] = [];
   const sideAssets: Record<SideKey, AnalysisInput["sides"]["a"]> = { a: [], b: [] };
+  // Built in lockstep with sideAssets so the result can render headshots.
+  const assetMeta: Record<SideKey, ImportAssetMeta[]> = { a: [], b: [] };
   const rosterToSide = (rid: number): SideKey => (rid === rosterA ? "a" : "b");
 
   for (const [sid, rid] of Object.entries(adds)) {
     const playerId = playerMap.get(sid)!;
-    sideAssets[rosterToSide(Number(rid))].push({ kind: "player", playerId });
+    const side = rosterToSide(Number(rid));
+    sideAssets[side].push({ kind: "player", playerId });
+    assetMeta[side].push({ kind: "player", sleeperId: sid, round: null });
   }
 
   if (format.allowsPicks) {
@@ -309,8 +351,10 @@ export async function importAndAnalyze(args: {
       const owner = Number(pick.owner_id);
       if (!Number.isFinite(season) || !Number.isFinite(round) || !Number.isFinite(owner)) continue;
       if (owner !== rosterA && owner !== rosterB) continue;
+      const side = rosterToSide(owner);
       // Slot is unknown from Sleeper; the engine uses a generic season+round value.
-      sideAssets[rosterToSide(owner)].push({ kind: "pick", season, round });
+      sideAssets[side].push({ kind: "pick", season, round });
+      assetMeta[side].push({ kind: "pick", sleeperId: null, round });
     }
   } else if (picks.length > 0) {
     notices.push("Draft picks were excluded because this is a redraft format.");
@@ -358,7 +402,7 @@ export async function importAndAnalyze(args: {
         teamLabels,
         // Private import context: never copied into public_payload.
         sleeperContext: { sleeperLeagueId, sleeperTransactionId, rosterIds: rosters },
-        formatDetectionEvidence: { lines: evidence, derived: deriveLeagueFormat(sleeperLeague) },
+        formatDetectionEvidence: { lines: evidence, derived },
       });
       const { error } = await admin
         .from("signal_check_analyses")
@@ -367,7 +411,7 @@ export async function importAndAnalyze(args: {
       else shareUrl = `${SITE.url}/tools/signal-check/v/${shareId}`;
     }
 
-    return { ok: true, view, evidence, notices, shareUrl };
+    return { ok: true, view, assetMeta, evidence, notices, shareUrl };
   } catch (err) {
     if (err instanceof SignalCheckError) return { ok: false, error: err.message };
     console.error("[signal-check import] failed", err);

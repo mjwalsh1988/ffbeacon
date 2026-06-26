@@ -77,3 +77,58 @@ export function mapToFormatSlug(derived: DerivedFormat): string | null {
 export function deriveFormatSlug(league: SleeperLeague): string | null {
   return mapToFormatSlug(deriveLeagueFormat(league));
 }
+
+/** Plain-language label for a derived Sleeper format, e.g. "Dynasty PPR Superflex TE Premium". */
+export function describeDerivedFormat(d: DerivedFormat): string {
+  const league = d.league_type === "dynasty" ? "Dynasty" : "Redraft";
+  const scoring =
+    d.scoring_type === "ppr" ? "PPR" : d.scoring_type === "half_ppr" ? "Half PPR" : "Standard";
+  const parts = [league, scoring];
+  if (d.is_superflex) parts.push("Superflex");
+  if (d.is_tep) parts.push("TE Premium");
+  return parts.join(" ");
+}
+
+/** A supported format we can fall back to, with the structural flags we score against. */
+export interface FormatCandidate {
+  slug: string;
+  display: string;
+  league_type: "redraft" | "dynasty" | string;
+  scoring_type: "ppr" | "half_ppr" | "standard" | string;
+  is_superflex: boolean;
+  is_tep: boolean;
+  display_order: number | null;
+}
+
+/**
+ * Pick the closest supported format to a derived Sleeper format when the exact
+ * combination has no FF Beacon values yet (e.g. dynasty half-PPR, or a TEP
+ * redraft we don't carry). NEVER crosses league_type: a redraft league only
+ * ever maps to a redraft format and a dynasty league only to a dynasty format.
+ *
+ * Within the same league_type, closeness is scored by structural impact:
+ * superflex (the biggest value driver) > scoring > TE premium, then the lowest
+ * display_order breaks ties. Returns null only when no supported format shares
+ * the league_type (which should not happen while both types have formats).
+ */
+export function pickClosestSupportedFormat(
+  derived: DerivedFormat,
+  candidates: FormatCandidate[],
+): FormatCandidate | null {
+  const sameLeague = candidates.filter((c) => c.league_type === derived.league_type);
+  if (sameLeague.length === 0) return null;
+
+  const scoreOf = (c: FormatCandidate) =>
+    (c.is_superflex === derived.is_superflex ? 8 : 0) +
+    (c.scoring_type === derived.scoring_type ? 4 : 0) +
+    (c.is_tep === derived.is_tep ? 2 : 0);
+
+  return [...sameLeague].sort((a, b) => {
+    const diff = scoreOf(b) - scoreOf(a);
+    if (diff !== 0) return diff;
+    const ao = a.display_order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.display_order ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return a.slug.localeCompare(b.slug);
+  })[0];
+}

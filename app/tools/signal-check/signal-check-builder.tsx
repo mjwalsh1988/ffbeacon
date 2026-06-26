@@ -1,8 +1,11 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { ArrowRight, Trash2, Scale, Copy, Check } from "lucide-react";
+import { Scale, Trash2, RotateCcw, Loader2 } from "lucide-react";
 import { AssetAutocomplete, type SearchResult } from "./asset-autocomplete";
+import { AssetAvatar } from "./asset-avatar";
+import { LeagueFormatSelector } from "./league-format-selector";
+import { TradeResult, type ResultAssetMetaBySide } from "./trade-result";
 import { runSignalCheck } from "./actions";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
@@ -20,6 +23,9 @@ interface SelectedAsset {
   name: string;
   detail: string | null;
   playerId?: string;
+  sleeperId?: string | null;
+  position?: string | null;
+  team?: string | null;
   season?: number;
   round?: number;
   pickPosition?: "early" | "mid" | "late";
@@ -33,6 +39,9 @@ function fromResult(r: SearchResult): SelectedAsset {
       name: r.name,
       detail: [r.position, r.team].filter(Boolean).join(", ") || null,
       playerId: r.playerId,
+      sleeperId: r.sleeperId,
+      position: r.position,
+      team: r.team,
     };
   }
   return {
@@ -53,6 +62,17 @@ function toInput(a: SelectedAsset): AnalysisInput["sides"]["a"][number] {
     : { kind: "pick", season: a.season!, round: a.round! };
 }
 
+/** Build the per-side headshot metadata for the result, aligned to submit order. */
+function toAssetMeta(sides: Record<SideKey, SelectedAsset[]>): ResultAssetMetaBySide {
+  const mapSide = (list: SelectedAsset[]) =>
+    list.map((a) => ({
+      kind: a.kind,
+      sleeperId: a.sleeperId ?? null,
+      round: a.round ?? null,
+    }));
+  return { a: mapSide(sides.a), b: mapSide(sides.b) };
+}
+
 export function SignalCheckBuilder({
   formats,
   defaultFormatSlug,
@@ -67,6 +87,7 @@ export function SignalCheckBuilder({
   );
   const [sides, setSides] = useState<Record<SideKey, SelectedAsset[]>>({ a: [], b: [] });
   const [result, setResult] = useState<BuilderView | null>(null);
+  const [resultMeta, setResultMeta] = useState<ResultAssetMetaBySide | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState<string>("");
@@ -79,14 +100,19 @@ export function SignalCheckBuilder({
     [formats, formatSlug],
   );
   const allowsPicks = activeFormat?.allowsPicks ?? false;
-
   const assetCount = sides.a.length + sides.b.length;
+  const canRun = sides.a.length > 0 && sides.b.length > 0;
+
+  function resetResult() {
+    setResult(null);
+    setResultMeta(null);
+    setShareUrl(null);
+  }
 
   function changeFormat(next: string) {
     const nextFormat = formats.find((f) => f.slug === next);
     setFormatSlug(next);
-    setResult(null);
-    setShareUrl(null);
+    resetResult();
     // Picks are dynasty-only: drop any picks when moving to a redraft format.
     if (nextFormat && !nextFormat.allowsPicks) {
       let removed = 0;
@@ -106,8 +132,7 @@ export function SignalCheckBuilder({
 
   function addAsset(side: SideKey, r: SearchResult) {
     const asset = fromResult(r);
-    setResult(null);
-    setShareUrl(null);
+    resetResult();
     setSides((prev) => {
       if (prev[side].some((a) => a.key === asset.key)) {
         setNotice(`${asset.name} is already on that side.`);
@@ -119,13 +144,19 @@ export function SignalCheckBuilder({
   }
 
   function removeAsset(side: SideKey, key: string) {
-    setResult(null);
-    setShareUrl(null);
+    resetResult();
     setSides((prev) => {
       const removed = prev[side].find((a) => a.key === key);
       if (removed) setNotice(`${removed.name} removed from Side ${side.toUpperCase()}.`);
       return { ...prev, [side]: prev[side].filter((a) => a.key !== key) };
     });
+  }
+
+  function clearAll() {
+    resetResult();
+    setSides({ a: [], b: [] });
+    setError(null);
+    setNotice("Trade cleared.");
   }
 
   function buildInput(): AnalysisInput {
@@ -137,16 +168,23 @@ export function SignalCheckBuilder({
 
   function analyze(save: boolean) {
     setError(null);
+    const snapshot = toAssetMeta(sides);
     startTransition(async () => {
       const res = await runSignalCheck(buildInput(), save ? { save: true, makePublic: true } : undefined);
       if (res.ok) {
         setResult(res.view);
-        if (save) setShareUrl(res.shareUrl);
-        // Move focus to the result for screen-reader users.
-        requestAnimationFrame(() => resultRef.current?.focus());
+        setResultMeta(snapshot);
+        if (save) {
+          setShareUrl(res.shareUrl);
+          // Focus is handled inside TradeResult: it moves to the share input
+          // when the link appears, so don't yank it back to the result top.
+        } else {
+          // Move focus to the result for screen-reader users.
+          requestAnimationFrame(() => resultRef.current?.focus());
+        }
       } else {
         setError(res.error);
-        setResult(null);
+        resetResult();
       }
     });
   }
@@ -169,103 +207,133 @@ export function SignalCheckBuilder({
         {notice}
       </p>
 
-      {/* Format selector */}
-      <div>
-        <label htmlFor="sc-format" className="block text-sm font-medium text-ink">
-          League format
-        </label>
-        <select
-          id="sc-format"
-          value={formatSlug}
-          onChange={(e) => changeFormat(e.target.value)}
-          className="mt-2 min-h-11 w-full max-w-sm rounded-card border border-line bg-base px-3 py-2 text-sm text-ink focus:border-brand-purple focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-        >
-          {formats.map((f) => (
-            <option key={f.slug} value={f.slug}>
-              {f.display}
-              {f.allowsPicks ? "" : " (no draft picks)"}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-ink-subtle">
-          Values come from FF Beacon for this format.{" "}
-          {allowsPicks ? "Players and draft picks are tradeable." : "Redraft format: players only."}
-        </p>
-      </div>
+      {/* Step 1: format */}
+      <LeagueFormatSelector formats={formats} value={formatSlug} onChange={changeFormat} />
 
-      {/* Two sides */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {(["a", "b"] as SideKey[]).map((side) => (
-          <section
-            key={side}
-            aria-labelledby={`side-${side}-heading`}
-            className="rounded-card border border-line bg-surface/40 p-4 sm:p-5"
+      {/* Step 2: build the trade */}
+      <section aria-labelledby="build-step-heading">
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-beacon text-xs font-bold text-black"
           >
-            <h2 id={`side-${side}-heading`} className="text-lg font-semibold text-ink">
-              Side {side.toUpperCase()}
-            </h2>
-            <div className="mt-3">
-              <AssetAutocomplete
-                sideLabel={`Side ${side.toUpperCase()}`}
-                formatSlug={formatSlug}
-                minLength={minLength}
-                onSelect={(r) => addAsset(side, r)}
-              />
-            </div>
+            2
+          </span>
+          <h2 id="build-step-heading" className="text-base font-semibold text-ink">
+            Build the trade
+          </h2>
+          {assetCount > 0 && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-card px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+              Clear all
+            </button>
+          )}
+        </div>
 
-            <ul role="list" aria-label={`Assets on Side ${side.toUpperCase()}`} className="mt-4 space-y-2">
-              {sides[side].length === 0 ? (
-                <li className="rounded-card border border-dashed border-line px-3 py-4 text-sm text-ink-subtle">
-                  No assets yet.
-                </li>
-              ) : (
-                sides[side].map((a) => (
-                  <li
-                    key={a.key}
-                    className="flex items-center justify-between gap-3 rounded-card border border-line bg-base px-3 py-2"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-ink">{a.name}</span>
-                      {a.detail && <span className="block text-xs text-ink-subtle">{a.detail}</span>}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeAsset(side, a.key)}
-                      aria-label={`Remove ${a.name} from Side ${side.toUpperCase()}`}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                    >
-                      <Trash2 aria-hidden="true" className="h-4 w-4" />
-                    </button>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {(["a", "b"] as SideKey[]).map((side) => (
+            <section
+              key={side}
+              aria-labelledby={`side-${side}-heading`}
+              className="rounded-card border border-line bg-surface/40 p-4 sm:p-5"
+            >
+              <div className="flex items-center justify-between">
+                <h3 id={`side-${side}-heading`} className="text-lg font-semibold text-ink">
+                  Side {side.toUpperCase()}
+                </h3>
+                <span className="rounded-full border border-line bg-base px-2 py-0.5 text-xs text-ink-subtle">
+                  {sides[side].length} {sides[side].length === 1 ? "asset" : "assets"}
+                </span>
+              </div>
+              <div className="mt-3">
+                <AssetAutocomplete
+                  sideLabel={`Side ${side.toUpperCase()}`}
+                  formatSlug={formatSlug}
+                  minLength={minLength}
+                  onSelect={(r) => addAsset(side, r)}
+                />
+              </div>
+
+              <ul role="list" aria-label={`Assets on Side ${side.toUpperCase()}`} className="mt-4 space-y-2">
+                {sides[side].length === 0 ? (
+                  <li className="flex items-center gap-2 rounded-card border border-dashed border-line px-3 py-4 text-sm text-ink-subtle">
+                    {allowsPicks
+                      ? "Add players or draft picks to this side."
+                      : "Add players to this side."}
                   </li>
-                ))
-              )}
-            </ul>
-          </section>
-        ))}
-      </div>
+                ) : (
+                  sides[side].map((a) => (
+                    <li
+                      key={a.key}
+                      className="flex items-center gap-3 rounded-card border border-line bg-base px-3 py-2"
+                    >
+                      <AssetAvatar
+                        kind={a.kind}
+                        sleeperId={a.sleeperId ?? null}
+                        round={a.round ?? null}
+                        name={a.name}
+                        size={44}
+                        decorative
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-ink">{a.name}</span>
+                        {a.detail && (
+                          <span className="block truncate text-xs text-ink-subtle">{a.detail}</span>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeAsset(side, a.key)}
+                        aria-label={`Remove ${a.name} from Side ${side.toUpperCase()}`}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                      >
+                        <Trash2 aria-hidden="true" className="h-4 w-4" />
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </section>
 
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => analyze(false)}
-          disabled={isPending || assetCount === 0}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-        >
-          <Scale aria-hidden="true" className="h-4 w-4" />
-          {isPending ? "Analyzing..." : "Run Signal Check"}
-        </button>
-        {result && (
+      {/* Run bar */}
+      <div className="flex flex-col gap-3 rounded-card border border-line bg-surface/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-ink-muted">
+          {canRun
+            ? "Ready to check. We weigh both sides with FF Beacon Values for your format."
+            : "Add at least one asset to each side to run the check."}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => analyze(true)}
-            disabled={isPending}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            onClick={() => analyze(false)}
+            disabled={isPending || !canRun}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            Create share link
-            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            {isPending ? (
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+            ) : (
+              <Scale aria-hidden="true" className="h-4 w-4" />
+            )}
+            {isPending ? "Checking..." : "Run Signal Check"}
           </button>
-        )}
+          {result && !shareUrl && (
+            <button
+              type="button"
+              onClick={() => analyze(true)}
+              disabled={isPending}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Create share link
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -274,114 +342,83 @@ export function SignalCheckBuilder({
         </p>
       )}
 
-      {/* Results */}
-      <div ref={resultRef} tabIndex={-1} aria-live="polite" className="scroll-mt-24 outline-none">
-        {result && <ResultPanel view={result} shareUrl={shareUrl} copied={copied} onCopy={copyShare} />}
+      {/* Concise result announcement. The full result subtree below is NOT a
+          live region (it would announce hero + margin + both sides + every
+          explainer at once); instead we move focus there and announce a short
+          summary here. */}
+      <p aria-live="polite" className="sr-only">
+        {isPending
+          ? "Checking the trade."
+          : result
+            ? `Result ready. ${result.verdictLabel} Value ${result.isNeutral ? "spread" : "margin"} ${result.marginPct} percent.`
+            : ""}
+      </p>
+
+      {/* Result region: empty -> loading -> result */}
+      <div
+        ref={resultRef}
+        tabIndex={-1}
+        role="region"
+        aria-label="Signal Check result"
+        className="scroll-mt-24 outline-none"
+      >
+        {isPending ? (
+          <ResultLoading />
+        ) : result ? (
+          <TradeResult
+            view={result}
+            shareUrl={shareUrl}
+            copied={copied}
+            onCopy={copyShare}
+            assetMeta={resultMeta ?? undefined}
+          />
+        ) : !error ? (
+          <ResultEmpty canRun={canRun} />
+        ) : null}
       </div>
     </div>
   );
 }
 
-export function ResultPanel({
-  view,
-  shareUrl,
-  copied,
-  onCopy,
-}: {
-  view: BuilderView;
-  shareUrl: string | null;
-  copied: boolean;
-  onCopy: () => void;
-}) {
+function ResultEmpty({ canRun }: { canRun: boolean }) {
   return (
-    <div className="rounded-modal border border-line bg-surface p-5 sm:p-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">{view.resultLabel}</p>
-      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">{view.verdictLabel}</h2>
+    <div className="rounded-modal border border-dashed border-line bg-surface/30 p-8 text-center">
+      <span
+        aria-hidden="true"
+        className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-line bg-base text-brand-cyan"
+      >
+        <Scale className="h-5 w-5" />
+      </span>
+      <p className="mt-4 text-base font-semibold text-ink">
+        {canRun ? "You're all set. Run the check." : "Your verdict shows up here"}
+      </p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
+        {canRun
+          ? "Press Run Signal Check to see who wins, by how much, and why."
+          : "Pick your format, add players to both sides, then run the check to get the Beacon Verdict."}
+      </p>
+    </div>
+  );
+}
 
-      <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-        <div>
-          <dt className="text-ink-subtle">Format</dt>
-          <dd className="font-medium text-ink">{view.formatDisplay}</dd>
+function ResultLoading() {
+  return (
+    <div className="rounded-modal border border-line bg-surface p-6" aria-busy="true">
+      <p className="flex items-center gap-2 text-sm font-medium text-brand-cyan">
+        <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+        Weighing both sides with FF Beacon Values...
+      </p>
+      <div aria-hidden="true" className="mt-5 space-y-4">
+        <div className="h-8 w-2/3 animate-pulse rounded-card bg-line/60" />
+        <div className="space-y-2.5">
+          <div className="h-3.5 w-full animate-pulse rounded-full bg-line/60" />
+          <div className="h-3.5 w-5/6 animate-pulse rounded-full bg-line/50" />
         </div>
-        {view.tradeShapeLabel && (
-          <div>
-            <dt className="text-ink-subtle">Trade shape</dt>
-            <dd className="font-medium text-ink">{view.tradeShapeLabel}</dd>
-          </div>
-        )}
-        {view.confidenceLabel && (
-          <div>
-            <dt className="text-ink-subtle">Confidence</dt>
-            <dd className="font-medium text-ink">{view.confidenceLabel}</dd>
-          </div>
-        )}
-      </dl>
-
-      <p className="mt-4 text-sm leading-relaxed text-ink-muted">{view.explanation}</p>
-
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {view.sides.map((s) => (
-          <div key={s.side} className="rounded-card border border-line bg-base/50 p-4">
-            <div className="flex items-baseline justify-between">
-              <h3 className="text-sm font-semibold text-ink">
-                Side {s.side.toUpperCase()}
-                {view.winnerSide === s.side && (
-                  <span className="ml-2 rounded-full bg-brand-cyan/15 px-2 py-0.5 text-xs font-medium text-brand-cyan">
-                    Winner
-                  </span>
-                )}
-              </h3>
-              {s.total !== null && <span className="text-sm font-medium text-ink-muted">{s.total}</span>}
-            </div>
-            <ul role="list" className="mt-2 space-y-1">
-              {s.assets.map((a, i) => (
-                <li key={i} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="min-w-0 truncate text-ink">
-                    {a.name}
-                    {a.noValue && <span className="ml-1 text-xs text-signal-danger">(no value)</span>}
-                  </span>
-                  {a.value !== null && <span className="text-xs text-ink-subtle">{a.value}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-24 animate-pulse rounded-card bg-line/40" />
+          <div className="h-24 animate-pulse rounded-card bg-line/40" />
+        </div>
       </div>
-
-      {view.hasMissingValues && (
-        <p className="mt-4 text-xs text-ink-subtle">
-          One or more assets had no FF Beacon value and were excluded from the totals.
-        </p>
-      )}
-
-      {shareUrl && (
-        <div className="mt-5 border-t border-line pt-4">
-          <label htmlFor="sc-share-url" className="block text-sm font-medium text-ink">
-            Shareable link
-          </label>
-          <div className="mt-2 flex gap-2">
-            <input
-              id="sc-share-url"
-              type="text"
-              readOnly
-              value={shareUrl}
-              onFocus={(e) => e.currentTarget.select()}
-              className="min-h-11 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink"
-            />
-            <button
-              type="button"
-              onClick={onCopy}
-              aria-label="Copy share link"
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              {copied ? <Check aria-hidden="true" className="h-4 w-4 text-brand-cyan" /> : <Copy aria-hidden="true" className="h-4 w-4" />}
-            </button>
-          </div>
-          <p aria-live="polite" className="mt-1 text-xs text-ink-subtle">
-            {copied ? "Link copied to clipboard." : ""}
-          </p>
-        </div>
-      )}
     </div>
   );
 }

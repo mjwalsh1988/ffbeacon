@@ -67,6 +67,8 @@ export interface PricedPlayer {
   name: string;
   position: string | null;
   team: string | null;
+  /** Sleeper id for the headshot CDN. null when the player has no mapping. */
+  sleeperId: string | null;
   baseValue: number;
   /** True when no FF Beacon value row exists for this player+format. */
   noValue: boolean;
@@ -293,7 +295,16 @@ export interface SignalCheckSettings {
 export interface PublicSidePayload {
   side: SideKey;
   teamLabel: string | null;
-  assets: { name: string; detail: string | null }[];
+  assets: {
+    name: string;
+    detail: string | null;
+    /** Asset kind, so the share page can render a headshot vs a pick badge. */
+    kind: "player" | "pick";
+    /** Sleeper id for the headshot CDN (player assets only). Public, safe. */
+    sleeperId: string | null;
+    /** Draft round (pick assets only) for the pick badge. */
+    round: number | null;
+  }[];
   /** Only present when the admin "show raw values" toggle is on. */
   total: number | null;
 }

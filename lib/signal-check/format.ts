@@ -10,6 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { ResolvedFormat, SignalCheckSettings } from "./types";
+import type { FormatCandidate } from "@/lib/sleeper-to-format";
 
 type Client = SupabaseClient<Database>;
 
@@ -52,6 +53,38 @@ export async function resolveFormat(
     leagueType: fc.league_type,
     allowsPicks: fc.league_type === "dynasty",
   };
+}
+
+/**
+ * The supported, active, non-disabled formats as fallback candidates, carrying
+ * the structural flags (scoring/superflex/TEP) the closeness picker scores
+ * against. Used to approximate a Sleeper league whose exact format FF Beacon
+ * does not publish values for yet.
+ */
+export async function supportedFormatCandidates(
+  supabase: Client,
+  settings: SignalCheckSettings,
+): Promise<FormatCandidate[]> {
+  const supported = await ffbeaconSupportedSlugs(supabase);
+  const { data } = await supabase
+    .from("format_configs")
+    .select("slug, display_name, league_type, scoring_type, is_superflex, te_premium_bonus, display_order")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+
+  const disabled = new Set(settings.disabledFormatSlugs);
+  return (data ?? [])
+    .filter((fc) => (supported ? supported.includes(fc.slug) : true))
+    .filter((fc) => !disabled.has(fc.slug))
+    .map((fc) => ({
+      slug: fc.slug,
+      display: fc.display_name,
+      league_type: fc.league_type,
+      scoring_type: fc.scoring_type,
+      is_superflex: fc.is_superflex,
+      is_tep: fc.te_premium_bonus > 0,
+      display_order: fc.display_order,
+    }));
 }
 
 /** FF Beacon's supported_format_slugs (null means "all formats"). */

@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ScrollText, Trophy } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatEastern } from "@/lib/datetime";
 import { SITE } from "@/lib/site";
-import type { PublicSharePayload } from "@/lib/signal-check/types";
+import type { PublicSharePayload, SideKey } from "@/lib/signal-check/types";
+import { TradeMarginGraph } from "../../trade-margin-graph";
+import { AssetAvatar } from "../../asset-avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,10 @@ export async function generateMetadata({
   };
 }
 
+function sideName(s: PublicSharePayload["sides"][number]): string {
+  return s.teamLabel || `Side ${s.side.toUpperCase()}`;
+}
+
 export default async function SignalCheckSharePage({
   params,
 }: {
@@ -61,6 +67,9 @@ export default async function SignalCheckSharePage({
   const { shareId } = await params;
   const payload = await loadPayload(shareId);
   if (!payload) notFound();
+
+  const labelFor = (side: SideKey) =>
+    payload.sides.find((s) => s.side === side)?.teamLabel || `Side ${side.toUpperCase()}`;
 
   return (
     <main id="main">
@@ -73,32 +82,43 @@ export default async function SignalCheckSharePage({
               "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
           }}
         />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 left-1/2 h-[340px] w-[760px] -translate-x-1/2"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
+          }}
+        />
         <div className="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
             {payload.featureLabel} · {payload.resultLabel}
           </p>
-          <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
-            {payload.verdictLabel}
-          </h1>
 
-          <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-            <div>
-              <dt className="text-ink-subtle">Format</dt>
-              <dd className="font-medium text-ink">{payload.formatDisplay}</dd>
-            </div>
-            {payload.tradeShapeLabel && (
-              <div>
-                <dt className="text-ink-subtle">Trade shape</dt>
-                <dd className="font-medium text-ink">{payload.tradeShapeLabel}</dd>
+          <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <h1 className="max-w-xl text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
+              {payload.verdictLabel}
+            </h1>
+            {payload.marginPct !== null && (
+              <div className="shrink-0 sm:text-right">
+                <p
+                  className="bg-clip-text text-4xl font-bold tabular-nums text-transparent sm:text-5xl"
+                  style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
+                >
+                  {payload.marginPct}%
+                </p>
+                <p className="text-xs text-ink-subtle">
+                  {payload.winnerSide ? "value margin" : "value spread"}
+                </p>
               </div>
             )}
-            {payload.confidenceLabel && (
-              <div>
-                <dt className="text-ink-subtle">Confidence</dt>
-                <dd className="font-medium text-ink">{payload.confidenceLabel}</dd>
-              </div>
-            )}
-          </dl>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Chip label="Format" value={payload.formatDisplay} />
+            {payload.tradeShapeLabel && <Chip label="Trade shape" value={payload.tradeShapeLabel} />}
+            {payload.confidenceLabel && <Chip label="Confidence" value={payload.confidenceLabel} />}
+          </div>
         </div>
       </header>
 
@@ -108,34 +128,83 @@ export default async function SignalCheckSharePage({
             Verdict detail
           </h2>
 
-          <p className="text-base leading-relaxed text-ink-muted">{payload.explanation}</p>
+          {payload.marginPct !== null && (
+            <TradeMarginGraph
+              marginPct={payload.marginPct}
+              winnerSide={payload.winnerSide}
+              isNeutral={payload.winnerSide === null}
+              sideALabel={labelFor("a")}
+              sideBLabel={labelFor("b")}
+              totalA={payload.sides.find((s) => s.side === "a")?.total ?? null}
+              totalB={payload.sides.find((s) => s.side === "b")?.total ?? null}
+            />
+          )}
+
+          <div className="mt-6 rounded-card border border-line bg-surface/40 p-4 sm:p-5">
+            <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <ScrollText aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
+              What this means
+            </p>
+            <p className="mt-2 text-base leading-relaxed text-ink-muted">{payload.explanation}</p>
+          </div>
 
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {payload.sides.map((s) => (
-              <div key={s.side} className="rounded-card border border-line bg-surface/40 p-4">
-                <div className="flex items-baseline justify-between">
-                  <h3 className="text-sm font-semibold text-ink">
-                    {s.teamLabel || `Side ${s.side.toUpperCase()}`}
-                    {payload.winnerSide === s.side && (
-                      <span className="ml-2 rounded-full bg-brand-cyan/15 px-2 py-0.5 text-xs font-medium text-brand-cyan">
-                        Winner
+            {payload.sides.map((s) => {
+              const isWinner = payload.winnerSide === s.side;
+              return (
+                <div
+                  key={s.side}
+                  className={`rounded-card border p-4 ${
+                    isWinner ? "border-brand-cyan/50 bg-brand-cyan/[0.04]" : "border-line bg-surface/40"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                      {sideName(s)}
+                      {isWinner && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-brand-cyan/15 px-2 py-0.5 text-xs font-medium text-brand-cyan">
+                          <Trophy aria-hidden="true" className="h-3 w-3" />
+                          Winner
+                        </span>
+                      )}
+                    </h3>
+                    {s.total !== null && (
+                      <span className="text-sm font-semibold tabular-nums text-ink-muted">
+                        {s.total.toLocaleString()}
                       </span>
                     )}
-                  </h3>
-                  {s.total !== null && (
-                    <span className="text-sm font-medium text-ink-muted">{s.total}</span>
-                  )}
+                  </div>
+
+                  <ul role="list" className="mt-3 space-y-2">
+                    {s.assets.map((a, i) => {
+                      const kind: "player" | "pick" =
+                        a.kind ??
+                        (a.detail?.toLowerCase().startsWith("draft pick") ? "pick" : "player");
+                      return (
+                        <li key={i} className="flex items-center gap-2.5">
+                          <AssetAvatar
+                            kind={kind}
+                            sleeperId={a.sleeperId ?? null}
+                            round={a.round ?? null}
+                            name={a.name}
+                            size={36}
+                            decorative
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-ink">
+                              {a.name}
+                            </span>
+                            {a.detail && (
+                              <span className="block truncate text-xs text-ink-subtle">{a.detail}</span>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-                <ul role="list" className="mt-2 space-y-1">
-                  {s.assets.map((a, i) => (
-                    <li key={i} className="text-sm text-ink">
-                      {a.name}
-                      {a.detail && <span className="ml-2 text-xs text-ink-subtle">{a.detail}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <p className="mt-6 text-xs text-ink-subtle">
@@ -155,5 +224,14 @@ export default async function SignalCheckSharePage({
         </div>
       </section>
     </main>
+  );
+}
+
+function Chip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-3 py-1 text-xs">
+      <span className="text-ink-subtle">{label}:</span>
+      <span className="font-medium text-ink">{value}</span>
+    </span>
   );
 }

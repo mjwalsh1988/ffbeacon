@@ -24,6 +24,7 @@ function asset(id: string, value: number, kind: "player" | "pick" = "player"): P
     name: id,
     position: "WR",
     team: "FA",
+    sleeperId: null,
     baseValue: value,
     noValue: false,
   };

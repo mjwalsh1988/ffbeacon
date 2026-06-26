@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Scale, ShieldCheck, ListTree } from "lucide-react";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
 import { supportedFormats } from "@/lib/signal-check/format";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { SignalCheckBuilder, type FormatOption } from "./signal-check-builder";
+import { SleeperImportPanel } from "./sleeper-import-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,27 @@ export default async function SignalCheckPage() {
     allowsPicks: f.allowsPicks,
   }));
 
+  // The inline Sleeper import panel adapts to auth state. We resolve the signed
+  // in user and their saved Sleeper username here so the panel can open straight
+  // into the league picker (or the save-username step) without a round trip.
+  const cookieClient = await createClient();
+  const {
+    data: { user },
+  } = await cookieClient.auth.getUser();
+  const signedIn = Boolean(user);
+
+  let savedUsername: string | null = null;
+  if (user) {
+    const { data: prefs } = await cookieClient
+      .from("user_preferences")
+      .select("sleeper_league_settings")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    savedUsername = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
+  }
+
+  const showImport = settings.enabled && settings.sleeperImportsEnabled;
+
   return (
     <main id="main">
       <Hero featureLabel={settings.publicLabel} resultLabel={settings.resultLabel} />
@@ -43,11 +65,19 @@ export default async function SignalCheckPage() {
               {settings.publicLabel} is not available right now. Please check back soon.
             </p>
           ) : (
-            <SignalCheckBuilder
-              formats={formats}
-              defaultFormatSlug={settings.defaultFormatSlug}
-              minLength={settings.autocompleteMinLength}
-            />
+            <div className="space-y-8">
+              {showImport && (
+                <>
+                  <SleeperImportPanel signedIn={signedIn} initialUsername={savedUsername} />
+                  <OrDivider />
+                </>
+              )}
+              <SignalCheckBuilder
+                formats={formats}
+                defaultFormatSlug={settings.defaultFormatSlug}
+                minLength={settings.autocompleteMinLength}
+              />
+            </div>
           )}
         </div>
       </section>
@@ -102,15 +132,23 @@ function Hero({ featureLabel, resultLabel }: { featureLabel: string; resultLabel
           <HeroBullet icon={ShieldCheck} title="Shareable verdicts" body="Freeze a result and share a clean public link." />
         </ul>
 
-        <p className="mt-6 text-sm text-ink-muted">
-          Have a Sleeper league?{" "}
-          <Link href="/my-beacon/sleeper-leagues" className="text-brand-purple underline-offset-4 hover:underline">
-            Sign in to import a completed trade
-          </Link>
-          .
-        </p>
       </div>
     </header>
+  );
+}
+
+function OrDivider() {
+  return (
+    <div className="flex items-center gap-4" role="separator" aria-label="or build your own trade below">
+      <span aria-hidden="true" className="h-px flex-1 bg-line" />
+      <span
+        aria-hidden="true"
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted"
+      >
+        or
+      </span>
+      <span aria-hidden="true" className="h-px flex-1 bg-line" />
+    </div>
   );
 }
 

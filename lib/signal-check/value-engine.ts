@@ -29,6 +29,8 @@ export interface ResolvedPlayerValue {
   name: string;
   position: string | null;
   team: string | null;
+  /** Sleeper id for the headshot CDN. Optional; defaults to null. */
+  sleeperId?: string | null;
   /** null => no FF Beacon value row for this player+format. */
   value: number | null;
   capturedAt: string | null;
@@ -98,6 +100,7 @@ function pricePlayer(
         name: "Unknown player",
         position: null,
         team: null,
+        sleeperId: null,
         baseValue: 0,
         noValue: true,
       },
@@ -113,6 +116,7 @@ function pricePlayer(
       name: resolved.name,
       position: resolved.position,
       team: resolved.team,
+      sleeperId: resolved.sleeperId ?? null,
       baseValue: resolved.value ?? 0,
       noValue,
     },

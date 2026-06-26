@@ -56,6 +56,9 @@ function buildSidePayload(
     assets: s.assets.map((r) => ({
       name: r.asset.kind === "player" ? r.asset.name : r.asset.label,
       detail: assetDetail(r.asset),
+      kind: r.asset.kind,
+      sleeperId: r.asset.kind === "player" ? r.asset.sleeperId : null,
+      round: r.asset.kind === "pick" ? r.asset.round : null,
     })),
     total: settings.showRawValues ? Math.round(s.totalPost) : null,
   };
