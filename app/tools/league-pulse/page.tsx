@@ -4,6 +4,8 @@ import { Workflow, Sparkles, Lock, ArrowRight } from "lucide-react";
 import { LeaguePulseForm } from "./league-pulse-form";
 import { LeagueResults } from "./league-results";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
+import { createClient } from "@/lib/supabase/server";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 
 export const metadata: Metadata = {
   title: "Sleeper League Pulse",
@@ -20,6 +22,29 @@ export default async function LeaguePulsePage({
   const params = await searchParams;
   const usernameInput = params.username?.trim();
   const season = params.season?.trim() || currentNflSeason();
+
+  // Logged-in state drives two things: hide the "sign in to save" CTA, and
+  // pre-fill the search input with the saved Sleeper handle so the user never
+  // has to paste it again.
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  const isLoggedIn = Boolean(authUser);
+
+  let savedUsername = "";
+  if (authUser) {
+    const { data: prefs } = await supabase
+      .from("user_preferences")
+      .select("sleeper_league_settings")
+      .eq("user_id", authUser.id)
+      .maybeSingle();
+    savedUsername =
+      parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? "";
+  }
+
+  // URL param wins (shareable links); otherwise fall back to the saved handle.
+  const defaultUsername = usernameInput ?? savedUsername;
 
   let user = null;
   let leagues: Awaited<ReturnType<typeof getSleeperLeagues>> = [];
@@ -56,7 +81,7 @@ export default async function LeaguePulsePage({
           </p>
 
           <div className="mt-6">
-            <LeaguePulseForm defaultUsername={usernameInput ?? ""} defaultSeason={season} />
+            <LeaguePulseForm defaultUsername={defaultUsername} defaultSeason={season} />
           </div>
 
           {error && (
@@ -122,7 +147,7 @@ export default async function LeaguePulsePage({
         </section>
       )}
 
-      <CtaSection />
+      {!isLoggedIn && <CtaSection />}
     </main>
   );
 }
