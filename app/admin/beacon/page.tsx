@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { getRecomputeStatus } from "@/lib/beacon-admin";
 import { BEACON_SUBPAGES } from "@/lib/beacon-admin-nav";
 
-export const metadata: Metadata = { title: "Player Values & Sources" };
+export const metadata: Metadata = { title: "Values, Rankings, & Sources" };
 export const dynamic = "force-dynamic";
 
 /** Parent landing: a short list of clear destinations, no controls. */
@@ -19,7 +19,7 @@ export default async function BeaconOverviewPage() {
     <div className="space-y-8">
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">Overview</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Player Values & Sources</h2>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Values, Rankings, & Sources</h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
           Control surface for the FF Beacon proprietary value engine. Choose a section below.
           {" "}Last recompute: {lastRunLabel}.{" "}
@@ -27,7 +27,7 @@ export default async function BeaconOverviewPage() {
         </p>
       </header>
 
-      <nav aria-label="Player Values and Sources sections">
+      <nav aria-label="Values, Rankings, and Sources sections">
         <ul role="list" className="grid gap-3 sm:grid-cols-2">
           {BEACON_SUBPAGES.map((p) => (
             <li key={p.href}>

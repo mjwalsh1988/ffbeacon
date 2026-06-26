@@ -34,6 +34,7 @@ export function RankingsReview({
   baselineSlug,
   total,
   cap,
+  preserveParams = {},
 }: {
   rows: ReviewRow[];
   formats: Array<{ slug: string }>;
@@ -43,10 +44,14 @@ export function RankingsReview({
   baselineSlug: string | null;
   total: number;
   cap: number;
+  preserveParams?: Record<string, string>;
 }) {
   return (
     <div className="space-y-4">
       <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filter rankings">
+        {Object.entries(preserveParams).map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
         <label className="text-xs text-ink-muted">Format
           <select name="format" defaultValue={currentFormat} className="mt-1 block min-h-[44px] rounded-card border border-line bg-base px-3 text-sm text-ink">
             {formats.map((f) => <option key={f.slug} value={f.slug}>{f.slug}</option>)}

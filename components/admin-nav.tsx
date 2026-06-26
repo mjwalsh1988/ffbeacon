@@ -32,10 +32,10 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/admin/beacon",
-    label: "Player Values & Sources",
+    label: "Values, Rankings, & Sources",
     icon: SlidersHorizontal,
     description:
-      "Value engine control: sources, weights, bands, manual signals, and the full ranking review.",
+      "Value engine control: sources, weights, bands, manual signals, draft pick values, and the full ranking review.",
   },
   {
     href: "/admin/beacon-brief",

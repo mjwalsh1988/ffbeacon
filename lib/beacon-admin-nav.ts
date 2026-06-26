@@ -1,5 +1,5 @@
 /**
- * Registry of the Player Values & Sources admin sub-pages. Single source of
+ * Registry of the Values, Rankings, & Sources admin sub-pages. Single source of
  * truth for both the parent landing index and the in-section sub-navigation, so
  * adding a sub-page is one edit and it appears in both places.
  */
@@ -9,7 +9,7 @@ export const BEACON_SUBPAGES = [
     href: "/admin/beacon/rankings",
     label: "Rankings & Values",
     description:
-      "Review every player's value, rank, and 7d/30d/90d movement by format and position, with the full per-player signal breakdown.",
+      "Review every player's value, rank, and 7d/30d/90d movement by format and position, with the full per-player signal breakdown, plus draft pick values for every source.",
   },
   {
     href: "/admin/beacon/sources",

@@ -1,7 +1,7 @@
 /**
  * Admin index hero. Carries the single H1 for the /admin overview page. It is
  * intentionally NOT in the admin layout: every other admin page owns its own
- * unique H1 (cron logs, and each Player Values & Sources sub-page via
+ * unique H1 (cron logs, and each Values, Rankings, & Sources sub-page via
  * BeaconPageShell), so screen-reader heading navigation lands on a page-specific
  * H1 everywhere.
  */

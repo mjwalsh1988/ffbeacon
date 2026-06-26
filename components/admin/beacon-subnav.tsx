@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BEACON_SUBPAGES } from "@/lib/beacon-admin-nav";
 
-/** Secondary nav within Player Values & Sources, so a reader can jump between
+/** Secondary nav within Values, Rankings, & Sources, so a reader can jump between
  *  sibling sub-pages without returning to the overview. aria-current marks the
  *  active page for assistive tech. */
 export function BeaconSubNav() {
@@ -15,7 +15,7 @@ export function BeaconSubNav() {
     }`;
 
   return (
-    <nav aria-label="Player Values and Sources sections" className="flex flex-wrap gap-2">
+    <nav aria-label="Values, Rankings, and Sources sections" className="flex flex-wrap gap-2">
       <Link
         href="/admin/beacon"
         aria-current={pathname === "/admin/beacon" ? "page" : undefined}

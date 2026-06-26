@@ -1,5 +1,5 @@
 /**
- * Shared server-side helpers for the Player Values & Sources admin sub-pages.
+ * Shared server-side helpers for the Values, Rankings, & Sources admin sub-pages.
  * The recompute-status check is reused across every sub-page that offers the
  * "Recompute now" affordance so the staleness warning is consistent everywhere.
  */
