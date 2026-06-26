@@ -75,16 +75,14 @@ function toAssetMeta(sides: Record<SideKey, SelectedAsset[]>): ResultAssetMetaBy
 
 export function SignalCheckBuilder({
   formats,
-  defaultFormatSlug,
   minLength,
 }: {
   formats: FormatOption[];
-  defaultFormatSlug: string;
   minLength: number;
 }) {
-  const [formatSlug, setFormatSlug] = useState(
-    formats.some((f) => f.slug === defaultFormatSlug) ? defaultFormatSlug : (formats[0]?.slug ?? ""),
-  );
+  // No default format on purpose: the user must consciously pick the format that
+  // matches their league before a trade can run, since format drives every value.
+  const [formatSlug, setFormatSlug] = useState("");
   const [sides, setSides] = useState<Record<SideKey, SelectedAsset[]>>({ a: [], b: [] });
   const [result, setResult] = useState<BuilderView | null>(null);
   const [resultMeta, setResultMeta] = useState<ResultAssetMetaBySide | null>(null);
@@ -100,8 +98,9 @@ export function SignalCheckBuilder({
     [formats, formatSlug],
   );
   const allowsPicks = activeFormat?.allowsPicks ?? false;
+  const hasFormat = formatSlug !== "";
   const assetCount = sides.a.length + sides.b.length;
-  const canRun = sides.a.length > 0 && sides.b.length > 0;
+  const canRun = hasFormat && sides.a.length > 0 && sides.b.length > 0;
 
   function resetResult() {
     setResult(null);
@@ -253,6 +252,7 @@ export function SignalCheckBuilder({
                 <AssetAutocomplete
                   sideLabel={`Side ${side.toUpperCase()}`}
                   formatSlug={formatSlug}
+                  allowsPicks={allowsPicks}
                   minLength={minLength}
                   onSelect={(r) => addAsset(side, r)}
                 />
@@ -307,7 +307,9 @@ export function SignalCheckBuilder({
         <p className="text-sm text-ink-muted">
           {canRun
             ? "Ready to check. We weigh both sides with FF Beacon Values for your format."
-            : "Add at least one asset to each side to run the check."}
+            : !hasFormat
+              ? "Select your league format above to run the check."
+              : "Add at least one asset to each side to run the check."}
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <button

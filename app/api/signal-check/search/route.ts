@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ELIGIBLE_POSITIONS, readSleeperId } from "@/lib/ranking-boards";
-import { parsePickName } from "@/lib/ktc-picks";
 import { DEFAULT_SETTINGS } from "@/lib/signal-check/settings";
 
 /**
@@ -39,7 +38,20 @@ interface PickResult {
   label: string;
 }
 
-const ORDINALS: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th" };
+const ORDINALS: Record<number, string> = {
+  1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th", 7: "7th",
+};
+
+// A bare year expands to this many rounds (the rounds KTC actually publishes
+// pick values for). An explicitly typed round is still honored beyond this.
+const GENERATED_ROUNDS = 4;
+
+type PickBucket = "early" | "mid" | "late";
+const PICK_BUCKETS: PickBucket[] = ["early", "mid", "late"];
+
+function ordinalFor(round: number): string {
+  return ORDINALS[round] ?? `Round ${round}`;
+}
 
 async function autocompleteMinLength(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -55,34 +67,43 @@ async function autocompleteMinLength(
   return Math.max(3, Math.floor(n) || DEFAULT_SETTINGS.autocompleteMinLength);
 }
 
+/**
+ * Loose pick suggestions for the trade builder. Picks surface as soon as a year
+ * is present, so users do not have to know the exact "2027 1st" syntax:
+ *   "2027"                 -> every round that year (slot-agnostic)
+ *   "2027 2" / "2027 2nd"  -> that round, plus its early/mid/late slots
+ *   "2027 2 early"         -> just that one slotted pick
+ * A bucket typed without a round applies across every generated round.
+ */
 function buildPickResults(query: string): PickResult[] {
-  const parsed = parsePickName(query);
-  if (!parsed) return [];
-  const ord = ORDINALS[parsed.round] ?? `Round ${parsed.round}`;
-  const explicitBucket = /\b(early|mid|late)\b/i.test(query);
-  if (explicitBucket && parsed.pick_position !== "unknown") {
-    return [
-      {
-        kind: "pick",
-        season: parsed.season,
-        round: parsed.round,
-        pickPosition: parsed.pick_position,
-        label: `${parsed.season} ${ord} (${parsed.pick_position})`,
-      },
-    ];
+  const yearMatch = query.match(/\b(20\d{2})\b/);
+  if (!yearMatch) return [];
+  const season = Number(yearMatch[1]);
+
+  // Drop the year before scanning for a round so a bare round digit (the "2" in
+  // "2027 2") cannot collide with the four-digit year.
+  const rest = query.replace(yearMatch[0], " ");
+  const bucketMatch = rest.toLowerCase().match(/\b(early|mid|late)\b/);
+  const bucket = (bucketMatch?.[1] as PickBucket | undefined) ?? null;
+  // A round is a 1-7 digit with an optional ordinal suffix: "2" or "2nd".
+  const roundMatch = rest.match(/\b([1-7])(?:st|nd|rd|th)?\b/i);
+  const round = roundMatch ? Number(roundMatch[1]) : null;
+
+  const generic = (r: number): PickResult => ({
+    kind: "pick", season, round: r, pickPosition: null, label: `${season} ${ordinalFor(r)}`,
+  });
+  const slotted = (r: number, b: PickBucket): PickResult => ({
+    kind: "pick", season, round: r, pickPosition: b, label: `${season} ${ordinalFor(r)} (${b})`,
+  });
+
+  // A specific round: that round, optionally narrowed to a single slot.
+  if (round !== null) {
+    return bucket ? [slotted(round, bucket)] : [generic(round), ...PICK_BUCKETS.map((b) => slotted(round, b))];
   }
-  // No explicit bucket: offer a generic pick plus the three buckets.
-  const buckets: ("early" | "mid" | "late")[] = ["early", "mid", "late"];
-  return [
-    { kind: "pick", season: parsed.season, round: parsed.round, pickPosition: null, label: `${parsed.season} ${ord}` },
-    ...buckets.map((b) => ({
-      kind: "pick" as const,
-      season: parsed.season,
-      round: parsed.round,
-      pickPosition: b,
-      label: `${parsed.season} ${ord} (${b})`,
-    })),
-  ];
+
+  // Year only: one entry per round (carrying the bucket if the user typed one).
+  const rounds = Array.from({ length: GENERATED_ROUNDS }, (_, i) => i + 1);
+  return bucket ? rounds.map((r) => slotted(r, bucket)) : rounds.map((r) => generic(r));
 }
 
 export async function GET(req: Request) {

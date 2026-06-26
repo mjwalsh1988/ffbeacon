@@ -74,7 +74,6 @@ export default async function SignalCheckPage() {
               )}
               <SignalCheckBuilder
                 formats={formats}
-                defaultFormatSlug={settings.defaultFormatSlug}
                 minLength={settings.autocompleteMinLength}
               />
             </div>

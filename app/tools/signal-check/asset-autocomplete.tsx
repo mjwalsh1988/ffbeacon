@@ -1,9 +1,18 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Info } from "lucide-react";
 
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
+
+/**
+ * True when the typed query looks like a draft pick. A bare 20xx year is enough,
+ * matching the server's loose pick suggestions. Used only to decide whether to
+ * nudge the user toward a dynasty format, never to build picks.
+ */
+function looksLikePick(q: string): boolean {
+  return /\b20\d{2}\b/.test(q);
+}
 
 export type SearchResult =
   | {
@@ -42,11 +51,13 @@ function resultDetail(r: SearchResult): string {
 export function AssetAutocomplete({
   sideLabel,
   formatSlug,
+  allowsPicks,
   minLength,
   onSelect,
 }: {
   sideLabel: string;
   formatSlug: string;
+  allowsPicks: boolean;
   minLength: number;
   onSelect: (result: SearchResult) => void;
 }) {
@@ -64,6 +75,10 @@ export function AssetAutocomplete({
 
   const trimmed = query.trim();
   const longEnough = trimmed.length >= minLength;
+  // Picks are dynasty-only. When the user types a pick-shaped query on a redraft
+  // (or not-yet-selected) format, nudge them toward a dynasty format instead of
+  // silently returning players only.
+  const showPickHint = !allowsPicks && looksLikePick(trimmed);
 
   // Debounced search.
   useEffect(() => {
@@ -167,7 +182,7 @@ export function AssetAutocomplete({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder="Search players or type a pick like 2026 1st"
+        placeholder="Search players, or a year like 2027 for picks"
         className="mt-2 min-h-11 w-full rounded-card border border-line bg-base px-3 py-2 text-base text-ink placeholder:text-ink-subtle caret-brand-purple focus:border-brand-purple focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:text-sm"
       />
       <p id={helpId} className="mt-1 text-xs text-ink-subtle">
@@ -176,6 +191,20 @@ export function AssetAutocomplete({
       <p id={statusId} aria-live="polite" className="sr-only">
         {statusText}
       </p>
+
+      {showPickHint && (
+        <div
+          role="note"
+          aria-live="polite"
+          className="mt-2 flex items-start gap-2 rounded-card border border-brand-cyan/30 bg-brand-cyan/5 px-3 py-2 text-xs leading-relaxed text-ink-muted"
+        >
+          <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" />
+          <span>
+            Draft picks are only available in dynasty formats. Choose a dynasty league format above
+            to add picks to this trade.
+          </span>
+        </div>
+      )}
 
       {showList && (
         <ul
