@@ -60,9 +60,11 @@ export interface RosterFuturePick {
 /** A full per-team rollup, ranked by total FF Beacon value. */
 export interface TeamRollup {
   rosterId: number;
-  teamName: string;
-  /** Owner's Sleeper handle (@username), null when unknown or same as teamName. */
-  ownerUsername: string | null;
+  /** Primary label: the owner's Sleeper username / display name. */
+  ownerName: string;
+  /** Custom team name (metadata.team_name), shown subtly after the username.
+   * null when the owner set none or it just echoes the username. */
+  teamName: string | null;
   isYou: boolean;
   players: Record<RosterPosition, RosterPlayerLite[]>;
   positionTotals: Record<RosterPosition, number>;
@@ -83,10 +85,10 @@ export interface TeamRollupInput {
   tradedPicks: TradedPickRecord[];
   /** FULL FF Beacon board for player + pick valuation. */
   valueBoard: RankedPlayer[];
-  /** roster_id -> display name. */
-  teamNameByRosterId: Record<number, string>;
-  /** roster_id -> owner @username, for the subtle owner label. Optional. */
-  ownerUsernameByRosterId?: Record<number, string | null>;
+  /** roster_id -> owner username / display name (the primary label + pick "via"). */
+  ownerNameByRosterId: Record<number, string>;
+  /** roster_id -> custom team name (metadata.team_name), the subtle label. Optional. */
+  teamNameByRosterId?: Record<number, string | null>;
   /** Connected user's roster id, for the "You" highlight. null when undetected. */
   myRosterId: number | null;
   /** Sleeper draft settings (teams). */
@@ -113,8 +115,8 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
     picks,
     tradedPicks,
     valueBoard,
+    ownerNameByRosterId,
     teamNameByRosterId,
-    ownerUsernameByRosterId,
     myRosterId,
     draftSettings,
     draftSeason,
@@ -209,7 +211,7 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
       round: fp.round,
       originalRosterId: fp.original,
       isOwn,
-      viaTeamName: isOwn ? null : teamNameByRosterId[fp.original] ?? `Team ${fp.original}`,
+      viaTeamName: isOwn ? null : ownerNameByRosterId[fp.original] ?? `Team ${fp.original}`,
       value: projectPickValue(fp.round, yearsAhead),
     });
     picksByOwner.set(fp.current, arr);
@@ -239,17 +241,17 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
       );
     const futurePicksValue = futurePicks.reduce((s, p) => s + p.value, 0);
 
-    const teamName = teamNameByRosterId[rid] ?? `Team ${rid}`;
-    const rawUsername = ownerUsernameByRosterId?.[rid] ?? null;
-    // Suppress the @username when it would just echo the team name (leagues with no
-    // custom team name show the handle as the team name already).
-    const ownerUsername =
-      rawUsername && rawUsername.toLowerCase() !== teamName.toLowerCase() ? rawUsername : null;
+    const ownerName = ownerNameByRosterId[rid] ?? `Team ${rid}`;
+    const rawTeamName = teamNameByRosterId?.[rid] ?? null;
+    // Suppress the custom team name when it just echoes the username (so leagues
+    // with no custom team name don't show the same text twice).
+    const teamName =
+      rawTeamName && rawTeamName.toLowerCase() !== ownerName.toLowerCase() ? rawTeamName : null;
 
     return {
       rosterId: rid,
+      ownerName,
       teamName,
-      ownerUsername,
       isYou: myRosterId != null && rid === myRosterId,
       players,
       positionTotals,

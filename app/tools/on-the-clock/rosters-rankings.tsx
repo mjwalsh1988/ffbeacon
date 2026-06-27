@@ -144,8 +144,8 @@ export function RostersRankings({
 function TeamRosterCard({ team }: { team: TeamRollup }) {
   return (
     <article
-      aria-label={`Power ranking ${team.rank}. ${team.teamName}${
-        team.ownerUsername ? `, owner @${team.ownerUsername}` : ""
+      aria-label={`Power ranking ${team.rank}. ${team.ownerName}${
+        team.teamName ? `, team ${team.teamName}` : ""
       }${team.isYou ? ", your team" : ""}. FF Beacon value ${fmt(team.totalValue)}.`}
       className={`overflow-hidden rounded-card border bg-surface/60 ${
         team.isYou ? "border-brand-purple/60 ring-1 ring-inset ring-brand-purple/40" : "border-line"
@@ -160,11 +160,9 @@ function TeamRosterCard({ team }: { team: TeamRollup }) {
         </span>
         <div className="min-w-0 flex-1">
           <h4 className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-semibold text-ink">
-            <span className="truncate">{team.teamName}</span>
-            {team.ownerUsername && (
-              <span className="truncate text-xs font-normal text-ink-subtle">
-                @{team.ownerUsername}
-              </span>
+            <span className="truncate">{team.ownerName}</span>
+            {team.teamName && (
+              <span className="truncate text-xs font-normal text-ink-subtle">{team.teamName}</span>
             )}
             {team.isYou && (
               <span className="shrink-0 rounded-full border border-brand-purple/50 bg-brand-purple/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-purple">

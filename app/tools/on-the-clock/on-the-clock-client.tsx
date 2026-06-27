@@ -594,16 +594,17 @@ export function OnTheClockClient({
   const tradedFuturePicks = resolveTradedFuturePicks(tradedPicks, tradeSeason);
   // roster_id -> display name, for owner labels on picks (board/trade).
   const teamNameByRosterId: Record<number, string> = {};
-  // Rosters & Rankings prefers the owner's custom team name and surfaces the
-  // @username separately; these are kept local so board/trade labels are unchanged.
-  const rollupTeamNameByRosterId: Record<number, string> = {};
-  const rollupUsernameByRosterId: Record<number, string | null> = {};
+  // Rosters & Rankings shows the owner's username as the primary label and the
+  // custom team name (when set) subtly after it; kept local so board/trade labels
+  // are unchanged.
+  const rollupOwnerNameByRosterId: Record<number, string> = {};
+  const rollupTeamNameByRosterId: Record<number, string | null> = {};
   for (const r of draftCache.rosters) {
     const user = r.ownerId ? draftCache.users.find((u) => u.userId === r.ownerId) : undefined;
     teamNameByRosterId[r.rosterId] = user?.displayName ?? `Team ${r.rosterId}`;
-    rollupTeamNameByRosterId[r.rosterId] =
-      user?.teamName || user?.displayName || `Team ${r.rosterId}`;
-    rollupUsernameByRosterId[r.rosterId] = user?.username || user?.displayName || null;
+    rollupOwnerNameByRosterId[r.rosterId] =
+      user?.displayName || user?.username || `Team ${r.rosterId}`;
+    rollupTeamNameByRosterId[r.rosterId] = user?.teamName ?? null;
   }
   const tradeGroups = tradeReady
     ? buildTradeCatalog({
@@ -632,8 +633,8 @@ export function OnTheClockClient({
           picks: draftCache.picks,
           tradedPicks,
           valueBoard: boardPlayers,
+          ownerNameByRosterId: rollupOwnerNameByRosterId,
           teamNameByRosterId: rollupTeamNameByRosterId,
-          ownerUsernameByRosterId: rollupUsernameByRosterId,
           myRosterId: derived.myRosterId,
           draftSettings: draftCache.draft.settings,
           draftSeason: tradeSeason,

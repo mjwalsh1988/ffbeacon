@@ -53,7 +53,7 @@ function baseInput(over: Partial<TeamRollupInput> = {}): TeamRollupInput {
     picks: [],
     tradedPicks: [],
     valueBoard: BOARD,
-    teamNameByRosterId: { 1: "Alpha", 2: "Bravo" },
+    ownerNameByRosterId: { 1: "Alpha", 2: "Bravo" },
     myRosterId: 1,
     draftSettings: { teams: 2 },
     draftSeason: 2026,
@@ -91,10 +91,10 @@ describe("buildTeamRollups", () => {
         futureSeasonCount: 0,
       }),
     );
-    expect(rollups.map((r) => r.teamName)).toEqual(["Bravo", "Alpha"]);
+    expect(rollups.map((r) => r.ownerName)).toEqual(["Bravo", "Alpha"]);
     expect(rollups[0].rank).toBe(1);
     expect(rollups[1].rank).toBe(2);
-    expect(rollups.find((r) => r.isYou)?.teamName).toBe("Alpha");
+    expect(rollups.find((r) => r.isYou)?.ownerName).toBe("Alpha");
   });
 
   it("gives every team a baseline of future picks (futures only) and counts them", () => {
@@ -110,19 +110,20 @@ describe("buildTeamRollups", () => {
     expect(alpha.futurePicksValue).toBeGreaterThan(0);
   });
 
-  it("surfaces the owner @username, suppressing it when it echoes the team name", () => {
+  it("shows the custom team name subtly, suppressing it when it echoes the username", () => {
     const rollups = buildTeamRollups(
       baseInput({
         futureSeasonCount: 0,
+        ownerNameByRosterId: { 1: "ash", 2: "bravo" },
         teamNameByRosterId: { 1: "Team Rocket", 2: "Bravo" },
-        ownerUsernameByRosterId: { 1: "ash", 2: "bravo" },
       }),
     );
     const alpha = rollups.find((r) => r.rosterId === 1)!;
     const bravo = rollups.find((r) => r.rosterId === 2)!;
-    expect(alpha.ownerUsername).toBe("ash");
-    // Bravo's username matches its team name (case-insensitive), so it is hidden.
-    expect(bravo.ownerUsername).toBeNull();
+    expect(alpha.ownerName).toBe("ash");
+    expect(alpha.teamName).toBe("Team Rocket");
+    // Bravo's team name matches its username (case-insensitive), so it is hidden.
+    expect(bravo.teamName).toBeNull();
   });
 
   it("moves a traded future pick to its new owner", () => {
