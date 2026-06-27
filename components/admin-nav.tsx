@@ -12,6 +12,7 @@ import {
   Settings,
   Scale,
   Coins,
+  Timer,
   type LucideIcon,
 } from "lucide-react";
 
@@ -58,6 +59,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: Coins,
     description:
       "Waiver bid calculator settings: bid curve, league depth, need multipliers, dump mechanic, value normalization, and copy.",
+  },
+  {
+    href: "/admin/on-the-clock",
+    label: "On The Clock Settings",
+    icon: Timer,
+    description:
+      "Live draft helper settings: enable the tool, sync cooldown and limits, and the Best Available / Team Need recommendation tuning.",
   },
   {
     href: "/admin/system",

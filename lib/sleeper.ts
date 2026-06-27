@@ -41,6 +41,10 @@ export type SleeperLeague = {
   scoring_settings?: Record<string, number>;
   roster_positions?: string[];
   settings?: Record<string, number>;
+  // The Sleeper league object carries the draft id and avatar at the top level.
+  // On The Clock reads draft_id from here to avoid a per-league drafts fetch.
+  draft_id?: string | null;
+  avatar?: string | null;
 };
 
 export type SleeperRoster = {
@@ -159,6 +163,30 @@ export async function getSleeperLeagueDrafts(leagueId: string): Promise<SleeperD
 
 export async function getSleeperDraft(draftId: string): Promise<SleeperDraft | null> {
   return safeFetch<SleeperDraft>(`${BASE}/draft/${draftId}`);
+}
+
+/**
+ * One drafted pick from `GET /draft/{id}/picks`.
+ *
+ * `player_id` is the Sleeper player id (numeric string for skill players, a team
+ * code like "BUF" for defenses). `metadata` is loosely typed by Sleeper and may
+ * carry first_name / last_name / position / team / amount (auction). `is_keeper`
+ * arrives as boolean or null. Normalize defensively at the call site.
+ */
+export type SleeperDraftPick = {
+  draft_id: string;
+  pick_no: number;
+  round: number;
+  draft_slot: number;
+  roster_id: number | null;
+  picked_by: string | null;
+  player_id: string | null;
+  is_keeper?: boolean | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export async function getSleeperDraftPicks(draftId: string): Promise<SleeperDraftPick[]> {
+  return (await safeFetch<SleeperDraftPick[]>(`${BASE}/draft/${draftId}/picks`)) ?? [];
 }
 
 export type SleeperNflState = {

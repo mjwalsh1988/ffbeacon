@@ -1,0 +1,440 @@
+/**
+ * On The Clock Trade Analyzer (Phase 6C).
+ *
+ * Pure, browser-safe, deterministic. NOTHING here touches Sleeper, Supabase, or
+ * fetch. It turns the board the cockpit already holds into a draft-room "value
+ * check" with two pool-driven modes:
+ *   - Everyone  -> Startup Trade Builder: startup draft picks only (made picks valued
+ *     by the player taken, upcoming picks projected from the board) plus future pick
+ *     buckets. The available player pool is NOT a tradeable asset in a startup draft.
+ *   - Rookies   -> Rookie Draft Signal Check style: available rookies, current
+ *     rookie picks (projected from the rookie board), and future rookie buckets.
+ *
+ * Every asset is valued from FF Beacon data the client already loaded, so there is
+ * no DB round trip and no dependence on KTC pick values (which would break OTC's
+ * force-FF-Beacon posture). Picks are PROJECTIONS, clearly flagged `estimated` so
+ * the UI can say "values are estimated". This is a value signal, never a command.
+ *
+ * Pick projection reuses the existing snake/linear/3RR shape helpers in
+ * draft-derive.ts (seatForPick / pickNoForSeat / draftShapeFromMeta), so the same
+ * serpentine math that drives the board drives pick value.
+ */
+
+import type { RankedPlayer } from "./board-types";
+import type { PlayerPool, ShapedPick } from "./types";
+import type { CurrentDraftPick, TradedFuturePick } from "./pick-ownership";
+
+// ---------------------------------------------------------------------------
+// Constants (documented fallbacks)
+// ---------------------------------------------------------------------------
+
+/**
+ * Value used when the board is too thin to project a pick (e.g. a deep future
+ * bucket on a tiny board). A small floor so an unprojectable pick still carries a
+ * token value rather than 0, and the UI flags it estimated. Documented here so it
+ * is never a hidden magic number.
+ */
+export const FALLBACK_PICK_VALUE = 50;
+
+/**
+ * Per-year discount for FUTURE picks vs an equivalent current-draft slot. A future
+ * first is worth less than this year's equivalent because of time + uncertainty.
+ * Geometric 0.85^yearsAhead (next year ~0.85, the year after ~0.72). This is the
+ * documented estimate; it is intentionally simple and tunable later.
+ */
+export function futureDiscount(yearsAhead: number): number {
+  return Math.pow(0.85, Math.max(0, yearsAhead));
+}
+
+/** How many future seasons of buckets to offer, and which rounds. */
+const FUTURE_SEASON_COUNT = 2;
+const FUTURE_ROUNDS = [1, 2, 3] as const;
+const BUCKETS = ["early", "mid", "late"] as const;
+
+/** Cap on the player list in the picker (top N by value). Surfaced in a UI note. */
+export const PLAYER_PICKER_CAP = 200;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type TradeMode = "startup" | "rookie";
+export type PickBucket = (typeof BUCKETS)[number];
+export type TradeItemKind = "player" | "startup-pick" | "rookie-pick" | "future-pick";
+
+/** One selectable trade asset with its computed FF Beacon value. */
+export interface TradeItemOption {
+  id: string;
+  label: string;
+  /** Optional secondary line (projected player for a pick, or "Estimated"). */
+  detail?: string;
+  value: number;
+  kind: TradeItemKind;
+  /** True when the value is a projection/estimate (UI shows the estimate note). */
+  estimated: boolean;
+  /**
+   * True when the same asset can be placed more than once in a trade (generic
+   * future-pick buckets like "2027 1st"). Exact draft slots (current-draft made /
+   * upcoming picks and concrete traded future picks) are unique and default to
+   * false, so the picker only offers each of them once across both sides.
+   */
+  repeatable?: boolean;
+}
+
+/** A labeled group of options (renders as an <optgroup> in the picker). */
+export interface TradeItemGroup {
+  label: string;
+  options: TradeItemOption[];
+}
+
+export interface TradeCatalogInput {
+  mode: TradeMode;
+  pool: PlayerPool;
+  /** Post-exclusion, pool-filtered board (upcoming pick projection + player search). */
+  available: RankedPlayer[];
+  /** Pre-exclusion, pool-filtered board (future pick projection, not depleted). */
+  poolBoard: RankedPlayer[];
+  /** FULL pre-exclusion board (any position) for valuing already-made picks. */
+  valueBoard: RankedPlayer[];
+  /** Every pick in the current draft with ownership + made/upcoming state. */
+  currentPicks: CurrentDraftPick[];
+  /** Concrete traded FUTURE-season picks (owner-aware). */
+  tradedFuturePicks: TradedFuturePick[];
+  /** roster_id -> display name, for owner labels. */
+  teamNameByRosterId: Record<number, string>;
+  /** The connected user's roster id, for "Your pick" labels. null when undetected. */
+  myRosterId: number | null;
+  /** Sleeper draft settings (teams / rounds). */
+  draftSettings: Record<string, number>;
+  /** Overall pick number on the clock (0 when complete/unknown). */
+  onTheClockPickNo: number;
+  /** The draft's season (number); future buckets label currentSeason + 1.. */
+  currentSeason: number;
+}
+
+export type TradeLean = "empty" | "fair" | "a-lean" | "b-lean" | "a-strong" | "b-strong";
+
+export interface TradeAnalysisResult {
+  totalA: number;
+  totalB: number;
+  /** Absolute value difference. */
+  diff: number;
+  /** Difference as a percent of the larger side (0..100). */
+  diffPct: number;
+  lean: TradeLean;
+  headline: string;
+  detail: string;
+  /** True when any placed asset on either side is an estimate (a projected pick). */
+  hasEstimates: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function sortByValueDesc(players: RankedPlayer[]): RankedPlayer[] {
+  return players.slice().sort((a, b) => b.value - a.value || a.overallRank - b.overallRank);
+}
+
+/** The board player projected at a 0-based index (clamped). Null on empty board. */
+function projectAt(sortedDesc: RankedPlayer[], index: number): RankedPlayer | null {
+  if (sortedDesc.length === 0) return null;
+  const i = Math.min(Math.max(0, Math.round(index)), sortedDesc.length - 1);
+  return sortedDesc[i];
+}
+
+/** Representative seat within a round for a bucket (early/mid/late). */
+export function bucketSlot(bucket: PickBucket, teams: number): number {
+  if (teams <= 1) return 1;
+  if (bucket === "early") return Math.max(1, Math.round(teams * 0.15));
+  if (bucket === "late") return Math.min(teams, Math.round(teams * 0.85));
+  return Math.round(teams * 0.5);
+}
+
+function ordinal(round: number): string {
+  if (round === 1) return "1st";
+  if (round === 2) return "2nd";
+  if (round === 3) return "3rd";
+  return `${round}th`;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function cap(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function madeName(mp: ShapedPick): string {
+  return `${mp.firstName ?? ""} ${mp.lastName ?? ""}`.trim() || "Unknown player";
+}
+
+/** Plain owner label for a roster, "Your pick" for the connected user. */
+function ownerLabel(
+  rosterId: number | null,
+  myRosterId: number | null,
+  teamNameByRosterId: Record<number, string>,
+): string {
+  if (rosterId == null) return "owner unknown";
+  if (myRosterId != null && rosterId === myRosterId) return "Your pick";
+  return teamNameByRosterId[rosterId] ?? `Team ${rosterId}`;
+}
+
+/**
+ * Sort comparator: natural draft order by overall pick number (1.01, 1.02, ...).
+ * This is a generic trade builder, so every pick is listed in board order
+ * regardless of owner (no "my picks first" reordering, which scrambled the list).
+ */
+function byOverall(a: CurrentDraftPick, b: CurrentDraftPick): number {
+  return a.overall - b.overall;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog (Tasks 3, 4, 5, 6, 7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the pool-appropriate asset catalog with computed values. Returns empty
+ * groups when the board is unavailable, so the UI shows a graceful "values
+ * unavailable" state instead of crashing.
+ *
+ * Picks come from the ownership model (every pick in the current draft, any owner),
+ * split into Made (valued by the selected player's FF Beacon value) and Upcoming
+ * (projected from the available board). Future picks are generic discounted buckets
+ * plus any concrete owner-aware traded future picks.
+ */
+export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
+  const {
+    mode,
+    available,
+    poolBoard,
+    valueBoard,
+    currentPicks,
+    tradedFuturePicks,
+    teamNameByRosterId,
+    myRosterId,
+    draftSettings,
+    onTheClockPickNo,
+    currentSeason,
+  } = input;
+  const teams = Number.isFinite(draftSettings.teams) && draftSettings.teams > 0 ? draftSettings.teams : 12;
+
+  // No board at all: return an empty catalog so the UI shows the graceful
+  // "values unavailable" state instead of floor-valued phantom picks.
+  if (available.length === 0 && poolBoard.length === 0 && valueBoard.length === 0) return [];
+
+  const availSorted = sortByValueDesc(available);
+  const poolSorted = sortByValueDesc(poolBoard.length > 0 ? poolBoard : available);
+  const pickKind: TradeItemKind = mode === "rookie" ? "rookie-pick" : "startup-pick";
+  const groups: TradeItemGroup[] = [];
+
+  // Value lookup for already-made picks (FULL board, any position).
+  const valByPlayerId = new Map<string, number>();
+  const valBySleeperId = new Map<string, number>();
+  for (const p of valueBoard) {
+    valByPlayerId.set(p.playerId, p.value);
+    if (p.sleeperId) valBySleeperId.set(p.sleeperId, p.value);
+  }
+  const madeValue = (mp: ShapedPick): number | null => {
+    if (mp.playerId && valByPlayerId.has(mp.playerId)) return valByPlayerId.get(mp.playerId)!;
+    if (mp.sleeperPlayerId && valBySleeperId.has(mp.sleeperPlayerId)) return valBySleeperId.get(mp.sleeperPlayerId)!;
+    return null;
+  };
+
+  // 1. Players (FF Beacon value, not estimated). Capped to the top N by value.
+  // ROOKIE drafts only: rookie players are tradeable assets alongside rookie picks.
+  // In a STARTUP draft you trade draft picks, not the available player pool, so the
+  // player group is intentionally omitted (a made pick already represents the player
+  // taken at that slot). See the Startup Trade Builder copy in trade-analyzer.tsx.
+  if (mode === "rookie") {
+    const playerOptions: TradeItemOption[] = availSorted.slice(0, PLAYER_PICKER_CAP).map((p) => ({
+      id: `pl-${p.playerId}`,
+      label: `${p.name}, ${p.position}`,
+      detail: p.team ? `${p.team} · value ${p.value.toLocaleString()}` : `value ${p.value.toLocaleString()}`,
+      value: p.value,
+      kind: "player",
+      estimated: false,
+    }));
+    if (playerOptions.length > 0) {
+      groups.push({ label: "Rookie players", options: playerOptions });
+    }
+  }
+
+  // 2. MADE picks (any team), valued by the selected player's current FF Beacon value.
+  const madeOptions: TradeItemOption[] = currentPicks
+    .filter((p) => p.made && p.madePick)
+    .slice()
+    .sort(byOverall)
+    .map((p) => {
+      const mp = p.madePick as ShapedPick;
+      const name = madeName(mp);
+      const owner = ownerLabel(p.currentOwnerRosterId, myRosterId, teamNameByRosterId);
+      const val = madeValue(mp);
+      const posLabel = mp.position ? `, ${mp.position}` : "";
+      return {
+        id: `made-${p.overall}`,
+        label: `${p.round}.${pad2(p.pickInRound)} - ${name}`,
+        detail:
+          val !== null
+            ? `Made pick${posLabel} · ${owner}`
+            : `Made pick${posLabel} · value unavailable · ${owner}`,
+        value: val ?? 0,
+        kind: pickKind,
+        // A made pick valued by a real player value is NOT a projection; only an
+        // unmappable selection is flagged estimated/unavailable.
+        estimated: val === null,
+      };
+    });
+  if (madeOptions.length > 0) {
+    groups.push({ label: "Made picks", options: madeOptions });
+  }
+
+  // 3. UPCOMING picks (any team), projected from the available board.
+  const upcomingOptions: TradeItemOption[] = currentPicks
+    .filter((p) => !p.made)
+    .slice()
+    .sort(byOverall)
+    .map((p) => {
+      // How many selections happen before this pick from now (0 = on the clock).
+      const picksUntil = onTheClockPickNo > 0 ? Math.max(0, p.overall - onTheClockPickNo) : p.overall - 1;
+      const projected = projectAt(availSorted, picksUntil);
+      const owner = ownerLabel(p.currentOwnerRosterId, myRosterId, teamNameByRosterId);
+      return {
+        id: `up-${p.overall}`,
+        label: `${p.round}.${pad2(p.pickInRound)} - projected`,
+        detail: projected
+          ? `Projected: ${projected.name}, ${projected.position} · ${owner}`
+          : `Projected pick · ${owner}`,
+        value: projected ? projected.value : FALLBACK_PICK_VALUE,
+        kind: pickKind,
+        estimated: true,
+      };
+    });
+  if (upcomingOptions.length > 0) {
+    groups.push({ label: "Upcoming picks", options: upcomingOptions });
+  }
+
+  // 4. Future pick buckets (generic discounted board projection; always estimated).
+  const futureOptions: TradeItemOption[] = [];
+  for (let s = 1; s <= FUTURE_SEASON_COUNT; s++) {
+    const season = currentSeason + s;
+    const discount = futureDiscount(s);
+    for (const round of FUTURE_ROUNDS) {
+      for (const bucket of BUCKETS) {
+        const idx = (round - 1) * teams + bucketSlot(bucket, teams) - 1;
+        const projected = projectAt(poolSorted, idx);
+        const base = projected ? projected.value : FALLBACK_PICK_VALUE;
+        futureOptions.push({
+          id: `fut-${season}-${round}-${bucket}`,
+          label: `${season} ${ordinal(round)} (${cap(bucket)})`,
+          detail: "Estimated future pick",
+          value: Math.round(base * discount),
+          kind: "future-pick",
+          estimated: true,
+          // Generic buckets are not a specific slot, so they can be added repeatedly
+          // (a deal can include two 2027 1sts).
+          repeatable: true,
+        });
+      }
+    }
+  }
+  if (futureOptions.length > 0) {
+    groups.push({ label: "Future pick buckets", options: futureOptions });
+  }
+
+  // 5. Concrete traded FUTURE picks (owner-aware), valued at the round's mid bucket.
+  const tradedFutureOptions: TradeItemOption[] = tradedFuturePicks
+    .filter((t) => t.season - currentSeason >= 1 && t.season - currentSeason <= FUTURE_SEASON_COUNT)
+    .map((t) => {
+      const yearsAhead = t.season - currentSeason;
+      const idx = (t.round - 1) * teams + bucketSlot("mid", teams) - 1;
+      const projected = projectAt(poolSorted, idx);
+      const base = projected ? projected.value : FALLBACK_PICK_VALUE;
+      const owner = ownerLabel(t.currentOwnerRosterId, myRosterId, teamNameByRosterId);
+      return {
+        id: `tfut-${t.season}-${t.round}-${t.originalRosterId}`,
+        label: `${t.season} ${ordinal(t.round)} - ${owner}`,
+        detail: "Traded future pick (estimated)",
+        value: Math.round(base * futureDiscount(yearsAhead)),
+        kind: "future-pick",
+        estimated: true,
+      };
+    });
+  if (tradedFutureOptions.length > 0) {
+    groups.push({ label: "Traded future picks", options: tradedFutureOptions });
+  }
+
+  return groups;
+}
+
+// ---------------------------------------------------------------------------
+// Analysis (Task 2)
+// ---------------------------------------------------------------------------
+
+const EMPTY_RESULT: TradeAnalysisResult = {
+  totalA: 0,
+  totalB: 0,
+  diff: 0,
+  diffPct: 0,
+  lean: "empty",
+  headline: "Build both sides to see the value check",
+  detail:
+    "Add players or picks to Side A and Side B, then we will show which side carries more FF Beacon value. This is a value signal, not a guarantee.",
+  hasEstimates: false,
+};
+
+/**
+ * Total each side and produce a plain-English verdict. Thresholds mirror the
+ * site's trade analyzer: within 5% is fair, within 15% is a lean, beyond that is a
+ * strong edge. Pure: no rounding surprises, deterministic for a given input.
+ */
+export function analyzeTradeSides(
+  sideA: TradeItemOption[],
+  sideB: TradeItemOption[],
+): TradeAnalysisResult {
+  if (sideA.length === 0 && sideB.length === 0) return EMPTY_RESULT;
+
+  const totalA = sideA.reduce((sum, i) => sum + i.value, 0);
+  const totalB = sideB.reduce((sum, i) => sum + i.value, 0);
+  const hasEstimates = [...sideA, ...sideB].some((i) => i.estimated);
+
+  const diff = Math.abs(totalA - totalB);
+  const max = Math.max(totalA, totalB, 1);
+  const diffPct = (diff / max) * 100;
+  const pctLabel = `${Math.round(diffPct)}%`;
+  const diffLabel = Math.round(diff).toLocaleString();
+  const estimateNote = hasEstimates
+    ? " Some values are estimated pick projections, so treat this as a rough signal."
+    : "";
+
+  if (diffPct <= 5) {
+    return {
+      totalA,
+      totalB,
+      diff,
+      diffPct,
+      lean: "fair",
+      headline: "Fair deal",
+      detail: `Both sides land within ${pctLabel} of each other (${diffLabel} points apart). By FF Beacon value this is an even swap.${estimateNote}`,
+      hasEstimates,
+    };
+  }
+
+  const aLeads = totalA > totalB;
+  const winner = aLeads ? "Side A" : "Side B";
+  const strong = diffPct > 15;
+  const lean: TradeLean = strong ? (aLeads ? "a-strong" : "b-strong") : aLeads ? "a-lean" : "b-lean";
+  const headline = strong ? `Strong edge to ${winner}` : `Slight edge to ${winner}`;
+  const margin = strong ? "a clear margin" : "a small margin";
+  return {
+    totalA,
+    totalB,
+    diff,
+    diffPct,
+    lean,
+    headline,
+    detail: `${winner} carries about ${pctLabel} more value (${diffLabel} points), ${margin}. This is a value signal, not a recommendation to accept or reject.${estimateNote}`,
+    hasEstimates,
+  };
+}

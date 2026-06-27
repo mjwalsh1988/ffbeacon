@@ -5,6 +5,7 @@ import {
   Workflow,
   Calculator,
   Scale,
+  Timer,
   ArrowRight,
   Accessibility,
   BookOpen,
@@ -90,7 +91,12 @@ function Hero() {
 
 type Tool = {
   icon: LucideIcon;
-  href: "/rankings" | "/tools/signal-check" | "/tools/league-pulse" | "/tools/faab";
+  href:
+    | "/rankings"
+    | "/tools/signal-check"
+    | "/tools/league-pulse"
+    | "/tools/on-the-clock"
+    | "/tools/faab";
   eyebrow: string;
   title: string;
   pitch: string;
@@ -143,6 +149,21 @@ const TOOLS: Tool[] = [
       "Tap any team to see a full breakdown of their roster",
     ],
     cta: "Sync a league",
+  },
+  {
+    icon: Timer,
+    href: "/tools/on-the-clock",
+    eyebrow: "Live drafts",
+    title: "On The Clock",
+    pitch:
+      "Connect your active Sleeper draft and FF Beacon strips drafted players out of the pool, then surfaces the best remaining value for your league's format. Built to work the same by eye or by ear.",
+    bullets: [
+      "Reads your active Sleeper draft and removes drafted players live",
+      "Best Available and Team Need picks tuned to your league format",
+      "A native draft board and a full pick list, both screen-reader friendly",
+      "Manual Sync keeps the room current without hammering Sleeper",
+    ],
+    cta: "Open the draft room",
   },
   {
     icon: Calculator,

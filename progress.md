@@ -2011,3 +2011,1317 @@ T897 | completed | Moderation UI for reference matches. moderation-manager.tsx n
 T898 | completed | Review (impl + perf + a11y sub-agents, scoped to ONLY the T889-T897 change). NO Blockers. Fixed all 3 Important + 3 cheap Minors: (1 perf) migration 0100 adds an exact case-insensitive tie-break to bb_player_match_candidates ORDER BY so a true exact match is never crowded out of the top-N by a common surname (verified: 'Josh Allen' returns exact first at sim 1.0); (2 a11y) player-search result "Link X" buttons now use btnClass (real 44x44 target, not a bare underline) + aria-busy on the results region while searching; (3 impl) worker failOrRetry now closes (rejects) an ingestion's pending null-article player_match/team_match moderation rows when its article_write job is marked failed, so they never strand unresolvable; (minor) dedupeNames keys on normalizeName ("Mahomes"/"Mahomes II" collapse); (minor) moderation page pending query bounded with .limit(500). Verified article_players/article_teams have composite PKs backing the resolution upsert onConflict (impl Important #4 - no change needed). typecheck + build PASS; bb_enabled still false.
      | files: supabase/migrations/0100_bb_player_match_candidates_exact_first.sql, lib/beacon-brief/worker.ts, lib/beacon-brief/match.ts, components/admin/beacon-brief/moderation-manager.tsx, app/admin/beacon-brief/moderation/page.tsx | verified: typecheck + build PASS; RPC tie-break smoke-tested
      | ACCEPTED / DOCUMENTED (reviewers rated Minor, not fixed): focus is not restored after an item resolves and disappears (announcement still fires; matches the existing articles-manager pattern - candidate for a future focused a11y pass); one sequential RPC round-trip per unique player name (index-assisted, fine at the 5-min cron cadence; batch later only if post volume grows).
+
+## On The Clock (live Sleeper draft helper) - building from ON-THE-CLOCK-PLAN.md
+
+CURRENT PHASE: Phase 1 (Supabase cache foundation). Phase 0 done.
+RESUME RULE: do not start Phase 2 until owner approves. Update progress.md +
+handoff.md after EVERY task. Do not commit/push.
+
+### Phase 0 - Safety audit + setup (completed)
+OTC-T000 | completed | Read ON-THE-CLOCK-PLAN.md in full (1042 lines). No blockers,
+     no security contradiction, no plan/codebase conflict found. Plan is internally
+     consistent and maps onto existing patterns (FAAB settings, try_claim_* lock,
+     MCP type-regen). Safe to proceed.
+OTC-T001 | completed | Real next migration number determined = 0106.
+     | evidence: highest migration file on disk is 0105_faab_calculator_settings.sql,
+       and mcp list_migrations confirms it applied (version 20260626204055, last in
+       ledger). Duplicate FILE-NUMBER prefixes exist (0028, 0029, 0100, 0101, 0102,
+       0103 each appear twice) but the DB ledger keys on timestamp versions, so the
+       collisions are cosmetic-on-disk only, NOT a DB conflict. 0106+ is free.
+       On The Clock will use 0106..0113 (see plan task split below).
+OTC-T002 | completed | FAAB settings pattern captured (template for on_the_clock_settings).
+     | source: supabase/migrations/0105_faab_calculator_settings.sql + lib/faab/.
+       Shape: `id text primary key default 'global' check (id = 'global')`, `settings
+       jsonb not null`, created_at/updated_at timestamptz default now(), `updated_by
+       uuid references auth.users(id) on delete set null`. RLS enabled, single policy
+       `<t>_service_role_all for all to service_role using(true) with check(true)`,
+       NO anon/auth policies. Defaults live in code; missing row degrades to code
+       defaults. Access-matrix comment block at top of migration.
+OTC-T003 | completed | Durable lock RPC pattern captured (template for the sync lock).
+     | source: supabase/migrations/0026_try_claim_league_resync.sql (+0025 ledger).
+       Shape: `create or replace function ... returns boolean language plpgsql
+       security definer set search_path = public`; CTE upsert with a conditional
+       ON CONFLICT ... DO UPDATE ... WHERE last_attempt_at < now() - make_interval(...)
+       so only the window-winner updates; `select exists(select 1 from upsert)`.
+       Then `revoke all on function ... from public; grant execute ... to
+       authenticated, service_role;` + comment. The ledger table (0025) is
+       service-role-only RLS, single service_role_all policy.
+OTC-T004 | completed | Type-regen workflow confirmed.
+     | MCP generate_typescript_types returns JSON-wrapped output; extract the `.types`
+       field, write to lib/database.types.ts, then `npx prettier --write`. (Matches
+       memory project_mcp_types_regen_workflow + the Beacon Brief handoff notes.)
+OTC-T005 | completed | Realtime publication: no existing supabase_realtime migration in
+     the repo (grep clean). Supabase provisions the publication by default, so the
+     Realtime task uses `alter publication supabase_realtime add table
+     public.on_the_clock_pick_cache;` (idempotent-guarded).
+OTC-T006 | completed | progress.md + handoff.md updated for On The Clock (this section
+     + a fresh handoff.md; prior Beacon Brief handoff state is fully captured in the
+     T843-T898 entries above, so handoff.md is repurposed for the active feature).
+
+### Phase 1 - Supabase cache foundation (migrations DONE, verified; types regen in progress)
+All migrations applied via MCP apply_migration AND written to supabase/migrations/.
+One atomic migration per file. Next free number was 0106.
+- 0106 on_the_clock_settings (single-row JSONB, service-role-only) [DONE]
+- 0107 on_the_clock_draft_cache (one row/draft + lock cols, public SELECT, 4 indexes) [DONE]
+- 0108 on_the_clock_pick_cache (one row/pick, cascade from draft, public SELECT, player_id idx) [DONE]
+- 0109 on_the_clock_lookup_attempts (durable lookup guard ledger, service-role) [DONE]
+- 0110 sync-lock RPCs claim/complete/release (SECURITY DEFINER, returns-table claim) [DONE]
+- 0111 try_claim_on_the_clock_lookup RPC (SECURITY DEFINER) [DONE]
+- 0112 enable Realtime on on_the_clock_pick_cache (publication add + REPLICA IDENTITY FULL) [DONE]
+- 0113 cleanup_on_the_clock_cache TTL function (deletion only, NOT cron-wired) [DONE]
+- 0114 RPC EXECUTE hardening (revoke anon/authenticated; service_role only) [DONE]
+
+OTC-T007 | completed | 0106 on_the_clock_settings applied + file written (FAAB pattern).
+OTC-T008 | completed | 0107 on_the_clock_draft_cache applied + file written.
+OTC-T009 | completed | 0108 on_the_clock_pick_cache applied + file written (FK cascade to draft, player_id uuid -> players.id).
+OTC-T010 | completed | 0109 on_the_clock_lookup_attempts applied + file written.
+OTC-T011 | completed | 0110 sync-lock RPCs applied + file written.
+     | FIX during verification: claim_on_the_clock_sync hit "column reference last_synced_at
+       is ambiguous" (RETURNS TABLE out-cols shadow table cols in the UPDATE WHERE).
+       Fixed by aliasing the UPDATE target `as c` and qualifying c.last_synced_at /
+       c.sync_locked_until. Re-applied via create-or-replace (preserves ACL); 0110 file updated.
+OTC-T012 | completed | 0111 try_claim_on_the_clock_lookup applied + file written.
+OTC-T013 | completed | 0112 Realtime publication for pick_cache applied + file written.
+OTC-T014 | completed | 0113 cleanup_on_the_clock_cache applied + file written.
+OTC-T015 | completed | 0114 RPC EXECUTE hardening applied + file written.
+     | SECURITY FIX during verification: `revoke all ... from public` did NOT remove the
+       anon/authenticated EXECUTE that Supabase grants by default privilege. Since these
+       are SECURITY DEFINER, anon could have called cleanup (wipe cache) / claim (grief lock).
+       0114 explicitly revokes EXECUTE from public, anon, authenticated on all 5 functions.
+       Re-verified ACL = postgres + service_role only.
+
+### Phase 1 verification (all PASS, via MCP execute_sql)
+- RLS enabled on all 4 tables (relrowsecurity = true).
+- Policies: draft_cache + pick_cache = select_public (anon, authenticated) + service_role_all;
+  settings + lookup_attempts = service_role_all only. No anon/auth write policy anywhere.
+- Function ACLs after 0114: claim/complete/release/try_claim_lookup/cleanup = postgres +
+  service_role EXECUTE only (anon + authenticated removed).
+- Realtime: on_the_clock_pick_cache is in the supabase_realtime publication; REPLICA IDENTITY FULL.
+- Lock semantics (live RPC test, throwaway draft, cleaned up after):
+  * claim #1 on fresh draft -> claimed=true, last_synced_at null, remaining 0, locked_by_other false.
+  * claim #2 immediately -> claimed=false, locked_by_other=true (exactly one winner; concurrency safe).
+  * complete(5,'drafting') -> advances last_synced_at; next claim -> claimed=false, remaining 27,
+    locked_by_other false (30s cooldown enforced; advances only on success).
+  * second draft: claim -> release -> claim -> claimed=true again (release clears lock WITHOUT
+    advancing last_synced_at, so retry allowed before cooldown).
+  * try_claim_on_the_clock_lookup: same key within window false, different key true.
+  * cleanup_on_the_clock_cache(0,0) deleted 2 stale drafts AND cascaded the seeded pick (0 orphans).
+- Anon role simulation (set local role anon):
+  * SELECT: settings=0 (blocked), draft_cache=1 (visible, seeded), pick_cache=0, lookup_attempts=0 (blocked).
+  * INSERT into draft_cache -> ERROR 42501 RLS violation (write blocked).
+  * EXECUTE claim_on_the_clock_sync -> ERROR 42501 permission denied (hardening confirmed).
+- All test/probe rows cleaned (drafts/settings/lookups all 0 after teardown).
+
+OTC-T016 | completed | Regenerated lib/database.types.ts via MCP generate_typescript_types
+     (delegated to a sub-agent to keep the large output out of context). 3835 lines,
+      prettier-formatted. Confirmed present: on_the_clock_settings, on_the_clock_draft_cache,
+      on_the_clock_pick_cache, on_the_clock_lookup_attempts (tables) + claim/complete/release_
+      on_the_clock_sync, try_claim_on_the_clock_lookup, cleanup_on_the_clock_cache (functions).
+     | verified: `npm run typecheck` clean after regen.
+
+PHASE 1 COMPLETE. STOP POINT. Do NOT start Phase 2 (server utilities + settings layer)
+until owner approves. No app/lib/UI code written yet. Value pipelines untouched.
+
+### Phase 2 - Server utilities + settings layer (owner-approved; in progress)
+Boundaries: NO API routes, NO /tools UI, NO /admin UI, NO value-pipeline changes.
+OTC-T017 | completed | lib/on-the-clock/types.ts - settings types (nested groups) + shaped
+     cache payload types (ShapedDraftCache/Pick/Roster/LeagueUser) + SyncStatus/SyncOutcome.
+OTC-T018 | completed | lib/on-the-clock/default-settings.ts - DEFAULT_ON_THE_CLOCK_SETTINGS.
+     | feature.enabled defaults FALSE (ships OFF, project convention). defaultFormatFallback
+       reuses DEFAULT_FORMAT_SLUG ("redraft-ppr-std") from @/lib/site. cooldown 30s / lock 15s,
+       cache 24h/168h, maxLeagues 10 / maxAvail 100, balanced weights 0.6/0.4/0.15, DST/K
+       suppress_until_need with round gates 10/12, SF QB x1.25, TEP TE x1.15.
+OTC-T019 | completed | lib/on-the-clock/settings.ts - zod schema (per-field .default), 
+     validateOnTheClockSettings + loadOnTheClockSettings (reads on_the_clock_settings id='global',
+     degrades to defaults on missing/invalid). Refinements: defaultPool in enabledPools,
+     lockSeconds <= cooldownSeconds. FAAB pattern exactly.
+OTC-T020 | completed | lib/on-the-clock/validation.ts - isValidUsername/Season/LeagueId/DraftId,
+     normalizeUsername (lookup-key), sanitizeSleeperPlayerId + sanitizeSleeperPlayerIds (allowlist
+     ^[A-Za-z0-9]{1,16}$, dedupe, drop "0"). Regexes match plan section 12.
+OTC-T021 | completed | lib/sleeper.ts - added SleeperDraftPick type + getSleeperDraftPicks(draftId)
+     (GET /draft/{id}/picks, safeFetch 20s, [] on failure). No other change to sleeper.ts.
+OTC-T022 | completed | lib/players/sleeper-map.ts - mapSleeperToPlayerIds(client, ids): sanitize +
+     dedupe, chunk by 200, partial-tolerant, never throws. Handles numeric + DST team-code ("BUF").
+     DEVIATION (documented): used sanitized .or() not .in() - the sleeper id is at the json path
+     external_ids->>'sleeper', which supabase-js .in() cannot express type-safely; sanitized .or()
+     is the proven, injection-safe pattern already used in trade-analyzer.ts / league-view-data.ts.
+OTC-T023 | completed | lib/on-the-clock/cache.ts - RPC wrappers (claimSync/completeSync/releaseSync/
+     claimLookup, service-role client) + readDraftCache + shapeDraftCache (whitelist-only wire shaping
+     of draft meta, users, rosters, picks). No Sleeper calls. FIX: complete RPC p_status is
+     string|undefined (SQL default null), coerced null->undefined.
+OTC-T024 | completed | lib/on-the-clock/sleeper-sync.ts - performDraftSync (server-only). Full flow:
+     resolve league/season -> claim -> fetch draft/picks/users/rosters -> map ids ONCE -> upsert
+     draft+pick cache -> complete; release + safe error on Sleeper failure; returns SyncOutcome with
+     cached shape regardless of status. NOT wired to any route (Phase 3).
+OTC-T025 | completed | Tests: lib/on-the-clock/validation.test.ts, settings.test.ts,
+     lib/players/sleeper-map.test.ts. Cover: username/season/league/draft accept+reject; BUF allowed;
+     hostile + "0" dropped; settings defaults parse + partial-merge + reject (lock>cooldown, bad pool,
+     wrong type, bad enum); sleeper-map round-trip (numeric+BUF+kicker), unknown id absent (partial),
+     hostile never in filter string, empty input issues no query, chunk error never throws.
+OTC-T026 | completed | Checks: `npm run typecheck` clean; full `npm test` = 14 files / 108 tests pass
+     (23 new + no regressions). lib/sleeper.ts change confirmed non-breaking.
+
+PHASE 2 COMPLETE. STOP POINT. Do NOT start Phase 3 (API routes) until owner approves.
+No API routes, no /tools UI, no /admin UI, no value-pipeline changes written.
+
+### Phase 3 - API routes (owner-approved; complete)
+Boundaries honored: NO /tools UI, NO /admin UI, NO recommendation UI, NO value-pipeline change.
+All three routes use createAdminClient() server-side only (service role never reaches the
+client), require the x-requested-with: ff-beacon header, validate input via
+lib/on-the-clock/validation, gate on settings.feature.enabled (ships OFF -> 503), and set
+Cache-Control: private, no-store.
+OTC-T027 | completed | lib/sleeper.ts SleeperLeague extended with draft_id + avatar (top-level
+     Sleeper league fields) so the leagues route reads draft_id without a per-league drafts call.
+     lib/on-the-clock/types.ts gains the LeagueCard wire type (leagueId+draftId+season+name+
+     totalRosters+avatar+draftStatus).
+OTC-T028 | completed | app/api/on-the-clock/leagues/route.ts (GET ?username=&season=).
+     Header guard -> input validation (username/season regex) -> settings.enabled gate ->
+     durable claimLookup guard (IP + normalized username, 10s window, FAIL CLOSED on error) ->
+     getSleeperUser (404 if unknown) -> getSleeperLeagues. Active-draft filter uses ONLY the
+     league objects (status in {drafting,pre_draft} AND draft_id present), drafting-first,
+     capped at settings.limits.maxActiveLeagues with a truncated flag. private/no-store +
+     Referrer-Policy: no-referrer. DEVIATION (documented): no per-league getSleeperLeagueDrafts
+     fan-out - the league object's own status + draft_id is a reliable zero-extra-call signal,
+     which satisfies "do not over-hit Sleeper". One getSleeperUser + one getSleeperLeagues per lookup.
+OTC-T029 | completed | app/api/on-the-clock/draft/route.ts (GET ?draft_id=). READ-ONLY.
+     Header guard -> draft_id validation -> enabled gate -> readDraftCache (NO Sleeper on warm
+     path). Cold cache only: one warm performDraftSync through the lock, then return. 404 if a
+     cold draft cannot be warmed. private/no-store.
+OTC-T030 | completed | app/api/on-the-clock/draft/sync/route.ts (POST {draft_id, league_id?,
+     season?}). Header guard -> JSON parse (400 on malformed) -> draft_id required + optional
+     league_id/season validated -> enabled gate -> performDraftSync. Returns 200 with the
+     SyncStatus union (synced|cooldown|synced-by-other|served-cache|error) + cache + cooldown
+     seconds + lastSyncedAt; ok=false on error status; 500 only on an unexpected throw. Passing
+     league_id+season lets the claim happen with no pre-fetch.
+OTC-T031 | completed | Route tests (vitest, vi.mock): leagues.route.test.ts (8),
+     draft/sync/route.test.ts (9), draft/route.test.ts (6). Cover: header-missing 403, bad-input
+     400, feature-disabled 503, lookup-guard 429, unknown-user 404, card shaping/filter/sort/
+     truncation, sync status passthrough (synced/cooldown/synced-by-other/error), malformed JSON
+     400, and the KEY assertions that the rejected paths NEVER call Sleeper/performDraftSync and
+     that a WARM draft read does NOT trigger a sync (no Sleeper on the read path).
+     | vitest.config.ts include extended to app/**/*.test.ts so route tests are discovered.
+     | NOTE: route tests mock @/lib/on-the-clock/sleeper-sync because its real module imports
+       "server-only" (throws when imported directly in a node test).
+OTC-T032 | completed | Checks: `npm run typecheck` clean; full `npm test` = 17 files / 131 tests
+     pass (23 new route tests, no regressions); `npm run build` green (prebuild reserved-route
+     guard passed; .next emitted leagues + draft + draft/sync route.js).
+
+PHASE 3 COMPLETE. STOP POINT. Do NOT start Phase 4 (mocked UI shell) until owner approves.
+No UI, no admin, no value-pipeline change. Live-draft behavior NOT yet tested against a real
+active draft (requires a live Sleeper draft; deferred to the live-wiring phase).
+
+### Phase 4 - Mocked UI shell (owner-approved; complete)
+Boundaries honored: FIXTURES ONLY (no Sleeper/Supabase from UI), NO live wiring, NO admin pages,
+NO recommendation engine (placeholders), NO value-pipeline change. All files under
+app/tools/on-the-clock/. Brand: dark + purple/cyan beacon gradient, Geist, matches League Pulse /
+Signal Check design language.
+OTC-T033 | completed | fixtures.ts - mock data mirroring Phase 2/3 shaped types (LeagueCard[],
+     ShapedDraftCache snake 8-team/5-round/11-picks, RankedPlayer[] incl DST/K + rookies,
+     RecommendationCardData placeholders, connected user, sync status). NOTHING calls Sleeper/Supabase.
+OTC-T034 | completed | states.tsx - shared LoadingCard (role=status), ErrorCard (role=alert),
+     EmptyCard (dashed) blocks. No color-only state.
+OTC-T035 | completed | username-gate.tsx - League-Pulse-style username+season form; MOCK onConnect
+     (no network). 44px button, focus rings, described-by help.
+OTC-T036 | completed | league-picker.tsx - active-draft league cards (Open draft) + empty state +
+     Refresh; status pills carry text ("Drafting now"/"Not started").
+OTC-T037 | completed | sync-button.tsx - Sync Draft button + cooldown countdown (mock 30s) +
+     polite aria-live status line (the polite sync live-region stub).
+OTC-T038 | completed | command-header.tsx - sticky Draft Command Header: status/format/source chips,
+     pool toggle (aria-pressed), teams/rounds/picks (mobile disclosure via aria-expanded, never
+     hidden outright), last-pick line, embedded SyncButton, and the ASSERTIVE "your turn" live-region
+     stub (role=alert, sr-only, empty unless your turn).
+OTC-T039 | completed | recommendation-cards.tsx - Best Available + Team Need placeholder cards;
+     aligned -> single "Value and need align" card; chips carry text; PlayerHeadshot (fallback-safe).
+OTC-T040 | completed | available-list.tsx - semantic <table> (caption, scope, aria-sort on sortable
+     columns, sort buttons in <th>), search, position filter chips (aria-pressed), Show more
+     pagination (NOT virtualized), polite live region announcing visible count + sort state.
+OTC-T041 | completed | draft-board.tsx - native <table>, STABLE seat columns (<th scope=col>), rounds
+     rows (<th scope=row>), serpentine pick numbers in cell text + aria-label; "On the clock"/"Your
+     pick"/"Last pick"/"Open slot" all TEXT (no color-only); horizontal scroll keeps all seats on mobile.
+OTC-T042 | completed | pick-list.tsx - chronological picks as a semantic table (a11y peer of the board);
+     unmapped picks render from cached name fields with a "(not in our database)" note.
+OTC-T043 | completed | my-draft.tsx - connected user's picks + roster-shape position counts; empty state.
+OTC-T044 | completed | on-the-clock-client.tsx - client root state machine (connect -> pick-league ->
+     room) + APG tabs view switcher (Recommend/Available/Board/Picks/Mine) with roving tabindex +
+     ArrowLeft/Right/Home/End + aria-controls/aria-selected; pool gating filters Available to rookies.
+OTC-T045 | completed | page.tsx - server shell (force-dynamic), hero (one h1, gradient, bullets),
+     Phase-4 preview notice, renders OnTheClockClient with currentNflSeason(). No Sleeper/Supabase.
+OTC-T046 | completed | Registered the tool: lib/site.ts (TOOLS_NAV + FOOTER_COLUMNS) and
+     app/tools/page.tsx (TOOLS array + href union + Timer icon).
+OTC-T047 | completed | Accessibility basics verified by construction + build: APG tabs (keyboard),
+     focus-visible outlines everywhere, semantic tables (caption/scope/aria-sort), no color-only
+     states (text markers), polite + assertive live-region stubs, aria-pressed toggles, 44px targets
+     (min-h-11), one h1/page, mobile disclosure keeps all data. NOTE: full interactive screen-reader /
+     axe audit is deferred to Phase 8 (not claimed done here).
+OTC-T048 | completed | Checks: `npm run typecheck` clean; `npm run build` green (/tools/on-the-clock
+     10.5 kB compiled, all 3 api routes intact); full `npm test` = 17 files / 131 tests pass (no
+     regressions from the site.ts / tools page edits). `next lint` is NOT configured in this repo
+     (prompts interactive setup), so lint was skipped per "lint only if appropriate".
+
+PHASE 4 COMPLETE. STOP POINT. Do NOT start Phase 5 (live data wiring) until owner approves.
+UI runs entirely on fixtures; no live Sleeper/Supabase wiring; no live-draft behavior claimed.
+
+### Phase 4.5 - Premium draft-cockpit visual/UX refinement (owner-requested; in progress)
+Goal: make On The Clock feel like a premium draft HQ / command center, not a generic tabbed tool
+page. NO live wiring, NO API/DB/engine changes, accessibility preserved. Fixtures only.
+OTC-T049 | completed | fixtures.ts - added MOCK-ONLY spotlight fields to RankedPlayer
+     (yearsExperience, age, recentFinishes[], shortNote) + an ENRICH map keyed by name; spread into
+     the board build. Structured so Phase 5/6 hides any missing section (never blocks the feature).
+OTC-T050 | completed | panel.tsx - cockpit Panel primitive (bordered surface, top beacon hairline,
+     structured header eyebrow+heading+helper+action, optional glow, real h2/h3/h4) + StatReadout
+     (big accent-number metric). The dashboard's visual backbone.
+OTC-T051 | completed | player-spotlight.tsx - premium broadcast-style featured recommendation
+     (PlayerSpotlight: big headshot, big name, exp/age line, bold accent value/posrank/tier readouts,
+     reason + shortNote, "Last positional finishes" accent-number strip hidden when absent) +
+     SecondaryPick (compact). Variants best (Pure Value) / need (Roster Need) / aligned. No color-only.
+OTC-T052 | completed | step-rail.tsx - onboarding stepper (1 Connect -> 2 Choose -> 3 Sync ->
+     4 Draft) as <ol> with aria-current="step" + sr-only state word per step (not color-only).
+OTC-T053 | completed | dashboard-panels.tsx - DraftRoomStatus (status/on-the-clock/last-pick +
+     teams/rounds/picks StatReadouts) + BestRemainingByPosition (top value per position at a glance).
+OTC-T054 | completed | sync-button.tsx - polished: transient "Syncing..." state with reduced-motion-
+     safe spin, clearer cooldown copy, polite aria-live status. (Sync lives in the command bar.)
+OTC-T055 | completed | command-header.tsx - reworked into a premium CONTROL BAR: sticky, beacon
+     hairline, identity + status + your seat, a prominent broadcast-style "on the clock" banner
+     (reduced-motion-safe pulse), format/source chips, pool toggle (aria-pressed), embedded Sync.
+     Keeps the assertive "your turn" live region. Counts moved to the Room status rail panel.
+OTC-T056 | completed | on-the-clock-client.tsx - reworked from tab-first into a DASHBOARD: sticky
+     command bar; setup steps now use StepRail + guidance; room is a room-container with a Draft
+     Signal hero (dominant spotlight + secondary, or one aligned spotlight), a wide main column
+     (Big board / Draft board / All picks as cockpit Panels), and a sticky right rail (Room status /
+     Best remaining / Your draft). A section jump-nav replaces primary tabs (no section hidden).
+     Removed the old APG tabs + the now-unused recommendation-cards.tsx (deleted).
+OTC-T057 | completed | page.tsx unchanged hero retained; preview notice kept and intentional. Tool
+     registration (lib/site.ts, app/tools/page.tsx) unchanged from Phase 4.
+OTC-T058 | completed | Accessibility preserved + extended: semantic tables intact (caption/scope/
+     aria-sort), real heading outline via Panel h2/h3, aria-current step rail, aria-pressed toggles,
+     assertive + polite live regions, reduced-motion-safe pulses/spin (motion-reduce:animate-none),
+     focus-visible everywhere, 44px targets, landmarks (nav/aside/section). Jump-nav is anchor links
+     (keyboard-usable). NOTE: full screen-reader/axe pass still deferred to Phase 8.
+OTC-T059 | completed | Checks: `npm run typecheck` clean; `npm run build` green (/tools/on-the-clock
+     12.9 kB); `npm test` 17 files / 131 tests pass (no regressions). VISUAL VERIFICATION done in a
+     real browser (dev server + Chrome): walked connect -> league picker -> room; confirmed the
+     command bar, on-the-clock banner, Pure Value spotlight (headshot + accent numbers + finish strip
+     WR6/WR14/WR8), Roster Need secondary, Big board table, native Draft board (serpentine numbers,
+     Your pick / On the clock / Last pick markers), and right-rail panels all render premium + correct.
+
+PHASE 4.5 COMPLETE. STOP POINT. Do NOT start Phase 5 (live data wiring) until owner approves.
+UI runs entirely on fixtures; no live Sleeper/Supabase wiring; no live-draft behavior claimed.
+
+### Phase 4.6 - Cockpit UX refinements (owner-requested; complete)
+Fixtures only; no API/DB/engine change; accessibility preserved + verified in browser.
+OTC-T060 | completed | View switcher replaces the section jump-nav. The room content area now
+     SWITCHES views in place instead of one long scroll: "Who to pick" (Draft Signal hero +
+     Available big board, default) and "Drafted players" (a Board <-> List sub-toggle showing the
+     native draft board OR the pick list). Built as WAI-ARIA tabs (roving tabindex + arrow keys,
+     aria-selected/aria-controls); sub-toggle is an aria-pressed segmented control (LayoutGrid/List
+     icons). Right rail (Room status / Best remaining / Your draft) stays persistent across views.
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+OTC-T061 | completed | Player-pool toggle is now CARD-STYLE with icons: Everyone (Users icon, "All
+     ranked players") + Rookies only (Baby icon, "This year's class"), aria-pressed, 44px, in the
+     command bar. Replaced the old segmented pill.
+     | files: app/tools/on-the-clock/command-header.tsx
+OTC-T062 | completed | List view (All picks): pick/round number column narrowed (w-px whitespace-
+     nowrap, compact "{N} R{r}.{p}") and Player moved ahead of Team, so the player name sits right
+     beside the number instead of being pushed far across the row.
+     | files: app/tools/on-the-clock/pick-list.tsx
+OTC-T063 | completed | Checks: `npm run typecheck` clean; `npm run build` green (/tools/on-the-clock
+     13.8 kB); browser-verified the view switcher (swaps in place), Board/List sub-toggle, card pool
+     toggle, and the narrowed list columns. (Tests unchanged: still 131 pass.)
+
+### Phase 4.7 - Cockpit visual additions (owner-requested; complete)
+Fixtures only; no API/DB/engine change; accessibility preserved; browser-verified.
+OTC-T064 | completed | Draft board (board view only) now renders a small PlayerHeadshot next to each
+     DRAFTED player. The headshot is aria-hidden (decorative) because the cell aria-label already
+     names the player; unmapped/mock ids fall back to the shared avatar (never a broken image). Open
+     slots / on-the-clock / empty cells stay photo-free. List view unchanged (no photos, by request).
+     | files: app/tools/on-the-clock/draft-board.tsx
+OTC-T065 | completed | New OnTheClockCard above the Who-to-pick content: a broadcast-style card with a
+     big gradient pick number in round.pick form (e.g. 02.04) + overall #, which team is up, and a
+     "picks below are for this slot / Sync if your draft moved" nudge. Makes it obvious the
+     recommendations target that specific pick. Reduced-motion-safe pulse.
+     | files: app/tools/on-the-clock/on-the-clock-card.tsx (new), on-the-clock-client.tsx (wired into
+       the pick tabpanel)
+OTC-T066 | completed | Checks: `npm run typecheck` clean; `npm run build` green (/tools/on-the-clock
+     14.4 kB); browser-verified the ON THE CLOCK card (02.04 overall #12, Team 5) and board-view
+     headshots (real photos where the CDN resolves, clean avatar fallback otherwise).
+
+PHASE 4.7 COMPLETE.
+
+### Phase 4.6 (Trade Analyzer) - mocked draft-room Trade Analyzer panel (owner-requested; complete)
+Fixtures only; NO Phase 5 live wiring, NO real Signal Check API call, NO new DB tables, NO API
+route changes, NO admin settings, NO live Sleeper data. UI/mock only before Phase 5. Pool-aware:
+the analyzer mode switches on the existing player-pool toggle (Everyone -> Startup Value Check,
+Rookies only -> Rookie Draft Signal Check).
+OTC-T067 | completed | fixtures.ts - added MOCK-ONLY Trade Analyzer fixtures: TradeItemKind /
+     TradeItemOption / TradeItemGroup types; MOCK_FUTURE_PICK_GROUP (2027/2028 1st-3rd Early/Mid/Late
+     buckets); MOCK_STARTUP_TRADE_GROUPS (startup picks 1.05..4.06, each with a projected
+     player/value, + future buckets); MOCK_ROOKIE_TRADE_GROUPS (rookie players, current-year rookie
+     picks 1.01..3.05 with FF Beacon bucket values, + future buckets). All values illustrative, not
+     engine output; header comment documents the future startup board-fill + Signal Check reuse.
+     | files: app/tools/on-the-clock/fixtures.ts
+OTC-T068 | completed | trade-analyzer.tsx (new) - the cockpit Trade Analyzer panel. Heading "Trade
+     Analyzer" + helper "Check a draft-room trade before you accept it." + pool-aware mode badge +
+     amber "Sample data only" preview note. Two labeled columns (Side A / Side B), each with a
+     grouped <select> + Add button (optgroups by asset kind), removable item rows (44px X buttons
+     with aria-label "Remove {asset} from {side}"), and a big accent Total value. ResultPanel: big
+     side-by-side totals (lead marked with "(leads)" text + border, never color alone), a single
+     polite aria-live region carrying the headline + plain-English explanation. Startup framing is
+     "value check, not a demand"; rookie framing carries the "Powered by Signal Check logic" preview
+     note. Even/slight/clear verdict from percentage difference. "Clear both sides" reset.
+     | files: app/tools/on-the-clock/trade-analyzer.tsx
+OTC-T069 | completed | on-the-clock-client.tsx - wired the Trade Analyzer in as a THIRD room view.
+     Added "Trade Analyzer" (ArrowLeftRight icon) to the VIEWS tablist (View union now
+     pick|drafted|trade) and a matching role=tabpanel that renders <TradeAnalyzer pool={pool} />, so
+     it lives inside the draft HQ (available after a league is selected) and reuses the existing
+     WAI-ARIA tabs keyboard model. The pool prop comes from the existing command-bar pool toggle.
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+OTC-T070 | completed | Checks: `npm run typecheck` clean; `npm run build` green (/tools/on-the-clock
+     17.2 kB, up from 14.4); full `npm test` = 17 files / 131 tests pass (unchanged). No Sleeper/
+     Supabase/Signal-Check calls added; Phase 5 remains safe and untouched.
+
+PHASE 4.6 (Trade Analyzer) COMPLETE. STOP POINT. Do NOT start Phase 5 (live data wiring) until
+owner approves.
+
+### Phase 5 - Live data wiring (owner-approved; IN PROGRESS)
+Scope: wire the existing cockpit UI to the existing Phase 3 routes + Supabase Realtime. NO UI
+redesign, NO Phase 6 recommendation engine, NO real Trade Analyzer / Signal Check wiring, NO admin
+pages, NO value-pipeline changes, NO automatic Sleeper polling, NO commits/pushes.
+
+OTC-T071 | completed | Task 1: inspected the mocked UI + data flow before changing code.
+     | Findings (the exact mocked reads to swap):
+       - ALL fixture reads live in on-the-clock-client.tsx: MOCK_LEAGUES (connect),
+         MOCK_DRAFT_CACHE / MOCK_CONNECTED_USER / MOCK_SYNC_STATUS (room), MOCK_AVAILABLE +
+         MOCK_RECOMMENDATIONS (value side).
+       - connect() ignores the typed username and loads MOCK_LEAGUES; selectLeague() just sets
+         state; the room derives on-the-clock + last pick from MOCK_SYNC_STATUS/MOCK_DRAFT_CACHE.
+       - SyncButton owns a self-contained MOCK 30s countdown (no network).
+       - UsernameGate already calls onConnect(username, season) + has a `pending` prop (no error
+         prop yet). LeaguePicker takes leagues + onSelect + onRefresh (sync; no loading/error/
+         truncated states yet). CommandHeader renders SyncButton internally and only passes
+         syncLabel.
+       - Phase 3 routes return: leagues GET -> { ok, season, leagues: LeagueCard[], truncated }
+         (does NOT currently return the resolved Sleeper user_id); draft GET -> { ok, cache }
+         (warms cold cache via one locked sync); sync POST -> { ok, status, cooldownRemainingSeconds,
+         lastSyncedAt, cache, error? }. All require header x-requested-with: ff-beacon; all 503
+         while settings.feature.enabled=false.
+       - cache.ts shapePick (metadata-aware) is the canonical pick shaper but is NOT exported;
+         Realtime needs the same shaping for a raw on_the_clock_pick_cache row.
+       - Browser Supabase client = lib/supabase/client.ts createClient() (createBrowserClient,
+         SUPABASE_PUBLISHABLE_KEY forwarded to the bundle via next.config env; URL is
+         NEXT_PUBLIC_SUPABASE_URL). Realtime has NEVER been used in the UI before; OTC is first.
+       - Tests run in vitest `environment: "node"` (no jsdom/RTL). Phase 5 tests must be pure
+         function / fetch-wrapper units (lib/**/*.test.ts or app/**/*.test.ts), not React renders.
+     | Scope decisions locked from the prompt + handoff (so the room is coherent + honest):
+       - LIVE-wire: leagues lookup, draft cache load (warm + cold), Sync button, Realtime pick
+         merge, draft board, pick list, My Draft, on-the-clock status, AND my-team detection.
+         Task 5 lists "My Draft view" among the realtime-updated surfaces, so my-team detection is
+         in scope. It needs the resolved Sleeper user_id, which only the server has -> add an
+         additive top-level `userId` to the leagues route response (existing fields unchanged;
+         backward compatible with the route test). This is the ONLY route change.
+       - STAYS MOCK (clearly "Sample data" labeled): the available Big Board, Best Available /
+         Team Need spotlight, Best remaining by position, and the Trade Analyzer. Per task 6 +
+         handoff, the real ranked-board loader + recommendation engine are the next phase. The
+         "if available" qualifier in task 5 confirms the available board may stay mock.
+     | files: (none changed - inspection only)
+     | verified: n/a (read-only pass)
+
+OTC-T072 | completed | Foundation for live wiring (shared, testable, no UI redesign).
+     | - cache.ts: renamed internal shapePick -> exported shapePickRow so the Realtime handler
+         reuses the SAME pick shaper as the read path (zero drift). shapeDraftCache unchanged.
+       - lib/on-the-clock/draft-derive.ts (NEW, pure, browser-safe, no Sleeper/Supabase/fetch):
+         mapRealtimePickRow, mergePick/mergePicks (idempotent fold by pick_no), seatForPick (snake,
+         mirrors draft-board.tsx pickNoFor), deriveDraftState (on-the-clock pick/seat/round + last
+         pick + my-roster/my-seat detection + complete), teamNameForSeat, lastPickLabel,
+         relativeTime/formatLastSynced/syncStatusLine (status copy).
+       - lib/on-the-clock/client.ts (NEW, browser fetch wrappers): fetchLeagues/fetchDraft/syncDraft.
+         Always attach x-requested-with: ff-beacon + cache:no-store; map HTTP status -> typed
+         ApiErrorCode (feature-disabled/throttled/not-found/bad-input/forbidden/server/network) with
+         the route message; sync wrapper passes the 200 status union through. Exactly one fetch per
+         call (no polling).
+     | files: lib/on-the-clock/cache.ts, lib/on-the-clock/draft-derive.ts, lib/on-the-clock/client.ts
+     | verified: typecheck clean
+
+OTC-T073 | completed | Task 2: username/search flow -> GET /api/on-the-clock/leagues.
+     | - leagues route: added additive top-level `userId` (resolved Sleeper user_id) to the 200 body
+         for connected-team detection. Existing fields unchanged (route test still green).
+       - UsernameGate: added optional `error` prop (ErrorCard above the help text); already had
+         pending + defaultUsername. Saved-username prefill flows from the server page.
+       - Client connect() now calls fetchLeagues(username, season); shows pending (Finding...),
+         inline error on the gate for user-not-found/throttled/feature-disabled/network, and only
+         advances to pick-league on success. NO direct Sleeper call, NO route bypass.
+     | files: app/api/on-the-clock/leagues/route.ts, app/tools/on-the-clock/username-gate.tsx,
+       app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + build green; leagues route test passes
+
+OTC-T074 | completed | Task 3: league selection -> GET /api/on-the-clock/draft?draft_id=.
+     | - LeaguePicker: added loading / error / refreshing / truncated states (Refresh disabled +
+         spinner while in flight; truncated note; LoadingCard/ErrorCard). Refresh re-requests the
+         leagues route via the stored lookup (respects the durable lookup guard).
+       - selectLeague() uses the card's draftId/leagueId/season and loads the room via fetchDraft
+         (the read route warms a cold cache once server-side through the lock). 404/503/error render
+         the branded ErrorCard + a "Try again" retry; the premium cockpit layout is unchanged.
+     | files: app/tools/on-the-clock/league-picker.tsx, app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + build green
+
+OTC-T075 | completed | Task 4: Sync Draft button -> POST /api/on-the-clock/draft/sync.
+     | - SyncButton is now CONTROLLED presentational (no internal mock timer/network): props
+         syncing/cooldownRemaining/statusMessage/onSync. CommandHeader threads a `sync` control
+         object through to it (replaced the old syncLabel prop).
+       - onSync sends { draft_id, league_id, season } so the server claims the lock with no
+         pre-fetch. Statuses handled: synced (full cooldown starts), cooldown / synced-by-other
+         (server's reported remaining seconds), served-cache, error. syncStatusLine renders "Updated
+         just now", "Synced by another viewer Ns ago", "Last synced ... Next sync available in Ns",
+         etc. Returned shaped cache replaces room state. The per-second countdown is a UI timer only
+         (NOT polling; never calls Sleeper).
+     | files: app/tools/on-the-clock/sync-button.tsx, app/tools/on-the-clock/command-header.tsx,
+       app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + build green
+
+OTC-T076 | completed | Task 5: Supabase Realtime (Postgres Changes on on_the_clock_pick_cache).
+     | - Client subscribes via the browser client (lib/supabase/client.ts createClient) to channel
+         otc-draft-{draftId} on table on_the_clock_pick_cache filtered sleeper_draft_id=eq.{draftId},
+         event "*". On INSERT/UPDATE it maps payload.new via mapRealtimePickRow and folds it into
+         local picks with mergePick (NO Sleeper, NO sync route, NO DB round-trip). Board, pick list,
+         My Draft, on-the-clock status all recompute from the merged picks. pickCount bumps to the
+         merged length. Cleanup: supabase.removeChannel on draft change / unmount. liveStatus drives
+         a subtle "Live updates unavailable. Use Sync draft to refresh." note when not SUBSCRIBED;
+         realtimeEnabled=false skips the subscription entirely (manual Sync only).
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + build green (live propagation needs a real active draft - NOT yet tested)
+
+OTC-T077 | completed | Task 6: recommendations + Trade Analyzer stay MOCK (clearly labeled).
+     | - Available Big Board, Best Available / Team Need spotlight, Best remaining by position, and
+         the Trade Analyzer still read fixtures. Added a "Sample data" badge to the Draft signal +
+         Available players panels and explanatory copy; the page carries a partial-live notice. NO
+         Phase 6 engine, NO Signal Check / trade endpoint wiring. Drafted board / picks / My Draft /
+         on-the-clock are the live parts.
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx, app/tools/on-the-clock/page.tsx
+     | verified: typecheck + build green
+
+OTC-T078 | completed | Task 7: feature-flag (503) clean state + documented enable path.
+     | - Server page loads on_the_clock_settings; when feature.enabled=false it renders a clean
+         "On The Clock is not enabled yet." panel (no gate) with a League Pulse link. When enabled it
+         passes realtimeEnabled + cooldownSeconds + savedUsername to the client. Defense-in-depth: if
+         a route still returns 503 (settings flip mid-session), the client maps it to the same clean
+         message. The 503 gate in the routes is NOT removed/bypassed.
+       - Enable for local/manual testing (service role / SQL editor), single-row upsert:
+         insert into on_the_clock_settings (id, settings)
+         values ('global', '{"feature":{"enabled":true}}'::jsonb)
+         on conflict (id) do update set settings = on_the_clock_settings.settings
+           || jsonb_build_object('feature', jsonb_build_object('enabled', true)),
+           updated_at = now();
+         (loadOnTheClockSettings deep-merges over DEFAULT_ON_THE_CLOCK_SETTINGS, so only the feature
+         flag needs to be set; everything else falls back to code defaults. Set back to false to
+         disable.)
+     | files: app/tools/on-the-clock/page.tsx
+     | verified: typecheck + build green (FeatureOffNotice renders by default since no settings row)
+
+OTC-T079 | completed | Task 8: tests + checks.
+     | - lib/on-the-clock/draft-derive.test.ts (NEW): seatForPick snake math; deriveDraftState
+         on-the-clock + my-team detection + complete; mapRealtimePickRow (shapes a raw row, null on
+         bad payload, no Sleeper); mergePick/mergePicks idempotent fold; status copy.
+       - lib/on-the-clock/client.test.ts (NEW): username flow calls the leagues route with the header
+         guard; 503->feature-disabled, 429->throttled, 404->not-found, network->network; fetchDraft
+         404; syncDraft POSTs draft_id+league_id+season and passes the synced/cooldown/synced-by-
+         other/served-cache/error status union through; 500->server. Each wrapper makes exactly one
+         fetch (asserts no polling).
+     | checks: `npm run typecheck` clean; `npm test` = 19 files / 158 tests pass (was 17/131, +27);
+       `npm run build` green (/tools/on-the-clock 20.8 kB, 190 kB First Load - the Realtime client
+       adds the bundle).
+     | files: lib/on-the-clock/draft-derive.test.ts, lib/on-the-clock/client.test.ts
+     | verified: yes (all green)
+
+PHASE 5 (live data wiring) COMPLETE for fixtures/mocked verification. NOT yet verified against a
+real active Sleeper draft (live pick propagation, real my-team detection, snake/3RR ordering, two-
+browser single-fetch). Available board + recommendations + Trade Analyzer remain MOCK by design;
+the real ranked-board loader + recommendation engine are the next phase. No commits, no pushes.
+
+### Phase 6A - real ranked-board loader (owner-approved; IN PROGRESS)
+Scope: replace MOCK_AVAILABLE with the real FF Beacon ranked-board loader (consume-only). NO Team
+Need engine (6B), NO real Trade Analyzer (6C), NO admin, NO value-pipeline changes, NO auto polling,
+NO commits/pushes.
+
+OTC-T080 | completed | Task 1: inspected the mocked board usage + the canonical query shape.
+     | Findings:
+       - MOCK_AVAILABLE (RankedPlayer[], defined in fixtures.ts alongside DraftPosition +
+         RecommendationCardData) is consumed by AvailableList (players), BestRemainingByPosition
+         (players), and via MOCK_RECOMMENDATIONS by PlayerSpotlight/SecondaryPick (player is a
+         RankedPlayer). In on-the-clock-client.tsx, poolPlayers = MOCK_AVAILABLE filtered by
+         isRookie. THIS is the exact read to replace.
+       - Canonical query shape = app/rankings/page.tsx:114-228: rankings !inner join players
+         (id, slug, first/last, position, team, status, external_ids), filter format_config_id +
+         source + season + week is null, order overall_rank limit 500; per-table source resolution
+         via resolveSourceForFormat("rankings") AND ("player_value_history"); latest value per player
+         from player_value_history; 7d movement from player_value_trends. NOTE the rankings page
+         HARDCODES SEASON=2025 (the R-risk the plan calls out).
+       - DB reality: rankings has ONLY season=2025 rows (sources dynastyprocess, fantasycalc,
+         ffbeacon, ktc). currentNflSeason() returns 2026 in June 2026, so a STRICT dynamic-season
+         query returns an empty board today. DECISION: the loader resolves the season as "requested
+         (currentNflSeason()) if it has rows for (format, source), else the latest season that does"
+         and exposes a no-rankings empty state only when the (format, source) has NO rows in ANY
+         season. This satisfies "dynamic season, never hardcode 2025" AND keeps the board working
+         today (2026 -> 2025 fallback), auto-upgrading when 2026 rankings land. Documented deviation
+         from a strict "empty when missing for current season".
+       - players columns available: birth_date (age), draft_year, years_experience, external_ids
+         (sleeper). Rookie derivation: years_experience === 0 (fallback draft_year === rookieSeason
+         when years_experience is null). rookieSeason = currentNflSeason() (the incoming class),
+         distinct from the value-board season.
+       - Positions: only ffbeacon ranks K + DEF (K 522, DEF 288); KTC/FC/DP rank QB/RB/WR/TE only.
+         ffbeacon is is_active=false (gated), so getAvailableSources excludes it and K/DEF are absent
+         from the board by default TODAY. The loader includes K/DEF "when present" (coerces position
+         to the 6 DraftPosition values, maps DST->DEF defensively); they surface once a K/DEF-ranking
+         source is active.
+       - format/source: OTC is a /tools/ page, so per CLAUDE.md's global source/format-sync rule the
+         loader resolves via the standard chain (resolveFormatSlug/resolveSourceSlug +
+         reconcileFormatWithSource + resolveSourceForFormat), NOT the /leagues/ league-derived path.
+         League-auto-detected format needs the rich Sleeper league object (scoring_settings/
+         roster_positions), which is NOT cached today; that is a later enhancement, documented.
+       - RankedPlayer/DraftPosition/RecommendationCardData will move to lib/on-the-clock/board-types
+         (so the server loader and client share one type); fixtures.ts re-exports them so existing
+         component imports ("./fixtures") are unchanged. Drafted-exclusion + pool-filter run
+         client-side (picks change via Realtime), so they go in the browser-safe draft-derive.ts.
+     | files: (none changed - inspection only)
+     | verified: n/a (read-only; DB facts confirmed via MCP execute_sql)
+
+OTC-T081 | completed | Task 2: real ranked-board loader.
+     | - NEW lib/on-the-clock/board-types.ts: DraftPosition, RankedPlayer (+ optional age/
+         yearsExperience/7d-movement), RecommendationCardData, BoardStatus, BoardResult. fixtures.ts
+         now re-exports DraftPosition/RankedPlayer/RecommendationCardData from here (component imports
+         from "./fixtures" unchanged).
+       - NEW lib/on-the-clock/board-loader.ts loadRankedBoard(supabase, {formatSlug,
+         requestedSourceSlug, season, rookieSeason}): replicates the Rankings Board query shape
+         (rankings !inner players join + latest player_value_history value + player_value_trends 7d),
+         per-table source resolution via resolveSourceForFormat("rankings"/"player_value_history"),
+         dynamic season with fallback (requested if it has rows, else latest season that does;
+         seasonFellBack flag), position coercion to the 6 buckets (toDraftPosition, DST->DEF, drops
+         IDP), rookie derivation (years_experience===0, fallback draft_year===rookieSeason), age from
+         birth_date, sleeperId from external_ids.sleeper. Returns typed BoardResult with ok /
+         no-rankings / error. Read-only (no writes). Does NOT touch the Rankings Board or any value
+         pipeline.
+     | files: lib/on-the-clock/board-types.ts, lib/on-the-clock/board-loader.ts,
+       app/tools/on-the-clock/fixtures.ts
+     | verified: typecheck clean
+
+OTC-T082 | completed | Task 3: drafted-player exclusion (browser-safe, pure).
+     | - draft-derive.ts excludeDrafted(board, picks): exclude by resolved player_id (exact), then
+         Sleeper id, then a normalized-name guard for unmapped picks (no player_id). DST/K excluded
+         the same way once drafted, present until then. Garbage/empty picks do not crash.
+     | files: lib/on-the-clock/draft-derive.ts
+     | verified: typecheck + tests
+
+OTC-T083 | completed | Task 4: player pool filtering.
+     | - draft-derive.ts filterPool(players, pool): Everyone = all undrafted ranked; Rookies = only
+         RankedPlayer.isRookie. Missing rookie flags read false (empty Rookies pool, no crash). The
+         room defaults the pool to "rookies" when draft.draftType === "rookie", user can override via
+         the command-bar toggle. ASSUMPTION (documented): rookie = first-year player (years_experience
+         ===0; fallback draft_year===currentNflSeason()); "current draft class" uses currentNflSeason()
+         independent of the value-board season.
+     | files: lib/on-the-clock/draft-derive.ts, app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + tests
+
+OTC-T084 | completed | Task 5: wire the real board into the UI.
+     | - page.tsx: resolves format/source via the standard global chain (resolveFormatSlug/
+         resolveSourceSlug + reconcileFormatWithSource) and calls loadRankedBoard; passes BoardResult
+         to the client (only when feature enabled). Added searchParams {format, source}.
+       - on-the-clock-client.tsx: available = filterPool(excludeDrafted(board.players, picks), pool).
+         AvailableList + BestRemainingByPosition now render the REAL board. Best Available =
+         pickBestByValue(available) (real, deterministic). Team Need stays a clearly-labeled SAMPLE
+         (SampleBadge + copy) until 6B. Command-bar Format/Source chips now show the resolved
+         board.formatLabel / board.sourceLabel (no more hardcoded "Dynasty SF" / "KTC"). Empty/error/
+         season-fallback states render in the Available panel. Premium cockpit layout preserved;
+         Trade Analyzer untouched (mock).
+     | files: app/tools/on-the-clock/page.tsx, app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + build green
+
+OTC-T085 | completed | Task 6: draft-shape snake / linear / 3RR.
+     | - draft-derive.ts: DraftShape + draftShapeFromMeta + isReversedRound + generalized
+         seatForPick(pickNo, teams, shape) + pickNoForSeat(round, seat, teams, shape). linear never
+         reverses; snake reverses even rounds; 3RR (settings.reversal_round) keeps the reversal round
+         reversed then alternates. deriveDraftState now passes the shape; draft-board.tsx uses the
+         shared pickNoForSeat (seat COLUMNS stay stable for a11y; only the serpentine pick number per
+         cell changes). Auction treated as linear for seat math (board read-only).
+     | files: lib/on-the-clock/draft-derive.ts, app/tools/on-the-clock/draft-board.tsx
+     | verified: typecheck + tests (snake/linear/3RR + inverse round-trip)
+
+OTC-T086 | completed | Tasks 7 + 8: tests + checks.
+     | - lib/on-the-clock/board-loader.test.ts (NEW): toDraftPosition / deriveIsRookie /
+         ageFromBirthDate; loadRankedBoard with a mocked Supabase chain - no-rankings empty state,
+         season fallback (2026->2025), uses requested season when present, drops IDP + keeps K/DEF.
+         The mock's write methods throw, proving the loader never mutates (no value-pipeline change).
+       - lib/on-the-clock/draft-derive.test.ts (EXTENDED): draft-shape snake/linear/3RR +
+         seat<->pickNo inverse round-trip; excludeDrafted by player_id / sleeper id / name guard +
+         no-crash + K/DEF kept; filterPool Everyone vs Rookies + empty-not-crash; pickBestByValue
+         deterministic tie-break + empty.
+       - Checks: `npm run typecheck` clean; `npm test` = 20 files / 181 tests (was 19/158, +23);
+         `npm run build` green (/tools/on-the-clock 21.6 kB, 191 kB First Load).
+     | files: lib/on-the-clock/board-loader.test.ts, lib/on-the-clock/draft-derive.test.ts
+     | verified: yes (all green)
+
+PHASE 6A (real ranked board) COMPLETE at the code level. The available big board + Best Available
+are now real FF Beacon data; Team Need stays a labeled SAMPLE (6B), Trade Analyzer stays mock (6C).
+NOT yet verified against a real active Sleeper draft. KNOWN: by default the board shows only QB/RB/
+WR/TE (only ffbeacon ranks K/DEF and it is is_active=false); format/source come from the global
+chain, not league-auto-detected (deferred). No commits, no pushes.
+
+OTC-T087 | completed | Season-behavior audit + fix (owner-requested, pre-6B).
+     | Audit (MCP-verified, no value-pipeline changes): the Phase 6A report's "fallback to 2025 /
+       showing 2025 values / 2026 not published" framing was WRONG and implied staleness. Findings:
+       - rankings.season=2025 for ALL active sources, but rankings.generated_at = 2026-06-26 10:00
+         (TODAY) - rankings are regenerated daily. season=2025 is a fixed board-season LABEL, not a
+         freshness signal. Both the writer (lib/seed-rankings.ts: const SEASON = 2025) and the reader
+         (app/rankings/page.tsx: const SEASON = 2025) hardcode the same label.
+       - player_value_history.captured_at = 2026-06-26 (today) for every source;
+         player_value_trends.updated_at = 2026-06-26 (today). Values are fully current daily data.
+       - player_value_history has NO season column; the latest value per (player, format, source) is
+         always used, independent of the rankings.season label. So values are current regardless.
+     | Answers: (1) production Rankings Board hardcodes SEASON=2025, not dynamic. (2) yes, daily
+       values flow from value_history/trends even though rankings.season=2025. (3) it is a LABEL, not
+       stale. (4) yes - OTC should use the latest available ranking season per (format, source), not
+       currentNflSeason(). (5) yes - the UI must NOT say "2025 values".
+     | Fix (loader now matches production behavior):
+       - board-loader.ts: board season = the LATEST published ranking-season partition for the
+         (format, source) via the existing max(season) query. Dropped the currentNflSeason() request +
+         count probe + fallback semantics. Dropped the `season` param (kept `rookieSeason` =
+         currentNflSeason() for rookie-class derivation only - that is correctly calendar-based).
+       - board-types.ts: BoardResult dropped requestedSeason + seasonFellBack; `season` is now
+         documented as a label only.
+       - on-the-clock-client.tsx: removed the misleading "Showing 2025 values..." note; the Available
+         panel helper now reads "sorted by current FF Beacon value".
+       - page.tsx: loadRankedBoard call updated (no season; rookieSeason only).
+       - board-loader.test.ts: updated - no-rankings empty state, "uses the latest published ranking
+         season as the board label (values stay current)", drops IDP + keeps K/DEF. Removed the
+         obsolete "requested season" test.
+     | files: lib/on-the-clock/board-loader.ts, lib/on-the-clock/board-types.ts,
+       app/tools/on-the-clock/{on-the-clock-client,page}.tsx, lib/on-the-clock/board-loader.test.ts
+     | checks: typecheck clean; npm test = 20 files / 180 tests pass; build green (/tools/on-the-clock
+       21.5 kB). No value-pipeline changes. No commits/pushes.
+     | verified: yes
+
+### Phase 6A.2 - force FF Beacon source + auto-detect league format + DEF/K fix (owner-approved; IN PROGRESS)
+Scope: force OTC value source to FF Beacon, auto-detect closest league format from Sleeper (like
+Signal Check), remove user-facing source/format selectors, fix DEF/K loading. NOT 6B/6C, NO admin,
+NO value-pipeline changes, NO commits/pushes.
+
+OTC-T088 | completed | Task 1: audit of the source/format flow + Signal Check detection + DEF/K.
+     | Findings:
+       - OTC resolves format/source via the GLOBAL chain in app/tools/on-the-clock/page.tsx
+         (resolveFormatSlug/resolveSourceSlug + reconcileFormatWithSource), then loadRankedBoard uses
+         resolveSourceForFormat, which filters is_active and therefore picks the default KTC and NEVER
+         ffbeacon (is_active=false). This is the root cause of DEF/K missing: KTC ranks no K/DEF.
+       - No real source/format DROPDOWNS exist in the OTC UI; command-header.tsx shows read-only
+         <Chip>s fed by board.formatLabel / board.sourceLabel. But URL ?format=/?source= + prefs still
+         drive them via the global chain. "Remove selectors" = stop using the global chain, force
+         ffbeacon, derive format from the league, show locked chips.
+       - Signal Check detection lives in lib/sleeper-to-format.ts (deriveLeagueFormat, deriveFormatSlug,
+         mapToFormatSlug, describeDerivedFormat, pickClosestSupportedFormat) + lib/signal-check/format.ts
+         (FFBEACON_SOURCE_SLUG = "ffbeacon", FFBEACON_SOURCE_DISPLAY = "FF Beacon"; candidate list =
+         ffbeacon.supported_format_slugs INTERSECT active format_configs). Signal Check reads ffbeacon
+         values REGARDLESS of the source's is_active flag (it only gates on the FORMAT being active).
+       - DB facts (MCP): ffbeacon ranks K (58 players, numeric sleeper ids, values up to 1499) and DEF
+         (32 teams, external_ids.sleeper = team code like "ARI"/"BUF", values up to 1466). So DEF id
+         mapping works (board.sleeperId = team code; drafted DEF pick.sleeperPlayerId = team code ->
+         exclusion by sleeperId matches). toDraftPosition already maps DEF/DST->DEF and K/PK->K.
+       - SleeperLeague type carries scoring_settings + roster_positions + settings + previous_league_id;
+         the leagues route already fetches these via getSleeperLeagues, so format is detectable there
+         with ZERO extra Sleeper calls (Task 4). The draft cache does NOT store league scoring, but we
+         do not need it if detection happens in the leagues route.
+     | Files in scope: app/tools/on-the-clock/{page,on-the-clock-client,command-header}.tsx,
+       lib/on-the-clock/{board-loader,board-types,types}.ts, app/api/on-the-clock/leagues/route.ts,
+       lib/sleeper-to-format.ts, lib/signal-check/format.ts.
+     | Plan: force source=ffbeacon in the loader (reuse FFBEACON_SOURCE_SLUG, read the row regardless
+       of is_active like Signal Check; render an admin note when is_active=false; graceful error only
+       when the row/data is missing). Detect format per league in the leagues route. Move board load to
+       a per-league GET /api/on-the-clock/board route fetched client-side on league select. Lock the
+       UI chips. Fix DEF/K via the forced source (loader coercion already correct).
+     | files: (none changed - inspection only)
+     | verified: n/a (read-only; DB facts confirmed via MCP)
+
+OTC-T089 | completed | Task 2: force value source to FF Beacon.
+     | - board-loader.ts now FORCES source='ffbeacon' (FFBEACON_SOURCE_SLUG from lib/signal-check/
+         format.ts; display "FF Beacon"). Dropped the global resolveSourceForFormat path (which
+         filtered is_active and picked KTC). Reads the ffbeacon source row regardless of is_active
+         (mirrors Signal Check); is_active=false -> BoardResult.sourceActive=false (admin note, not a
+         block). Missing ffbeacon row -> status "source-unavailable" (graceful dev/admin message).
+         loadRankedBoard signature is now { formatSlug, rookieSeason } (no requestedSourceSlug).
+       - board-types.ts: BoardStatus adds "source-unavailable"; BoardResult adds sourceActive.
+       - UI shows a locked "Values: FF Beacon" chip (command-header) + an admin note when
+         sourceActive=false. No user-facing source dropdown exists.
+     | files: lib/on-the-clock/board-loader.ts, lib/on-the-clock/board-types.ts,
+       app/tools/on-the-clock/command-header.tsx, app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + tests (source-unavailable, sourceActive false-but-loads, sourceSlug=ffbeacon)
+
+OTC-T090 | completed | Task 3 + 4: auto-detect closest league format from Sleeper (route context).
+     | - NEW lib/on-the-clock/format-detect.ts: ffbeaconFormatCandidates (ffbeacon supported_format_slugs
+         INTERSECT active format_configs, as FormatCandidate[]) + detectLeagueFormat(league, candidates)
+         = exact deriveFormatSlug when ffbeacon carries it, else pickClosestSupportedFormat (never
+         crosses redraft/dynasty). Reuses lib/sleeper-to-format.ts (the Signal Check toolkit).
+       - leagues route detects the format PER league from the rich SleeperLeague object it ALREADY
+         fetched via getSleeperLeagues (scoring_settings/roster_positions). ZERO extra Sleeper calls
+         (one Supabase candidate read). LeagueCard gains formatSlug/formatLabel/formatDerivedLabel/
+         formatIsClosest (lib/on-the-clock/types.ts). Task 4: the leagues route is the right place;
+         no cache schema change needed.
+       - UI: locked "Format: {label}" chip + helper "Format detected from your Sleeper league. Values
+         always come from FF Beacon." (+ "Closest FF Beacon format used" when formatIsClosest).
+     | files: lib/on-the-clock/format-detect.ts, lib/on-the-clock/types.ts,
+       app/api/on-the-clock/leagues/route.ts, app/tools/on-the-clock/command-header.tsx
+     | verified: typecheck + tests (exact/closest/never-cross-type/superflex)
+
+OTC-T091 | completed | Task 5: remove user-facing selectors; board fetched per-league.
+     | - The board is now format-specific per the SELECTED league, so it moved out of page.tsx into a
+         new per-league GET /api/on-the-clock/board?format=<slug> route (header-guarded + feature-
+         gated; forces FF Beacon in the loader). page.tsx no longer resolves global format/source and
+         no longer loads the board. The client fetches the board on league select (fetchBoard in
+         lib/on-the-clock/client.ts) and holds it in state, recomputing available = filterPool(
+         excludeDrafted(board.players, picks)). Command-header chips are locked (Format auto-detected,
+         Values=FF Beacon); no dropdowns. Global Rankings Board / Signal Check / other tools untouched
+         (they still use their own resolvers).
+     | files: app/api/on-the-clock/board/route.ts, lib/on-the-clock/client.ts,
+       app/tools/on-the-clock/{page,on-the-clock-client,command-header}.tsx
+     | verified: typecheck + build green
+
+OTC-T092 | completed | Task 6 + 7: DEF/K audit + fix.
+     | Audit (MCP): FF Beacon ranks K (58, numeric sleeper ids) + DEF (32, external_ids.sleeper =
+       team code like "BUF"/"ARI"), values up to ~1499/1466. toDraftPosition already maps DEF/DST->DEF
+       and K/PK->K; excludeDrafted matches DEF team-code ids via sleeperId. So DEF/K were missing for
+       TWO independent reasons: (1) the global resolver picked KTC (no K/DEF) - fixed by forcing
+       ffbeacon (OTC-T089); (2) K/DEF sit LOW by value (overall_rank ~509-797 for dynasty-SF, total
+       797 ranked) and the board's 500-row cap truncated them out BEFORE reaching K/DEF.
+     | Fix: raised BOARD_ROW_CAP 500 -> 1500 (largest ffbeacon format = 797 ranked, comfortable
+       headroom; the available list is paginated client-side so the row count costs nothing visually).
+       DEF/K now load when FF Beacon has values, appear in the available list + draft board + pick list
+       + My Draft, and drop when drafted (exclusion). They are NOT recommended (Best Available is pure
+       value; DEF/K almost never top it). Late-round DEF/K roster-need gating is Phase 6B.
+     | files: lib/on-the-clock/board-loader.ts
+     | verified: typecheck + tests (K/DEF kept, IDP dropped, DEF team-code id round-trips) + MCP row counts
+
+OTC-T093 | completed | Task 8: tests + checks.
+     | - NEW lib/on-the-clock/format-detect.test.ts (exact / closest / never-cross-type / superflex).
+       - NEW app/api/on-the-clock/board/route.test.ts (header guard 403, bad slug 400, feature 503, ok
+         returns ffbeacon board; route never passes a source - loader forces FF Beacon).
+       - board-loader.test.ts rewritten for forced FF Beacon: source-unavailable when row missing;
+         no-rankings; ok with sourceSlug/valueSourceSlug=ffbeacon + sourceActive; loads even when
+         is_active=false (sourceActive=false); drops IDP + keeps K/DEF + DEF team-code id round-trips.
+       - leagues route test: stubs format-detect, asserts the card carries the detected format.
+       - Checks: typecheck clean; npm test = 22 files / 191 tests (was 20/180, +11); build green
+         (/tools/on-the-clock 22 kB; new /api/on-the-clock/board route).
+       - "Other tools unaffected": the global source/format chain is untouched; only OTC's loader +
+         page were changed. Rankings Board, Signal Check, FAAB still resolve via their own paths.
+     | files: lib/on-the-clock/format-detect.test.ts, app/api/on-the-clock/board/route.test.ts,
+       lib/on-the-clock/board-loader.test.ts, app/api/on-the-clock/leagues/route.test.ts
+     | verified: yes (all green)
+
+PHASE 6A.2 COMPLETE at the code level. OTC value source is FORCED to FF Beacon (ffbeacon, now
+is_active=true in the DB so it renders fully); format is auto-detected per league from Sleeper
+(exact or closest); no user-facing source/format selectors (locked chips). DEF/K now load (forced
+source + raised cap). NOT yet verified against a real active Sleeper draft. Team Need (6B) + Trade
+Analyzer (6C) remain sample/mock. No value-pipeline changes. No commits/pushes.
+
+---
+
+PHASE 6B - Team Need recommendation engine (in progress, code only, no commits)
+
+OTC-T094 | completed | Task 1: audit current recommendation/card flow (before changes).
+     | Findings:
+       - Best Available: pickBestByValue(available) in lib/on-the-clock/draft-derive.ts:117, called in
+         app/tools/on-the-clock/on-the-clock-client.tsx:444. available = filterPool(excludeDrafted(
+         boardPlayers, draftCache.picks), pool) (client line 441). boardPlayers = board.players when
+         board.status==="ok".
+       - Sample Team Need card: on-the-clock-client.tsx:454-463 (needSample = available.find(p !==
+         bestPlayer)); rendered lines 580-586 via SecondaryPick + SampleBadge + "sample until engine".
+       - Card prop shape: RecommendationCardData (lib/on-the-clock/board-types.ts:42) = { kind:
+         "best"|"need", player: RankedPlayer|null, reason, decidingFactor: value|need|reach|none,
+         filledSlot: string|null }. Rendered by player-spotlight.tsx PlayerSpotlight/SecondaryPick
+         (uses data.player, data.reason, data.filledSlot).
+       - Draft state (deriveDraftState, draft-derive.ts:212): onTheClockPickNo/Slot/Round/PickInRound,
+         lastPick, myRosterId, mySlot, complete.
+       - My picks: cache.picks.filter(pickedBy===myUserId || draftSlot===mySlot). Pick carries
+         position (ShapedPick.position) + playerId. Seed roster: cache.rosters.find(mine).players =
+         Sleeper ids; positions resolved via board RankedPlayer.sleeperId -> position.
+       - Slot counts: ShapedDraftMeta.settings (Record<string,number>) carries Sleeper draft slots_qb/
+         slots_rb/slots_wr/slots_te/slots_flex/slots_super_flex/slots_k/slots_def + teams/rounds. This
+         is the roster_positions source; falls back to settings.positionFallbackTargets when absent.
+       - Settings to client: page.tsx currently passes ONLY realtimeEnabled + cooldownSeconds. The 6B
+         engine needs recommendation.weights, dstk gate, positionAdjust, positionFallbackTargets,
+         recommendation.teamNeedEnabled - must be threaded through to the client.
+     | files: (audit only, no changes)
+     | verified: n/a (read-only audit)
+
+OTC-T095 | completed | Tasks 2-5: recommendation engine (recommend.ts), scoring, slot model, DST/K gate.
+     | NEW lib/on-the-clock/recommend.ts - pure, browser-safe, deterministic. Exports recommend()
+       plus tested helpers (buildSlotModel, assignToSlots, slotFitFor, tallyPositions,
+       isSuperflexFormat, isTepFormat, dstkRecommendable, reachScoreFor).
+     | Task 3 (Team Need scoring): one canonical equation on 0-100 components -
+         blended = wValue*valueScore + wNeed*needScore - wReach*reachScore.
+       - valueScore: raw FF Beacon value rescaled 0-100 across the available board.
+       - VORP: replacement[pos] = value of the league-wide last startable AVAILABLE player at that
+         position (depth = teams * startableDepth(pos); FLEX/SF folded into skill spots; QB depth gets
+         SF only when superflex). vor = max(0, value - replacement); vorScore rescaled 0-100.
+       - needScore: slotFit.factor * formatMult * (0.5*valueScore + 0.5*vorScore), rescaled 0-100.
+         slotFit: dedicated open slot 1.0, FLEX/SF 0.7, bench-only 0.25. So need is value-AWARE, never
+         blind positional need, and never just the top value player again.
+       - Deterministic tie-break: blended -> raw value -> better position_rank -> lowest player id.
+     | Task 4 (slot model): buildSlotModel reads Sleeper draft.settings slots_qb/rb/wr/te/flex/
+       super_flex/k/def (slots_rec_flex folded into FLEX); falls back to settings.positionFallbackTargets
+       when no slot keys present. assignToSlots greedily fills dedicated -> FLEX (RB/WR/TE) ->
+       SUPER_FLEX (QB/RB/WR/TE), so a drafted QB reduces SF need. have = my drafted + seeded (dynasty)
+       positions. DEF/DST and K/PK normalization is handled upstream by board-loader toDraftPosition.
+     | Task 5 (DST/K gate): dstkRecommendable() - "never" => never; "always_allowed" => always;
+       "suppress_until_need" (default) => currentRound >= minRoundForDst/minRoundForK AND
+       (requireStartingSlot ? league has the slot) AND team lacks one. Gated DST/K are removed from the
+       Team-Need eligible pool but stay in available + Best Available (pure value can still surface a
+       high-value one if the user position-filters). Defaults: minRoundForDst 10, minRoundForK 12.
+     | Format logic: isSuperflexFormat (SUPER_FLEX slot OR slug ~ /sflex|superflex/) applies
+       superflexQbMultiplier to QB need; isTepFormat (slug ~ /tep/) applies tePremiumMultiplier to TE
+       need. Rookie-only pool just runs on whatever players are in `available` (caller pre-filters); no
+       full-dynasty starter overreaction because need rescales within the eligible pool.
+       reachScoreFor is POSITIONAL + tier-gated (only bites > maxReachTierBreak tiers below the best
+       same-position option), so a needed position is never vetoed by an unrelated global top.
+     | Graceful degrade: rosterKnown=false => need card shows the scarcity/value pick with the
+       "No clear roster-need edge yet" copy; teamNeedEnabled=false or empty pool => safe fallback cards.
+     | files: lib/on-the-clock/recommend.ts
+     | verified: pending (tests + typecheck in OTC-T097/T098)
+
+OTC-T096 | completed | Task 6: wire real Team Need into the UI (remove sample badge/copy).
+     | - page.tsx now passes the full admin `settings` object to OnTheClockClient (new prop). Partial-
+       live notice updated: only the Trade Analyzer is sample now (both rec cards are live).
+     | - on-the-clock-client.tsx: removed pickBestByValue + SampleBadge + the needSample stand-in.
+       Added coercePosition() (Sleeper pos string -> DraftPosition). Computes engine inputs from live
+       data: detectedFormatSlug (board/league), isDynasty (slug ~ /dynasty/), myDraftedPositions (my
+       picks via pickedBy/draftSlot), seededPositions (dynasty only: my roster's Sleeper ids -> position
+       via the board's sleeperId map), rosterKnown (mySlot>0 || any picks/seed), currentRound. Calls
+       recommend({...}); bestCard = rec.best, needCard = rec.need.
+     | - Draft signal section: when rec.aligned, render ONE PlayerSpotlight variant="aligned" (no
+       demotion to a runner-up). Otherwise the Best Available spotlight + the Team Need SecondaryPick
+       (plain "Team Need" label, no Sample badge). Reason copy is plain English from the engine
+       (decidingFactor-driven): "You are light at running back...", "Superflex leagues lean hard on
+       quarterbacks...", "Tight end premium...", late "your lineup still needs a defense...", and the
+       graceful "No clear roster-need edge yet. Best Available is your safest signal." fallback.
+     | files: app/tools/on-the-clock/page.tsx, app/tools/on-the-clock/on-the-clock-client.tsx
+     | verified: typecheck + build green
+
+OTC-T097 | completed | Task 7: tests for the engine + UI wiring.
+     | NEW lib/on-the-clock/recommend.test.ts (33 tests): Best Available is pure value; Team Need
+       differs when the top value sits at a saturated position; superflex flips an equal-value tie to
+       QB; TE premium flips an equal-value tie to TE; empty RB/WR/TE room recommends a sensible (not
+       bottom-tier) player; rookies-only pool runs without crashing; dynasty seeded QBs reduce QB need
+       so a non-QB wins; drafted players are never resurrected (engine only sees the caller's pool);
+       K/DEF are in Best Available but gated out of early Team Need, and recommendable late only when
+       rules require + team lacks one; "never"/"always_allowed" behaviors; missing roster settings fall
+       back to fallback targets; rosterKnown=false uses the no-edge copy; empty pool -> empty cards;
+       teamNeedEnabled=false disables Team Need but not Best Available; aligned flag + copy; reach is
+       positional + tier-gated (a needed QB is not penalized for an unrelated top WR).
+     | No-regression coverage: no source/format selector behavior touched (OTC still forces FF Beacon,
+       format auto-detected); Trade Analyzer untouched (still mock); no value-pipeline file changed.
+     | files: lib/on-the-clock/recommend.test.ts
+     | verified: 33/33 pass
+
+OTC-T098 | completed | Task 8: run checks.
+     | - npm run typecheck: clean.
+     | - npm test: 23 files / 224 tests pass (was 22/191 in 6A.2; +1 file, +33 tests).
+     | - npm run build: green. /tools/on-the-clock 24.5 kB (was 22 kB). No new routes.
+     | - No value-pipeline changes; no Sleeper polling added; no admin UI; no commits/pushes.
+     | files: (checks only)
+     | verified: yes (all green)
+
+PHASE 6B COMPLETE at the code level. Team Need is a real value-aware recommendation (VORP + slot-fill
++ format multipliers + tier-gated reach + DST/K late gate) in lib/on-the-clock/recommend.ts, wired
+into the cockpit (sample badge removed). Best Available stays pure value. Trade Analyzer (6C) remains
+mock. No value-pipeline / source-format / polling changes. NOT yet verified against a real active
+Sleeper draft. No commits/pushes.
+
+---
+
+PHASE 6C - Trade Analyzer (real value analyzer, code only, no commits)
+
+OTC-T099 | completed | Task 1: audit current Trade Analyzer mock (before changes).
+     | Findings:
+       - Mock UI: app/tools/on-the-clock/trade-analyzer.tsx (TradeAnalyzer({pool})). Builds Side A/B
+         from MOCK_STARTUP_TRADE_GROUPS / MOCK_ROOKIE_TRADE_GROUPS (app/tools/on-the-clock/fixtures.ts),
+         sums option.value per side, describeResult() does the 5%/15% verdict. Pure UI shapes:
+         TradeItemOption {id,label,detail?,value,kind} + TradeItemGroup {label,options[]}.
+       - Cockpit nav: VIEWS in on-the-clock-client.tsx includes { id:"trade", label:"Trade Analyzer" };
+         the trade tabpanel renders <TradeAnalyzer pool={pool} />. Keep this placement.
+       - Already available in the client: `available` (post-exclusion + pool-filtered RankedPlayer[]),
+         board.players (pre-exclusion full format board), board.formatSlug/formatLabel, league (season,
+         formatSlug), draftCache.draft.settings (teams/rounds/slots/reversal_round), derived
+         (onTheClockPickNo/Round, mySlot), draftCache.picks. pool state. recommend() already wired.
+       - Reusable shape helpers (pure, lib/on-the-clock/draft-derive.ts): draftShapeFromMeta,
+         seatForPick, pickNoForSeat, DraftShape (snake/linear/3RR already handled).
+       - Signal Check / lib/trade-analyzer.ts analyzeTrade(): SERVER-side (queries player_value_trends +
+         draft_pick_values, Sleeper-transaction shaped). NOT reusable client-side without a DB round
+         trip and it pulls KTC pick values (would break OTC's force-FF-Beacon + project-from-board
+         posture). REUSE only the verdict thresholds (<=5% even, <=15% slight edge, else won) as the
+         pattern; do NOT import it. Signal Check pipeline modules are its own engine; leave untouched.
+       - Decision: build a self-contained PURE module (lib/on-the-clock/trade-analyzer.ts) that values
+         every asset from the board the client already holds (players = FF Beacon value; current picks =
+         board projection via draft shape; future buckets = discounted board projection, clearly
+         labeled estimated). No new routes, no DB, no pipeline change, browser-safe + testable.
+     | files: (audit only, no changes)
+     | verified: n/a (read-only audit)
+
+OTC-T100 | completed | Tasks 2,3,4,6: pure trade-analyzer module (catalog + projection + verdict).
+     | NEW lib/on-the-clock/trade-analyzer.ts - pure, browser-safe, deterministic. Exports TradeMode,
+       TradeItemOption/TradeItemGroup (with `estimated` flag + computed value), buildTradeCatalog(),
+       analyzeTradeSides(), plus tested helpers bucketSlot/futureDiscount and the documented constants
+       FALLBACK_PICK_VALUE (50) + PLAYER_PICKER_CAP (200).
+     | Task 2 (analyze): analyzeTradeSides(a,b) -> { totalA, totalB, diff, diffPct, lean, headline,
+       detail, hasEstimates }. Lean buckets: fair (<=5%), a-lean/b-lean (<=15%), a-strong/b-strong
+       (>15%), empty (nothing placed). Thresholds mirror the site trade analyzer; plain-English detail
+       with a "value signal, not a recommendation" disclaimer and an estimate note when any pick is in.
+     | Task 3 (startup): buildTradeCatalog mode="startup" -> groups: "Available players" (FF Beacon
+       value, not estimated, top 200 by value), "Your upcoming startup picks" (the connected user's
+       remaining picks via pickNoForSeat; generic mid-seat per round when mySlot unknown), "Future pick
+       buckets". Startup pick value = projected player at that board slot (see Task 6). No board
+       mutation, no DB.
+     | Task 4 (rookie): mode="rookie" -> same shape but the board passed in is the rookies-only pool, so
+       "Rookie players" + "Current rookie picks" + "Future rookie pick buckets" all project from the
+       rookie board. Reuses the SAME projection + verdict (no duplicate business logic). Did NOT import
+       Signal Check (its analyzeTrade is server-side + KTC-pick-based, which would break OTC force-FF-
+       Beacon); reused only the verdict-threshold pattern. Signal Check untouched.
+     | Task 6 (projection): current pick value = availSorted[max(0, overallPickNo - onTheClockPickNo)]
+       (0 = on the clock; uses the existing snake/linear/3RR shape via pickNoForSeat). Already-made
+       picks are excluded (only upcoming picks are offered). Future bucket value =
+       poolSorted[(round-1)*teams + bucketSlot(bucket) - 1] * futureDiscount(yearsAhead) where
+       futureDiscount = 0.85^yearsAhead; bucketSlot maps early/mid/late to ~15%/50%/85% of the round.
+       Future picks project from the PRE-exclusion pool board (not depleted by the current draft) and
+       are always estimated=true. Empty/thin board -> FALLBACK_PICK_VALUE, still flagged estimated.
+       DEF/K are valued at their plain FF Beacon value (no boost), same as any player.
+     | files: lib/on-the-clock/trade-analyzer.ts
+     | verified: pending (tests + typecheck in OTC-T103/T104)
+
+OTC-T101 | completed | Task 5: UI wiring (replace mock Trade Analyzer with real value check).
+     | - trade-analyzer.tsx rewritten: takes { pool, groups, boardReady }. Removed the "Sample data
+       only" amber note; mode framing (Startup Trade Builder / Rookie Draft Signal Check) + a plain note
+       that picks are projected/estimated and this is a value signal not a recommendation. Builds Side A
+       and Side B from the real `groups`; per-side add (native <select> with <optgroup>s = type-ahead
+       search + full keyboard/screen-reader support, zero custom-widget risk) and remove; per-side total;
+       a ResultPanel with the 5-bucket verdict (Fair / Slight edge to A|B / Strong edge to A|B), big
+       side-by-side totals ("(leads)" text, not color alone), and an aria-live polite result region.
+       Estimated picks carry an "est." marker on the chip + in the option label. Empty/board-not-ready ->
+       graceful EmptyCard "Trade values are not available yet."
+     | - on-the-clock-client.tsx: builds tradeGroups = buildTradeCatalog({ mode from pool, available,
+       poolBoard = filterPool(boardPlayers, pool), draftSettings, shape = draftShapeFromMeta, onTheClock
+       PickNo, mySlot, currentSeason }) when board.status==="ok"; passes groups + boardReady. Premium
+       cockpit design + the existing "trade" tab placement preserved.
+     | - fixtures.ts: removed the dead MOCK_*_TRADE_GROUPS / TradeItem* mock block (no consumers left).
+     | - page.tsx + client header comment updated: no mock panels remain; Trade Analyzer is live with
+       projected/estimated pick values.
+     | files: app/tools/on-the-clock/trade-analyzer.tsx, app/tools/on-the-clock/on-the-clock-client.tsx,
+       app/tools/on-the-clock/fixtures.ts, app/tools/on-the-clock/page.tsx
+     | verified: typecheck clean
+
+OTC-T102 | completed | Task 7: Trade Analyzer state handling.
+     | - Reset on league switch AND pool switch: <TradeAnalyzer key={`${league.draftId}-${pool}`}> so
+       changing leagues or Everyone<->Rookies remounts the analyzer and clears both sides (no carryover
+       of players/picks between drafts).
+     | - Board reload safe: placed items SNAPSHOT their TradeItemOption (label + value + estimated) at
+       add time, so a sync/Realtime board reload only refreshes the add catalog, never mutating an
+       already-placed asset.
+     | - Drafted-mid-build behavior (documented): a player who gets drafted after being placed STAYS on
+       the side with the value it had when added (safest: no surprise removal, no crash). They simply
+       drop out of the add catalog (which reads from `available`). This is the chosen, documented
+       behavior.
+     | - No DB writes anywhere (MVP). No Sleeper calls.
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx, app/tools/on-the-clock/trade-analyzer.tsx
+     | verified: typecheck clean
+
+OTC-T103 | completed | Task 8: tests for the trade analyzer.
+     | NEW lib/on-the-clock/trade-analyzer.test.ts (23 tests): startup player-for-player totals; startup
+       pick projection from the available board; future bucket valuation (discounted board projection,
+       exact value check vs bucketSlot*futureDiscount); rookie player-for-pick trade; rookie future
+       buckets; fair/lean/strong-edge thresholds (<=5% / <=15% / >15%); snake/linear/3RR shapes do not
+       crash; drafted players are not double-counted (current picks project only from `available`, never
+       exceed the best available value); switching modes back to back is safe; empty board returns no
+       groups (graceful unavailable); DEF/K valued at face value with no boost; documented fallback
+       value used when a bucket cannot project. bucketSlot + futureDiscount unit tested.
+     | No-regression: Signal Check untouched (its tests still pass); no value-pipeline file changed.
+     | files: lib/on-the-clock/trade-analyzer.test.ts
+     | verified: 23/23 pass
+
+OTC-T104 | completed | Task 9: run checks.
+     | - npm run typecheck: clean (test casts go through `unknown`).
+     | - npm test: 24 files / 247 tests pass (was 23/224 after 6B; +1 file, +23).
+     | - npm run build: green. /tools/on-the-clock 23.6 kB (slightly smaller; mock fixtures removed).
+       Signal Check 14 kB unchanged (not broken). No new routes.
+     | - No value-pipeline changes; no Sleeper polling; no admin UI; no source/format change; no commits.
+     | files: (checks only)
+     | verified: yes (all green)
+
+PHASE 6C COMPLETE at the code level. The Trade Analyzer is a real, pool-aware value check
+(lib/on-the-clock/trade-analyzer.ts): Everyone = Startup Trade Builder, Rookies = Rookie Draft Signal
+Check style. Players use FF Beacon value; current picks project from the board via the existing
+snake/linear/3RR shape; future buckets are discounted board projections, all flagged estimated. No mock
+panels remain in On The Clock. No value-pipeline / source-format / polling changes. Signal Check
+untouched. NOT yet verified against a real active Sleeper draft. No commits/pushes.
+
+---
+
+PHASE 6C.1 - Trade Analyzer pick ownership + transaction-aware pick values (code only, no commits)
+
+OTC-T105 | completed | Task 1: audit current Trade Analyzer pick catalog (before changes).
+     | Findings (the limitation to fix):
+       - Current pick options are built in lib/on-the-clock/trade-analyzer.ts buildTradeCatalog() via
+         upcomingPicks(), which ONLY generates the connected user's seat (mySlot) picks AND only
+         upcoming ones (overall >= onTheClockPickNo). Generic mid-seat fallback when mySlot unknown.
+         => It excludes: already-made picks, other teams' picks, and any traded-pick ownership.
+       - Already-made picks ARE in cache.picks (ShapedPick: pickNo, round, draftSlot, rosterId, pickedBy,
+         sleeperPlayerId, playerId, position, team) but the catalog ignores them entirely.
+       - Future buckets: generic Early/Mid/Late x rounds 1-3 x 2 seasons, discounted board projection;
+         not ownership-aware.
+       - Available cached data: ShapedDraftMeta.slotToRosterId (slot->roster = original draft order),
+         settings (teams/rounds/reversal_round), draftType; cache.picks (made picks w/ roster_id +
+         picked_by + player_id); cache.rosters (rosterId/ownerId/coOwners/players); cache.users
+         (userId/displayName). NO traded_picks fetched or cached yet. draft order = slot_to_roster_id.
+     | files: (audit only)
+     | verified: n/a
+
+OTC-T106 | completed | Task 2: audit Sleeper transaction data already available.
+     | - lib/sleeper.ts already has getSleeperTradedPicks(leagueId) -> SleeperTradedPick[]
+       { season:string, round:number, roster_id:number (ORIGINAL owner/slot), previous_owner_id:number,
+       owner_id:number (CURRENT owner) }. Also getAllSleeperTransactions / getSleeperWeekTransactions
+       (raw trades with draft_picks) and getSleeperTradedPicks's sibling getSleeperTradedPicks.
+       traded_picks is the AUTHORITATIVE materialized ownership state (cumulative result of every pick
+       trade incl. current AND future seasons), simpler + safer than replaying transactions. Covers the
+       owner clarification ("ownership changed through transactions/trades").
+       - Existing parsers: lib/trade-analyzer.ts parsePicks (transaction draft_picks), lib/league-pulse.ts
+         normalizeDraftPicks, lib/league-pick-slots.ts (inverts slot_to_roster_id -> slotFor). Reusable
+         patterns; no need to duplicate.
+       - Decision: use getSleeperTradedPicks in the EXISTING server sync path (sleeper-sync.ts). No new
+         Sleeper utility needed, no client-side Sleeper calls, exactly ONE extra fetch per sync (added to
+         the existing Promise.all), failure-tolerant (null -> [] -> partial status). Defensive parsing
+         for missing/loosely-typed fields in the ownership module.
+     | files: (audit only)
+     | verified: n/a
+
+OTC-T107 | completed | Task 3: pure draft-pick ownership model.
+     | NEW lib/on-the-clock/pick-ownership.ts - pure, browser-safe, deterministic. Exports:
+       - normalizeTradedPicks(raw): defensively parse the cached traded_picks jsonb (Sleeper rows
+         { season, round, roster_id=ORIGINAL, owner_id=CURRENT, previous_owner_id }); coerces string/
+         number, skips incomplete rows, never throws.
+       - resolveCurrentDraftPicks({teams,rounds,shape,slotToRosterId,madePicks,tradedPicks,currentSeason})
+         -> CurrentDraftPick[] for EVERY pick (overall 1..teams*rounds, all seats), each with overall/
+         round/pickInRound/slot, originalRosterId (slot_to_roster_id), currentOwnerRosterId, ownershipKnown,
+         made + madePick. Ownership priority: made pick's actual rosterId (authoritative) > traded_picks
+         owner for (currentSeason, round, originalRoster) > original roster. Unknown seat mapping leaves
+         ownership unknown (not guessed), pick still usable. Uses seatForPick (snake/linear/3RR).
+       - resolveTradedFuturePicks(tradedPicks, currentSeason) -> concrete future-season picks that
+         changed hands (season > current, owner != original), sorted, for owner-labeled future assets.
+     | files: lib/on-the-clock/pick-ownership.ts
+     | verified: pending (tests in OTC-T112)
+
+OTC-T108 | completed | Task 4: sync + cache traded picks during the manual draft sync.
+     | - Migration 0115_on_the_clock_draft_cache_traded_picks.sql: add traded_picks jsonb NOT NULL
+       default '[]' to on_the_clock_draft_cache (RLS inherited from 0107: public SELECT, service-role
+       write; client writes blocked). Applied via MCP; column verified (jsonb, NOT NULL, default '[]').
+     - lib/database.types.ts: added traded_picks to the table Row (Json) + Insert/Update (Json?),
+       targeted edit (full MCP type dump exceeded the token cap; column-level patch matches the schema).
+     - lib/on-the-clock/sleeper-sync.ts: getSleeperTradedPicks(leagueId) added to the existing
+       Promise.all (ONE extra Sleeper call per sync, inside the same durable lock/cooldown). It returns
+       [] on any failure, so a traded-picks outage degrades to "no traded picks" (ownership falls back to
+       the original draft order) WITHOUT breaking picks/board/sync = the partial-safe behavior. Written
+       to the new traded_picks column on the draft upsert.
+     - lib/on-the-clock/types.ts: ShapedTradedPick (snake_case, matches Sleeper + the normalizer) +
+       ShapedDraftCache.tradedPicks.
+     - lib/on-the-clock/cache.ts: shapeTradedPicks() validates + shapes the column; shapeDraftCache
+       includes tradedPicks. The read route + Realtime path both surface it, so co-viewers get the
+       updated ownership after any sync (read path re-shapes the freshly-written row).
+     - Updated the two ShapedDraftCache literals (fixtures MOCK_DRAFT_CACHE, draft-derive.test cacheWith)
+       with tradedPicks: [].
+     | files: supabase/migrations/0115_on_the_clock_draft_cache_traded_picks.sql, lib/database.types.ts,
+       lib/on-the-clock/sleeper-sync.ts, lib/on-the-clock/types.ts, lib/on-the-clock/cache.ts,
+       app/tools/on-the-clock/fixtures.ts, lib/on-the-clock/draft-derive.test.ts
+     | verified: migration applied + column verified via MCP; typecheck pending (OTC-T113)
+
+OTC-T109 | completed | Tasks 5,6,7: catalog values made/upcoming/future picks (ownership-aware).
+     | Rewrote buildTradeCatalog (lib/on-the-clock/trade-analyzer.ts) to consume the ownership model
+       instead of the user-only upcomingPicks helper. New input: currentPicks (CurrentDraftPick[]),
+       tradedFuturePicks, valueBoard (full board, any position), teamNameByRosterId, myRosterId.
+     | Task 5 (made picks): "Made picks" group from currentPicks.filter(made). Value = the selected
+       player's current FF Beacon value looked up by playerId then sleeperId in the FULL valueBoard;
+       estimated=false (real value). Label "{round}.{pickInRound} - {Player}"; detail "Made pick, {pos}
+       and {owner}". Unmapped player -> value 0, estimated=true, detail "value unavailable" (graceful,
+       no fake value).
+     | Task 6 (upcoming picks): "Upcoming picks" group from currentPicks.filter(!made), ANY owner.
+       Value = projectAt(availSorted, max(0, overall - onTheClockPickNo)) (post-exclusion board, existing
+       snake/linear/3RR overall math), estimated=true. Detail "Projected: {name}, {pos} and {owner}".
+     | Task 7 (future): generic "Future pick buckets" unchanged (Early/Mid/Late x 1st/2nd/3rd x 2
+       seasons, discounted board projection, estimated). NEW "Traded future picks" group built from
+       resolveTradedFuturePicks: concrete owner-aware future picks valued at the round's mid bucket *
+       futureDiscount, labeled "{season} {ordinal} - {owner}", estimated. Generic buckets vs concrete
+       traded picks are separate groups = visually distinct. Owner labels: "Your pick" / team name /
+       "owner unknown" (never invented). User's picks sort to the top of Made + Upcoming.
+     | files: lib/on-the-clock/trade-analyzer.ts
+     | verified: typecheck clean
+
+OTC-T110 | completed | Task 8: UI shows all current draft picks grouped, with owners.
+     | The TradeAnalyzer component already renders any `groups` as <optgroup>s, so the new groups
+       (Available/Rookie players, Made picks, Upcoming picks, Future pick buckets, Traded future picks)
+       appear automatically with owner labels in each option's detail line + the est. marker on
+       estimated assets. on-the-clock-client.tsx now builds the catalog from the ownership model:
+       normalizeTradedPicks(cache.tradedPicks) -> resolveCurrentDraftPicks + resolveTradedFuturePicks;
+       builds teamNameByRosterId from cache.rosters + cache.users; passes valueBoard=boardPlayers (full),
+       currentPicks, tradedFuturePicks, teamNameByRosterId, myRosterId=derived.myRosterId. Either side
+       can add any pick. Native <select>+optgroup kept for accessibility. User's picks sorted first +
+       labeled "Your pick" (easy to find, not the only option).
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx (trade-analyzer.tsx unchanged - generic)
+     | verified: typecheck + build green
+
+OTC-T111 | completed | Task 9: tests.
+     | NEW lib/on-the-clock/pick-ownership.test.ts (12 tests): normalizeTradedPicks (string-season
+       coercion, skip-incomplete, never-throw); ownership defaults to seat's roster (snake + linear);
+       made pick authoritative; traded current pick changes owner; future-season trade NOT applied to
+       current draft; unknown seat -> ownershipKnown false (no crash); teams/rounds 0 -> []; traded
+       future picks filtered.
+     | Rewrote lib/on-the-clock/trade-analyzer.test.ts for the ownership API: includes Made + Upcoming +
+       Future groups; upcoming picks for ALL teams (not just the user); made pick valued by selected
+       player's value; unmapped made pick -> 0/estimated/unavailable; upcoming projects from
+       post-exclusion board; generic future buckets + owner-aware Traded future picks group; rookie mode
+       (rookie-pick kind); snake/linear/3RR no crash; empty board -> []; partial-sync (empty traded
+       picks) still builds full catalog; DEF/K summed at face value. analyzeTradeSides thresholds kept.
+     | League-switch reset is covered by the client `key` (OTC-T102, unchanged); Signal Check + value
+       pipelines untouched (full suite still green).
+     | files: lib/on-the-clock/pick-ownership.test.ts, lib/on-the-clock/trade-analyzer.test.ts
+     | verified: 31/31 in these files; full suite green
+
+OTC-T112 | completed | Task 10: run checks.
+     | - npm run typecheck: clean.
+     | - npm test: 25 files / 255 tests pass (was 24/247 after 6C; +1 file, +8 net).
+     | - npm run build: green. /tools/on-the-clock 24.5 kB; Signal Check 14 kB UNCHANGED (untouched).
+     | - One new Sleeper call per sync (getSleeperTradedPicks, inside the existing lock); no polling; no
+       value-pipeline/source/format change; no admin UI; no commits/pushes.
+     | files: (checks only)
+     | verified: yes (all green)
+
+PHASE 6C.1 COMPLETE at the code level. The Trade Analyzer now offers EVERY current draft pick (made +
+upcoming, any owner) plus generic and traded future picks. Made picks are valued by the selected
+player's FF Beacon value; upcoming picks project from the post-exclusion board; ownership is
+transaction-aware via Sleeper traded_picks cached on each manual sync (failure-tolerant). NOT yet
+verified against a real active Sleeper draft. No value-pipeline / source-format / polling changes.
+Signal Check untouched. No commits/pushes.
+
+# On The Clock - PHASE 6D (Admin Settings UI) - in progress
+
+OTC-T113 | completed | Task 0: carry-forward verification of Phase 6C.1 Trade Analyzer UI.
+     | Verified (no code change needed): trade-analyzer.tsx renders ALL groups from buildTradeCatalog
+       (Made picks, Upcoming picks, Future buckets, Traded future picks), not limited to the connected
+       user (6C.1 rewrite). Owner labels ("Your pick" / team name / "owner unknown") come from
+       buildTradeCatalog in lib/on-the-clock/trade-analyzer.ts. Estimated values are clearly labeled:
+       option labels show "(value, est.)", placed chips show an "est." badge, and the mode blurb states
+       picks are projected/estimated. No obvious bug; left as-is.
+     | files: (verification only)
+     | verified: yes
+
+OTC-T114 | completed | Task 1: audit current On The Clock settings structure (no code change).
+     | Source of truth: lib/on-the-clock/{types,default-settings,settings}.ts (single jsonb row
+       on_the_clock_settings, id='global', service-role RLS, zod per-field defaults + deep-merge loader).
+     | ACTIVELY USED settings (wired into running code):
+       - feature.enabled -> all 4 routes gate (leagues/draft/sync/board) + page.tsx cockpit vs off-state.
+       - sync.cooldownSeconds -> draft + sync routes (claim cooldown) + client countdown.
+       - sync.lockSeconds -> draft + sync routes (in-progress lock).
+       - sync.realtimeEnabled -> page.tsx + client Realtime subscription.
+       - limits.maxActiveLeagues -> leagues route cap.
+       - recommendation.teamNeedEnabled -> recommend.ts (gates Team Need card).
+       - recommendation.weights.{value,need,reach} -> recommend.ts blended score.
+       - recommendation.maxReachTierBreak -> recommend.ts reachScoreFor.
+       - dstk.recommendBehavior / requireStartingSlot / minRoundForDst / minRoundForK -> recommend.ts
+         dstkRecommendable gate.
+       - positionAdjust.superflexQbMultiplier / tePremiumMultiplier -> recommend.ts format multipliers.
+       - positionFallbackTargets.* -> recommend.ts slot model when roster_positions unmatched.
+     | DEFINED BUT NOT YET WIRED into running code:
+       - sourceFormat.defaultRankingSource -> SUPERSEDED by the Phase 6A.2 hard FF Beacon lock
+         (board-loader forces 'ffbeacon'). Not read anywhere. Keep code-only; surface as a read-only note.
+       - sourceFormat.defaultFormatFallback -> format-detect picks the closest supported format; this
+         fallback slug is not consumed. Code-only.
+       - pools.enabledPools / pools.defaultPool -> client hardcodes "everyone" then overrides from draft
+         type; settings.pools is not read. Code-only.
+       - limits.maxAvailablePlayers -> available list is not yet paginated against this. Code-only.
+       - cache.activeTtlHours / completedRetentionHours -> consumed only as params by
+         cleanup_on_the_clock_cache() (migration 0113), which is NOT cron-wired yet. Expose under
+         Maintenance, labeled as taking effect when the cleanup job runs.
+       - dstk.includedInRoom -> board always includes DST/K; flag not read. Surface as a read-only note.
+       - mappingVisibility.showUnmappedPanel -> the unmapped-ids admin panel is not built. Code-only.
+     | CODE-ONLY constants (NOT in settings, intentionally): Trade Analyzer projection constants live in
+       lib/on-the-clock/trade-analyzer.ts (FALLBACK_PICK_VALUE=50, PLAYER_PICKER_CAP=200, future discount
+       0.85^n, bucket slot %s, fair<=5% / lean<=15% thresholds). Per boundaries (no Trade Analyzer
+       algorithm change), these stay code-only this phase; documented in the admin Trade Analyzer card.
+     | EXPOSE in admin UI: the ACTIVELY-USED list above, plus cache TTLs (maintenance, with the caveat).
+       Read-only informational: FF Beacon source lock, DST/K always-in-room. Unwired keys are preserved
+       through save untouched (the manager edits a full settings object; only exposed fields change).
+     | files: (audit only)
+     | verified: yes
+
+OTC-T115 | completed | Task 2: design admin settings groups (layman-friendly).
+     | 1. Feature status: On/off master toggle (feature.enabled) + plain status copy.
+     | 2. Sync & Sleeper limits: sync cooldown seconds, in-progress lock seconds, Realtime on/off, max
+          active leagues returned. Cache TTLs moved to Maintenance.
+     | 3. Board & player pool: read-only notes (values locked to FF Beacon; format auto-detected per
+          league; DST/K always in the room). No editable controls here this phase (unwired).
+     | 4. Recommendation engine: Team Need on/off, aggressiveness preset (seeds weights), value/need/
+          reach weights, max acceptable reach (tier break), Superflex QB multiplier, TE premium
+          multiplier, and DST/K recommendation gates (behavior, require starting slot, min round for DEF,
+          min round for K). Advanced (collapsed): position fallback targets.
+     | 5. Trade Analyzer: informational card explaining values are projected/estimated and the projection
+          constants are code-only for now (no controls).
+     | 6. Maintenance / debug: cache TTLs (active + completed, with "applies when cleanup runs" note),
+          last updated timestamp (America/New_York), settings JSON preview, reset to defaults.
+     | All numeric fields get plain-English labels + hints and are clamped to safe ranges on save.
+     | files: (design only)
+     | verified: yes
+
+OTC-T116 | completed | Tasks 3+5: admin route/page + MVP controls.
+     | NEW app/admin/on-the-clock/page.tsx (requireAdmin -> loadOnTheClockSettings via service role +
+       reads on_the_clock_settings.updated_at; force-dynamic; mirrors /admin/faab).
+     | NEW app/admin/on-the-clock/on-the-clock-settings-manager.tsx ("use client", mirrors the FAAB
+       manager primitives: NumberInput text-buffer, Field/Toggle with aria-describedby hints,
+       SectionCard, CollapsibleSection via native details/summary). Exposed (wired) controls: feature
+       enabled toggle; sync cooldown / lock seconds + Realtime toggle + max active leagues; Team Need
+       toggle, aggressiveness preset (seeds value+need weights), value/need/reach weights, max reach
+       tier break, superflex QB + TE premium multipliers, DST/K behavior + require starting slot + min
+       round DEF/K; advanced position fallback targets; maintenance cache TTLs. Read-only LockedNotes:
+       FF Beacon source lock, auto-detected format, DST/K always in room. Informational: Trade Analyzer
+       constants are code-only. a11y: one h1 (page), section headings, labels+hints linked via
+       aria-describedby, native details disclosure, 44px controls, aria-live status, color never the
+       only signal.
+     | files: app/admin/on-the-clock/page.tsx, app/admin/on-the-clock/on-the-clock-settings-manager.tsx
+     | verified: typecheck clean; build green (/admin/on-the-clock 6.97 kB)
+
+OTC-T117 | completed | Task 4: settings read/write server action + clamp helper.
+     | lib/on-the-clock/settings.ts: added clampOnTheClockSettings (coerces every numeric field into a
+       safe range and forces lockSeconds <= cooldownSeconds; preserves unwired/unknown keys via spread).
+     | NEW app/admin/on-the-clock/actions.ts: saveOnTheClockSettings (requireAdmin -> clamp -> validate
+       -> service-role upsert with server-set updated_by; revalidates admin + tool) and
+       resetOnTheClockSettings (restores code defaults but KEEPS current feature.enabled). Flow is
+       clamp-first then validate so a valid-but-out-of-range payload is rescued while bad enums/types
+       still fail safely. Service-role-only RLS unchanged; no anon/auth write path added.
+     | files: lib/on-the-clock/settings.ts, app/admin/on-the-clock/actions.ts
+     | verified: typecheck clean; unit tests below
+
+OTC-T118 | completed | Tasks 6+7: reset-to-defaults behavior + admin nav.
+     | Manager has three actions: Save settings; Reset form to defaults (local, keeps enabled, requires
+       explicit Save); Reset to defaults and save (window.confirm, calls resetOnTheClockSettings, keeps
+       enabled, upserts the row rather than deleting it). components/admin-nav.tsx: added the "On The
+       Clock Settings" nav item (Timer icon, href /admin/on-the-clock) before System Settings.
+     | files: app/admin/on-the-clock/on-the-clock-settings-manager.tsx, components/admin-nav.tsx
+     | verified: build green (nav renders; page reachable)
+
+OTC-T119 | completed | Tasks 8+9: tests + checks.
+     | lib/on-the-clock/settings.test.ts: +1 round-trip-preservation test (pools / maxAvailablePlayers /
+       mappingVisibility survive validate) and +5 clamp tests (defaults unchanged; too-low cooldown
+       raised to 5; lock clamped <= cooldown and result re-validates; negative weight -> 0 + huge board
+       cap -> 2000; superflex multiplier 50 -> 5).
+     | NEW app/admin/on-the-clock/actions.test.ts (8): requireAdmin gating on save AND reset (throws ->
+       no write); valid save stamps updated_by + id=global; unsafe lock/cooldown is clamped before
+       write; malformed enum rejected without write; db error surfaced; reset keeps enabled=true from
+       the current row and restores other defaults; reset with no row -> enabled false.
+     | Checks: npm run typecheck clean; npm test 26 files / 269 tests pass (was 25/255, +1 file, +14
+       tests); npm run build green. /tools/on-the-clock 24.5 kB UNCHANGED; Signal Check 14 kB UNCHANGED;
+       value pipelines, FF Beacon source behavior, and league-format detection untouched. No commits/
+       pushes.
+     | files: lib/on-the-clock/settings.test.ts, app/admin/on-the-clock/actions.test.ts
+     | verified: yes (all green)
+
+PHASE 6D (Admin Settings UI) COMPLETE at the code level. /admin/on-the-clock exposes every wired On The
+Clock setting in plain-English groups, gated by requireAdmin, validated + clamped + service-role-written,
+with reset-to-defaults that preserves launch state. Unwired settings stay code-only and round-trip
+untouched. No value-pipeline / source-format / polling change. Next: end-to-end live-draft QA.

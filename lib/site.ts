@@ -53,6 +53,11 @@ export const TOOLS_NAV: NavChild[] = [
     description: "Sync and analyze your Sleeper leagues",
   },
   {
+    label: "On The Clock",
+    href: "/tools/on-the-clock",
+    description: "Live Sleeper draft helper",
+  },
+  {
     label: "FAAB Calculator",
     href: "/tools/faab",
     description: "Recommended waiver bid ranges",
@@ -82,6 +87,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
       { label: "Rankings Board", href: "/rankings" },
       { label: "Signal Check", href: "/tools/signal-check" },
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
+      { label: "On The Clock", href: "/tools/on-the-clock" },
       { label: "FAAB Calculator", href: "/tools/faab" },
     ],
   },

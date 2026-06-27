@@ -1670,6 +1670,156 @@ export type Database = {
         };
         Relationships: [];
       };
+      on_the_clock_draft_cache: {
+        Row: {
+          created_at: string;
+          draft_status: string | null;
+          draft_type: string | null;
+          last_synced_at: string | null;
+          league_users: Json | null;
+          metadata: Json;
+          pick_count: number;
+          rosters: Json | null;
+          season: string;
+          sleeper_draft_id: string;
+          sleeper_league_id: string;
+          sync_locked_until: string | null;
+          traded_picks: Json;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          draft_status?: string | null;
+          draft_type?: string | null;
+          last_synced_at?: string | null;
+          league_users?: Json | null;
+          metadata?: Json;
+          pick_count?: number;
+          rosters?: Json | null;
+          season: string;
+          sleeper_draft_id: string;
+          sleeper_league_id: string;
+          sync_locked_until?: string | null;
+          traded_picks?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          draft_status?: string | null;
+          draft_type?: string | null;
+          last_synced_at?: string | null;
+          league_users?: Json | null;
+          metadata?: Json;
+          pick_count?: number;
+          rosters?: Json | null;
+          season?: string;
+          sleeper_draft_id?: string;
+          sleeper_league_id?: string;
+          sync_locked_until?: string | null;
+          traded_picks?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      on_the_clock_lookup_attempts: {
+        Row: {
+          key: string;
+          last_attempt_at: string;
+        };
+        Insert: {
+          key: string;
+          last_attempt_at?: string;
+        };
+        Update: {
+          key?: string;
+          last_attempt_at?: string;
+        };
+        Relationships: [];
+      };
+      on_the_clock_pick_cache: {
+        Row: {
+          created_at: string;
+          draft_slot: number | null;
+          is_keeper: boolean;
+          metadata: Json | null;
+          pick_no: number;
+          picked_by: string | null;
+          player_id: string | null;
+          roster_id: number | null;
+          round: number | null;
+          sleeper_draft_id: string;
+          sleeper_player_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          draft_slot?: number | null;
+          is_keeper?: boolean;
+          metadata?: Json | null;
+          pick_no: number;
+          picked_by?: string | null;
+          player_id?: string | null;
+          roster_id?: number | null;
+          round?: number | null;
+          sleeper_draft_id: string;
+          sleeper_player_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          draft_slot?: number | null;
+          is_keeper?: boolean;
+          metadata?: Json | null;
+          pick_no?: number;
+          picked_by?: string | null;
+          player_id?: string | null;
+          roster_id?: number | null;
+          round?: number | null;
+          sleeper_draft_id?: string;
+          sleeper_player_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_the_clock_pick_cache_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "on_the_clock_pick_cache_sleeper_draft_id_fkey";
+            columns: ["sleeper_draft_id"];
+            isOneToOne: false;
+            referencedRelation: "on_the_clock_draft_cache";
+            referencedColumns: ["sleeper_draft_id"];
+          },
+        ];
+      };
+      on_the_clock_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       player_stats: {
         Row: {
           blk_kick: number;
@@ -3487,6 +3637,32 @@ export type Database = {
           team: string;
         }[];
       };
+      claim_on_the_clock_sync: {
+        Args: {
+          p_cooldown_seconds?: number;
+          p_draft_id: string;
+          p_league_id: string;
+          p_lock_seconds?: number;
+          p_season: string;
+        };
+        Returns: {
+          claimed: boolean;
+          cooldown_remaining_seconds: number;
+          last_synced_at: string;
+          locked_by_other: boolean;
+        }[];
+      };
+      cleanup_on_the_clock_cache: {
+        Args: {
+          p_active_ttl_hours?: number;
+          p_completed_retention_hours?: number;
+        };
+        Returns: number;
+      };
+      complete_on_the_clock_sync: {
+        Args: { p_draft_id: string; p_pick_count: number; p_status?: string };
+        Returns: undefined;
+      };
       get_my_active_sessions: {
         Args: never;
         Returns: {
@@ -3498,6 +3674,10 @@ export type Database = {
           updated_at: string;
           user_agent: string;
         }[];
+      };
+      release_on_the_clock_sync: {
+        Args: { p_draft_id: string };
+        Returns: undefined;
       };
       set_default_source: { Args: { target_slug: string }; Returns: undefined };
       show_limit: { Args: never; Returns: number };
@@ -3515,6 +3695,10 @@ export type Database = {
           p_user_id: string;
           p_window_seconds?: number;
         };
+        Returns: boolean;
+      };
+      try_claim_on_the_clock_lookup: {
+        Args: { p_ip: string; p_username: string; p_window_seconds?: number };
         Returns: boolean;
       };
     };
