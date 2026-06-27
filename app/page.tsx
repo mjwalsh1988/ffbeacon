@@ -6,6 +6,7 @@ import {
   Workflow,
   Calculator,
   Scale,
+  Timer,
   ArrowRight,
   Radar,
   Layers,
@@ -64,20 +65,28 @@ type FeaturedTool = {
 
 const FEATURED_TOOLS: FeaturedTool[] = [
   {
-    href: "/rankings",
-    title: "Rankings Board",
-    description:
-      "See exactly where every player ranks today, sorted and filtered the way you think. Switch between scoring formats and ranking sites without ever losing your spot.",
-    cta: "Open the rankings",
-    icon: BarChart3,
-  },
-  {
     href: "/tools/signal-check",
     title: "Signal Check",
     description:
       "Thinking about a trade? Build both sides and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
     cta: "Analyze a trade",
     icon: Scale,
+  },
+  {
+    href: "/tools/on-the-clock",
+    title: "On The Clock",
+    description:
+      "Drafting right now? Connect your live Sleeper draft and we will point you to the real best value on the board, tell you exactly where your team needs help, and even let you run startup trade offers without ever leaving your draft hub.",
+    cta: "Open the draft room",
+    icon: Timer,
+  },
+  {
+    href: "/rankings",
+    title: "Rankings Board",
+    description:
+      "See exactly where every player ranks today, sorted and filtered the way you think. Switch between scoring formats and ranking sites without ever losing your spot.",
+    cta: "Open the rankings",
+    icon: BarChart3,
   },
   {
     href: "/tools/league-pulse",
@@ -278,9 +287,16 @@ function ToolsSection() {
           </Link>
         </div>
 
+        {/* Top row: 2 across (Signal Check, On The Clock). Bottom row: 3 across
+            (Rankings, League Pulse, FAAB). Everything stacks on mobile. */}
         <div className="mt-12 grid gap-5 md:grid-cols-2">
-          {FEATURED_TOOLS.map((tool, i) => (
+          {FEATURED_TOOLS.slice(0, 2).map((tool, i) => (
             <ToolCard key={tool.href} tool={tool} index={i} />
+          ))}
+        </div>
+        <div className="mt-5 grid gap-5 md:grid-cols-3">
+          {FEATURED_TOOLS.slice(2).map((tool, i) => (
+            <ToolCard key={tool.href} tool={tool} index={i + 2} />
           ))}
         </div>
       </div>
