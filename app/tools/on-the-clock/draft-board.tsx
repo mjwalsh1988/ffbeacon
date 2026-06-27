@@ -47,6 +47,8 @@ export function DraftBoard({
   const byPickNo = new Map<number, ShapedPick>(picks.map((p) => [p.pickNo, p]));
   // Ownership lookup keyed by overall pick number (carries original vs current owner).
   const ownerByPickNo = new Map<number, CurrentDraftPick>(currentPicks.map((c) => [c.overall, c]));
+  // Roster id behind the searched user's seat, used to highlight their picks.
+  const userRosterId = draft.slotToRosterId[String(connectedUserSlot)] ?? null;
 
   // Column header = the ORIGINAL owner of that seat (its username), not a team name.
   const teamName = (seat: number) => {
@@ -92,7 +94,6 @@ export function DraftBoard({
                 const pick = byPickNo.get(pickNo);
                 const isOnClock = pickNo === onTheClockPickNo;
                 const isLast = pickNo === lastPickNo;
-                const isYours = seat === connectedUserSlot;
 
                 // Traded-pick flag: when the current owner differs from the seat's
                 // original owner, name the NEW owner so the cell is not misread as the
@@ -109,6 +110,16 @@ export function DraftBoard({
                     ? teamNameByRosterId[owner.currentOwnerRosterId] ??
                       `Team ${owner.currentOwnerRosterId}`
                     : null;
+
+                // The searched user's picks, by CURRENT ownership (picks traded to
+                // them count; picks they traded away do not). Falls back to the seat's
+                // original owner when ownership can't be resolved.
+                const isYours =
+                  userRosterId != null &&
+                  owner?.ownershipKnown &&
+                  owner.currentOwnerRosterId != null
+                    ? owner.currentOwnerRosterId === userRosterId
+                    : seat === connectedUserSlot;
 
                 const stateText = pick
                   ? `${shortName(pick)}, ${pick.position ?? ""}`
@@ -138,21 +149,27 @@ export function DraftBoard({
                       isOnClock
                         ? "bg-brand-cyan/10 ring-1 ring-inset ring-brand-cyan/50"
                         : isYours
-                          ? "bg-brand-purple/5"
+                          ? "bg-brand-purple/10 ring-1 ring-inset ring-brand-purple/45"
                           : ""
                     }`}
                   >
-                    {newOwner && (
-                      <span
-                        aria-hidden="true"
-                        title={`Traded pick, now owned by ${newOwner}`}
-                        className="mb-1 flex items-center gap-1 truncate rounded-sm border border-brand-cyan/40 bg-brand-cyan/15 px-1 py-px text-[9px] font-semibold text-brand-cyan"
-                      >
-                        <ArrowLeftRight aria-hidden="true" className="h-2.5 w-2.5 shrink-0" />
-                        <span className="truncate">{newOwner}</span>
-                      </span>
-                    )}
-                    <span className="block text-[10px] text-ink-subtle">#{pickNo}</span>
+                    {/* Meta row: pick number plus the traded-owner flag, kept to a
+                        fixed height so the flag never bumps the player name/photo row
+                        down. Cells without a flag reserve the same height, so every
+                        name in the round lines up. */}
+                    <div className="flex min-h-[1.125rem] items-center gap-1">
+                      <span className="text-[10px] text-ink-subtle">#{pickNo}</span>
+                      {newOwner && (
+                        <span
+                          aria-hidden="true"
+                          title={`Traded pick, now owned by ${newOwner}`}
+                          className="ml-auto flex min-w-0 items-center gap-1 rounded-sm border border-brand-cyan/40 bg-brand-cyan/15 px-1 py-px text-[9px] font-semibold text-brand-cyan"
+                        >
+                          <ArrowLeftRight aria-hidden="true" className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">{newOwner}</span>
+                        </span>
+                      )}
+                    </div>
                     {pick ? (
                       <div className="mt-0.5 flex items-center gap-1.5">
                         {/* Player photo (board view only). Decorative here: the cell

@@ -73,10 +73,15 @@ export function PickList({
             const pickInRound = teams ? ((p.pickNo - 1) % teams) + 1 : p.pickNo;
             const yours = p.pickedBy === connectedUserId;
             return (
-              <tr key={p.pickNo} className="border-t border-line/60">
+              <tr
+                key={p.pickNo}
+                className={`border-t border-line/60 ${yours ? "bg-brand-purple/10" : ""}`}
+              >
                 <th
                   scope="row"
-                  className="w-px whitespace-nowrap px-3 py-2 text-right align-middle font-normal"
+                  className={`w-px whitespace-nowrap px-3 py-2 text-right align-middle font-normal ${
+                    yours ? "shadow-[inset_3px_0_0_0_#A855F7]" : ""
+                  }`}
                 >
                   <span className="font-mono text-sm font-semibold tabular-nums text-ink">
                     {p.pickNo}

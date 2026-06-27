@@ -103,9 +103,12 @@ export function PlayerSpotlight({ data, variant }: { data: RecommendationCardDat
         </p>
       ) : (
         <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
-          {/* Headshot, framed */}
+          {/* Headshot, framed. The photo fills the rounded square edge to edge:
+              the scoped overrides drop the shared headshot's circular shape and
+              inner border so the image (clipped by overflow-hidden) sits flush to
+              the frame's rounded corners. */}
           <div
-            className="relative shrink-0 self-start rounded-modal border border-line bg-base p-1.5"
+            className="relative shrink-0 self-start overflow-hidden rounded-modal border border-line bg-base [&_img]:rounded-none [&_img]:border-0 [&_span]:rounded-none [&_span]:border-0"
             style={{ boxShadow: "0 0 40px -20px rgba(168, 85, 247, 0.6)" }}
           >
             <PlayerHeadshot sleeperId={p.sleeperId} name={p.name} position={p.position} size={96} />
