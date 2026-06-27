@@ -409,28 +409,64 @@ export function OnTheClockClient({
   if (step === "pick-league") {
     return (
       <div className="mx-auto max-w-4xl">
-        <StepRail current={2} />
-        <button
-          type="button"
-          onClick={() => setStep("connect")}
-          className="mt-5 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        <div
+          className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
+          }}
         >
-          <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
-          Change username
-        </button>
-        <p className="mt-3 text-sm text-ink-muted">
-          Only leagues that are actively drafting show up here. Pick one to open its
-          draft room.
-        </p>
-        <div className="mt-4">
-          <LeaguePicker
-            leagues={leagues}
-            onSelect={selectLeague}
-            onRefresh={refreshLeagues}
-            refreshing={refreshing}
-            error={refreshError}
-            truncated={truncated}
+          {/* Beacon-gradient accent bar pinned to the top of the cockpit shell. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-px"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+            }}
           />
+          <button
+            type="button"
+            onClick={() => setStep("connect")}
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
+            Change username
+          </button>
+          <div className="mt-4 flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-base text-brand-cyan"
+            >
+              <Gauge className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+                Draft cockpit
+              </p>
+              <h3 className="text-lg font-semibold tracking-tight text-ink sm:text-xl">
+                Choose your draft
+              </h3>
+            </div>
+          </div>
+          <p className="mt-2 text-sm text-ink-muted">
+            Only leagues that are actively drafting show up here. Pick one to open its
+            draft room.
+          </p>
+
+          <div className="mt-6">
+            <StepRail current={2} />
+          </div>
+          <div className="mt-5">
+            <LeaguePicker
+              leagues={leagues}
+              onSelect={selectLeague}
+              onRefresh={refreshLeagues}
+              refreshing={refreshing}
+              error={refreshError}
+              truncated={truncated}
+            />
+          </div>
         </div>
       </div>
     );
