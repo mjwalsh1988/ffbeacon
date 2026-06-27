@@ -14,7 +14,12 @@ vi.mock("@/lib/on-the-clock/sleeper-sync", () => ({ performDraftSync: performDra
 import { GET } from "./route";
 
 const ENABLED = { feature: { enabled: true }, sync: { cooldownSeconds: 30, lockSeconds: 15 } };
-const CACHE = { draft: { sleeperDraftId: "123" }, users: [], rosters: [], picks: [] };
+const CACHE = {
+  draft: { sleeperDraftId: "123", sleeperLeagueId: "456", season: "2026" },
+  users: [],
+  rosters: [],
+  picks: [],
+};
 
 function req(qs: string, headers: Record<string, string> = { "x-requested-with": "ff-beacon" }) {
   return new Request(`http://test/api/on-the-clock/draft${qs}`, { headers });
@@ -44,15 +49,44 @@ describe("GET /api/on-the-clock/draft", () => {
     expect(res.status).toBe(503);
   });
 
-  it("serves a warm cache WITHOUT any Sleeper / warm-sync call", async () => {
+  it("auto-resyncs a warm cache through the lock, passing the known league/season", async () => {
     readDraftCacheMock.mockResolvedValue(CACHE);
+    const fresh = { ...CACHE, picks: [{ pickNo: 1 }] };
+    performDraftSyncMock.mockResolvedValue({
+      status: "synced",
+      cache: fresh,
+      cooldownRemainingSeconds: 30,
+      lastSyncedAt: null,
+    });
     const res = await GET(req("?draft_id=123"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
+    // Returns the freshly re-synced cache, not the stale pre-read.
+    expect(body.cache).toEqual(fresh);
+    expect(performDraftSyncMock).toHaveBeenCalledOnce();
+    // The claim is made with the league/season from the existing cache so the
+    // warm-and-fresh path never pre-fetches Sleeper just to resolve them.
+    expect(performDraftSyncMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ draftId: "123", leagueId: "456", season: "2026" }),
+    );
+  });
+
+  it("returns the existing cache when the resync is denied by the cooldown", async () => {
+    readDraftCacheMock.mockResolvedValue(CACHE);
+    // Within the cooldown window the claim is denied inside the RPC; performDraftSync
+    // returns the current cache with a "cooldown" status and no Sleeper call.
+    performDraftSyncMock.mockResolvedValue({
+      status: "cooldown",
+      cache: CACHE,
+      cooldownRemainingSeconds: 12,
+      lastSyncedAt: null,
+    });
+    const res = await GET(req("?draft_id=123"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
     expect(body.cache).toEqual(CACHE);
-    // The read path must not trigger a sync when the cache is warm.
-    expect(performDraftSyncMock).not.toHaveBeenCalled();
   });
 
   it("warms a cold cache via one sync, then returns the warmed cache", async () => {
@@ -63,6 +97,11 @@ describe("GET /api/on-the-clock/draft", () => {
     const body = await res.json();
     expect(body.cache).toEqual(CACHE);
     expect(performDraftSyncMock).toHaveBeenCalledOnce();
+    // No existing cache, so league/season are left for performDraftSync to resolve.
+    expect(performDraftSyncMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ draftId: "123", leagueId: undefined, season: undefined }),
+    );
   });
 
   it("returns 404 when a cold draft cannot be warmed", async () => {
@@ -70,5 +109,15 @@ describe("GET /api/on-the-clock/draft", () => {
     performDraftSyncMock.mockResolvedValue({ status: "error", cache: null, cooldownRemainingSeconds: 0, lastSyncedAt: null });
     const res = await GET(req("?draft_id=123"));
     expect(res.status).toBe(404);
+  });
+
+  it("falls back to the existing cache when the resync attempt yields none", async () => {
+    readDraftCacheMock.mockResolvedValue(CACHE);
+    // A transient resync error still returns the cache the route pre-read.
+    performDraftSyncMock.mockResolvedValue({ status: "error", cache: null, cooldownRemainingSeconds: 0, lastSyncedAt: null });
+    const res = await GET(req("?draft_id=123"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.cache).toEqual(CACHE);
   });
 });
