@@ -18,6 +18,11 @@ export interface FormatOption {
 }
 
 interface SelectedAsset {
+  // Stable per-instance id, used for the React list key and removal. Picks may
+  // appear multiple times in one trade, so the asset identity (`key`) is not
+  // unique across instances; `id` always is.
+  id: string;
+  // Asset identity (player id, or pick descriptor). Used to dedup players.
   key: string;
   kind: "player" | "pick";
   name: string;
@@ -31,7 +36,7 @@ interface SelectedAsset {
   pickPosition?: "early" | "mid" | "late";
 }
 
-function fromResult(r: SearchResult): SelectedAsset {
+function fromResult(r: SearchResult): Omit<SelectedAsset, "id"> {
   if (r.kind === "player") {
     return {
       key: `player:${r.playerId}`,
@@ -92,6 +97,8 @@ export function SignalCheckBuilder({
   const [isPending, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
+  // Monotonic counter for unique per-instance asset ids (React keys + removal).
+  const instanceCounter = useRef(0);
 
   const activeFormat = useMemo(
     () => formats.find((f) => f.slug === formatSlug),
@@ -130,24 +137,28 @@ export function SignalCheckBuilder({
   }
 
   function addAsset(side: SideKey, r: SearchResult) {
-    const asset = fromResult(r);
+    const base = fromResult(r);
+    const id = `inst-${instanceCounter.current++}`;
     resetResult();
     setSides((prev) => {
-      if (prev[side].some((a) => a.key === asset.key)) {
-        setNotice(`${asset.name} is already on that side.`);
+      // Players can appear only once across the entire trade. Draft picks have
+      // no cap: the same pick descriptor may be added to either side as many
+      // times as the user wants.
+      if (base.kind === "player" && [...prev.a, ...prev.b].some((a) => a.key === base.key)) {
+        setNotice(`${base.name} is already in this trade.`);
         return prev;
       }
-      setNotice(`${asset.name} added to Side ${side.toUpperCase()}.`);
-      return { ...prev, [side]: [...prev[side], asset] };
+      setNotice(`${base.name} added to Side ${side.toUpperCase()}.`);
+      return { ...prev, [side]: [...prev[side], { ...base, id }] };
     });
   }
 
-  function removeAsset(side: SideKey, key: string) {
+  function removeAsset(side: SideKey, id: string) {
     resetResult();
     setSides((prev) => {
-      const removed = prev[side].find((a) => a.key === key);
+      const removed = prev[side].find((a) => a.id === id);
       if (removed) setNotice(`${removed.name} removed from Side ${side.toUpperCase()}.`);
-      return { ...prev, [side]: prev[side].filter((a) => a.key !== key) };
+      return { ...prev, [side]: prev[side].filter((a) => a.id !== id) };
     });
   }
 
@@ -268,7 +279,7 @@ export function SignalCheckBuilder({
                 ) : (
                   sides[side].map((a) => (
                     <li
-                      key={a.key}
+                      key={a.id}
                       className="flex items-center gap-3 rounded-card border border-line bg-base px-3 py-2"
                     >
                       <AssetAvatar
@@ -287,7 +298,7 @@ export function SignalCheckBuilder({
                       </span>
                       <button
                         type="button"
-                        onClick={() => removeAsset(side, a.key)}
+                        onClick={() => removeAsset(side, a.id)}
                         aria-label={`Remove ${a.name} from Side ${side.toUpperCase()}`}
                         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                       >
