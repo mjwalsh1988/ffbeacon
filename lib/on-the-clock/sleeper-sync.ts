@@ -150,6 +150,11 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
     const leagueUsersJson = users.map((u) => ({
       user_id: u.user_id,
       display_name: u.display_name ?? null,
+      username: u.username ?? null,
+      team_name:
+        typeof u.metadata?.team_name === "string" && u.metadata.team_name.trim() !== ""
+          ? u.metadata.team_name
+          : null,
       avatar: u.avatar ?? null,
     }));
     const rostersJson = rosters.map((r) => ({

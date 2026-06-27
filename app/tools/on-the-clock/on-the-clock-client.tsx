@@ -29,6 +29,7 @@ import {
   LayoutGrid,
   List,
   ArrowLeftRight,
+  Users,
   WifiOff,
 } from "lucide-react";
 import type {
@@ -55,6 +56,7 @@ import {
   draftShapeFromMeta,
 } from "@/lib/on-the-clock/draft-derive";
 import { buildTradeCatalog } from "@/lib/on-the-clock/trade-analyzer";
+import { buildTeamRollups } from "@/lib/on-the-clock/rosters";
 import {
   normalizeTradedPicks,
   resolveCurrentDraftPicks,
@@ -73,16 +75,18 @@ import { DraftBoard } from "./draft-board";
 import { PickList } from "./pick-list";
 import { MyDraft } from "./my-draft";
 import { TradeAnalyzer } from "./trade-analyzer";
+import { RostersRankings } from "./rosters-rankings";
 import { LoadingCard, ErrorCard, EmptyCard } from "./states";
 
 type Step = "connect" | "pick-league" | "room";
-type View = "pick" | "drafted" | "trade";
+type View = "pick" | "drafted" | "rosters" | "trade";
 type DraftedMode = "board" | "list";
 type LiveStatus = "off" | "connecting" | "live" | "unavailable";
 
 const VIEWS: Array<{ id: View; label: string; icon: typeof Target }> = [
   { id: "pick", label: "Who to pick", icon: Target },
   { id: "drafted", label: "Drafted players", icon: ListChecks },
+  { id: "rosters", label: "Rosters & Rankings", icon: Users },
   { id: "trade", label: "Trade Analyzer", icon: ArrowLeftRight },
 ];
 
@@ -588,11 +592,18 @@ export function OnTheClockClient({
     currentSeason: tradeSeason,
   });
   const tradedFuturePicks = resolveTradedFuturePicks(tradedPicks, tradeSeason);
-  // roster_id -> display name, for owner labels on picks.
+  // roster_id -> display name, for owner labels on picks (board/trade).
   const teamNameByRosterId: Record<number, string> = {};
+  // Rosters & Rankings prefers the owner's custom team name and surfaces the
+  // @username separately; these are kept local so board/trade labels are unchanged.
+  const rollupTeamNameByRosterId: Record<number, string> = {};
+  const rollupUsernameByRosterId: Record<number, string | null> = {};
   for (const r of draftCache.rosters) {
     const user = r.ownerId ? draftCache.users.find((u) => u.userId === r.ownerId) : undefined;
     teamNameByRosterId[r.rosterId] = user?.displayName ?? `Team ${r.rosterId}`;
+    rollupTeamNameByRosterId[r.rosterId] =
+      user?.teamName || user?.displayName || `Team ${r.rosterId}`;
+    rollupUsernameByRosterId[r.rosterId] = user?.username || user?.displayName || null;
   }
   const tradeGroups = tradeReady
     ? buildTradeCatalog({
@@ -610,6 +621,24 @@ export function OnTheClockClient({
         currentSeason: tradeSeason,
       })
     : [];
+
+  // Rosters & Rankings rollups: per-team drafted-player value + future-pick value,
+  // ranked by total. Only computed while that tab is open (and the board is ready)
+  // so the realtime re-render on every pick stays cheap on the other tabs.
+  const teamRollups =
+    view === "rosters" && tradeReady
+      ? buildTeamRollups({
+          rosters: draftCache.rosters,
+          picks: draftCache.picks,
+          tradedPicks,
+          valueBoard: boardPlayers,
+          teamNameByRosterId: rollupTeamNameByRosterId,
+          ownerUsernameByRosterId: rollupUsernameByRosterId,
+          myRosterId: derived.myRosterId,
+          draftSettings: draftCache.draft.settings,
+          draftSeason: tradeSeason,
+        })
+      : [];
 
   // Format/source chips: source is ALWAYS FF Beacon (forced); format is auto-detected
   // from the Sleeper league. Use the league's detected label until the board confirms it.
@@ -655,7 +684,13 @@ export function OnTheClockClient({
           </p>
         )}
 
-        <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        {/* Rosters & Rankings stretches to the full container width: the right
+            rail is hidden so every team's horizontal row has room. */}
+        <div
+          className={`mt-4 grid gap-5 ${
+            view === "rosters" ? "" : "xl:grid-cols-[minmax(0,1fr)_360px]"
+          }`}
+        >
           {/* ---- Main content area: switches between views ---- */}
           <div className="min-w-0 space-y-5">
             {/* View switcher (tabs) */}
@@ -857,6 +892,22 @@ export function OnTheClockClient({
               )}
             </div>
 
+            {/* View: Rosters & Rankings (full width; right rail hidden) */}
+            <div
+              role="tabpanel"
+              id="otc-view-rosters"
+              aria-labelledby="otc-tab-rosters"
+              tabIndex={0}
+              hidden={view !== "rosters"}
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <RostersRankings
+                teams={teamRollups}
+                myRosterId={derived.myRosterId}
+                boardReady={tradeReady}
+              />
+            </div>
+
             {/* View: Trade Analyzer (LIVE Phase 6C; pool-aware value check) */}
             <div
               role="tabpanel"
@@ -877,25 +928,27 @@ export function OnTheClockClient({
             </div>
           </div>
 
-          {/* ---- Persistent right rail ---- */}
-          <aside aria-label="Draft room panels" className="space-y-5 xl:sticky xl:top-32 xl:self-start">
-            <DraftRoomStatus
-              draft={draftCache.draft}
-              onTheClockTeam={onTheClockTeam}
-              onTheClockPickLabel={onTheClockPickLabel}
-              isYourTurn={isYourTurn}
-              lastPickLabel={lastPickLabelFor(derived.lastPick)}
-            />
-            <BestRemainingByPosition players={available} />
-            <Panel eyebrow="Your team" title="Your draft">
-              <MyDraft
-                picks={draftCache.picks}
+          {/* ---- Persistent right rail (hidden on the full-width Rosters tab) ---- */}
+          {view !== "rosters" && (
+            <aside aria-label="Draft room panels" className="space-y-5 xl:sticky xl:top-32 xl:self-start">
+              <DraftRoomStatus
                 draft={draftCache.draft}
-                connectedUserId={myUserId ?? ""}
-                connectedUserSlot={derived.mySlot}
+                onTheClockTeam={onTheClockTeam}
+                onTheClockPickLabel={onTheClockPickLabel}
+                isYourTurn={isYourTurn}
+                lastPickLabel={lastPickLabelFor(derived.lastPick)}
               />
-            </Panel>
-          </aside>
+              <BestRemainingByPosition players={available} />
+              <Panel eyebrow="Your team" title="Your draft">
+                <MyDraft
+                  picks={draftCache.picks}
+                  draft={draftCache.draft}
+                  connectedUserId={myUserId ?? ""}
+                  connectedUserSlot={derived.mySlot}
+                />
+              </Panel>
+            </aside>
+          )}
         </div>
       </div>
     </div>

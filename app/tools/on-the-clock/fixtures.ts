@@ -142,6 +142,8 @@ export const MOCK_DRAFT_CACHE: ShapedDraftCache = {
   users: Array.from({ length: MOCK_TEAMS }, (_, i) => ({
     userId: `u${i + 1}`,
     displayName: i + 1 === MOCK_CONNECTED_USER.draftSlot ? "You" : `Team ${i + 1}`,
+    username: null,
+    teamName: null,
     avatar: null,
   })),
   rosters: Array.from({ length: MOCK_TEAMS }, (_, i) => ({

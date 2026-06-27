@@ -73,6 +73,8 @@ function cacheWith(pickCount: number): ShapedDraftCache {
     users: Array.from({ length: 8 }, (_, i) => ({
       userId: `u${i + 1}`,
       displayName: `Team ${i + 1}`,
+      username: null,
+      teamName: null,
       avatar: null,
     })),
     rosters: Array.from({ length: 8 }, (_, i) => ({

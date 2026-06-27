@@ -169,6 +169,10 @@ export interface OnTheClockSettings {
 export interface ShapedLeagueUser {
   userId: string;
   displayName: string | null;
+  /** Sleeper handle (the @username). May equal displayName. */
+  username: string | null;
+  /** Custom team name (metadata.team_name) when the owner set one, else null. */
+  teamName: string | null;
   avatar: string | null;
 }
 

@@ -155,6 +155,8 @@ function shapeUsers(row: DraftRow): ShapedLeagueUser[] {
     return {
       userId: readString(o, "user_id") ?? "",
       displayName: readString(o, "display_name"),
+      username: readString(o, "username"),
+      teamName: readString(o, "team_name"),
       avatar: readString(o, "avatar"),
     };
   });
