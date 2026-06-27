@@ -756,35 +756,53 @@ export function OnTheClockClient({
         >
           {/* ---- Main content area: switches between views ---- */}
           <div className="min-w-0 space-y-5">
-            {/* View switcher (tabs) */}
-            <div role="tablist" aria-label="Draft views" className="flex flex-wrap gap-2">
-              {VIEWS.map((v, i) => {
-                const active = view === v.id;
-                const Icon = v.icon;
-                return (
-                  <button
-                    key={v.id}
-                    ref={(el) => {
-                      viewTabRefs.current[v.id] = el;
-                    }}
-                    role="tab"
-                    id={`otc-tab-${v.id}`}
-                    aria-selected={active}
-                    aria-controls={`otc-view-${v.id}`}
-                    tabIndex={active ? 0 : -1}
-                    onClick={() => setView(v.id)}
-                    onKeyDown={(e) => onViewKeyDown(e, i)}
-                    className={`flex min-h-11 items-center gap-2 rounded-card border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
-                      active
-                        ? "border-brand-cyan/60 bg-brand-cyan/10 text-brand-cyan"
-                        : "border-line bg-surface/60 text-ink-muted hover:text-ink"
-                    }`}
-                  >
-                    <Icon aria-hidden="true" className="h-4 w-4" />
-                    {v.label}
-                  </button>
-                );
-              })}
+            {/* View switcher: a standout control bar that reads as the cockpit's
+                primary navigation (elevated surface, beacon hairline, soft glow). */}
+            <div
+              className="relative overflow-hidden rounded-modal border border-line-accent bg-surface/70 p-1.5 shadow-[0_0_70px_-50px_rgba(168,85,247,0.7)] sm:p-2"
+              style={{
+                backgroundImage:
+                  "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
+              }}
+            >
+              {/* Top-edge beacon hairline, decorative (matches the cockpit panels). */}
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 h-px"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+                }}
+              />
+              <div role="tablist" aria-label="Draft views" className="flex flex-wrap gap-1.5">
+                {VIEWS.map((v, i) => {
+                  const active = view === v.id;
+                  const Icon = v.icon;
+                  return (
+                    <button
+                      key={v.id}
+                      ref={(el) => {
+                        viewTabRefs.current[v.id] = el;
+                      }}
+                      role="tab"
+                      id={`otc-tab-${v.id}`}
+                      aria-selected={active}
+                      aria-controls={`otc-view-${v.id}`}
+                      tabIndex={active ? 0 : -1}
+                      onClick={() => setView(v.id)}
+                      onKeyDown={(e) => onViewKeyDown(e, i)}
+                      className={`flex min-h-11 items-center gap-2 rounded-card border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+                        active
+                          ? "border-brand-cyan/70 bg-brand-cyan/15 text-brand-cyan shadow-[0_0_22px_-8px_rgba(34,211,238,0.85)]"
+                          : "border-transparent bg-base/50 text-ink-muted hover:bg-surface hover:text-ink"
+                      }`}
+                    >
+                      <Icon aria-hidden="true" className="h-4 w-4" />
+                      {v.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* View: Who to pick */}
