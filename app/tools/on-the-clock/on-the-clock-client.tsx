@@ -29,6 +29,7 @@ import {
   LayoutGrid,
   List,
   ArrowLeftRight,
+  History,
   Users,
   WifiOff,
 } from "lucide-react";
@@ -42,7 +43,8 @@ import type {
 import type { BoardResult, DraftPosition } from "@/lib/on-the-clock/board-types";
 import { recommend } from "@/lib/on-the-clock/recommend";
 import { createClient } from "@/lib/supabase/client";
-import { fetchLeagues, fetchDraft, syncDraft, fetchBoard } from "@/lib/on-the-clock/client";
+import { fetchLeagues, fetchDraft, syncDraft, fetchBoard, fetchTransactions } from "@/lib/on-the-clock/client";
+import type { HistoryTransaction, TradeHistoryContext } from "@/lib/on-the-clock/trade-history";
 import {
   deriveDraftState,
   mapRealtimePickRow,
@@ -76,17 +78,19 @@ import { PickList } from "./pick-list";
 import { MyDraft } from "./my-draft";
 import { TradeAnalyzer } from "./trade-analyzer";
 import { RostersRankings } from "./rosters-rankings";
+import { TradeHistory } from "./trade-history";
 import { LoadingCard, ErrorCard, EmptyCard } from "./states";
 
 type Step = "connect" | "pick-league" | "room";
-type View = "pick" | "drafted" | "rosters" | "trade";
+type View = "pick" | "drafted" | "rosters" | "history" | "trade";
 type DraftedMode = "board" | "list";
 type LiveStatus = "off" | "connecting" | "live" | "unavailable";
 
 const VIEWS: Array<{ id: View; label: string; icon: typeof Target }> = [
   { id: "pick", label: "Who to pick", icon: Target },
-  { id: "drafted", label: "Drafted players", icon: ListChecks },
-  { id: "rosters", label: "Rosters & Rankings", icon: Users },
+  { id: "drafted", label: "Board", icon: ListChecks },
+  { id: "rosters", label: "Rosters", icon: Users },
+  { id: "history", label: "Trades", icon: History },
   { id: "trade", label: "Trade Analyzer", icon: ArrowLeftRight },
 ];
 
@@ -136,6 +140,15 @@ export function OnTheClockClient({
   const [board, setBoard] = useState<BoardResult | null>(null);
   const [boardLoading, setBoardLoading] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
+
+  // ----- trade history (lazy-loaded when the tab opens; cached per league) -----
+  const [tradeHistory, setTradeHistory] = useState<HistoryTransaction[] | null>(null);
+  const [tradeHistoryTruncated, setTradeHistoryTruncated] = useState(false);
+  const [tradeHistoryLoading, setTradeHistoryLoading] = useState(false);
+  const [tradeHistoryError, setTradeHistoryError] = useState<string | null>(null);
+  // The league id whose trades are loaded (or claimed in-flight), so the tab does
+  // not refetch on every render. Reset to null to force a reload.
+  const historyLoadedFor = useRef<string | null>(null);
 
   // ----- sync -----
   const [syncing, setSyncing] = useState(false);
@@ -233,6 +246,24 @@ export function OnTheClockClient({
     setBoardLoading(false);
   }, []);
 
+  // ----- trade history load (Sleeper trades for the league, server-fetched) -----
+  const loadTradeHistory = useCallback(async (leagueId: string) => {
+    // Claim the league id immediately so the open-tab effect won't refire while
+    // this request is in flight.
+    historyLoadedFor.current = leagueId;
+    setTradeHistoryLoading(true);
+    setTradeHistoryError(null);
+    const result = await fetchTransactions(leagueId);
+    if (result.ok) {
+      setTradeHistory(result.data.transactions);
+      setTradeHistoryTruncated(result.data.truncated);
+    } else {
+      setTradeHistoryError(result.message);
+      historyLoadedFor.current = null; // allow a retry
+    }
+    setTradeHistoryLoading(false);
+  }, []);
+
   const selectLeague = (l: LeagueCard) => {
     setLeague(l);
     setView("pick");
@@ -240,6 +271,10 @@ export function OnTheClockClient({
     setDraftError(null);
     setBoard(null);
     setBoardError(null);
+    setTradeHistory(null);
+    setTradeHistoryTruncated(false);
+    setTradeHistoryError(null);
+    historyLoadedFor.current = null;
     setCooldownRemaining(0);
     setSyncMessage("Loading draft...");
     setLiveStatus(realtimeEnabled ? "connecting" : "off");
@@ -336,6 +371,13 @@ export function OnTheClockClient({
       void supabase.removeChannel(channel);
     };
   }, [league, realtimeEnabled]);
+
+  // ----- lazy-load trade history the first time the tab is opened for a league -----
+  useEffect(() => {
+    if (view !== "history" || !league) return;
+    if (historyLoadedFor.current === league.leagueId) return;
+    void loadTradeHistory(league.leagueId);
+  }, [view, league, loadTradeHistory]);
 
   const onViewKeyDown = (e: React.KeyboardEvent, index: number) => {
     const last = VIEWS.length - 1;
@@ -641,6 +683,26 @@ export function OnTheClockClient({
         })
       : [];
 
+  // Trade History context: values every trade against the FULL board (independent of
+  // the room's pool toggle, since a trade can involve any player or pick). Made picks
+  // use the player taken; upcoming picks project from the post-draft board; future
+  // picks are discounted projections. Built only while the tab is open so the
+  // realtime re-render on every pick stays cheap elsewhere.
+  const tradeHistoryContext: TradeHistoryContext | null =
+    view === "history" && tradeReady
+      ? {
+          valueBoard: boardPlayers,
+          available: excludeDrafted(boardPlayers, draftCache.picks),
+          poolBoard: boardPlayers,
+          currentPicks,
+          teamNameByRosterId,
+          myRosterId: derived.myRosterId,
+          teams: Number(draftCache.draft.settings.teams ?? 0),
+          onTheClockPickNo: derived.onTheClockPickNo,
+          currentSeason: tradeSeason,
+        }
+      : null;
+
   // Format/source chips: source is ALWAYS FF Beacon (forced); format is auto-detected
   // from the Sleeper league. Use the league's detected label until the board confirms it.
   const formatLabel = board?.formatLabel ?? league?.formatLabel ?? "Detecting...";
@@ -906,6 +968,29 @@ export function OnTheClockClient({
                 teams={teamRollups}
                 myRosterId={derived.myRosterId}
                 boardReady={tradeReady}
+              />
+            </div>
+
+            {/* View: Trade History (mini Signal Check per trade; keeps the right rail) */}
+            <div
+              role="tabpanel"
+              id="otc-view-history"
+              aria-labelledby="otc-tab-history"
+              tabIndex={0}
+              hidden={view !== "history"}
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <TradeHistory
+                transactions={tradeHistory ?? []}
+                context={tradeHistoryContext}
+                loading={tradeHistoryLoading}
+                error={tradeHistoryError}
+                boardReady={tradeReady}
+                formatLabel={formatLabel}
+                truncated={tradeHistoryTruncated}
+                onRefresh={() => {
+                  if (league) void loadTradeHistory(league.leagueId);
+                }}
               />
             </div>
 

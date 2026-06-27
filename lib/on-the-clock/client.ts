@@ -13,6 +13,7 @@
 
 import type { LeagueCard, ShapedDraftCache, SyncStatus } from "./types";
 import type { BoardResult } from "./board-types";
+import type { HistoryTransaction } from "./trade-history";
 
 /** Header that every On The Clock route requires (CSRF-lite / bot filter). */
 export const OTC_REQUEST_HEADER = { "x-requested-with": "ff-beacon" } as const;
@@ -132,6 +133,27 @@ export function fetchBoard(formatSlug: string): Promise<ApiResult<{ board: Board
   const qs = new URLSearchParams({ format: formatSlug }).toString();
   return request(`/api/on-the-clock/board?${qs}`, { method: "GET" }, (body) => ({
     board: body.board as BoardResult,
+  }));
+}
+
+export interface TransactionsResponse {
+  transactions: HistoryTransaction[];
+  /** True when the league had more trades than the route's cap. */
+  truncated: boolean;
+}
+
+/**
+ * GET /api/on-the-clock/transactions?league_id= (every completed trade in the
+ * league, newest first, shaped for the Trade History tab). The server is the only
+ * Sleeper-touching path; the client caches the result for the session.
+ */
+export function fetchTransactions(leagueId: string): Promise<ApiResult<TransactionsResponse>> {
+  const qs = new URLSearchParams({ league_id: leagueId }).toString();
+  return request(`/api/on-the-clock/transactions?${qs}`, { method: "GET" }, (body) => ({
+    transactions: Array.isArray(body.transactions)
+      ? (body.transactions as HistoryTransaction[])
+      : [],
+    truncated: Boolean(body.truncated),
   }));
 }
 
