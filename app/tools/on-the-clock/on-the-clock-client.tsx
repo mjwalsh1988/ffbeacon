@@ -791,7 +791,7 @@ export function OnTheClockClient({
                       tabIndex={active ? 0 : -1}
                       onClick={() => setView(v.id)}
                       onKeyDown={(e) => onViewKeyDown(e, i)}
-                      className={`flex min-h-11 items-center gap-2 rounded-card border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+                      className={`flex min-h-11 items-center gap-1.5 rounded-card border px-3.5 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0 ${
                         active
                           ? "border-brand-cyan/70 bg-brand-cyan/15 text-brand-cyan shadow-[0_0_22px_-8px_rgba(34,211,238,0.85)]"
                           : "border-transparent bg-base/50 text-ink-muted hover:bg-surface hover:text-ink"
