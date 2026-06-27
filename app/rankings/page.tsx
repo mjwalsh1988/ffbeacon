@@ -248,7 +248,7 @@ export default async function RankingsPage({
               "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
           }}
         />
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
           {reconciled.fallback && (
             <p
               role="status"

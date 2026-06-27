@@ -94,7 +94,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
         }}
       />
-      <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-16 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
+      <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-8 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
         {/* Beacon gradient ring around the portrait. */}
         <span
           aria-hidden="true"

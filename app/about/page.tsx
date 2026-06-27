@@ -64,7 +64,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
         }}
       />
-      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           About FF Beacon
         </p>

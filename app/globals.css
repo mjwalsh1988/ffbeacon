@@ -56,3 +56,45 @@
     background-clip: padding-box;
   }
 }
+
+/**
+ * Continuous horizontal marquee for the On The Clock feature cards. The track
+ * holds two identical card sets; translating it by -50% loops seamlessly because
+ * each card carries its own trailing margin, so both halves are exactly equal
+ * width. The motion pauses on hover/focus so a reader can stop on a card, and
+ * respects reduced-motion by halting the animation and falling back to a
+ * manually scrollable row (every card stays reachable).
+ */
+@keyframes otc-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.otc-marquee {
+  overflow: hidden;
+}
+
+.otc-marquee-track {
+  animation: otc-marquee 38s linear infinite;
+  will-change: transform;
+}
+
+.otc-marquee:hover .otc-marquee-track,
+.otc-marquee:focus-within .otc-marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otc-marquee {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .otc-marquee-track {
+    animation: none;
+  }
+}

@@ -1,11 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Timer, Sparkles, ListChecks, Accessibility, Clock } from "lucide-react";
+import {
+  Target,
+  Scale,
+  ArrowLeftRight,
+  Users,
+  Receipt,
+  TrendingUp,
+  Trophy,
+  Accessibility,
+  Clock,
+  type LucideIcon,
+} from "lucide-react";
 import { currentNflSeason } from "@/lib/sleeper";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { OnTheClockClient } from "./on-the-clock-client";
+import { StartDraftingButton } from "./start-drafting-button";
 
 export const metadata: Metadata = {
   title: "On The Clock",
@@ -56,26 +68,23 @@ export default async function OnTheClockPage() {
   return (
     <main id="main">
       <Hero />
-      <section aria-labelledby="otc-app-heading" className="border-b border-line">
+      <section
+        id="otc-connect"
+        aria-labelledby="otc-app-heading"
+        className="scroll-mt-24 border-b border-line"
+      >
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
           <h2 id="otc-app-heading" className="sr-only">
             Connect a draft
           </h2>
           {settings.feature.enabled ? (
-            <>
-              <OnTheClockClient
-                defaultSeason={season}
-                defaultUsername={savedUsername}
-                realtimeEnabled={settings.sync.realtimeEnabled}
-                cooldownSeconds={settings.sync.cooldownSeconds}
-                settings={settings}
-              />
-              {/* Live notice: everything runs on real FF Beacon data. */}
-              <p className="mx-auto mt-6 max-w-3xl rounded-card border border-brand-cyan/30 bg-brand-cyan/5 px-4 py-3 text-xs text-ink-muted">
-                Everything here runs on real FF Beacon values, with your league&rsquo;s
-                format detected from Sleeper. Trade pick values are estimates.
-              </p>
-            </>
+            <OnTheClockClient
+              defaultSeason={season}
+              defaultUsername={savedUsername}
+              realtimeEnabled={settings.sync.realtimeEnabled}
+              cooldownSeconds={settings.sync.cooldownSeconds}
+              settings={settings}
+            />
           ) : (
             <FeatureOffNotice />
           )}
@@ -111,6 +120,17 @@ function FeatureOffNotice() {
   );
 }
 
+const OTC_FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
+  { icon: Target, title: "Best pick, live", body: "Best Available and Team Need" },
+  { icon: Scale, title: "Trade calculator", body: "Weigh any offer fast" },
+  { icon: ArrowLeftRight, title: "Trade analyzer", body: "Startup and rookie drafts" },
+  { icon: Users, title: "Every roster", body: "All teams, one view" },
+  { icon: Receipt, title: "Trades and moves", body: "Full transaction history" },
+  { icon: TrendingUp, title: "Power rankings", body: "Live and league-tuned" },
+  { icon: Trophy, title: "Grades and awards", body: "Startup draft recap" },
+  { icon: Accessibility, title: "Screen-reader native", body: "Read it or hear it" },
+];
+
 function Hero() {
   return (
     <header className="relative overflow-hidden border-b border-line">
@@ -130,7 +150,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
         }}
       />
-      <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           Tools · On The Clock
         </p>
@@ -147,32 +167,42 @@ function Hero() {
           </span>
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          Connect your active Sleeper draft and FF Beacon strips drafted players out
-          of the pool, then surfaces the best remaining value for your league&rsquo;s
-          format. Every view works the same whether you read it or hear it.
+          Drafting right now? Connect your live Sleeper draft and FF Beacon calls out
+          exactly where your team needs help, runs trade offers through a built-in
+          calculator and an analyzer for startup and rookie drafts, and opens every team
+          roster, the full trade history, live power rankings, and startup draft grades
+          and awards. Every view works the same whether you read it or hear it.
         </p>
 
-        <ul
-          role="list"
-          aria-label="What this tool does"
-          className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"
+        <StartDraftingButton />
+
+        {/* Continuous horizontal marquee: one always-moving row that fits every
+            card without stacking. The track holds the real list plus an
+            aria-hidden duplicate so the loop is seamless; screen readers only see
+            the real list once. Edges fade via a mask. Pauses on hover/focus and
+            falls back to a scrollable row under reduced-motion (see globals.css). */}
+        <div
+          className="otc-marquee mt-8"
+          style={{
+            maskImage:
+              "linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%)",
+            WebkitMaskImage:
+              "linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%)",
+          }}
         >
-          <HeroBullet
-            icon={Sparkles}
-            title="Best value, live"
-            body="Drafted players drop out; the best remaining value rises to the top."
-          />
-          <HeroBullet
-            icon={ListChecks}
-            title="Board and list"
-            body="A native board and a full pick list, both readable by ear."
-          />
-          <HeroBullet
-            icon={Accessibility}
-            title="Screen-reader native"
-            body="Tables, live regions, and keyboard control built in from the start."
-          />
-        </ul>
+          <div className="otc-marquee-track flex w-max">
+            <ul role="list" aria-label="What this tool does" className="flex shrink-0">
+              {OTC_FEATURES.map((f) => (
+                <HeroBullet key={f.title} icon={f.icon} title={f.title} body={f.body} />
+              ))}
+            </ul>
+            <ul aria-hidden="true" className="flex shrink-0">
+              {OTC_FEATURES.map((f) => (
+                <HeroBullet key={f.title} icon={f.icon} title={f.title} body={f.body} />
+              ))}
+            </ul>
+          </div>
+        </div>
 
       </div>
     </header>
@@ -184,20 +214,22 @@ function HeroBullet({
   title,
   body,
 }: {
-  icon: typeof Timer;
+  icon: LucideIcon;
   title: string;
   body: string;
 }) {
   return (
-    <li className="rounded-card border border-line bg-surface/60 p-4">
+    <li className="mr-3 flex w-52 shrink-0 items-center gap-3 rounded-card border border-line bg-surface/60 p-3 sm:w-56">
       <span
         aria-hidden="true"
-        className="flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
       >
         <Icon className="h-4 w-4" />
       </span>
-      <p className="mt-3 text-sm font-semibold text-ink">{title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold leading-tight text-ink">{title}</span>
+        <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{body}</span>
+      </span>
     </li>
   );
 }

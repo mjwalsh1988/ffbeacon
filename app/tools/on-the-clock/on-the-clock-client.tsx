@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
-  Info,
+  Gauge,
   Target,
   ListChecks,
   LayoutGrid,
@@ -352,26 +352,54 @@ export function OnTheClockClient({
   if (step === "connect") {
     return (
       <div className="mx-auto max-w-3xl">
-        <StepRail current={1} />
-        <div className="mt-4 rounded-card border border-line bg-surface/40 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <Info aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-            How On The Clock works
-          </p>
-          <ul role="list" className="mt-2 space-y-1 text-sm text-ink-muted">
-            <li>Connect your Sleeper account so we can find your active draft.</li>
-            <li>We strip drafted players out and rank what is left by FF Beacon value.</li>
-            <li>You draft with Best Available and Team Need signals, by eye or by ear.</li>
-          </ul>
-        </div>
-        <div className="mt-3">
-          <UsernameGate
-            defaultUsername={defaultUsername}
-            defaultSeason={defaultSeason}
-            onConnect={connect}
-            pending={connecting}
-            error={connectError}
+        <div
+          className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
+          }}
+        >
+          {/* Beacon-gradient accent bar pinned to the top of the cockpit shell. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-px"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+            }}
           />
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-base text-brand-cyan"
+            >
+              <Gauge className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+                Draft cockpit
+              </p>
+              <h3 className="text-lg font-semibold tracking-tight text-ink sm:text-xl">
+                Connect your draft to begin
+              </h3>
+            </div>
+          </div>
+          <p className="mt-2 text-sm text-ink-muted">
+            Enter your Sleeper username to load your live draft and step into the cockpit.
+          </p>
+
+          <div className="mt-6">
+            <StepRail current={1} />
+          </div>
+          <div className="mt-5">
+            <UsernameGate
+              defaultUsername={defaultUsername}
+              defaultSeason={defaultSeason}
+              onConnect={connect}
+              pending={connecting}
+              error={connectError}
+            />
+          </div>
         </div>
       </div>
     );

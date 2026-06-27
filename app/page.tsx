@@ -76,7 +76,7 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     href: "/tools/on-the-clock",
     title: "On The Clock",
     description:
-      "Drafting right now? Connect your live Sleeper draft and we will point you to the real best value on the board, tell you exactly where your team needs help, and even let you run startup trade offers without ever leaving your draft hub.",
+      "Drafting right now? Connect your live Sleeper draft and we will call out where your team needs help, run trade offers with a calculator and an analyzer for startup and rookie drafts, and open every team roster, the full trade history, live power rankings, and startup draft grades and awards.",
     cta: "Open the draft room",
     icon: Timer,
   },
@@ -164,7 +164,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
-      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
+      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           Fantasy football, built for everyone
         </p>

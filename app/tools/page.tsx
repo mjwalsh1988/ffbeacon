@@ -56,7 +56,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
-      <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
+      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
           Fantasy football tools
         </p>
@@ -156,12 +156,12 @@ const TOOLS: Tool[] = [
     eyebrow: "Live drafts",
     title: "On The Clock",
     pitch:
-      "Connect your active Sleeper draft and FF Beacon strips drafted players out of the pool, then surfaces the best remaining value for your league's format. Built to work the same by eye or by ear.",
+      "Connect your active Sleeper draft and FF Beacon points you to the best pick for your team, then keeps everything else you need in one hub. Built to work the same by eye or by ear.",
     bullets: [
-      "Reads your active Sleeper draft and removes drafted players live",
       "Best Available and Team Need picks tuned to your league format",
-      "A native draft board and a full pick list, both screen-reader friendly",
-      "Manual Sync keeps the room current without hammering Sleeper",
+      "A trade calculator and an analyzer for startup and rookie drafts",
+      "Every team roster plus the full trade and transaction history",
+      "Live power rankings, startup draft grades, and awards",
     ],
     cta: "Open the draft room",
   },
