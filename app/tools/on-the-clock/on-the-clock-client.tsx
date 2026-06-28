@@ -1096,6 +1096,7 @@ export function OnTheClockClient({
                   draft={draftCache.draft}
                   connectedUserId={myUserId ?? ""}
                   connectedUserSlot={derived.mySlot}
+                  connectedUserRosterId={derived.myRosterId}
                 />
               </Panel>
             </aside>

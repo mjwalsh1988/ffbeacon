@@ -15,19 +15,43 @@ function fullName(pick: ShapedPick): string {
   return `${pick.firstName ?? ""} ${pick.lastName ?? ""}`.trim() || "Unknown player";
 }
 
+/**
+ * A pick belongs in "Your draft" only when the connected user CURRENTLY owns it.
+ * Sleeper's roster_id on a made pick is the roster that actually selected the
+ * player, so it already reflects pick trades: a pick the user traded away points
+ * at its new owner, and a pick traded TO the user points at the user's roster.
+ * We prefer roster ownership; pickedBy is the same idea keyed by user id. The
+ * draft-seat match is a last resort and is NOT trade-aware (the seat keeps the
+ * original owner even after the pick is traded), so it is used only when neither
+ * ownership signal is available.
+ */
+function isMyPick(
+  pick: ShapedPick,
+  rosterId: number | null,
+  userId: string,
+  slot: number,
+): boolean {
+  if (rosterId != null && pick.rosterId != null) return pick.rosterId === rosterId;
+  if (userId && pick.pickedBy) return pick.pickedBy === userId;
+  return slot > 0 && pick.draftSlot === slot;
+}
+
 export function MyDraft({
   picks,
   draft,
   connectedUserId,
   connectedUserSlot,
+  connectedUserRosterId,
 }: {
   picks: ShapedPick[];
   draft: ShapedDraftCache["draft"];
   connectedUserId: string;
   connectedUserSlot: number;
+  /** Connected user's roster id (trade-aware ownership). null when undetected. */
+  connectedUserRosterId: number | null;
 }) {
   const mine = picks
-    .filter((p) => p.pickedBy === connectedUserId || p.draftSlot === connectedUserSlot)
+    .filter((p) => isMyPick(p, connectedUserRosterId, connectedUserId, connectedUserSlot))
     .sort((a, b) => a.pickNo - b.pickNo);
 
   const counts: Record<string, number> = {};
