@@ -26,7 +26,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { FFBEACON_SOURCE_SLUG, FFBEACON_SOURCE_DISPLAY } from "@/lib/signal-check/format";
-import type { BoardResult, DraftPosition, RankedPlayer } from "./board-types";
+import type { BoardResult, DraftPosition, PickBucketValue, RankedPlayer } from "./board-types";
 
 type Client = SupabaseClient<Database>;
 
@@ -114,7 +114,32 @@ function emptyResult(
     valueSourceSlug: FFBEACON_SOURCE_SLUG,
     sourceActive,
     season: "",
+    pickValues: [],
   };
+}
+
+/**
+ * Reduce the raw ffbeacon draft_pick_values rows (captured_at desc) to the latest
+ * value per (season, round, bucket). Only the three real buckets are kept;
+ * 'unknown' is dropped. Values are coerced to finite numbers (PostgREST can return
+ * numeric columns as strings).
+ */
+export function shapePickValues(
+  rows: { season: number; round: number; pick_position: string; value: number | string }[],
+): PickBucketValue[] {
+  const out: PickBucketValue[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const bucket = row.pick_position;
+    if (bucket !== "early" && bucket !== "mid" && bucket !== "late") continue;
+    const key = `${row.season}|${row.round}|${bucket}`;
+    if (seen.has(key)) continue; // captured_at desc, so the first per key is latest
+    const value = Number(row.value);
+    if (!Number.isFinite(value)) continue;
+    seen.add(key);
+    out.push({ season: row.season, round: row.round, bucket, value });
+  }
+  return out;
 }
 
 /**
@@ -185,7 +210,7 @@ export async function loadRankedBoard(
     // for source='ffbeacon', in parallel. We do NOT filter player_value_history by
     // player id: with hundreds of UUIDs the PostgREST URL overflows; the (format,
     // source) pair already bounds the rows (mirrors the Rankings Board note).
-    const [rankingsResult, valuesResult, trendsResult] = await Promise.all([
+    const [rankingsResult, valuesResult, trendsResult, picksResult] = await Promise.all([
       supabase
         .from("rankings")
         .select(
@@ -208,6 +233,16 @@ export async function loadRankedBoard(
         .select("player_id, change_7d, change_7d_pct, trend_7d, show_trend_7d")
         .eq("format_config_id", format.id)
         .eq("source", FFBEACON_SOURCE_SLUG),
+      // FF Beacon draft-pick values for this format (forced ffbeacon source, never
+      // KTC). Latest snapshot per (season, round, bucket) is taken in shapePickValues.
+      // Empty for redraft formats, which publish no future picks; the Trade Analyzer
+      // then simply offers no future-pick buckets.
+      supabase
+        .from("draft_pick_values")
+        .select("season, round, pick_position, value, captured_at")
+        .eq("format_config_id", format.id)
+        .eq("source", FFBEACON_SOURCE_SLUG)
+        .order("captured_at", { ascending: false }),
     ]);
 
     const rankings = (rankingsResult.data ?? []) as unknown as RankingJoinRow[];
@@ -264,6 +299,7 @@ export async function loadRankedBoard(
       valueSourceSlug: FFBEACON_SOURCE_SLUG,
       sourceActive,
       season: String(seasonToUse),
+      pickValues: shapePickValues(picksResult.data ?? []),
     };
   } catch (err) {
     console.error("[on-the-clock/board-loader] failed", err);

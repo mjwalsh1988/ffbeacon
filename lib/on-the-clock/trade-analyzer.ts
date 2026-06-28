@@ -10,17 +10,24 @@
  *   - Rookies   -> Rookie Draft Signal Check style: available rookies, current
  *     rookie picks (projected from the rookie board), and future rookie buckets.
  *
- * Every asset is valued from FF Beacon data the client already loaded, so there is
- * no DB round trip and no dependence on KTC pick values (which would break OTC's
- * force-FF-Beacon posture). Picks are PROJECTIONS, clearly flagged `estimated` so
- * the UI can say "values are estimated". This is a value signal, never a command.
+ * Player and current-draft pick values come from the FF Beacon board the client
+ * already loaded, so there is no DB round trip for those. FUTURE-year pick buckets
+ * (2027, 2028, ...) are valued directly from the FF Beacon published pick values
+ * (source='ffbeacon' in draft_pick_values), loaded with the board and passed in as
+ * `futurePickValues`. We do NOT project a player and discount for future picks, and
+ * we never read KTC pick values (that would break OTC's force-FF-Beacon posture).
  *
- * Pick projection reuses the existing snake/linear/3RR shape helpers in
+ * Made picks are valued by the player taken (real value). Upcoming current-draft
+ * picks are still projected from the board (who is expected at that slot, no
+ * multiplier) and flagged `estimated`. Future-year picks read a real FF Beacon value
+ * and are NOT estimated; a future bucket with no FF Beacon value is simply omitted.
+ *
+ * Upcoming-pick projection reuses the existing snake/linear/3RR shape helpers in
  * draft-derive.ts (seatForPick / pickNoForSeat / draftShapeFromMeta), so the same
  * serpentine math that drives the board drives pick value.
  */
 
-import type { RankedPlayer } from "./board-types";
+import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { PlayerPool, ShapedPick } from "./types";
 import type { CurrentDraftPick, TradedFuturePick } from "./pick-ownership";
 
@@ -37,18 +44,21 @@ import type { CurrentDraftPick, TradedFuturePick } from "./pick-ownership";
 export const FALLBACK_PICK_VALUE = 50;
 
 /**
- * Per-year discount for FUTURE picks vs an equivalent current-draft slot. A future
- * first is worth less than this year's equivalent because of time + uncertainty.
- * Geometric 0.85^yearsAhead (next year ~0.85, the year after ~0.72). This is the
- * documented estimate; it is intentionally simple and tunable later.
+ * Per-year discount for a FUTURE pick vs an equivalent current-draft slot.
+ * Geometric 0.85^yearsAhead (next year ~0.85, the year after ~0.72).
+ *
+ * NOTE: The Trade Analyzer and Trade History NO LONGER use this for future picks;
+ * they read real FF Beacon pick values instead. This is retained only for the
+ * Rosters & Rankings power-ranking rollups (lib/on-the-clock/rosters.ts), which
+ * still estimate future-pick value from the board.
  */
 export function futureDiscount(yearsAhead: number): number {
   return Math.pow(0.85, Math.max(0, yearsAhead));
 }
 
-/** How many future seasons of buckets to offer, and which rounds. */
+/** How many future seasons of buckets to offer, and which rounds (1st through 4th). */
 const FUTURE_SEASON_COUNT = 2;
-const FUTURE_ROUNDS = [1, 2, 3] as const;
+const FUTURE_ROUNDS = [1, 2, 3, 4] as const;
 const BUCKETS = ["early", "mid", "late"] as const;
 
 /** Cap on the player list in the picker (top N by value). Surfaced in a UI note. */
@@ -100,6 +110,12 @@ export interface TradeCatalogInput {
   currentPicks: CurrentDraftPick[];
   /** Concrete traded FUTURE-season picks (owner-aware). */
   tradedFuturePicks: TradedFuturePick[];
+  /**
+   * FF Beacon published pick values for this league's format (source='ffbeacon').
+   * Future-year buckets read directly from these; a bucket with no value is omitted.
+   * Empty for redraft formats (no future picks published).
+   */
+  futurePickValues: PickBucketValue[];
   /** roster_id -> display name, for owner labels. */
   teamNameByRosterId: Record<number, string>;
   /** The connected user's roster id, for "Your pick" labels. null when undetected. */
@@ -141,6 +157,24 @@ function projectAt(sortedDesc: RankedPlayer[], index: number): RankedPlayer | nu
   if (sortedDesc.length === 0) return null;
   const i = Math.min(Math.max(0, Math.round(index)), sortedDesc.length - 1);
   return sortedDesc[i];
+}
+
+/** Index FF Beacon pick values by `${season}|${round}|${bucket}` for O(1) lookup. */
+export function buildPickValueLookup(values: PickBucketValue[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const v of values) map.set(`${v.season}|${v.round}|${v.bucket}`, v.value);
+  return map;
+}
+
+/** The FF Beacon value for a (season, round, bucket), or null when not published. */
+export function lookupPickValue(
+  lookup: Map<string, number>,
+  season: number,
+  round: number,
+  bucket: PickBucket,
+): number | null {
+  const v = lookup.get(`${season}|${round}|${bucket}`);
+  return typeof v === "number" ? v : null;
 }
 
 /** Representative seat within a round for a bucket (early/mid/late). */
@@ -212,6 +246,7 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
     valueBoard,
     currentPicks,
     tradedFuturePicks,
+    futurePickValues,
     teamNameByRosterId,
     myRosterId,
     draftSettings,
@@ -225,7 +260,6 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
   if (available.length === 0 && poolBoard.length === 0 && valueBoard.length === 0) return [];
 
   const availSorted = sortByValueDesc(available);
-  const poolSorted = sortByValueDesc(poolBoard.length > 0 ? poolBoard : available);
   const pickKind: TradeItemKind = mode === "rookie" ? "rookie-pick" : "startup-pick";
   const groups: TradeItemGroup[] = [];
 
@@ -315,23 +349,26 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
     groups.push({ label: "Upcoming picks", options: upcomingOptions });
   }
 
-  // 4. Future pick buckets (generic discounted board projection; always estimated).
+  // 4. Future pick buckets, valued DIRECTLY from FF Beacon published pick values
+  // (source='ffbeacon'). No board projection, no discount: "2027 3rd (Early)" is
+  // exactly what FF Beacon says that bucket is worth. Buckets FF Beacon does not
+  // publish (e.g. a redraft format, or a season beyond what is published) are simply
+  // omitted rather than shown with a fabricated value. Real values, not estimates.
+  const pickLookup = buildPickValueLookup(futurePickValues);
   const futureOptions: TradeItemOption[] = [];
   for (let s = 1; s <= FUTURE_SEASON_COUNT; s++) {
     const season = currentSeason + s;
-    const discount = futureDiscount(s);
     for (const round of FUTURE_ROUNDS) {
       for (const bucket of BUCKETS) {
-        const idx = (round - 1) * teams + bucketSlot(bucket, teams) - 1;
-        const projected = projectAt(poolSorted, idx);
-        const base = projected ? projected.value : FALLBACK_PICK_VALUE;
+        const val = lookupPickValue(pickLookup, season, round, bucket);
+        if (val === null) continue; // hide buckets with no FF Beacon value
         futureOptions.push({
           id: `fut-${season}-${round}-${bucket}`,
           label: `${season} ${ordinal(round)} (${cap(bucket)})`,
-          detail: "Estimated future pick",
-          value: Math.round(base * discount),
+          detail: "FF Beacon pick value",
+          value: Math.round(val),
           kind: "future-pick",
-          estimated: true,
+          estimated: false,
           // Generic buckets are not a specific slot, so they can be added repeatedly
           // (a deal can include two 2027 1sts).
           repeatable: true,
@@ -343,24 +380,25 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
     groups.push({ label: "Future pick buckets", options: futureOptions });
   }
 
-  // 5. Concrete traded FUTURE picks (owner-aware), valued at the round's mid bucket.
+  // 5. Concrete traded FUTURE picks (owner-aware), valued from the FF Beacon value
+  // for the round's mid bucket (the slot is unknown until that draft). A pick with no
+  // published FF Beacon value is omitted. Real values, not estimates.
   const tradedFutureOptions: TradeItemOption[] = tradedFuturePicks
     .filter((t) => t.season - currentSeason >= 1 && t.season - currentSeason <= FUTURE_SEASON_COUNT)
-    .map((t) => {
-      const yearsAhead = t.season - currentSeason;
-      const idx = (t.round - 1) * teams + bucketSlot("mid", teams) - 1;
-      const projected = projectAt(poolSorted, idx);
-      const base = projected ? projected.value : FALLBACK_PICK_VALUE;
+    .map((t): TradeItemOption | null => {
+      const val = lookupPickValue(pickLookup, t.season, t.round, "mid");
+      if (val === null) return null;
       const owner = ownerLabel(t.currentOwnerRosterId, myRosterId, teamNameByRosterId);
       return {
         id: `tfut-${t.season}-${t.round}-${t.originalRosterId}`,
         label: `${t.season} ${ordinal(t.round)} - ${owner}`,
-        detail: "Traded future pick (estimated)",
-        value: Math.round(base * futureDiscount(yearsAhead)),
+        detail: "FF Beacon pick value",
+        value: Math.round(val),
         kind: "future-pick",
-        estimated: true,
+        estimated: false,
       };
-    });
+    })
+    .filter((o): o is TradeItemOption => o !== null);
   if (tradedFutureOptions.length > 0) {
     groups.push({ label: "Traded future picks", options: tradedFutureOptions });
   }

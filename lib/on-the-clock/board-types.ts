@@ -12,6 +12,19 @@
 /** The six draftable position buckets On The Clock renders. */
 export type DraftPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
 
+/**
+ * One FF Beacon draft-pick value, keyed by season + round + bucket. These are the
+ * real published FF Beacon pick values (source='ffbeacon' in draft_pick_values),
+ * loaded alongside the board so the Trade Analyzer and Trade History can value
+ * future-year picks directly instead of projecting a player and discounting.
+ */
+export interface PickBucketValue {
+  season: number;
+  round: number;
+  bucket: "early" | "mid" | "late";
+  value: number;
+}
+
 /** One ranked, draftable player for the available board. */
 export interface RankedPlayer {
   playerId: string;
@@ -83,4 +96,11 @@ export interface BoardResult {
    * rather than the calendar/NFL season. Empty string when no board exists.
    */
   season: string;
+  /**
+   * FF Beacon draft-pick values for this format (source='ffbeacon'), latest
+   * snapshot per (season, round, bucket). Empty when the format has no FF Beacon
+   * pick rows (e.g. redraft formats, which publish no future picks). The Trade
+   * Analyzer reads these directly for future-year pick buckets.
+   */
+  pickValues: PickBucketValue[];
 }

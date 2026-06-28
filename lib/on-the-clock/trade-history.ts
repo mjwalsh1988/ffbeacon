@@ -10,17 +10,19 @@
  *     slot (the real FF Beacon value of that player), never a projection.
  *   - A current-draft pick that is not yet made is projected from the board (who is
  *     expected to be there at that point), flagged estimated.
- *   - A future-season pick is a discounted board projection at the round's mid seat,
- *     flagged estimated.
+ *   - A future-season pick reads the real FF Beacon published pick value for that
+ *     season/round (mid bucket), source='ffbeacon'. No projection, no discount; not
+ *     flagged estimated. A pick with no published FF Beacon value is marked noValue.
  *
- * Every value comes from the board the cockpit already holds (FF Beacon, forced), so
- * there is no DB round trip and no dependence on KTC pick values. Verdict thresholds
- * mirror the site analyzer: within 5% is fair, within 15% is a lean, beyond is strong.
+ * Player and current-draft pick values come from the board the cockpit already holds
+ * (FF Beacon, forced); future-pick values come from the board's `pickValues`
+ * (source='ffbeacon', never KTC). Verdict thresholds mirror the site analyzer: within
+ * 5% is fair, within 15% is a lean, beyond is strong.
  */
 
-import type { RankedPlayer } from "./board-types";
+import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { CurrentDraftPick } from "./pick-ownership";
-import { futureDiscount, bucketSlot, FALLBACK_PICK_VALUE } from "./trade-analyzer";
+import { buildPickValueLookup, lookupPickValue, bucketSlot, FALLBACK_PICK_VALUE } from "./trade-analyzer";
 
 // ---------------------------------------------------------------------------
 // Shaped transaction (the wire shape the transactions route returns)
@@ -129,8 +131,13 @@ export interface TradeHistoryContext {
   valueBoard: RankedPlayer[];
   /** Post-exclusion board (drafted removed); upcoming-pick projection. */
   available: RankedPlayer[];
-  /** Pre-exclusion board; future-pick projection (not depleted by the draft). */
+  /** Pre-exclusion board; current-season unknown-seat projection (not depleted). */
   poolBoard: RankedPlayer[];
+  /**
+   * FF Beacon published pick values for the league's format (source='ffbeacon').
+   * Future-season picks read directly from these. Empty for redraft formats.
+   */
+  futurePickValues: PickBucketValue[];
   /** Every pick in the current draft with made/owner state. */
   currentPicks: CurrentDraftPick[];
   /** roster_id -> display name, for side labels. */
@@ -193,6 +200,7 @@ export function analyzeTradeTransaction(
   const teams = ctx.teams > 0 ? ctx.teams : 12;
   const availSorted = sortByValueDesc(ctx.available);
   const poolSorted = sortByValueDesc(ctx.poolBoard.length > 0 ? ctx.poolBoard : ctx.available);
+  const pickLookup = buildPickValueLookup(ctx.futurePickValues);
 
   // Player lookups (meta for display + value) from the full value board.
   const playerBySleeperId = new Map<string, RankedPlayer>();
@@ -269,20 +277,19 @@ export function analyzeTradeTransaction(
       };
     }
 
-    // Future (or past) season pick: discounted board projection at the round's mid seat.
-    const yearsAhead = season - cs;
-    const idx = (round - 1) * teams + bucketSlot("mid", teams) - 1;
-    const projected = projectAt(poolSorted, idx);
-    const base = projected ? projected.value : FALLBACK_PICK_VALUE;
-    const discount = yearsAhead > 0 ? futureDiscount(yearsAhead) : 1;
+    // Future-season pick: the real FF Beacon value for that season/round (mid bucket,
+    // since the exact slot is unknown until that draft). No projection, no discount.
+    // A pick FF Beacon does not publish a value for (e.g. a past season, or a redraft
+    // format) is marked noValue rather than fabricated.
+    const val = lookupPickValue(pickLookup, season, round, "mid");
     return {
       key: `fut-${season}-${round}-${pick.originalRosterId}`,
       kind: "future-pick",
       label: `${season} ${ordinal(round)}`,
-      detail: yearsAhead > 0 ? "Estimated future pick" : "Estimated pick",
-      value: Math.round(base * discount),
-      estimated: true,
-      noValue: false,
+      detail: val !== null ? "FF Beacon pick value" : "No FF Beacon value",
+      value: val ?? 0,
+      estimated: false,
+      noValue: val === null,
       fromRosterId: pick.previousOwnerRosterId,
     };
   };

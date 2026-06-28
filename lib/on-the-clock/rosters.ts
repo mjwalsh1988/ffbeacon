@@ -5,7 +5,8 @@
  * fetch. It turns the data the cockpit already holds (made picks, rosters, the
  * normalized traded_picks, and the FF Beacon board) into one rollup per team:
  *   - drafted players grouped by position (QB/RB/WR/TE), valued from the board,
- *   - the future draft picks the team currently owns, valued by board projection,
+ *   - the future draft picks the team currently owns, valued from FF Beacon's
+ *     published pick values,
  *   - a power-ranking total = drafted player value + future pick value.
  *
  * Future-pick ownership mirrors the League Pulse pipeline (lib/league-pulse.ts
@@ -14,15 +15,17 @@
  * only keep FUTURE seasons here (draftSeason + 1 and beyond); the current draft's
  * own picks are never counted as "future".
  *
- * Pick VALUES reuse the Trade Analyzer's board projection (bucketSlot +
- * futureDiscount), keeping On The Clock's force-FF-Beacon posture: no KTC pick
- * values, no DB round trip. Pick values are therefore estimates.
+ * Pick VALUES read the real FF Beacon published pick values (source='ffbeacon',
+ * the board's `pickValues`) for each (season, round) at the round's mid bucket. No
+ * board projection, no per-year discount, and never KTC. A future pick FF Beacon
+ * does not publish a value for (e.g. a season beyond what is published, or a
+ * redraft format) is omitted from the rollup so totals stay accurate.
  */
 
-import type { RankedPlayer } from "./board-types";
+import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { ShapedPick, ShapedRoster } from "./types";
 import type { TradedPickRecord } from "./pick-ownership";
-import { bucketSlot, futureDiscount, FALLBACK_PICK_VALUE } from "./trade-analyzer";
+import { buildPickValueLookup, lookupPickValue } from "./trade-analyzer";
 
 /** The four valued positions the rollup groups drafted players into. */
 export const ROSTER_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
@@ -45,7 +48,7 @@ export interface RosterPlayerLite {
   pickNo: number;
 }
 
-/** One future draft pick a team currently owns (estimated value). */
+/** One future draft pick a team currently owns, valued from FF Beacon pick values. */
 export interface RosterFuturePick {
   season: number;
   round: number;
@@ -83,8 +86,14 @@ export interface TeamRollupInput {
   picks: ShapedPick[];
   /** Normalized traded picks (mutates future-pick ownership). */
   tradedPicks: TradedPickRecord[];
-  /** FULL FF Beacon board for player + pick valuation. */
+  /** FULL FF Beacon board for player valuation. */
   valueBoard: RankedPlayer[];
+  /**
+   * FF Beacon published pick values for the league's format (source='ffbeacon').
+   * Future picks read directly from these (mid bucket per round). Empty for redraft
+   * formats, in which case future picks contribute nothing to the power-ranking total.
+   */
+  futurePickValues: PickBucketValue[];
   /** roster_id -> owner username / display name (the primary label + pick "via"). */
   ownerNameByRosterId: Record<number, string>;
   /** roster_id -> custom team name (metadata.team_name), the subtle label. Optional. */
@@ -107,7 +116,8 @@ function coercePosition(pos: string | null | undefined): RosterPosition | null {
 
 /**
  * Build one ranked rollup per team. Returns rollups sorted by total value desc
- * with `rank` assigned. An empty board yields token pick values but still ranks.
+ * with `rank` assigned. Future picks are valued from FF Beacon pick values; when
+ * none are published for the format the rollups still rank on drafted-player value.
  */
 export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
   const {
@@ -118,12 +128,10 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
     ownerNameByRosterId,
     teamNameByRosterId,
     myRosterId,
-    draftSettings,
     draftSeason,
+    futurePickValues,
   } = input;
 
-  const teams =
-    Number.isFinite(draftSettings.teams) && draftSettings.teams > 0 ? draftSettings.teams : 12;
   const futureSeasonCount = input.futureSeasonCount ?? DEFAULT_FUTURE_SEASONS;
   const futureRounds = input.futureRounds ?? DEFAULT_FUTURE_ROUNDS;
 
@@ -140,16 +148,13 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
     return 0;
   };
 
-  // Board sorted by value desc, for future-pick projection (mid bucket per round).
-  const boardDesc = valueBoard
-    .slice()
-    .sort((a, b) => b.value - a.value || a.overallRank - b.overallRank);
-  const projectPickValue = (round: number, yearsAhead: number): number => {
-    if (boardDesc.length === 0) return FALLBACK_PICK_VALUE;
-    const idx = (round - 1) * teams + bucketSlot("mid", teams) - 1;
-    const clamped = Math.min(Math.max(0, idx), boardDesc.length - 1);
-    const base = boardDesc[clamped]?.value ?? FALLBACK_PICK_VALUE;
-    return Math.round(base * futureDiscount(yearsAhead));
+  // FF Beacon published pick value for a (season, round) at the round's mid bucket
+  // (the exact slot is unknown until that draft). Null when FF Beacon publishes no
+  // value for it, in which case the caller drops the pick from the rollup.
+  const pickLookup = buildPickValueLookup(futurePickValues);
+  const pickValueFor = (season: number, round: number): number | null => {
+    const val = lookupPickValue(pickLookup, season, round, "mid");
+    return val === null ? null : Math.round(val);
   };
 
   // Future-pick ownership baseline: each team owns its own pick per round per
@@ -200,10 +205,12 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
     playersByRoster.set(pk.rosterId, arr);
   }
 
-  // Future picks grouped by current owner.
+  // Future picks grouped by current owner. A pick with no published FF Beacon value
+  // is dropped (not shown, not counted) so the power-ranking total stays accurate.
   const picksByOwner = new Map<number, RosterFuturePick[]>();
   for (const fp of futureOwner.values()) {
-    const yearsAhead = fp.season - draftSeason;
+    const value = pickValueFor(fp.season, fp.round);
+    if (value === null) continue;
     const isOwn = fp.original === fp.current;
     const arr = picksByOwner.get(fp.current) ?? [];
     arr.push({
@@ -212,7 +219,7 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
       originalRosterId: fp.original,
       isOwn,
       viaTeamName: isOwn ? null : ownerNameByRosterId[fp.original] ?? `Team ${fp.original}`,
-      value: projectPickValue(fp.round, yearsAhead),
+      value,
     });
     picksByOwner.set(fp.current, arr);
   }

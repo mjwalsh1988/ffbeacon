@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildTeamRollups, type TeamRollupInput } from "./rosters";
-import type { RankedPlayer } from "./board-types";
+import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { ShapedPick, ShapedRoster } from "./types";
 
 function player(over: Partial<RankedPlayer> & { playerId: string; value: number }): RankedPlayer {
@@ -47,12 +47,27 @@ const BOARD: RankedPlayer[] = [
   player({ playerId: "p4", value: 3000, position: "TE", overallRank: 4 }),
 ];
 
+/** FF Beacon pick values for seasons 2027-2029, rounds 1-4, all three buckets. */
+const PICK_VALUES: PickBucketValue[] = (() => {
+  const out: PickBucketValue[] = [];
+  for (const season of [2027, 2028, 2029]) {
+    for (const round of [1, 2, 3, 4]) {
+      for (const bucket of ["early", "mid", "late"] as const) {
+        const bucketAdj = bucket === "early" ? 100 : bucket === "mid" ? 0 : -100;
+        out.push({ season, round, bucket, value: 4000 - (round - 1) * 600 + bucketAdj });
+      }
+    }
+  }
+  return out;
+})();
+
 function baseInput(over: Partial<TeamRollupInput> = {}): TeamRollupInput {
   return {
     rosters: ROSTERS,
     picks: [],
     tradedPicks: [],
     valueBoard: BOARD,
+    futurePickValues: PICK_VALUES,
     ownerNameByRosterId: { 1: "Alpha", 2: "Bravo" },
     myRosterId: 1,
     draftSettings: { teams: 2 },
@@ -124,6 +139,30 @@ describe("buildTeamRollups", () => {
     expect(alpha.teamName).toBe("Team Rocket");
     // Bravo's team name matches its username (case-insensitive), so it is hidden.
     expect(bravo.teamName).toBeNull();
+  });
+
+  it("values future picks from FF Beacon pick values (mid bucket per round)", () => {
+    const rollups = buildTeamRollups(
+      baseInput({ futureSeasonCount: 1, futureRounds: 2 }),
+    );
+    const alpha = rollups.find((r) => r.rosterId === 1)!;
+    // 2027 round 1 + round 2, each at the round's mid bucket value from PICK_VALUES.
+    const r1 = alpha.futurePicks.find((p) => p.round === 1)!;
+    const r2 = alpha.futurePicks.find((p) => p.round === 2)!;
+    expect(r1.value).toBe(4000); // 4000 - 0*600 + 0 (mid)
+    expect(r2.value).toBe(3400); // 4000 - 1*600 + 0 (mid)
+    expect(alpha.futurePicksValue).toBe(7400);
+  });
+
+  it("drops future picks FF Beacon does not publish a value for (e.g. redraft)", () => {
+    const rollups = buildTeamRollups(
+      baseInput({ futureSeasonCount: 2, futureRounds: 4, futurePickValues: [] }),
+    );
+    const alpha = rollups.find((r) => r.rosterId === 1)!;
+    expect(alpha.futurePicks).toHaveLength(0);
+    expect(alpha.futurePicksValue).toBe(0);
+    // Total still reflects drafted-player value (here zero, no picks made).
+    expect(alpha.totalValue).toBe(alpha.playersValue);
   });
 
   it("moves a traded future pick to its new owner", () => {

@@ -47,7 +47,7 @@ function modeFor(pool: PlayerPool): { modeLabel: string; modeIcon: LucideIcon; a
       modeIcon: Sparkles,
       addLabel: "Add a rookie or pick",
       blurb:
-        "Rookie players use their FF Beacon value; rookie picks are projected from the rookie board. Future picks are estimated. This is a value signal, not a recommendation.",
+        "Rookie players use their FF Beacon value; rookie picks are projected from the rookie board. Future-year picks use FF Beacon pick values. This is a value signal, not a recommendation.",
     };
   }
   return {
@@ -55,7 +55,7 @@ function modeFor(pool: PlayerPool): { modeLabel: string; modeIcon: LucideIcon; a
     modeIcon: Scale,
     addLabel: "Add a draft pick",
     blurb:
-      "Trade startup draft picks and future picks. A made pick is valued by the player taken, an upcoming pick is projected from the board, and future picks are estimated. This is a value check, not a demand.",
+      "Trade startup draft picks and future picks. A made pick is valued by the player taken, an upcoming pick is projected from the board, and future-year picks use FF Beacon pick values. This is a value check, not a demand.",
   };
 }
 

@@ -85,6 +85,7 @@ function ctx(): TradeHistoryContext {
     valueBoard: board,
     available: board,
     poolBoard: board,
+    futurePickValues: [],
     currentPicks: [],
     teamNameByRosterId: { 1: "Alpha", 2: "Bravo", 3: "Cara" },
     myRosterId: 1,

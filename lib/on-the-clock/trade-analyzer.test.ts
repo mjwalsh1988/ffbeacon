@@ -11,7 +11,7 @@ import {
 import { draftShapeFromMeta } from "./draft-derive";
 import { resolveCurrentDraftPicks, resolveTradedFuturePicks } from "./pick-ownership";
 import type { ShapedDraftCache, ShapedPick } from "./types";
-import type { RankedPlayer } from "./board-types";
+import type { PickBucketValue, RankedPlayer } from "./board-types";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -49,6 +49,29 @@ function board(n: number, opts: { rookie?: boolean; startValue?: number; step?: 
       isRookie: opts.rookie ?? false,
     }),
   );
+}
+
+const FUTURE_PICK_SEASONS = [2027, 2028];
+const FUTURE_PICK_ROUNDS = [1, 2, 3, 4];
+const FUTURE_PICK_BUCKETS = ["early", "mid", "late"] as const;
+
+/** Distinct, deterministic FF Beacon pick value per (season, round, bucket). */
+function pickValueFor(season: number, round: number, bucket: "early" | "mid" | "late"): number {
+  const bucketAdj = bucket === "early" ? 0 : bucket === "mid" ? 200 : 400;
+  return 8000 - (season - 2027) * 1000 - (round - 1) * 700 - bucketAdj;
+}
+
+/** A full FF Beacon pick-value set: 2 seasons x 4 rounds x 3 buckets = 24 rows. */
+function pickValues(): PickBucketValue[] {
+  const out: PickBucketValue[] = [];
+  for (const season of FUTURE_PICK_SEASONS) {
+    for (const round of FUTURE_PICK_ROUNDS) {
+      for (const bucket of FUTURE_PICK_BUCKETS) {
+        out.push({ season, round, bucket, value: pickValueFor(season, round, bucket) });
+      }
+    }
+  }
+  return out;
 }
 
 function madePick(pickNo: number, over: Partial<ShapedPick> = {}): ShapedPick {
@@ -104,6 +127,7 @@ function catalogInput(over: Partial<TradeCatalogInput> = {}): TradeCatalogInput 
     valueBoard: over.valueBoard ?? b,
     currentPicks,
     tradedFuturePicks: over.tradedFuturePicks ?? [],
+    futurePickValues: over.futurePickValues ?? pickValues(),
     teamNameByRosterId: over.teamNameByRosterId ?? TEAM_NAMES,
     myRosterId: over.myRosterId ?? 5,
     draftSettings: { teams: 12, rounds: 15 },
@@ -302,19 +326,41 @@ describe("buildTradeCatalog - upcoming pick projection (Task 6)", () => {
 });
 
 describe("buildTradeCatalog - future picks (Task 7)", () => {
-  it("offers generic future buckets, always estimated", () => {
+  it("values generic future buckets from FF Beacon pick values, not estimated", () => {
     idSeq = 0;
     const b = board(60);
     const groups = buildTradeCatalog(catalogInput({ available: b, poolBoard: b, valueBoard: b, currentSeason: 2026 }));
     const future = groups.find((g) => g.label === "Future pick buckets")!;
-    expect(future.options.length).toBeGreaterThan(0);
-    for (const o of future.options) expect(o.estimated).toBe(true);
+    // 2 seasons x 4 rounds x 3 buckets = 24 buckets, all real FF Beacon values.
+    expect(future.options.length).toBe(24);
+    for (const o of future.options) expect(o.estimated).toBe(false);
     const early = future.options.find((o) => o.id === "fut-2027-1-early")!;
-    const slotIdx = bucketSlot("early", 12) - 1;
-    expect(early.value).toBe(Math.round(b[slotIdx].value * futureDiscount(1)));
+    expect(early.value).toBe(pickValueFor(2027, 1, "early"));
+    expect(early.detail).toBe("FF Beacon pick value");
   });
 
-  it("adds an owner-aware Traded future picks group when transaction data supports it", () => {
+  it("includes 1st through 4th round future picks", () => {
+    idSeq = 0;
+    const b = board(60);
+    const groups = buildTradeCatalog(catalogInput({ available: b, poolBoard: b, valueBoard: b, currentSeason: 2026 }));
+    const future = groups.find((g) => g.label === "Future pick buckets")!;
+    const ids = new Set(future.options.map((o) => o.id));
+    for (const round of [1, 2, 3, 4]) {
+      expect(ids.has(`fut-2027-${round}-mid`)).toBe(true);
+      expect(ids.has(`fut-2028-${round}-mid`)).toBe(true);
+    }
+  });
+
+  it("hides future buckets when FF Beacon has no pick values (e.g. redraft)", () => {
+    idSeq = 0;
+    const b = board(60);
+    const groups = buildTradeCatalog(
+      catalogInput({ available: b, poolBoard: b, valueBoard: b, futurePickValues: [] }),
+    );
+    expect(groups.find((g) => g.label === "Future pick buckets")).toBeFalsy();
+  });
+
+  it("adds an owner-aware Traded future picks group valued from FF Beacon, not estimated", () => {
     idSeq = 0;
     const b = board(60);
     const tradedFuturePicks = resolveTradedFuturePicks(
@@ -327,7 +373,8 @@ describe("buildTradeCatalog - future picks (Task 7)", () => {
     const traded = groups.find((g) => g.label === "Traded future picks")!;
     expect(traded.options.length).toBe(1);
     expect(traded.options[0].label).toMatch(/2027 1st - Your pick/);
-    expect(traded.options[0].estimated).toBe(true);
+    expect(traded.options[0].value).toBe(pickValueFor(2027, 1, "mid"));
+    expect(traded.options[0].estimated).toBe(false);
   });
 });
 
@@ -370,12 +417,16 @@ describe("buildTradeCatalog - shapes + edges", () => {
     expect(buildTradeCatalog(catalogInput({ available: [], poolBoard: [], valueBoard: [] }))).toEqual([]);
   });
 
-  it("uses the documented fallback value when a future bucket cannot project", () => {
+  it("values future buckets from FF Beacon data regardless of board size", () => {
     idSeq = 0;
+    // A 1-player board cannot project deep slots, but future picks no longer depend
+    // on the board: they read FF Beacon pick values, so they are still fully valued.
     const tiny = board(1);
     const groups = buildTradeCatalog(catalogInput({ available: tiny, poolBoard: tiny, valueBoard: tiny }));
     const future = groups.find((g) => g.label === "Future pick buckets")!;
+    expect(future.options.length).toBe(24);
     for (const o of future.options) expect(o.value).toBeGreaterThan(0);
+    // The board-projection floor is retained only for upcoming current-draft picks.
     expect(FALLBACK_PICK_VALUE).toBeGreaterThan(0);
   });
 
