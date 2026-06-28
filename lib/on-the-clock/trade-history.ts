@@ -80,6 +80,12 @@ export interface HistoryAsset {
   estimated: boolean;
   /** True when we could not resolve any FF Beacon value for the asset. */
   noValue: boolean;
+  /**
+   * The roster that GAVE this asset up in the trade (the receiving roster is the
+   * HistorySide that holds it). null when Sleeper did not record an origin. Used by
+   * the awards computation to net each roster's give/get without re-valuing assets.
+   */
+  fromRosterId: number | null;
 }
 
 /** One side of the trade (one roster) with everything it received. */
@@ -229,6 +235,7 @@ export function analyzeTradeTransaction(
           value: val ?? 0,
           estimated: false,
           noValue: val === null,
+          fromRosterId: pick.previousOwnerRosterId,
         };
       }
       // Known seat, not yet made -> project who is expected to be there.
@@ -244,6 +251,7 @@ export function analyzeTradeTransaction(
           value: projected ? projected.value : FALLBACK_PICK_VALUE,
           estimated: true,
           noValue: false,
+          fromRosterId: pick.previousOwnerRosterId,
         };
       }
       // Current season but the seat is unknown (cold/odd draft): generic round bucket.
@@ -257,6 +265,7 @@ export function analyzeTradeTransaction(
         value: projected ? projected.value : FALLBACK_PICK_VALUE,
         estimated: true,
         noValue: false,
+        fromRosterId: pick.previousOwnerRosterId,
       };
     }
 
@@ -274,6 +283,7 @@ export function analyzeTradeTransaction(
       value: Math.round(base * discount),
       estimated: true,
       noValue: false,
+      fromRosterId: pick.previousOwnerRosterId,
     };
   };
 
@@ -301,6 +311,7 @@ export function analyzeTradeTransaction(
               value: meta.value,
               estimated: false,
               noValue: false,
+              fromRosterId: txn.drops[sleeperId] ?? null,
             }
           : {
               key: `pl-${sleeperId}`,
@@ -310,6 +321,7 @@ export function analyzeTradeTransaction(
               value: 0,
               estimated: false,
               noValue: true,
+              fromRosterId: txn.drops[sleeperId] ?? null,
             },
       );
     }

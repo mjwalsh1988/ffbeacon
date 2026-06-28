@@ -31,6 +31,7 @@ import {
   ArrowLeftRight,
   History,
   Users,
+  Trophy,
   WifiOff,
 } from "lucide-react";
 import type {
@@ -59,6 +60,7 @@ import {
 } from "@/lib/on-the-clock/draft-derive";
 import { buildTradeCatalog } from "@/lib/on-the-clock/trade-analyzer";
 import { buildTeamRollups } from "@/lib/on-the-clock/rosters";
+import { computeDraftAwards } from "@/lib/on-the-clock/awards";
 import {
   normalizeTradedPicks,
   resolveCurrentDraftPicks,
@@ -78,11 +80,12 @@ import { PickList } from "./pick-list";
 import { MyDraft } from "./my-draft";
 import { TradeAnalyzer } from "./trade-analyzer";
 import { RostersRankings } from "./rosters-rankings";
+import { RankingsAwards } from "./rankings-awards";
 import { TradeHistory } from "./trade-history";
 import { LoadingCard, ErrorCard, EmptyCard } from "./states";
 
 type Step = "connect" | "pick-league" | "room";
-type View = "pick" | "drafted" | "rosters" | "history" | "trade";
+type View = "pick" | "drafted" | "rosters" | "history" | "trade" | "rankings";
 type DraftedMode = "board" | "list";
 type LiveStatus = "off" | "connecting" | "live" | "unavailable";
 
@@ -92,6 +95,7 @@ const VIEWS: Array<{ id: View; label: string; icon: typeof Target }> = [
   { id: "rosters", label: "Rosters", icon: Users },
   { id: "history", label: "Trades", icon: History },
   { id: "trade", label: "Trade Analyzer", icon: ArrowLeftRight },
+  { id: "rankings", label: "Awards", icon: Trophy },
 ];
 
 /** Coerce a Sleeper pick/roster position string to one of the six draft buckets. */
@@ -372,9 +376,10 @@ export function OnTheClockClient({
     };
   }, [league, realtimeEnabled]);
 
-  // ----- lazy-load trade history the first time the tab is opened for a league -----
+  // ----- lazy-load trade history the first time the Trades OR Rankings & Awards tab
+  // is opened for a league (the awards need the league's trades too) -----
   useEffect(() => {
-    if (view !== "history" || !league) return;
+    if ((view !== "history" && view !== "rankings") || !league) return;
     if (historyLoadedFor.current === league.leagueId) return;
     void loadTradeHistory(league.leagueId);
   }, [view, league, loadTradeHistory]);
@@ -641,12 +646,16 @@ export function OnTheClockClient({
   // are unchanged.
   const rollupOwnerNameByRosterId: Record<number, string> = {};
   const rollupTeamNameByRosterId: Record<number, string | null> = {};
+  // roster_id -> owner Sleeper avatar id, used by the award cards on the Rankings &
+  // Awards tab. Captured during sync (league_users.avatar); null when unset.
+  const avatarByRosterId: Record<number, string | null> = {};
   for (const r of draftCache.rosters) {
     const user = r.ownerId ? draftCache.users.find((u) => u.userId === r.ownerId) : undefined;
     teamNameByRosterId[r.rosterId] = user?.displayName ?? `Team ${r.rosterId}`;
     rollupOwnerNameByRosterId[r.rosterId] =
       user?.displayName || user?.username || `Team ${r.rosterId}`;
     rollupTeamNameByRosterId[r.rosterId] = user?.teamName ?? null;
+    avatarByRosterId[r.rosterId] = user?.avatar ?? null;
   }
   const tradeGroups = tradeReady
     ? buildTradeCatalog({
@@ -666,10 +675,10 @@ export function OnTheClockClient({
     : [];
 
   // Rosters & Rankings rollups: per-team drafted-player value + future-pick value,
-  // ranked by total. Only computed while that tab is open (and the board is ready)
-  // so the realtime re-render on every pick stays cheap on the other tabs.
+  // ranked by total. Computed while the Rosters OR Rankings & Awards tab is open (and
+  // the board is ready) so the realtime re-render on every pick stays cheap elsewhere.
   const teamRollups =
-    view === "rosters" && tradeReady
+    (view === "rosters" || view === "rankings") && tradeReady
       ? buildTeamRollups({
           rosters: draftCache.rosters,
           picks: draftCache.picks,
@@ -689,7 +698,7 @@ export function OnTheClockClient({
   // picks are discounted projections. Built only while the tab is open so the
   // realtime re-render on every pick stays cheap elsewhere.
   const tradeHistoryContext: TradeHistoryContext | null =
-    view === "history" && tradeReady
+    (view === "history" || view === "rankings") && tradeReady
       ? {
           valueBoard: boardPlayers,
           available: excludeDrafted(boardPlayers, draftCache.picks),
@@ -702,6 +711,22 @@ export function OnTheClockClient({
           currentSeason: tradeSeason,
         }
       : null;
+
+  // Rankings & Awards: six live startup-draft awards, recomputed on every sync from
+  // the rollups, the league's trades, the made picks, and the league's slot model.
+  // Only while that tab is open (and the board is ready) so other tabs stay cheap.
+  const awards =
+    view === "rankings" && tradeReady
+      ? computeDraftAwards({
+          rollups: teamRollups,
+          avatarByRosterId,
+          transactions: tradeHistory ?? [],
+          tradeContext: tradeHistoryContext,
+          picks: draftCache.picks,
+          draftSettings: draftCache.draft.settings,
+          settings,
+        })
+      : [];
 
   // Format/source chips: source is ALWAYS FF Beacon (forced); format is auto-detected
   // from the Sleeper league. Use the league's detected label until the board confirms it.
@@ -1028,6 +1053,28 @@ export function OnTheClockClient({
                 pool={pool}
                 groups={tradeGroups}
                 boardReady={tradeReady}
+              />
+            </div>
+
+            {/* View: Rankings & Awards (live awards + condensed power rankings table) */}
+            <div
+              role="tabpanel"
+              id="otc-view-rankings"
+              aria-labelledby="otc-tab-rankings"
+              tabIndex={0}
+              hidden={view !== "rankings"}
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <RankingsAwards
+                awards={awards}
+                teams={teamRollups}
+                myRosterId={derived.myRosterId}
+                boardReady={tradeReady}
+                tradesLoading={tradeHistoryLoading}
+                tradesError={tradeHistoryError}
+                onRetryTrades={() => {
+                  if (league) void loadTradeHistory(league.leagueId);
+                }}
               />
             </div>
           </div>
