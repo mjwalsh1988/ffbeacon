@@ -28,6 +28,8 @@ export interface BeaconSettings {
   aiMinSpread: number;
   /** Candidate gate: abs(stat_performance adjustment) >= this. */
   aiMinMover: number;
+  /** Global multiplier applied ONLY to ffbeacon draft pick values at recompute. 1 = no change. */
+  pickValueMultiplier: number;
   /** The raw rows, for the run's weights_snapshot. */
   raw: Record<string, unknown>;
 }
@@ -52,6 +54,7 @@ const DEFAULTS = {
   aiMaxCalls: 60,
   aiMinSpread: 0.15,
   aiMinMover: 0.05,
+  pickValueMultiplier: 1,
 };
 
 function num(v: unknown, fallback: number): number {
@@ -99,6 +102,7 @@ export async function loadBeaconSettings(
     aiMaxCalls: num(map.get("ai_max_calls"), DEFAULTS.aiMaxCalls),
     aiMinSpread: num(map.get("ai_min_spread"), DEFAULTS.aiMinSpread),
     aiMinMover: num(map.get("ai_min_mover"), DEFAULTS.aiMinMover),
+    pickValueMultiplier: num(map.get("pick_value_multiplier"), DEFAULTS.pickValueMultiplier),
     raw,
   };
 }

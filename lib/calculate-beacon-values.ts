@@ -600,15 +600,28 @@ export async function runCalculateBeaconValues(
         const key = `${p.season}|${p.round}|${p.pick_position}|${p.format_config_id}`;
         if (!latestPick.has(key)) latestPick.set(key, p);
       }
+      // Global FF Beacon-only pick multiplier (admin setting, default 1). KTC and
+      // every other source stay untouched; only these source='ffbeacon' rows are
+      // scaled. Guarded non-negative and rounded to a whole number like all other
+      // published values. metadata records the multiplier applied for audit.
+      const pickMultiplier =
+        Number.isFinite(settings.pickValueMultiplier) && settings.pickValueMultiplier >= 0
+          ? settings.pickValueMultiplier
+          : 1;
       const pickInserts = [...latestPick.values()].map((p) => ({
         season: p.season,
         round: p.round,
         pick_position: p.pick_position,
         format_config_id: p.format_config_id,
         source: SOURCE_SLUG,
-        value: p.value,
+        value: Math.max(0, Math.round(Number(p.value) * pickMultiplier)),
         captured_at: capturedAt,
-        metadata: { baseline: "ktc", baseline_metadata: p.metadata } as Json,
+        metadata: {
+          baseline: "ktc",
+          baseline_value: p.value,
+          pick_value_multiplier: pickMultiplier,
+          baseline_metadata: p.metadata,
+        } as Json,
       }));
 
       // Inherit picks into the dynasty-baselined derived formats (KTC publishes
