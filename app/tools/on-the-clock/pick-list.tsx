@@ -53,7 +53,10 @@ export function PickList({
 
   return (
     <div className="overflow-x-auto rounded-card border border-line">
-      <table className="w-full border-collapse text-sm">
+      {/* On mobile the table keeps its natural width (min 100%) and the wrapper
+          scrolls horizontally, so columns stay readable instead of squishing.
+          On desktop it fills the container as before. */}
+      <table className="w-max min-w-full border-collapse text-sm sm:w-full">
         <caption className="sr-only">All draft picks in order.</caption>
         <thead className="bg-surface/60 text-xs uppercase tracking-wide text-ink-subtle">
           <tr>

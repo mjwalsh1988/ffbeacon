@@ -64,6 +64,26 @@ export function PlayerSpotlight({ data, variant }: { data: RecommendationCardDat
   const Icon = v.icon;
   const p = data.player;
 
+  // Player name + the small info line (position, team, overall, exp, age). Shared
+  // so it can sit beside the headshot on mobile and inside the right column on
+  // desktop without duplicating the markup.
+  const identity = p && (
+    <>
+      <h3 className="text-2xl font-bold leading-tight tracking-tight text-ink sm:text-3xl">
+        {p.name}
+      </h3>
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-muted">
+        <span className="font-semibold text-ink">{p.position}</span>
+        {p.team && <span>· {p.team}</span>}
+        <span>· Overall #{p.overallRank}</span>
+        {typeof p.yearsExperience === "number" && (
+          <span>· {p.yearsExperience === 0 ? "Rookie" : `${p.yearsExperience} yr exp`}</span>
+        )}
+        {typeof p.age === "number" && <span>· Age {p.age}</span>}
+      </p>
+    </>
+  );
+
   return (
     <article
       aria-label={`${v.label}. ${p ? p.name : "No recommendation yet"}`}
@@ -103,42 +123,44 @@ export function PlayerSpotlight({ data, variant }: { data: RecommendationCardDat
         </p>
       ) : (
         <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
-          {/* Headshot, framed. The photo fills the rounded square edge to edge:
-              the scoped overrides drop the shared headshot's circular shape and
-              inner border so the image (clipped by overflow-hidden) sits flush to
-              the frame's rounded corners. */}
-          <div
-            className="relative shrink-0 self-start overflow-hidden rounded-modal border border-line bg-base [&_img]:rounded-none [&_img]:border-0 [&_span]:rounded-none [&_span]:border-0"
-            style={{ boxShadow: "0 0 40px -20px rgba(168, 85, 247, 0.6)" }}
-          >
-            <PlayerHeadshot sleeperId={p.sleeperId} name={p.name} position={p.position} size={96} />
+          {/* On mobile the headshot and the name/info share one row to save
+              vertical space. On desktop this wrapper collapses (display:contents)
+              so the headshot becomes a direct flex child and the name/info move
+              into the right column, leaving the desktop layout unchanged. */}
+          <div className="flex items-center gap-4 sm:contents">
+            {/* Headshot, framed. The photo fills the rounded square edge to edge:
+                the scoped overrides drop the shared headshot's circular shape and
+                inner border so the image (clipped by overflow-hidden) sits flush
+                to the frame's rounded corners. */}
+            <div
+              className="relative shrink-0 self-start overflow-hidden rounded-modal border border-line bg-base [&_img]:rounded-none [&_img]:border-0 [&_span]:rounded-none [&_span]:border-0 [&_img]:!size-[5.5rem] [&_span]:!size-[5.5rem] sm:[&_img]:!size-24 sm:[&_span]:!size-24"
+              style={{ boxShadow: "0 0 40px -20px rgba(168, 85, 247, 0.6)" }}
+            >
+              <PlayerHeadshot sleeperId={p.sleeperId} name={p.name} position={p.position} size={96} />
+            </div>
+            {/* Name + info, mobile placement (beside the headshot). */}
+            <div className="min-w-0 flex-1 sm:hidden">{identity}</div>
           </div>
 
           <div className="min-w-0 flex-1">
-            <h3 className="text-2xl font-bold leading-tight tracking-tight text-ink sm:text-3xl">
-              {p.name}
-            </h3>
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-muted">
-              <span className="font-semibold text-ink">{p.position}</span>
-              {p.team && <span>· {p.team}</span>}
-              <span>· Overall #{p.overallRank}</span>
-              {typeof p.yearsExperience === "number" && (
-                <span>· {p.yearsExperience === 0 ? "Rookie" : `${p.yearsExperience} yr exp`}</span>
-              )}
-              {typeof p.age === "number" && <span>· Age {p.age}</span>}
-            </p>
+            {/* Name + info, desktop placement (top of the right column). */}
+            <div className="hidden sm:block">{identity}</div>
 
-            {/* Accent number row (broadcast stat treatment) */}
-            <dl className="mt-3 grid grid-cols-3 gap-2">
-              <div className="rounded-card border border-brand-purple/40 bg-base/50 px-3 py-2">
+            {/* Accent number row (broadcast stat treatment). On mobile the cards
+                flex to their content so the FF Beacon value card grows enough to
+                keep its number on one line; on desktop they keep equal thirds. */}
+            <dl className="mt-3 flex gap-2 sm:grid sm:grid-cols-3">
+              <div className="min-w-0 flex-1 rounded-card border border-brand-purple/40 bg-base/50 px-3 py-2">
                 <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">
-                  FF Beacon value
+                  {/* Shorter label on mobile to save space; full label on desktop. */}
+                  <span className="sm:hidden">FFB Value</span>
+                  <span className="hidden sm:inline">FF Beacon value</span>
                 </dt>
                 <dd className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-brand-purple">
                   {p.value.toLocaleString()}
                 </dd>
               </div>
-              <div className="rounded-card border border-line bg-base/50 px-3 py-2">
+              <div className="shrink-0 rounded-card border border-line bg-base/50 px-3 py-2 sm:shrink">
                 <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">
                   Pos rank
                 </dt>
@@ -147,7 +169,7 @@ export function PlayerSpotlight({ data, variant }: { data: RecommendationCardDat
                   {p.positionRank}
                 </dd>
               </div>
-              <div className="rounded-card border border-line bg-base/50 px-3 py-2">
+              <div className="shrink-0 rounded-card border border-line bg-base/50 px-3 py-2 sm:shrink">
                 <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">
                   Tier
                 </dt>

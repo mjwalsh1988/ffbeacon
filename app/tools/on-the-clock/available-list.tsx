@@ -115,7 +115,10 @@ export function AvailableList({ players }: { players: RankedPlayer[] }) {
       </p>
 
       <div className="mt-2 overflow-x-auto rounded-card border border-line">
-        <table className="w-full border-collapse text-sm">
+        {/* On mobile the table keeps its natural width (min 100%) and the wrapper
+            scrolls horizontally, so columns stay readable instead of squishing.
+            On desktop it fills the container as before. */}
+        <table className="w-max min-w-full border-collapse text-sm sm:w-full">
           <caption className="sr-only">
             Available players, sortable by value, overall rank, and position rank.
           </caption>
