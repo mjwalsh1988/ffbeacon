@@ -58,7 +58,7 @@ export function DraftBoard({
   };
 
   return (
-    <div className="overflow-x-auto rounded-card border border-line">
+    <div className="mx-auto w-fit max-w-full overflow-x-auto rounded-card border border-line">
       {/* border-separate + page-colored (base) background and spacing puts a thin gap
           in the page's own color between every cell, so the solid drafted tiles read
           as distinct blocks rather than one merged slab. */}
