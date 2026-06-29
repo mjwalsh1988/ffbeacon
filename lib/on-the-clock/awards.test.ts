@@ -179,8 +179,9 @@ describe("computeDraftAwards", () => {
     expect(find(awards, "most-boring").pending).toBe(true);
   });
 
-  it("nets received minus given for the most successful trader", () => {
-    // Alpha(1) sends A(100), receives B(300): net +200. Bravo(2) the mirror: net -200.
+  it("uses average margin per trade for the most successful trader (minimum relaxes to one)", () => {
+    // Alpha(1) sends A(100), receives B(300): +200 margin over a single trade. Only one
+    // trade each, so the 3- and 2-trade bars relax down to 1 and Alpha qualifies.
     const transactions = [
       txn({
         transactionId: "t1",
@@ -193,7 +194,57 @@ describe("computeDraftAwards", () => {
     const success = find(awards, "most-successful-trader");
     expect(success.pending).toBe(false);
     expect(success.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
-    expect(success.metricLabel).toBe("+200 value");
+    expect(success.metricLabel).toBe("+200 avg value per trade across 1 trade");
+  });
+
+  it("rewards the best average margin, not the most total trade value", () => {
+    // Alpha(1) makes 4 winning swaps (gives A=100, gets B=300 => +200 each):
+    //   total +800 across 4 trades, average +200.
+    // Bravo(2) makes 3 stronger deals (receives C=250 for nothing => +250 each):
+    //   total +750 across 3 trades, average +250.
+    // Alpha has the higher TOTAL, but Bravo has the higher AVERAGE and wins the award.
+    const transactions: HistoryTransaction[] = [];
+    for (let i = 0; i < 4; i++) {
+      transactions.push(
+        txn({
+          transactionId: `a${i}`,
+          rosterIds: [1, 3],
+          adds: { sB: 1, sA: 3 },
+          drops: { sA: 1, sB: 3 },
+        }),
+      );
+    }
+    for (let i = 0; i < 3; i++) {
+      transactions.push(
+        txn({ transactionId: `b${i}`, rosterIds: [2, 3], adds: { sC: 2 }, drops: { sC: 3 } }),
+      );
+    }
+    const awards = computeDraftAwards(baseInput({ transactions }));
+    const success = find(awards, "most-successful-trader");
+    expect(success.pending).toBe(false);
+    expect(success.claimants.map((c) => c.ownerName)).toEqual(["Bravo"]);
+    expect(success.metricLabel).toBe("+250 avg value per trade across 3 trades");
+  });
+
+  it("relaxes the trade minimum to two when no team has three", () => {
+    // Alpha(1) makes 2 winning swaps (+200 each); Bravo(2) the losing mirror. Nobody
+    // reaches 3 trades, so the bar relaxes to 2 and Alpha qualifies at +200 average.
+    const transactions: HistoryTransaction[] = [];
+    for (let i = 0; i < 2; i++) {
+      transactions.push(
+        txn({
+          transactionId: `t${i}`,
+          rosterIds: [1, 2],
+          adds: { sB: 1, sA: 2 },
+          drops: { sA: 1, sB: 2 },
+        }),
+      );
+    }
+    const awards = computeDraftAwards(baseInput({ transactions }));
+    const success = find(awards, "most-successful-trader");
+    expect(success.pending).toBe(false);
+    expect(success.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
+    expect(success.metricLabel).toBe("+200 avg value per trade across 2 trades");
   });
 
   it("stays pending for the value award when the board context is missing", () => {

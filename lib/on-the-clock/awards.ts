@@ -6,8 +6,9 @@
  * league's completed trades, the made picks, and the league's starting-slot model)
  * into six live awards that re-resolve on every resync:
  *   - Most Active Trader      (The Signal Flare Award): most completed trades.
- *   - Most Successful Trader  (The Value Beacon Award): highest net FF Beacon value
- *     gained across completed trades (value received minus value given).
+ *   - Most Successful Trader  (The Value Beacon Award): best AVERAGE FF Beacon value
+ *     margin per trade (value received minus value given, averaged over their trades),
+ *     gated to a minimum trade count so trade volume alone cannot win it.
  *   - First to Fill Starting Roster (The Full Beam Award): first team to fill every
  *     required starting slot, by overall pick number.
  *   - Most Boring League Mate (The Dead Air Award): fewest completed trades.
@@ -191,6 +192,14 @@ function pickExtreme(
 const ZERO_HAVE: Record<DraftPosition, number> = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };
 
 /**
+ * Minimum completed-trade counts to qualify for Most Successful Trader, tried in
+ * order. We start at 3 so a single lopsided trade cannot steal the award, then relax
+ * to 2, then to any team that has traded, so a low-volume league still surfaces a
+ * winner instead of leaving the award permanently up for grabs.
+ */
+const MIN_SUCCESSFUL_TRADER_TRADES = [3, 2, 1];
+
+/**
  * Compute all six awards. Deterministic and side-effect free. Returns them in the
  * fixed product order (Signal Flare, Value Beacon, Full Beam, Dead Air, North Star,
  * Lost Signal). Callers render the array directly.
@@ -212,25 +221,46 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     }
   }
 
-  // ---- Net trade value (needs the FF Beacon board context) ----
-  // net(roster) = sum(received) - sum(given) across every completed trade.
-  const net = new Map<number, number>();
-  for (const id of rosterIds) net.set(id, 0);
+  // ---- Per-trade value margin (needs the FF Beacon board context) ----
+  // For each completed trade, a roster's margin is the value it received minus the
+  // value it gave away in THAT trade. We track the running sum of those margins and
+  // the count of trades each roster moved value in, so the Most Successful Trader can
+  // be judged by AVERAGE margin per trade rather than a cumulative total (which just
+  // tracks trade volume and would duplicate Most Active Trader).
+  const rosterIdSet = new Set(rosterIds);
+  const marginSum = new Map<number, number>();
+  const marginTradeCount = new Map<number, number>();
   const netReady = tradeContext != null;
   if (tradeContext) {
     for (const txn of transactions) {
       const entry = analyzeTradeTransaction(txn, tradeContext);
+      // Value received + value given per roster, within this single trade.
+      const received = new Map<number, number>();
+      const given = new Map<number, number>();
       for (const side of entry.sides) {
-        if (net.has(side.rosterId)) {
-          net.set(side.rosterId, (net.get(side.rosterId) ?? 0) + side.total);
-        }
+        received.set(side.rosterId, (received.get(side.rosterId) ?? 0) + side.total);
         for (const asset of side.assets) {
-          if (asset.fromRosterId != null && net.has(asset.fromRosterId)) {
-            net.set(asset.fromRosterId, (net.get(asset.fromRosterId) ?? 0) - asset.value);
+          if (asset.fromRosterId != null) {
+            given.set(asset.fromRosterId, (given.get(asset.fromRosterId) ?? 0) + asset.value);
           }
         }
       }
+      // Every roster that moved value in this trade records one per-trade margin.
+      const involved = new Set<number>([...received.keys(), ...given.keys()]);
+      for (const rid of involved) {
+        if (!rosterIdSet.has(rid)) continue;
+        const margin = (received.get(rid) ?? 0) - (given.get(rid) ?? 0);
+        marginSum.set(rid, (marginSum.get(rid) ?? 0) + margin);
+        marginTradeCount.set(rid, (marginTradeCount.get(rid) ?? 0) + 1);
+      }
     }
+  }
+
+  // Average margin per trade, per roster (only rosters that actually moved value).
+  const avgMargin = new Map<number, number>();
+  for (const id of rosterIds) {
+    const c = marginTradeCount.get(id) ?? 0;
+    if (c > 0) avgMargin.set(id, (marginSum.get(id) ?? 0) / c);
   }
 
   // ---- Drafted-player value (best / worst drafter) ----
@@ -261,18 +291,41 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
 
   // 2. Most Successful Trader — The Value Beacon Award.
   {
-    const r = pickExtreme(base, net, rosterIds, "max");
-    const pending = !netReady || !anyTrades || r.allTied || r.extreme == null || r.extreme <= 0;
+    // Judge by AVERAGE value margin per trade, so the sharpest dealmaker wins rather
+    // than simply the busiest trader. Qualify on a minimum trade count that relaxes
+    // 3 -> 2 -> 1 when no team meets the higher bar (see MIN_SUCCESSFUL_TRADER_TRADES).
+    let candidateIds: number[] = [];
+    for (const threshold of MIN_SUCCESSFUL_TRADER_TRADES) {
+      const ids = rosterIds.filter((id) => (marginTradeCount.get(id) ?? 0) >= threshold);
+      if (ids.length > 0) {
+        candidateIds = ids;
+        break;
+      }
+    }
+    const r = pickExtreme(base, avgMargin, candidateIds, "max");
+    const pending =
+      !netReady || !anyTrades || candidateIds.length === 0 || r.extreme == null || r.extreme <= 0;
+    // Surface the winner's trade count beside the average when every co-winner shares
+    // it (the common single-winner case); otherwise show the average alone.
+    const winnerCounts = r.claimants.map((c) => marginTradeCount.get(c.rosterId) ?? 0);
+    const sharedCount =
+      winnerCounts.length > 0 && winnerCounts.every((c) => c === winnerCounts[0])
+        ? winnerCounts[0]
+        : null;
     awards.push({
       id: "most-successful-trader",
       title: "The Value Beacon Award",
       category: "Most Successful Trader",
-      description: "Gains the most FF Beacon value across completed trades.",
+      description: "Earns the best average FF Beacon value per trade across their deals.",
       claimants: pending ? [] : r.claimants,
-      metricLabel: pending ? null : `+${fmtValue(r.extreme!)} value`,
+      metricLabel: pending
+        ? null
+        : sharedCount != null
+          ? `+${fmtValue(r.extreme!)} avg value per trade across ${tradeWord(sharedCount)}`
+          : `+${fmtValue(r.extreme!)} avg value per trade`,
       pending,
       pendingLabel: netReady
-        ? "No trade has come out ahead yet. Up for grabs."
+        ? "No team has a winning trade average yet. Up for grabs."
         : "Trade values are still loading.",
     });
   }
