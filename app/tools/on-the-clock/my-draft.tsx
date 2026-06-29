@@ -69,6 +69,22 @@ export function MyDraft({
     );
   }
 
+  // Group the picks by position so the user can see how much of each position they
+  // hold at a glance. Positions appear in the canonical QB/RB/WR/TE/K/DEF order, with
+  // any unexpected positions appended after. `mine` is already sorted by pick number,
+  // so each position group stays in pick order.
+  const byPosition = new Map<string, ShapedPick[]>();
+  for (const p of mine) {
+    const pos = p.position ?? "?";
+    const arr = byPosition.get(pos) ?? [];
+    arr.push(p);
+    byPosition.set(pos, arr);
+  }
+  const orderedPositions = [
+    ...POSITION_ORDER.filter((pos) => byPosition.has(pos)),
+    ...[...byPosition.keys()].filter((pos) => !(POSITION_ORDER as readonly string[]).includes(pos)),
+  ];
+
   return (
     <div>
       <h3 className="text-base font-semibold text-ink">Your roster shape</h3>
@@ -87,23 +103,39 @@ export function MyDraft({
       <h3 className="mt-5 text-base font-semibold text-ink">
         Your picks ({mine.length})
       </h3>
-      <ul role="list" className="mt-2 divide-y divide-line/60 rounded-card border border-line">
-        {mine.map((p) => (
-          <li key={p.pickNo} className="flex items-center justify-between gap-3 px-3 py-2.5">
-            <span className="min-w-0">
-              <span className="block truncate font-semibold text-ink">{fullName(p)}</span>
-              <span className="text-xs text-ink-muted">
-                {p.position ?? ""}
-                {p.team ? ` · ${p.team}` : ""}
-                {draft.draftType ? ` · ${draft.draftType}` : ""}
-              </span>
-            </span>
-            <span className="shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
-              #{p.pickNo}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <div className="mt-2 space-y-3">
+        {orderedPositions.map((pos) => {
+          const items = byPosition.get(pos) ?? [];
+          return (
+            <div key={pos}>
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                {pos} <span className="font-medium text-ink-muted">({items.length})</span>
+              </h4>
+              <ul
+                role="list"
+                className="mt-1 divide-y divide-line/60 rounded-card border border-line"
+              >
+                {items.map((p) => (
+                  <li
+                    key={p.pickNo}
+                    className="flex items-center justify-between gap-3 px-3 py-2.5"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-ink">{fullName(p)}</span>
+                      <span className="text-xs text-ink-muted">
+                        {[p.team, draft.draftType].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
+                      #{p.pickNo}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

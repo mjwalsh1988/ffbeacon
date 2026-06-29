@@ -71,7 +71,6 @@ import { UsernameGate } from "./username-gate";
 import { LeaguePicker } from "./league-picker";
 import { StepRail } from "./step-rail";
 import { CommandHeader } from "./command-header";
-import { OnTheClockCard } from "./on-the-clock-card";
 import { PlayerSpotlight, SecondaryPick } from "./player-spotlight";
 import { Panel } from "./panel";
 import { DraftRoomStatus, BestRemainingByPosition } from "./dashboard-panels";
@@ -80,7 +79,7 @@ import { DraftBoard } from "./draft-board";
 import { PickList } from "./pick-list";
 import { MyDraft } from "./my-draft";
 import { TradeAnalyzer } from "./trade-analyzer";
-import { RostersRankings } from "./rosters-rankings";
+import { RostersRankings, TeamPositionGrid } from "./rosters-rankings";
 import { RankingsAwards } from "./rankings-awards";
 import { TradeHistory } from "./trade-history";
 import { LoadingCard, ErrorCard, EmptyCard } from "./states";
@@ -700,11 +699,16 @@ export function OnTheClockClient({
       })
     : [];
 
+  // Board view (Drafted -> Board): only the board breaks out to the full viewport; the
+  // supporting rows above it stay inside the container.
+  const boardFull = view === "drafted" && draftedMode === "board";
+
   // Rosters & Rankings rollups: per-team drafted-player value + future-pick value,
-  // ranked by total. Computed while the Rosters OR Rankings & Awards tab is open (and
-  // the board is ready) so the realtime re-render on every pick stays cheap elsewhere.
+  // ranked by total. Computed while the Rosters or Rankings & Awards tab is open, or in
+  // the full board view (whose "Your draft" row reuses this roster layout), and only
+  // when the board is ready, so the realtime re-render on every pick stays cheap.
   const teamRollups =
-    (view === "rosters" || view === "rankings") && tradeReady
+    (view === "rosters" || view === "rankings" || boardFull) && tradeReady
       ? buildTeamRollups({
           rosters: draftCache.rosters,
           picks: draftCache.picks,
@@ -718,6 +722,10 @@ export function OnTheClockClient({
           draftSeason: tradeSeason,
         })
       : [];
+
+  // The connected user's rollup, for the board view's "Your draft" row (same roster
+  // layout as the Rosters tab). Null when their team is not detected.
+  const myBoardRollup = boardFull ? (teamRollups.find((t) => t.isYou) ?? null) : null;
 
   // Trade History context: values every trade against the FULL board (independent of
   // the room's pool toggle, since a trade can involve any player or pick). Made picks
@@ -762,8 +770,38 @@ export function OnTheClockClient({
   const formatIsClosest = league?.formatIsClosest ?? false;
   const sourceActive = board ? board.sourceActive : true;
 
+  // The three supporting panels (room status, best remaining, your draft) for the
+  // sticky right rail, shown on every view except Rosters and the full board view.
+  const sidebarPanels = (
+    <>
+      <DraftRoomStatus
+        draft={draftCache.draft}
+        onTheClockTeam={onTheClockTeam}
+        onTheClockRound={derived.onTheClockRound}
+        onTheClockPickInRound={derived.onTheClockPickInRound}
+        onTheClockOverallPickNo={derived.onTheClockPickNo}
+        isYourTurn={isYourTurn}
+        lastPickLabel={lastPickLabelFor(derived.lastPick)}
+      />
+      <BestRemainingByPosition players={available} />
+      <Panel eyebrow="Your team" title="Your draft">
+        <MyDraft
+          picks={draftCache.picks}
+          draft={draftCache.draft}
+          connectedUserId={myUserId ?? ""}
+          connectedUserSlot={derived.mySlot}
+          connectedUserRosterId={derived.myRosterId}
+        />
+      </Panel>
+    </>
+  );
+
   return (
-    <div className="overflow-hidden rounded-modal border border-line bg-base/40">
+    <div
+      className={`rounded-modal border border-line bg-base/40 ${
+        boardFull ? "" : "overflow-hidden"
+      }`}
+    >
       <CommandHeader
         leagueName={league?.name ?? "League"}
         draft={draftCache.draft}
@@ -800,11 +838,11 @@ export function OnTheClockClient({
           </p>
         )}
 
-        {/* Rosters & Rankings stretches to the full container width: the right
-            rail is hidden so every team's horizontal row has room. */}
+        {/* Rosters & Rankings (and the full-width board view) stretch to the full
+            container width: the right rail is hidden so the content has room. */}
         <div
           className={`mt-4 grid gap-5 ${
-            view === "rosters" ? "" : "xl:grid-cols-[minmax(0,1fr)_360px]"
+            view === "rosters" || boardFull ? "" : "xl:grid-cols-[minmax(0,1fr)_360px]"
           }`}
         >
           {/* ---- Main content area: switches between views ---- */}
@@ -867,16 +905,6 @@ export function OnTheClockClient({
               hidden={view !== "pick"}
               className="space-y-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
-              {derived.onTheClockPickNo > 0 && (
-                <OnTheClockCard
-                  round={derived.onTheClockRound}
-                  pickInRound={derived.onTheClockPickInRound}
-                  overallPickNo={derived.onTheClockPickNo}
-                  teamLabel={onTheClockTeam}
-                  isYourTurn={isYourTurn}
-                />
-              )}
-
               <section aria-labelledby="draft-signal-title">
                 <div className="mb-3">
                   <h2
@@ -993,22 +1021,70 @@ export function OnTheClockClient({
               </div>
 
               {draftedMode === "board" ? (
-                <Panel
-                  eyebrow="Every seat"
-                  title="Draft board"
-                  helper="Columns are seats, rows are rounds. Each cell shows the overall pick number and who was taken."
-                  bodyClassName="px-0 sm:px-0"
-                >
-                  <DraftBoard
-                    draft={draftCache.draft}
-                    picks={draftCache.picks}
-                    currentPicks={currentPicks}
-                    teamNameByRosterId={teamNameByRosterId}
-                    connectedUserSlot={derived.mySlot}
-                    onTheClockPickNo={derived.onTheClockPickNo}
-                    lastPickNo={derived.lastPick?.pickNo ?? 0}
-                  />
-                </Panel>
+                <>
+                  {/* Rows 1 and 2 stay within the container; only the board (Row 3)
+                      breaks out to the full viewport width. */}
+                  {/* Row 1: room status (1/3) beside best remaining (2/3, two-column). */}
+                  <div className="mb-5 grid gap-5 lg:grid-cols-3">
+                    <div className="lg:col-span-1">
+                      <DraftRoomStatus
+                        draft={draftCache.draft}
+                        onTheClockTeam={onTheClockTeam}
+                        onTheClockRound={derived.onTheClockRound}
+                        onTheClockPickInRound={derived.onTheClockPickInRound}
+                        onTheClockOverallPickNo={derived.onTheClockPickNo}
+                        isYourTurn={isYourTurn}
+                        lastPickLabel={lastPickLabelFor(derived.lastPick)}
+                      />
+                    </div>
+                    <div className="lg:col-span-2">
+                      <BestRemainingByPosition players={available} columns={2} />
+                    </div>
+                  </div>
+
+                  {/* Row 2: the connected user's roster, same layout as the Rosters tab
+                      (every position shown even when empty; future picks with show-more). */}
+                  <div className="mb-5">
+                    <Panel eyebrow="Your team" title="Your draft">
+                      {myBoardRollup ? (
+                        <TeamPositionGrid team={myBoardRollup} />
+                      ) : (
+                        <EmptyCard
+                          title={
+                            tradeReady
+                              ? "We could not detect your team yet."
+                              : "FF Beacon values are loading."
+                          }
+                          body={
+                            tradeReady
+                              ? "Make a pick or check your Sleeper username, and your roster will appear here by position with your future picks."
+                              : "Your roster will appear here once this format's FF Beacon values load."
+                          }
+                        />
+                      )}
+                    </Panel>
+                  </div>
+
+                  {/* Row 3: the board, broken out to the full viewport width. */}
+                  <div className="relative left-1/2 w-screen -translate-x-1/2 px-6 sm:px-8 lg:px-10">
+                    <Panel
+                      eyebrow="Every seat"
+                      title="Draft board"
+                      helper="Columns are seats, rows are rounds. Each cell shows the overall pick number and who was taken."
+                      bodyClassName="px-0 sm:px-0"
+                    >
+                      <DraftBoard
+                        draft={draftCache.draft}
+                        picks={draftCache.picks}
+                        currentPicks={currentPicks}
+                        teamNameByRosterId={teamNameByRosterId}
+                        connectedUserSlot={derived.mySlot}
+                        onTheClockPickNo={derived.onTheClockPickNo}
+                        lastPickNo={derived.lastPick?.pickNo ?? 0}
+                      />
+                    </Panel>
+                  </div>
+                </>
               ) : (
                 <Panel
                   eyebrow="History"
@@ -1107,26 +1183,11 @@ export function OnTheClockClient({
             </div>
           </div>
 
-          {/* ---- Persistent right rail (hidden on the full-width Rosters tab) ---- */}
-          {view !== "rosters" && (
+          {/* ---- Persistent right rail (hidden on the full-width Rosters tab and on
+              the full-width board view, where the panels move to a top bar) ---- */}
+          {view !== "rosters" && !boardFull && (
             <aside aria-label="Draft room panels" className="space-y-5 xl:sticky xl:top-32 xl:self-start">
-              <DraftRoomStatus
-                draft={draftCache.draft}
-                onTheClockTeam={onTheClockTeam}
-                onTheClockPickLabel={onTheClockPickLabel}
-                isYourTurn={isYourTurn}
-                lastPickLabel={lastPickLabelFor(derived.lastPick)}
-              />
-              <BestRemainingByPosition players={available} />
-              <Panel eyebrow="Your team" title="Your draft">
-                <MyDraft
-                  picks={draftCache.picks}
-                  draft={draftCache.draft}
-                  connectedUserId={myUserId ?? ""}
-                  connectedUserSlot={derived.mySlot}
-                  connectedUserRosterId={derived.myRosterId}
-                />
-              </Panel>
+              {sidebarPanels}
             </aside>
           )}
         </div>

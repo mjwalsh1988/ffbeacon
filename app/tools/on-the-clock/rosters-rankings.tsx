@@ -183,18 +183,31 @@ function TeamRosterCard({ team }: { team: TeamRollup }) {
         </div>
       </header>
 
-      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
-        {ROSTER_POSITIONS.map((pos) => (
-          <PositionColumn
-            key={pos}
-            position={pos}
-            players={team.players[pos]}
-            total={team.positionTotals[pos]}
-          />
-        ))}
-        <FuturePicksColumn picks={team.futurePicks} total={team.futurePicksValue} />
+      <div className="p-4">
+        <TeamPositionGrid team={team} />
       </div>
     </article>
+  );
+}
+
+/**
+ * The position columns (QB/RB/WR/TE, always shown even when empty) plus the future
+ * picks column (with its show-more toggle) for one team. Exported so the board view
+ * can render the connected user's roster with the exact same layout as this tab.
+ */
+export function TeamPositionGrid({ team }: { team: TeamRollup }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {ROSTER_POSITIONS.map((pos) => (
+        <PositionColumn
+          key={pos}
+          position={pos}
+          players={team.players[pos]}
+          total={team.positionTotals[pos]}
+        />
+      ))}
+      <FuturePicksColumn picks={team.futurePicks} total={team.futurePicksValue} />
+    </div>
   );
 }
 

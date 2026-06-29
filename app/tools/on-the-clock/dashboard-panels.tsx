@@ -7,63 +7,146 @@
  * the shaped draft cache / ranked board; no Sleeper or Supabase calls.
  */
 
+import { Clock } from "lucide-react";
 import type { ShapedDraftCache } from "@/lib/on-the-clock/types";
 import type { DraftPosition, RankedPlayer } from "./fixtures";
 import { Panel, StatReadout } from "./panel";
 
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * Room status, styled as a broadcast "on the clock" card (matching the look that
+ * used to sit above the Who-to-pick content): a beacon-glow surface, clock badge,
+ * the big round.pick treatment, and the on-the-clock team, plus the supporting
+ * status / last-pick lines and the Teams / Rounds / Picks readout. Shown in the
+ * sidebar on every view, so the redundant Who-to-pick card was removed.
+ */
 export function DraftRoomStatus({
   draft,
   onTheClockTeam,
-  onTheClockPickLabel,
+  onTheClockRound,
+  onTheClockPickInRound,
+  onTheClockOverallPickNo,
   isYourTurn,
   lastPickLabel,
 }: {
   draft: ShapedDraftCache["draft"];
   onTheClockTeam: string;
-  onTheClockPickLabel: string;
+  onTheClockRound: number;
+  onTheClockPickInRound: number;
+  onTheClockOverallPickNo: number;
   isYourTurn: boolean;
   lastPickLabel: string;
 }) {
   const statusWord = draft.draftStatus === "drafting" ? "Drafting" : draft.draftStatus ?? "Unknown";
+  const onClock = onTheClockOverallPickNo > 0;
+  const pickLabel = onClock ? `${pad(onTheClockRound)}.${pad(onTheClockPickInRound)}` : null;
+
   return (
-    <Panel id="room-status" eyebrow="Draft room" title="Room status" headingLevel={2} className="scroll-mt-40">
-      <p className="text-sm text-ink">
-        <span className="font-semibold">Status:</span>{" "}
-        <span className="text-brand-cyan">{statusWord}</span>
-      </p>
-      <p className="mt-1 text-sm text-ink">
-        <span className="font-semibold">On the clock:</span>{" "}
-        {isYourTurn ? (
-          <span className="font-semibold text-brand-cyan">You</span>
-        ) : (
-          <span className="text-ink-muted">
-            {onTheClockTeam} ({onTheClockPickLabel})
-          </span>
-        )}
-      </p>
-      <p className="mt-1 text-sm text-ink">
-        <span className="font-semibold">Last pick:</span>{" "}
-        <span className="text-ink-muted">{lastPickLabel}</span>
-      </p>
+    <section
+      id="room-status"
+      aria-labelledby="room-status-heading"
+      className="relative scroll-mt-40 overflow-hidden rounded-modal border border-brand-cyan/40 bg-surface/60 p-4 sm:p-5"
+      style={{
+        boxShadow: "0 0 80px -48px rgba(34, 211, 238, 0.6)",
+        backgroundImage:
+          "radial-gradient(ellipse at 0% 0%, rgba(34, 211, 238, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(168, 85, 247, 0.12) 0%, transparent 55%)",
+      }}
+    >
+      {/* Decorative top beacon hairline. */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #22D3EE 30%, #A855F7 70%, transparent 100%)",
+        }}
+      />
+      <h2 id="room-status-heading" className="sr-only">
+        Room status
+      </h2>
+
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-brand-cyan/50 bg-base text-brand-cyan"
+        >
+          <Clock className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-cyan">
+            <span
+              aria-hidden="true"
+              className="h-2 w-2 rounded-full bg-brand-cyan animate-pulse motion-reduce:animate-none"
+            />
+            On the clock
+          </p>
+          {onClock ? (
+            <>
+              <p className="mt-0.5 flex items-baseline gap-2">
+                <span
+                  className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
+                  style={{ backgroundImage: "linear-gradient(135deg, #22D3EE 0%, #A855F7 100%)" }}
+                >
+                  {pickLabel}
+                </span>
+                <span className="text-xs text-ink-muted">overall #{onTheClockOverallPickNo}</span>
+              </p>
+              <p className="mt-0.5 text-sm">
+                {isYourTurn ? (
+                  <span className="font-semibold text-brand-cyan">Your pick. You are up.</span>
+                ) : (
+                  <span className="text-ink-muted">{onTheClockTeam} is on the clock</span>
+                )}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-lg font-bold text-ink">Draft complete</p>
+          )}
+        </div>
+      </div>
+
+      <dl className="mt-4 space-y-1 border-t border-line/60 pt-3 text-sm">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="font-semibold text-ink">Status</dt>
+          <dd className="text-brand-cyan">{statusWord}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="shrink-0 font-semibold text-ink">Last pick</dt>
+          <dd className="min-w-0 truncate text-ink-muted">{lastPickLabel}</dd>
+        </div>
+      </dl>
 
       <dl className="mt-3 grid grid-cols-3 gap-2">
         <StatReadout label="Teams" value={String(draft.settings.teams ?? 0)} accent="ink" />
         <StatReadout label="Rounds" value={String(draft.settings.rounds ?? 0)} accent="ink" />
         <StatReadout label="Picks" value={String(draft.pickCount)} accent="cyan" />
       </dl>
-    </Panel>
+    </section>
   );
 }
 
 const POSITION_ORDER: DraftPosition[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
 
-export function BestRemainingByPosition({ players }: { players: RankedPlayer[] }) {
+export function BestRemainingByPosition({
+  players,
+  columns = 1,
+}: {
+  players: RankedPlayer[];
+  /** 1 = single stacked list (sidebar). 2 = two columns (board-view top bar), which
+   *  keeps the panel short enough to sit beside the room-status card. */
+  columns?: 1 | 2;
+}) {
   const best = POSITION_ORDER.map((pos) => {
     const top = players
       .filter((p) => p.position === pos)
       .sort((a, b) => b.value - a.value)[0];
     return { pos, top };
   }).filter((r) => r.top);
+
+  const twoCol = columns === 2;
 
   return (
     <Panel
@@ -73,9 +156,17 @@ export function BestRemainingByPosition({ players }: { players: RankedPlayer[] }
       helper="The top value still available at each spot."
       headingLevel={2}
     >
-      <ul role="list" className="divide-y divide-line/60">
+      <ul
+        role="list"
+        className={twoCol ? "grid grid-cols-1 gap-x-6 sm:grid-cols-2" : "divide-y divide-line/60"}
+      >
         {best.map(({ pos, top }) => (
-          <li key={pos} className="flex items-center justify-between gap-3 py-2">
+          <li
+            key={pos}
+            className={`flex items-center justify-between gap-3 py-2 ${
+              twoCol ? "border-b border-line/60" : ""
+            }`}
+          >
             <span className="flex items-center gap-2">
               <span className="w-9 shrink-0 rounded-card border border-line bg-base px-1.5 py-0.5 text-center text-[11px] font-bold text-ink-muted">
                 {pos}

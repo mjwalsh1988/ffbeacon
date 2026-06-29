@@ -11,7 +11,7 @@
  * every seat visible on mobile (no data hidden at any breakpoint).
  */
 
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, User } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
 import type { CurrentDraftPick } from "@/lib/on-the-clock/pick-ownership";
@@ -59,7 +59,10 @@ export function DraftBoard({
 
   return (
     <div className="overflow-x-auto rounded-card border border-line">
-      <table className="border-collapse text-xs">
+      {/* border-separate + page-colored (base) background and spacing puts a thin gap
+          in the page's own color between every cell, so the solid drafted tiles read
+          as distinct blocks rather than one merged slab. */}
+      <table className="border-separate border-spacing-[5px] bg-base text-xs">
         <caption className="sr-only">
           Draft board. Columns are draft seats, rows are rounds. Each cell names the
           overall pick number, and the drafted player when the pick has been made.
@@ -85,7 +88,7 @@ export function DraftBoard({
         </thead>
         <tbody>
           {Array.from({ length: rounds }, (_, r) => r + 1).map((round) => (
-            <tr key={round} className="border-t border-line/60">
+            <tr key={round}>
               <th scope="row" className="sticky left-0 z-10 bg-surface px-2 py-2 text-left text-ink-subtle">
                 R{round}
               </th>
@@ -121,11 +124,14 @@ export function DraftBoard({
                     ? owner.currentOwnerRosterId === userRosterId
                     : seat === connectedUserSlot;
 
-                const stateText = pick
-                  ? `${shortName(pick)}, ${pick.position ?? ""}`
-                  : isOnClock
-                    ? "On the clock"
-                    : "Open slot";
+                // Made cells put the player name on its own line; position, team, and
+                // the overall pick number drop to the subtle second line below. Empty
+                // (not-on-clock) cells read "Open slot". The on-the-clock cell renders
+                // its own big label.
+                const stateText = pick ? shortName(pick) : "Open slot";
+                const subInfo = pick
+                  ? [pick.position, pick.team, `#${pickNo}`].filter(Boolean).join(" · ")
+                  : "";
 
                 const label = [
                   `Round ${round}`,
@@ -145,56 +151,101 @@ export function DraftBoard({
                   <td
                     key={seat}
                     aria-label={label}
-                    className={`px-2 py-2 align-top ${
+                    // A made pick gets a strong solid fill so taken seats read as
+                    // obviously filled at a glance: scanning the board, the run of
+                    // solid cells stops right at the on-the-clock pick. Your own made
+                    // picks deepen the purple highlight; everyone else's made picks use
+                    // a clearly lighter neutral block. Open slots stay transparent. The
+                    // on-the-clock cell carries the animated gold shine border (CSS).
+                    className={`relative px-2.5 ${
+                      isOnClock ? "py-2 align-middle" : "pb-2 pt-[31px] align-bottom rounded-[4px]"
+                    } ${
                       isOnClock
-                        ? "bg-brand-cyan/10 ring-1 ring-inset ring-brand-cyan/50"
+                        ? "otc-onclock-cell bg-brand-cyan/10"
                         : isYours
-                          ? "bg-brand-purple/10 ring-1 ring-inset ring-brand-purple/45"
-                          : ""
+                          ? pick
+                            ? "bg-brand-purple/30 ring-1 ring-inset ring-brand-purple/60"
+                            : "bg-brand-purple/10 ring-1 ring-inset ring-brand-purple/45"
+                          : pick
+                            ? "bg-line-accent/85"
+                            : ""
                     }`}
                   >
-                    {/* Meta row: pick number plus the traded-owner flag, kept to a
-                        fixed height so the flag never bumps the player name/photo row
-                        down. Cells without a flag reserve the same height, so every
-                        name in the round lines up. */}
-                    <div className="flex min-h-[1.125rem] items-center gap-1">
-                      <span className="text-[10px] text-ink-subtle">#{pickNo}</span>
-                      {newOwner && (
-                        <span
-                          aria-hidden="true"
-                          title={`Traded pick, now owned by ${newOwner}`}
-                          className="ml-auto flex min-w-0 items-center gap-1 rounded-sm border border-brand-cyan/40 bg-brand-cyan/15 px-1 py-px text-[9px] font-semibold text-brand-cyan"
-                        >
-                          <ArrowLeftRight aria-hidden="true" className="h-2.5 w-2.5 shrink-0" />
-                          <span className="truncate">{newOwner}</span>
+                    {isOnClock ? (
+                      // One big, centered gold label (no duplicate "On the clock"
+                      // line); the shine border around the cell is the CSS class above.
+                      <div className="flex min-h-[3.25rem] flex-col items-center justify-center gap-1 text-center">
+                        <span className="text-sm font-extrabold uppercase leading-tight tracking-wide text-amber-300">
+                          On the clock
                         </span>
-                      )}
-                    </div>
-                    {pick ? (
-                      <div className="mt-0.5 flex items-center gap-1.5">
-                        {/* Player photo (board view only). Decorative here: the cell
-                            aria-label already names the player, so the headshot is
-                            hidden from the accessibility tree to avoid double reads. */}
-                        <span aria-hidden="true" className="shrink-0">
-                          <PlayerHeadshot
-                            sleeperId={pick.sleeperPlayerId}
-                            name=""
-                            position={pick.position ?? undefined}
-                            size={26}
-                          />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium text-ink">{stateText}</span>
-                          <span className="block text-[10px] text-ink-subtle">{pick.team ?? ""}</span>
-                        </span>
+                        <span className="text-[10px] font-medium text-ink-subtle">Pick #{pickNo}</span>
+                        {newOwner && (
+                          <span
+                            aria-hidden="true"
+                            title={`Traded pick, now owned by ${newOwner}`}
+                            className="flex min-w-0 items-center gap-1 rounded-[4px] border border-brand-cyan/40 bg-brand-cyan/15 px-1 py-px text-[9px] font-semibold text-brand-cyan"
+                          >
+                            <ArrowLeftRight aria-hidden="true" className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{newOwner}</span>
+                          </span>
+                        )}
                       </div>
                     ) : (
-                      <span className="block font-medium text-ink">{stateText}</span>
-                    )}
-                    {(isYours || isOnClock || isLast) && (
-                      <span className="mt-0.5 block text-[10px] font-semibold text-brand-cyan">
-                        {isOnClock ? "On the clock" : isYours ? "Your pick" : "Last pick"}
-                      </span>
+                      <>
+                        {/* Pinned top corners, out of flow so they never shift the
+                            content: pick number (plus a small user icon when it's your
+                            pick, replacing the old "Your pick" text since the cell is
+                            already highlighted) top-left, traded-owner flag top-right.
+                            The cell is align-bottom, so the player content sits in the
+                            bottom-left and the eye follows straight down a column. */}
+                        <span className="absolute left-1.5 top-1 flex items-center gap-1 text-[10px] font-medium text-ink-subtle">
+                          #{pickNo}
+                          {isYours && (
+                            <User aria-hidden="true" className="h-3 w-3 text-brand-purple" />
+                          )}
+                        </span>
+                        {newOwner && (
+                          <span
+                            aria-hidden="true"
+                            title={`Traded pick, now owned by ${newOwner}`}
+                            className="absolute right-1 top-1 flex min-w-0 max-w-[60%] items-center gap-1 rounded-[4px] border border-brand-cyan/40 bg-brand-cyan/15 px-1 py-px text-[9px] font-semibold text-brand-cyan"
+                          >
+                            <ArrowLeftRight aria-hidden="true" className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{newOwner}</span>
+                          </span>
+                        )}
+                        {pick ? (
+                          <div className="flex items-center gap-2">
+                            {/* Player photo (board view only). Decorative here: the
+                                cell aria-label already names the player, so the headshot
+                                is hidden from the accessibility tree. */}
+                            <span
+                              aria-hidden="true"
+                              className="shrink-0 [&_img]:!rounded-[4px] [&_span]:!rounded-[4px]"
+                            >
+                              <PlayerHeadshot
+                                sleeperId={pick.sleeperPlayerId}
+                                name=""
+                                position={pick.position ?? undefined}
+                                size={26}
+                              />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-ink">{stateText}</span>
+                              <span className="block truncate text-[10px] text-ink-subtle">
+                                {subInfo}
+                              </span>
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="block font-medium text-ink">{stateText}</span>
+                        )}
+                        {isLast && (
+                          <span className="mt-1 block text-[10px] font-semibold text-brand-cyan">
+                            Last pick
+                          </span>
+                        )}
+                      </>
                     )}
                   </td>
                 );
