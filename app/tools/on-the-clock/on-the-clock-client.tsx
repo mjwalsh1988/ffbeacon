@@ -51,6 +51,7 @@ import {
   mapRealtimePickRow,
   mergePick,
   teamNameForSeat,
+  teamNameForRoster,
   lastPickLabel as lastPickLabelFor,
   formatLastSynced,
   syncStatusLine,
@@ -558,9 +559,47 @@ export function OnTheClockClient({
   const draftCache = cache;
   const derived = deriveDraftState(draftCache, myUserId);
   const teams = Number(draftCache.draft.settings.teams ?? 0);
-  const isYourTurn = derived.mySlot > 0 && derived.onTheClockSlot === derived.mySlot;
+
+  // Transaction-aware pick ownership: every current-draft pick (any owner) + concrete
+  // traded future picks, resolved from the cached Sleeper traded_picks. Computed here
+  // (ahead of the on-the-clock labels) so "who is on the clock" reflects the roster
+  // that CURRENTLY owns the upcoming pick, not the seat's original owner. Reused below
+  // by the Trade Analyzer and Trade History catalogs.
+  const tradeSeason = Number(league?.season ?? draftCache.draft.season) || 0;
+  const tradedPicks = normalizeTradedPicks(draftCache.tradedPicks);
+  const currentPicks = resolveCurrentDraftPicks({
+    teams: Number(draftCache.draft.settings.teams ?? 0),
+    rounds: Number(draftCache.draft.settings.rounds ?? 0),
+    shape: draftShapeFromMeta(draftCache.draft),
+    slotToRosterId: draftCache.draft.slotToRosterId,
+    madePicks: draftCache.picks,
+    tradedPicks,
+    currentSeason: tradeSeason,
+  });
+  const tradedFuturePicks = resolveTradedFuturePicks(tradedPicks, tradeSeason);
+
+  // The roster that currently owns the on-the-clock pick (trade-aware). When a pick
+  // has been traded, this is the team that traded FOR it, not the seat's original
+  // owner. Null when the draft is complete or ownership could not be resolved.
+  const onTheClockPick =
+    derived.onTheClockPickNo > 0
+      ? currentPicks.find((p) => p.overall === derived.onTheClockPickNo) ?? null
+      : null;
+  const onTheClockOwnerRosterId = onTheClockPick?.currentOwnerRosterId ?? null;
+
+  // It's your turn when YOU currently own the on-the-clock pick (so a pick you
+  // traded for makes it your turn, and a pick you traded away does not). Falls back
+  // to the seat match only when ownership or your roster is unknown.
+  const isYourTurn =
+    onTheClockOwnerRosterId !== null && derived.myRosterId !== null
+      ? onTheClockOwnerRosterId === derived.myRosterId
+      : derived.mySlot > 0 && derived.onTheClockSlot === derived.mySlot;
   const onTheClockTeam =
-    derived.onTheClockSlot > 0 ? teamNameForSeat(draftCache, derived.onTheClockSlot) : "Draft complete";
+    derived.onTheClockSlot > 0
+      ? onTheClockOwnerRosterId !== null
+        ? teamNameForRoster(draftCache, onTheClockOwnerRosterId)
+        : teamNameForSeat(draftCache, derived.onTheClockSlot)
+      : "Draft complete";
   const onTheClockPickLabel =
     derived.onTheClockPickNo > 0
       ? `pick ${derived.onTheClockPickNo} overall, R${derived.onTheClockRound}.${derived.onTheClockPickInRound}`
@@ -625,20 +664,6 @@ export function OnTheClockClient({
   // depleted by the current draft); `available` is post-exclusion for upcoming picks;
   // boardPlayers (full, all positions) values already-made picks.
   const tradeReady = board?.status === "ok";
-  const tradeSeason = Number(league?.season ?? draftCache.draft.season) || 0;
-  // Transaction-aware pick ownership: every current-draft pick (any owner) + concrete
-  // traded future picks, resolved from the cached Sleeper traded_picks.
-  const tradedPicks = normalizeTradedPicks(draftCache.tradedPicks);
-  const currentPicks = resolveCurrentDraftPicks({
-    teams: Number(draftCache.draft.settings.teams ?? 0),
-    rounds: Number(draftCache.draft.settings.rounds ?? 0),
-    shape: draftShapeFromMeta(draftCache.draft),
-    slotToRosterId: draftCache.draft.slotToRosterId,
-    madePicks: draftCache.picks,
-    tradedPicks,
-    currentSeason: tradeSeason,
-  });
-  const tradedFuturePicks = resolveTradedFuturePicks(tradedPicks, tradeSeason);
   // roster_id -> display name, for owner labels on picks (board/trade).
   const teamNameByRosterId: Record<number, string> = {};
   // Rosters & Rankings shows the owner's username as the primary label and the

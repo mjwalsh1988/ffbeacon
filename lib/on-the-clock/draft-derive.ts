@@ -285,6 +285,22 @@ export function teamNameForSeat(cache: ShapedDraftCache, seat: number): string {
   return `Team ${seat}`;
 }
 
+/**
+ * Display name for a roster id, resolving roster -> owner -> user when possible.
+ * Used for the trade-aware "on the clock" label: a traded pick's current owner is
+ * a roster id, not a draft seat, so we resolve the name from the roster directly
+ * rather than from the seat -> roster map (which always points at the seat's
+ * original owner).
+ */
+export function teamNameForRoster(cache: ShapedDraftCache, rosterId: number): string {
+  const roster = cache.rosters.find((r) => r.rosterId === rosterId);
+  if (roster?.ownerId) {
+    const user = cache.users.find((u) => u.userId === roster.ownerId);
+    if (user?.displayName) return user.displayName;
+  }
+  return `Team ${rosterId}`;
+}
+
 /** Plain label for the most recent pick. */
 export function lastPickLabel(pick: ShapedPick | null): string {
   if (!pick) return "None yet";
