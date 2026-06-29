@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Draft Command Bar: the control bar of the room. Sticky, visually prominent, and
- * built like a broadcast control strip. Shows league identity + status, a bold
+ * Draft Command Bar: the control bar of the room. Visually prominent and built
+ * like a broadcast control strip (it scrolls with the page, not pinned). Shows
+ * league identity + status, a bold
  * "on the clock" banner, format/source chips, the player-pool toggle, the user's
  * seat, and the Sync control. Always visible at every breakpoint (counts live in
  * the Room status panel, so nothing critical hides on mobile).
@@ -70,7 +71,7 @@ export function CommandHeader({
   const statusWord = draft.draftStatus === "drafting" ? "Drafting" : draft.draftStatus ?? "Unknown";
 
   return (
-    <div className="sticky top-0 z-20 border-b border-line bg-base/95 backdrop-blur supports-[backdrop-filter]:bg-base/80">
+    <div className="border-b border-line bg-base/95 backdrop-blur supports-[backdrop-filter]:bg-base/80">
       {/* Decorative beacon hairline along the top edge. */}
       <span
         aria-hidden="true"
