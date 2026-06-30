@@ -16,6 +16,11 @@ import { PlayerHeadshot } from "@/components/player-headshot";
 import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
 import type { CurrentDraftPick } from "@/lib/on-the-clock/pick-ownership";
 import { draftShapeFromMeta, pickNoForSeat } from "@/lib/on-the-clock/draft-derive";
+import {
+  normalizePositionColor,
+  POSITION_CELL,
+  POSITION_CELL_FALLBACK,
+} from "@/lib/on-the-clock/position-colors";
 
 function shortName(pick: ShapedPick): string {
   const first = pick.firstName ? `${pick.firstName[0]}.` : "";
@@ -58,11 +63,14 @@ export function DraftBoard({
   };
 
   return (
-    <div className="mx-auto w-fit max-w-full overflow-x-auto rounded-card border border-line">
+    <div className="mx-auto w-full max-w-[2400px] overflow-x-auto rounded-card border border-line">
       {/* border-separate + page-colored (base) background and spacing puts a thin gap
           in the page's own color between every cell, so the solid drafted tiles read
-          as distinct blocks rather than one merged slab. */}
-      <table className="border-separate border-spacing-[5px] bg-base text-xs">
+          as distinct blocks rather than one merged slab.
+          min-w-full lets the board stretch to fill wide viewports (no empty gutters on
+          1440/2560 screens) while still growing past the container and scrolling
+          horizontally when there are more seats than fit. */}
+      <table className="min-w-full border-separate border-spacing-[5px] bg-base text-xs">
         <caption className="sr-only">
           Draft board. Columns are draft seats, rows are rounds. Each cell names the
           overall pick number, and the drafted player when the pick has been made.
@@ -128,6 +136,16 @@ export function DraftBoard({
                 // the overall pick number drop to the subtle second line below. Empty
                 // (not-on-clock) cells read "Open slot". The on-the-clock cell renders
                 // its own big label.
+                // Position hue for a drafted cell: the entire made cell is tinted with
+                // its positional color so the board reads by position at a glance.
+                // Unknown positions fall back to the prior neutral fill.
+                const posKey = pick ? normalizePositionColor(pick.position) : null;
+                const posFill = pick
+                  ? posKey
+                    ? POSITION_CELL[posKey]
+                    : POSITION_CELL_FALLBACK
+                  : "";
+
                 const stateText = pick ? shortName(pick) : "Open slot";
                 const subInfo = pick
                   ? [pick.position, pick.team, `#${pickNo}`].filter(Boolean).join(" · ")
@@ -151,23 +169,24 @@ export function DraftBoard({
                   <td
                     key={seat}
                     aria-label={label}
-                    // A made pick gets a strong solid fill so taken seats read as
-                    // obviously filled at a glance: scanning the board, the run of
-                    // solid cells stops right at the on-the-clock pick. Your own made
-                    // picks deepen the purple highlight; everyone else's made picks use
-                    // a clearly lighter neutral block. Open slots stay transparent. The
-                    // on-the-clock cell carries the animated gold shine border (CSS).
+                    // A made pick is tinted with its position color so taken seats read
+                    // by position at a glance: scanning the board, the run of colored
+                    // cells stops right at the on-the-clock pick. Your own made picks
+                    // keep the inset purple ring on top of the position fill so ownership
+                    // is still distinct from position. Open slots stay transparent (your
+                    // upcoming seats keep the faint purple wash). The on-the-clock cell
+                    // carries the animated gold shine border (CSS).
                     className={`relative px-2.5 ${
                       isOnClock ? "py-2 align-middle" : "pb-2 pt-[31px] align-bottom rounded-[4px]"
                     } ${
                       isOnClock
                         ? "otc-onclock-cell bg-brand-cyan/10"
-                        : isYours
-                          ? pick
-                            ? "bg-brand-purple/30 ring-1 ring-inset ring-brand-purple/60"
-                            : "bg-brand-purple/10 ring-1 ring-inset ring-brand-purple/45"
-                          : pick
-                            ? "bg-line-accent/85"
+                        : pick
+                          ? isYours
+                            ? `${posFill} ring-2 ring-inset ring-brand-purple shadow-[0_0_16px_-1px_rgba(168,85,247,0.85)]`
+                            : posFill
+                          : isYours
+                            ? "bg-brand-purple/10 ring-1 ring-inset ring-brand-purple/45"
                             : ""
                     }`}
                   >

@@ -35,6 +35,19 @@ const config: Config = {
           warning: "#F59E0B",
           danger: "#EF4444",
         },
+        // Fantasy position palette: one distinct hue per positional group, used to
+        // color-code drafted picks (board + list) and position tags (rosters). Chosen
+        // to read clearly on the near-black base and to stay clear of the reserved
+        // brand colors (purple = "your pick", cyan = "on the clock") so position hue
+        // never reads as a state signal. Canonical source: lib/on-the-clock/position-colors.ts.
+        position: {
+          qb: "#F87171",
+          rb: "#34D399",
+          wr: "#60A5FA",
+          te: "#FBBF24",
+          k: "#F472B6",
+          def: "#94A3B8",
+        },
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "system-ui", "-apple-system", "sans-serif"],

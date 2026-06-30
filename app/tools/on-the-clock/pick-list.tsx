@@ -11,6 +11,7 @@
  */
 
 import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
+import { normalizePositionColor, POSITION_ROW } from "@/lib/on-the-clock/position-colors";
 import { EmptyCard } from "./states";
 
 function fullName(pick: ShapedPick): string {
@@ -56,7 +57,10 @@ export function PickList({
       {/* On mobile the table keeps its natural width (min 100%) and the wrapper
           scrolls horizontally, so columns stay readable instead of squishing.
           On desktop it fills the container as before. */}
-      <table className="w-max min-w-full border-collapse text-sm sm:w-full">
+      {/* border-separate + a small vertical gap turns each row into its own bordered
+          band, so rows are clearly separated. Horizontal spacing stays 0 so the cells
+          in a row read as one continuous block. */}
+      <table className="w-max min-w-full border-separate border-spacing-x-0 border-spacing-y-1.5 text-sm sm:w-full">
         <caption className="sr-only">All draft picks in order.</caption>
         <thead className="bg-surface/60 text-xs uppercase tracking-wide text-ink-subtle">
           <tr>
@@ -75,14 +79,16 @@ export function PickList({
           {ordered.map((p) => {
             const pickInRound = teams ? ((p.pickNo - 1) % teams) + 1 : p.pickNo;
             const yours = p.pickedBy === connectedUserId;
+            // Faint position hue behind the row so the list matches the board's
+            // color coding. Ownership stays signalled by the purple bar on the
+            // pick cell below (not a row fill), so the two never conflict.
+            const posKey = normalizePositionColor(p.position);
+            const rowTint = posKey ? POSITION_ROW[posKey] : "";
             return (
-              <tr
-                key={p.pickNo}
-                className={`border-t border-line/60 ${yours ? "bg-brand-purple/10" : ""}`}
-              >
+              <tr key={p.pickNo}>
                 <th
                   scope="row"
-                  className={`w-px whitespace-nowrap px-3 py-2 text-right align-middle font-normal ${
+                  className={`w-px whitespace-nowrap rounded-l-md border-y border-l border-line-accent px-3 py-2 text-right align-middle font-normal ${rowTint} ${
                     yours ? "shadow-[inset_3px_0_0_0_#A855F7]" : ""
                   }`}
                 >
@@ -93,7 +99,7 @@ export function PickList({
                     R{p.round}.{pickInRound}
                   </span>
                 </th>
-                <td className="px-3 py-2">
+                <td className={`border-y border-line-accent px-3 py-2 ${rowTint}`}>
                   <span className="font-semibold text-ink">{fullName(p)}</span>
                   <span className="ml-2 text-xs text-ink-muted">
                     {p.position ?? ""}
@@ -103,7 +109,9 @@ export function PickList({
                     <span className="ml-2 text-[10px] text-ink-subtle">(not in our database)</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-ink-muted">
+                <td
+                  className={`rounded-r-md border-y border-r border-line-accent px-3 py-2 text-ink-muted ${rowTint}`}
+                >
                   {teamName(p)}
                   {yours && (
                     <span className="ml-1 text-xs font-semibold text-brand-cyan">(You)</span>

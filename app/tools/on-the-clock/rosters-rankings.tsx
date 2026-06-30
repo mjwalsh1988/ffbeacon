@@ -23,14 +23,8 @@ import {
   type RosterPosition,
   type TeamRollup,
 } from "@/lib/on-the-clock/rosters";
+import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import { EmptyCard } from "./states";
-
-const POSITION_TONE: Record<RosterPosition, string> = {
-  QB: "bg-brand-purple/15 text-brand-purple",
-  RB: "bg-brand-cyan/15 text-brand-cyan",
-  WR: "bg-signal-positive/15 text-signal-positive",
-  TE: "bg-signal-warning/15 text-signal-warning",
-};
 
 function fmt(v: number): string {
   return Math.round(v).toLocaleString();
@@ -227,7 +221,7 @@ function PositionColumn({
     >
       <header className="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2">
         <span
-          className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.16em] ${POSITION_TONE[position]}`}
+          className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.16em] ${POSITION_BADGE[position]}`}
         >
           {position}
         </span>

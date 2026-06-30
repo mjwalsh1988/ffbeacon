@@ -787,7 +787,6 @@ export function OnTheClockClient({
       <Panel eyebrow="Your team" title="Your draft">
         <MyDraft
           picks={draftCache.picks}
-          draft={draftCache.draft}
           connectedUserId={myUserId ?? ""}
           connectedUserSlot={derived.mySlot}
           connectedUserRosterId={derived.myRosterId}

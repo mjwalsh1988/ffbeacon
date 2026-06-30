@@ -6,7 +6,12 @@
  * Sleeper data; Phase 7 (Team Need) consumes the same roster shape.
  */
 
-import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
+import type { ShapedPick } from "@/lib/on-the-clock/types";
+import {
+  normalizePositionColor,
+  POSITION_BADGE,
+  POSITION_BADGE_FALLBACK,
+} from "@/lib/on-the-clock/position-colors";
 import { EmptyCard } from "./states";
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
@@ -38,13 +43,11 @@ function isMyPick(
 
 export function MyDraft({
   picks,
-  draft,
   connectedUserId,
   connectedUserSlot,
   connectedUserRosterId,
 }: {
   picks: ShapedPick[];
-  draft: ShapedDraftCache["draft"];
   connectedUserId: string;
   connectedUserSlot: number;
   /** Connected user's roster id (trade-aware ownership). null when undetected. */
@@ -92,9 +95,13 @@ export function MyDraft({
         {POSITION_ORDER.map((pos) => (
           <li
             key={pos}
-            className="rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink-muted"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-1 text-xs font-medium"
           >
-            <span className="text-ink-subtle">{pos}:</span>{" "}
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-bold tracking-[0.12em] ${POSITION_BADGE[pos]}`}
+            >
+              {pos}
+            </span>
             <span className="font-semibold text-ink">{counts[pos] ?? 0}</span>
           </li>
         ))}
@@ -106,31 +113,42 @@ export function MyDraft({
       <div className="mt-2 space-y-3">
         {orderedPositions.map((pos) => {
           const items = byPosition.get(pos) ?? [];
+          const posKey = normalizePositionColor(pos);
+          const badgeCls = posKey ? POSITION_BADGE[posKey] : POSITION_BADGE_FALLBACK;
           return (
             <div key={pos}>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                {pos} <span className="font-medium text-ink-muted">({items.length})</span>
+              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-ink-subtle">
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${badgeCls}`}
+                >
+                  {pos}
+                </span>
+                <span className="font-medium text-ink-muted">({items.length})</span>
               </h4>
               <ul
                 role="list"
                 className="mt-1 divide-y divide-line/60 rounded-card border border-line"
               >
-                {items.map((p) => (
-                  <li
-                    key={p.pickNo}
-                    className="flex items-center justify-between gap-3 px-3 py-2.5"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold text-ink">{fullName(p)}</span>
-                      <span className="text-xs text-ink-muted">
-                        {[p.team, draft.draftType].filter(Boolean).join(" · ")}
+                {items.map((p) => {
+                  // Name, then team and position as subtle inline text, all on one line
+                  // (the sidebar is narrow, so the whole left side truncates together);
+                  // pick number pinned to the far right.
+                  const meta = [p.team, p.position].filter(Boolean).join(" · ");
+                  return (
+                    <li
+                      key={p.pickNo}
+                      className="flex items-baseline justify-between gap-3 px-3 py-2"
+                    >
+                      <span className="min-w-0 truncate">
+                        <span className="font-semibold text-ink">{fullName(p)}</span>
+                        {meta && <span className="ml-2 text-xs text-ink-muted">{meta}</span>}
                       </span>
-                    </span>
-                    <span className="shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
-                      #{p.pickNo}
-                    </span>
-                  </li>
-                ))}
+                      <span className="shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
+                        #{p.pickNo}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           );
