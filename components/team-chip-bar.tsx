@@ -47,67 +47,67 @@ export function TeamChipBar({
   const totalCount = teams.length;
   const selectedCount = selectedRosterIds.size;
   const allOn = totalCount > 0 && selectedCount === totalCount;
-  const noneOn = selectedCount === 0;
 
   return (
-    <div className="relative -mx-1 px-1" role="group" aria-label="Toggle team visibility">
-      <div className="flex flex-wrap items-center gap-2 pb-2 pt-1">
-        <button
-          type="button"
-          onClick={onToggleAll}
-          aria-pressed={allOn}
-          aria-label={
-            allOn
-              ? `Hide all teams. Currently showing ${selectedCount} of ${totalCount}.`
-              : `Show all teams. Currently showing ${selectedCount} of ${totalCount}.`
-          }
-          className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${chipClass(allOn)}`}
-        >
-          <span aria-hidden="true">{allOn ? "✓" : noneOn ? "○" : "◐"}</span>
-          <span>Show all</span>
-          <span className="font-mono text-[10px] tabular-nums opacity-80">
-            {selectedCount}/{totalCount}
-          </span>
-        </button>
+    <div
+      className="flex flex-wrap items-center gap-1.5"
+      role="group"
+      aria-label="Toggle team visibility"
+    >
+      <button
+        type="button"
+        onClick={onToggleAll}
+        aria-pressed={allOn}
+        aria-label={
+          allOn
+            ? `Hide all teams. Currently showing ${selectedCount} of ${totalCount}.`
+            : `Show all teams. Currently showing ${selectedCount} of ${totalCount}.`
+        }
+        className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0 ${chipClass(allOn)}`}
+      >
+        <span>{allOn ? "Hide all" : "Show all"}</span>
+        <span className="font-mono text-[10px] tabular-nums opacity-70">
+          {selectedCount}/{totalCount}
+        </span>
+      </button>
 
-        {sorted.map((t) => {
-          const rank = overallRankByRoster[t.rosterId];
-          const isOn = selectedRosterIds.has(t.rosterId);
-          const label = chipLabel(t);
-          const ariaState = isOn ? "visible" : "hidden";
-          const ariaRank = rank != null ? `, ranked #${rank}` : "";
-          return (
-            <button
-              key={t.rosterId}
-              type="button"
-              onClick={() => onToggleRoster(t.rosterId)}
-              aria-pressed={isOn}
-              aria-label={`${t.teamName}${ariaRank}, ${ariaState}. Toggle to ${isOn ? "hide" : "show"} this team.`}
-              className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${chipClass(isOn)}`}
-            >
+      {sorted.map((t) => {
+        const rank = overallRankByRoster[t.rosterId];
+        const isOn = selectedRosterIds.has(t.rosterId);
+        const label = chipLabel(t);
+        const ariaState = isOn ? "visible" : "hidden";
+        const ariaRank = rank != null ? `, ranked #${rank}` : "";
+        return (
+          <button
+            key={t.rosterId}
+            type="button"
+            onClick={() => onToggleRoster(t.rosterId)}
+            aria-pressed={isOn}
+            aria-label={`${t.teamName}${ariaRank}, ${ariaState}. Toggle to ${isOn ? "hide" : "show"} this team.`}
+            className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0 ${chipClass(isOn)}`}
+          >
+            {rank != null && (
               <span
                 aria-hidden="true"
-                className={`inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full border px-1.5 font-mono text-[10px] font-bold tabular-nums ${
-                  isOn
-                    ? "border-brand-purple/40 bg-brand-purple/15 text-brand-purple"
-                    : "border-line bg-base text-ink-subtle"
+                className={`font-mono text-[10px] font-bold tabular-nums ${
+                  isOn ? "text-brand-purple" : "text-ink-subtle"
                 }`}
               >
-                {rank != null ? `#${rank}` : "—"}
+                {rank}
               </span>
-              <span className="max-w-[10rem] truncate">{label}</span>
-            </button>
-          );
-        })}
-      </div>
+            )}
+            <span className="max-w-[8.5rem] truncate">{label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 function chipClass(active: boolean): string {
   return active
-    ? "border-brand-purple bg-brand-purple/15 text-ink hover:bg-brand-purple/25"
-    : "border-line bg-surface text-ink-muted hover:border-brand-cyan hover:text-ink";
+    ? "border-brand-purple/70 bg-brand-purple/15 text-ink hover:bg-brand-purple/25"
+    : "border-line bg-surface/60 text-ink-muted hover:border-brand-cyan/50 hover:text-ink";
 }
 
 function chipLabel(t: TeamChipBarTeam): string {

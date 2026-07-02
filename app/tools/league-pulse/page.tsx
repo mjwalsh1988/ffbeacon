@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Workflow, Sparkles, Lock, ArrowRight } from "lucide-react";
+import { Workflow, Sparkles, Lock, ArrowRight, Activity } from "lucide-react";
 import { LeaguePulseForm } from "./league-pulse-form";
 import { LeagueResults } from "./league-results";
 import { ScrollToResults } from "./scroll-to-results";
+import { StepRail } from "./step-rail";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
@@ -60,6 +61,10 @@ export default async function LeaguePulsePage({
     }
   }
 
+  // Drive the lookup step rail: once a valid user resolved (leagues below), the
+  // flow has advanced to "choose a league". A failed lookup stays on step 1.
+  const currentStep: 1 | 2 | 3 = user ? 2 : 1;
+
   return (
     <main id="main">
       <Hero />
@@ -68,31 +73,71 @@ export default async function LeaguePulsePage({
         className="border-b border-line bg-surface/30"
       >
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-          <SectionEyebrow>Look up a username</SectionEyebrow>
-          <h2
-            id="sync-heading"
-            className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
-          >
-            Paste your Sleeper handle, pick a season.
-          </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            We hit Sleeper directly and return every active league for that user
-            and season. Tap any league to see its roster shape and open its
-            deep view.
-          </p>
-
-          <div className="mt-6">
-            <LeaguePulseForm defaultUsername={defaultUsername} defaultSeason={season} />
-          </div>
-
-          {error && (
-            <p
-              role="alert"
-              className="mt-6 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
+          {/* Contained lookup shell: the form lives inside a centered cockpit
+              card (icon badge, step rail, glow wash) so the entry experience
+              reads as a guided wizard, matching On The Clock. */}
+          <div className="mx-auto max-w-3xl">
+            <div
+              className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
+              style={{
+                backgroundImage:
+                  "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
+              }}
             >
-              {error}
-            </p>
-          )}
+              {/* Beacon-gradient accent bar pinned to the top of the shell. */}
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 h-px"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+                }}
+              />
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-base text-brand-cyan"
+                >
+                  <Activity className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+                    League lookup
+                  </p>
+                  <h2
+                    id="sync-heading"
+                    className="text-lg font-semibold tracking-tight text-ink sm:text-xl"
+                  >
+                    Connect your Sleeper account
+                  </h2>
+                </div>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                Paste your Sleeper handle and pick a season. We hit Sleeper
+                directly and return every active league for that user, no
+                account required.
+              </p>
+
+              <div className="mt-6">
+                <StepRail current={currentStep} />
+              </div>
+              <div className="mt-5">
+                <LeaguePulseForm
+                  defaultUsername={defaultUsername}
+                  defaultSeason={season}
+                />
+              </div>
+
+              {error && (
+                <p
+                  role="alert"
+                  className="mt-5 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
+                >
+                  {error}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 

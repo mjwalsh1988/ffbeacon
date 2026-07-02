@@ -21,10 +21,11 @@ import { humanizeLeagueStatus } from "@/lib/league-status";
 import { LeagueDetailSheet } from "./league-detail-sheet";
 
 /**
- * Build the deep-view href for a league. Mirrors the username default the old
- * server action applied: forward ?tab=teams&username= so the deep view's team
- * chips default to the user's roster. Navigating with a plain <Link> lets the
- * branded loading boundary show instantly; the deep-view page does the sync.
+ * Build the deep-view href for a league. First load lands on the Overview tab;
+ * we forward ?username= (not ?tab=teams) so the deep view still knows whose
+ * roster to default the Teams-tab chips to once the user navigates there.
+ * Navigating with a plain <Link> lets the branded loading boundary show
+ * instantly; the deep-view page does the sync.
  *
  * Also forwards ?name= so the deep view's <title> is correct on a league's
  * first open (before the row is synced), since generateMetadata can't yet read
@@ -37,7 +38,6 @@ function leagueHref(
 ): string {
   const params = new URLSearchParams();
   if (sleeperUsername) {
-    params.set("tab", "teams");
     params.set("username", sleeperUsername);
   }
   if (leagueName) params.set("name", leagueName);

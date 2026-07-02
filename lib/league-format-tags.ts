@@ -44,7 +44,7 @@ const POSITION_ORDER = [
 ];
 
 function labelForPosition(slot: string): string {
-  if (slot === "SUPER_FLEX") return "SuperFLEX";
+  if (slot === "SUPER_FLEX") return "SF";
   if (slot === "WRRB_FLEX") return "W/R";
   if (slot === "REC_FLEX") return "W/T";
   if (slot === "IDP_FLEX") return "IDP";
@@ -138,6 +138,108 @@ export function buildLeagueFormatTags(input: {
         });
       }
     }
+  }
+
+  return tags;
+}
+
+/**
+ * Build the scoring-settings tags shown in the league info card's Scoring
+ * section. Reads the synced Sleeper `scoring_settings` and surfaces the rules
+ * that actually shape skill-position fantasy value and that vary between
+ * leagues: reception type, position reception + first-down premiums, passing TD
+ * value, non-standard rushing/receiving TD value, and the milestone bonus
+ * families (yardage, long TD). Near-universal defaults (DST tiers, kicker
+ * distances, standard INT/fumble penalties) are intentionally omitted so the
+ * row stays clear. All tags render in the "format" (cyan) tone.
+ */
+export function buildLeagueScoringTags(scoringSettings: unknown): FormatTag[] {
+  const s = (scoringSettings ?? {}) as Record<string, unknown>;
+  const num = (k: string): number | null =>
+    typeof s[k] === "number" ? (s[k] as number) : null;
+  const positive = (k: string): number | null => {
+    const v = num(k);
+    return v != null && v > 0 ? v : null;
+  };
+  const anyPositive = (keys: string[]): boolean => keys.some((k) => positive(k) != null);
+
+  const tags: FormatTag[] = [];
+  const push = (key: string, label: string) => tags.push({ key, label, tone: "format" });
+
+  // Reception scoring.
+  const rec = num("rec");
+  if (rec === 1) push("sc-rec", "PPR");
+  else if (rec === 0.5) push("sc-rec", "Half PPR");
+  else if (rec == null || rec === 0) push("sc-rec", "Standard");
+  else push("sc-rec", `PPR ${formatScoring(rec)}`);
+
+  // Position reception premiums.
+  const tep = positive("bonus_rec_te");
+  if (tep != null) push("sc-tep", `TEP +${formatScoring(tep)}`);
+  const rbRec = positive("bonus_rec_rb");
+  if (rbRec != null) push("sc-rbrec", `RB rec +${formatScoring(rbRec)}`);
+  const wrRec = positive("bonus_rec_wr");
+  if (wrRec != null) push("sc-wrrec", `WR rec +${formatScoring(wrRec)}`);
+
+  // Point-per-first-down (position bonuses first, then a flat fallback).
+  const fdByPos: Array<[string, string]> = [
+    ["bonus_fd_qb", "QB"],
+    ["bonus_fd_rb", "RB"],
+    ["bonus_fd_wr", "WR"],
+    ["bonus_fd_te", "TE"],
+  ];
+  let anyPosFd = false;
+  for (const [key, pos] of fdByPos) {
+    const v = positive(key);
+    if (v != null) {
+      push(`sc-fd-${pos}`, `${pos} 1D +${formatScoring(v)}`);
+      anyPosFd = true;
+    }
+  }
+  if (!anyPosFd) {
+    const flat = positive("rec_fd") ?? positive("rush_fd") ?? positive("pass_fd");
+    if (flat != null) push("sc-fd", `1st down +${formatScoring(flat)}`);
+  }
+
+  // Passing TD value (4 vs 6 is a defining difference).
+  const passTd = num("pass_td");
+  if (passTd != null) push("sc-passtd", `Pass TD ${formatScoring(passTd)}`);
+
+  // Non-standard rush/rec TD value (default is 6).
+  const rushTd = num("rush_td");
+  const recTd = num("rec_td");
+  if (rushTd != null && recTd != null && rushTd === recTd && rushTd !== 6) {
+    push("sc-td", `${formatScoring(rushTd)}pt TDs`);
+  } else {
+    if (rushTd != null && rushTd !== 6) push("sc-rushtd", `Rush TD ${formatScoring(rushTd)}`);
+    if (recTd != null && recTd !== 6) push("sc-rectd", `Rec TD ${formatScoring(recTd)}`);
+  }
+
+  // Milestone bonus families, summarized so the row stays readable.
+  if (
+    anyPositive([
+      "bonus_pass_yd_300",
+      "bonus_rush_yd_100",
+      "bonus_rec_yd_100",
+      "bonus_rush_yd_200",
+      "bonus_rec_yd_200",
+      "bonus_rush_rec_yd_100",
+      "bonus_rush_rec_yd_200",
+    ])
+  ) {
+    push("sc-ydbonus", "Yardage bonuses");
+  }
+  if (
+    anyPositive([
+      "pass_td_40p",
+      "pass_td_50p",
+      "rush_td_40p",
+      "rush_td_50p",
+      "rec_td_40p",
+      "rec_td_50p",
+    ])
+  ) {
+    push("sc-longtd", "Long TD bonus");
   }
 
   return tags;

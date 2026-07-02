@@ -34,9 +34,10 @@ export function LeagueDetailSheet({
   // instantly on click; the deep-view page runs the sync under the loader.
   // ?name= gives the deep view a correct <title> on first open, before the
   // league row is synced (the DB name takes precedence once it exists).
+  // First load lands on Overview; forward ?username= (not ?tab=teams) so the
+  // Teams tab can still default its chips to this user's roster later.
   const hrefParams = new URLSearchParams();
   if (sleeperUsername) {
-    hrefParams.set("tab", "teams");
     hrefParams.set("username", sleeperUsername);
   }
   hrefParams.set("name", league.name);

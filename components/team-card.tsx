@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo } from "react";
+import { useId, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { BeaconValue } from "@/components/beacon-value-icon";
+import { PlayerHeadshot } from "@/components/player-headshot";
+import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import type {
   DraftPickAsset,
   ResolvedPlayer,
@@ -39,11 +42,16 @@ const POSITION_LABEL: Record<ValuedPosition, string> = {
   TE: "Tight Ends",
 };
 
-const POSITION_TONE: Record<ValuedPosition, string> = {
-  QB: "bg-brand-purple/15 text-brand-purple",
-  RB: "bg-brand-cyan/15 text-brand-cyan",
-  WR: "bg-signal-positive/15 text-signal-positive",
-  TE: "bg-signal-warning/15 text-signal-warning",
+// Colored top edge per position group, matching the On The Clock draft board
+// hues (QB red, RB green, WR blue, TE amber). Full literal class strings so
+// Tailwind's content scanner keeps them. The position pill itself uses the
+// shared POSITION_BADGE tokens (lib/on-the-clock/position-colors) so roster
+// colors track the draft board exactly.
+const POSITION_ACCENT: Record<ValuedPosition, string> = {
+  QB: "border-t-2 border-position-qb/70",
+  RB: "border-t-2 border-position-rb/70",
+  WR: "border-t-2 border-position-wr/70",
+  TE: "border-t-2 border-position-te/70",
 };
 
 /**
@@ -109,63 +117,96 @@ export function TeamCard({
   const headingId = `team-${sleeperRosterId}-heading`;
   const regionId = useId();
 
+  // Shared segmented-strip styling for the two stat panels: a brighter outline
+  // and a soft beacon glow so they read as focused, elevated units. Full width
+  // on mobile, content-sized inline on desktop.
+  const statStrip =
+    "flex w-full items-stretch divide-x divide-line/70 overflow-hidden rounded-card border border-line-accent bg-base/70 shadow-[0_0_22px_-10px_rgba(168,85,247,0.6)] sm:inline-flex sm:w-auto";
+
   const HeaderInner = (
-    <div className="flex w-full flex-col gap-3 text-left">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <div className="relative flex w-full items-center gap-3 text-left">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-3">
+        {/* Left: power-rank badge + team identity, vertically centered together.
+            flex-1 so it grows and pushes the stat panels to the right on desktop.
+            On mobile it reserves room for the absolutely-positioned toggle. */}
+        <div
+          className={`flex min-w-0 flex-1 items-center gap-3 ${
+            collapsible ? "pr-9 sm:pr-0" : ""
+          }`}
+        >
+          {cacheRow?.overall_rank != null && (
+            <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-card border border-brand-purple/40 bg-brand-purple/10 shadow-[0_0_18px_-8px_rgba(168,85,247,0.7)]">
+              <span className="sr-only">Power ranking {cacheRow.overall_rank}</span>
+              <span
+                aria-hidden="true"
+                className="text-[7px] font-bold uppercase tracking-[0.14em] text-brand-purple/70"
+              >
+                Rank
+              </span>
+              <span
+                aria-hidden="true"
+                className="font-mono text-lg font-extrabold leading-none text-brand-purple"
+              >
+                {cacheRow.overall_rank}
+              </span>
+            </div>
+          )}
+          <div className="min-w-0">
             <HeadingTag
               id={headingId}
               className="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl"
             >
               {teamName}
             </HeadingTag>
-            {cacheRow?.overall_rank != null && (
-              <span
-                className="inline-flex items-center rounded-full bg-brand-purple/15 px-2 py-0.5 text-xs font-semibold text-brand-purple"
-                aria-label={`Power ranking ${cacheRow.overall_rank}`}
-              >
-                #{cacheRow.overall_rank}
-              </span>
+            {(ownerSleeperUsername || ownerDisplayName) && (
+              <p className="mt-0.5 truncate text-xs text-ink-subtle">
+                Owner: {ownerDisplayName || `@${ownerSleeperUsername}`}
+              </p>
             )}
           </div>
-          {(ownerSleeperUsername || ownerDisplayName) && (
-            <p className="mt-0.5 text-xs text-ink-subtle">
-              Owner: {ownerDisplayName || `@${ownerSleeperUsername}`}
-            </p>
-          )}
-          <p className="mt-1 font-mono text-xs text-ink-muted">
-            {record.wins}-{record.losses}
-            {record.ties ? `-${record.ties}` : ""} • {record.pointsFor.toFixed(0)} pts
-          </p>
         </div>
-        {collapsible && (
-          <span
-            aria-hidden="true"
-            className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-line bg-base text-ink-muted transition-transform ${
-              expanded ? "rotate-180" : ""
-            }`}
-          >
-            ▼
-          </span>
-        )}
+
+        {/* Right: the two stat panels. Full width and stacked on mobile (they
+            span the whole card since the toggle is floated out of flow);
+            content-sized inline on desktop, pushed right by the flex-1 identity. */}
+        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto sm:flex-nowrap">
+          {/* Record & performance. */}
+          <dl aria-label="Record and performance" className={statStrip}>
+            <StatCell
+              label="Record"
+              value={`${record.wins}-${record.losses}${record.ties ? `-${record.ties}` : ""}`}
+            />
+            <StatCell label="Points" value={record.pointsFor.toFixed(0)} />
+          </dl>
+
+          {/* Positional + total ranks (top-3 cyan / bottom-3 purple highlight). */}
+          {cacheRow && (
+            <ul aria-label="Position rankings" className={statStrip}>
+              <RankTile label="QB" rank={positionRanks.QB} teamCount={teamCount} count={grouped.QB.length} countLabel="players" />
+              <RankTile label="RB" rank={positionRanks.RB} teamCount={teamCount} count={grouped.RB.length} countLabel="players" />
+              <RankTile label="WR" rank={positionRanks.WR} teamCount={teamCount} count={grouped.WR.length} countLabel="players" />
+              <RankTile label="TE" rank={positionRanks.TE} teamCount={teamCount} count={grouped.TE.length} countLabel="players" />
+              <RankTile label="PICKS" rank={statRanks.picks} teamCount={teamCount} count={sortedPicks.length} countLabel="picks" />
+              <RankTile label="TOTAL" rank={statRanks.total} teamCount={teamCount} count={null} countLabel="" />
+              {/* TODO(transactions phase): add a TRADES rank chip here once
+                * league_transactions ingestion ships (trades count + league rank
+                * with the same top-3/bottom-3 tier highlight). */}
+            </ul>
+          )}
+        </div>
       </div>
-      {cacheRow && (
-        <ul
-          aria-label="Position rankings"
-          className="grid w-full grid-cols-3 gap-2 sm:grid-cols-6 sm:gap-3"
+
+      {collapsible && (
+        // Floated to the top-right on mobile so the full-width stat panels below
+        // aren't shortened by it; back in the flow (centered) on desktop.
+        <span
+          aria-hidden="true"
+          className={`absolute right-0 top-0 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-base text-ink-muted transition-transform sm:static ${
+            expanded ? "rotate-180" : ""
+          }`}
         >
-          <RankTile label="QB" rank={positionRanks.QB} teamCount={teamCount} count={grouped.QB.length} countLabel="players" />
-          <RankTile label="RB" rank={positionRanks.RB} teamCount={teamCount} count={grouped.RB.length} countLabel="players" />
-          <RankTile label="WR" rank={positionRanks.WR} teamCount={teamCount} count={grouped.WR.length} countLabel="players" />
-          <RankTile label="TE" rank={positionRanks.TE} teamCount={teamCount} count={grouped.TE.length} countLabel="players" />
-          <RankTile label="PICKS" rank={statRanks.picks} teamCount={teamCount} count={sortedPicks.length} countLabel="picks" />
-          <RankTile label="TOTAL" rank={statRanks.total} teamCount={teamCount} count={null} countLabel="" />
-          {/* TODO(transactions phase): add a TRADES rank tile here matching DPC's
-            * DynastyDecoderLeagueClient.tsx tradesByRoster computation. Show
-            * trades count + league rank, with the same top-3/bottom-3 tier
-            * highlight. Blocked until league_transactions ingestion ships. */}
-        </ul>
+          ▼
+        </span>
       )}
     </div>
   );
@@ -273,10 +314,13 @@ function PositionColumn({
       ? `${POSITION_LABEL[position]}: ranked ${rankLabel}${denominator}, total value ${formatValue(totalValue)}`
       : `${POSITION_LABEL[position]}: total value ${formatValue(totalValue)}`;
   return (
-    <section aria-label={headerAria} className="flex min-w-0 flex-col rounded-card border border-line bg-base">
+    <section
+      aria-label={headerAria}
+      className={`flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-base ${POSITION_ACCENT[position]}`}
+    >
       <header className="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2">
         <h3 className="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wider">
-          <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.16em] ${POSITION_TONE[position]}`}>
+          <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.16em] ${POSITION_BADGE[position]}`}>
             {position}
           </span>
           <span className="font-mono text-[11px] text-ink-subtle">
@@ -299,6 +343,19 @@ function PositionColumn({
                 key={p.id}
                 className="flex items-center gap-2 px-3 py-1.5"
               >
+                {/* Decorative headshot: the name text beside it is the label.
+                    !rounded-md forces a subtle 6px radius over ImageWithFallback's
+                    default 12px, which reads as a circle at this small size. */}
+                <span aria-hidden="true" className="shrink-0">
+                  <PlayerHeadshot
+                    sleeperId={p.sleeper_id}
+                    name=""
+                    position={p.position}
+                    size={26}
+                    rounded={false}
+                    className="!rounded-md ring-1 ring-inset ring-white/10"
+                  />
+                </span>
                 <span
                   className="truncate text-sm font-medium text-ink"
                   title={p.full_name}
@@ -328,6 +385,8 @@ function PositionColumn({
   );
 }
 
+const PICKS_COLLAPSED_MAX = 5;
+
 function PicksColumn({
   picks,
   ownRosterId,
@@ -339,6 +398,14 @@ function PicksColumn({
   rosterIdToTeamName: Record<number, string>;
   rosterIdToOwnerUsername: Record<number, string | null>;
 }) {
+  // Show the first few picks by default; reveal the rest on demand so a deep
+  // pick stash doesn't run the roster card long. Mirrors On The Clock.
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  const canToggle = picks.length > PICKS_COLLAPSED_MAX;
+  const visible = expanded || !canToggle ? picks : picks.slice(0, PICKS_COLLAPSED_MAX);
+  const hiddenCount = picks.length - visible.length;
+
   return (
     <section
       aria-label="Draft picks"
@@ -357,8 +424,9 @@ function PicksColumn({
       {picks.length === 0 ? (
         <p className="px-3 py-3 text-xs italic text-ink-subtle">No picks</p>
       ) : (
-        <ul className="divide-y divide-line/60">
-          {picks.map((p, i) => {
+        <>
+          <ul id={listId} className="divide-y divide-line/60">
+          {visible.map((p, i) => {
             const isOwn = p.original_roster_id === ownRosterId;
             // Prefer the Sleeper username over team_name for attribution.
             // Falls through to team name, then numeric roster id if neither resolved.
@@ -395,9 +463,42 @@ function PicksColumn({
               </li>
             );
           })}
-        </ul>
+          </ul>
+          {canToggle && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-controls={listId}
+              className="flex min-h-11 items-center justify-center gap-1 border-t border-line px-3 py-2 text-xs font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/5 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              {expanded ? (
+                <>
+                  Show less
+                  <ChevronUp aria-hidden="true" className="h-3.5 w-3.5" />
+                </>
+              ) : (
+                <>
+                  Show {hiddenCount} more
+                  <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
+                </>
+              )}
+            </button>
+          )}
+        </>
       )}
     </section>
+  );
+}
+
+/** One label/value cell of the Record & performance segmented panel. Stretches
+ *  to fill on mobile (flex-1) and sizes to content inline on desktop. */
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 sm:flex-none">
+      <dt className="text-[9px] font-bold uppercase tracking-wider text-ink-subtle">{label}</dt>
+      <dd className="font-mono text-sm font-bold leading-none tabular-nums text-ink">{value}</dd>
+    </div>
   );
 }
 
@@ -411,20 +512,20 @@ function RankTile({
   label: string;
   rank: number | null;
   teamCount: number;
-  /** Optional secondary count below the rank (e.g. 5 players, 12 picks). null hides the line. */
+  /** Secondary count (e.g. 5 players, 12 picks), surfaced in the aria-label. */
   count: number | null;
   countLabel: string;
 }) {
   const tier = rankTier(rank, teamCount);
-  // Inline styles so the colors render even if a build cache or PurgeCSS
-  // pass dropped the dynamic Tailwind classes. Each tier maps to the brand
-  // tokens documented in plan.md section 2.
-  const frameStyle =
+  // Inline styles so the tier colors survive a PurgeCSS pass. Each tier maps to
+  // the brand tokens documented in plan.md section 2. Only the standouts get a
+  // wash; mid cells stay on the strip's own background.
+  const cellStyle =
     tier === "top"
-      ? { borderColor: "rgba(34, 211, 238, 0.55)", backgroundColor: "rgba(34, 211, 238, 0.10)" }
+      ? { backgroundColor: "rgba(34, 211, 238, 0.10)" }
       : tier === "bottom"
-        ? { borderColor: "rgba(168, 85, 247, 0.55)", backgroundColor: "rgba(168, 85, 247, 0.10)" }
-        : { borderColor: "#1F1F33", backgroundColor: "#07070D" };
+        ? { backgroundColor: "rgba(168, 85, 247, 0.10)" }
+        : undefined;
   const numberStyle =
     tier === "top"
       ? { color: "#22D3EE" }
@@ -437,34 +538,25 @@ function RankTile({
       : tier === "bottom"
         ? " (bottom three in league)"
         : "";
-  const rankLabel = rank != null && teamCount > 0 ? `${ordinal(rank)} of ${teamCount}` : "—";
+  const rankFull = rank != null && teamCount > 0 ? `${ordinal(rank)} of ${teamCount}` : "unranked";
+  // One cell of the segmented stat bar: a stacked label + rank. Top/bottom-three
+  // cells get a faint tier wash so strong/weak spots pop; the rank number
+  // carries the tier color. Full "of N" + count detail lives in the aria-label.
   return (
     <li
-      style={frameStyle}
-      className="flex flex-col items-center gap-0.5 rounded-card border px-2 py-2 text-center"
-      aria-label={`${label} rank ${rankLabel}${ariaTier}${count != null ? `, ${count} ${countLabel}` : ""}`}
+      style={cellStyle}
+      className="flex flex-1 flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 sm:flex-none"
+      aria-label={`${label} rank ${rankFull}${ariaTier}${count != null ? `, ${count} ${countLabel}` : ""}`}
     >
-      <span
-        className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle"
-      >
+      <span className="text-[9px] font-bold uppercase tracking-wider text-ink-subtle">
         {label}
       </span>
       <span
         style={numberStyle}
-        className="font-mono text-lg font-extrabold tabular-nums leading-none sm:text-xl"
+        className="font-mono text-sm font-bold tabular-nums leading-none"
       >
         {rank != null ? ordinal(rank) : "—"}
       </span>
-      {teamCount > 0 && (
-        <span className="font-mono text-[9px] tabular-nums text-ink-subtle" aria-hidden="true">
-          of {teamCount}
-        </span>
-      )}
-      {count != null && (
-        <span className="text-[9px] uppercase tracking-wider text-ink-subtle">
-          {count} {countLabel}
-        </span>
-      )}
     </li>
   );
 }

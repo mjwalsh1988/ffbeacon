@@ -8,7 +8,6 @@ import {
   describeDerived,
 } from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
-import { humanizeLeagueStatus } from "@/lib/league-status";
 import { type SleeperLeague } from "@/lib/sleeper";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { TeamFilter } from "@/components/team-filter";
@@ -17,17 +16,17 @@ import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
 import { LeagueTabs } from "@/components/league-tabs";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
+import { Panel, StatReadout } from "@/components/dashboard-panel";
+import { LeagueInfoPanel, LeagueMetaLine } from "@/components/league-info-panel";
 import {
   buildLeagueFormatTags,
-  type FormatTag,
+  buildLeagueScoringTags,
 } from "@/lib/league-format-tags";
+import Link from "next/link";
 import {
-  CalendarDays,
   Users,
-  Trophy,
-  Activity,
-  ClipboardList,
   ArrowLeftRight,
+  ArrowRight,
   type LucideIcon,
 } from "lucide-react";
 
@@ -155,6 +154,7 @@ export default async function LeagueDeepViewPage({
     scoringSettings: league.scoring_settings,
     teamCount: league.total_rosters,
   });
+  const scoringTags = buildLeagueScoringTags(league.scoring_settings);
 
   // Resolve source preference. Format is NOT user-controlled inside a
   // league view (CLAUDE.md: League Pulse Format Resolution rule). We derive
@@ -189,18 +189,69 @@ export default async function LeagueDeepViewPage({
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
   const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";
 
+  // Value coverage + format/source, resolved once and shared by the info panel,
+  // power rankings, and teams list. "none" means no source covers the league's
+  // format, so the value-dependent surfaces get nulls and render name-only.
+  const derivedLabel = describeDerived(context.derived);
+  const coverageOk = context.coverage !== "none";
+  const formatSlug = coverageOk ? context.formatSlug : null;
+  const sourceSlug = coverageOk ? context.sourceSlug : null;
+  const formatDisplay = coverageOk ? context.formatDisplay : "N/A";
+  const sourceDisplay = coverageOk ? context.sourceDisplay : "N/A";
+  const pickSourceDisplay =
+    coverageOk && context.pickSource && context.pickSource.slug !== context.sourceSlug
+      ? context.pickSource.display
+      : null;
+  const fallbackDisplay =
+    context.coverage === "fallback" ? context.fallback?.derivedDisplay ?? null : null;
+
+  // In-view links (username forwarded so the Teams chips default correctly).
+  const teamsHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}?tab=teams`;
+  const transactionsHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}/transactions?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}/transactions`;
+
+  // Shared props for the league info card, rendered as a left rail on Overview
+  // and as a full-width horizontal band on Teams (so the rosters get full width).
+  const infoPanelProps = {
+    leagueName: league.name,
+    season: league.season ?? null,
+    teamCount: league.total_rosters ?? null,
+    status: league.status ?? null,
+    formatTags,
+    scoringTags,
+    lastUpdatedLabel: lastPulsedLabel,
+    cached: pulseResult.cached,
+    coverage: context.coverage,
+    sourceDisplay,
+    formatDisplay,
+    derivedLabel,
+    fallbackDisplay,
+    pickSourceDisplay,
+  };
+
   return (
     <main id="main">
-      <header className="border-b border-line">
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          {/* Grid so the source order (breadcrumb → buttons → name) is the
-              mobile stacking order, while sm+ reflows to a two-column layout:
-              breadcrumb + name in the left column, buttons top-right. */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6">
+      <header className="relative overflow-hidden border-b border-line">
+        {/* Beacon-gradient accent bar, matching the On The Clock command strip. */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+          }}
+        />
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          {/* Slim header: breadcrumb + actions only. The league name (page h1)
+              and all league context now live in the highlighted LeagueInfoPanel
+              in the sidebar. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <LeagueBreadcrumb
               homeHref={backHref}
               crumbs={[{ label: league.name }]}
-              className="sm:col-start-1 sm:row-start-1"
             />
             <LeagueHeaderActions
               sleeperLeagueId={sleeperLeagueId}
@@ -209,106 +260,20 @@ export default async function LeagueDeepViewPage({
               otherLeagues={otherLeagues}
               searchedUsername={searchedUsername}
               canForceRefresh={canForceRefresh}
-              className="sm:col-start-2 sm:row-start-1"
             />
-            <h1 className="min-w-0 text-3xl font-semibold tracking-tight sm:col-start-1 sm:row-start-2 sm:text-4xl">
-              {league.name}
-            </h1>
           </div>
 
-          <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <InfoChip
-              icon={CalendarDays}
-              label="Season"
-              value={<span className="font-mono">{league.season}</span>}
-            />
-            <InfoChip
-              icon={Users}
-              label="Teams"
-              value={
-                <span className="font-mono">{league.total_rosters ?? "?"}</span>
-              }
-            />
-            <InfoChip
-              icon={Trophy}
-              label="League format"
-              value={describeDerived(context.derived)}
-            />
-            <InfoChip
-              icon={Activity}
-              label="Status"
-              value={<StatusPill status={league.status ?? null} />}
-            />
-          </dl>
-
-          {formatTags.length > 0 && (
-            <FormatTagRow tags={formatTags} />
-          )}
-
-          <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-            <span>
-              Last updated {lastPulsedLabel}
-              {pulseResult.cached ? " (served from cache)" : " (fresh from Sleeper)"}.
-            </span>
-            {context.coverage !== "none" && (
-              <span
-                title="Values are calibrated to your league's scoring rules. The global format toggle has no effect inside a league view."
-                aria-describedby={`league-format-info`}
-              >
-                · Values via{" "}
-                <span className="text-ink-muted">{context.sourceDisplay}</span> •{" "}
-                <span className="text-ink-muted">{context.formatDisplay}</span>
-              </span>
-            )}
-          </p>
-          <p id="league-format-info" className="sr-only">
-            Player values shown inside this league view use the format closest to your
-            league's actual Sleeper scoring rules. Changing the global format toggle does
-            not affect this view; switching source recalculates which format we can
-            display.
-          </p>
-
+          {/* League identity + context now lives in the left sidebar
+              (LeagueInfoPanel) to keep the header compact. Only a true refresh
+              error stays here, surfaced prominently as a page-level alert. */}
           {league.pulse_status === "error" && league.pulse_error && (
             <p
               role="alert"
-              className="mt-3 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-3 text-sm text-signal-danger"
+              className="mt-4 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-3 text-sm text-signal-danger"
             >
               Last refresh failed: {league.pulse_error}
             </p>
           )}
-
-          {context.coverage === "fallback" && context.fallback && (
-            <p
-              role="status"
-              className="mt-3 rounded-card border border-brand-cyan/30 bg-brand-cyan/5 p-3 text-xs text-ink-muted"
-            >
-              Showing values for {context.formatDisplay} because {context.sourceDisplay}{" "}
-              doesn't publish data for {context.fallback.derivedDisplay}. Pick a different
-              source from the header to find a closer match.
-            </p>
-          )}
-
-          {context.coverage === "none" && (
-            <p
-              role="status"
-              className="mt-3 rounded-card border border-signal-warning/40 bg-signal-warning/10 p-3 text-xs text-signal-warning"
-            >
-              No data source covers {describeDerived(context.derived)} yet. Players will
-              still show with names; values are unavailable for this combination.
-            </p>
-          )}
-
-          {context.coverage !== "none" &&
-            context.pickSource &&
-            context.pickSource.slug !== context.sourceSlug && (
-              <p
-                role="note"
-                className="mt-2 text-xs text-ink-subtle"
-              >
-                Draft pick values powered by {context.pickSource.display} (
-                {context.sourceDisplay} doesn't publish pick values).
-              </p>
-            )}
         </div>
       </header>
 
@@ -319,85 +284,144 @@ export default async function LeagueDeepViewPage({
       />
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {activeTab === "overview" && (
-          <OverviewPanel
-            leagueRowId={league.id}
-            sleeperLeagueId={sleeperLeagueId}
-            counts={pulseResult.counts}
-            formatSlug={context.coverage === "none" ? null : context.formatSlug}
-            sourceSlug={context.coverage === "none" ? null : context.sourceSlug}
-            formatDisplay={context.coverage === "none" ? "N/A" : context.formatDisplay}
-            sourceDisplay={context.coverage === "none" ? "N/A" : context.sourceDisplay}
-            leagueSeason={league.season != null ? String(league.season) : null}
-            leagueStatus={league.status ?? null}
-            searchedUsername={searchedUsername}
-          />
-        )}
-        {activeTab === "teams" && (
-          <TeamsPanel
-            leagueRowId={league.id}
-            sleeperLeagueId={sleeperLeagueId}
-            formatSlug={context.coverage === "none" ? null : context.formatSlug}
-            sourceSlug={context.coverage === "none" ? null : context.sourceSlug}
-            searchedUsername={searchedUsername}
-            focusedRosterId={focusedRosterId}
-            leagueSeason={league.season != null ? String(league.season) : null}
-            leagueStatus={league.status ?? null}
-          />
+        {activeTab === "overview" ? (
+          // Overview: league info + quick panels in a LEFT rail, power rankings
+          // on the RIGHT. The rail stacks above the content below xl.
+          <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+            <aside
+              aria-label="League information and links"
+              className="space-y-6 xl:sticky xl:top-8 xl:self-start"
+            >
+              <LeagueInfoPanel layout="sidebar" {...infoPanelProps} />
+
+              <Panel eyebrow="At a glance" title="Snapshot">
+                <dl className="grid grid-cols-3 gap-2">
+                  <StatReadout
+                    label="Rosters"
+                    value={String(pulseResult.counts.rosters)}
+                    accent="cyan"
+                  />
+                  <StatReadout
+                    label="Members"
+                    value={String(pulseResult.counts.users)}
+                    accent="purple"
+                  />
+                  <StatReadout
+                    label="Transactions"
+                    value={String(pulseResult.counts.transactions)}
+                    accent="ink"
+                  />
+                </dl>
+              </Panel>
+
+              <Panel eyebrow="Go deeper" title="Explore this league">
+                <ul className="space-y-2">
+                  <li>
+                    <ExploreLink
+                      href={teamsHref}
+                      icon={Users}
+                      label="Teams and rosters"
+                      hint="Compare every roster side by side"
+                    />
+                  </li>
+                  <li>
+                    <ExploreLink
+                      href={transactionsHref}
+                      icon={ArrowLeftRight}
+                      label="Transactions"
+                      hint="Trades, waivers, and FAAB moves"
+                    />
+                  </li>
+                </ul>
+              </Panel>
+            </aside>
+
+            <div className="min-w-0 space-y-6">
+              <PowerRankingsSection
+                leagueRowId={league.id}
+                sleeperLeagueId={sleeperLeagueId}
+                formatSlug={formatSlug}
+                sourceSlug={sourceSlug}
+                formatDisplay={formatDisplay}
+                sourceDisplay={sourceDisplay}
+                leagueSeason={league.season != null ? String(league.season) : null}
+                leagueStatus={league.status ?? null}
+                searchedUsername={searchedUsername}
+              />
+            </div>
+          </div>
+        ) : (
+          // Teams: the league info becomes a full-width horizontal band on top,
+          // so the rosters below can use the full page width. The last-updated /
+          // value meta drops out of the band and renders as one discreet line.
+          <div className="space-y-6">
+            <div>
+              <LeagueInfoPanel
+                layout="horizontal"
+                showFooter={false}
+                {...infoPanelProps}
+              />
+              <div className="mt-2 px-1">
+                <LeagueMetaLine
+                  lastUpdatedLabel={lastPulsedLabel}
+                  cached={pulseResult.cached}
+                  coverage={context.coverage}
+                  sourceDisplay={sourceDisplay}
+                  formatDisplay={formatDisplay}
+                  derivedLabel={derivedLabel}
+                  fallbackDisplay={fallbackDisplay}
+                  pickSourceDisplay={pickSourceDisplay}
+                />
+              </div>
+            </div>
+            <TeamsPanel
+              leagueRowId={league.id}
+              sleeperLeagueId={sleeperLeagueId}
+              formatSlug={formatSlug}
+              sourceSlug={sourceSlug}
+              searchedUsername={searchedUsername}
+              focusedRosterId={focusedRosterId}
+              leagueSeason={league.season != null ? String(league.season) : null}
+              leagueStatus={league.status ?? null}
+            />
+          </div>
         )}
       </div>
     </main>
   );
 }
 
-async function OverviewPanel({
-  leagueRowId,
-  sleeperLeagueId,
-  counts,
-  formatSlug,
-  sourceSlug,
-  formatDisplay,
-  sourceDisplay,
-  leagueSeason,
-  leagueStatus,
-  searchedUsername,
+function ExploreLink({
+  href,
+  icon: Icon,
+  label,
+  hint,
 }: {
-  leagueRowId: string;
-  sleeperLeagueId: string;
-  counts: { rosters: number; users: number; transactions: number };
-  formatSlug: string | null;
-  sourceSlug: string | null;
-  formatDisplay: string;
-  sourceDisplay: string;
-  leagueSeason: string | null;
-  leagueStatus: string | null;
-  searchedUsername: string | null;
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  hint: string;
 }) {
   return (
-    <div className="space-y-8">
-      <section aria-labelledby="snapshot-heading">
-        <h2 id="snapshot-heading" className="text-2xl font-semibold tracking-tight">
-          Snapshot
-        </h2>
-        <ul className="mt-4 grid gap-4 sm:grid-cols-3">
-          <Stat icon={ClipboardList} label="Rosters synced" value={counts.rosters} />
-          <Stat icon={Users} label="Members" value={counts.users} />
-          <Stat icon={ArrowLeftRight} label="Transactions" value={counts.transactions} />
-        </ul>
-      </section>
-
-      <PowerRankingsSection
-        leagueRowId={leagueRowId}
-        sleeperLeagueId={sleeperLeagueId}
-        formatSlug={formatSlug}
-        sourceSlug={sourceSlug}
-        formatDisplay={formatDisplay}
-        sourceDisplay={sourceDisplay}
-        leagueSeason={leagueSeason}
-        leagueStatus={leagueStatus}
-        searchedUsername={searchedUsername}
+    <Link
+      href={href}
+      className="group flex min-h-11 items-center gap-3 rounded-card border border-line bg-base/50 px-3 py-2.5 transition-colors hover:border-brand-cyan/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-ink">{label}</span>
+        <span className="block truncate text-xs text-ink-subtle">{hint}</span>
+      </span>
+      <ArrowRight
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-ink-subtle transition-colors group-hover:text-brand-cyan"
       />
-    </div>
+    </Link>
   );
 }
 
@@ -532,7 +556,11 @@ async function PowerRankingsSection({
 
   if (ranked.length === 0) {
     return (
-      <div className="rounded-card border border-line bg-surface p-6">
+      <Panel
+        eyebrow="Standings"
+        title="Power Rankings"
+        helper={`${formatDisplay} • ${sourceDisplay}`}
+      >
         <p className="text-sm text-ink-muted">
           No cached power rankings yet for {formatDisplay} via {sourceDisplay}. The cache
           builds during the next sync; refresh in a moment, or run{" "}
@@ -541,23 +569,21 @@ async function PowerRankingsSection({
           </span>{" "}
           locally to backfill.
         </p>
-      </div>
+      </Panel>
     );
   }
 
   const teamCount = teams.length;
 
   return (
-    <section aria-labelledby="pr-heading" className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="pr-heading" className="text-2xl font-semibold tracking-tight">
-          Power Rankings
-        </h2>
-        <p className="text-xs text-ink-subtle">
-          {formatDisplay} • {sourceDisplay}
-        </p>
-      </div>
-      <div className="overflow-x-auto rounded-card border border-line">
+    <Panel
+      id="pr"
+      eyebrow="Standings"
+      title="Power Rankings"
+      helper={`Ranked by total team value. ${formatDisplay} • ${sourceDisplay}.`}
+      bodyClassName="p-0"
+    >
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">
             League power rankings. Columns: overall rank, team, positional rank
@@ -626,154 +652,10 @@ async function PowerRankingsSection({
           </tbody>
         </table>
       </div>
-    </section>
+    </Panel>
   );
 }
 
-function Stat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: number;
-}) {
-  return (
-    <li className="flex items-center gap-4 rounded-card border border-line bg-surface p-5">
-      <span
-        aria-hidden="true"
-        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-line bg-base/60 text-brand-cyan"
-      >
-        <Icon className="h-5 w-5" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs uppercase tracking-wider text-ink-subtle">{label}</p>
-        <p className="mt-1 font-mono text-3xl font-semibold text-ink">{value}</p>
-      </div>
-    </li>
-  );
-}
-
-function InfoChip({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-card border border-line bg-surface/60 px-4 py-3">
-      <span
-        aria-hidden="true"
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-line bg-base/60 text-brand-cyan"
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
-          {label}
-        </p>
-        <div className="mt-0.5 truncate text-sm font-medium text-ink">{value}</div>
-      </div>
-    </div>
-  );
-}
-
-
-function FormatTagRow({ tags }: { tags: FormatTag[] }) {
-  // Two visual tones so format meta (cyan) is scannable apart from per-slot
-  // counts (purple), mirroring the FF Beacon brand split. Border + chip tint
-  // are inline so the colors survive PurgeCSS even when Tailwind misses the
-  // arbitrary value.
-  const styles = {
-    format: {
-      backgroundColor: "rgba(34, 211, 238, 0.08)",
-      borderColor: "rgba(34, 211, 238, 0.30)",
-      color: "#22D3EE",
-    },
-    position: {
-      backgroundColor: "rgba(168, 85, 247, 0.08)",
-      borderColor: "rgba(168, 85, 247, 0.30)",
-      color: "#A855F7",
-    },
-  } as const;
-  return (
-    <ul
-      className="mt-4 flex flex-wrap gap-1.5"
-      role="list"
-      aria-label="League format tags"
-    >
-      {tags.map((t) => (
-        <li
-          key={t.key}
-          className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide"
-          style={styles[t.tone]}
-        >
-          {t.label}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function StatusPill({ status }: { status: string | null }) {
-  const label = humanizeLeagueStatus(status);
-  const key = (status ?? "").toLowerCase();
-  // Map Sleeper status → semantic accent. Pre-draft = brand cyan (build-up
-  // energy), drafting = warning amber (active event), in-season = brand
-  // purple (live), complete = muted slate, anything else = neutral subtle.
-  const palette: { dot: string; chip: string; text: string } =
-    key === "pre_draft"
-      ? {
-          dot: "#22D3EE",
-          chip: "rgba(34, 211, 238, 0.10)",
-          text: "#22D3EE",
-        }
-      : key === "drafting"
-        ? {
-            dot: "#F59E0B",
-            chip: "rgba(245, 158, 11, 0.10)",
-            text: "#F59E0B",
-          }
-        : key === "in_season"
-          ? {
-              dot: "#A855F7",
-              chip: "rgba(168, 85, 247, 0.10)",
-              text: "#A855F7",
-            }
-          : key === "complete"
-            ? {
-                dot: "#10B981",
-                chip: "rgba(16, 185, 129, 0.10)",
-                text: "#10B981",
-              }
-            : {
-                dot: "#6B6B7D",
-                chip: "rgba(107, 107, 125, 0.10)",
-                text: "#A8A8B8",
-              };
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold"
-      style={{
-        backgroundColor: palette.chip,
-        borderColor: `${palette.dot}55`,
-        color: palette.text,
-      }}
-      aria-label={`Status: ${label}`}
-    >
-      <span
-        aria-hidden="true"
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ backgroundColor: palette.dot, boxShadow: `0 0 6px ${palette.dot}` }}
-      />
-      {label}
-    </span>
-  );
-}
 
 function formatRelative(date: Date): string {
   const diffMs = Date.now() - date.getTime();

@@ -32,10 +32,12 @@ export function LeaguePulseForm({
   return (
     <form
       onSubmit={submit}
-      className="relative overflow-hidden rounded-modal border border-line bg-surface p-5 sm:p-6"
+      className="relative overflow-hidden rounded-modal border border-brand-purple/30 bg-surface p-5 sm:p-6"
       aria-describedby="league-pulse-help"
       style={{
-        boxShadow: "0 0 64px -32px rgba(168, 85, 247, 0.35)",
+        boxShadow: "0 0 90px -36px rgba(168, 85, 247, 0.55)",
+        backgroundImage:
+          "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.10) 0%, transparent 55%)",
       }}
     >
       {/* Top-edge gradient accent — same treatment as the login card so the

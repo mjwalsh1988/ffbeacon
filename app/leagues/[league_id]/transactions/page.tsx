@@ -4,14 +4,31 @@ import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { pulseLeague } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
-import { resolveLeagueContext, type LeagueContext } from "@/lib/league-format-resolution";
+import {
+  resolveLeagueContext,
+  describeDerived,
+  type LeagueContext,
+} from "@/lib/league-format-resolution";
 import { loadLeagueTransactions, type TransactionFilter } from "@/lib/league-transactions-data";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
+import {
+  analyzeLeagueTrades,
+  type LeagueTradeSignalCheck,
+} from "@/lib/league-signal-check";
+import type { SleeperLeague } from "@/lib/sleeper";
 import { TransactionRow } from "@/components/transaction-row";
+import { SignalCheckTradeCard } from "@/components/signal-check-trade-card";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
 import { LeagueTabs } from "@/components/league-tabs";
+import { Panel, StatReadout } from "@/components/dashboard-panel";
+import { LeagueInfoPanel } from "@/components/league-info-panel";
+import {
+  buildLeagueFormatTags,
+  buildLeagueScoringTags,
+} from "@/lib/league-format-tags";
+import { LayoutDashboard, Users, ArrowRight, type LucideIcon } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +94,9 @@ export default async function LeagueTransactionsPage({
   const supabase = await createClient();
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, sleeper_league_id, name, season, metadata")
+    .select(
+      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
+    )
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
   if (!league) notFound();
@@ -128,18 +147,107 @@ export default async function LeagueTransactionsPage({
   const hasPrev = currentOffset > 0;
   const hasNext = currentOffset + rows.length < total;
 
+  // Grade every trade on this page through the real Signal Check pipeline (FF
+  // Beacon values, the league's derived format, the published ruleset), so each
+  // trade shows the same verdict a user gets typing it into /tools/signal-check.
+  const tradeRows = rows.filter((r) => r.type === "trade");
+  const rosterLabels: Record<number, string> = {};
+  for (const [rid, identity] of Object.entries(rows[0]?.rosterIdentities ?? {})) {
+    rosterLabels[Number(rid)] = identity.teamName;
+  }
+  const tradeAnalysis =
+    tradeRows.length > 0
+      ? await analyzeLeagueTrades(adminClient, {
+          sleeperLeague: league.metadata as unknown as SleeperLeague,
+          trades: tradeRows.map((r) => ({
+            sleeperTransactionId: r.sleeperTransactionId,
+            adds: r.adds,
+            draftPicks: r.draftPicks,
+          })),
+          rosterLabels,
+        })
+      : null;
+  const gradedTrades: Map<string, LeagueTradeSignalCheck> =
+    tradeAnalysis?.results ?? new Map();
+
+  // League identity + context for the highlighted sidebar card, mirroring the
+  // overview page so every deep-view surface reads as one dashboard. Format is
+  // derived from the league's Sleeper settings; only the value source respects
+  // the user's pick (CLAUDE.md: League Pulse Format Resolution).
+  const formatTags = buildLeagueFormatTags({
+    rosterPositions: league.roster_positions,
+    scoringSettings: league.scoring_settings,
+    teamCount: league.total_rosters,
+  });
+  const scoringTags = buildLeagueScoringTags(league.scoring_settings);
+  const derivedLabel = describeDerived(context.derived);
+  const coverageOk = context.coverage !== "none";
+  const sourceDisplay = coverageOk ? context.sourceDisplay : "N/A";
+  const formatDisplay = coverageOk ? context.formatDisplay : "N/A";
+  const pickSourceDisplay =
+    coverageOk && context.pickSource && context.pickSource.slug !== context.sourceSlug
+      ? context.pickSource.display
+      : null;
+  const fallbackDisplay =
+    context.coverage === "fallback" ? context.fallback?.derivedDisplay ?? null : null;
+  const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
+  const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";
+
+  const infoPanelProps = {
+    leagueName: league.name,
+    season: league.season ?? null,
+    teamCount: league.total_rosters ?? null,
+    status: league.status ?? null,
+    formatTags,
+    scoringTags,
+    lastUpdatedLabel: lastPulsedLabel,
+    cached: pulseResult.cached,
+    coverage: context.coverage,
+    sourceDisplay,
+    formatDisplay,
+    derivedLabel,
+    fallbackDisplay,
+    pickSourceDisplay,
+  };
+
+  // At-a-glance transaction counts from the unfiltered facet set (so the
+  // snapshot reflects the whole league, not the current filter).
+  const typeCountBy = new Map(facets.types.map((t) => [t.value, t.count]));
+  const totalAll = facets.types.reduce((sum, t) => sum + t.count, 0);
+  const tradeCount = typeCountBy.get("trade") ?? 0;
+  const waiverCount =
+    (typeCountBy.get("waiver") ?? 0) + (typeCountBy.get("free_agent") ?? 0);
+
+  // In-view links back to the other deep-view surfaces (username forwarded so
+  // the switcher + Teams owner default survive the hop).
+  const overviewHref = leagueHref;
+  const teamsHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}?tab=teams`;
+
   return (
     <main id="main">
-      <header className="border-b border-line">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6">
+      <header className="relative overflow-hidden border-b border-line">
+        {/* Beacon-gradient accent bar, matching the On The Clock command strip. */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+          }}
+        />
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          {/* Slim header: breadcrumb + actions only. League identity and context
+              live in the highlighted LeagueInfoPanel in the sidebar, matching
+              the overview page. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <LeagueBreadcrumb
               homeHref={homeHref}
               crumbs={[
                 { label: league.name, href: leagueHref },
                 { label: "Transactions" },
               ]}
-              className="sm:col-start-1 sm:row-start-1"
             />
             <LeagueHeaderActions
               sleeperLeagueId={sleeperLeagueId}
@@ -148,21 +256,8 @@ export default async function LeagueTransactionsPage({
               otherLeagues={otherLeagues}
               searchedUsername={searchedUsername}
               canForceRefresh={canForceRefresh}
-              className="sm:col-start-2 sm:row-start-1"
             />
-            <h1 className="min-w-0 text-3xl font-semibold tracking-tight sm:col-start-1 sm:row-start-2 sm:text-4xl">
-              Transactions
-            </h1>
           </div>
-          <p className="mt-2 text-sm text-ink-muted">
-            {total} total {total === 1 ? "transaction" : "transactions"}
-            {context.coverage !== "none" && (
-              <>
-                {" "}
-                · values via {context.sourceDisplay} • {context.formatDisplay}
-              </>
-            )}
-          </p>
         </div>
       </header>
 
@@ -172,55 +267,192 @@ export default async function LeagueTransactionsPage({
         searchedUsername={searchedUsername}
       />
 
-      <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-        <TransactionFilters
-          sleeperLeagueId={sleeperLeagueId}
-          types={facets.types}
-          teams={facets.teams}
-          weeks={facets.weeks}
-        />
-
-        {rows.length === 0 ? (
-          <div className="rounded-card border border-line bg-surface p-8 text-center">
-            <p className="text-sm text-ink-muted">
-              No transactions match the current filters.
-            </p>
-          </div>
-        ) : (
-          <ol className="space-y-3" role="list" aria-label="League transactions">
-            {rows.map((row) => (
-              <li key={row.sleeperTransactionId} id={`tx-${row.sleeperTransactionId}`}>
-                <TransactionRow data={row} sleeperLeagueId={sleeperLeagueId} />
-              </li>
-            ))}
-          </ol>
-        )}
-
-        {(hasPrev || hasNext) && (
-          <nav
-            aria-label="Transactions pagination"
-            className="flex flex-wrap items-center justify-between gap-3"
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Transactions: league info + quick panels in a LEFT rail, the filter
+            bar and activity feed on the RIGHT. The rail stacks above the feed
+            below xl, mirroring the overview page. */}
+        <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <aside
+            aria-label="League information and links"
+            className="space-y-6 xl:sticky xl:top-8 xl:self-start"
           >
-            <p className="text-xs text-ink-subtle">
-              Showing {currentOffset + 1}–{currentOffset + rows.length} of {total}
-            </p>
-            <div className="flex gap-2">
-              <PaginationLink
-                disabled={!hasPrev}
-                href={buildHref(sleeperLeagueId, sp, Math.max(0, currentOffset - PAGE_SIZE))}
-                label="Previous"
-              />
-              <PaginationLink
-                disabled={!hasNext}
-                href={buildHref(sleeperLeagueId, sp, currentOffset + PAGE_SIZE)}
-                label="Next"
-              />
-            </div>
-          </nav>
-        )}
+            <LeagueInfoPanel layout="sidebar" {...infoPanelProps} />
+
+            {/* Supplementary rail panels are hidden below the sidebar
+                breakpoint. `hidden` sets display:none, so they leave the
+                accessibility tree entirely and screen readers skip them on
+                mobile rather than reading a stack of secondary links. */}
+            <Panel eyebrow="At a glance" title="Activity" className="hidden xl:block">
+              <dl className="grid grid-cols-3 gap-2">
+                <StatReadout label="Total" value={String(totalAll)} accent="ink" />
+                <StatReadout label="Trades" value={String(tradeCount)} accent="purple" />
+                <StatReadout label="Waivers" value={String(waiverCount)} accent="cyan" />
+              </dl>
+            </Panel>
+
+            <Panel
+              eyebrow="Go deeper"
+              title="Explore this league"
+              className="hidden xl:block"
+            >
+              <ul className="space-y-2">
+                <li>
+                  <ExploreLink
+                    href={overviewHref}
+                    icon={LayoutDashboard}
+                    label="League overview"
+                    hint="Power rankings and league snapshot"
+                  />
+                </li>
+                <li>
+                  <ExploreLink
+                    href={teamsHref}
+                    icon={Users}
+                    label="Teams and rosters"
+                    hint="Compare every roster side by side"
+                  />
+                </li>
+              </ul>
+            </Panel>
+          </aside>
+
+          <div className="min-w-0 space-y-6">
+            <TransactionFilters
+              sleeperLeagueId={sleeperLeagueId}
+              types={facets.types}
+              teams={facets.teams}
+              weeks={facets.weeks}
+            />
+
+            <Panel
+              eyebrow="Feed"
+              title="Transactions"
+              helper={
+                gradedTrades.size > 0
+                  ? `${total} total ${total === 1 ? "transaction" : "transactions"}. Trades graded by Signal Check using FF Beacon values${tradeAnalysis?.formatDisplay ? ` in ${tradeAnalysis.formatDisplay}` : ""}.`
+                  : coverageOk
+                    ? `${total} total ${total === 1 ? "transaction" : "transactions"}, values via ${sourceDisplay} in ${formatDisplay}.`
+                    : `${total} total ${total === 1 ? "transaction" : "transactions"}.`
+              }
+              bodyClassName="p-4 sm:p-5"
+            >
+              {tradeAnalysis?.formatNotice && (
+                <p
+                  role="status"
+                  className="mb-4 rounded-card border border-brand-cyan/30 bg-brand-cyan/5 p-3 text-xs leading-relaxed text-ink-muted"
+                >
+                  {tradeAnalysis.formatNotice}
+                </p>
+              )}
+
+              {rows.length === 0 ? (
+                <div className="rounded-card border border-line bg-base/40 p-8 text-center">
+                  <p className="text-sm text-ink-muted">
+                    No transactions match the current filters.
+                  </p>
+                </div>
+              ) : (
+                <ol className="space-y-4" role="list" aria-label="League transactions">
+                  {rows.map((row) => {
+                    const graded =
+                      row.type === "trade"
+                        ? gradedTrades.get(row.sleeperTransactionId)
+                        : undefined;
+                    return (
+                      <li key={row.sleeperTransactionId} id={`tx-${row.sleeperTransactionId}`}>
+                        {graded ? (
+                          <SignalCheckTradeCard
+                            view={graded.view}
+                            assetMeta={graded.assetMeta}
+                            sleeperLeagueId={sleeperLeagueId}
+                            sleeperTransactionId={row.sleeperTransactionId}
+                            week={row.week}
+                            createdAtSleeper={row.createdAtSleeper}
+                            status={row.status}
+                          />
+                        ) : (
+                          <TransactionRow data={row} sleeperLeagueId={sleeperLeagueId} />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+
+              {(hasPrev || hasNext) && (
+                <nav
+                  aria-label="Transactions pagination"
+                  className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line/70 pt-4"
+                >
+                  <p className="text-xs text-ink-subtle">
+                    Showing {currentOffset + 1}-{currentOffset + rows.length} of {total}
+                  </p>
+                  <div className="flex gap-2">
+                    <PaginationLink
+                      disabled={!hasPrev}
+                      href={buildHref(sleeperLeagueId, sp, Math.max(0, currentOffset - PAGE_SIZE))}
+                      label="Previous"
+                    />
+                    <PaginationLink
+                      disabled={!hasNext}
+                      href={buildHref(sleeperLeagueId, sp, currentOffset + PAGE_SIZE)}
+                      label="Next"
+                    />
+                  </div>
+                </nav>
+              )}
+            </Panel>
+          </div>
+        </div>
       </div>
     </main>
   );
+}
+
+function ExploreLink({
+  href,
+  icon: Icon,
+  label,
+  hint,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-11 items-center gap-3 rounded-card border border-line bg-base/50 px-3 py-2.5 transition-colors hover:border-brand-cyan/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-ink">{label}</span>
+        <span className="block truncate text-xs text-ink-subtle">{hint}</span>
+      </span>
+      <ArrowRight
+        aria-hidden="true"
+        className="h-4 w-4 shrink-0 text-ink-subtle transition-colors group-hover:text-brand-cyan"
+      />
+    </Link>
+  );
+}
+
+function formatRelative(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const secs = Math.round(diffMs / 1000);
+  if (secs < 60) return `${secs} seconds ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 function PaginationLink({

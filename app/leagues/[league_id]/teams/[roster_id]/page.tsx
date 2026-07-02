@@ -147,7 +147,16 @@ export default async function TeamDetailPage({
 
   return (
     <main id="main">
-      <header className="border-b border-line">
+      <header className="relative overflow-hidden border-b border-line">
+        {/* Beacon-gradient accent bar, matching the On The Clock command strip. */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+          }}
+        />
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6">
             <LeagueBreadcrumb

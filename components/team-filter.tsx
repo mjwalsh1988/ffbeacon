@@ -124,10 +124,17 @@ export function TeamFilter({
   return (
     <div className="space-y-4">
       <div
-        className="rounded-card border border-line bg-surface p-3 sm:p-4"
+        className="rounded-card border border-line bg-surface px-3 py-2.5 sm:px-4"
         aria-label="Filter visible teams"
       >
-        <p className="mb-2 text-xs uppercase tracking-wider text-ink-subtle">Show teams</p>
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+            Show teams
+          </p>
+          <p className="text-[11px] text-ink-subtle" aria-live="polite">
+            {visibleTeams.length} of {teams.length} shown
+          </p>
+        </div>
         <TeamChipBar
           teams={chipTeams}
           overallRankByRoster={overallRankByRoster}
@@ -135,10 +142,6 @@ export function TeamFilter({
           onToggleRoster={handleToggleRoster}
           onToggleAll={handleToggleAll}
         />
-        <p className="mt-1 text-[11px] text-ink-subtle" aria-live="polite">
-          Showing {visibleTeams.length} of {teams.length} team
-          {teams.length === 1 ? "" : "s"}. Click a team chip to toggle visibility.
-        </p>
       </div>
 
       {visibleTeams.length === 0 ? (

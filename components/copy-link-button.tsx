@@ -12,9 +12,10 @@ type CopyLinkButtonProps = {
   /** Visible label override. When omitted, the button is icon-only on
    * smaller sizes and shows "Copy link" on default/lg. */
   label?: string;
-  /** "sm" hides the label and tightens padding for inline use inside
-   * trade rows. "md" and "lg" are progressively roomier. */
-  size?: "sm" | "md" | "lg";
+  /** "xs" and "sm" hide the label and tighten padding for inline use inside
+   * trade rows ("xs" is the most condensed). "md" and "lg" are progressively
+   * roomier. */
+  size?: "xs" | "sm" | "md" | "lg";
 };
 
 /**
@@ -79,18 +80,21 @@ export function CopyLinkButton({
   };
 
   const sizeClasses =
-    size === "sm"
-      ? "min-h-9 min-w-9 px-2 text-xs"
-      : size === "lg"
-        ? "min-h-11 px-4 text-sm"
-        : "min-h-10 px-3 text-sm";
+    size === "xs"
+      ? "min-h-8 min-w-8 px-1.5 text-xs"
+      : size === "sm"
+        ? "min-h-9 min-w-9 px-2 text-xs"
+        : size === "lg"
+          ? "min-h-11 px-4 text-sm"
+          : "min-h-10 px-3 text-sm";
 
+  const iconOnly = size === "xs" || size === "sm";
   const visibleLabel =
     status === "copied"
       ? "Link copied"
       : status === "manual"
         ? "Press Ctrl+C"
-        : (label ?? (size === "sm" ? "" : "Copy link"));
+        : (label ?? (iconOnly ? "" : "Copy link"));
 
   const announcement =
     status === "copied"
@@ -107,7 +111,7 @@ export function CopyLinkButton({
         aria-label={ariaLabel}
         className={`inline-flex items-center justify-center gap-1.5 rounded-card border border-line bg-surface text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline-2 focus-visible:outline-brand-cyan ${sizeClasses}`}
       >
-        <LinkIcon />
+        <LinkIcon size={size === "xs" ? 12 : 14} />
         {visibleLabel && <span>{visibleLabel}</span>}
       </button>
       <span className="sr-only" aria-live="polite" role="status">
@@ -125,11 +129,11 @@ export function CopyLinkButton({
   );
 }
 
-function LinkIcon() {
+function LinkIcon({ size = 14 }: { size?: number }) {
   return (
     <svg
-      width="14"
-      height="14"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
