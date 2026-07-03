@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import {
-  BarChart3,
   Workflow,
   Calculator,
   Scale,
+  Swords,
   Timer,
   ArrowRight,
   Radar,
@@ -65,12 +65,12 @@ type FeaturedTool = {
 
 const FEATURED_TOOLS: FeaturedTool[] = [
   {
-    href: "/tools/signal-check",
-    title: "Signal Check",
+    href: "/tools/league-pulse",
+    title: "Sleeper League Pulse",
     description:
-      "Thinking about a trade? Build both sides and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
-    cta: "Analyze a trade",
-    icon: Scale,
+      "Type in your Sleeper username and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
+    cta: "Check your league's pulse",
+    icon: Workflow,
   },
   {
     href: "/tools/on-the-clock",
@@ -81,20 +81,20 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     icon: Timer,
   },
   {
-    href: "/rankings",
-    title: "Rankings Board",
+    href: "/tools/beacon-breakdown",
+    title: "Beacon Breakdown",
     description:
-      "See exactly where every player ranks today, sorted and filtered the way you think. Switch between scoring formats and ranking sites without ever losing your spot.",
-    cta: "Open the rankings",
-    icon: BarChart3,
+      "Torn between two players? Drop them into a matchup card and see who has the edge, with side-by-side values, rankings, and trends, plus a plain-English verdict you can screenshot and share.",
+    cta: "Compare players",
+    icon: Swords,
   },
   {
-    href: "/tools/league-pulse",
-    title: "Sleeper League Pulse",
+    href: "/tools/signal-check",
+    title: "Signal Check",
     description:
-      "Type in your Sleeper username and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
-    cta: "Check your league's pulse",
-    icon: Workflow,
+      "Thinking about a trade? Build both sides and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
+    cta: "Analyze a trade",
+    icon: Scale,
   },
   {
     href: "/tools/faab",

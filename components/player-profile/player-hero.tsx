@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { PlayerHeadshot } from "@/components/player-headshot";
+import { PlayerPortrait } from "@/components/player-profile/player-portrait";
 import { TeamAnthem } from "@/components/player-profile/team-anthem";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
 import { RoleBadge } from "@/components/player-profile/role-badge";
@@ -41,6 +41,9 @@ export function PlayerHero({
 }) {
   const fullName = player.full_name ?? `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
   const accent = positionAccent(player.position);
+  // The team's primary color pools behind the photo; fall back to the position
+  // accent for free agents / unmapped teams.
+  const teamColor = team?.primary_color ?? accent;
 
   return (
     <header className="relative overflow-hidden border-b border-line">
@@ -75,22 +78,16 @@ export function PlayerHero({
           </ol>
         </nav>
 
+        {/* Player photo beside the identity; the full-width Team Anthem banner
+            sits below with breathing room. The headshot is a large rounded
+            photo shown in full (object-contain, no crop) with no border. */}
         <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-7">
-          {/* Floating headshot: accent glow behind, soft shadow, no border. */}
-          <div className="relative shrink-0">
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 -z-10 scale-125 rounded-full blur-2xl"
-              style={{ background: `radial-gradient(circle, ${accent}44 0%, transparent 70%)` }}
-            />
-            <PlayerHeadshot
-              sleeperId={sleeperId}
-              position={player.position}
-              name=""
-              size={176}
-              className="drop-shadow-[0_18px_38px_rgba(0,0,0,0.6)]"
-            />
-          </div>
+          <PlayerPortrait
+            sleeperId={sleeperId}
+            name=""
+            accentColor={teamColor}
+            className="shrink-0 drop-shadow-[0_16px_34px_rgba(0,0,0,0.5)]"
+          />
 
           <div className="min-w-0 flex-1 text-center sm:text-left">
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
@@ -131,6 +128,7 @@ export function PlayerHero({
           </div>
         </div>
 
+        {/* Full-width Team Anthem banner with spacing above it. */}
         {team && (
           <div className="mt-7">
             <TeamAnthem team={team} />

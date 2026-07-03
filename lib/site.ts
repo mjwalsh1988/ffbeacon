@@ -41,9 +41,9 @@ export type NavItem = {
 // top-level nav item). Rankings Board is intentionally not listed here.
 export const TOOLS_NAV: NavChild[] = [
   {
-    label: "Signal Check",
-    href: "/tools/signal-check",
-    description: "Grade any trade with the Beacon Verdict",
+    label: "Sleeper League Pulse",
+    href: "/tools/league-pulse",
+    description: "Sync and analyze your Sleeper leagues",
   },
   {
     label: "On The Clock",
@@ -51,9 +51,14 @@ export const TOOLS_NAV: NavChild[] = [
     description: "Live Sleeper draft helper",
   },
   {
-    label: "Sleeper League Pulse",
-    href: "/tools/league-pulse",
-    description: "Sync and analyze your Sleeper leagues",
+    label: "Beacon Breakdown",
+    href: "/tools/beacon-breakdown",
+    description: "Compare two players head-to-head",
+  },
+  {
+    label: "Signal Check",
+    href: "/tools/signal-check",
+    description: "Grade any trade with the Beacon Verdict",
   },
   {
     label: "FAAB Calculator",
@@ -95,6 +100,12 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     href: "/tools/signal-check",
     description: "Grade any trade with the Beacon Verdict",
     keywords: ["trade", "grade", "calculator", "analyzer", "verdict"],
+  },
+  {
+    label: "Beacon Breakdown",
+    href: "/tools/beacon-breakdown",
+    description: "Compare two players head-to-head",
+    keywords: ["compare", "comparison", "versus", "vs", "player", "breakdown", "head to head"],
   },
   {
     label: "On The Clock",
@@ -141,11 +152,12 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
   {
     heading: "Tools",
     links: [
-      { label: "Rankings Board", href: "/rankings" },
-      { label: "Signal Check", href: "/tools/signal-check" },
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
       { label: "On The Clock", href: "/tools/on-the-clock" },
+      { label: "Beacon Breakdown", href: "/tools/beacon-breakdown" },
+      { label: "Signal Check", href: "/tools/signal-check" },
       { label: "FAAB Calculator", href: "/tools/faab" },
+      { label: "Rankings Board", href: "/rankings" },
     ],
   },
   {

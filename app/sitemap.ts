@@ -12,6 +12,7 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/rankings", priority: 0.9 },
   { path: "/players", priority: 0.7 },
   { path: "/tools", priority: 0.7 },
+  { path: "/tools/beacon-breakdown", priority: 0.6 },
   { path: "/tools/league-pulse", priority: 0.6 },
   { path: "/tools/faab", priority: 0.6 },
   { path: "/brief", priority: 0.7 },

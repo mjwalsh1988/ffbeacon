@@ -5,6 +5,7 @@ import {
   Workflow,
   Calculator,
   Scale,
+  Swords,
   Timer,
   ArrowRight,
   Accessibility,
@@ -94,6 +95,7 @@ type Tool = {
   href:
     | "/rankings"
     | "/tools/signal-check"
+    | "/tools/beacon-breakdown"
     | "/tools/league-pulse"
     | "/tools/on-the-clock"
     | "/tools/faab";
@@ -134,6 +136,21 @@ const TOOLS: Tool[] = [
       "Freeze and share a clean public verdict link",
     ],
     cta: "Analyze a trade",
+  },
+  {
+    icon: Swords,
+    href: "/tools/beacon-breakdown",
+    eyebrow: "Player comparison",
+    title: "Beacon Breakdown",
+    pitch:
+      "Two players. One verdict. Drop any two players into a matchup card and see who has the edge, with side-by-side values, rankings, trends, and a plain-English bottom line you can screenshot and share.",
+    bullets: [
+      "Head-to-head cards with a single Beacon Edge meter up top",
+      "Every row shows who wins: value, rank, production, risk, and upside",
+      "Dynasty and redraft outlooks weighted to your league format",
+      "A Beacon Verdict that reads like a real take, not a stat dump",
+    ],
+    cta: "Compare players",
   },
   {
     icon: Workflow,
