@@ -47,14 +47,7 @@ export function SiteFooter() {
 
         <div className="mt-12 border-t border-line pt-6 text-sm text-ink-muted">
           <p>
-            Built and maintained by{" "}
-            <Link
-              href={SITE.author.bylineHref}
-              className="font-medium text-ink hover:text-brand-purple"
-            >
-              {SITE.author.name}
-            </Link>{" "}
-            at {SITE.name}. © {year}
+            © {year} {SITE.name}
           </p>
         </div>
       </div>

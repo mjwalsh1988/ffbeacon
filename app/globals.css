@@ -153,3 +153,75 @@
     box-shadow: inset 0 0 0 2px #fde68a;
   }
 }
+
+/**
+ * Team anthem banner (player profile). A compact pennant that flows a team's
+ * three brand colors and carries the crowd chant. Three layers stack:
+ *   1. `.team-anthem-sweep` background: a looping gradient built from the team's
+ *      three colors (set inline as --anthem-c1/2/3), animated by shifting its
+ *      background-position so the colors drift across the banner.
+ *   2. a dark scrim div (Tailwind bg) the component adds for legibility, so the
+ *      white chant text stays readable regardless of how light a team color is.
+ *   3. `.team-anthem` ::after sheen: a soft diagonal highlight that sweeps across
+ *      once every few seconds for a premium "trophy shine" feel.
+ * Both animations halt under prefers-reduced-motion, leaving a static, still
+ * fully legible and fully colored banner.
+ */
+@keyframes anthem-sweep {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 200% 50%;
+  }
+}
+
+.team-anthem-sweep {
+  background-image: linear-gradient(
+    110deg,
+    var(--anthem-c1) 0%,
+    var(--anthem-c2) 28%,
+    var(--anthem-c3) 50%,
+    var(--anthem-c2) 72%,
+    var(--anthem-c1) 100%
+  );
+  background-size: 200% 100%;
+  animation: anthem-sweep 9s linear infinite;
+  will-change: background-position;
+}
+
+@keyframes anthem-sheen {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+.team-anthem::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    105deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 58%
+  );
+  background-size: 250% 100%;
+  animation: anthem-sheen 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-anthem-sweep {
+    animation: none;
+    background-position: 0% 50%;
+  }
+
+  .team-anthem::after {
+    animation: none;
+    background-image: none;
+  }
+}

@@ -2,10 +2,11 @@ export const SITE = {
   name: "FF Beacon",
   shortName: "Beacon",
   tagline: "Your signal through the fantasy noise.",
-  /** Short paragraph for the footer About column. Keep it under ~30 words so
-   * it sits comfortably alongside the other footer columns. */
+  /** Brand mission blurb for the footer About column. Focuses on the community
+   * and the welcome, not on specific tools. Keep it under ~30 words so it sits
+   * comfortably alongside the other footer columns. */
   about:
-    "Fantasy football tools built for everyone. Rankings, league sync, and waiver bids in plain English that work the same by eye or by ear.",
+    "Fantasy football for everyone. We're building a welcoming, supportive community where every manager belongs, whether you're new to the game, a lifelong veteran, or playing by ear.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://ffbeacon.com",
   author: {
     name: "Michael",
@@ -36,26 +37,23 @@ export type NavItem = {
 /** Every tool on the site, in display order. Single source of truth shared
  * by the header dropdown, the mobile menu, and (conceptually) the footer
  * Tools column. Keep descriptions short and jargon-free. */
+// Order mirrors the homepage tools grid (minus Rankings, which is its own
+// top-level nav item). Rankings Board is intentionally not listed here.
 export const TOOLS_NAV: NavChild[] = [
-  {
-    label: "Rankings Board",
-    href: "/rankings",
-    description: "Sortable player values, tiers, and trends",
-  },
   {
     label: "Signal Check",
     href: "/tools/signal-check",
     description: "Grade any trade with the Beacon Verdict",
   },
   {
-    label: "Sleeper League Pulse",
-    href: "/tools/league-pulse",
-    description: "Sync and analyze your Sleeper leagues",
-  },
-  {
     label: "On The Clock",
     href: "/tools/on-the-clock",
     description: "Live Sleeper draft helper",
+  },
+  {
+    label: "Sleeper League Pulse",
+    href: "/tools/league-pulse",
+    description: "Sync and analyze your Sleeper leagues",
   },
   {
     label: "FAAB Calculator",
