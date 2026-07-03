@@ -65,8 +65,67 @@ export const TOOLS_NAV: NavChild[] = [
 export const PRIMARY_NAV: NavItem[] = [
   { label: "Tools", href: "/tools", children: TOOLS_NAV },
   { label: "Rankings", href: "/rankings" },
+  { label: "The Beacon Brief", href: "/brief" },
   { label: "Guides", href: "/guides" },
   { label: "About", href: "/about" },
+];
+
+/** A destination the site search can match on the client. Tools and top-level
+ * pages are a tiny fixed set, so the header search filters this list locally
+ * instead of hitting the DB for them. `keywords` broadens what a label matches
+ * (for example "trade" -> Signal Check). Keep keywords lowercase. */
+export type SearchableTool = {
+  label: string;
+  href: Route;
+  description: string;
+  keywords: string[];
+};
+
+/** Tools + primary destinations, in the order the search palette lists them.
+ * Descriptions are reused verbatim from TOOLS_NAV where they exist. */
+export const SEARCHABLE_TOOLS: SearchableTool[] = [
+  {
+    label: "Rankings Board",
+    href: "/rankings",
+    description: "Full player and pick rankings for every format",
+    keywords: ["rankings", "board", "values", "tiers", "adp"],
+  },
+  {
+    label: "Signal Check",
+    href: "/tools/signal-check",
+    description: "Grade any trade with the Beacon Verdict",
+    keywords: ["trade", "grade", "calculator", "analyzer", "verdict"],
+  },
+  {
+    label: "On The Clock",
+    href: "/tools/on-the-clock",
+    description: "Live Sleeper draft helper",
+    keywords: ["draft", "sleeper", "board", "pick", "live"],
+  },
+  {
+    label: "Sleeper League Pulse",
+    href: "/tools/league-pulse",
+    description: "Sync and analyze your Sleeper leagues",
+    keywords: ["league", "sleeper", "sync", "power rankings", "transactions"],
+  },
+  {
+    label: "FAAB Calculator",
+    href: "/tools/faab",
+    description: "Recommended waiver bid ranges",
+    keywords: ["faab", "waiver", "bid", "budget", "add"],
+  },
+  {
+    label: "The Beacon Brief",
+    href: "/brief",
+    description: "Fantasy football news, injuries, and transactions",
+    keywords: ["news", "brief", "articles", "injuries", "transactions", "blog"],
+  },
+  {
+    label: "Guides",
+    href: "/guides",
+    description: "Plain-English fantasy football explainers",
+    keywords: ["guides", "learn", "help", "how to", "strategy"],
+  },
 ];
 
 /** Footer-link shape. `disabled` links render as a non-interactive
@@ -92,6 +151,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
   {
     heading: "Learn",
     links: [
+      { label: "The Beacon Brief", href: "/brief" },
       { label: "Guides", href: "/guides" },
       { label: "Fantasy Analytics 101", href: "/guides/fantasy-analytics-101", disabled: true },
       { label: "Accessible Fantasy Football", href: "/guides/accessible-fantasy-football", disabled: true },

@@ -685,7 +685,7 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
 function ArticleCard({ article }: { article: ArticleRow }) {
   return (
     <Link
-      href={`/articles/${article.slug}`}
+      href={`/brief/${article.slug}`}
       className="group flex h-full flex-col rounded-card border border-line bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-brand-purple/60 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

@@ -10,16 +10,13 @@ import {
 import type { FormatLike } from "@/lib/format-fallback";
 import { getActiveFormats, getAvailableSources, pickDefaultSource } from "@/lib/source";
 import { BeaconMark } from "@/components/beacon-mark";
-import { FormatToggle, type FormatOption } from "@/components/format-toggle";
-import { SourceToggle, type SourceOption } from "@/components/source-toggle";
+import { type FormatOption } from "@/components/format-toggle";
+import { type SourceOption } from "@/components/source-toggle";
 import { MobileMenu } from "@/components/mobile-menu";
+import { SiteSearch } from "@/components/site-search";
+import { PreferencesMenu } from "@/components/preferences-menu";
 import { HeaderNavLink } from "@/components/header-nav-link";
 import { NavDropdown } from "@/components/nav-dropdown";
-import {
-  InfoTooltip,
-  SOURCE_INFO_TOOLTIP,
-  FORMAT_INFO_TOOLTIP,
-} from "@/components/info-tooltip";
 
 async function loadHeaderData(): Promise<{
   formats: FormatOption[];
@@ -161,33 +158,20 @@ export async function SiteHeader() {
           )}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          {sources.length > 0 && (
-            <div className="hidden items-center gap-1 md:flex">
-              <InfoTooltip
-                content={SOURCE_INFO_TOOLTIP}
-                placement="below"
-                align="start"
-              />
-              <Suspense fallback={<TogglePillSkeleton />}>
-                <SourceToggle
-                  options={sources}
-                  initialSlug={initialSourceSlug}
-                  currentFormatSlug={initialFormatSlug}
-                  allFormats={allFormats}
-                />
-              </Suspense>
-            </div>
-          )}
-          <div className="hidden items-center gap-1 md:flex">
-            <InfoTooltip
-              content={FORMAT_INFO_TOOLTIP}
-              placement="below"
-              align="start"
-            />
+          {/* Site search: icon trigger visible on every breakpoint, opens the
+              accessible search palette (players, articles, tools). */}
+          <SiteSearch />
+          {/* Desktop: source + format toggles are tucked into a single popover
+              to save header space. Mobile keeps them inline in the slide-out
+              menu below. */}
+          <div className="hidden md:block">
             <Suspense fallback={<TogglePillSkeleton />}>
-              <FormatToggle
-                options={fallbackFormats}
-                initialSlug={initialFormatSlug}
+              <PreferencesMenu
+                formats={fallbackFormats}
+                initialFormatSlug={initialFormatSlug}
+                sources={sources}
+                initialSourceSlug={initialSourceSlug}
+                allFormats={allFormats}
                 supportedFormatSlugs={supportedFormatSlugs}
               />
             </Suspense>

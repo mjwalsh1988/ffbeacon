@@ -28,6 +28,20 @@ export function formatEastern(iso: string | null | undefined): string {
   }).format(d);
 }
 
+/** "Jun 12, 2026" in America/New_York, or n/a. Date only, no time-of-day, so
+ * no zone label is needed (a calendar date is unambiguous across US zones). */
+export function formatEasternDate(iso: string | null | undefined): string {
+  if (!iso) return NA;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return NA;
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: SITE_TIME_ZONE,
+  }).format(d);
+}
+
 /** "3 hours ago", "in 5 minutes", "yesterday", relative to nowMs. */
 export function formatRelative(
   iso: string | null | undefined,

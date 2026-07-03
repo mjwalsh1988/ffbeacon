@@ -1,10 +1,11 @@
 /**
  * Beacon Brief tab: published articles from The Beacon Brief that mention this
- * player. Titles are plain text for now (no public article reader route exists
- * yet), so nothing links out. Async server component; reads through the anon
- * server client, whose RLS already limits articles to status = 'published'.
+ * player. Titles link into the public reader at /brief/[slug]. Async server
+ * component; reads through the anon server client, whose RLS already limits
+ * articles to status = 'published'.
  */
 
+import Link from "next/link";
 import { Newspaper } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Panel } from "@/components/dashboard-panel";
@@ -71,7 +72,14 @@ export async function BeaconBriefTab({
                   <Newspaper className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                  <h3 className="text-base font-semibold leading-snug text-ink">{article.title}</h3>
+                  <h3 className="text-base font-semibold leading-snug text-ink">
+                    <Link
+                      href={`/brief/${article.slug}`}
+                      className="transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                    >
+                      {article.title}
+                    </Link>
+                  </h3>
                   {article.tl_dr && (
                     <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{article.tl_dr}</p>
                   )}
