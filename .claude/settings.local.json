@@ -180,7 +180,8 @@
       "PowerShell(npx vitest run lib/on-the-clock/recommend.test.ts)",
       "PowerShell(npx vitest run lib/on-the-clock/trade-analyzer.test.ts 2>&1 | Select-Object -Last 30)",
       "PowerShell(npx vitest run lib/on-the-clock/settings.test.ts app/admin/on-the-clock/actions.test.ts)",
-      "PowerShell(git commit *)"
+      "PowerShell(git commit *)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   },
   "enabledMcpjsonServers": [

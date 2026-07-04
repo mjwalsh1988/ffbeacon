@@ -181,7 +181,11 @@ export function SiteSearch() {
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    // Focus the input on the next frame so the portal has mounted.
+    // Focus the input right away so the user can type immediately. The portal is
+    // already mounted by the time this effect runs, so focus synchronously and
+    // re-assert on the next frame as a fallback in case the first call is
+    // interrupted by the layout shift from hiding body scroll.
+    inputRef.current?.focus();
     const raf = requestAnimationFrame(() => inputRef.current?.focus());
     document.body.style.overflow = "hidden";
 
@@ -216,9 +220,12 @@ export function SiteSearch() {
     };
   }, [open, close]);
 
+  // Keyboard (Enter) navigation. There is no anchor click here, so navigate
+  // programmatically, then close. Mouse clicks navigate through the result's
+  // <Link> instead (see OptionRow) to avoid a duplicate navigation.
   function go(r: AnyResult) {
-    close();
     router.push(resultHref(r));
+    close();
   }
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -365,7 +372,7 @@ export function SiteSearch() {
                         result={p}
                         active={i === activeIdx}
                         onHover={() => setActiveIdx(i)}
-                        onSelect={() => go(p)}
+                        onNavigate={() => go(p)}
                         describedBy={`${listboxId}-players`}
                       />
                     ))}
@@ -385,7 +392,7 @@ export function SiteSearch() {
                           result={a}
                           active={idx === activeIdx}
                           onHover={() => setActiveIdx(idx)}
-                          onSelect={() => go(a)}
+                          onNavigate={() => go(a)}
                           describedBy={`${listboxId}-articles`}
                         />
                       );
@@ -406,7 +413,7 @@ export function SiteSearch() {
                           result={t}
                           active={idx === activeIdx}
                           onHover={() => setActiveIdx(idx)}
-                          onSelect={() => go(t)}
+                          onNavigate={() => go(t)}
                           describedBy={`${listboxId}-tools`}
                         />
                       );
@@ -442,16 +449,28 @@ function SectionHeading({
   );
 }
 
-/** Shared wrapper for a selectable option. Uses a Link so plain clicks and
- * middle-click / open-in-new-tab all work, while onMouseDown drives the
- * single-click navigation and keeps focus in the input. */
+/** Shared wrapper for a selectable option. The <Link> carries the href so
+ * middle-click and open-in-new-tab work, but a plain left click navigates
+ * through onNavigate (router.push) instead of the Link's own click handler.
+ *
+ * Two subtleties, both learned the hard way, drive this:
+ *  1. We preventDefault on the click so the Link does NOT also navigate. Firing
+ *     both the Link's navigation and router.push sends two navigations to the
+ *     same href; on same-segment routes (player to player, article to article)
+ *     Next.js drops one and the user is stranded on the current page.
+ *  2. We navigate via router.push (owned by the always-mounted SiteSearch), not
+ *     the Link, because onNavigate also closes the dialog, which unmounts this
+ *     Link. Next.js aborts a Link's in-flight navigation when it unmounts, so a
+ *     Link-driven navigation would be cancelled by the close.
+ * Modified / non-primary clicks fall through untouched so the browser can open
+ * the href in a new tab. */
 function OptionRow({
   id,
   active,
   href,
   describedBy,
   onHover,
-  onSelect,
+  onNavigate,
   children,
 }: {
   id: string;
@@ -459,7 +478,7 @@ function OptionRow({
   href: string;
   describedBy: string;
   onHover: () => void;
-  onSelect: () => void;
+  onNavigate: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -468,13 +487,14 @@ function OptionRow({
         href={href}
         tabIndex={-1}
         onMouseEnter={onHover}
-        onMouseDown={(e) => {
-          // Left-click selects immediately without stealing input focus; let
-          // modified clicks (new tab) fall through to the browser.
-          if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-            e.preventDefault();
-            onSelect();
+        onClick={(e) => {
+          // Let modified / non-primary clicks open a new tab and keep the dialog
+          // open.
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+            return;
           }
+          e.preventDefault();
+          onNavigate();
         }}
         className={`flex min-h-11 items-center gap-3 px-4 py-2.5 transition-colors ${
           active ? "bg-brand-purple/15" : ""
@@ -491,14 +511,14 @@ function PlayerOption({
   result,
   active,
   onHover,
-  onSelect,
+  onNavigate,
   describedBy,
 }: {
   id: string;
   result: PlayerResult;
   active: boolean;
   onHover: () => void;
-  onSelect: () => void;
+  onNavigate: () => void;
   describedBy: string;
 }) {
   const detail = [result.position, result.team].filter(Boolean).join(", ");
@@ -509,7 +529,7 @@ function PlayerOption({
       href={`/players/${result.slug}`}
       describedBy={describedBy}
       onHover={onHover}
-      onSelect={onSelect}
+      onNavigate={onNavigate}
     >
       <PlayerHeadshot
         sleeperId={result.sleeperId}
@@ -538,14 +558,14 @@ function ArticleOption({
   result,
   active,
   onHover,
-  onSelect,
+  onNavigate,
   describedBy,
 }: {
   id: string;
   result: ArticleResult;
   active: boolean;
   onHover: () => void;
-  onSelect: () => void;
+  onNavigate: () => void;
   describedBy: string;
 }) {
   const meta = [
@@ -561,7 +581,7 @@ function ArticleOption({
       href={`/brief/${result.slug}`}
       describedBy={describedBy}
       onHover={onHover}
-      onSelect={onSelect}
+      onNavigate={onNavigate}
     >
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-ink">
@@ -584,14 +604,14 @@ function ToolOption({
   result,
   active,
   onHover,
-  onSelect,
+  onNavigate,
   describedBy,
 }: {
   id: string;
   result: ToolResult;
   active: boolean;
   onHover: () => void;
-  onSelect: () => void;
+  onNavigate: () => void;
   describedBy: string;
 }) {
   return (
@@ -601,7 +621,7 @@ function ToolOption({
       href={result.tool.href}
       describedBy={describedBy}
       onHover={onHover}
-      onSelect={onSelect}
+      onNavigate={onNavigate}
     >
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-ink">

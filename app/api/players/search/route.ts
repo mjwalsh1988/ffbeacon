@@ -5,6 +5,7 @@ import {
   readSleeperId,
   type SearchablePlayer,
 } from "@/lib/ranking-boards";
+import { searchFantasyPlayers } from "@/lib/player-search";
 import type { Position } from "@/lib/site";
 
 /**
@@ -58,32 +59,23 @@ export async function GET(req: Request) {
     50,
   );
 
-  const escaped = query.replace(/[%_]/g, (m) => `\\${m}`);
-  let builder = supabase
-    .from("players")
-    .select("id, slug, first_name, last_name, full_name, position, team, external_ids")
-    .eq("status", "active")
-    .or(
-      `full_name.ilike.%${escaped}%,first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%`,
-    )
-    .order("full_name", { ascending: true, nullsFirst: false })
-    .limit(limit);
-
-  builder = position
-    ? builder.eq("position", position)
-    : builder.in("position", ELIGIBLE_POSITIONS as unknown as string[]);
-
-  const { data, error } = await builder;
-  if (error) {
+  let rows;
+  try {
+    rows = await searchFantasyPlayers(supabase, {
+      query,
+      limit,
+      positions: position ? [position] : ELIGIBLE_POSITIONS,
+    });
+  } catch (error) {
     console.error("[players/search] query failed", error);
     return NextResponse.json({ error: "Search failed" }, { status: 500 });
   }
 
-  const players: SearchablePlayer[] = (data ?? []).map((p) => ({
+  const players: SearchablePlayer[] = rows.map((p) => ({
     playerId: p.id,
     slug: p.slug,
-    name: p.full_name ?? `${p.first_name} ${p.last_name}`,
-    position: p.position,
+    name: p.full_name ?? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),
+    position: p.position ?? "",
     team: p.team,
     sleeperId: readSleeperId(p.external_ids as Record<string, unknown> | null),
   }));

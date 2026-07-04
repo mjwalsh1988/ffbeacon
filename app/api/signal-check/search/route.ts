@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ELIGIBLE_POSITIONS, readSleeperId } from "@/lib/ranking-boards";
+import { readSleeperId } from "@/lib/ranking-boards";
+import { searchFantasyPlayers } from "@/lib/player-search";
 import { DEFAULT_SETTINGS } from "@/lib/signal-check/settings";
 
 /**
@@ -142,22 +143,15 @@ export async function GET(req: Request) {
     allowsPicks = fc?.league_type === "dynasty";
   }
 
-  const escaped = query.replace(/[%_]/g, (m) => `\\${m}`);
-  const { data, error } = await supabase
-    .from("players")
-    .select("id, first_name, last_name, full_name, position, team, external_ids")
-    .eq("status", "active")
-    .or(`full_name.ilike.%${escaped}%,first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%`)
-    .in("position", ELIGIBLE_POSITIONS as unknown as string[])
-    .order("full_name", { ascending: true, nullsFirst: false })
-    .limit(limit);
-
-  if (error) {
+  let rows;
+  try {
+    rows = await searchFantasyPlayers(supabase, { query, limit });
+  } catch (error) {
     console.error("[signal-check/search] query failed", error);
     return NextResponse.json({ error: "Search failed" }, { status: 500 });
   }
 
-  const players: PlayerResult[] = (data ?? []).map((p) => ({
+  const players: PlayerResult[] = rows.map((p) => ({
     kind: "player",
     playerId: p.id,
     name: p.full_name ?? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),

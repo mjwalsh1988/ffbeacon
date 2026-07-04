@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ELIGIBLE_POSITIONS, readSleeperId } from "@/lib/ranking-boards";
+import { readSleeperId } from "@/lib/ranking-boards";
+import { searchFantasyPlayers } from "@/lib/player-search";
 
 /**
  * GET /api/breakdown/search?q=&limit=
@@ -50,22 +51,15 @@ export async function GET(req: Request) {
     30,
   );
 
-  const escaped = query.replace(/[%_]/g, (m) => `\\${m}`);
-  const { data, error } = await supabase
-    .from("players")
-    .select("id, slug, first_name, last_name, full_name, position, team, external_ids")
-    .eq("status", "active")
-    .or(`full_name.ilike.%${escaped}%,first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%`)
-    .in("position", ELIGIBLE_POSITIONS as unknown as string[])
-    .order("full_name", { ascending: true, nullsFirst: false })
-    .limit(limit);
-
-  if (error) {
+  let rows;
+  try {
+    rows = await searchFantasyPlayers(supabase, { query, limit });
+  } catch (error) {
     console.error("[breakdown/search] query failed", error);
     return NextResponse.json({ error: "Search failed" }, { status: 500 });
   }
 
-  const results: PlayerResult[] = (data ?? []).map((p) => ({
+  const results: PlayerResult[] = rows.map((p) => ({
     slug: p.slug,
     playerId: p.id,
     name: p.full_name ?? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ELIGIBLE_POSITIONS, readSleeperId } from "@/lib/ranking-boards";
+import { readSleeperId } from "@/lib/ranking-boards";
+import { searchFantasyPlayers } from "@/lib/player-search";
 
 /**
  * GET /api/search?q=&limit=
@@ -85,19 +86,18 @@ export async function GET(req: Request) {
   const supabase = await createClient();
   const escaped = query.replace(/[%_]/g, (m) => `\\${m}`);
 
-  const [playerRes, articleRes] = await Promise.all([
-    supabase
-      .from("players")
-      .select("slug, first_name, last_name, full_name, position, team, external_ids")
-      .eq("status", "active")
-      .in("position", ELIGIBLE_POSITIONS as unknown as string[])
-      .or(
-        `full_name.ilike.%${escaped}%,first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%`,
-      )
-      // Over-fetch so rankPlayers has room to promote prefix matches before we
-      // slice to PLAYER_LIMIT.
-      .order("full_name", { ascending: true, nullsFirst: false })
-      .limit(PLAYER_LIMIT * 4),
+  // Players are filtered to active, currently-ranked (fantasy relevant) players
+  // in the six fantasy positions by the shared helper. We over-fetch so
+  // rankPlayers has room to promote prefix matches before we slice to
+  // PLAYER_LIMIT.
+  const [playerRows, articleRes] = await Promise.all([
+    searchFantasyPlayers(supabase, {
+      query,
+      limit: PLAYER_LIMIT * 4,
+    }).catch((err) => {
+      console.error("[search] player query failed", err);
+      return [];
+    }),
     supabase
       .from("articles")
       .select("slug, title, tl_dr, article_type, published_at")
@@ -109,15 +109,12 @@ export async function GET(req: Request) {
       .limit(ARTICLE_LIMIT),
   ]);
 
-  if (playerRes.error) {
-    console.error("[search] player query failed", playerRes.error);
-  }
   if (articleRes.error) {
     console.error("[search] article query failed", articleRes.error);
   }
 
   const players: PlayerResult[] = rankPlayers(
-    (playerRes.data ?? []).map((p) => ({
+    playerRows.map((p) => ({
       kind: "player" as const,
       slug: p.slug,
       name: p.full_name ?? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),
