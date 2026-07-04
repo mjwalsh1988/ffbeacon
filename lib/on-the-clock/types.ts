@@ -142,6 +142,15 @@ export interface PositionFallbackTargets {
   DEF: number;
 }
 
+export interface ValueIndicatorSettings {
+  /**
+   * Neutral band (in picks) for the ADP value indicators: a made pick is only
+   * flagged good value / reach when |pick_no - ADP| reaches this many picks.
+   * Keeps ordinary draft-order noise from being called good or bad.
+   */
+  thresholdPicks: number;
+}
+
 export interface MappingVisibilitySettings {
   /** Show the admin panel listing recent unmapped Sleeper ids per draft. */
   showUnmappedPanel: boolean;
@@ -158,6 +167,7 @@ export interface OnTheClockSettings {
   dstk: DstkSettings;
   positionAdjust: PositionAdjustSettings;
   positionFallbackTargets: PositionFallbackTargets;
+  valueIndicators: ValueIndicatorSettings;
   mappingVisibility: MappingVisibilitySettings;
 }
 
@@ -214,8 +224,14 @@ export interface LeagueCard {
   name: string;
   totalRosters: number;
   avatar: string | null;
-  /** Mapped from the Sleeper league status: "drafting" | "pre_draft". */
+  /** The raw Sleeper league status ("drafting", "pre_draft", "in_season", ...). */
   draftStatus: string;
+  /**
+   * Which picker group the league belongs to. Actively drafting leagues lead,
+   * pre-draft leagues follow, completed/in-season drafts render last (openable
+   * for review, visually differentiated).
+   */
+  stage: "drafting" | "pre_draft" | "completed";
   /**
    * FF Beacon format auto-detected from the league's Sleeper scoring/roster
    * settings (On The Clock derives the format from the league, never the global

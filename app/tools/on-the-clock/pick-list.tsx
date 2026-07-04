@@ -2,8 +2,13 @@
 
 /**
  * Chronological pick list: a full a11y peer of the visual board, rendered as a
- * semantic <table> in pick order. MOCKED for Phase 4 from the fixture picks.
- * Unmapped picks still render from cached name fields (no value chip).
+ * semantic <table> in pick order. Unmapped picks still render from cached name
+ * fields (no value chip).
+ *
+ * Carries a "Value vs ADP" column: the same good-value / reach signal as the
+ * board icons, but written out in plain English ("Great value: taken 14 picks
+ * after ADP", "Reach: taken 11 picks before ADP", "Near ADP") with the raw ADP
+ * beneath it so the WHY is readable per pick.
  *
  * The leading pick/round number column is kept as narrow as possible
  * (whitespace-nowrap, shrink-to-fit) so the player name sits right next to it
@@ -11,6 +16,11 @@
  */
 
 import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
+import {
+  classifyPickValue,
+  describePickValue,
+  pickValueDelta,
+} from "@/lib/on-the-clock/adp";
 import { normalizePositionColor, POSITION_ROW } from "@/lib/on-the-clock/position-colors";
 import { EmptyCard } from "./states";
 
@@ -25,6 +35,8 @@ export function PickList({
   draft,
   teamNameByRosterId,
   connectedUserId,
+  adpBySleeperId = {},
+  adpThreshold = 6,
 }: {
   picks: ShapedPick[];
   users: ShapedDraftCache["users"];
@@ -32,6 +44,10 @@ export function PickList({
   /** roster_id -> owner username (Sleeper display_name). */
   teamNameByRosterId: Record<number, string>;
   connectedUserId: string;
+  /** Sleeper player id -> ADP, for the value-vs-ADP column. */
+  adpBySleeperId?: Record<string, number>;
+  /** Neutral band (picks) before a pick is called good value / reach. */
+  adpThreshold?: number;
 }) {
   if (picks.length === 0) {
     return (
@@ -73,12 +89,32 @@ export function PickList({
             <th scope="col" className="px-3 py-2 text-left font-semibold">
               Team
             </th>
+            <th scope="col" className="px-3 py-2 text-left font-semibold">
+              Value vs ADP
+            </th>
           </tr>
         </thead>
         <tbody>
           {ordered.map((p) => {
             const pickInRound = teams ? ((p.pickNo - 1) % teams) + 1 : p.pickNo;
             const yours = p.pickedBy === connectedUserId;
+            const adp =
+              !p.isKeeper && p.sleeperPlayerId
+                ? (adpBySleeperId[p.sleeperPlayerId] ?? null)
+                : null;
+            const delta = pickValueDelta(p.pickNo, adp);
+            const verdict = classifyPickValue(delta, adpThreshold);
+            const verdictText = p.isKeeper
+              ? "Keeper"
+              : adp === null
+                ? "No ADP data"
+                : describePickValue(delta, verdict);
+            const verdictClass =
+              verdict === "value"
+                ? "font-medium text-emerald-300"
+                : verdict === "reach"
+                  ? "font-medium text-amber-300"
+                  : "text-ink-muted";
             // Faint position hue behind the row so the list matches the board's
             // color coding. Ownership stays signalled by the purple bar on the
             // pick cell below (not a row fill), so the two never conflict.
@@ -109,9 +145,7 @@ export function PickList({
                     <span className="ml-2 text-[10px] text-ink-subtle">(not in our database)</span>
                   )}
                 </td>
-                <td
-                  className={`rounded-r-md border-y border-r border-line-accent px-3 py-2 text-ink-muted ${rowTint}`}
-                >
+                <td className={`border-y border-line-accent px-3 py-2 text-ink-muted ${rowTint}`}>
                   {teamName(p)}
                   {yours && (
                     <span className="ml-1 text-xs font-semibold text-brand-cyan">(You)</span>
@@ -119,6 +153,16 @@ export function PickList({
                   {p.isKeeper && (
                     <span className="ml-1 rounded-full border border-line px-1.5 py-0.5 text-[10px] text-ink-subtle">
                       Keeper
+                    </span>
+                  )}
+                </td>
+                <td
+                  className={`rounded-r-md border-y border-r border-line-accent px-3 py-2 text-xs ${rowTint}`}
+                >
+                  <span className={`block ${verdictClass}`}>{verdictText}</span>
+                  {adp !== null && (
+                    <span className="block text-[10px] text-ink-subtle">
+                      ADP {adp.toFixed(1)}
                     </span>
                   )}
                 </td>

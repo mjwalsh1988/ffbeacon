@@ -3325,3 +3325,95 @@ PHASE 6D (Admin Settings UI) COMPLETE at the code level. /admin/on-the-clock exp
 Clock setting in plain-English groups, gated by requireAdmin, validated + clamped + service-role-written,
 with reset-to-defaults that preserves launch state. Unwired settings stay code-only and round-trip
 untouched. No value-pipeline / source-format / polling change. Next: end-to-end live-draft QA.
+
+OTC-T120 | completed | Sleeper draft-market ingestion (ADP + projections), nightly + historical.
+     | NEW supabase/migrations/0120_player_market_snapshots.sql: player_market_snapshots (one row per
+       source/season_type/season/sleeper_player_id/snapshot_date; adp jsonb map keyed by normalized
+       format key with the 999 sentinel stripped; projected_pts_ppr/half/std columns; metadata jsonb =
+       full raw Sleeper object; player/date/source indexes; RLS public-select + service-role-all) plus
+       the player_market_latest security_invoker view for current lookups. Applied via MCP; policies
+       verified via pg_policies; types regenerated to lib/database.types.ts.
+     | NEW lib/sync-sleeper-market.ts (runSleeperMarketSync: one call to the undocumented
+       api.sleeper.com/projections/nfl/{season} endpoint, rows stored only when they carry a real ADP
+       or projection, zero-row and all-sentinel writes throw, batched idempotent upserts) + NEW
+       scripts/sync-sleeper-market.ts (npm run sync:market) + NEW app/api/cron/sync-sleeper-market
+       (CRON_SECRET + recordCronRun) + vercel.json 0 11 * * * + lib/cron-runs.ts registry entry +
+       lib/sleeper.ts getSleeperSeasonProjections. docs/data-sources.md documents the endpoint shape
+       and the no-historical-access limitation.
+     | verified: yes (first run stored 672 rows, 100% player match, 10 ADP formats; re-run idempotent
+       at 672 rows / 1 date partition)
+
+OTC-T121 | completed | Completed-draft snapshot system (schema + finalizer + route).
+     | NEW supabase/migrations/0121_on_the_clock_draft_snapshots.sql: on_the_clock_draft_snapshots (one
+       row per draft: frozen board/draft/transactions/awards jsonb + provenance columns
+       value/adp_snapshot_source+date, adp_format_key, player_pool, snapshot_confidence, checks) and
+       on_the_clock_pick_snapshots (relational per-pick beacon value/rank, sleeper_adp,
+       pick_value_delta, value_verdict; cascade). RLS public-select + service-role-all, verified.
+     | NEW lib/on-the-clock/history-lookup.ts (server-only): resolveHistoricalBoard (re-ranks
+       player_value_history source=ffbeacon at/before the draft completion time, paginated + bounded,
+       falls forward then to current; classifies exact/during_draft/previous/next_available/
+       current_fallback) + resolveAdpSnapshot (nearest player_market_snapshots partition, ordered adp
+       key candidates) + deriveSnapshotConfidence. NEW lib/on-the-clock/snapshot-types.ts (pure payload
+       types). NEW lib/on-the-clock/draft-snapshot.ts getOrCreateDraftSnapshot (snapshot-first; builds
+       once from frozen inputs incl. trades via shared shaping and awards computed at finalize). NEW
+       app/api/on-the-clock/draft/snapshot route (existing snapshots unthrottled; create path behind
+       the durable claim). NEW lib/on-the-clock/transactions-shape.ts extracted from the transactions
+       route so live + snapshot shaping is identical.
+     | verified: typecheck + tests + build green (live end-to-end finalize needs a real completed
+       draft; see handoff)
+
+OTC-T122 | completed | On The Clock UX: ADP everywhere, inferred pool, grouped league search, awards.
+     | Leagues route + picker: every league with a draft id now returns, staged Actively Drafting >
+       Pre-Draft > Completed/In-Season (per-stage caps; completed cards dimmed with a Draft complete
+       badge). LeagueCard.stage added.
+     | Pool: manual Everyone/Rookies toggle REMOVED. inferPlayerPool (redraft/chopped -> everyone;
+       dynasty <= 6 rounds -> rookies else everyone; best ball follows league type) +
+       describeInferredPool + one-time accessible PoolNotice dialog (localStorage-keyed per draft,
+       focus-managed, Escape/backdrop dismiss).
+     | ADP: board route attaches latest Sleeper ADP per format market (adpFormatKeyCandidates maps
+       format slug -> adp key; rookie pools prefer rookie ADP). Available list gains a sortable Sleeper
+       ADP column with plain-English Beacon-vs-ADP comparison; draft board cells show Gem (good value)
+       / AlertTriangle (reach) icons with the comparison written into the cell aria-label; pick list
+       gains a Value vs ADP column ("Great value: taken 14 picks after ADP"). Threshold admin-tunable
+       (valueIndicators.thresholdPicks, default 6, clamped 1..100).
+     | Awards: Best Drafter (North Star) now = most total draft value vs Sleeper ADP (sum of pick_no -
+       ADP over non-keeper picks with known ADP; pending without ADP data; copy updated). Worst Drafter
+       unchanged. Snapshot mode renders the awards LOCKED at finalize.
+     | Snapshot mode client: completed drafts load the finalized snapshot (frozen board/cache/trades/
+       awards), hide Sync + Realtime, and show a "Final results" provenance banner (Eastern-time
+       formatted). Fallback to live values only when a snapshot cannot be built, with a visible
+       warning. Player photos in On The Clock are rounded-square (no circles).
+     | Admin: /admin/on-the-clock gains the ADP value indicators setting + a read-only
+       Completed-draft snapshots panel (finalized time, value/ADP dates + how chosen, confidence).
+     | verified: yes (typecheck clean; 29 files / 314 tests pass incl. new adp/pool/awards/leagues
+       tests; production build green; no commits, no pushes)
+
+OTC-T123 | completed | Lost Signal award mirror + review-driven hardening.
+     | lib/on-the-clock/awards.ts: Worst Drafter (The Lost Signal Award) now mirrors North Star
+       exactly: LOWEST total (pick_no - ADP) over ADP-known non-keeper picks (the drafter who reached
+       earliest / lost the most value against the market). Same pending rules (no ADP data, under two
+       eligible teams, all-tied) and the same signed "picks of ADP value" metric. Old
+       lowest-drafted-value logic removed. Tests updated + expanded (mirror scenario, biggest-net-reach
+       winner, both-pending on no ADP / keepers-only / exact tie).
+     | Review fixes (unbiased sub-agent findings on the T120-T122 work):
+       1. history-lookup.ts pagination now has a deterministic secondary sort (.order("id")) so tied
+          captured_at rows can never be duplicated/skipped across pages and silently drop players from
+          a permanently frozen board.
+       2. Snapshot payload carries thresholdPicks (the neutral band the draft was GRADED with);
+          snapshot-mode board icons and list verdicts classify against the frozen threshold, so a
+          later admin tuning can never change finalized results (matches the admin copy).
+       3. on-the-clock-client.tsx: activeDraftIdRef staleness guard on loadDraft/loadBoard/loadSnapshot
+          continuations (switching leagues mid-flight can no longer land league A's frozen snapshot
+          inside league B's room); loading flags reset on select.
+       4. draft-snapshot.ts freezes only trades with createdAt <= draft completion, so locked trade
+          awards reflect the draft window instead of whenever the draft was first opened (cutoff +
+          counts recorded in snapshot metadata).
+       Also: available-list "no ADP" dash uses sr-only text instead of aria-label-on-span; CLAUDE.md
+       ingestion-table list gains player_market_snapshots; pool-notice message uses the finalizer's
+       format in snapshot mode.
+     | files: lib/on-the-clock/awards.ts, lib/on-the-clock/awards.test.ts,
+       lib/on-the-clock/history-lookup.ts, lib/on-the-clock/draft-snapshot.ts,
+       lib/on-the-clock/snapshot-types.ts, app/tools/on-the-clock/on-the-clock-client.tsx,
+       app/tools/on-the-clock/available-list.tsx, CLAUDE.md
+     | verified: yes (typecheck clean; 29 files / 314 tests pass; production build green; no commits,
+       no pushes)

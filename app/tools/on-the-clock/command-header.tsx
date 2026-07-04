@@ -3,24 +3,23 @@
 /**
  * Draft Command Bar: the control bar of the room. Visually prominent and built
  * like a broadcast control strip (it scrolls with the page, not pinned). Shows
- * league identity + status, a bold
- * "on the clock" banner, format/source chips, the player-pool toggle, the user's
- * seat, and the Sync control. Always visible at every breakpoint (counts live in
- * the Room status panel, so nothing critical hides on mobile).
+ * league identity + status, a bold "on the clock" banner, format/values/pool
+ * chips, the user's seat, and the Sync control.
+ *
+ * The player pool is INFERRED from the league and draft (no manual toggle): the
+ * pool chip states what the room is showing, and the one-time PoolNotice modal
+ * explains why. In snapshot mode (a completed draft rendered from its finalized
+ * snapshot) the Sync control is replaced by a "results locked" note, because
+ * nothing about a finished draft can change.
  *
  * Carries the ASSERTIVE "your turn" live region (sr-only role=alert); the polite
  * sync channel lives in the SyncButton. The on-the-clock pulse is decorative and
  * reduced-motion-safe.
  */
 
-import { Users, Baby } from "lucide-react";
+import { Users, Baby, Lock } from "lucide-react";
 import type { ShapedDraftCache, PlayerPool } from "@/lib/on-the-clock/types";
 import { SyncButton } from "./sync-button";
-
-const POOL_OPTIONS: Array<{ id: PlayerPool; label: string; hint: string; icon: typeof Users }> = [
-  { id: "everyone", label: "Everyone", hint: "All ranked players", icon: Users },
-  { id: "rookies", label: "Rookies only", hint: "This year's class", icon: Baby },
-];
 
 function Chip({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
@@ -41,12 +40,12 @@ export function CommandHeader({
   formatLabel,
   formatIsClosest,
   pool,
-  onPoolChange,
   onTheClockTeam,
   onTheClockPickLabel,
   isYourTurn,
   yourSeatLabel,
   sync,
+  snapshotNotice = null,
 }: {
   leagueName: string;
   draft: ShapedDraftCache["draft"];
@@ -54,21 +53,32 @@ export function CommandHeader({
   formatLabel: string;
   /** True when a closest FF Beacon format was used (helper copy nuance). */
   formatIsClosest: boolean;
+  /** Inferred player pool (no manual toggle; see PoolNotice for the why). */
   pool: PlayerPool;
-  onPoolChange: (pool: PlayerPool) => void;
   onTheClockTeam: string;
   onTheClockPickLabel: string;
   isYourTurn: boolean;
   yourSeatLabel: string;
-  /** Controlled sync state, owned by the room (real POST /draft/sync). */
+  /** Controlled sync state, owned by the room. Null in snapshot mode. */
   sync: {
     syncing: boolean;
     cooldownRemaining: number;
     statusMessage: string;
     onSync: () => void;
-  };
+  } | null;
+  /**
+   * Snapshot mode note (e.g. "Final results. Values locked as of ..."). When
+   * set, the Sync control is hidden and this renders in its place.
+   */
+  snapshotNotice?: string | null;
 }) {
-  const statusWord = draft.draftStatus === "drafting" ? "Drafting" : draft.draftStatus ?? "Unknown";
+  const snapshotMode = snapshotNotice !== null;
+  const statusWord = snapshotMode
+    ? "Draft complete"
+    : draft.draftStatus === "drafting"
+      ? "Drafting"
+      : draft.draftStatus ?? "Unknown";
+  const PoolIcon = pool === "rookies" ? Baby : Users;
 
   return (
     <div className="border-b border-line bg-base/95 backdrop-blur supports-[backdrop-filter]:bg-base/80">
@@ -103,88 +113,69 @@ export function CommandHeader({
             </p>
           </div>
 
-          <SyncButton
-            syncing={sync.syncing}
-            cooldownRemaining={sync.cooldownRemaining}
-            statusMessage={sync.statusMessage}
-            onSync={sync.onSync}
-          />
+          {sync && !snapshotMode ? (
+            <SyncButton
+              syncing={sync.syncing}
+              cooldownRemaining={sync.cooldownRemaining}
+              statusMessage={sync.statusMessage}
+              onSync={sync.onSync}
+            />
+          ) : null}
         </div>
 
-        {/* On-the-clock banner (broadcast strip). */}
-        <div
-          className={`mt-3 flex items-center gap-2.5 rounded-card border px-3 py-2 ${
-            isYourTurn
-              ? "border-brand-cyan/60 bg-brand-cyan/10"
-              : "border-line bg-surface/50"
-          }`}
-        >
-          <span
-            aria-hidden="true"
-            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-              isYourTurn ? "bg-brand-cyan" : "bg-brand-purple"
-            } animate-pulse motion-reduce:animate-none`}
-          />
-          <p className="text-sm">
-            {isYourTurn ? (
-              <span className="font-bold text-brand-cyan">You are on the clock. Make your pick.</span>
-            ) : (
-              <>
-                <span className="font-semibold text-ink">On the clock:</span>{" "}
-                <span className="text-ink-muted">
-                  {onTheClockTeam} ({onTheClockPickLabel})
-                </span>
-              </>
-            )}
-          </p>
-        </div>
+        {/* On-the-clock banner (broadcast strip), or the snapshot lock note. */}
+        {snapshotMode ? (
+          <div className="mt-3 flex items-center gap-2.5 rounded-card border border-brand-purple/40 bg-brand-purple/10 px-3 py-2">
+            <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-purple" />
+            <p className="text-sm text-ink">
+              <span className="font-semibold">Final results.</span>{" "}
+              <span className="text-ink-muted">{snapshotNotice}</span>
+            </p>
+          </div>
+        ) : (
+          <div
+            className={`mt-3 flex items-center gap-2.5 rounded-card border px-3 py-2 ${
+              isYourTurn ? "border-brand-cyan/60 bg-brand-cyan/10" : "border-line bg-surface/50"
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                isYourTurn ? "bg-brand-cyan" : "bg-brand-purple"
+              } animate-pulse motion-reduce:animate-none`}
+            />
+            <p className="text-sm">
+              {isYourTurn ? (
+                <span className="font-bold text-brand-cyan">You are on the clock. Make your pick.</span>
+              ) : (
+                <>
+                  <span className="font-semibold text-ink">On the clock:</span>{" "}
+                  <span className="text-ink-muted">
+                    {onTheClockTeam} ({onTheClockPickLabel})
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+        )}
 
         {/* Locked status chips (no selectors): format is auto-detected from the
-            Sleeper league; values always come from FF Beacon. */}
+            Sleeper league; values always come from FF Beacon; the pool is
+            inferred from the league type + draft rounds. */}
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <Chip label="Format" value={formatLabel} accent />
           <Chip label="Values" value="FF Beacon" />
-
-          <div role="group" aria-label="Player pool" className="ml-auto flex gap-2">
-            {POOL_OPTIONS.map(({ id, label, hint, icon: Icon }) => {
-              const active = pool === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => onPoolChange(id)}
-                  className={`flex min-h-11 items-center gap-2 rounded-card border px-3 py-1.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
-                    active
-                      ? "border-brand-cyan/60 bg-brand-cyan/10"
-                      : "border-line bg-base hover:border-line-accent"
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-card border ${
-                      active ? "border-brand-cyan/50 text-brand-cyan" : "border-line text-ink-subtle"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="leading-tight">
-                    <span
-                      className={`block text-xs font-semibold ${active ? "text-brand-cyan" : "text-ink"}`}
-                    >
-                      {label}
-                    </span>
-                    <span className="block text-[10px] text-ink-subtle">{hint}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-medium">
+            <PoolIcon aria-hidden="true" className="h-3.5 w-3.5 text-ink-subtle" />
+            <span className="text-ink-subtle">Pool</span>
+            <span className="text-ink">{pool === "rookies" ? "Rookies only" : "All players"}</span>
+          </span>
         </div>
 
-        {/* Helper: where the locked format/values come from. */}
+        {/* Helper: where the locked format/values/pool come from. */}
         <p className="mt-1.5 text-[11px] text-ink-subtle">
-          Format detected from your Sleeper league. Values always come from FF Beacon.
+          Format and player pool detected from your Sleeper league. Values always come from FF
+          Beacon.
           {formatIsClosest ? " Closest FF Beacon format used for this league." : ""}
         </p>
       </div>

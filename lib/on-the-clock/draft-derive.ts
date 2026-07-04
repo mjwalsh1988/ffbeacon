@@ -99,6 +99,52 @@ export function excludeDrafted(board: RankedPlayer[], picks: ShapedPick[]): Rank
 }
 
 /**
+ * Rookie drafts run this many rounds or fewer. A dynasty draft with more rounds
+ * than this is a startup (full player pool).
+ */
+export const ROOKIE_DRAFT_MAX_ROUNDS = 6;
+
+/**
+ * Infer the player pool from the league's detected format and the draft's round
+ * count. No manual toggle: redraft (including chopped/guillotine, which derive as
+ * redraft) always shows everyone; dynasty uses the round count to split rookie
+ * drafts (6 rounds or fewer) from startups. Best ball follows its league type.
+ * Unknown round counts read as a startup so we never hide the full pool by
+ * accident.
+ */
+export function inferPlayerPool(params: {
+  formatSlug: string | null | undefined;
+  rounds: number;
+}): PlayerPool {
+  const isDynasty = (params.formatSlug ?? "").toLowerCase().startsWith("dynasty");
+  if (!isDynasty) return "everyone";
+  const rounds = Number(params.rounds);
+  if (Number.isFinite(rounds) && rounds > 0 && rounds <= ROOKIE_DRAFT_MAX_ROUNDS) {
+    return "rookies";
+  }
+  return "everyone";
+}
+
+/**
+ * Plain-English explanation of the inferred pool, for the one-time notice shown
+ * when a draft room opens.
+ */
+export function describeInferredPool(params: {
+  formatSlug: string | null | undefined;
+  rounds: number;
+  pool: PlayerPool;
+}): string {
+  const isDynasty = (params.formatSlug ?? "").toLowerCase().startsWith("dynasty");
+  if (!isDynasty) {
+    return "Looks like this is a redraft league, so we are showing all players.";
+  }
+  if (params.pool === "rookies") {
+    return `Looks like this is a dynasty rookie draft (${params.rounds} rounds), so we are showing rookies only.`;
+  }
+  return "Looks like this is a dynasty startup draft, so we are showing all players.";
+}
+
+/**
  * Filter the available board to a pool. "everyone" = all ranked undrafted
  * players; "rookies" = only first-year players (RankedPlayer.isRookie, derived by
  * the loader from years_experience / draft_year). DST/K stay in either pool when

@@ -30,6 +30,7 @@
     "beacon-brief": "tsx --env-file=.env.local scripts/beacon-brief.ts",
     "beacon-brief:tests": "tsx scripts/beacon-brief-ingest-tests.ts",
     "sync:stats": "tsx --env-file=.env.local scripts/sync-sleeper-stats.ts",
+    "sync:market": "tsx --env-file=.env.local scripts/sync-sleeper-market.ts",
     "seed:rankings": "tsx --env-file=.env.local scripts/seed-rankings.ts",
     "calculate:trends": "tsx --env-file=.env.local scripts/calculate-trends.ts",
     "calculate:power-rankings": "tsx --env-file=.env.local scripts/calculate-league-power-rankings.ts",

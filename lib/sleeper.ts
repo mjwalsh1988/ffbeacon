@@ -243,6 +243,54 @@ export async function getWeeklyStats(
   return out;
 }
 
+/**
+ * One row from Sleeper's season projections endpoint. `stats` is a flat map
+ * carrying both projection points (pts_ppr / pts_half_ppr / pts_std plus
+ * component stats) and ADP keys (adp_ppr, adp_half_ppr, adp_std, adp_2qb,
+ * adp_dynasty_ppr, adp_dynasty_half_ppr, adp_dynasty_std, adp_dynasty_2qb,
+ * adp_idp, adp_idp_1qb, adp_rookie, adp_dynasty). Sleeper uses 999 as the
+ * "no ADP data" sentinel; callers must strip it. `player` is a reduced player
+ * object (name / position / team) that may lag the canonical players sync.
+ */
+export type SleeperSeasonProjection = {
+  player_id: string;
+  season: string;
+  season_type: string;
+  week: number | null;
+  stats: Record<string, number> | null;
+  player?: {
+    first_name?: string | null;
+    last_name?: string | null;
+    position?: string | null;
+    team?: string | null;
+    fantasy_positions?: string[] | null;
+    years_exp?: number | null;
+  } | null;
+  company?: string | null;
+  updated_at?: number | null;
+  last_modified?: number | null;
+};
+
+/**
+ * Season-long projections + ADP for every fantasy-relevant position, from
+ * Sleeper's undocumented (but stable, publicly read-only) projections host.
+ * NOTE: this endpoint lives on api.sleeper.com WITHOUT the /v1 prefix, unlike
+ * everything else in this file. One call returns the full player set (~3 MB),
+ * so the timeout is raised above the default. Returns [] on any failure.
+ */
+const PROJECTIONS_BASE = "https://api.sleeper.com";
+const PROJECTION_POSITIONS = ["DEF", "K", "QB", "RB", "TE", "WR"] as const;
+
+export async function getSleeperSeasonProjections(
+  season: string,
+  seasonType: SleeperSeasonType = "regular",
+): Promise<SleeperSeasonProjection[]> {
+  const params = new URLSearchParams({ season_type: seasonType, order_by: "adp_ppr" });
+  for (const pos of PROJECTION_POSITIONS) params.append("position[]", pos);
+  const url = `${PROJECTIONS_BASE}/projections/nfl/${encodeURIComponent(season)}?${params.toString()}`;
+  return (await safeFetch<SleeperSeasonProjection[]>(url, 45_000)) ?? [];
+}
+
 export function currentNflSeason(): string {
   const now = new Date();
   // NFL season "year" rolls over March-ish. If we're past March, this year is the season.

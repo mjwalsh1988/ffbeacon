@@ -86,7 +86,7 @@ describe("GET /api/on-the-clock/leagues", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns only active/pre-draft leagues with a draft_id, drafting first, with shaped cards", async () => {
+  it("returns every league with a draft_id staged drafting > pre_draft > completed, with shaped cards", async () => {
     getSleeperUserMock.mockResolvedValue({ user_id: "u1", username: "mike" });
     getSleeperLeaguesMock.mockResolvedValue([
       { league_id: "L_pre", name: "Pre", season: "2026", total_rosters: 12, status: "pre_draft", draft_id: "D_pre", avatar: null },
@@ -101,7 +101,13 @@ describe("GET /api/on-the-clock/leagues", () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.truncated).toBe(false);
-    expect(body.leagues.map((l: { leagueId: string }) => l.leagueId)).toEqual(["L_drft", "L_pre"]);
+    // Completed / in-season drafts ARE included, after active + pre-draft.
+    expect(body.leagues.map((l: { leagueId: string }) => l.leagueId)).toEqual([
+      "L_drft",
+      "L_pre",
+      "L_done",
+      "L_season",
+    ]);
     expect(body.leagues[0]).toMatchObject({
       leagueId: "L_drft",
       draftId: "D_drft",
@@ -109,24 +115,29 @@ describe("GET /api/on-the-clock/leagues", () => {
       name: "Drafting",
       totalRosters: 10,
       draftStatus: "drafting",
+      stage: "drafting",
       // Format is auto-detected per league (stubbed here) and returned on the card.
       formatSlug: "dynasty-ppr-sflex",
       formatLabel: "Dynasty Superflex",
     });
+    expect(body.leagues[2]).toMatchObject({ leagueId: "L_done", stage: "completed" });
+    expect(body.leagues[3]).toMatchObject({ leagueId: "L_season", stage: "completed" });
     expect(res.headers.get("Cache-Control")).toBe("private, no-store");
     expect(res.headers.get("Referrer-Policy")).toBe("no-referrer");
   });
 
-  it("flags truncated when more than the cap are active", async () => {
+  it("flags truncated when a stage exceeds the cap, without starving other stages", async () => {
     loadSettingsMock.mockResolvedValue({ feature: { enabled: true }, limits: { maxActiveLeagues: 1 } });
     getSleeperUserMock.mockResolvedValue({ user_id: "u1", username: "mike" });
     getSleeperLeaguesMock.mockResolvedValue([
       { league_id: "L1", name: "A", season: "2026", total_rosters: 12, status: "drafting", draft_id: "D1" },
       { league_id: "L2", name: "B", season: "2026", total_rosters: 12, status: "drafting", draft_id: "D2" },
+      { league_id: "L3", name: "C", season: "2026", total_rosters: 12, status: "in_season", draft_id: "D3" },
     ]);
     const res = await GET(req("?username=Mike&season=2026"));
     const body = await res.json();
-    expect(body.leagues).toHaveLength(1);
+    // One drafting league (capped) + the completed league (its own stage cap).
+    expect(body.leagues.map((l: { leagueId: string }) => l.leagueId)).toEqual(["L1", "L3"]);
     expect(body.truncated).toBe(true);
   });
 });

@@ -26,6 +26,10 @@
       "schedule": "0 9 * 1,2,8,9,10,11,12 *"
     },
     {
+      "path": "/api/cron/sync-sleeper-market",
+      "schedule": "0 11 * * *"
+    },
+    {
       "path": "/api/cron/beacon-brief",
       "schedule": "*/5 * * * *"
     },

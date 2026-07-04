@@ -42,9 +42,17 @@ import type {
   SyncStatus,
 } from "@/lib/on-the-clock/types";
 import type { BoardResult, DraftPosition } from "@/lib/on-the-clock/board-types";
+import type { DraftSnapshotPayload } from "@/lib/on-the-clock/snapshot-types";
 import { recommend } from "@/lib/on-the-clock/recommend";
 import { createClient } from "@/lib/supabase/client";
-import { fetchLeagues, fetchDraft, syncDraft, fetchBoard, fetchTransactions } from "@/lib/on-the-clock/client";
+import {
+  fetchLeagues,
+  fetchDraft,
+  syncDraft,
+  fetchBoard,
+  fetchSnapshot,
+  fetchTransactions,
+} from "@/lib/on-the-clock/client";
 import type { HistoryTransaction, TradeHistoryContext } from "@/lib/on-the-clock/trade-history";
 import {
   deriveDraftState,
@@ -57,8 +65,11 @@ import {
   syncStatusLine,
   excludeDrafted,
   filterPool,
+  inferPlayerPool,
+  describeInferredPool,
   draftShapeFromMeta,
 } from "@/lib/on-the-clock/draft-derive";
+import { formatEastern, formatEasternDate } from "@/lib/datetime";
 import { buildTradeCatalog } from "@/lib/on-the-clock/trade-analyzer";
 import { buildTeamRollups } from "@/lib/on-the-clock/rosters";
 import { computeDraftAwards } from "@/lib/on-the-clock/awards";
@@ -69,6 +80,7 @@ import {
 } from "@/lib/on-the-clock/pick-ownership";
 import { UsernameGate } from "./username-gate";
 import { LeaguePicker } from "./league-picker";
+import { PoolNotice, markPoolNoticeSeen, poolNoticeSeen } from "./pool-notice";
 import { StepRail } from "./step-rail";
 import { CommandHeader } from "./command-header";
 import { PlayerSpotlight, SecondaryPick } from "./player-spotlight";
@@ -145,6 +157,22 @@ export function OnTheClockClient({
   const [boardLoading, setBoardLoading] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
 
+  // ----- completed-draft snapshot (results locked server-side; see
+  // lib/on-the-clock/draft-snapshot.ts). Non-null = snapshot mode. -----
+  const [snapshot, setSnapshot] = useState<DraftSnapshotPayload | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotWarning, setSnapshotWarning] = useState<string | null>(null);
+
+  // ----- one-time inferred player-pool notice -----
+  const [poolNoticeOpen, setPoolNoticeOpen] = useState(false);
+
+  // Staleness guard for async load continuations: selectLeague stamps the
+  // active draft id, and every in-flight loadDraft / loadBoard / loadSnapshot
+  // response is dropped unless it still matches. Without this, switching
+  // leagues while a slow snapshot request is in flight could land league A's
+  // frozen board and trades inside league B's room.
+  const activeDraftIdRef = useRef<string | null>(null);
+
   // ----- trade history (lazy-loaded when the tab opens; cached per league) -----
   const [tradeHistory, setTradeHistory] = useState<HistoryTransaction[] | null>(null);
   const [tradeHistoryTruncated, setTradeHistoryTruncated] = useState(false);
@@ -163,7 +191,7 @@ export function OnTheClockClient({
   const [liveStatus, setLiveStatus] = useState<LiveStatus>(realtimeEnabled ? "connecting" : "off");
 
   // ----- view -----
-  const [pool, setPool] = useState<PlayerPool>("everyone");
+  // (the player pool is DERIVED, not state: see inferPlayerPool below)
   const [view, setView] = useState<View>("pick");
   const [draftedMode, setDraftedMode] = useState<DraftedMode>("board");
   const viewTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -205,31 +233,9 @@ export function OnTheClockClient({
     void runLookup(username, season, "refresh");
   };
 
-  // ----- draft load -----
-  const loadDraft = useCallback(
-    async (card: LeagueCard) => {
-      setDraftLoading(true);
-      setDraftError(null);
-      const result = await fetchDraft(card.draftId);
-      if (result.ok && result.data.cache) {
-        const loaded = result.data.cache;
-        setCache(loaded);
-        setSyncMessage(formatLastSynced(loaded.draft.lastSyncedAt, Date.now()));
-        // Default the pool from the draft type (rookie drafts default to Rookies
-        // only); the user can override with the command-bar toggle afterward.
-        setPool(loaded.draft.draftType === "rookie" ? "rookies" : "everyone");
-      } else if (result.ok) {
-        setDraftError("We could not load that draft.");
-      } else {
-        setDraftError(result.message);
-      }
-      setDraftLoading(false);
-    },
-    [],
-  );
-
   // ----- board load (FF Beacon, format auto-detected from the league) -----
-  const loadBoard = useCallback(async (card: LeagueCard) => {
+  const loadBoard = useCallback(async (card: LeagueCard, poolForAdp: PlayerPool) => {
+    if (activeDraftIdRef.current !== card.draftId) return;
     if (!card.formatSlug) {
       setBoard(null);
       setBoardError(
@@ -240,7 +246,8 @@ export function OnTheClockClient({
     }
     setBoardLoading(true);
     setBoardError(null);
-    const result = await fetchBoard(card.formatSlug);
+    const result = await fetchBoard(card.formatSlug, poolForAdp);
+    if (activeDraftIdRef.current !== card.draftId) return; // league switched away
     if (result.ok) {
       setBoard(result.data.board);
     } else {
@@ -249,6 +256,79 @@ export function OnTheClockClient({
     }
     setBoardLoading(false);
   }, []);
+
+  // ----- snapshot load (completed drafts; locked results, snapshot-first) -----
+  const loadSnapshot = useCallback(
+    async (card: LeagueCard, fallbackPool: PlayerPool) => {
+      setSnapshotLoading(true);
+      setSnapshotWarning(null);
+      const result = await fetchSnapshot({
+        draftId: card.draftId,
+        formatSlug: card.formatSlug,
+        leagueName: card.name,
+      });
+      if (activeDraftIdRef.current !== card.draftId) return; // league switched away
+      if (result.ok && result.data.snapshot) {
+        const snap = result.data.snapshot;
+        setSnapshot(snap);
+        // The frozen cache is the render source: picks, users, rosters, traded
+        // picks all come from the moment the snapshot was finalized.
+        setCache(snap.cache);
+        setTradeHistory(snap.transactions);
+        setTradeHistoryTruncated(false);
+        historyLoadedFor.current = card.leagueId;
+      } else {
+        // Fall back to live mode so the room still renders; results for a
+        // completed draft may drift until a snapshot can be locked, so say so.
+        if (!result.ok) {
+          setSnapshotWarning(
+            "We could not lock this draft's final results right now, so current values are shown temporarily. Reload later to lock them.",
+          );
+        } else if (result.data.reason === "no-board") {
+          setSnapshotWarning(
+            "No FF Beacon values exist for this league's format yet, so this draft cannot be graded.",
+          );
+        }
+        void loadBoard(card, fallbackPool);
+      }
+      setSnapshotLoading(false);
+    },
+    [loadBoard],
+  );
+
+  // ----- draft load -----
+  const loadDraft = useCallback(
+    async (card: LeagueCard) => {
+      setDraftLoading(true);
+      setDraftError(null);
+      const result = await fetchDraft(card.draftId);
+      if (activeDraftIdRef.current !== card.draftId) return; // league switched away
+      if (result.ok && result.data.cache) {
+        const loaded = result.data.cache;
+        setCache(loaded);
+        setSyncMessage(formatLastSynced(loaded.draft.lastSyncedAt, Date.now()));
+        // The player pool is inferred (no manual toggle): league type + draft
+        // round count. Completed drafts route to snapshot mode; live drafts load
+        // the current FF Beacon board (with ADP for the inferred pool's market).
+        const inferredPool = inferPlayerPool({
+          formatSlug: card.formatSlug,
+          rounds: Number(loaded.draft.settings.rounds ?? 0),
+        });
+        if (loaded.draft.draftStatus === "complete") {
+          void loadSnapshot(card, inferredPool);
+        } else {
+          void loadBoard(card, inferredPool);
+        }
+        if (!poolNoticeSeen(card.draftId)) setPoolNoticeOpen(true);
+      } else if (result.ok) {
+        setDraftError("We could not load that draft.");
+      } else {
+        setDraftError(result.message);
+      }
+      setDraftLoading(false);
+    },
+    [loadBoard, loadSnapshot],
+  );
 
   // ----- trade history load (Sleeper trades for the league, server-fetched) -----
   const loadTradeHistory = useCallback(async (leagueId: string) => {
@@ -269,12 +349,18 @@ export function OnTheClockClient({
   }, []);
 
   const selectLeague = (l: LeagueCard) => {
+    activeDraftIdRef.current = l.draftId;
     setLeague(l);
     setView("pick");
     setCache(null);
     setDraftError(null);
     setBoard(null);
     setBoardError(null);
+    setBoardLoading(false);
+    setSnapshot(null);
+    setSnapshotWarning(null);
+    setSnapshotLoading(false);
+    setPoolNoticeOpen(false);
     setTradeHistory(null);
     setTradeHistoryTruncated(false);
     setTradeHistoryError(null);
@@ -283,8 +369,9 @@ export function OnTheClockClient({
     setSyncMessage("Loading draft...");
     setLiveStatus(realtimeEnabled ? "connecting" : "off");
     setStep("room");
+    // The board (or the completed-draft snapshot) loads after the draft, once
+    // the round count is known, so the inferred pool drives the ADP market.
     void loadDraft(l);
-    void loadBoard(l);
   };
 
   // ----- sync handler -----
@@ -330,10 +417,11 @@ export function OnTheClockClient({
     return () => clearTimeout(timer);
   }, [cooldownRemaining]);
 
-  // ----- Supabase Realtime: merge co-viewer picks, never call Sleeper/sync -----
+  // ----- Supabase Realtime: merge co-viewer picks, never call Sleeper/sync.
+  // Skipped entirely in snapshot mode: a completed draft can never change. -----
   useEffect(() => {
-    if (!league || !realtimeEnabled) {
-      setLiveStatus(realtimeEnabled ? "connecting" : "off");
+    if (!league || !realtimeEnabled || snapshot) {
+      setLiveStatus(realtimeEnabled && !snapshot ? "connecting" : "off");
       return;
     }
     const draftId = league.draftId;
@@ -374,15 +462,16 @@ export function OnTheClockClient({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [league, realtimeEnabled]);
+  }, [league, realtimeEnabled, snapshot]);
 
   // ----- lazy-load trade history the first time the Trades OR Rankings & Awards tab
-  // is opened for a league (the awards need the league's trades too) -----
+  // is opened for a league (the awards need the league's trades too). Snapshot
+  // mode never fetches: the frozen trades were set when the snapshot loaded. -----
   useEffect(() => {
-    if ((view !== "history" && view !== "rankings") || !league) return;
+    if ((view !== "history" && view !== "rankings") || !league || snapshot) return;
     if (historyLoadedFor.current === league.leagueId) return;
     void loadTradeHistory(league.leagueId);
-  }, [view, league, loadTradeHistory]);
+  }, [view, league, snapshot, loadTradeHistory]);
 
   const onViewKeyDown = (e: React.KeyboardEvent, index: number) => {
     const last = VIEWS.length - 1;
@@ -501,8 +590,9 @@ export function OnTheClockClient({
             </div>
           </div>
           <p className="mt-2 text-sm text-ink-muted">
-            Only leagues that are actively drafting show up here. Pick one to open its
-            draft room.
+            Actively drafting leagues lead the list, with pre-draft and completed drafts
+            below. Open a completed draft to review its results, grades, trades, and
+            awards.
           </p>
 
           <div className="mt-6">
@@ -559,6 +649,45 @@ export function OnTheClockClient({
   const derived = deriveDraftState(draftCache, myUserId);
   const teams = Number(draftCache.draft.settings.teams ?? 0);
 
+  // ----- Snapshot mode vs live mode -----
+  // Completed draft with a finalized snapshot: everything renders from the
+  // frozen payload (board, cache, trades, awards); nothing recalculates from
+  // current values. Active drafts stay fully live.
+  const snapshotMode = snapshot !== null;
+  const activeBoard: BoardResult | null = snapshotMode
+    ? {
+        status: "ok",
+        players: snapshot.board.players,
+        formatSlug: snapshot.board.formatSlug,
+        formatLabel: snapshot.board.formatLabel,
+        sourceSlug: "ffbeacon",
+        sourceLabel: "FF Beacon",
+        valueSourceSlug: "ffbeacon",
+        sourceActive: true,
+        season: snapshot.board.season,
+        pickValues: snapshot.board.pickValues,
+        adpFormatKey: snapshot.board.adpFormatKey,
+        adpSnapshotDate: snapshot.board.adpSnapshotDate,
+      }
+    : board;
+  const activeBoardLoading = snapshotMode ? false : boardLoading || snapshotLoading;
+  const activeBoardError = snapshotMode ? null : boardError;
+
+  // The player pool is inferred, never toggled: the snapshot's recorded pool in
+  // snapshot mode, else league type + round count (see inferPlayerPool).
+  const draftRounds = Number(draftCache.draft.settings.rounds ?? 0);
+  const pool: PlayerPool = snapshotMode
+    ? snapshot.playerPool
+    : inferPlayerPool({ formatSlug: league?.formatSlug, rounds: draftRounds });
+
+  // ADP context: player-keyed map (for board/list pick indicators + awards) and
+  // the neutral threshold. Snapshot mode uses the threshold the draft was GRADED
+  // with (frozen at finalize), so a later admin tuning can never change a
+  // finalized draft's icons or verdicts; live mode uses the current setting.
+  const adpThreshold = snapshotMode
+    ? snapshot.thresholdPicks
+    : settings.valueIndicators.thresholdPicks;
+
   // Transaction-aware pick ownership: every current-draft pick (any owner) + concrete
   // traded future picks, resolved from the cached Sleeper traded_picks. Computed here
   // (ahead of the on-the-clock labels) so "who is on the clock" reflects the roster
@@ -606,13 +735,20 @@ export function OnTheClockClient({
   const yourSeatLabel = derived.mySlot > 0 ? `You · Seat ${derived.mySlot}` : "Team not detected";
 
   // Real available board (FF Beacon): ranked players minus drafted, filtered to the
-  // pool. Empty until the per-league board finishes loading.
-  const boardPlayers = board?.status === "ok" ? board.players : [];
+  // pool. Empty until the per-league board (or snapshot) finishes loading.
+  const boardPlayers = activeBoard?.status === "ok" ? activeBoard.players : [];
   const available = filterPool(excludeDrafted(boardPlayers, draftCache.picks), pool);
+
+  // Sleeper player id -> ADP, from the board rows (live: latest snapshot; frozen:
+  // the snapshot resolved for the draft's completion time).
+  const adpBySleeperId: Record<string, number> = {};
+  for (const pl of boardPlayers) {
+    if (pl.sleeperId && typeof pl.adp === "number") adpBySleeperId[pl.sleeperId] = pl.adp;
+  }
 
   // Real recommendation engine (Phase 6B): Best Available (pure value) + Team Need
   // (value-aware roster need). Inputs are derived from the live cache + board.
-  const detectedFormatSlug = board?.formatSlug ?? league?.formatSlug ?? "";
+  const detectedFormatSlug = activeBoard?.formatSlug ?? league?.formatSlug ?? "";
   const isDynasty = /dynasty/i.test(detectedFormatSlug);
 
   // My in-draft picks -> positions.
@@ -645,7 +781,7 @@ export function OnTheClockClient({
     available,
     pool,
     formatSlug: detectedFormatSlug,
-    formatLabel: board?.formatLabel ?? league?.formatLabel ?? "",
+    formatLabel: activeBoard?.formatLabel ?? league?.formatLabel ?? "",
     draftSettings: draftCache.draft.settings,
     myDraftedPositions,
     seededPositions,
@@ -662,7 +798,7 @@ export function OnTheClockClient({
   // poolBoard is the pre-exclusion pool board (future picks project from a board not
   // depleted by the current draft); `available` is post-exclusion for upcoming picks;
   // boardPlayers (full, all positions) values already-made picks.
-  const tradeReady = board?.status === "ok";
+  const tradeReady = activeBoard?.status === "ok";
   // roster_id -> display name, for owner labels on picks (board/trade).
   const teamNameByRosterId: Record<number, string> = {};
   // Rosters & Rankings shows the owner's username as the primary label and the
@@ -690,7 +826,7 @@ export function OnTheClockClient({
         valueBoard: boardPlayers,
         currentPicks,
         tradedFuturePicks,
-        futurePickValues: board?.pickValues ?? [],
+        futurePickValues: activeBoard?.pickValues ?? [],
         teamNameByRosterId,
         myRosterId: derived.myRosterId,
         draftSettings: draftCache.draft.settings,
@@ -714,7 +850,7 @@ export function OnTheClockClient({
           picks: draftCache.picks,
           tradedPicks,
           valueBoard: boardPlayers,
-          futurePickValues: board?.pickValues ?? [],
+          futurePickValues: activeBoard?.pickValues ?? [],
           ownerNameByRosterId: rollupOwnerNameByRosterId,
           teamNameByRosterId: rollupTeamNameByRosterId,
           myRosterId: derived.myRosterId,
@@ -738,7 +874,7 @@ export function OnTheClockClient({
           valueBoard: boardPlayers,
           available: excludeDrafted(boardPlayers, draftCache.picks),
           poolBoard: boardPlayers,
-          futurePickValues: board?.pickValues ?? [],
+          futurePickValues: activeBoard?.pickValues ?? [],
           currentPicks,
           teamNameByRosterId,
           myRosterId: derived.myRosterId,
@@ -748,11 +884,13 @@ export function OnTheClockClient({
         }
       : null;
 
-  // Rankings & Awards: six live startup-draft awards, recomputed on every sync from
-  // the rollups, the league's trades, the made picks, and the league's slot model.
+  // Rankings & Awards. Snapshot mode uses the awards LOCKED at finalize (they can
+  // never drift). Live mode recomputes on every sync from the rollups, the
+  // league's trades, the made picks, the ADP map, and the league's slot model.
   // Only while that tab is open (and the board is ready) so other tabs stay cheap.
-  const awards =
-    view === "rankings" && tradeReady
+  const awards = snapshotMode
+    ? snapshot.awards
+    : view === "rankings" && tradeReady
       ? computeDraftAwards({
           rollups: teamRollups,
           avatarByRosterId,
@@ -761,14 +899,18 @@ export function OnTheClockClient({
           picks: draftCache.picks,
           draftSettings: draftCache.draft.settings,
           settings,
+          adpBySleeperId,
         })
       : [];
 
+  // Snapshot provenance line shown in the command bar (snapshot mode only).
+  const snapshotNotice = snapshotMode ? buildSnapshotNotice(snapshot) : null;
+
   // Format/source chips: source is ALWAYS FF Beacon (forced); format is auto-detected
   // from the Sleeper league. Use the league's detected label until the board confirms it.
-  const formatLabel = board?.formatLabel ?? league?.formatLabel ?? "Detecting...";
+  const formatLabel = activeBoard?.formatLabel ?? league?.formatLabel ?? "Detecting...";
   const formatIsClosest = league?.formatIsClosest ?? false;
-  const sourceActive = board ? board.sourceActive : true;
+  const sourceActive = activeBoard ? activeBoard.sourceActive : true;
 
   // The three supporting panels (room status, best remaining, your draft) for the
   // sticky right rail, shown on every view except Rosters and the full board view.
@@ -807,19 +949,52 @@ export function OnTheClockClient({
         formatLabel={formatLabel}
         formatIsClosest={formatIsClosest}
         pool={pool}
-        onPoolChange={setPool}
         onTheClockTeam={onTheClockTeam}
         onTheClockPickLabel={onTheClockPickLabel}
         isYourTurn={isYourTurn}
         yourSeatLabel={yourSeatLabel}
-        sync={{ syncing, cooldownRemaining, statusMessage: syncMessage, onSync }}
+        sync={
+          snapshotMode ? null : { syncing, cooldownRemaining, statusMessage: syncMessage, onSync }
+        }
+        snapshotNotice={snapshotNotice}
+      />
+
+      {/* One-time explanation of the auto-detected player pool. */}
+      <PoolNotice
+        open={poolNoticeOpen}
+        pool={pool}
+        message={describeInferredPool({
+          // In snapshot mode the message describes the format the FINALIZER
+          // resolved (the pool it recorded), not the league card's live hint.
+          formatSlug: snapshotMode ? snapshot.formatSlug : league?.formatSlug,
+          rounds: draftRounds,
+          pool,
+        })}
+        formatLabel={formatLabel}
+        onClose={() => {
+          setPoolNoticeOpen(false);
+          if (league) markPoolNoticeSeen(league.draftId);
+        }}
       />
 
       <div className="px-4 py-5 sm:px-6 sm:py-6">
         <BackToLeagues onClick={() => setStep("pick-league")} />
 
-        {/* Realtime fallback note: subtle, never blocks the room. */}
-        {liveStatus !== "live" && (
+        {/* Snapshot fallback warning: a completed draft that could not lock its
+            results yet is temporarily showing live values. */}
+        {snapshotWarning && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="mt-3 rounded-card border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
+          >
+            {snapshotWarning}
+          </p>
+        )}
+
+        {/* Realtime fallback note: subtle, never blocks the room. Irrelevant for a
+            finalized snapshot, whose data can never change. */}
+        {!snapshotMode && liveStatus !== "live" && (
           <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-ink-subtle">
             <WifiOff aria-hidden="true" className="h-3.5 w-3.5" />
             {liveStatus === "connecting"
@@ -830,7 +1005,7 @@ export function OnTheClockClient({
 
         {/* Admin note: FF Beacon values are loading but the source is not publicly
             active yet. Dev/admin-facing; the board still renders. */}
-        {board && !sourceActive && (
+        {activeBoard && !sourceActive && (
           <p className="mt-2 rounded-card border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
             Admin: FF Beacon values are not marked active in the source registry yet.
             On The Clock is showing them anyway because it forces FF Beacon.
@@ -942,18 +1117,18 @@ export function OnTheClockClient({
                 title="Available players"
                 helper="Real undrafted players from FF Beacon, sorted by current value. Drafted players drop off automatically."
               >
-                {boardLoading ? (
+                {activeBoardLoading ? (
                   <LoadingCard label="Loading the FF Beacon board..." />
-                ) : boardError ? (
-                  <ErrorCard message={boardError} />
-                ) : !board || board.status === "source-unavailable" ? (
+                ) : activeBoardError ? (
+                  <ErrorCard message={activeBoardError} />
+                ) : !activeBoard || activeBoard.status === "source-unavailable" ? (
                   <EmptyCard
                     title="FF Beacon values are not set up."
                     body="Admin: the FF Beacon source row is missing from the source registry. On The Clock uses FF Beacon values for the available board."
                   />
-                ) : board.status !== "ok" ? (
+                ) : activeBoard.status !== "ok" ? (
                   <EmptyCard
-                    title={`No FF Beacon rankings for ${board.formatLabel} yet.`}
+                    title={`No FF Beacon rankings for ${activeBoard.formatLabel} yet.`}
                     body="The draft board and picks still work. The available big board and values will appear once this format's FF Beacon rankings are published."
                   />
                 ) : available.length === 0 ? (
@@ -961,12 +1136,16 @@ export function OnTheClockClient({
                     title={pool === "rookies" ? "No rookies available." : "No players available."}
                     body={
                       pool === "rookies"
-                        ? "We could not find ranked first-year players in FF Beacon for this format. Switch the pool to Everyone, or check back once rookie values are published."
+                        ? "We could not find ranked first-year players in FF Beacon for this format yet. Check back once rookie values are published."
                         : "Every ranked player in this pool has been drafted."
                     }
                   />
                 ) : (
-                  <AvailableList players={available} />
+                  <AvailableList
+                    players={available}
+                    adpThreshold={adpThreshold}
+                    adpAvailable={Boolean(activeBoard?.adpFormatKey)}
+                  />
                 )}
               </Panel>
             </div>
@@ -1080,6 +1259,8 @@ export function OnTheClockClient({
                         connectedUserSlot={derived.mySlot}
                         onTheClockPickNo={derived.onTheClockPickNo}
                         lastPickNo={derived.lastPick?.pickNo ?? 0}
+                        adpBySleeperId={adpBySleeperId}
+                        adpThreshold={adpThreshold}
                       />
                     </Panel>
                   </div>
@@ -1096,6 +1277,8 @@ export function OnTheClockClient({
                     draft={draftCache.draft}
                     teamNameByRosterId={teamNameByRosterId}
                     connectedUserId={myUserId ?? ""}
+                    adpBySleeperId={adpBySleeperId}
+                    adpThreshold={adpThreshold}
                   />
                 </Panel>
               )}
@@ -1135,7 +1318,8 @@ export function OnTheClockClient({
                 formatLabel={formatLabel}
                 truncated={tradeHistoryTruncated}
                 onRefresh={() => {
-                  if (league) void loadTradeHistory(league.leagueId);
+                  // Snapshot mode never refetches: the trades are frozen.
+                  if (league && !snapshotMode) void loadTradeHistory(league.leagueId);
                 }}
               />
             </div>
@@ -1176,7 +1360,7 @@ export function OnTheClockClient({
                 tradesLoading={tradeHistoryLoading}
                 tradesError={tradeHistoryError}
                 onRetryTrades={() => {
-                  if (league) void loadTradeHistory(league.leagueId);
+                  if (league && !snapshotMode) void loadTradeHistory(league.leagueId);
                 }}
               />
             </div>
@@ -1193,6 +1377,33 @@ export function OnTheClockClient({
       </div>
     </div>
   );
+}
+
+/**
+ * Plain-language provenance line for the command bar's snapshot-mode banner.
+ * Timestamps render in Eastern time per the site-wide display rule. The ADP
+ * partition date is anchored to UTC noon before formatting so a date-only value
+ * cannot roll back a day in Eastern time.
+ */
+function buildSnapshotNotice(s: DraftSnapshotPayload): string {
+  const bits: string[] = [`Locked ${formatEastern(s.finalizedAt)}.`];
+  if (s.valueSnapshotDate) {
+    bits.push(`FF Beacon values from ${formatEasternDate(s.valueSnapshotDate)}.`);
+  }
+  if (s.adpSnapshotDate) {
+    bits.push(`Sleeper ADP from ${formatEasternDate(`${s.adpSnapshotDate}T12:00:00.000Z`)}.`);
+  }
+  if (s.confidence === "low") {
+    bits.push(
+      "Historical data was limited, so these results are estimated from the nearest available snapshots.",
+    );
+  } else if (
+    s.valueSnapshotSource === "next_available" ||
+    s.adpSnapshotSource === "next_available"
+  ) {
+    bits.push("Some inputs use the nearest snapshot after the draft finished (estimated).");
+  }
+  return bits.join(" ");
 }
 
 function BackToLeagues({ onClick }: { onClick: () => void }) {

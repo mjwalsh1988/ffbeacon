@@ -12,20 +12,24 @@
  *   - First to Fill Starting Roster (The Full Beam Award): first team to fill every
  *     required starting slot, by overall pick number.
  *   - Most Boring League Mate (The Dead Air Award): fewest completed trades.
- *   - Best Drafter            (The North Star Award): highest drafted-player value.
- *   - Worst Drafter           (The Lost Signal Award): lowest drafted-player value.
+ *   - Best Drafter            (The North Star Award): most draft value captured
+ *     versus Sleeper ADP (sum of pick_no - ADP across the team's non-keeper
+ *     picks with a known ADP). Rewards beating the market, not raw totals.
+ *   - Worst Drafter           (The Lost Signal Award): the exact mirror. Lowest
+ *     total pick_no - ADP: the drafter who reached earliest and most often,
+ *     losing the most value against the market.
  *
  * Trade values reuse trade-history.ts analyzeTradeTransaction (the same FF Beacon
  * board projection the Trade History tab uses), so there is no DB round trip and no
- * dependence on KTC pick values. Best / Worst Drafter measure DRAFTED-player value
- * only (rollup.playersValue), which is distinct from the power-ranking total (which
- * also folds in equal-baseline future picks) and is the truer "who drafted well"
- * signal early in a startup.
+ * dependence on KTC pick values. Best / Worst Drafter share ONE per-roster total of
+ * (pick_no - ADP) over ADP-known, non-keeper picks; North Star takes the max and
+ * Lost Signal the min, so both judge market timing, not raw roster value.
  *
  * Every award stays "up for grabs" until it can be earned honestly: trade awards
  * until at least one trade exists and there is a standout, the drafter awards until
- * at least two teams have drafted distinct values, and the starting-roster award
- * until a team actually completes its lineup. Exact ties surface every co-winner.
+ * at least two teams have ADP-known picks with distinct totals, and the
+ * starting-roster award until a team actually completes its lineup. Exact ties
+ * surface every co-winner.
  */
 
 import type { DraftPosition } from "./board-types";
@@ -95,6 +99,12 @@ export interface DraftAwardsInput {
   draftSettings: Record<string, number>;
   /** Admin settings (fallback slot targets when the draft omits slot counts). */
   settings: OnTheClockSettings;
+  /**
+   * Sleeper player id -> ADP (overall pick number) for the draft's resolved ADP
+   * market. Drives Best Drafter (value captured vs the market). Pass {} when no
+   * ADP snapshot exists; the award then stays pending.
+   */
+  adpBySleeperId: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,8 +215,16 @@ const MIN_SUCCESSFUL_TRADER_TRADES = [3, 2, 1];
  * Lost Signal). Callers render the array directly.
  */
 export function computeDraftAwards(input: DraftAwardsInput): Award[] {
-  const { rollups, avatarByRosterId, transactions, tradeContext, picks, draftSettings, settings } =
-    input;
+  const {
+    rollups,
+    avatarByRosterId,
+    transactions,
+    tradeContext,
+    picks,
+    draftSettings,
+    settings,
+    adpBySleeperId,
+  } = input;
 
   const base = buildClaimantBase(rollups, avatarByRosterId);
   const rosterIds = rollups.map((r) => r.rosterId);
@@ -263,10 +281,22 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     if (c > 0) avgMargin.set(id, (marginSum.get(id) ?? 0) / c);
   }
 
-  // ---- Drafted-player value (best / worst drafter) ----
-  const playersValue = new Map<number, number>();
-  for (const r of rollups) playersValue.set(r.rosterId, r.playersValue);
-  const draftedIds = rollups.filter((r) => r.playerCount > 0).map((r) => r.rosterId);
+  // ---- ADP value captured (best AND worst drafter) ----
+  // Per roster: sum of (pick_no - ADP) over its made, non-keeper picks with a
+  // known Sleeper ADP. Positive = players landed later than the market expected
+  // (discounts); negative = reaches. Keepers are excluded: their slot is
+  // assigned, not a market decision. North Star takes the max; Lost Signal takes
+  // the min of the same totals.
+  const adpDeltaSum = new Map<number, number>();
+  const adpPickCount = new Map<number, number>();
+  for (const pk of picks) {
+    if (pk.rosterId == null || pk.isKeeper) continue;
+    const adp = pk.sleeperPlayerId ? adpBySleeperId[pk.sleeperPlayerId] : undefined;
+    if (typeof adp !== "number" || !Number.isFinite(adp) || adp <= 0) continue;
+    adpDeltaSum.set(pk.rosterId, (adpDeltaSum.get(pk.rosterId) ?? 0) + (pk.pickNo - adp));
+    adpPickCount.set(pk.rosterId, (adpPickCount.get(pk.rosterId) ?? 0) + 1);
+  }
+  const adpEligibleIds = rosterIds.filter((id) => (adpPickCount.get(id) ?? 0) > 0);
 
   // ---- First to fill the starting lineup ----
   const completionPick = computeStartingRosterCompletion(picks, draftSettings, settings, base);
@@ -374,35 +404,71 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     });
   }
 
-  // 5. Best Drafter — The North Star Award.
+  // 5. Best Drafter (The North Star Award). Judged against the market: the team
+  // that captured the most total draft value versus Sleeper ADP (sum of
+  // pick_no - ADP across its picks) wins, so consistently landing players after
+  // their ADP beats simply hoarding the biggest names. Uses the ADP map the
+  // caller resolved for THIS draft (the locked snapshot for completed drafts),
+  // never live market data.
   {
-    const r = pickExtreme(base, playersValue, draftedIds, "max");
-    const pending = draftedIds.length < 2 || r.allTied || r.extreme == null;
+    const r = pickExtreme(base, adpDeltaSum, adpEligibleIds, "max");
+    const noAdp = Object.keys(adpBySleeperId).length === 0 || adpEligibleIds.length === 0;
+    const pending = noAdp || adpEligibleIds.length < 2 || r.allTied || r.extreme == null;
+    const winnerCounts = r.claimants.map((c) => adpPickCount.get(c.rosterId) ?? 0);
+    const sharedCount =
+      winnerCounts.length > 0 && winnerCounts.every((c) => c === winnerCounts[0])
+        ? winnerCounts[0]
+        : null;
+    const signed = r.extreme == null ? "" : `${r.extreme >= 0 ? "+" : "-"}${fmtValue(Math.abs(r.extreme))}`;
     awards.push({
       id: "best-drafter",
       title: "The North Star Award",
       category: "Best Drafter",
-      description: "Holds the highest drafted-player FF Beacon value.",
+      description: "Finds the most draft value compared to Sleeper ADP.",
       claimants: pending ? [] : r.claimants,
-      metricLabel: pending ? null : `${fmtValue(r.extreme!)} drafted value`,
+      metricLabel: pending
+        ? null
+        : sharedCount != null
+          ? `${signed} picks of ADP value across ${sharedCount} ${sharedCount === 1 ? "pick" : "picks"}`
+          : `${signed} picks of ADP value`,
       pending,
-      pendingLabel: "Not enough teams have drafted yet.",
+      pendingLabel: noAdp
+        ? "Sleeper ADP is not available for this draft yet, so no one has earned this."
+        : "Not enough teams have made picks with a known ADP yet.",
     });
   }
 
-  // 6. Worst Drafter — The Lost Signal Award.
+  // 6. Worst Drafter (The Lost Signal Award). The exact mirror of North Star:
+  // the team with the LOWEST total draft value versus Sleeper ADP (sum of
+  // pick_no - ADP across its picks), i.e. the drafter who consistently reached
+  // for players well before the market expected them to go. Uses the same
+  // per-draft ADP map (the locked snapshot for completed drafts), so the loser
+  // is as stable as the winner.
   {
-    const r = pickExtreme(base, playersValue, draftedIds, "min");
-    const pending = draftedIds.length < 2 || r.allTied || r.extreme == null;
+    const r = pickExtreme(base, adpDeltaSum, adpEligibleIds, "min");
+    const noAdp = Object.keys(adpBySleeperId).length === 0 || adpEligibleIds.length === 0;
+    const pending = noAdp || adpEligibleIds.length < 2 || r.allTied || r.extreme == null;
+    const loserCounts = r.claimants.map((c) => adpPickCount.get(c.rosterId) ?? 0);
+    const sharedCount =
+      loserCounts.length > 0 && loserCounts.every((c) => c === loserCounts[0])
+        ? loserCounts[0]
+        : null;
+    const signed = r.extreme == null ? "" : `${r.extreme >= 0 ? "+" : "-"}${fmtValue(Math.abs(r.extreme))}`;
     awards.push({
       id: "worst-drafter",
       title: "The Lost Signal Award",
       category: "Worst Drafter",
-      description: "Holds the lowest drafted-player FF Beacon value.",
+      description: "Loses the most draft value compared to Sleeper ADP by reaching early.",
       claimants: pending ? [] : r.claimants,
-      metricLabel: pending ? null : `${fmtValue(r.extreme!)} drafted value`,
+      metricLabel: pending
+        ? null
+        : sharedCount != null
+          ? `${signed} picks of ADP value across ${sharedCount} ${sharedCount === 1 ? "pick" : "picks"}`
+          : `${signed} picks of ADP value`,
       pending,
-      pendingLabel: "Not enough teams have drafted yet.",
+      pendingLabel: noAdp
+        ? "Sleeper ADP is not available for this draft yet, so no one is on the hook."
+        : "Not enough teams have made picks with a known ADP yet.",
     });
   }
 

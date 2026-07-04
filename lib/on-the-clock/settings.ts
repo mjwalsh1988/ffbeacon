@@ -125,6 +125,12 @@ export const onTheClockSettingsSchema = z.object({
     })
     .default(d.positionFallbackTargets),
 
+  valueIndicators: z
+    .object({
+      thresholdPicks: positiveInt.default(d.valueIndicators.thresholdPicks),
+    })
+    .default(d.valueIndicators),
+
   mappingVisibility: z
     .object({
       showUnmappedPanel: z.boolean().default(d.mappingVisibility.showUnmappedPanel),
@@ -224,6 +230,14 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
         0.1,
         5,
         dd.positionAdjust.tePremiumMultiplier,
+      ),
+    },
+    valueIndicators: {
+      thresholdPicks: clampInt(
+        raw.valueIndicators?.thresholdPicks,
+        1,
+        100,
+        dd.valueIndicators.thresholdPicks,
       ),
     },
     positionFallbackTargets: {

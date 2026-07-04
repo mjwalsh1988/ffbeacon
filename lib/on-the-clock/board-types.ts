@@ -37,6 +37,12 @@ export interface RankedPlayer {
   tier: number;
   value: number;
   isRookie: boolean;
+  /**
+   * Sleeper ADP (overall pick number) for the board's resolved ADP market key,
+   * from the latest (live) or historically resolved (snapshot) market snapshot.
+   * Null/absent when the market has no data for this player.
+   */
+  adp?: number | null;
   // ---- Enrichment, populated by the loader when available; UI hides absent ----
   yearsExperience?: number;
   age?: number;
@@ -103,4 +109,11 @@ export interface BoardResult {
    * Analyzer reads these directly for future-year pick buckets.
    */
   pickValues: PickBucketValue[];
+  /**
+   * The Sleeper ADP market key the board's `adp` values came from (e.g.
+   * "dynasty_2qb"), or null when no ADP snapshot exists yet.
+   */
+  adpFormatKey?: string | null;
+  /** The snapshot_date (YYYY-MM-DD) the ADP values came from, or null. */
+  adpSnapshotDate?: string | null;
 }

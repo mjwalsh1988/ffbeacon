@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { loadSettingsMock, loadBoardMock } = vi.hoisted(() => ({
+const { loadSettingsMock, loadBoardMock, resolveAdpMock } = vi.hoisted(() => ({
   loadSettingsMock: vi.fn(),
   loadBoardMock: vi.fn(),
+  resolveAdpMock: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/on-the-clock/settings", () => ({ loadOnTheClockSettings: loadSettingsMock }));
 vi.mock("@/lib/on-the-clock/board-loader", () => ({ loadRankedBoard: loadBoardMock }));
+// history-lookup imports "server-only", so it must be mocked in the node test env.
+vi.mock("@/lib/on-the-clock/history-lookup", () => ({ resolveAdpSnapshot: resolveAdpMock }));
 vi.mock("@/lib/sleeper", () => ({ currentNflSeason: () => "2026" }));
 
 import { GET } from "./route";
@@ -20,6 +23,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   loadSettingsMock.mockResolvedValue({ feature: { enabled: true } });
   loadBoardMock.mockResolvedValue({ status: "ok", players: [], sourceSlug: "ffbeacon", sourceActive: true });
+  resolveAdpMock.mockResolvedValue({
+    adpBySleeperId: {},
+    adpKey: "dynasty_2qb",
+    snapshotDate: "2026-07-04",
+    source: "current_fallback",
+  });
 });
 
 describe("GET /api/on-the-clock/board", () => {

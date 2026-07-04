@@ -234,7 +234,14 @@ function PositionColumn({
           {players.map((p) => (
             <li key={p.pickNo} className="flex items-center gap-2 px-3 py-1.5">
               <span aria-hidden="true" className="shrink-0">
-                <PlayerHeadshot sleeperId={p.sleeperId} name="" position={p.position} size={22} />
+                {/* Rounded-square headshot (player photos are never circular). */}
+                <PlayerHeadshot
+                  sleeperId={p.sleeperId}
+                  name=""
+                  position={p.position}
+                  size={22}
+                  rounded={false}
+                />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={p.name}>
                 {p.name}

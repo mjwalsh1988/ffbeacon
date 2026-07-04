@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { OnTheClockSettingsManager } from "./on-the-clock-settings-manager";
+import { DraftSnapshotsPanel } from "./draft-snapshots-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function OnTheClockAdminPage() {
         initialSettings={settings}
         lastUpdated={row?.updated_at ?? null}
       />
+      <DraftSnapshotsPanel />
     </div>
   );
 }

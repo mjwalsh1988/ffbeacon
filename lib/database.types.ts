@@ -1754,6 +1754,93 @@ export type Database = {
         };
         Relationships: [];
       };
+      on_the_clock_draft_snapshots: {
+        Row: {
+          adp_format_key: string | null;
+          adp_snapshot_date: string | null;
+          adp_snapshot_source: string | null;
+          awards: Json;
+          board: Json;
+          created_at: string;
+          draft: Json;
+          draft_completed_at: string | null;
+          draft_status: string;
+          draft_type: string | null;
+          finalized_at: string;
+          format_label: string | null;
+          format_slug: string | null;
+          league_name: string | null;
+          metadata: Json;
+          player_pool: string;
+          rounds: number | null;
+          season: string;
+          sleeper_draft_id: string;
+          sleeper_league_id: string;
+          snapshot_confidence: string;
+          teams: number | null;
+          transactions: Json;
+          updated_at: string;
+          value_snapshot_date: string | null;
+          value_snapshot_source: string | null;
+        };
+        Insert: {
+          adp_format_key?: string | null;
+          adp_snapshot_date?: string | null;
+          adp_snapshot_source?: string | null;
+          awards?: Json;
+          board?: Json;
+          created_at?: string;
+          draft?: Json;
+          draft_completed_at?: string | null;
+          draft_status?: string;
+          draft_type?: string | null;
+          finalized_at?: string;
+          format_label?: string | null;
+          format_slug?: string | null;
+          league_name?: string | null;
+          metadata?: Json;
+          player_pool?: string;
+          rounds?: number | null;
+          season: string;
+          sleeper_draft_id: string;
+          sleeper_league_id: string;
+          snapshot_confidence?: string;
+          teams?: number | null;
+          transactions?: Json;
+          updated_at?: string;
+          value_snapshot_date?: string | null;
+          value_snapshot_source?: string | null;
+        };
+        Update: {
+          adp_format_key?: string | null;
+          adp_snapshot_date?: string | null;
+          adp_snapshot_source?: string | null;
+          awards?: Json;
+          board?: Json;
+          created_at?: string;
+          draft?: Json;
+          draft_completed_at?: string | null;
+          draft_status?: string;
+          draft_type?: string | null;
+          finalized_at?: string;
+          format_label?: string | null;
+          format_slug?: string | null;
+          league_name?: string | null;
+          metadata?: Json;
+          player_pool?: string;
+          rounds?: number | null;
+          season?: string;
+          sleeper_draft_id?: string;
+          sleeper_league_id?: string;
+          snapshot_confidence?: string;
+          teams?: number | null;
+          transactions?: Json;
+          updated_at?: string;
+          value_snapshot_date?: string | null;
+          value_snapshot_source?: string | null;
+        };
+        Relationships: [];
+      };
       on_the_clock_lookup_attempts: {
         Row: {
           key: string;
@@ -1829,6 +1916,90 @@ export type Database = {
           },
         ];
       };
+      on_the_clock_pick_snapshots: {
+        Row: {
+          beacon_rank: number | null;
+          beacon_value: number | null;
+          created_at: string;
+          draft_slot: number | null;
+          is_keeper: boolean;
+          metadata: Json;
+          pick_no: number;
+          pick_value_delta: number | null;
+          picked_by: string | null;
+          player_id: string | null;
+          player_name: string | null;
+          position: string | null;
+          roster_id: number | null;
+          round: number | null;
+          sleeper_adp: number | null;
+          sleeper_draft_id: string;
+          sleeper_player_id: string | null;
+          team: string | null;
+          updated_at: string;
+          value_verdict: string | null;
+        };
+        Insert: {
+          beacon_rank?: number | null;
+          beacon_value?: number | null;
+          created_at?: string;
+          draft_slot?: number | null;
+          is_keeper?: boolean;
+          metadata?: Json;
+          pick_no: number;
+          pick_value_delta?: number | null;
+          picked_by?: string | null;
+          player_id?: string | null;
+          player_name?: string | null;
+          position?: string | null;
+          roster_id?: number | null;
+          round?: number | null;
+          sleeper_adp?: number | null;
+          sleeper_draft_id: string;
+          sleeper_player_id?: string | null;
+          team?: string | null;
+          updated_at?: string;
+          value_verdict?: string | null;
+        };
+        Update: {
+          beacon_rank?: number | null;
+          beacon_value?: number | null;
+          created_at?: string;
+          draft_slot?: number | null;
+          is_keeper?: boolean;
+          metadata?: Json;
+          pick_no?: number;
+          pick_value_delta?: number | null;
+          picked_by?: string | null;
+          player_id?: string | null;
+          player_name?: string | null;
+          position?: string | null;
+          roster_id?: number | null;
+          round?: number | null;
+          sleeper_adp?: number | null;
+          sleeper_draft_id?: string;
+          sleeper_player_id?: string | null;
+          team?: string | null;
+          updated_at?: string;
+          value_verdict?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "on_the_clock_pick_snapshots_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "on_the_clock_pick_snapshots_sleeper_draft_id_fkey";
+            columns: ["sleeper_draft_id"];
+            isOneToOne: false;
+            referencedRelation: "on_the_clock_draft_snapshots";
+            referencedColumns: ["sleeper_draft_id"];
+          },
+        ];
+      };
       on_the_clock_settings: {
         Row: {
           created_at: string;
@@ -1852,6 +2023,65 @@ export type Database = {
           updated_by?: string | null;
         };
         Relationships: [];
+      };
+      player_market_snapshots: {
+        Row: {
+          adp: Json;
+          created_at: string;
+          id: string;
+          metadata: Json;
+          player_id: string | null;
+          projected_pts_half_ppr: number | null;
+          projected_pts_ppr: number | null;
+          projected_pts_std: number | null;
+          season: number;
+          season_type: string;
+          sleeper_player_id: string;
+          snapshot_date: string;
+          source: string;
+          updated_at: string;
+        };
+        Insert: {
+          adp?: Json;
+          created_at?: string;
+          id?: string;
+          metadata?: Json;
+          player_id?: string | null;
+          projected_pts_half_ppr?: number | null;
+          projected_pts_ppr?: number | null;
+          projected_pts_std?: number | null;
+          season: number;
+          season_type?: string;
+          sleeper_player_id: string;
+          snapshot_date: string;
+          source?: string;
+          updated_at?: string;
+        };
+        Update: {
+          adp?: Json;
+          created_at?: string;
+          id?: string;
+          metadata?: Json;
+          player_id?: string | null;
+          projected_pts_half_ppr?: number | null;
+          projected_pts_ppr?: number | null;
+          projected_pts_std?: number | null;
+          season?: number;
+          season_type?: string;
+          sleeper_player_id?: string;
+          snapshot_date?: string;
+          source?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_market_snapshots_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       player_stats: {
         Row: {
@@ -3635,7 +3865,33 @@ export type Database = {
       };
     };
     Views: {
-      [_ in never]: never;
+      player_market_latest: {
+        Row: {
+          adp: Json | null;
+          created_at: string | null;
+          id: string | null;
+          metadata: Json | null;
+          player_id: string | null;
+          projected_pts_half_ppr: number | null;
+          projected_pts_ppr: number | null;
+          projected_pts_std: number | null;
+          season: number | null;
+          season_type: string | null;
+          sleeper_player_id: string | null;
+          snapshot_date: string | null;
+          source: string | null;
+          updated_at: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_market_snapshots_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Functions: {
       account_has_password: { Args: never; Returns: boolean };

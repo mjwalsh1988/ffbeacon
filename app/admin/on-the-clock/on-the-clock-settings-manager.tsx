@@ -231,6 +231,8 @@ export function OnTheClockSettingsManager({
       ...s,
       positionFallbackTargets: { ...s.positionFallbackTargets, ...next },
     }));
+  const patchValueIndicators = (next: Partial<OnTheClockSettings["valueIndicators"]>) =>
+    setSettings((s) => ({ ...s, valueIndicators: { ...s.valueIndicators, ...next } }));
 
   // Changing the preset seeds the need + value weights, mirroring the plan's presets.
   const setAggressiveness = (preset: TeamNeedAggressiveness) =>
@@ -381,6 +383,33 @@ export function OnTheClockSettingsManager({
             Defenses and kickers always appear in the board, lists, and picks. Whether they can be
             recommended is controlled under Recommendation engine below.
           </LockedNote>
+          <LockedNote>
+            The player pool (all players vs rookies only) is inferred automatically: redraft leagues
+            always show everyone; dynasty drafts with 6 rounds or fewer are treated as rookie
+            drafts. There is no manual toggle.
+          </LockedNote>
+        </div>
+      </SectionCard>
+
+      {/* 3b. ADP value indicators */}
+      <SectionCard
+        title="ADP value indicators"
+        blurb="How far from Sleeper ADP a pick must land before the board and list call it good value or a reach. Applies to live rooms and to new completed-draft snapshots (already-finalized snapshots keep the threshold they were graded with)."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Neutral band (picks)"
+            htmlFor={`${ids}-adpthreshold`}
+            hint="A pick is flagged only when it lands at least this many picks after (good value) or before (reach) its Sleeper ADP. 6 is about half a round in a 12-team league."
+          >
+            <NumberInput
+              id={`${ids}-adpthreshold`}
+              value={settings.valueIndicators.thresholdPicks}
+              onChange={(n) => patchValueIndicators({ thresholdPicks: Math.round(n) })}
+              step="1"
+              min={1}
+            />
+          </Field>
         </div>
       </SectionCard>
 

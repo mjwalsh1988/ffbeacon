@@ -94,6 +94,13 @@ export const DEFAULT_ON_THE_CLOCK_SETTINGS: OnTheClockSettings = {
     DEF: 1,
   },
 
+  // ADP value indicators: a pick is flagged good value / reach only once it
+  // lands this many picks after / before its Sleeper ADP (half a round in a
+  // 12-team league). Adjustable in /admin/on-the-clock.
+  valueIndicators: {
+    thresholdPicks: 6,
+  },
+
   mappingVisibility: {
     showUnmappedPanel: true,
   },

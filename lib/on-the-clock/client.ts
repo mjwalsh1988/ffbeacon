@@ -11,8 +11,9 @@
  * one fetch when called; nothing here schedules repeats.
  */
 
-import type { LeagueCard, ShapedDraftCache, SyncStatus } from "./types";
+import type { LeagueCard, PlayerPool, ShapedDraftCache, SyncStatus } from "./types";
 import type { BoardResult } from "./board-types";
+import type { DraftSnapshotPayload } from "./snapshot-types";
 import type { HistoryTransaction } from "./trade-history";
 
 /** Header that every On The Clock route requires (CSRF-lite / bot filter). */
@@ -126,13 +127,42 @@ export function fetchLeagues(username: string, season: string): Promise<ApiResul
 }
 
 /**
- * GET /api/on-the-clock/board?format= (FF Beacon ranked board for the league's
- * auto-detected format; source is forced to FF Beacon server-side).
+ * GET /api/on-the-clock/board?format=&pool= (FF Beacon ranked board for the
+ * league's auto-detected format; source is forced to FF Beacon server-side).
+ * `pool` only steers which Sleeper ADP market the board's adp values use
+ * (rookie drafts prefer rookie ADP when it has data).
  */
-export function fetchBoard(formatSlug: string): Promise<ApiResult<{ board: BoardResult }>> {
-  const qs = new URLSearchParams({ format: formatSlug }).toString();
+export function fetchBoard(
+  formatSlug: string,
+  pool: PlayerPool = "everyone",
+): Promise<ApiResult<{ board: BoardResult }>> {
+  const qs = new URLSearchParams({ format: formatSlug, pool }).toString();
   return request(`/api/on-the-clock/board?${qs}`, { method: "GET" }, (body) => ({
     board: body.board as BoardResult,
+  }));
+}
+
+export interface SnapshotResponse {
+  /** Null when the draft is not complete (live mode applies) or no board data exists. */
+  snapshot: DraftSnapshotPayload | null;
+  reason: string | null;
+}
+
+/**
+ * GET /api/on-the-clock/draft/snapshot?draft_id=&format=&league_name=
+ * Finalized results for a completed draft (created server-side on first open).
+ */
+export function fetchSnapshot(params: {
+  draftId: string;
+  formatSlug?: string | null;
+  leagueName?: string | null;
+}): Promise<ApiResult<SnapshotResponse>> {
+  const qp = new URLSearchParams({ draft_id: params.draftId });
+  if (params.formatSlug) qp.set("format", params.formatSlug);
+  if (params.leagueName) qp.set("league_name", params.leagueName);
+  return request(`/api/on-the-clock/draft/snapshot?${qp.toString()}`, { method: "GET" }, (body) => ({
+    snapshot: (body.snapshot as DraftSnapshotPayload | null) ?? null,
+    reason: typeof body.reason === "string" ? body.reason : null,
   }));
 }
 

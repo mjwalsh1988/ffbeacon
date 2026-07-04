@@ -341,7 +341,7 @@ For canonical merged tables like `players` where one row represents the union of
 
 NEVER drop raw source data on the floor during ingestion. Even if we "only need 3 fields right now," store the full object.
 
-Tables currently subject to this rule: `player_value_history`, `rankings`, `projections`, `player_stats`, `news_items`, `players`, `leagues`, `rosters`, `league_users`, `league_transactions`, `draft_pick_values`. Add to this list whenever a new ingestion table lands.
+Tables currently subject to this rule: `player_value_history`, `rankings`, `projections`, `player_stats`, `news_items`, `players`, `leagues`, `rosters`, `league_users`, `league_transactions`, `draft_pick_values`, `player_market_snapshots`. Add to this list whenever a new ingestion table lands.
 
 ### Pre-Calculated (Derived) Tables
 

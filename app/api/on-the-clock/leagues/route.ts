@@ -21,9 +21,10 @@ export const dynamic = "force-dynamic";
  *
  * To avoid over-hitting Sleeper, league detection uses ONLY the league objects from
  * one getSleeperLeagues call (which carry status + draft_id). We do NOT fan out a
- * per-league drafts fetch: status "drafting" / "pre_draft" plus a present draft_id
- * is a reliable, zero-extra-call signal (Sleeper flips league.status off "drafting"
- * once a draft completes). See ON-THE-CLOCK-PLAN.md section 6.
+ * per-league drafts fetch. Every league with a draft id is returned, staged for
+ * the picker: actively drafting first, then pre-draft, then completed/in-season
+ * drafts (openable for after-the-fact review; those load in snapshot mode).
+ * Each stage is capped independently at the maxActiveLeagues limit.
  *
  * Response: private, no-store, Referrer-Policy: no-referrer (usernames are sensitive
  * even though Sleeper is public). Returns trimmed league cards only.
@@ -47,12 +48,15 @@ function clientIp(req: Request): string {
   return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
-/** Drafting leagues first, then not-yet-started (pre_draft). */
-function statusRank(status: string): number {
-  if (status === "drafting") return 0;
-  if (status === "pre_draft") return 1;
-  return 2;
+/** Picker stage for a Sleeper league status. Anything past pre_draft/drafting
+ * (in_season, complete, post_season, ...) means the draft already happened. */
+function stageOf(status: string): "drafting" | "pre_draft" | "completed" {
+  if (status === "drafting") return "drafting";
+  if (status === "pre_draft") return "pre_draft";
+  return "completed";
 }
+
+const STAGE_ORDER = { drafting: 0, pre_draft: 1, completed: 2 } as const;
 
 export async function GET(req: Request) {
   if (req.headers.get("x-requested-with") !== "ff-beacon") {
@@ -103,16 +107,26 @@ export async function GET(req: Request) {
   const leagues = await getSleeperLeagues(user.user_id, seasonRaw);
   const cap = settings.limits.maxActiveLeagues;
 
+  // Every league with a draft id qualifies: active and pre-draft leagues open in
+  // live mode; completed/in-season leagues open their finished draft for review
+  // (snapshot mode). Each stage is capped independently so a busy in-season
+  // account can never crowd out an actively drafting league.
   const candidates = leagues
-    .filter(
-      (l) =>
-        typeof l.draft_id === "string" &&
-        l.draft_id.length > 0 &&
-        (l.status === "drafting" || l.status === "pre_draft"),
-    )
-    .sort((a, b) => statusRank(a.status) - statusRank(b.status));
+    .filter((l) => typeof l.draft_id === "string" && l.draft_id.length > 0)
+    .sort((a, b) => STAGE_ORDER[stageOf(a.status)] - STAGE_ORDER[stageOf(b.status)]);
 
-  const truncated = candidates.length > cap;
+  const perStageCount: Record<string, number> = { drafting: 0, pre_draft: 0, completed: 0 };
+  const capped: typeof candidates = [];
+  let truncated = false;
+  for (const l of candidates) {
+    const stage = stageOf(l.status);
+    if (perStageCount[stage] >= cap) {
+      truncated = true;
+      continue;
+    }
+    perStageCount[stage] += 1;
+    capped.push(l);
+  }
 
   // Auto-detect each league's FF Beacon format from the rich Sleeper league object
   // we already fetched above (scoring_settings / roster_positions). This adds ZERO
@@ -121,7 +135,7 @@ export async function GET(req: Request) {
   // FF Beacon downstream).
   const formatCandidates = await ffbeaconFormatCandidates(admin);
 
-  const cards: LeagueCard[] = candidates.slice(0, cap).map((l) => {
+  const cards: LeagueCard[] = capped.map((l) => {
     const detected = detectLeagueFormat(l, formatCandidates);
     return {
       leagueId: l.league_id,
@@ -131,6 +145,7 @@ export async function GET(req: Request) {
       totalRosters: l.total_rosters,
       avatar: l.avatar ?? null,
       draftStatus: l.status,
+      stage: stageOf(l.status),
       formatSlug: detected?.slug ?? null,
       formatLabel: detected?.label ?? null,
       formatDerivedLabel: detected?.derivedLabel ?? null,

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getAllSleeperTransactions, type SleeperTransaction } from "@/lib/sleeper";
+import { getAllSleeperTransactions } from "@/lib/sleeper";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { claimLookup } from "@/lib/on-the-clock/cache";
-import { isValidLeagueId, sanitizeSleeperPlayerId } from "@/lib/on-the-clock/validation";
-import type { HistoryFaab, HistoryPick, HistoryTransaction } from "@/lib/on-the-clock/trade-history";
+import { isValidLeagueId } from "@/lib/on-the-clock/validation";
+import { shapeLeagueTrades } from "@/lib/on-the-clock/transactions-shape";
 
 export const dynamic = "force-dynamic";
 
@@ -45,102 +45,6 @@ function clientIp(req: Request): string {
   return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
-function toNum(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() !== "") {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
-
-/**
- * Sleeper sends transaction draft_picks as an array OR an object OR a JSON string
- * OR null. Normalize every shape to HistoryPick[], dropping rows missing the fields
- * we rely on. Mirrors the league-pulse normalizeDraftPicks pattern.
- */
-function normalizePicks(raw: unknown): HistoryPick[] {
-  let arr: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      arr = JSON.parse(raw);
-    } catch {
-      return [];
-    }
-  }
-  if (arr && typeof arr === "object" && !Array.isArray(arr)) {
-    arr = Object.values(arr as Record<string, unknown>);
-  }
-  if (!Array.isArray(arr)) return [];
-
-  const out: HistoryPick[] = [];
-  for (const item of arr) {
-    if (!item || typeof item !== "object") continue;
-    const o = item as Record<string, unknown>;
-    const season = toNum(o.season);
-    const round = toNum(o.round);
-    const originalRosterId = toNum(o.roster_id);
-    if (season === null || round === null || originalRosterId === null) continue;
-    out.push({
-      season,
-      round,
-      originalRosterId,
-      newOwnerRosterId: toNum(o.owner_id),
-      previousOwnerRosterId: toNum(o.previous_owner_id),
-    });
-  }
-  return out;
-}
-
-function normalizeFaab(raw: unknown): HistoryFaab[] {
-  if (!Array.isArray(raw)) return [];
-  const out: HistoryFaab[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const o = item as Record<string, unknown>;
-    const sender = toNum(o.sender);
-    const receiver = toNum(o.receiver);
-    const amount = toNum(o.amount);
-    if (sender === null || receiver === null || amount === null) continue;
-    out.push({ sender, receiver, amount });
-  }
-  return out;
-}
-
-/**
- * Keep only valid (sanitized) Sleeper ids mapped to a numeric roster id. The
- * sanitizer's ^[A-Za-z0-9]{1,16}$ allowlist is what makes the bracket assignment
- * below safe: "__proto__" contains underscores and is rejected, so no key can reach
- * Object.prototype. Do NOT relax the sanitizer to accept separators.
- */
-function normalizeAddsDrops(raw: Record<string, number> | null): Record<string, number> {
-  const out: Record<string, number> = {};
-  if (!raw || typeof raw !== "object") return out;
-  for (const [key, value] of Object.entries(raw)) {
-    const id = sanitizeSleeperPlayerId(key);
-    const roster = toNum(value);
-    if (!id || id === "0" || roster === null) continue;
-    out[id] = roster;
-  }
-  return out;
-}
-
-function shapeTrade(t: SleeperTransaction): HistoryTransaction {
-  return {
-    transactionId: String(t.transaction_id),
-    status: typeof t.status === "string" ? t.status : "complete",
-    week: toNum(t.week),
-    createdAt: toNum(t.created),
-    rosterIds: Array.isArray(t.roster_ids)
-      ? t.roster_ids.filter((r): r is number => typeof r === "number")
-      : [],
-    adds: normalizeAddsDrops(t.adds),
-    drops: normalizeAddsDrops(t.drops),
-    picks: normalizePicks(t.draft_picks),
-    faab: normalizeFaab(t.waiver_budget),
-  };
-}
-
 export async function GET(req: Request) {
   if (req.headers.get("x-requested-with") !== "ff-beacon") {
     return json({ error: "Invalid request" }, 403);
@@ -176,11 +80,10 @@ export async function GET(req: Request) {
   }
 
   const all = await getAllSleeperTransactions(leagueId);
-  const trades = all
-    .filter((t) => t.type === "trade" && t.status !== "failed")
-    .map(shapeTrade)
-    // Newest first; transactions with no timestamp sink to the bottom.
-    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  // Shared shaping (lib/on-the-clock/transactions-shape.ts): completed trades
+  // only, newest first. The snapshot finalizer freezes trades through the same
+  // path so live and snapshot renders can never diverge.
+  const trades = shapeLeagueTrades(all);
 
   const truncated = trades.length > MAX_TRADES;
 

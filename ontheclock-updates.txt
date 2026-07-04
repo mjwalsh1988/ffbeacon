@@ -1,0 +1,571 @@
+We are enhancing the FF Beacon “On The Clock” tool on ffbeacon.com.
+
+Please review the existing source code, database patterns, cron job patterns, Supabase naming conventions, Sleeper integration code, existing player/value storage, and any existing Sleeper-related ingestion jobs before making changes.
+
+You do not need to be told exactly how to implement every detail. Please infer the best implementation by reviewing the codebase and doing any necessary research on Sleeper API endpoints, including official Sleeper documentation, repositories, community references, or the previously researched undocumented Sleeper projections/ADP endpoint.
+
+Do not commit or push anything when finished.
+
+Do not run browser/Chrome-based testing because it takes too long.
+
+You may run TypeScript/typecheck, lint, unit tests, integration tests, build checks, and any other non-browser verification that makes sense.
+
+The goal is to implement the following On The Clock enhancements cleanly, consistently, and without rewriting unrelated parts of the tool.
+
+---
+
+# 1. Add nightly Sleeper projections / ADP ingestion
+
+Create a new scheduled job that runs with our existing Sleeper cron jobs.
+
+Preferred cadence: nightly.
+
+Reasoning: projections and ADP can change frequently, especially during the season, so nightly is the best default.
+
+This job should pull data from the Sleeper projections endpoint we previously researched. That endpoint returns player projection data and ADP data across the formats Sleeper supports, including formats that are not clearly documented in the official Sleeper docs.
+
+Please do any necessary source-code review and Sleeper API research needed to confirm the endpoint shape and expected fields.
+
+Implement this using our existing Supabase table/migration patterns.
+
+The ingestion should store:
+
+- Player projection data by player
+- Sleeper ADP by player
+- ADP for every format Sleeper provides from that endpoint
+- Proper association to our existing players table wherever possible
+- Clean timestamps / update tracking
+- Idempotent nightly updates so repeated runs do not create duplicate rows
+- Consistent table naming, column naming, indexes, and RLS/security patterns based on the existing project
+
+The purpose of this data is to make Sleeper ADP available inside On The Clock and future FF Beacon features.
+
+---
+
+# 2. Store the full Sleeper response object in meta JSONB
+
+When building the nightly Sleeper projections/ADP ingestion job, make sure each stored record includes a `meta` JSONB column that stores the full raw Sleeper object returned by the endpoint.
+
+This is important because Sleeper may include fields that we do not use immediately but may need later.
+
+Requirements:
+
+- Store parsed/normalized fields in normal columns for fast querying
+- Store the full original Sleeper object in a `meta` JSONB column
+- Use JSONB, not plain text
+- Keep this consistent with our existing Supabase naming and table patterns
+- Make the ingestion idempotent
+- Avoid duplicate rows for the same player/format/date/snapshot
+- Include proper timestamps
+- Add indexes where needed for player lookup, format lookup, and date-based lookup
+
+---
+
+# 3. Preserve nightly historical ADP/projection snapshots
+
+Do not only overwrite the latest Sleeper ADP/projection data.
+
+We need a historical record of nightly Sleeper projection/ADP snapshots so that we can later reconstruct what the Sleeper ADP/projection data looked like at a specific point in time.
+
+The system should likely support both:
+
+1. A latest/current table or view for fast current lookups
+2. A historical snapshot table that keeps nightly records
+
+Please infer the best schema based on our existing database patterns.
+
+The historical table should allow us to answer questions like:
+
+- What was this player’s Sleeper ADP on June 15, 2026?
+- What was the Sleeper ADP for this draft format around the time this draft happened?
+- What projection/ADP data should we use for a completed draft that was never opened in FF Beacon while it was live?
+
+Suggested structure, but please adapt to project patterns:
+
+- `sleeper_player_adp_snapshots`
+- `sleeper_player_projection_snapshots`
+- Or one combined `sleeper_player_market_snapshots` table if that is cleaner
+
+Important columns may include:
+
+- `id`
+- `player_id`
+- `sleeper_player_id`
+- `format`
+- `adp`
+- Projection fields
+- `snapshot_date`
+- `source`
+- `meta` JSONB
+- `created_at`
+- `updated_at`
+
+Use the cleanest design that supports both current and historical draft review.
+
+---
+
+# 4. Add draft-level snapshot/cache for On The Clock
+
+We need a performance-friendly way to cache/snapshot each draft so that once a draft is completed, the results do not change later.
+
+Right now, if the awards, grades, board view, list view, or value calculations always pull current FF Beacon values and current Sleeper ADP, then finished draft results will change over time. That cannot happen.
+
+Create a draft-level snapshot/cache system for On The Clock.
+
+The snapshot should preserve the relevant data needed to accurately reload and grade a draft later, including:
+
+- Draft ID
+- League ID
+- User/team/roster mappings
+- Draft settings
+- Draft type/format detected
+- Draft status
+- Draft rounds
+- Draft picks
+- Player IDs
+- Player display names at time of snapshot
+- Player positions/teams at time of snapshot
+- FF Beacon value/rank used for that draft
+- Sleeper ADP used for that draft
+- ADP vs Beacon difference
+- Pick-by-pick value result
+- Award-relevant calculated data
+- Any other fields needed to re-render completed draft results without recalculating from moving current data
+
+This can be implemented as one or more tables depending on what is cleanest.
+
+Possible table ideas:
+
+- `on_the_clock_draft_snapshots`
+- `on_the_clock_draft_pick_snapshots`
+- `on_the_clock_award_snapshots`
+
+Or a combined draft snapshot table with a structured JSONB payload if that is more appropriate.
+
+Please choose a design that balances:
+
+- Query performance
+- Long-term maintainability
+- Easy historical review
+- Avoiding excessive recalculation
+- Avoiding giant unstructured blobs where relational data would be better
+- Still keeping a `meta` JSONB or snapshot payload when useful
+
+---
+
+# 5. Snapshot timing rules
+
+Implement clear rules for when a draft snapshot is created or updated.
+
+## Active or pre-draft drafts
+
+For drafts that are still active, pre-draft, or in progress:
+
+- It is okay for the tool to refresh draft state from Sleeper
+- It is okay for values/ADP to update while the draft is ongoing
+- Consider caching enough to avoid excessive API calls
+- Avoid recalculating expensive data on every page load if a short-lived cache would be better
+
+## Finished drafts that were already used in FF Beacon
+
+Once a draft is completed:
+
+- Create or finalize a permanent snapshot
+- Lock the values/ADP/award calculations to that completed snapshot
+- Future page loads should use the finalized snapshot
+- Do not let current ADP or current FF Beacon values change the historical results
+- If recalculation is needed later, it should be intentional/admin-driven, not automatic
+
+## Finished drafts opened for the first time after completion
+
+This is the important edge case.
+
+If a user opens a completed Sleeper draft that was never previously used in FF Beacon, we still need to generate a historically reasonable snapshot.
+
+In that case:
+
+- Pull the completed draft data from Sleeper
+- Determine when the draft happened or when it completed
+- Use the best available historical FF Beacon values from that time period
+- Use the best available historical Sleeper ADP/projection snapshot from that time period
+- Generate and save a finalized draft snapshot based on those historical values
+- Future loads should use that saved snapshot
+
+If an exact historical date match is not available, use the nearest available snapshot before the draft completion date.
+
+If no prior snapshot exists, use the nearest available snapshot after the draft completion date and clearly mark the snapshot as estimated/fallback in metadata.
+
+The goal is to avoid using today’s values for an old completed draft unless there is truly no better option.
+
+---
+
+# 6. Historical lookup strategy
+
+Please implement or design a clean helper/service layer for historical value lookup.
+
+We need reusable logic that can do something like:
+
+- Given a draft ID and draft completion date
+- Determine the correct league format
+- Determine the relevant player pool
+- Find the closest FF Beacon value snapshot from that time
+- Find the closest Sleeper ADP/projection snapshot from that time
+- Return the correct value/ADP data to use for snapshot generation
+
+This helper should be reusable for:
+
+- Board view
+- List view
+- Awards
+- Finished draft review
+- Future historical tools
+
+Suggested lookup priority:
+
+1. Exact snapshot date matching the draft date/time
+2. Closest snapshot before the draft completion date
+3. Closest snapshot during the draft window
+4. Closest snapshot after the draft completion date
+5. Current data only as a last resort
+
+When a fallback is used, store that information in metadata so we know how the snapshot was created.
+
+Example metadata fields:
+
+- `value_snapshot_source`: `exact`, `previous`, `during_draft`, `next_available`, or `current_fallback`
+- `adp_snapshot_source`: `exact`, `previous`, `during_draft`, `next_available`, or `current_fallback`
+- `value_snapshot_date`
+- `adp_snapshot_date`
+- `draft_completed_at`
+- `snapshot_finalized_at`
+- `snapshot_confidence`: `high`, `medium`, or `low`
+
+---
+
+# 7. Draft snapshot should power completed draft pages
+
+For completed drafts, the On The Clock UI should read from the saved draft snapshot instead of recalculating everything from current data.
+
+This applies to:
+
+- Draft board view
+- Draft list view
+- Available players context if shown
+- Pick grades/value indicators
+- Team draft grades
+- Trade review if applicable
+- Awards page
+- Best Drafter award
+- Any other completed-draft review UI
+
+For active drafts, continue using live data as appropriate.
+
+The distinction should be clear in the code:
+
+- Active draft = live mode
+- Completed draft with snapshot = snapshot mode
+- Completed draft without snapshot = generate historical snapshot, then snapshot mode
+
+---
+
+# 8. Update first-step league search behavior
+
+Currently, after searching a Sleeper username in the first step of On The Clock, we only show leagues that are pre-draft or actively drafting.
+
+Change this so the search returns all relevant leagues, but visually groups/sorts them into clear categories:
+
+1. Actively Drafting
+2. Pre-Draft
+3. Completed / In-Season Drafts
+
+The actively drafting category should be treated as the primary/high-priority category.
+
+The completed / in-season drafts category should appear last and should be visually differentiated, likely slightly faded or styled in a way that clearly communicates these drafts are already finished.
+
+Reasoning: users should be able to open old drafts and review the draft results, grades, trades, awards, and overall draft performance.
+
+Do not remove the existing ability to prioritize active drafts. Just expand the league results and organize them better.
+
+---
+
+# 9. Remove manual “All Players / Rookies” toggle
+
+Inside On The Clock, after a user enters a league/draft, remove the manual toggle that lets them choose between all players and rookies.
+
+The player pool should now be inferred automatically from Sleeper league/draft data.
+
+Use the following logic:
+
+## Redraft leagues
+
+Always show all players.
+
+## Chopped leagues
+
+Always treat as redraft and show all players.
+
+## Dynasty leagues
+
+Use draft round count to infer startup vs rookie draft:
+
+- More than 6 rounds = startup draft = show all players
+- 6 rounds or fewer = rookie draft = show rookies only
+
+## Best ball leagues
+
+Use the same logic as the league type:
+
+- Dynasty best ball: use the Dynasty round-count logic
+- Redraft best ball: show all players
+
+The user should not have to make this decision manually.
+
+If helpful, add a modern, polished modal or confirmation UI when someone first enters the On The Clock page/draft that explains the detected league type and player pool in plain English.
+
+Example:
+
+“Looks like this is a Dynasty rookie draft, so we’re showing rookies only.”
+
+Or:
+
+“Looks like this is a Dynasty startup, so we’re showing all players.”
+
+This modal should be useful but not annoying. Make sure it feels polished and matches the FF Beacon design system.
+
+---
+
+# 10. Add Sleeper ADP to available players
+
+Use the new ADP data from the nightly ingestion job inside the On The Clock available players list.
+
+Add Sleeper ADP as its own column in the available players table/list.
+
+The user should be able to compare:
+
+- FF Beacon value/rank
+- Sleeper ADP
+- Difference between Sleeper ADP and FF Beacon value/rank
+
+The UI should make it easy to understand when FF Beacon is higher or lower on a player than Sleeper ADP.
+
+Example plain-English ideas:
+
+- “Sleeper ADP is 12 picks later”
+- “Sleeper ADP is 8 picks earlier”
+- “Beacon is higher than ADP”
+- “Beacon says value”
+
+The point is that users should be able to quickly understand something like:
+
+“FF Beacon recommends this player now, even though Sleeper ADP says he may not go for another 12 picks.”
+
+Please make this clean, understandable, and visually useful.
+
+---
+
+# 11. Add ADP/value indicators to board view
+
+On the draft board page, use FF Beacon value/rank compared against Sleeper ADP to determine whether a draft pick appears to be:
+
+- Good value
+- Bad value
+- Neutral / normal
+
+Add a small visual indicator/icon for good picks and bad picks.
+
+If the pick belongs to the current user, the icon can appear near the user/pick marker area.
+
+If it is not the current user’s pick, the icon should still appear near the draft pick number area in a consistent way.
+
+Neutral picks should show no icon to avoid clutter.
+
+The icon language should be simple and clear.
+
+Use one unique icon for good value and one unique icon for bad value.
+
+Use a reasonable value threshold so we are not calling every tiny ADP difference good or bad. Please infer the best threshold from the data/modeling patterns in the code and make it easy to adjust later if needed.
+
+---
+
+# 12. Add ADP/value information to board list view
+
+In the board list view, add an easy-to-understand column or display area that communicates the same ADP vs FF Beacon value information.
+
+This should include enough information for a user to understand why a pick is considered good value, bad value, or neutral.
+
+Keep the language layman-friendly.
+
+Examples:
+
+- “Great value: taken 14 picks after Beacon rank”
+- “Reach: taken 11 picks before Beacon rank”
+- “Near ADP”
+
+The exact wording can be improved, but it should be immediately understandable.
+
+---
+
+# 13. Update Best Drafter award logic
+
+On the awards page, update the Best Drafter award.
+
+Currently, I believe this award mostly sums FF Beacon value on the roster.
+
+Change it so the award is based on who drafted the best value against Sleeper ADP.
+
+The winner should be the team that captured the most draft value compared to ADP.
+
+Use the new ADP data and compare each drafted player’s actual draft position against the expected ADP / FF Beacon value context.
+
+The goal is to reward the drafter who consistently got value relative to the market, not just the team that accumulated the highest raw FF Beacon value.
+
+Please make the calculation reasonable, explainable, and consistent with the rest of the award system.
+
+For completed drafts, this award must use the locked draft snapshot data.
+
+It should not recalculate using current Sleeper ADP or current FF Beacon value.
+
+The award should be based on the values/ADP captured for that draft’s snapshot.
+
+The goal is:
+
+- Stable historical results
+- Fair comparison based on the market at the time of the draft
+- No awards changing weeks later because ADP moved
+
+Also update any copy/descriptions in the awards UI so users understand how the award is earned.
+
+Example description:
+
+“Given to the team that found the most value compared to Sleeper ADP.”
+
+Use better wording if appropriate.
+
+---
+
+# 14. Player photo styling cleanup
+
+Review every place inside the On The Clock feature where player photos are displayed.
+
+Any player photo currently using a full circle/circular border should be changed to use rounded-corner square/rectangle styling instead.
+
+Use consistent rounded corners that match the FF Beacon design language.
+
+Do not change unrelated avatar/user icons unless they are player photos.
+
+---
+
+# 15. Performance and API safety
+
+Please be careful with performance.
+
+Avoid repeatedly pulling the same completed draft from Sleeper and recalculating everything on every page load.
+
+Use a cache/snapshot-first strategy:
+
+- Check for existing finalized snapshot
+- If it exists, use it
+- If it does not exist and draft is completed, generate it once and save it
+- If draft is active, use live mode with sensible short-lived caching if needed
+
+Also be careful with the nightly cron job:
+
+- Do not create unnecessary duplicate rows
+- Do not make excessive Sleeper API calls
+- Use batching where appropriate
+- Log failures clearly
+- Make partial failures recoverable
+- Make reruns safe
+
+---
+
+# 16. Admin/debug visibility if reasonable
+
+If the project already has admin patterns that make this easy, add simple admin/debug visibility for draft snapshots.
+
+This does not need to be a huge admin UI, but it would be useful to see:
+
+- Whether a draft is using live mode or snapshot mode
+- Whether a completed draft snapshot is finalized
+- Snapshot date used
+- ADP snapshot date used
+- FF Beacon value snapshot date used
+- Whether the snapshot used exact, previous, next, or fallback data
+- Snapshot confidence
+
+Only add this if it fits cleanly into the existing admin structure. Do not overbuild it.
+
+---
+
+# 17. Quality, testing, and review requirements
+
+After implementation:
+
+- Run TypeScript/typecheck
+- Run lint if available
+- Run relevant unit/integration tests if available
+- Run build verification if reasonable
+- Do not run browser/Chrome testing
+- Do not commit
+- Do not push
+
+Also spawn an unbiased sub-agent to review the implementation for:
+
+- Correctness
+- Security
+- Performance
+- Accessibility
+- Database/schema quality
+- Cron job safety/idempotency
+- UI clarity
+- Regression risk
+
+Have the sub-agent specifically look for edge cases around:
+
+- Missing ADP data
+- Missing projection data
+- Players not found in the players table
+- Different Sleeper league types
+- Rookie drafts vs startup drafts
+- Finished drafts
+- Drafts with unusual round counts
+- Best ball and chopped formats
+- Completed drafts with old ADP data
+- Completed drafts that were never opened in FF Beacon while live
+- Mobile accessibility
+- Screen reader accessibility
+- Nightly ADP/projection records include `meta` JSONB with the full Sleeper object
+- Historical ADP/projection snapshots are preserved and not only overwritten
+- Current/latest ADP lookup still works efficiently
+- Completed drafts use saved snapshots
+- Completed drafts do not change when current ADP/value data changes
+- A completed draft with no existing FF Beacon snapshot can generate a reasonable historical snapshot
+- Fallback snapshot sources are stored in metadata
+- Missing player mappings do not break the UI
+- Awards use locked snapshot values
+- Best Drafter award is stable after finalization
+- Active drafts still behave live
+- Pre-draft leagues still behave normally
+- Finished draft pages load efficiently
+
+---
+
+# 18. Final implementation report
+
+When finished, provide a clear implementation report with:
+
+1. Summary of what changed
+2. Files changed
+3. Database tables/migrations added
+4. Cron/job changes
+5. Snapshot/cache architecture
+6. Historical lookup strategy
+7. How completed drafts are finalized
+8. How old drafts are handled when first opened after completion
+9. How fallback snapshot dates are selected
+10. UI changes
+11. Award calculation changes
+12. Tests/checks run
+13. Sub-agent review findings
+14. Risks or follow-up recommendations
+15. Confirmation that nothing was committed or pushed

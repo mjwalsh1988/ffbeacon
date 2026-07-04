@@ -22,6 +22,7 @@ export type CronJobName =
   | "recalculate-beacon"
   | "recalculate-derived"
   | "sync-sleeper-stats"
+  | "sync-sleeper-market"
   | "beacon-brief-curate"
   | "beacon-brief-worker";
 
@@ -86,6 +87,14 @@ export const CRON_JOBS: ReadonlyArray<{
     scheduleHuman: "Daily 09:00 UTC, NFL months only",
     description:
       "Refreshes current-season player_stats from Sleeper. Skips in the off-season.",
+  },
+  {
+    name: "sync-sleeper-market",
+    label: "Sleeper market sync",
+    schedule: "0 11 * * *",
+    scheduleHuman: "Daily, 11:00 UTC",
+    description:
+      "Refreshes Sleeper ADP (every format) + season projections into player_market_snapshots. Historical: one partition per night.",
   },
   {
     name: "beacon-brief-curate",

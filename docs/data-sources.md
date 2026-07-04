@@ -668,6 +668,40 @@ Idempotency: the script writes via Supabase upsert with
 UTC noon on the historical date so a given calendar day maps to a
 single canonical timestamp.
 
+### Sleeper draft market (ADP + projections): `player_market_snapshots`
+
+`scripts/sync-sleeper-market.ts` (lib at `lib/sync-sleeper-market.ts`, cron at
+`/api/cron/sync-sleeper-market`, nightly 11:00 UTC) pulls Sleeper's
+undocumented-but-stable season projections endpoint:
+
+```
+GET https://api.sleeper.com/projections/nfl/{season}
+  ?season_type=regular&position[]=DEF&position[]=K&position[]=QB
+  &position[]=RB&position[]=TE&position[]=WR&order_by=adp_ppr
+```
+
+Note the host: `api.sleeper.com`, no `/v1` prefix. One call returns ~3,300
+players; each row's flat `stats` map carries season projection points
+(`pts_ppr` / `pts_half_ppr` / `pts_std` plus component stats) and ADP keys for
+every format Sleeper publishes (`adp_ppr`, `adp_half_ppr`, `adp_std`,
+`adp_2qb`, `adp_dynasty_ppr`, `adp_dynasty_half_ppr`, `adp_dynasty_std`,
+`adp_dynasty_2qb`, `adp_idp`, `adp_idp_1qb`, `adp_rookie`, `adp_dynasty`).
+`999` is Sleeper's "no data" sentinel and is stripped at ingest. Rows with no
+real ADP and no projection are not stored (~600-800 stored per night).
+
+This data intentionally does NOT flow through `source_registry` /
+`player_value_history`: it is draft-market data (ADP), not a trade-value
+source, and Sleeper must never appear in the public Source dropdown. The
+`player_market_snapshots.source` column ('sleeper') is provenance only.
+`player_market_latest` (a security_invoker view) serves current lookups.
+
+**No historical access exists.** The endpoint serves current values only; every
+plausible historical variant is absent (this mirrors the FantasyCalc finding
+below). Consequence: ADP history accumulates from launch (2026-07-04) forward.
+On The Clock's historical draft-snapshot lookups treat pre-launch dates via the
+documented fallback chain (nearest snapshot after the date, else current data,
+always flagged in snapshot metadata).
+
 ### FantasyCalc historical — not publicly accessible
 
 FantasyCalc exposes `GET /values/current` only. We probed every

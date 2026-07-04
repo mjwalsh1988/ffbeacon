@@ -104,6 +104,7 @@ function baseInput(over: Partial<DraftAwardsInput> = {}): DraftAwardsInput {
     picks: [],
     draftSettings: { teams: 3 },
     settings: DEFAULT_ON_THE_CLOCK_SETTINGS,
+    adpBySleeperId: {},
     ...over,
   };
 }
@@ -127,28 +128,90 @@ describe("computeDraftAwards", () => {
     ]);
   });
 
-  it("crowns the best and worst drafter by drafted-player value", () => {
-    const awards = computeDraftAwards(baseInput());
+  it("crowns the best drafter by total value captured versus Sleeper ADP", () => {
+    // Delta = pick_no - ADP: positive means the player fell past his market
+    // price (value). Alpha (roster 1): sA at pick 8 with ADP 20 (-12, a reach)
+    // and sB at pick 44 with ADP 30 (+14). Net +2. Bravo (roster 2): sC at pick
+    // 28 with ADP 10 (+18). Bravo wins even though Alpha's roster carries more
+    // raw FF Beacon value.
+    const picks = [
+      pick({ pickNo: 8, rosterId: 1, sleeperPlayerId: "sA" }),
+      pick({ pickNo: 44, rosterId: 1, sleeperPlayerId: "sB" }),
+      pick({ pickNo: 28, rosterId: 2, sleeperPlayerId: "sC" }),
+    ];
+    const awards = computeDraftAwards(
+      baseInput({ picks, adpBySleeperId: { sA: 20, sB: 30, sC: 10 } }),
+    );
     const best = find(awards, "best-drafter");
-    const worst = find(awards, "worst-drafter");
     expect(best.pending).toBe(false);
-    expect(best.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
-    expect(best.metricLabel).toBe("5,000 drafted value");
-    expect(worst.claimants.map((c) => c.ownerName)).toEqual(["Cara"]);
-    expect(worst.metricLabel).toBe("1,000 drafted value");
-    // The connected team + avatar travel onto the claimant.
-    expect(best.claimants[0].isYou).toBe(true);
-    expect(best.claimants[0].avatar).toBe("av1");
+    expect(best.claimants.map((c) => c.ownerName)).toEqual(["Bravo"]);
+    expect(best.metricLabel).toBe("+18 picks of ADP value across 1 pick");
+    expect(best.description).toBe("Finds the most draft value compared to Sleeper ADP.");
+    // The Lost Signal Award is the exact mirror: lowest net delta. Between the
+    // two eligible teams, Alpha's net +2 is the worst total here.
+    const worst = find(awards, "worst-drafter");
+    expect(worst.pending).toBe(false);
+    expect(worst.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
+    expect(worst.metricLabel).toBe("+2 picks of ADP value across 2 picks");
+    expect(worst.description).toBe(
+      "Loses the most draft value compared to Sleeper ADP by reaching early.",
+    );
   });
 
-  it("leaves drafter awards pending until at least two teams have drafted", () => {
+  it("crowns the worst drafter for the biggest net reach versus ADP", () => {
+    // Alpha reaches hard: sA at pick 5 with ADP 35 (-30). Bravo banks value: sC
+    // at pick 40 with ADP 22 (+18). Cara is modestly negative: sB at pick 12
+    // with ADP 16 (-4). Alpha holds the Lost Signal.
+    const picks = [
+      pick({ pickNo: 5, rosterId: 1, sleeperPlayerId: "sA" }),
+      pick({ pickNo: 12, rosterId: 3, sleeperPlayerId: "sB" }),
+      pick({ pickNo: 40, rosterId: 2, sleeperPlayerId: "sC" }),
+    ];
     const awards = computeDraftAwards(
-      baseInput({
-        rollups: [
-          rollup({ rosterId: 1, ownerName: "Alpha", playersValue: 5000, playerCount: 2 }),
-          rollup({ rosterId: 2, ownerName: "Bravo", playersValue: 0, playerCount: 0 }),
-        ],
-      }),
+      baseInput({ picks, adpBySleeperId: { sA: 35, sB: 16, sC: 22 } }),
+    );
+    const worst = find(awards, "worst-drafter");
+    expect(worst.pending).toBe(false);
+    expect(worst.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
+    expect(worst.metricLabel).toBe("-30 picks of ADP value across 1 pick");
+  });
+
+  it("leaves both drafter awards pending when no ADP data exists for the draft", () => {
+    const picks = [
+      pick({ pickNo: 1, rosterId: 1, sleeperPlayerId: "sA" }),
+      pick({ pickNo: 2, rosterId: 2, sleeperPlayerId: "sB" }),
+    ];
+    const awards = computeDraftAwards(baseInput({ picks, adpBySleeperId: {} }));
+    const best = find(awards, "best-drafter");
+    expect(best.pending).toBe(true);
+    expect(best.pendingLabel).toContain("Sleeper ADP is not available");
+    const worst = find(awards, "worst-drafter");
+    expect(worst.pending).toBe(true);
+    expect(worst.pendingLabel).toContain("Sleeper ADP is not available");
+  });
+
+  it("excludes keeper picks from both drafter ADP calculations", () => {
+    // Bravo's only pick is a keeper: keepers are assigned, not drafted against
+    // the market, so Bravo has no ADP-eligible picks and Alpha lacks a rival.
+    const picks = [
+      pick({ pickNo: 30, rosterId: 1, sleeperPlayerId: "sB" }),
+      { ...pick({ pickNo: 5, rosterId: 2, sleeperPlayerId: "sC" }), isKeeper: true },
+    ];
+    const awards = computeDraftAwards(
+      baseInput({ picks, adpBySleeperId: { sB: 44, sC: 28 } }),
+    );
+    expect(find(awards, "best-drafter").pending).toBe(true);
+    expect(find(awards, "worst-drafter").pending).toBe(true);
+  });
+
+  it("leaves both drafter awards pending on an exact all-way tie", () => {
+    // Every eligible team nets the same delta, so neither award crowns anyone.
+    const picks = [
+      pick({ pickNo: 20, rosterId: 1, sleeperPlayerId: "sA" }),
+      pick({ pickNo: 30, rosterId: 2, sleeperPlayerId: "sB" }),
+    ];
+    const awards = computeDraftAwards(
+      baseInput({ picks, adpBySleeperId: { sA: 10, sB: 20 } }),
     );
     expect(find(awards, "best-drafter").pending).toBe(true);
     expect(find(awards, "worst-drafter").pending).toBe(true);

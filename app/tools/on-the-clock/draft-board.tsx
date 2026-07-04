@@ -6,16 +6,28 @@
  * purely in the serpentine pick number carried in each cell's text + aria-label;
  * the seat columns never reorder, which is what makes the board readable by ear.
  *
+ * Each made pick carries a value-vs-ADP indicator: a Gem icon for good value
+ * (taken meaningfully after Sleeper ADP), a warning triangle for a reach (taken
+ * meaningfully before it). Neutral picks show no icon to avoid clutter. The icon
+ * sits beside the pick number in every cell (the same spot for your picks and
+ * everyone else's) and the comparison is ALSO written into the cell aria-label,
+ * so the signal is never icon-only.
+ *
  * No color-only state: "On the clock", "Your pick", "Last pick", and "Open slot"
- * are all text. MOCKED for Phase 4 from the fixture picks. Horizontal scroll keeps
- * every seat visible on mobile (no data hidden at any breakpoint).
+ * are all text. Horizontal scroll keeps every seat visible on mobile (no data
+ * hidden at any breakpoint).
  */
 
-import { ArrowLeftRight, User } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Gem, User } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
 import type { CurrentDraftPick } from "@/lib/on-the-clock/pick-ownership";
 import { draftShapeFromMeta, pickNoForSeat } from "@/lib/on-the-clock/draft-derive";
+import {
+  classifyPickValue,
+  pickIndicatorLabel,
+  pickValueDelta,
+} from "@/lib/on-the-clock/adp";
 import {
   normalizePositionColor,
   POSITION_CELL,
@@ -35,6 +47,8 @@ export function DraftBoard({
   connectedUserSlot,
   onTheClockPickNo,
   lastPickNo,
+  adpBySleeperId = {},
+  adpThreshold = 6,
 }: {
   draft: ShapedDraftCache["draft"];
   picks: ShapedPick[];
@@ -45,6 +59,10 @@ export function DraftBoard({
   connectedUserSlot: number;
   onTheClockPickNo: number;
   lastPickNo: number;
+  /** Sleeper player id -> ADP, for the good-value / reach pick indicators. */
+  adpBySleeperId?: Record<string, number>;
+  /** Neutral band (picks) before a pick is flagged good value / reach. */
+  adpThreshold?: number;
 }) {
   const teams = draft.settings.teams ?? 0;
   const rounds = draft.settings.rounds ?? 0;
@@ -151,6 +169,18 @@ export function DraftBoard({
                   ? [pick.position, pick.team, `#${pickNo}`].filter(Boolean).join(" · ")
                   : "";
 
+                // Value-vs-ADP indicator for made, non-keeper picks with a known ADP.
+                const pickAdp =
+                  pick && !pick.isKeeper && pick.sleeperPlayerId
+                    ? (adpBySleeperId[pick.sleeperPlayerId] ?? null)
+                    : null;
+                const adpDelta = pick ? pickValueDelta(pickNo, pickAdp) : null;
+                const adpVerdict = classifyPickValue(adpDelta, adpThreshold);
+                const adpLabel =
+                  adpDelta !== null && adpVerdict !== null && adpVerdict !== "neutral"
+                    ? pickIndicatorLabel(adpDelta, adpVerdict)
+                    : null;
+
                 const label = [
                   `Round ${round}`,
                   `pick ${pickNo} overall`,
@@ -158,6 +188,7 @@ export function DraftBoard({
                   pick ? `${pick.firstName ?? ""} ${pick.lastName ?? ""}`.trim() : null,
                   pick?.position ?? null,
                   pick?.team ?? null,
+                  adpLabel,
                   isYours ? "your pick" : null,
                   isOnClock ? "on the clock" : null,
                   isLast ? "last pick" : null,
@@ -221,6 +252,19 @@ export function DraftBoard({
                           #{pickNo}
                           {isYours && (
                             <User aria-hidden="true" className="h-3 w-3 text-brand-purple" />
+                          )}
+                          {/* Value-vs-ADP indicator: one unique icon per verdict,
+                              same spot in every cell. Decorative here because the
+                              cell aria-label already carries the comparison. */}
+                          {adpVerdict === "value" && (
+                            <span aria-hidden="true" title={adpLabel ?? "Good value vs ADP"}>
+                              <Gem className="h-3 w-3 text-emerald-300" />
+                            </span>
+                          )}
+                          {adpVerdict === "reach" && (
+                            <span aria-hidden="true" title={adpLabel ?? "Possible reach vs ADP"}>
+                              <AlertTriangle className="h-3 w-3 text-amber-300" />
+                            </span>
                           )}
                         </span>
                         {newOwner && (
