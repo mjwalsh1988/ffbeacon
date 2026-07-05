@@ -6,7 +6,8 @@
  *  1. Which ADP map key (player_market_snapshots.adp) a league should be graded
  *     against, derived from its FF Beacon format slug and the inferred player
  *     pool. Returned as an ordered candidate list so callers can fall through to
- *     the first key the snapshot actually has data for (e.g. "rookie" ADP only
+ *     the first key the snapshot actually has data for (e.g. the "rookie" key,
+ *     fed by FantasyPros dynasty rookie rankings via DynastyProcess, only
  *     populates near rookie-draft season).
  *  2. Classifying a made pick against ADP: pick_value_delta = pick_no - adp.
  *     Positive means the player was taken LATER than the market expected (a
@@ -27,8 +28,9 @@ export type PickValueVerdict = "value" | "reach" | "neutral";
  * format_configs slugs shaped {league}-{scoring}-{shape} (e.g.
  * "dynasty-ppr-sflex", "redraft-half-std", "dynasty-ppr-tep-sflex").
  * Superflex maps to Sleeper's 2QB markets. TEP has no Sleeper ADP market, so
- * TEP formats grade against their base shape. For rookie drafts, Sleeper's
- * dedicated "rookie" ADP leads the list when it has data.
+ * TEP formats grade against their base shape. For rookie drafts, the dedicated
+ * "rookie" ADP (FantasyPros rookie rankings via DynastyProcess) leads the list
+ * when it has data.
  */
 export function adpFormatKeyCandidates(formatSlug: string, pool: PlayerPool): string[] {
   const slug = (formatSlug ?? "").toLowerCase();

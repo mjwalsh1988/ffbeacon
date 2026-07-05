@@ -90,11 +90,11 @@ export const CRON_JOBS: ReadonlyArray<{
   },
   {
     name: "sync-sleeper-market",
-    label: "Sleeper market sync",
+    label: "Draft-market ADP sync",
     schedule: "0 11 * * *",
     scheduleHuman: "Daily, 11:00 UTC",
     description:
-      "Refreshes Sleeper ADP (every format) + season projections into player_market_snapshots. Historical: one partition per night.",
+      "Refreshes Sleeper ADP (every format) + season projections into player_market_snapshots, then rookie ADP (FantasyPros rookie rankings via DynastyProcess) under the 'rookie' key. Historical: one partition per night.",
   },
   {
     name: "beacon-brief-curate",

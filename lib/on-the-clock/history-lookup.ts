@@ -39,6 +39,7 @@ import {
 } from "./board-loader";
 import type { PickBucketValue, RankedPlayer } from "./board-types";
 import { MARKET_SOURCE_SLUG } from "@/lib/sync-sleeper-market";
+import { ROOKIE_ADP_SOURCE, ROOKIE_ADP_KEY } from "@/lib/sync-rookie-adp";
 
 type Client = SupabaseClient<Database>;
 
@@ -341,12 +342,13 @@ const EMPTY_ADP: AdpSnapshot = {
 async function pickSnapshotDate(
   admin: Client,
   targetDate: string | null,
+  source: string = MARKET_SOURCE_SLUG,
 ): Promise<{ date: string | null; after: boolean }> {
   if (targetDate) {
     const before = await admin
       .from("player_market_snapshots")
       .select("snapshot_date")
-      .eq("source", MARKET_SOURCE_SLUG)
+      .eq("source", source)
       .lte("snapshot_date", targetDate)
       .order("snapshot_date", { ascending: false })
       .limit(1)
@@ -355,7 +357,7 @@ async function pickSnapshotDate(
     const afterRow = await admin
       .from("player_market_snapshots")
       .select("snapshot_date")
-      .eq("source", MARKET_SOURCE_SLUG)
+      .eq("source", source)
       .gt("snapshot_date", targetDate)
       .order("snapshot_date", { ascending: true })
       .limit(1)
@@ -366,7 +368,7 @@ async function pickSnapshotDate(
   const latest = await admin
     .from("player_market_snapshots")
     .select("snapshot_date")
-    .eq("source", MARKET_SOURCE_SLUG)
+    .eq("source", source)
     .order("snapshot_date", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -392,16 +394,28 @@ export async function resolveAdpSnapshot(
 ): Promise<AdpSnapshot> {
   const { keyCandidates, targetDate, completedAtMs, draftStartAtMs } = params;
 
-  const { date, after } = await pickSnapshotDate(admin, targetDate);
-  if (!date) return { ...EMPTY_ADP };
+  // ADP lives in two sources with independent partition dates: Sleeper writes the
+  // standard market keys, DynastyProcess writes the "rookie" key (Sleeper's own
+  // adp_rookie is a permanent 999 sentinel). Resolve each source's snapshot date
+  // once, then route every candidate key to the right (source, date) pair.
+  const [sleeper, rookie] = await Promise.all([
+    pickSnapshotDate(admin, targetDate, MARKET_SOURCE_SLUG),
+    pickSnapshotDate(admin, targetDate, ROOKIE_ADP_SOURCE),
+  ]);
+  if (!sleeper.date && !rookie.date) return { ...EMPTY_ADP };
 
   for (const key of keyCandidates) {
+    const isRookie = key === ROOKIE_ADP_KEY;
+    const source = isRookie ? ROOKIE_ADP_SOURCE : MARKET_SOURCE_SLUG;
+    const picked = isRookie ? rookie : sleeper;
+    if (!picked.date) continue;
+
     // Keys are internal constants (adpFormatKeyCandidates), never user input.
     const { data, error } = await admin
       .from("player_market_snapshots")
       .select("sleeper_player_id, adp")
-      .eq("source", MARKET_SOURCE_SLUG)
-      .eq("snapshot_date", date)
+      .eq("source", source)
+      .eq("snapshot_date", picked.date)
       .not(`adp->>${key}`, "is", null)
       .limit(PAGE);
     if (error) throw new Error(`ADP snapshot lookup failed: ${error.message}`);
@@ -415,15 +429,15 @@ export async function resolveAdpSnapshot(
     }
     if (Object.keys(adpBySleeperId).length === 0) continue;
 
-    const chosenMs = Date.parse(`${date}T12:00:00.000Z`);
-    const source: SnapshotSourceKind =
+    const chosenMs = Date.parse(`${picked.date}T12:00:00.000Z`);
+    const source_: SnapshotSourceKind =
       targetDate === null
         ? "current_fallback"
-        : after
+        : picked.after
           ? "next_available"
           : classifySnapshotSource(chosenMs, completedAtMs, draftStartAtMs);
-    return { adpBySleeperId, adpKey: key, snapshotDate: date, source };
+    return { adpBySleeperId, adpKey: key, snapshotDate: picked.date, source: source_ };
   }
 
-  return { ...EMPTY_ADP, snapshotDate: date };
+  return { ...EMPTY_ADP, snapshotDate: sleeper.date ?? rookie.date };
 }
