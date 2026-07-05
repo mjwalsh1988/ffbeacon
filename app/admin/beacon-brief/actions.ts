@@ -395,7 +395,7 @@ export async function getArticleDetail(
       .eq("article_id", articleId),
     admin
       .from("article_teams")
-      .select("teams(id, abbreviation)")
+      .select("nfl_teams(id, abbreviation)")
       .eq("article_id", articleId),
     admin
       .from("article_revisions")
@@ -413,7 +413,8 @@ export async function getArticleDetail(
     teams: (teams.data ?? [])
       .map(
         (r) =>
-          (r as { teams?: { id: string; abbreviation: string } | null }).teams,
+          (r as { nfl_teams?: { id: string; abbreviation: string } | null })
+            .nfl_teams,
       )
       .filter((t): t is { id: string; abbreviation: string } => Boolean(t)),
     revisions: (revisions.data ?? []) as ArticleDetail["revisions"],

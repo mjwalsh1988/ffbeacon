@@ -181,7 +181,7 @@ export async function matchReferences(
   const teamNames = dedupeNames(ai.teams);
   if (teamNames.length > 0) {
     const { data: allTeams } = await admin
-      .from("teams")
+      .from("nfl_teams")
       .select("id, abbreviation, name, discord_role_ids");
     const teams = (allTeams ?? []) as TeamRow[];
     for (const rawTeam of teamNames) {

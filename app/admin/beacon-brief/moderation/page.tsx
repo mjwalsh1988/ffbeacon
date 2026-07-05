@@ -70,7 +70,7 @@ export default async function BeaconBriefModerationPage() {
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(500),
-    admin.from("teams").select("id, abbreviation, name").order("name"),
+    admin.from("nfl_teams").select("id, abbreviation, name").order("name"),
   ]);
 
   const items: ModerationItem[] = (data ?? []).map((m) => {

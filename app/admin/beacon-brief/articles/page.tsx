@@ -35,7 +35,7 @@ export default async function BeaconBriefArticlesPage({
       .select("id, name")
       .order("display_order", { ascending: true }),
     admin
-      .from("teams")
+      .from("nfl_teams")
       .select("id, abbreviation, name")
       .order("abbreviation", { ascending: true }),
   ]);
@@ -53,7 +53,7 @@ export default async function BeaconBriefArticlesPage({
         .ilike("full_name", `%${token}%`)
         .limit(50),
       admin
-        .from("teams")
+        .from("nfl_teams")
         .select("id")
         .or(`abbreviation.ilike.${token},name.ilike.%${token}%`)
         .limit(5),
@@ -119,7 +119,7 @@ export default async function BeaconBriefArticlesPage({
       await Promise.all([
         admin
           .from("article_teams")
-          .select("article_id, teams(id, abbreviation)")
+          .select("article_id, nfl_teams(id, abbreviation)")
           .in("article_id", ids),
         admin
           .from("article_players")
@@ -135,8 +135,9 @@ export default async function BeaconBriefArticlesPage({
         articlesWithDiscord.add(r.article_id);
     }
     for (const r of atRows ?? []) {
-      const t = (r as { teams?: { id?: string; abbreviation?: string } | null })
-        .teams;
+      const t = (r as {
+        nfl_teams?: { id?: string; abbreviation?: string } | null;
+      }).nfl_teams;
       if (t?.id && typeof t.abbreviation === "string") {
         const list = teamsByArticle.get(r.article_id) ?? [];
         list.push({ id: t.id, abbreviation: t.abbreviation });

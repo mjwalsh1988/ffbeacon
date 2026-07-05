@@ -247,7 +247,7 @@ export async function resolveTeam(
   abbreviation: string,
 ): Promise<{ id: string; abbreviation: string; name: string } | null> {
   const { data } = await supabase
-    .from("teams")
+    .from("nfl_teams")
     .select("id, abbreviation, name")
     .eq("abbreviation", abbreviation.toUpperCase())
     .maybeSingle();
@@ -365,7 +365,7 @@ export async function loadSidebar(
           .in("id", topPlayerIds)
       : Promise.resolve({ data: [] as never[] }),
     topTeamIds.length
-      ? supabase.from("teams").select("id, abbreviation, name").in("id", topTeamIds)
+      ? supabase.from("nfl_teams").select("id, abbreviation, name").in("id", topTeamIds)
       : Promise.resolve({ data: [] as never[] }),
   ]);
 
@@ -422,7 +422,7 @@ export async function loadArticle(
       .eq("article_id", data.id),
     supabase
       .from("article_teams")
-      .select("teams(abbreviation, name)")
+      .select("nfl_teams(abbreviation, name)")
       .eq("article_id", data.id),
   ]);
 
@@ -449,9 +449,9 @@ export async function loadArticle(
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const teams: ArticleTeamLink[] = ((atRes.data ?? []) as {
-    teams: { abbreviation: string; name: string } | null;
+    nfl_teams: { abbreviation: string; name: string } | null;
   }[])
-    .map((r) => r.teams)
+    .map((r) => r.nfl_teams)
     .filter((t): t is NonNullable<typeof t> => Boolean(t?.abbreviation))
     .map((t) => ({ abbreviation: t.abbreviation, name: t.name }))
     .sort((a, b) => a.abbreviation.localeCompare(b.abbreviation));

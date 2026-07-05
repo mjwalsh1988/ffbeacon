@@ -52,7 +52,7 @@ export async function resolveReferenceMatch(
     if (error) throw new Error(error.message);
   } else {
     const { data: team } = await admin
-      .from("teams")
+      .from("nfl_teams")
       .select("id")
       .eq("id", chosenId)
       .maybeSingle();

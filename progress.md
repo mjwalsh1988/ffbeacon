@@ -3417,3 +3417,23 @@ OTC-T123 | completed | Lost Signal award mirror + review-driven hardening.
        app/tools/on-the-clock/available-list.tsx, CLAUDE.md
      | verified: yes (typecheck clean; 29 files / 314 tests pass; production build green; no commits,
        no pushes)
+
+T899 | completed | Migration 0120: merge the two overlapping NFL-team dimension tables (teams 0084 +
+       nfl_teams 0117) into one canonical nfl_teams table. Both held all 32 teams keyed on
+       abbreviation. Because article_teams.team_id FKs teams.id (and nothing referenced nfl_teams.id),
+       the branding columns (primary/secondary/tertiary_color, chant) were absorbed into teams, the
+       old nfl_teams was dropped, then teams was renamed to nfl_teams so the FK rides the rename with
+       ids preserved. Constraints/indexes/policies renamed to nfl_teams_*. A guard aborts the copy if
+       any branding is null or the row counts do not match; verified 32/32 rows carry both editorial
+       (conference, division, discord_role_ids) and branding fields, 0 bad hex, article_teams FK now
+       points to nfl_teams, all 14 tag rows survived. Code: 6 .from("teams") sites repointed to
+       nfl_teams; 3 PostgREST article_teams embeds teams(...) -> nfl_teams(...) with their consumer
+       property access updated .teams -> .nfl_teams. Types regenerated (teams removed, nfl_teams
+       gains the 3 editorial columns, FK referencedRelation updated) and prettier-formatted.
+     | files: supabase/migrations/0120_merge_teams_into_nfl_teams.sql, lib/database.types.ts,
+       lib/beacon-brief-feed.ts, lib/beacon-brief/match.ts, lib/beacon-brief/match-resolution.ts,
+       app/admin/beacon-brief/articles/page.tsx, app/admin/beacon-brief/moderation/page.tsx,
+       app/admin/beacon-brief/actions.ts
+     | verified: yes (MCP apply ok; data + FK + RLS + renamed objects verified via SQL; typecheck
+       clean; 29 files / 314 tests pass; review sub-agent PASS on completeness, false positives,
+       consumer correctness, migration sanity, punctuation; no commits pushed)
