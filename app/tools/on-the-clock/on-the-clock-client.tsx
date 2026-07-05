@@ -81,6 +81,7 @@ import {
 import { UsernameGate } from "./username-gate";
 import { LeaguePicker } from "./league-picker";
 import { PoolNotice, markPoolNoticeSeen, poolNoticeSeen } from "./pool-notice";
+import { ReportFormatDialog, type FormatReportContext } from "./report-format-dialog";
 import { StepRail } from "./step-rail";
 import { CommandHeader } from "./command-header";
 import { PlayerSpotlight, SecondaryPick } from "./player-spotlight";
@@ -165,6 +166,9 @@ export function OnTheClockClient({
 
   // ----- one-time inferred player-pool notice -----
   const [poolNoticeOpen, setPoolNoticeOpen] = useState(false);
+
+  // ----- "report incorrect format" dialog (opened from the pool notice) -----
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Staleness guard for async load continuations: selectLeague stamps the
   // active draft id, and every in-flight loadDraft / loadBoard / loadSnapshot
@@ -525,7 +529,8 @@ export function OnTheClockClient({
             </div>
           </div>
           <p className="mt-2 text-sm text-ink-muted">
-            Enter your Sleeper username to load your live draft and step into the cockpit.
+            Enter your Sleeper username to load every draft you are in, whether drafting
+            now, pre-draft, or completed, and step into the cockpit.
           </p>
 
           <div className="mt-6">
@@ -732,7 +737,7 @@ export function OnTheClockClient({
     derived.onTheClockPickNo > 0
       ? `pick ${derived.onTheClockPickNo} overall, R${derived.onTheClockRound}.${derived.onTheClockPickInRound}`
       : "no picks remaining";
-  const yourSeatLabel = derived.mySlot > 0 ? `You · Seat ${derived.mySlot}` : "Team not detected";
+  const yourSeatLabel = derived.mySlot > 0 ? `You, Seat ${derived.mySlot}` : "Team not detected";
 
   // Real available board (FF Beacon): ranked players minus drafted, filtered to the
   // pool. Empty until the per-league board (or snapshot) finishes loading.
@@ -912,6 +917,28 @@ export function OnTheClockClient({
   const formatIsClosest = league?.formatIsClosest ?? false;
   const sourceActive = activeBoard ? activeBoard.sourceActive : true;
 
+  // Context for the "report incorrect format" dialog: the searched Sleeper handle
+  // plus the league identity and detected-vs-derived format. Only meaningful once
+  // a league is open (the dialog is reached from the in-room pool notice).
+  const reportContext: FormatReportContext | null = league
+    ? {
+        sleeperUsername: lookupRef.current.username || "Unknown",
+        leagueName: league.name,
+        leagueId: league.leagueId,
+        draftId: league.draftId,
+        season: league.season,
+        totalRosters: league.totalRosters ?? null,
+        draftStatus: league.draftStatus ?? null,
+        assignedFormatLabel: formatLabel,
+        assignedFormatSlug:
+          activeBoard?.formatSlug ??
+          league.formatSlug ??
+          (snapshotMode ? snapshot.formatSlug : null),
+        derivedFormatLabel: league.formatDerivedLabel ?? null,
+        isClosestMatch: formatIsClosest,
+      }
+    : null;
+
   // The three supporting panels (room status, best remaining, your draft) for the
   // sticky right rail, shown on every view except Rosters and the full board view.
   const sidebarPanels = (
@@ -975,7 +1002,28 @@ export function OnTheClockClient({
           setPoolNoticeOpen(false);
           if (league) markPoolNoticeSeen(league.draftId);
         }}
+        onReportFormat={
+          reportContext
+            ? () => {
+                // Dismiss the notice (single modal at a time) and open the report.
+                setPoolNoticeOpen(false);
+                if (league) markPoolNoticeSeen(league.draftId);
+                setReportOpen(true);
+              }
+            : undefined
+        }
       />
+
+      {/* Report-an-incorrect-format dialog, reached from the pool notice. Keyed by
+          league so switching leagues remounts it fresh (no carried-over input). */}
+      {reportContext && (
+        <ReportFormatDialog
+          key={reportContext.leagueId}
+          open={reportOpen}
+          context={reportContext}
+          onClose={() => setReportOpen(false)}
+        />
+      )}
 
       <div className="px-4 py-5 sm:px-6 sm:py-6">
         <BackToLeagues onClick={() => setStep("pick-league")} />

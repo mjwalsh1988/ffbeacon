@@ -41,6 +41,7 @@ export function PoolNotice({
   message,
   formatLabel,
   onClose,
+  onReportFormat,
 }: {
   open: boolean;
   pool: "everyone" | "rookies";
@@ -49,6 +50,8 @@ export function PoolNotice({
   /** Detected FF Beacon format label, shown as supporting context. */
   formatLabel: string;
   onClose: () => void;
+  /** Opens the "report incorrect format" dialog. Omit to hide the report link. */
+  onReportFormat?: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -71,11 +74,26 @@ export function PoolNotice({
         onClose();
         return;
       }
-      // Minimal focus trap: the dialog has exactly one interactive element (the
-      // confirm button), so Tab simply keeps focus on it.
-      if (e.key === "Tab") {
+      // Focus trap: cycle Tab within the dialog's focusable elements (the confirm
+      // button plus the optional "report incorrect format" link).
+      if (e.key !== "Tab") return;
+      const root = dialogRef.current;
+      if (!root) return;
+      const items = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && active === first) {
         e.preventDefault();
-        closeButtonRef.current?.focus();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
       }
     },
     [onClose],
@@ -136,7 +154,7 @@ export function PoolNotice({
             is set automatically from your Sleeper league and draft settings.
           </p>
         </div>
-        <div className="mt-5">
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <button
             ref={closeButtonRef}
             type="button"
@@ -145,6 +163,15 @@ export function PoolNotice({
           >
             Got it
           </button>
+          {onReportFormat && (
+            <button
+              type="button"
+              onClick={onReportFormat}
+              className="inline-flex min-h-11 items-center justify-center rounded-card px-1 text-xs font-medium text-ink-subtle underline decoration-dotted underline-offset-4 transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              Wrong format? Report it
+            </button>
+          )}
         </div>
       </div>
     </div>

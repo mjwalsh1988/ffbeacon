@@ -89,7 +89,7 @@ export function UsernameGate({
             className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan md:w-auto"
           >
             <Search aria-hidden="true" className="h-3.5 w-3.5" />
-            {pending ? "Finding..." : "Find active drafts"}
+            {pending ? "Finding..." : "Find my drafts"}
           </button>
         </div>
       </div>
@@ -99,8 +99,8 @@ export function UsernameGate({
         </div>
       )}
       <p id="otc-username-help" className="mt-4 text-xs text-ink-subtle">
-        We only show leagues that are actively drafting. Your username is never
-        stored unless you sign in and save it.
+        We show every league with a draft, grouped by drafting now, pre-draft, and
+        completed. Your username is never stored unless you sign in and save it.
       </p>
     </form>
   );

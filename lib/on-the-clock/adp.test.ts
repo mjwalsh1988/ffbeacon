@@ -34,9 +34,30 @@ describe("adpFormatKeyCandidates", () => {
     expect(keys).toContain("dynasty_2qb");
   });
 
-  it("always ends on a broad market fallback", () => {
-    expect(adpFormatKeyCandidates("dynasty-ppr-sflex", "everyone")).toContain("dynasty_ppr");
-    expect(adpFormatKeyCandidates("redraft-half-std", "everyone")).toContain("ppr");
+  it("keeps superflex on a superflex market (never falls back to single-QB)", () => {
+    expect(adpFormatKeyCandidates("dynasty-ppr-sflex", "everyone")).toEqual(["dynasty_2qb"]);
+    expect(adpFormatKeyCandidates("redraft-ppr-sflex", "everyone")).toEqual(["2qb"]);
+  });
+
+  it("gives single-QB formats a same-league-type scoring fallback chain", () => {
+    // Exact scoring leads, then the nearest scoring, never crossing into a 2QB
+    // market and never crossing the dynasty/redraft line.
+    expect(adpFormatKeyCandidates("redraft-ppr-std", "everyone")).toEqual(["ppr", "half_ppr", "std"]);
+    expect(adpFormatKeyCandidates("redraft-half-std", "everyone")).toEqual(["half_ppr", "ppr", "std"]);
+    expect(adpFormatKeyCandidates("redraft-std-std", "everyone")).toEqual(["std", "half_ppr", "ppr"]);
+    expect(adpFormatKeyCandidates("dynasty-ppr-std", "everyone")).toEqual([
+      "dynasty_ppr",
+      "dynasty_half_ppr",
+      "dynasty_std",
+    ]);
+  });
+
+  it("maps best-ball slugs by their baked-in league type (dynasty stays dynasty)", () => {
+    // Regression: "bestball-dynasty-*" used to misgrade as redraft single-QB PPR
+    // because league type was read from the slug prefix only.
+    expect(adpFormatKeyCandidates("bestball-dynasty-ppr-sflex", "everyone")).toEqual(["dynasty_2qb"]);
+    expect(adpFormatKeyCandidates("bestball-ppr-sflex", "everyone")).toEqual(["2qb"]);
+    expect(adpFormatKeyCandidates("bestball-ppr-std", "everyone")).toEqual(["ppr", "half_ppr", "std"]);
   });
 });
 
