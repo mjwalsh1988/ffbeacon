@@ -37,6 +37,7 @@ import {
 import { detectLeagueFormat, ffbeaconFormatCandidates } from "./format-detect";
 import {
   deriveSnapshotConfidence,
+  pickValueFormatWithData,
   resolveAdpSnapshot,
   resolveHistoricalBoard,
 } from "./history-lookup";
@@ -183,17 +184,67 @@ export async function getOrCreateDraftSnapshot(
   const pool = inferPlayerPool({ formatSlug, rounds });
 
   // 5. Historical FF Beacon board + Sleeper ADP at the completion time.
-  const board = await resolveHistoricalBoard(admin, {
+  //    resolveHistoricalBoard already falls forward to the earliest available batch
+  //    (then to current) when a draft predates our value history, so a draft older
+  //    than our data window still locks. It returns null ONLY when the league's
+  //    format has NO FF Beacon value rows at all (we do not yet compute values for
+  //    every active format, e.g. redraft Half PPR / Standard / TEP).
+  let board = await resolveHistoricalBoard(admin, {
     formatSlug,
     targetIso: completedAtIso,
     draftStartAtMs,
     rookieSeason: season,
   });
+
+  // Missing-value-data fallback: rather than leave such drafts permanently
+  // unlockable (they would show the "reload later" warning on every open forever),
+  // grade their VALUES against the closest supported format that DOES have current
+  // value data, using current values. The league's real format is still used for
+  // ADP below, so the pick value/reach indicators stay accurate to its scoring.
+  // Leagues are never older than a year, so a one-time current-value lock is an
+  // acceptable, honest snapshot (recorded as low confidence + noted in metadata).
+  let valueFormatSlug = formatSlug;
+  let valueFormatSubstituted = false;
+  // The league's own display label. Normally board.formatLabel already carries it,
+  // but on a substitution board.formatLabel is the SUBSTITUTE format's name, so we
+  // resolve the real label from the league's format to avoid mislabeling.
+  let realFormatLabel: string | null = formatLabel;
+  if (!board) {
+    const fallbackSlug = await pickValueFormatWithData(admin, formatSlug);
+    if (fallbackSlug) {
+      const fallbackBoard = await resolveHistoricalBoard(admin, {
+        formatSlug: fallbackSlug,
+        targetIso: null, // current values
+        draftStartAtMs,
+        rookieSeason: season,
+      });
+      if (fallbackBoard) {
+        board = fallbackBoard;
+        valueFormatSlug = fallbackSlug;
+        valueFormatSubstituted = true;
+        if (!realFormatLabel) {
+          const { data: realFormat } = await admin
+            .from("format_configs")
+            .select("display_name")
+            .eq("slug", formatSlug)
+            .maybeSingle();
+          realFormatLabel = realFormat?.display_name ?? null;
+        }
+      }
+    }
+  }
   if (!board) return { status: "no-board" };
 
+  // ADP always uses the league's OWN format (Sleeper publishes Half/Standard/etc.
+  // markets even where we lack values). When we had to substitute the value format,
+  // pull current ADP too so both inputs describe "now", matching the frozen board.
   const adp = await resolveAdpSnapshot(admin, {
     keyCandidates: adpFormatKeyCandidates(formatSlug, pool),
-    targetDate: completedAtIso ? completedAtIso.slice(0, 10) : null,
+    targetDate: valueFormatSubstituted
+      ? null
+      : completedAtIso
+        ? completedAtIso.slice(0, 10)
+        : null,
     completedAtMs,
     draftStartAtMs,
   });
@@ -202,8 +253,11 @@ export async function getOrCreateDraftSnapshot(
   const frozenBoard: FrozenBoard = {
     players,
     pickValues: board.pickValues,
-    formatSlug: board.formatSlug,
-    formatLabel: formatLabel ?? board.formatLabel,
+    // The snapshot's identity stays the league's real format even when values were
+    // graded against a substitute (valueFormatSlug); the substitution is recorded
+    // in metadata for provenance.
+    formatSlug,
+    formatLabel: realFormatLabel ?? board.formatLabel,
     season,
     adpFormatKey: adp.adpKey,
     adpSnapshotDate: adp.snapshotDate,
@@ -368,6 +422,11 @@ export async function getOrCreateDraftSnapshot(
       trade_cutoff_ms: completedAtMs,
       trades_fetched: allTrades.length,
       trades_kept: trades.length,
+      // Value-format substitution: when the league's own format has no FF Beacon
+      // values, we grade against value_format_slug's CURRENT values so the draft
+      // still locks. Equal to format_slug on the normal path.
+      value_format_slug: valueFormatSlug,
+      value_format_substituted: valueFormatSubstituted,
     } as unknown as Json,
     updated_at: finalizedAt,
   };

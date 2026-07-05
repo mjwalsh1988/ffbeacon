@@ -40,6 +40,7 @@ import {
 import type { PickBucketValue, RankedPlayer } from "./board-types";
 import { MARKET_SOURCE_SLUG } from "@/lib/sync-sleeper-market";
 import { ROOKIE_ADP_SOURCE, ROOKIE_ADP_KEY } from "@/lib/sync-rookie-adp";
+import { pickFallbackFormat, type FormatLike } from "@/lib/format-fallback";
 
 type Client = SupabaseClient<Database>;
 
@@ -316,6 +317,67 @@ export async function resolveHistoricalBoard(
     capturedAt: batch.boundaryMs !== null ? new Date(batch.boundaryMs).toISOString() : null,
     source,
   };
+}
+
+/**
+ * When a league's own format has no FF Beacon value rows at all, pick the closest
+ * ACTIVE format that DOES have value data so a completed draft can still be graded
+ * and locked instead of being stuck forever.
+ *
+ * We do not yet compute FF Beacon values for every active format (as of now
+ * redraft Half PPR, redraft Standard, and redraft TEP have none), so a draft in
+ * one of those formats can never build a value board. Rather than leave it
+ * permanently unlockable, callers grade its VALUES against the format this returns
+ * (using current values), while still resolving ADP against the league's real
+ * format (Sleeper publishes those markets). Uses the shared format-fallback
+ * preference chain (same league_type, then scoring, then superflex, then lowest
+ * display_order), scoped to formats that actually have data. Returns null only
+ * when NO active format has any FF Beacon values (nothing to fall back to), or
+ * when the closest match is the input format itself.
+ *
+ * The chain keeps the same league_type only while at least one has-data format
+ * shares it; today the PPR base of each league type (redraft-ppr-std /
+ * dynasty-ppr-std) is always synced, so redraft stays redraft and dynasty stays
+ * dynasty. If every same-league format ever lost its values, this would degrade to
+ * a cross-type match rather than returning null.
+ */
+export async function pickValueFormatWithData(
+  admin: Client,
+  formatSlug: string,
+): Promise<string | null> {
+  const { data: formats } = await admin
+    .from("format_configs")
+    .select("id, slug, display_name, league_type, scoring_type, is_superflex, display_order")
+    .eq("is_active", true);
+  if (!formats || formats.length === 0) return null;
+
+  // Existence probe per format: LIMIT 1 is an index-friendly point lookup on
+  // (format_config_id, source), far cheaper than counting every value row.
+  const withData = await Promise.all(
+    formats.map(async (f) => {
+      const { data } = await admin
+        .from("player_value_history")
+        .select("player_id")
+        .eq("format_config_id", f.id)
+        .eq("source", FFBEACON_SOURCE_SLUG)
+        .limit(1);
+      return data && data.length > 0 ? f.slug : null;
+    }),
+  );
+  const eligible = withData.filter((s): s is string => s !== null);
+  if (eligible.length === 0) return null;
+
+  const formatLikes: FormatLike[] = formats.map((f) => ({
+    slug: f.slug,
+    display_name: f.display_name,
+    league_type: f.league_type,
+    scoring_type: f.scoring_type,
+    is_superflex: f.is_superflex,
+    display_order: f.display_order,
+  }));
+  const choice = pickFallbackFormat(formatLikes, formatSlug, eligible);
+  if (!choice || choice.slug === formatSlug) return null;
+  return choice.slug;
 }
 
 // ---------------------------------------------------------------------------
