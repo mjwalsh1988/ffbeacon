@@ -37,9 +37,12 @@ import {
 import { detectLeagueFormat, ffbeaconFormatCandidates } from "./format-detect";
 import {
   deriveSnapshotConfidence,
+  EMPTY_ADP,
   pickValueFormatWithData,
   resolveAdpSnapshot,
   resolveHistoricalBoard,
+  type AdpSnapshot,
+  type HistoricalBoard,
 } from "./history-lookup";
 import { normalizeTradedPicks, resolveCurrentDraftPicks } from "./pick-ownership";
 import { buildTeamRollups } from "./rosters";
@@ -183,71 +186,102 @@ export async function getOrCreateDraftSnapshot(
 
   const pool = inferPlayerPool({ formatSlug, rounds });
 
-  // 5. Historical FF Beacon board + Sleeper ADP at the completion time.
-  //    resolveHistoricalBoard already falls forward to the earliest available batch
-  //    (then to current) when a draft predates our value history, so a draft older
-  //    than our data window still locks. It returns null ONLY when the league's
-  //    format has NO FF Beacon value rows at all (we do not yet compute values for
-  //    every active format, e.g. redraft Half PPR / Standard / TEP).
-  let board = await resolveHistoricalBoard(admin, {
-    formatSlug,
-    targetIso: completedAtIso,
-    draftStartAtMs,
-    rookieSeason: season,
-  });
-
-  // Missing-value-data fallback: rather than leave such drafts permanently
-  // unlockable (they would show the "reload later" warning on every open forever),
-  // grade their VALUES against the closest supported format that DOES have current
-  // value data, using current values. The league's real format is still used for
-  // ADP below, so the pick value/reach indicators stay accurate to its scoring.
-  // Leagues are never older than a year, so a one-time current-value lock is an
-  // acceptable, honest snapshot (recorded as low confidence + noted in metadata).
+  // 5. Historical FF Beacon board + Sleeper ADP.
+  //    resolveHistoricalBoard reconstructs the board as of the draft's completion
+  //    (falling forward to the earliest available batch when a draft predates our
+  //    value history). Two failure modes must NEVER leave a completed draft
+  //    permanently unlockable (showing the "reload later" warning on every open):
+  //      - a THROWN error, e.g. a DB statement timeout on a slow reconstruction, and
+  //      - the league's format having NO FF Beacon values at all.
+  //    In both cases we fall back to CURRENT values and still lock (low confidence):
+  //    first the league's own format at current date, then the closest format that
+  //    has data. The league's real format is always used for ADP, so the pick
+  //    value/reach indicators stay accurate to its scoring.
+  let board: HistoricalBoard | null = null;
   let valueFormatSlug = formatSlug;
   let valueFormatSubstituted = false;
-  // The league's own display label. Normally board.formatLabel already carries it,
-  // but on a substitution board.formatLabel is the SUBSTITUTE format's name, so we
-  // resolve the real label from the league's format to avoid mislabeling.
+  // True when values reflect "now" rather than the draft date (a thrown/empty
+  // historical lookup, or a cross-format substitution). Drives the ADP target so
+  // both inputs describe the same moment.
+  let usingCurrentValues = false;
+  // The league's own display label. On a substitution board.formatLabel would be the
+  // SUBSTITUTE format's name, so we resolve the real label to avoid mislabeling.
   let realFormatLabel: string | null = formatLabel;
-  if (!board) {
-    const fallbackSlug = await pickValueFormatWithData(admin, formatSlug);
-    if (fallbackSlug) {
-      const fallbackBoard = await resolveHistoricalBoard(admin, {
-        formatSlug: fallbackSlug,
-        targetIso: null, // current values
+
+  // Resolve a board without ever throwing: a DB error (timeout) becomes null so the
+  // fallback chain below can still lock the draft with current data.
+  const tryBoard = async (slug: string, targetIso: string | null): Promise<HistoricalBoard | null> => {
+    try {
+      return await resolveHistoricalBoard(admin, {
+        formatSlug: slug,
+        targetIso,
         draftStartAtMs,
         rookieSeason: season,
       });
-      if (fallbackBoard) {
-        board = fallbackBoard;
-        valueFormatSlug = fallbackSlug;
-        valueFormatSubstituted = true;
-        if (!realFormatLabel) {
-          const { data: realFormat } = await admin
-            .from("format_configs")
-            .select("display_name")
-            .eq("slug", formatSlug)
-            .maybeSingle();
-          realFormatLabel = realFormat?.display_name ?? null;
+    } catch (err) {
+      console.error(
+        `[on-the-clock/draft-snapshot] value lookup failed (format=${slug}, target=${targetIso ?? "current"}); falling back`,
+        err,
+      );
+      return null;
+    }
+  };
+
+  // (a) Historical board at completion time (highest fidelity for recent drafts).
+  board = await tryBoard(formatSlug, completedAtIso);
+
+  // (b) Fall back to CURRENT values for the league's own format. Covers a historical
+  //     reconstruction that errored/timed out even though the format has data.
+  if (!board) {
+    board = await tryBoard(formatSlug, null);
+    if (board) usingCurrentValues = true;
+  }
+
+  // (c) Last resort: the league's format has no values at all; grade against the
+  //     closest supported format that does, using current values. Guarded so a hard
+  //     DB outage here degrades to no-board (a transient "reload later") rather than
+  //     throwing; nothing is locked.
+  if (!board) {
+    try {
+      const fallbackSlug = await pickValueFormatWithData(admin, formatSlug);
+      if (fallbackSlug) {
+        board = await tryBoard(fallbackSlug, null);
+        if (board) {
+          valueFormatSlug = fallbackSlug;
+          valueFormatSubstituted = true;
+          usingCurrentValues = true;
+          if (!realFormatLabel) {
+            const { data: realFormat } = await admin
+              .from("format_configs")
+              .select("display_name")
+              .eq("slug", formatSlug)
+              .maybeSingle();
+            realFormatLabel = realFormat?.display_name ?? null;
+          }
         }
       }
+    } catch (err) {
+      console.error("[on-the-clock/draft-snapshot] value-format fallback failed", err);
     }
   }
   if (!board) return { status: "no-board" };
 
   // ADP always uses the league's OWN format (Sleeper publishes Half/Standard/etc.
-  // markets even where we lack values). When we had to substitute the value format,
-  // pull current ADP too so both inputs describe "now", matching the frozen board.
-  const adp = await resolveAdpSnapshot(admin, {
-    keyCandidates: adpFormatKeyCandidates(formatSlug, pool),
-    targetDate: valueFormatSubstituted
-      ? null
-      : completedAtIso
-        ? completedAtIso.slice(0, 10)
-        : null,
-    completedAtMs,
-    draftStartAtMs,
-  });
+  // markets even where we lack values). Use current ADP whenever the values are
+  // current, so both frozen inputs describe the same moment. Never fail the lock on
+  // an ADP error: an empty ADP map just means no pick value/reach indicators.
+  let adp: AdpSnapshot;
+  try {
+    adp = await resolveAdpSnapshot(admin, {
+      keyCandidates: adpFormatKeyCandidates(formatSlug, pool),
+      targetDate: usingCurrentValues ? null : completedAtIso ? completedAtIso.slice(0, 10) : null,
+      completedAtMs,
+      draftStartAtMs,
+    });
+  } catch (err) {
+    console.error("[on-the-clock/draft-snapshot] ADP lookup failed; locking without ADP", err);
+    adp = { ...EMPTY_ADP };
+  }
 
   const players = attachAdpToPlayers(board.players, adp.adpBySleeperId);
   const frozenBoard: FrozenBoard = {
@@ -424,9 +458,12 @@ export async function getOrCreateDraftSnapshot(
       trades_kept: trades.length,
       // Value-format substitution: when the league's own format has no FF Beacon
       // values, we grade against value_format_slug's CURRENT values so the draft
-      // still locks. Equal to format_slug on the normal path.
+      // still locks. Equal to format_slug on the normal path. using_current_values
+      // is true whenever values reflect "now" rather than the draft date (a
+      // thrown/empty historical lookup, or a substitution).
       value_format_slug: valueFormatSlug,
       value_format_substituted: valueFormatSubstituted,
+      using_current_values: usingCurrentValues,
     } as unknown as Json,
     updated_at: finalizedAt,
   };

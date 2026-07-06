@@ -394,7 +394,7 @@ export interface AdpSnapshot {
   source: SnapshotSourceKind;
 }
 
-const EMPTY_ADP: AdpSnapshot = {
+export const EMPTY_ADP: AdpSnapshot = {
   adpBySleeperId: {},
   adpKey: null,
   snapshotDate: null,
