@@ -394,6 +394,47 @@ describe("buildTradeCatalog - rookie mode", () => {
   });
 });
 
+describe("buildTradeCatalog - values are always whole numbers", () => {
+  it("rounds fractional player, made-pick, and upcoming-pick values to integers", () => {
+    idSeq = 0;
+    // A board whose values carry decimals (e.g. 5123.4, 5023.4, ...).
+    const avail = board(40, { startValue: 5123.4, step: 100 });
+    const made = [madePick(3, { playerId: "b0", firstName: "Deci", lastName: "Mal", position: "WR" })];
+    const currentPicks = resolveCurrentDraftPicks({
+      teams: 12,
+      rounds: 15,
+      shape: SHAPE,
+      slotToRosterId: SLOT_TO_ROSTER,
+      madePicks: made,
+      tradedPicks: [],
+      currentSeason: 2026,
+    });
+    const groups = buildTradeCatalog(
+      catalogInput({ mode: "rookie", pool: "rookies", available: avail, poolBoard: avail, valueBoard: avail, currentPicks }),
+    );
+    for (const g of groups) {
+      for (const o of g.options) {
+        expect(Number.isInteger(o.value)).toBe(true);
+      }
+    }
+    // b0's fractional value 5123.4 rounds to 5123 for the made pick.
+    const madeGroup = groups.find((gr) => gr.label === "Made picks")!;
+    expect(madeGroup.options[0].value).toBe(5123);
+  });
+
+  it("keeps side totals whole when summing rounded option values", () => {
+    idSeq = 0;
+    const avail = board(40, { startValue: 4999.6, step: 250 });
+    const groups = buildTradeCatalog(
+      catalogInput({ mode: "rookie", pool: "rookies", available: avail, poolBoard: avail, valueBoard: avail }),
+    );
+    const options = groups.flatMap((g) => g.options);
+    const result = analyzeTradeSides(options.slice(0, 3), options.slice(3, 5));
+    expect(Number.isInteger(result.totalA)).toBe(true);
+    expect(Number.isInteger(result.totalB)).toBe(true);
+  });
+});
+
 describe("buildTradeCatalog - shapes + edges", () => {
   it("works for linear and 3RR without crashing", () => {
     idSeq = 0;

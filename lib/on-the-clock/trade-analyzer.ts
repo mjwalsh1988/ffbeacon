@@ -282,14 +282,17 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
   // player group is intentionally omitted (a made pick already represents the player
   // taken at that slot). See the Startup Trade Builder copy in trade-analyzer.tsx.
   if (mode === "rookie") {
-    const playerOptions: TradeItemOption[] = availSorted.slice(0, PLAYER_PICKER_CAP).map((p) => ({
-      id: `pl-${p.playerId}`,
-      label: `${p.name}, ${p.position}`,
-      detail: p.team ? `${p.team} · value ${p.value.toLocaleString()}` : `value ${p.value.toLocaleString()}`,
-      value: p.value,
-      kind: "player",
-      estimated: false,
-    }));
+    const playerOptions: TradeItemOption[] = availSorted.slice(0, PLAYER_PICKER_CAP).map((p) => {
+      const value = Math.round(p.value);
+      return {
+        id: `pl-${p.playerId}`,
+        label: `${p.name}, ${p.position}`,
+        detail: p.team ? `${p.team} · value ${value.toLocaleString()}` : `value ${value.toLocaleString()}`,
+        value,
+        kind: "player" as const,
+        estimated: false,
+      };
+    });
     if (playerOptions.length > 0) {
       groups.push({ label: "Rookie players", options: playerOptions });
     }
@@ -313,7 +316,7 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
           val !== null
             ? `Made pick${posLabel} · ${owner}`
             : `Made pick${posLabel} · value unavailable · ${owner}`,
-        value: val ?? 0,
+        value: val !== null ? Math.round(val) : 0,
         kind: pickKind,
         // A made pick valued by a real player value is NOT a projection; only an
         // unmappable selection is flagged estimated/unavailable.
@@ -340,7 +343,7 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
         detail: projected
           ? `Projected: ${projected.name}, ${projected.position} · ${owner}`
           : `Projected pick · ${owner}`,
-        value: projected ? projected.value : FALLBACK_PICK_VALUE,
+        value: projected ? Math.round(projected.value) : FALLBACK_PICK_VALUE,
         kind: pickKind,
         estimated: true,
       };
