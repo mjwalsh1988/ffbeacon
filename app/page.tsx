@@ -18,7 +18,7 @@ import { SITE_TIME_ZONE } from "@/lib/datetime";
 // Homepage description, drawn from the hero subtitle below. Kept to ~150
 // characters so search engines and social cards show it without truncation.
 const HOME_DESCRIPTION =
-  "Fantasy football rankings, calculators, and Sleeper league insights that read clearly by eye or by ear. Pick a format and source and get clear answers.";
+  "FF Beacon is a community-first fantasy football home. Get free lineup, trade, and draft help in our Discord, plus rankings and tools with no paywall.";
 
 export const metadata: Metadata = {
   // `absolute` bypasses the root layout's "%s | FF Beacon" title template so
