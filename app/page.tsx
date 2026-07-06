@@ -635,7 +635,7 @@ function SourceCard({
   );
 }
 
-/* ---------- Latest analysis ---------- */
+/* ---------- Latest from the Beacon Brief ---------- */
 
 type ArticleRow = {
   slug: string;
@@ -661,19 +661,19 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
       className="border-b border-line bg-surface/30"
     >
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <SectionEyebrow>Guides for beginners and beyond</SectionEyebrow>
+        <SectionEyebrow>The Beacon Brief</SectionEyebrow>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
           <h2
             id="articles-heading"
             className="text-3xl font-semibold tracking-tight sm:text-4xl"
           >
-            New to this? We explain the stats that matter, no jargon.
+            The latest fantasy news, explained in plain English.
           </h2>
           <Link
-            href="/guides"
+            href="/brief"
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            See all guides
+            Check out the Beacon Brief
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -687,8 +687,9 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
               <BookOpen className="h-6 w-6" />
             </span>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
-              Fresh breakdowns are on the way. In the meantime the rankings, the
-              FAAB calculator, and league sync are live and updating daily.
+              Fresh Beacon Brief stories are on the way. In the meantime the
+              rankings, the FAAB calculator, and league sync are live and updating
+              daily.
             </p>
           </div>
         ) : (
