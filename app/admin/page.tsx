@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { CRON_JOBS, summarizeCronResult, type CronJobName } from "@/lib/cron-runs";
 import { CronStatusBadge } from "@/components/cron-status-badge";
 import { AdminHero } from "@/components/admin/admin-hero";
+import { ImageWithFallback } from "@/components/image-with-fallback";
+import { Pager } from "@/components/admin/pager";
 import { formatRelative, formatEastern, formatDuration } from "@/lib/datetime";
 import type { Json } from "@/lib/database.types";
 
@@ -20,9 +22,32 @@ type LatestRun = {
   error: string | null;
 };
 
-export default async function AdminOverviewPage() {
+type UserRow = {
+  id: string;
+  displayName: string;
+  email: string | null;
+  avatarUrl: string | null;
+  lastSignInAt: string | null;
+  createdAt: string;
+};
+
+const USERS_PAGE_SIZE = 10;
+// Users are sorted newest-first in application code (the Auth admin API has
+// no sort param), so we pull a generous window up front and paginate that
+// in memory. Revisit with real .range()-based pagination against auth.users
+// if the user base grows past this.
+const USERS_FETCH_CAP = 500;
+const AVATAR_SIGNED_URL_TTL = 60 * 60; // 1 hour, display-only
+
+export default async function AdminOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ usersPage?: string }>;
+}) {
   // Independent re-check (defense in depth alongside the layout gate).
   await requireAdmin();
+
+  const { usersPage: usersPageParam } = await searchParams;
 
   const admin = createAdminClient();
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -34,7 +59,7 @@ export default async function AdminOverviewPage() {
     admins,
     trends,
     snaps24h,
-    recentRuns,
+    latestRuns,
     recentLeagues,
   ] = await Promise.all([
     admin.from("players").select("id", { count: "exact", head: true }),
@@ -49,11 +74,22 @@ export default async function AdminOverviewPage() {
       .from("player_value_history")
       .select("id", { count: "exact", head: true })
       .gte("captured_at", since24h),
-    admin
-      .from("cron_runs")
-      .select("job_name, status, started_at, finished_at, duration_ms, result, error")
-      .order("started_at", { ascending: false })
-      .limit(100),
+    // One latest-run lookup per job (not a single global "last 100" scan).
+    // The Beacon Brief curator and worker fire every 1-5 minutes and would
+    // otherwise fill the entire 100-row window on their own, starving out
+    // every daily/weekly job's last-run info. idx_cron_runs_job_started
+    // (job_name, started_at desc) makes each of these a cheap indexed lookup.
+    Promise.all(
+      CRON_JOBS.map((job) =>
+        admin
+          .from("cron_runs")
+          .select("job_name, status, started_at, finished_at, duration_ms, result, error")
+          .eq("job_name", job.name)
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ),
+    ),
     admin
       .from("leagues")
       .select("sleeper_league_id, name, season, total_rosters, last_pulsed_at")
@@ -61,13 +97,72 @@ export default async function AdminOverviewPage() {
       .limit(6),
   ]);
 
-  // Latest run per job from the recent slice.
+  // Latest run per job, one lookup per job name (see comment above).
   const latestByJob = new Map<string, LatestRun>();
-  for (const run of recentRuns.data ?? []) {
-    if (!latestByJob.has(run.job_name)) {
-      latestByJob.set(run.job_name, run as LatestRun);
-    }
+  for (const { data: run } of latestRuns) {
+    if (run) latestByJob.set(run.job_name, run as LatestRun);
   }
+
+  // Auth is the source of truth for the user list (email, display name,
+  // last sign-in, created at). user_preferences rows are created lazily
+  // (only once a user saves a preference), so not every signed-up user has
+  // one. Same avatar/display-name resolution as the "Edit profile" page.
+  const { data: authUsersPage } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: USERS_FETCH_CAP,
+  });
+  const allAuthUsers = (authUsersPage?.users ?? [])
+    .slice()
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const usersTotalPages = Math.max(1, Math.ceil(allAuthUsers.length / USERS_PAGE_SIZE));
+  const usersCurrentPage = Math.min(
+    Math.max(1, Number.parseInt(usersPageParam ?? "1", 10) || 1),
+    usersTotalPages,
+  );
+  const authUsers = allAuthUsers.slice(
+    (usersCurrentPage - 1) * USERS_PAGE_SIZE,
+    usersCurrentPage * USERS_PAGE_SIZE,
+  );
+
+  const userIds = authUsers.map((u) => u.id);
+  const { data: prefsRows } = userIds.length
+    ? await admin
+        .from("user_preferences")
+        .select("user_id, first_name, last_name, avatar_path")
+        .in("user_id", userIds)
+    : { data: [] };
+  const prefsByUser = new Map((prefsRows ?? []).map((p) => [p.user_id, p]));
+
+  const userRows: UserRow[] = await Promise.all(
+    authUsers.map(async (u) => {
+      const prefs = prefsByUser.get(u.id);
+      const metaDisplayName =
+        typeof u.user_metadata?.display_name === "string"
+          ? (u.user_metadata.display_name as string).trim()
+          : "";
+      const fullName = [prefs?.first_name, prefs?.last_name].filter(Boolean).join(" ").trim();
+      const displayName =
+        metaDisplayName || fullName || u.email?.split("@")[0] || "Unnamed user";
+
+      let avatarUrl: string | null = null;
+      if (prefs?.avatar_path) {
+        const { data } = await admin.storage
+          .from("user-avatars")
+          .createSignedUrl(prefs.avatar_path, AVATAR_SIGNED_URL_TTL);
+        avatarUrl = data?.signedUrl ?? null;
+      }
+
+      return {
+        id: u.id,
+        displayName,
+        email: u.email ?? null,
+        avatarUrl,
+        lastSignInAt: u.last_sign_in_at ?? null,
+        createdAt: u.created_at,
+      };
+    }),
+  );
 
   const nowMs = Date.now();
 
@@ -105,6 +200,13 @@ export default async function AdminOverviewPage() {
       <StatsSection stats={stats} />
       <CronHealthSection latestByJob={latestByJob} nowMs={nowMs} />
       <RecentLeaguesSection leagues={recentLeagues.data ?? []} nowMs={nowMs} />
+      <UsersSection
+        users={userRows}
+        nowMs={nowMs}
+        totalUsers={allAuthUsers.length}
+        currentPage={usersCurrentPage}
+        totalPages={usersTotalPages}
+      />
     </div>
   );
 }
@@ -156,6 +258,104 @@ function StatsSection({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/* ---------- Users ---------- */
+
+function UsersSection({
+  users,
+  nowMs,
+  totalUsers,
+  currentPage,
+  totalPages,
+}: {
+  users: UserRow[];
+  nowMs: number;
+  totalUsers: number;
+  currentPage: number;
+  totalPages: number;
+}) {
+  return (
+    <section aria-labelledby="admin-users-heading">
+      <SectionEyebrow>People</SectionEyebrow>
+      <h2
+        id="admin-users-heading"
+        className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+      >
+        Users
+      </h2>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+        {fmtCount(totalUsers)} registered account{totalUsers === 1 ? "" : "s"}, newest first.
+      </p>
+
+      {users.length === 0 ? (
+        <p className="mt-6 rounded-card border border-line bg-surface/40 p-6 text-sm text-ink-muted">
+          No registered users yet.
+        </p>
+      ) : (
+        <div className="mt-6 overflow-x-auto rounded-card border border-line">
+          <table className="w-full text-sm">
+            <caption className="sr-only">
+              Registered users, newest first, with last sign-in and account
+              creation date
+            </caption>
+            <thead>
+              <tr className="border-b border-line bg-surface/60 text-left text-xs uppercase tracking-wide text-ink-subtle">
+                <th scope="col" className="px-3 py-2">
+                  User
+                </th>
+                <th scope="col" className="px-3 py-2">
+                  Email
+                </th>
+                <th scope="col" className="px-3 py-2">
+                  Last online
+                </th>
+                <th scope="col" className="px-3 py-2">
+                  Joined
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-b border-line/60 last:border-b-0">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2.5">
+                      <ImageWithFallback src={u.avatarUrl} alt="" size={32} />
+                      <span className="font-medium text-ink">{u.displayName}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-ink-muted">{u.email ?? "No email on file"}</td>
+                  <td className="px-3 py-2 text-ink-muted">
+                    {u.lastSignInAt ? (
+                      <span title={formatEastern(u.lastSignInAt)}>
+                        {formatRelative(u.lastSignInAt, nowMs)}
+                      </span>
+                    ) : (
+                      "Never signed in"
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-ink-muted">
+                    <span title={formatEastern(u.createdAt)}>
+                      {formatRelative(u.createdAt, nowMs)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Pager
+        basePath="/admin"
+        paramName="usersPage"
+        currentPage={currentPage}
+        totalPages={totalPages}
+        label="Users pages"
+        hash="admin-users-heading"
+      />
     </section>
   );
 }
