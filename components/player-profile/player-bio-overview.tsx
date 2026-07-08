@@ -23,24 +23,12 @@ import {
 } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
 import { sleeperMeta, type PlayerRow } from "@/lib/player-profile";
+import { formatAge, formatAgeNumber } from "@/lib/player-age";
 
 function str(v: unknown): string | null {
   if (typeof v === "string" && v.trim()) return v.trim();
   if (typeof v === "number" && Number.isFinite(v)) return String(v);
   return null;
-}
-
-function computeAge(birthDate: string | null): number | null {
-  if (!birthDate) return null;
-  const parts = birthDate.split("-").map((p) => parseInt(p, 10));
-  if (parts.length !== 3 || parts.some((p) => Number.isNaN(p))) return null;
-  const [y, m, d] = parts;
-  const now = new Date();
-  let age = now.getUTCFullYear() - y;
-  const beforeBirthday =
-    now.getUTCMonth() + 1 < m || (now.getUTCMonth() + 1 === m && now.getUTCDate() < d);
-  if (beforeBirthday) age -= 1;
-  return age >= 0 && age < 80 ? age : null;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -64,7 +52,12 @@ function heightDisplay(player: PlayerRow, meta: Record<string, unknown>): string
 export function PlayerBioOverview({ player }: { player: PlayerRow }) {
   const meta = sleeperMeta(player);
 
-  const age = computeAge(player.birth_date) ?? (str(meta.age) ? Number(str(meta.age)) : null);
+  // Exact age to one decimal from the birth date; fall back to Sleeper's whole
+  // metadata.age (formatted as X.0) only when we have no birth date to compute
+  // the precise value.
+  const ageDisplay =
+    formatAge(player.birth_date) ??
+    formatAgeNumber(str(meta.age) ? Number(str(meta.age)) : null);
   const born = formatBirthDate(player.birth_date);
   const height = heightDisplay(player, meta);
   const weight = player.weight_lbs ? `${player.weight_lbs} lb` : str(meta.weight) ? `${str(meta.weight)} lb` : null;
@@ -96,7 +89,7 @@ export function PlayerBioOverview({ player }: { player: PlayerRow }) {
   const facts: { icon: LucideIcon; label: string; value: string }[] = [
     { icon: Shield, label: "Position", value: player.position },
     ...(player.team ? [{ icon: Shield, label: "Team", value: player.team }] : []),
-    ...(age != null ? [{ icon: CalendarDays, label: "Age", value: String(age) }] : []),
+    ...(ageDisplay ? [{ icon: CalendarDays, label: "Age", value: ageDisplay }] : []),
     ...(born ? [{ icon: Cake, label: "Born", value: born }] : []),
     ...(height ? [{ icon: Ruler, label: "Height", value: height }] : []),
     ...(weight ? [{ icon: Dumbbell, label: "Weight", value: weight }] : []),

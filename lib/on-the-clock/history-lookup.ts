@@ -31,6 +31,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { FFBEACON_SOURCE_SLUG, FFBEACON_SOURCE_DISPLAY } from "@/lib/signal-check/format";
+import { computeAgeDecimal } from "@/lib/player-age";
 import {
   ageFromBirthDate,
   deriveIsRookie,
@@ -277,6 +278,7 @@ export async function resolveHistoricalBoard(
       isRookie: deriveIsRookie(pl.years_experience, pl.draft_year, rookieSeasonNum),
       yearsExperience: pl.years_experience ?? undefined,
       age: ageFromBirthDate(pl.birth_date, now),
+      ageDecimal: computeAgeDecimal(pl.birth_date, now) ?? undefined,
       change7d: null,
       change7dPct: null,
       trend7d: null,

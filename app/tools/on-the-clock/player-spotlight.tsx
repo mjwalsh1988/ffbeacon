@@ -79,7 +79,9 @@ export function PlayerSpotlight({ data, variant }: { data: RecommendationCardDat
         {typeof p.yearsExperience === "number" && (
           <span>· {p.yearsExperience === 0 ? "Rookie" : `${p.yearsExperience} yr exp`}</span>
         )}
-        {typeof p.age === "number" && <span>· Age {p.age}</span>}
+        {typeof p.age === "number" && (
+          <span>· Age {(p.ageDecimal ?? p.age).toFixed(1)}</span>
+        )}
       </p>
     </>
   );

@@ -46,6 +46,9 @@ export interface RankedPlayer {
   // ---- Enrichment, populated by the loader when available; UI hides absent ----
   yearsExperience?: number;
   age?: number;
+  /** Exact age carried to one decimal, for display only (e.g. 23.4). Absent
+   * when there is no usable birth date. */
+  ageDecimal?: number;
   /** Last few positional finishes, newest first (not wired from data yet). */
   recentFinishes?: string[];
   /** One short scouting line (not wired from data yet). */

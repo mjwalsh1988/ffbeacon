@@ -41,6 +41,7 @@ import {
   type PlayerRow,
 } from "@/lib/player-profile";
 import { BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
+import { computeAgeDecimal } from "@/lib/player-age";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -64,7 +65,10 @@ export type BreakdownPlayer = {
    * gradient. Null when the player is a free agent or the team is unmapped. */
   teamPrimary: string | null;
   sleeperId: string | null;
+  /** Whole-years age, used for the youth/age scoring below. */
   age: number | null;
+  /** Exact age carried to one decimal, for display only (e.g. 23.4). */
+  ageDecimal: number | null;
   yearsExperience: number | null;
   value: number | null;
   overallRank: number | null;
@@ -304,6 +308,7 @@ export async function loadBreakdown(
       teamPrimary: row.team ? teamColors.get(row.team) ?? null : null,
       sleeperId: readSleeperId(row),
       age: computeAge(row.birth_date),
+      ageDecimal: computeAgeDecimal(row.birth_date),
       yearsExperience: row.years_experience ?? null,
       value: value ?? trends?.current_value ?? null,
       overallRank: rank?.overall ?? null,
@@ -590,8 +595,8 @@ function buildRows(
       help: "Long-term hold value, blending market value with age.",
       aDisplay: dynastyPhrase(a),
       bDisplay: dynastyPhrase(b),
-      aNote: a.age != null ? `Age ${a.age}` : undefined,
-      bNote: b.age != null ? `Age ${b.age}` : undefined,
+      aNote: a.ageDecimal != null ? `Age ${a.ageDecimal.toFixed(1)}` : undefined,
+      bNote: b.ageDecimal != null ? `Age ${b.ageDecimal.toFixed(1)}` : undefined,
       winner: winnerFromShare(share, 0.04),
     });
   }
@@ -621,8 +626,8 @@ function buildRows(
     key: "age",
     label: "Age & Long-Term Appeal",
     help: "Younger players hold value longer in dynasty formats.",
-    aDisplay: a.age != null ? `${a.age} yrs` : "-",
-    bDisplay: b.age != null ? `${b.age} yrs` : "-",
+    aDisplay: a.ageDecimal != null ? `${a.ageDecimal.toFixed(1)} yrs` : "-",
+    bDisplay: b.ageDecimal != null ? `${b.ageDecimal.toFixed(1)} yrs` : "-",
     winner: winnerFromShare(shareHigh(youthScore(a.age), youthScore(b.age)), 0.06),
   });
 

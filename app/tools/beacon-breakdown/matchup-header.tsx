@@ -104,8 +104,10 @@ function PlayerCard({
           {player.team && (
             <span className="text-xs font-medium text-ink-muted">{player.team}</span>
           )}
-          {player.age != null && (
-            <span className="text-xs text-ink-subtle">Age {player.age}</span>
+          {player.ageDecimal != null && (
+            <span className="text-xs text-ink-subtle">
+              Age {player.ageDecimal.toFixed(1)}
+            </span>
           )}
         </div>
         <Link
