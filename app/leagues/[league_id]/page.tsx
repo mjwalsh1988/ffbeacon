@@ -16,6 +16,7 @@ import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
 import { LeagueTabs } from "@/components/league-tabs";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
+import { PicksToggle } from "@/components/picks-toggle";
 import { Panel, StatReadout } from "@/components/dashboard-panel";
 import { LeagueInfoPanel, LeagueMetaLine } from "@/components/league-info-panel";
 import {
@@ -97,6 +98,7 @@ export default async function LeagueDeepViewPage({
     source?: string;
     username?: string;
     roster?: string;
+    picks?: string;
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
@@ -105,6 +107,7 @@ export default async function LeagueDeepViewPage({
     source: sourceParam,
     username: usernameParam,
     roster: rosterParam,
+    picks: picksParam,
   } = await searchParams;
   const searchedUsername =
     typeof usernameParam === "string" && usernameParam.trim() ? usernameParam.trim() : null;
@@ -204,6 +207,15 @@ export default async function LeagueDeepViewPage({
       : null;
   const fallbackDisplay =
     context.coverage === "fallback" ? context.fallback?.derivedDisplay ?? null : null;
+
+  // Draft picks only carry value in dynasty leagues, so the "Include draft
+  // picks in power rankings" toggle is dynasty-only. Default ON; `?picks=off`
+  // ranks teams by players only. Redraft leagues force picks off and never
+  // show the toggle or any picks column. When there's no value coverage there
+  // is nothing to rank, so the toggle is hidden then too.
+  const isDynasty = context.derived.league_type === "dynasty";
+  const includePicks = isDynasty ? picksParam !== "off" : false;
+  const showPicksToggle = isDynasty && coverageOk;
 
   // In-view links (username forwarded so the Teams chips default correctly).
   const teamsHref = searchedUsername
@@ -347,6 +359,8 @@ export default async function LeagueDeepViewPage({
                 leagueSeason={league.season != null ? String(league.season) : null}
                 leagueStatus={league.status ?? null}
                 searchedUsername={searchedUsername}
+                includePicks={includePicks}
+                showPicksToggle={showPicksToggle}
               />
             </div>
           </div>
@@ -383,6 +397,8 @@ export default async function LeagueDeepViewPage({
               focusedRosterId={focusedRosterId}
               leagueSeason={league.season != null ? String(league.season) : null}
               leagueStatus={league.status ?? null}
+              includePicks={includePicks}
+              showPicksToggle={showPicksToggle}
             />
           </div>
         )}
@@ -434,6 +450,8 @@ async function TeamsPanel({
   focusedRosterId,
   leagueSeason,
   leagueStatus,
+  includePicks,
+  showPicksToggle,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -443,6 +461,8 @@ async function TeamsPanel({
   focusedRosterId: number | null;
   leagueSeason: string | null;
   leagueStatus: string | null;
+  includePicks: boolean;
+  showPicksToggle: boolean;
 }) {
   const supabase = await createClient();
 
@@ -457,6 +477,7 @@ async function TeamsPanel({
     sourceSlug,
     leagueSeason,
     leagueStatus,
+    includePicks,
   );
   if (teams.length === 0) {
     return (
@@ -479,6 +500,11 @@ async function TeamsPanel({
           </p>
         )}
       </div>
+      {showPicksToggle && (
+        <div className="flex justify-start">
+          <PicksToggle includePicks={includePicks} />
+        </div>
+      )}
       <TeamFilter
         teams={teams}
         sleeperLeagueId={sleeperLeagueId}
@@ -500,6 +526,8 @@ async function PowerRankingsSection({
   leagueSeason,
   leagueStatus,
   searchedUsername,
+  includePicks,
+  showPicksToggle,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -510,6 +538,8 @@ async function PowerRankingsSection({
   leagueSeason: string | null;
   leagueStatus: string | null;
   searchedUsername: string | null;
+  includePicks: boolean;
+  showPicksToggle: boolean;
 }) {
   const supabase = await createClient();
 
@@ -545,13 +575,14 @@ async function PowerRankingsSection({
     sourceSlug,
     leagueSeason,
     leagueStatus,
+    includePicks,
   );
   const ranked = teams
-    .filter((t) => t.cacheRow?.overall_rank != null)
+    .filter((t) => t.displayOverallRank != null)
     .sort(
       (a, b) =>
-        (a.cacheRow!.overall_rank ?? Number.MAX_SAFE_INTEGER) -
-        (b.cacheRow!.overall_rank ?? Number.MAX_SAFE_INTEGER),
+        (a.displayOverallRank ?? Number.MAX_SAFE_INTEGER) -
+        (b.displayOverallRank ?? Number.MAX_SAFE_INTEGER),
     );
 
   if (ranked.length === 0) {
@@ -580,15 +611,24 @@ async function PowerRankingsSection({
       id="pr"
       eyebrow="Standings"
       title="Power Rankings"
-      helper={`Ranked by total team value. ${formatDisplay} • ${sourceDisplay}.`}
+      helper={`Ranked by ${
+        includePicks ? "total team value" : "player value (draft picks excluded)"
+      }. ${formatDisplay} • ${sourceDisplay}.`}
       bodyClassName="p-0"
     >
+      {showPicksToggle && (
+        <div className="border-b border-line px-4 py-3 sm:px-5">
+          <PicksToggle includePicks={includePicks} />
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">
             League power rankings. Columns: overall rank, team, positional rank
-            (QB, RB, WR, TE, Picks), then total team value. Top three for each
-            position column are highlighted cyan; bottom three are highlighted purple.
+            (QB, RB, WR, TE{includePicks ? ", Picks" : ""}), then total team
+            value{includePicks ? "" : " counting players only"}. Top three for
+            each position column are highlighted cyan; bottom three are
+            highlighted purple.
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
@@ -610,9 +650,11 @@ async function PowerRankingsSection({
               <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
                 TE
               </th>
-              <th scope="col" className="hidden px-4 py-3 text-center md:table-cell">
-                Picks
-              </th>
+              {includePicks && (
+                <th scope="col" className="hidden px-4 py-3 text-center md:table-cell">
+                  Picks
+                </th>
+              )}
               <th scope="col" className="hidden px-4 py-3 text-right md:table-cell">
                 Value
               </th>
@@ -626,13 +668,14 @@ async function PowerRankingsSection({
                 searchedUsername={searchedUsername}
                 teamCount={teamCount}
                 valueIsBeacon={sourceSlug === "ffbeacon"}
+                showPicks={includePicks}
                 data={{
                   rosterRowId: t.rosterRowId,
                   sleeperRosterId: t.sleeperRosterId,
                   teamName: t.teamName,
                   ownerHandle: t.ownerSleeperUsername,
                   ownerAvatarId: t.ownerAvatarId,
-                  overallRank: t.cacheRow?.overall_rank ?? null,
+                  overallRank: t.displayOverallRank,
                   positionRanks: {
                     QB: t.positionRanks.QB,
                     RB: t.positionRanks.RB,
@@ -645,7 +688,7 @@ async function PowerRankingsSection({
                     losses: t.record.losses,
                     ties: t.record.ties,
                   },
-                  totalValue: t.cacheRow?.total_value ?? null,
+                  totalValue: t.displayTotalValue,
                 }}
               />
             ))}

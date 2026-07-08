@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import {
   ChevronRight,
   ArrowRight,
@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { SleeperLeague } from "@/lib/sleeper";
+import {
+  groupLeaguesByCategory,
+  type LeagueCategoryGroup,
+} from "@/lib/league-category";
 import {
   setFeaturedLeague,
   setLeagueShownOnProfile,
@@ -115,6 +119,16 @@ export function LeagueResults({
     );
   }, [variant, showAll, leagues, featuredId, shownIds]);
 
+  // Group leagues into type buckets (Dynasty, Redraft, Best Ball Dynasty,
+  // Best Ball Redraft), alphabetized within each, so a long list is scannable
+  // by format. Public groups the full list; dashboard groups whatever the
+  // Show-all filter left visible.
+  const publicGroups = useMemo(() => groupLeaguesByCategory(leagues), [leagues]);
+  const dashboardGroups = useMemo(
+    () => groupLeaguesByCategory(visibleLeagues),
+    [visibleLeagues],
+  );
+
   // Public variant skips the filter UI and bypasses the count.
   const profileLeagueCount = useMemo(() => {
     const set = new Set(shownIds);
@@ -159,36 +173,46 @@ export function LeagueResults({
           {visibleLeagues.length === 0 ? (
             <FilterEmptyState onReset={() => setShowAll(true)} />
           ) : (
-            <>
-              <DesktopDashboardTable
-                leagues={visibleLeagues}
-                sleeperUsername={sleeperUsername}
-                featuredId={featuredId}
-                shownIds={shownIds}
-                onSetFeatured={handleSetFeatured}
-                onToggleShown={handleToggleShown}
-              />
-              <MobileDashboardCards
-                leagues={visibleLeagues}
-                sleeperUsername={sleeperUsername}
-                featuredId={featuredId}
-                shownIds={shownIds}
-                onSetFeatured={handleSetFeatured}
-                onToggleShown={handleToggleShown}
-              />
-            </>
+            <div className="space-y-8">
+              {dashboardGroups.map((group) => (
+                <LeagueCategorySection key={group.key} group={group}>
+                  <DesktopDashboardTable
+                    leagues={group.leagues}
+                    sleeperUsername={sleeperUsername}
+                    featuredId={featuredId}
+                    shownIds={shownIds}
+                    onSetFeatured={handleSetFeatured}
+                    onToggleShown={handleToggleShown}
+                  />
+                  <MobileDashboardCards
+                    leagues={group.leagues}
+                    sleeperUsername={sleeperUsername}
+                    featuredId={featuredId}
+                    shownIds={shownIds}
+                    onSetFeatured={handleSetFeatured}
+                    onToggleShown={handleToggleShown}
+                  />
+                </LeagueCategorySection>
+              ))}
+            </div>
           )}
         </>
       ) : (
         <>
-          <DesktopPublicTable
-            leagues={leagues}
-            sleeperUsername={sleeperUsername}
-          />
-          <MobilePublicTable
-            leagues={leagues}
-            onOpen={(id) => setOpenLeagueId(id)}
-          />
+          <div className="space-y-8">
+            {publicGroups.map((group) => (
+              <LeagueCategorySection key={group.key} group={group}>
+                <DesktopPublicTable
+                  leagues={group.leagues}
+                  sleeperUsername={sleeperUsername}
+                />
+                <MobilePublicTable
+                  leagues={group.leagues}
+                  onOpen={(id) => setOpenLeagueId(id)}
+                />
+              </LeagueCategorySection>
+            ))}
+          </div>
           {openLeague && (
             <LeagueDetailSheet
               league={openLeague}
@@ -202,6 +226,34 @@ export function LeagueResults({
         </>
       )}
     </section>
+  );
+}
+
+/* ---------- Category section wrapper ---------- */
+
+/**
+ * One labeled bucket of leagues (e.g. "Dynasty", "Best Ball Redraft") with a
+ * visible heading and count above the variant's table(s). The heading is an
+ * h3 under the section's sr-only "Your Sleeper leagues" h2, keeping the
+ * document outline correct on both the public tool and the dashboard.
+ */
+function LeagueCategorySection({
+  group,
+  children,
+}: {
+  group: LeagueCategoryGroup;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <h3 className="mb-3 flex items-baseline gap-2 text-base font-semibold tracking-tight text-ink">
+        {group.label}
+        <span className="text-xs font-normal text-ink-subtle">
+          {group.leagues.length} {group.leagues.length === 1 ? "league" : "leagues"}
+        </span>
+      </h3>
+      {children}
+    </div>
   );
 }
 

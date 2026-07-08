@@ -79,6 +79,20 @@ export type TeamCardData = {
   positionRanks: Record<ValuedPosition, number | null>;
   /** Total team count in the league. Used by TeamCard to render "Nth of M" labels. */
   teamCount: number;
+  /** Whether draft pick values are counted in this team's totals and league
+   * ranking. Driven by the "Include draft picks in power rankings" toggle
+   * (dynasty only) and forced false for redraft leagues, which have no pick
+   * values. When false, `displayTotalValue` / `displayOverallRank` exclude
+   * picks and the picks column / tile is hidden. */
+  includePicks: boolean;
+  /** Total team value to display, honoring `includePicks`: `total_value` when
+   * picks are included, `total_value - picks_value` when excluded. Null when
+   * no cache row exists for this (format, source). */
+  displayTotalValue: number | null;
+  /** League rank (1 = highest `displayTotalValue`) honoring `includePicks`.
+   * Equals `cacheRow.overall_rank` when picks are included; recomputed by
+   * players-only total when excluded. Null when no cache row exists. */
+  displayOverallRank: number | null;
   /** This team's league rank for each of the four header stat chips
    * (Starters / Bench / Picks / Total). 1 = best, null when the value is
    * zero or the cache row is missing. Drives the top-3 / bottom-3
@@ -110,6 +124,11 @@ export async function loadLeagueTeamCards(
   currentSeason?: string | null,
   /** League status from Sleeper. Only `pre_draft` keeps the current-season picks visible. */
   leagueStatus?: string | null,
+  /** Whether draft pick values count toward team totals and the league
+   * ranking. Defaults to true (picks included). Pass false to rank teams by
+   * players only, which the dynasty "Include draft picks" toggle does when
+   * turned off, and which redraft leagues always do (no pick values exist). */
+  includePicks = true,
 ): Promise<TeamCardData[]> {
   const [rostersRes, usersRes, cacheRes, slotIndex] = await Promise.all([
     supabase
@@ -243,6 +262,9 @@ export async function loadLeagueTeamCards(
       positionValues: extractPositionValues(cache),
       positionRanks: { QB: null, RB: null, WR: null, TE: null },
       teamCount: rosters.length,
+      includePicks,
+      displayTotalValue: null,
+      displayOverallRank: null,
       statRanks: { starter: null, bench: null, picks: null, total: null },
     });
   }
@@ -259,20 +281,54 @@ export async function loadLeagueTeamCards(
     });
   }
 
+  // Effective team total honoring the picks toggle: full total when picks are
+  // included, players-only (total minus picks) when excluded.
+  const effectiveTotal = (c: CacheRow | null): number =>
+    c ? Number(c.total_value) - (includePicks ? 0 : Number(c.picks_value)) : 0;
+
   // Compute per-stat rank for the four header chips. Reuses cacheRow values
-  // (starter/bench/picks/total) so the rank lines up with what the chip shows.
-  const STAT_KEYS = [
-    { key: "starter" as const, field: "starter_value" as const },
-    { key: "bench" as const, field: "bench_value" as const },
-    { key: "picks" as const, field: "picks_value" as const },
-    { key: "total" as const, field: "total_value" as const },
+  // (starter/bench/picks) so the rank lines up with what the chip shows; the
+  // total chip ranks on the effective total so it tracks the picks toggle.
+  const STAT_GETTERS: {
+    key: "starter" | "bench" | "picks" | "total";
+    valueOf: (t: TeamCardData) => number;
+  }[] = [
+    { key: "starter", valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.starter_value) : 0) },
+    { key: "bench", valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.bench_value) : 0) },
+    { key: "picks", valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.picks_value) : 0) },
+    { key: "total", valueOf: (t) => effectiveTotal(t.cacheRow) },
   ];
-  for (const { key, field } of STAT_KEYS) {
+  for (const { key, valueOf } of STAT_GETTERS) {
     const sorted = [...out]
-      .map((t) => ({ team: t, value: t.cacheRow ? Number(t.cacheRow[field]) : 0 }))
+      .map((t) => ({ team: t, value: valueOf(t) }))
       .sort((a, b) => b.value - a.value);
     sorted.forEach((entry, i) => {
       entry.team.statRanks[key] = entry.value > 0 ? i + 1 : null;
+    });
+  }
+
+  // Display total + overall rank honoring the picks toggle. With picks
+  // included this mirrors the cached total_value / overall_rank; excluded, it
+  // re-ranks every team that has a cache row by players-only total (starter
+  // value breaks ties, matching the cache's own ranking tiebreak). Teams
+  // without a cache row keep the null defaults.
+  if (includePicks) {
+    for (const t of out) {
+      t.displayTotalValue = t.cacheRow ? Number(t.cacheRow.total_value) : null;
+      t.displayOverallRank = t.cacheRow?.overall_rank ?? null;
+    }
+  } else {
+    const ranked = out
+      .filter((t) => t.cacheRow)
+      .map((t) => ({
+        team: t,
+        total: Number(t.cacheRow!.total_value) - Number(t.cacheRow!.picks_value),
+        starter: Number(t.cacheRow!.starter_value),
+      }))
+      .sort((a, b) => b.total - a.total || b.starter - a.starter);
+    ranked.forEach((entry, i) => {
+      entry.team.displayTotalValue = entry.total;
+      entry.team.displayOverallRank = i + 1;
     });
   }
 

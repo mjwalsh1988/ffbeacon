@@ -50,6 +50,7 @@ export function PowerRankingsRow({
   sleeperLeagueId,
   searchedUsername = null,
   valueIsBeacon = false,
+  showPicks = true,
 }: {
   data: PowerRankingsRowData;
   teamCount: number;
@@ -60,6 +61,10 @@ export function PowerRankingsRow({
   /** True when the league's selected value source is FF Beacon, so the total
    * team value renders with the FF Beacon mark. */
   valueIsBeacon?: boolean;
+  /** Whether the Picks rank column (desktop) and Picks tile (mobile sheet)
+   * render. False when draft picks are excluded from the rankings (picks
+   * toggle off) or the league is redraft. Must match the header column set. */
+  showPicks?: boolean;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const teamHref = (() => {
@@ -102,7 +107,9 @@ export function PowerRankingsRow({
         <PositionRankCell rank={data.positionRanks.RB} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.WR} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.TE} teamCount={teamCount} />
-        <PositionRankCell rank={data.positionRanks.PICKS} teamCount={teamCount} />
+        {showPicks && (
+          <PositionRankCell rank={data.positionRanks.PICKS} teamCount={teamCount} />
+        )}
         <td
           className="hidden px-4 py-2 text-right font-mono font-semibold tabular-nums text-ink md:table-cell"
           aria-label={`Total value ${formatValue(data.totalValue)}`}
@@ -118,6 +125,7 @@ export function PowerRankingsRow({
           teamCount={teamCount}
           teamHref={teamHref}
           valueIsBeacon={valueIsBeacon}
+          showPicks={showPicks}
           onClose={() => setSheetOpen(false)}
         />
       )}
@@ -181,12 +189,14 @@ function TeamRankSheet({
   teamCount,
   teamHref,
   valueIsBeacon,
+  showPicks,
   onClose,
 }: {
   data: PowerRankingsRowData;
   teamCount: number;
   teamHref: string;
   valueIsBeacon: boolean;
+  showPicks: boolean;
   onClose: () => void;
 }) {
   const labelId = useId();
@@ -336,11 +346,13 @@ function TeamRankSheet({
           <RankTile label="RB" rank={data.positionRanks.RB} teamCount={teamCount} />
           <RankTile label="WR" rank={data.positionRanks.WR} teamCount={teamCount} />
           <RankTile label="TE" rank={data.positionRanks.TE} teamCount={teamCount} />
-          <RankTile
-            label="Picks"
-            rank={data.positionRanks.PICKS}
-            teamCount={teamCount}
-          />
+          {showPicks && (
+            <RankTile
+              label="Picks"
+              rank={data.positionRanks.PICKS}
+              teamCount={teamCount}
+            />
+          )}
           <RankTile
             label="Overall"
             rank={data.overallRank}

@@ -55,7 +55,9 @@ export function TeamFilter({
 
   const overallRankByRoster = useMemo(() => {
     const m: Record<number, number | null> = {};
-    for (const t of teams) m[t.sleeperRosterId] = t.cacheRow?.overall_rank ?? null;
+    // displayOverallRank honors the picks toggle (players-only rank when picks
+    // are excluded); falls back to the cached rank when unset.
+    for (const t of teams) m[t.sleeperRosterId] = t.displayOverallRank ?? null;
     return m;
   }, [teams]);
 
@@ -74,8 +76,8 @@ export function TeamFilter({
     return teams
       .filter((t) => selectedRosterIds.has(t.sleeperRosterId))
       .sort((a, b) => {
-        const ra = a.cacheRow?.overall_rank ?? fallback;
-        const rb = b.cacheRow?.overall_rank ?? fallback;
+        const ra = a.displayOverallRank ?? fallback;
+        const rb = b.displayOverallRank ?? fallback;
         if (ra !== rb) return ra - rb;
         return a.teamName.localeCompare(b.teamName);
       });

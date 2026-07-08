@@ -11,13 +11,14 @@ import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamCard } from "@/components/team-card";
+import { PicksToggle } from "@/components/picks-toggle";
 import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
 
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ league_id: string; roster_id: string }>;
-type Search = Promise<{ source?: string; username?: string }>;
+type Search = Promise<{ source?: string; username?: string; picks?: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { league_id, roster_id } = await params;
@@ -72,7 +73,11 @@ export default async function TeamDetailPage({
   searchParams: Search;
 }) {
   const { league_id: sleeperLeagueId, roster_id } = await params;
-  const { source: sourceParam, username: usernameParam } = await searchParams;
+  const {
+    source: sourceParam,
+    username: usernameParam,
+    picks: picksParam,
+  } = await searchParams;
   const searchedUsername =
     typeof usernameParam === "string" && usernameParam.trim()
       ? usernameParam.trim()
@@ -106,6 +111,13 @@ export default async function TeamDetailPage({
   const effectiveSourceSlug =
     context.coverage === "none" ? null : context.sourceSlug;
 
+  // Draft picks only carry value in dynasty leagues, so the "Include draft
+  // picks" toggle is dynasty-only and matches the league overview. Default ON;
+  // `?picks=off` shows player value only. Redraft forces picks off.
+  const isDynasty = context.derived.league_type === "dynasty";
+  const includePicks = isDynasty ? picksParam !== "off" : false;
+  const showPicksToggle = isDynasty && context.coverage !== "none";
+
   // Single shared loader: the league inline view uses this for N teams,
   // we use it for one team. Same code path → identical visuals.
   const allTeams = await loadLeagueTeamCards(
@@ -115,6 +127,7 @@ export default async function TeamDetailPage({
     effectiveSourceSlug,
     league.season != null ? String(league.season) : null,
     league.status ?? null,
+    includePicks,
   );
   const team = allTeams.find((t) => t.sleeperRosterId === sleeperRosterId);
   if (!team) notFound();
@@ -210,6 +223,11 @@ export default async function TeamDetailPage({
       </header>
 
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {showPicksToggle && (
+          <div className="flex justify-start">
+            <PicksToggle includePicks={includePicks} />
+          </div>
+        )}
         <TeamCard
           data={team}
           sleeperLeagueId={sleeperLeagueId}

@@ -97,6 +97,8 @@ export function TeamCard({
     positionRanks,
     teamCount,
     statRanks,
+    includePicks,
+    displayOverallRank,
   } = data;
 
   const starterSet = useMemo(() => new Set(starterIds), [starterIds]);
@@ -134,9 +136,9 @@ export function TeamCard({
             collapsible ? "pr-9 sm:pr-0" : ""
           }`}
         >
-          {cacheRow?.overall_rank != null && (
+          {displayOverallRank != null && (
             <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-card border border-brand-purple/40 bg-brand-purple/10 shadow-[0_0_18px_-8px_rgba(168,85,247,0.7)]">
-              <span className="sr-only">Power ranking {cacheRow.overall_rank}</span>
+              <span className="sr-only">Power ranking {displayOverallRank}</span>
               <span
                 aria-hidden="true"
                 className="text-[7px] font-bold uppercase tracking-[0.14em] text-brand-purple/70"
@@ -147,7 +149,7 @@ export function TeamCard({
                 aria-hidden="true"
                 className="font-mono text-lg font-extrabold leading-none text-brand-purple"
               >
-                {cacheRow.overall_rank}
+                {displayOverallRank}
               </span>
             </div>
           )}
@@ -186,7 +188,9 @@ export function TeamCard({
               <RankTile label="RB" rank={positionRanks.RB} teamCount={teamCount} count={grouped.RB.length} countLabel="players" />
               <RankTile label="WR" rank={positionRanks.WR} teamCount={teamCount} count={grouped.WR.length} countLabel="players" />
               <RankTile label="TE" rank={positionRanks.TE} teamCount={teamCount} count={grouped.TE.length} countLabel="players" />
-              <RankTile label="PICKS" rank={statRanks.picks} teamCount={teamCount} count={sortedPicks.length} countLabel="picks" />
+              {includePicks && (
+                <RankTile label="PICKS" rank={statRanks.picks} teamCount={teamCount} count={sortedPicks.length} countLabel="picks" />
+              )}
               <RankTile label="TOTAL" rank={statRanks.total} teamCount={teamCount} count={null} countLabel="" />
               {/* TODO(transactions phase): add a TRADES rank chip here once
                 * league_transactions ingestion ships (trades count + league rank
@@ -244,7 +248,11 @@ export function TeamCard({
           role="region"
           aria-labelledby={headingId}
         >
-          <div className="grid gap-3 p-4 sm:grid-cols-2 sm:gap-4 sm:p-5 lg:grid-cols-5">
+          <div
+            className={`grid gap-3 p-4 sm:grid-cols-2 sm:gap-4 sm:p-5 ${
+              includePicks ? "lg:grid-cols-5" : "lg:grid-cols-4"
+            }`}
+          >
             {POSITION_ORDER.map((pos) => (
               <PositionColumn
                 key={pos}
@@ -257,12 +265,14 @@ export function TeamCard({
                 valueIsBeacon={valueIsBeacon}
               />
             ))}
-            <PicksColumn
-              picks={sortedPicks}
-              ownRosterId={sleeperRosterId}
-              rosterIdToTeamName={rosterIdToTeamName}
-              rosterIdToOwnerUsername={rosterIdToOwnerUsername}
-            />
+            {includePicks && (
+              <PicksColumn
+                picks={sortedPicks}
+                ownRosterId={sleeperRosterId}
+                rosterIdToTeamName={rosterIdToTeamName}
+                rosterIdToOwnerUsername={rosterIdToOwnerUsername}
+              />
+            )}
           </div>
 
           {/* Footer link */}
