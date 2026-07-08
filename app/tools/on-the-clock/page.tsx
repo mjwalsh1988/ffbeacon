@@ -4,6 +4,7 @@ import {
   Target,
   Scale,
   ArrowLeftRight,
+  ArrowRight,
   Users,
   Receipt,
   TrendingUp,
@@ -18,6 +19,8 @@ import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { OnTheClockClient } from "./on-the-clock-client";
 import { StartDraftingButton } from "./start-drafting-button";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { DiscordGlyph } from "@/components/discord-glyph";
 
 export const metadata: Metadata = {
   title: "On The Clock",
@@ -90,6 +93,11 @@ export default async function OnTheClockPage() {
           )}
         </div>
       </section>
+      <DiscordCtaSection
+        eyebrow="Need a hand mid-draft?"
+        heading="Stuck on a pick? Real people are watching the clock too."
+        body="Our Discord is full of drafters who will help you weigh a pick or a trade in real time, free, no matter how many rounds are left. Want to know what powers the recommendations? Read about FF Beacon."
+      />
     </main>
   );
 }
@@ -175,6 +183,26 @@ function Hero() {
         </p>
 
         <StartDraftingButton />
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href="/join"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Join our Discord (opens in new tab)"
+            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <DiscordGlyph className="h-5 w-5" />
+            Join our Discord
+          </a>
+          <Link
+            href="/rankings"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            View player rankings
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          </Link>
+        </div>
 
         {/* Continuous horizontal marquee: one always-moving row that fits every
             card without stacking. The track holds the real list plus an

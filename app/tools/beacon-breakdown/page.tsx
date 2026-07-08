@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { BarChart3, Gauge, Layers, ScrollText, Swords, Users } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, Gauge, Layers, ScrollText, Swords, Users, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { loadBreakdown } from "@/lib/beacon-breakdown";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
@@ -13,6 +14,8 @@ import { QuickTakeaways, VerdictCard } from "./breakdown-summary";
 import { BreakdownTabs } from "./breakdown-tabs";
 import { StatsCompare } from "./stats-compare";
 import { loadBreakdownStats } from "./load-stats";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { DiscordGlyph } from "@/components/discord-glyph";
 
 export const dynamic = "force-dynamic";
 
@@ -112,6 +115,11 @@ export default async function BeaconBreakdownPage({
           )}
         </div>
       </section>
+      <DiscordCtaSection
+        eyebrow="Torn on the verdict?"
+        heading="Still can't decide? Talk it out with real people."
+        body="The Beacon Edge gives you a clear lean, but a trade or a start/sit call can still be close. Bring the matchup to our Discord and real fantasy managers will help you settle it for free. Want to know what's behind FF Beacon? Read about the project."
+      />
     </main>
   );
 }
@@ -360,6 +368,25 @@ function Hero() {
           a quick takeaway on who actually has the edge. No spreadsheets, no jargon, just the
           call.
         </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href="/join"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Join our Discord (opens in new tab)"
+            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <DiscordGlyph className="h-5 w-5" />
+            Join our Discord
+          </a>
+          <Link
+            href="/rankings"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            View player rankings
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
     </header>
   );

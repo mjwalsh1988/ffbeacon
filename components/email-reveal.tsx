@@ -16,10 +16,18 @@ const EMAIL_CHARS = [
 ];
 
 const BUTTON_BASE =
-  "inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+  "inline-flex min-h-11 items-center gap-1.5 rounded-card px-4 py-2.5 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+const PRIMARY_STYLE = "bg-beacon text-black transition-opacity hover:opacity-90";
+const SECONDARY_STYLE =
+  "border border-line bg-base text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan";
 
-export function EmailReveal() {
+export function EmailReveal({
+  variant = "primary",
+}: {
+  variant?: "primary" | "secondary";
+}) {
   const [email, setEmail] = useState<string | null>(null);
+  const style = variant === "primary" ? PRIMARY_STYLE : SECONDARY_STYLE;
 
   useEffect(() => {
     setEmail(String.fromCharCode(...EMAIL_CHARS));
@@ -33,7 +41,7 @@ export function EmailReveal() {
         type="button"
         aria-label="Email Michael (address loading)"
         disabled
-        className={`${BUTTON_BASE} opacity-80`}
+        className={`${BUTTON_BASE} ${style} opacity-80`}
       >
         <Mail aria-hidden="true" className="h-4 w-4" />
         Email Michael
@@ -42,10 +50,7 @@ export function EmailReveal() {
   }
 
   return (
-    <a
-      href={`mailto:${email}`}
-      className={`${BUTTON_BASE} transition-opacity hover:opacity-90`}
-    >
+    <a href={`mailto:${email}`} className={`${BUTTON_BASE} ${style}`}>
       <Mail aria-hidden="true" className="h-4 w-4" />
       {email}
     </a>

@@ -15,6 +15,8 @@ import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { RankingsTable, type RankingsRow } from "@/components/rankings-table";
 import { ScrollToRankings } from "./scroll-to-rankings";
 import { POSITIONS } from "@/lib/site";
+import { DiscordGlyph } from "@/components/discord-glyph";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
 
 export const metadata: Metadata = {
   title: "Fantasy Football Rankings",
@@ -300,6 +302,25 @@ export default async function RankingsPage({
             English. Sort, filter, and switch your data source on the fly
             without losing your place.
           </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a
+              href="/join"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Join our Discord (opens in new tab)"
+              className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <DiscordGlyph className="h-5 w-5" />
+              Join our Discord
+            </a>
+            <Link
+              href="/tools"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              See every free tool
+              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </div>
           <div className="mt-10">
             <p
               id="currently-viewing-label"
@@ -433,7 +454,11 @@ export default async function RankingsPage({
         </div>
       </section>
 
-      <CtaSection />
+      <DiscordCtaSection
+        eyebrow="Need help reading the board?"
+        heading="Stuck on a ranking? Real people are a message away."
+        body="Drop into our Discord for a free gut check on any player or tier from real fantasy managers, and the board updates automatically as new data comes in. Want to know what powers the FF Beacon number? Read about FF Beacon."
+      />
     </main>
   );
 }
@@ -509,51 +534,3 @@ function StatusTile({
   );
 }
 
-function CtaSection() {
-  return (
-    <section
-      aria-labelledby="rankings-cta-heading"
-      className="border-t border-line"
-    >
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div
-          className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
-          style={{
-            backgroundImage:
-              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
-          }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            Pair it up
-          </p>
-          <h2
-            id="rankings-cta-heading"
-            className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-          >
-            Take these values into your actual lineup.
-          </h2>
-          <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
-            Got the rankings. Now run them against your league or set a smart
-            waiver bid with the tools that share the same data.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/tools/faab"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              Run a FAAB bid
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
-            <Link
-              href="/tools/league-pulse"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              Pulse a Sleeper league
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}

@@ -8,6 +8,8 @@ import { StepRail } from "./step-rail";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { DiscordGlyph } from "@/components/discord-glyph";
 
 export const metadata: Metadata = {
   title: "Sleeper League Pulse",
@@ -200,6 +202,11 @@ export default async function LeaguePulsePage({
       )}
 
       {!isLoggedIn && <CtaSection />}
+      <DiscordCtaSection
+        eyebrow="Need a hand with your league?"
+        heading="Questions about your league? Ask a real person."
+        body="Confused by a power ranking or an odd Sleeper setting? Drop into our Discord and a real fantasy player will help you sort it out, free. Curious what else drives FF Beacon? Read about the project."
+      />
     </main>
   );
 }
@@ -259,6 +266,26 @@ function Hero() {
           </Link>{" "}
           and load it instantly each visit.
         </p>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href="/join"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Join our Discord (opens in new tab)"
+            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <DiscordGlyph className="h-5 w-5" />
+            Join our Discord
+          </a>
+          <Link
+            href="/rankings"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            View player rankings
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          </Link>
+        </div>
 
         <ul
           role="list"

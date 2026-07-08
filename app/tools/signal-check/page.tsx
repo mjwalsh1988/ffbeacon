@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
-import { Scale, ShieldCheck, ListTree } from "lucide-react";
+import Link from "next/link";
+import { Scale, ShieldCheck, ListTree, ArrowRight } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
 import { supportedFormats } from "@/lib/signal-check/format";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { SignalCheckBuilder, type FormatOption } from "./signal-check-builder";
 import { SleeperImportPanel } from "./sleeper-import-panel";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { DiscordGlyph } from "@/components/discord-glyph";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +83,11 @@ export default async function SignalCheckPage() {
           )}
         </div>
       </section>
+      <DiscordCtaSection
+        eyebrow="Not sure about the verdict?"
+        heading="Get a second opinion before you hit send."
+        body="A Beacon Verdict is a great starting point, but our Discord is full of real managers who will sanity-check any trade with you for free. Curious how the values behind it are built? Read about FF Beacon."
+      />
     </main>
   );
 }
@@ -124,6 +132,26 @@ function Hero({ featureLabel, resultLabel }: { featureLabel: string; resultLabel
           Values for your league format and returns the {resultLabel}: who wins, the margin, and a
           plain-language reason, with no guesswork.
         </p>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href="/join"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Join our Discord (opens in new tab)"
+            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <DiscordGlyph className="h-5 w-5" />
+            Join our Discord
+          </a>
+          <Link
+            href="/rankings"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            View player rankings
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          </Link>
+        </div>
 
         <ul role="list" aria-label="How Signal Check works" className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           <HeroBullet icon={Scale} title="FF Beacon Values" body="One trusted value scale, weighted for your format." />

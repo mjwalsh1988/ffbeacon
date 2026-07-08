@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   resolveSourceForFormat,
@@ -8,6 +10,8 @@ import {
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { loadFaabSettings } from "@/lib/faab/settings";
 import { FaabForm, type FaabPlayer } from "./faab-form";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { DiscordGlyph } from "@/components/discord-glyph";
 
 export const metadata: Metadata = {
   title: "FAAB Calculator",
@@ -214,6 +218,25 @@ export default async function FaabPage({
             need the position. We recommend a bid range using market value and need-weighted
             heuristics.
           </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a
+              href="/join"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Join our Discord (opens in new tab)"
+              className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <DiscordGlyph className="h-5 w-5" />
+              Join our Discord
+            </a>
+            <Link
+              href="/rankings"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              View player rankings
+              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
       </header>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
@@ -226,6 +249,11 @@ export default async function FaabPage({
           settings={settings}
         />
       </div>
+      <DiscordCtaSection
+        eyebrow="Waivers are stressful"
+        heading="Bidding blind? Ask before you spend your FAAB."
+        body="A recommended range only goes so far. Drop your matchup into our Discord and real fantasy players will help you land on a number you feel good about, free. Want the story behind FF Beacon? Read about the project."
+      />
     </main>
   );
 }

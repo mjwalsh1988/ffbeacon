@@ -9,6 +9,7 @@ import { loadArticle, loadRelatedArticles } from "@/lib/beacon-brief-feed";
 import { ArticleMarkdown } from "@/components/beacon-brief/article-markdown";
 import { ArticleCard, articleTypeLabel } from "@/components/beacon-brief/article-card";
 import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -273,6 +274,13 @@ export default async function BriefArticlePage({ params }: PageProps) {
           </Link>
         </div>
       </div>
+
+      <DiscordCtaSection
+        eyebrow="React to this story"
+        heading="What does this mean for your team? Ask real people."
+        body="Bring this story into our Discord and real fantasy managers will help you work out the fantasy impact for your specific roster, free. Curious what else FF Beacon is building? Read about the project."
+        className="mt-4 border-t border-line"
+      />
     </main>
   );
 }

@@ -767,27 +767,31 @@ function CtaSection() {
               id="cta-heading"
               className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
             >
-              Sync your league, or just browse the rankings. Start free.
+              Real people in the Discord, real help on the clock.
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-              Browse everything with no signup and no paywall. Make an account
-              only when you want your source, your format, and your Sleeper
-              username saved, so the whole site remembers you the next time you
-              drop in.
+              Jump into our Discord for free lineup, trade, and draft advice
+              from real fantasy players, no matter how new you are. Drafting
+              tonight? Connect your live Sleeper draft and let On The Clock
+              call out your team's needs pick by pick. No paywall, ever.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                href="/tools/league-pulse"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              <a
+                href="/join"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Join our Discord (opens in new tab)"
+                className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                Pulse a Sleeper league
-                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-              </Link>
+                <DiscordGlyph className="h-4 w-4" />
+                Join our Discord
+              </a>
               <Link
-                href="/rankings"
+                href="/tools/on-the-clock"
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                Explore the rankings
+                <Timer aria-hidden="true" className="h-3.5 w-3.5" />
+                Get live draft help
                 <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
               </Link>
               <Link

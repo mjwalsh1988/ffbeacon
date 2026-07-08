@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AuthorPortrait } from "@/components/author-portrait";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
 
 export const metadata: Metadata = {
   title: "About FF Beacon",
@@ -27,7 +28,13 @@ export default function AboutPage() {
       <PrinciplesSection />
       <FeaturesSection />
       <FounderSection />
-      <CtaSection />
+      <DiscordCtaSection
+        eyebrow="See it in action"
+        heading="Come see the mission in practice."
+        body="The best way to understand FF Beacon is to use it. Drop into our Discord and real fantasy players will show you around, free, or jump straight into the tools built on everything above."
+        secondaryHref="/tools"
+        secondaryLabel="See every free tool"
+      />
     </main>
   );
 }
@@ -462,62 +469,6 @@ function FounderSection() {
               Read the full story
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- CTA ---------- */
-
-function CtaSection() {
-  return (
-    <section aria-labelledby="cta-heading">
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div
-          className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-12"
-          style={{
-            backgroundImage:
-              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
-          }}
-        >
-          {/* Top hairline so the closing panel feels like a lit beacon. */}
-          <span
-            aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-px"
-            style={{
-              backgroundImage:
-                "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-            }}
-          />
-          <div className="relative">
-            <h2
-              id="cta-heading"
-              className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-            >
-              Bring your league. Or skim the rankings. Both work by ear.
-            </h2>
-            <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
-              No signup needed to browse. Sign in only when you want to save your
-              source, your format, and your linked Sleeper username.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/rankings"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                Explore the rankings
-                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-              </Link>
-              <Link
-                href="/tools/league-pulse"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                Pulse a Sleeper league
-                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-              </Link>
-            </div>
           </div>
         </div>
       </div>

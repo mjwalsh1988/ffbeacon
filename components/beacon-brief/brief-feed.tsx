@@ -7,6 +7,7 @@ import { BriefSidebar, type BriefActiveFilter } from "@/components/beacon-brief/
 import { BriefShell } from "@/components/beacon-brief/brief-shell";
 import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
 import { BriefPagination } from "@/components/beacon-brief/brief-pagination";
+import { DiscordCtaSection } from "@/components/discord-cta-section";
 
 export type Breadcrumb = { label: string; href?: string };
 
@@ -144,6 +145,13 @@ export function BriefFeed({
           </>
         )}
       </BriefShell>
+
+      <DiscordCtaSection
+        eyebrow="Talk about the news"
+        heading="Got questions about what this means for your team?"
+        body="Drop into our Discord and real fantasy players will help you turn this news into a lineup decision, free. Want to know what's behind FF Beacon? Read about the project."
+        className="border-t border-line"
+      />
     </main>
   );
 }
