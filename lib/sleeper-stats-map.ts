@@ -1,6 +1,13 @@
 /**
- * Maps a Sleeper weekly stats payload (the flat per-player object returned by
- * /v1/stats/nfl/{seasonType}/{season}/{week}) onto our player_stats columns.
+ * Maps a Sleeper weekly stats payload onto our player_stats columns.
+ *
+ * The payload is the full per-player object from api.sleeper.com
+ * (/stats/nfl/{season}/{week}?season_type=...): the stat map is nested under
+ * `.stats`, and game context (`opponent`, `game_id`, `team`, `date`) sits at
+ * the top level. For resilience we also accept a flat legacy payload (the old
+ * api.sleeper.app/v1 shape had stat keys at the top level and no game context);
+ * when `.stats` is absent we read stat keys from the payload root and leave
+ * opponent / game_id NULL.
  *
  * Most player_stats columns are Sleeper-native stat keys, so the bulk of the
  * mapping is a verbatim key copy. Two rules protect data integrity:
@@ -52,34 +59,47 @@ function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function str(value: unknown): string | null {
+  if (typeof value === "string") return value.length > 0 ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 export function mapStatPayloadToRow(payload: Record<string, unknown>): StatRow {
   const row: StatRow = {};
 
+  // api.sleeper.com nests the stat map under `.stats`; the legacy flat payload
+  // put stat keys at the root. Fall back to the root so both shapes map cleanly.
+  const rawStats = payload.stats;
+  const stats: Record<string, unknown> =
+    rawStats && typeof rawStats === "object" ? (rawStats as Record<string, unknown>) : payload;
+
   for (const col of INT_COLUMNS) {
-    const v = num(payload[col]);
+    const v = num(stats[col]);
     row[col] = v === null ? 0 : Math.trunc(v);
   }
   for (const col of NUMERIC_COLUMNS) {
-    const v = num(payload[col]);
+    const v = num(stats[col]);
     row[col] = v === null ? 0 : v;
   }
   for (const col of NULLABLE_NUMERIC_COLUMNS) {
-    row[col] = num(payload[col]);
+    row[col] = num(stats[col]);
   }
   for (const col of NULLABLE_INT_COLUMNS) {
-    const v = num(payload[col]);
+    const v = num(stats[col]);
     row[col] = v === null ? null : Math.trunc(v);
   }
 
   // snap_pct: derived, NULL-safe. Missing snap data (common pre-2019) or a zero
   // team-snap denominator yields NULL, not 0, and never divides by zero.
-  const offSnp = num(payload.off_snp);
-  const tmOffSnp = num(payload.tm_off_snp);
+  const offSnp = num(stats.off_snp);
+  const tmOffSnp = num(stats.tm_off_snp);
   row.snap_pct = offSnp !== null && tmOffSnp !== null && tmOffSnp > 0 ? offSnp / tmOffSnp : null;
 
-  // The weekly stats endpoint does not carry game context, so these stay NULL.
-  row.opponent = null;
-  row.game_id = null;
+  // Game context comes from the top-level api.sleeper.com fields. A flat legacy
+  // payload has neither, so these resolve to NULL there.
+  row.opponent = str(payload.opponent);
+  row.game_id = str(payload.game_id);
 
   return row;
 }

@@ -214,31 +214,45 @@ export type SleeperSeasonType = "regular" | "post" | "pre";
 
 export type SleeperStatEntry = {
   sleeperId: string;
-  payload: Record<string, number>;
+  /**
+   * The FULL per-player object from api.sleeper.com. The stat map is nested
+   * under `.stats`; game context lives at the top level (`opponent`, `team`,
+   * `game_id`, `date`, `player`). Preserved verbatim into player_stats.metadata.
+   */
+  payload: Record<string, unknown>;
 };
 
 /**
  * Weekly player stats for one (seasonType, season, week).
  *
- * Sleeper's stats endpoint is undocumented but stable. It returns an object
- * keyed by Sleeper player_id whose values are the FLAT stats object (there is
- * no `.stats` wrapper, and no `opponent` / `game_id` / `team` fields). We
- * normalize to an array so callers don't depend on the keyed-object shape.
- * Returns [] on any failure, matching this lib's empty-on-failure convention.
+ * We read from api.sleeper.com (NOT api.sleeper.app/v1). Both hosts expose the
+ * same underlying Sleeper stat data, but the .com host returns the richer per-
+ * player object that carries game context: `opponent`, `team`, `game_id`, and
+ * `date`, with the stat map nested under `.stats`. The legacy .app/v1 endpoint
+ * returned only the flat stat map with no opponent, which is why weekly game
+ * logs had no opponent column. The `.stats` sub-object is byte-for-byte
+ * identical to the old .app payload, so column mapping is unchanged; we simply
+ * also capture the opponent and game id (see lib/sleeper-stats-map.ts).
+ *
+ * The .com host requires a User-Agent header (403s without one); safeFetch
+ * already sends one. Response is an ARRAY of per-player rows. Returns [] on any
+ * failure, matching this lib's empty-on-failure convention.
  */
 export async function getWeeklyStats(
   seasonType: SleeperSeasonType,
   season: number,
   week: number,
 ): Promise<SleeperStatEntry[]> {
-  const raw = await safeFetch<Record<string, Record<string, number>>>(
-    `${BASE}/stats/nfl/${seasonType}/${season}/${week}`,
+  const raw = await safeFetch<Array<Record<string, unknown>>>(
+    `https://api.sleeper.com/stats/nfl/${season}/${week}?season_type=${seasonType}`,
   );
-  if (!raw || typeof raw !== "object") return [];
+  if (!Array.isArray(raw)) return [];
   const out: SleeperStatEntry[] = [];
-  for (const [sleeperId, payload] of Object.entries(raw)) {
-    if (!sleeperId || !payload || typeof payload !== "object") continue;
-    out.push({ sleeperId, payload: payload as Record<string, number> });
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const sleeperId = (row as { player_id?: unknown }).player_id;
+    if (typeof sleeperId !== "string" || sleeperId.length === 0) continue;
+    out.push({ sleeperId, payload: row });
   }
   return out;
 }

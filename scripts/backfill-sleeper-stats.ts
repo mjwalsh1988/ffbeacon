@@ -4,10 +4,13 @@
  * Imports raw weekly player stats from Sleeper's (undocumented but stable)
  * stats endpoint into player_stats, for seasons 2016-2025, season types
  * regular + post + pre. Each stat lands in its own column via
- * lib/sleeper-stats-map.ts; the full raw payload is preserved in
- * player_stats.metadata.
+ * lib/sleeper-stats-map.ts; the full raw payload (including opponent, team,
+ * game_id, and the nested stat map) is preserved in player_stats.metadata.
  *
- *   GET https://api.sleeper.app/v1/stats/nfl/{seasonType}/{season}/{week}
+ *   GET https://api.sleeper.com/stats/nfl/{season}/{week}?season_type={type}
+ *
+ * (See lib/sleeper.ts getWeeklyStats: the .com host carries the per-game
+ * opponent that the legacy .app/v1 endpoint omitted.)
  *
  * Player matching: Sleeper stats are keyed by Sleeper player_id, which we map
  * to our players.id via external_ids.sleeper. Entries with no match in our

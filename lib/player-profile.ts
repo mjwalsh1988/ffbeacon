@@ -400,10 +400,17 @@ export async function loadWeeklyStats(
   return (data ?? []) as WeeklyStatRow[];
 }
 
-/** Read a fantasy-points key out of a weekly row's metadata jsonb. */
+/** Read a fantasy-points key out of a weekly row's metadata jsonb.
+ *
+ * Rows synced from api.sleeper.com nest the raw stat map under `.stats`; older
+ * rows stored the flat stat object directly. Prefer the nested map, falling
+ * back to the top level so both shapes read correctly. */
 export function readPoints(metadata: unknown, key: ScoringKey): number {
   if (metadata && typeof metadata === "object") {
-    const v = (metadata as Record<string, unknown>)[key];
+    const obj = metadata as Record<string, unknown>;
+    const stats =
+      obj.stats && typeof obj.stats === "object" ? (obj.stats as Record<string, unknown>) : obj;
+    const v = stats[key];
     const num = typeof v === "string" ? parseFloat(v) : typeof v === "number" ? v : 0;
     return Number.isFinite(num) ? num : 0;
   }
