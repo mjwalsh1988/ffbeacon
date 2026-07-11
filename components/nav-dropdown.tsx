@@ -25,10 +25,14 @@ export function NavDropdown({
   label,
   href,
   items,
+  overviewLabel = "All tools",
+  overviewDescription = "See every tool on one page",
 }: {
   label: string;
   href: Route;
   items: NavChild[];
+  overviewLabel?: string;
+  overviewDescription?: string;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -146,9 +150,9 @@ export function NavDropdown({
 
   // The overview link sits at index 0, children follow in order.
   const overview: NavChild = {
-    label: "All tools",
+    label: overviewLabel,
     href,
-    description: "See every tool on one page",
+    description: overviewDescription,
   };
   const entries = [overview, ...items];
 
@@ -177,7 +181,7 @@ export function NavDropdown({
         {label}
         <ChevronDown
           aria-hidden="true"
-          className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (

@@ -3465,6 +3465,336 @@ export type Database = {
         };
         Relationships: [];
       };
+      signal_scout_activity_counters: {
+        Row: {
+          action: string;
+          count: number;
+          game_date: string;
+          identity_key: string;
+          last_at: string;
+        };
+        Insert: {
+          action: string;
+          count?: number;
+          game_date: string;
+          identity_key: string;
+          last_at?: string;
+        };
+        Update: {
+          action?: string;
+          count?: number;
+          game_date?: string;
+          identity_key?: string;
+          last_at?: string;
+        };
+        Relationships: [];
+      };
+      signal_scout_daily_scores: {
+        Row: {
+          first_play_at: string;
+          game_date: string;
+          points: number;
+          rounds: number;
+          user_id: string;
+          wins: number;
+        };
+        Insert: {
+          first_play_at?: string;
+          game_date: string;
+          points?: number;
+          rounds?: number;
+          user_id: string;
+          wins?: number;
+        };
+        Update: {
+          first_play_at?: string;
+          game_date?: string;
+          points?: number;
+          rounds?: number;
+          user_id?: string;
+          wins?: number;
+        };
+        Relationships: [];
+      };
+      signal_scout_guesses: {
+        Row: {
+          created_at: string;
+          guess_number: number;
+          guessed_player_id: string;
+          is_correct: boolean;
+          round_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          guess_number: number;
+          guessed_player_id: string;
+          is_correct: boolean;
+          round_id: string;
+        };
+        Update: {
+          created_at?: string;
+          guess_number?: number;
+          guessed_player_id?: string;
+          is_correct?: boolean;
+          round_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_scout_guesses_guessed_player_id_fkey";
+            columns: ["guessed_player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "signal_scout_guesses_round_id_fkey";
+            columns: ["round_id"];
+            isOneToOne: false;
+            referencedRelation: "signal_scout_rounds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      signal_scout_player_overrides: {
+        Row: {
+          admin_note: string | null;
+          is_hidden: boolean;
+          player_id: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          admin_note?: string | null;
+          is_hidden?: boolean;
+          player_id: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          admin_note?: string | null;
+          is_hidden?: boolean;
+          player_id?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_scout_player_overrides_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: true;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      signal_scout_round_clues: {
+        Row: {
+          clue_key: string;
+          cost: number;
+          display_value: string;
+          is_revealed: boolean;
+          label: string;
+          reveal_order: number | null;
+          revealed_at: string | null;
+          round_id: string;
+          specificity: number;
+          tier: string;
+        };
+        Insert: {
+          clue_key: string;
+          cost: number;
+          display_value: string;
+          is_revealed?: boolean;
+          label: string;
+          reveal_order?: number | null;
+          revealed_at?: string | null;
+          round_id: string;
+          specificity: number;
+          tier: string;
+        };
+        Update: {
+          clue_key?: string;
+          cost?: number;
+          display_value?: string;
+          is_revealed?: boolean;
+          label?: string;
+          reveal_order?: number | null;
+          revealed_at?: string | null;
+          round_id?: string;
+          specificity?: number;
+          tier?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_scout_round_clues_round_id_fkey";
+            columns: ["round_id"];
+            isOneToOne: false;
+            referencedRelation: "signal_scout_rounds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      signal_scout_rounds: {
+        Row: {
+          burned_out_at: string | null;
+          completed_at: string | null;
+          game_date: string;
+          guest_id: string | null;
+          hints_used: number;
+          id: string;
+          ip_hash: string | null;
+          score_available: number;
+          score_awarded: number;
+          settings_snapshot: Json;
+          started_at: string;
+          status: string;
+          target_player_id: string;
+          tier_purchases: Json;
+          user_id: string | null;
+          wrong_guess_count: number;
+        };
+        Insert: {
+          burned_out_at?: string | null;
+          completed_at?: string | null;
+          game_date?: string;
+          guest_id?: string | null;
+          hints_used?: number;
+          id?: string;
+          ip_hash?: string | null;
+          score_available: number;
+          score_awarded?: number;
+          settings_snapshot: Json;
+          started_at?: string;
+          status?: string;
+          target_player_id: string;
+          tier_purchases?: Json;
+          user_id?: string | null;
+          wrong_guess_count?: number;
+        };
+        Update: {
+          burned_out_at?: string | null;
+          completed_at?: string | null;
+          game_date?: string;
+          guest_id?: string | null;
+          hints_used?: number;
+          id?: string;
+          ip_hash?: string | null;
+          score_available?: number;
+          score_awarded?: number;
+          settings_snapshot?: Json;
+          started_at?: string;
+          status?: string;
+          target_player_id?: string;
+          tier_purchases?: Json;
+          user_id?: string | null;
+          wrong_guess_count?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "signal_scout_rounds_target_player_id_fkey";
+            columns: ["target_player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      signal_scout_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      signal_scout_user_stats: {
+        Row: {
+          best_daily_streak: number;
+          best_signal_streak: number;
+          current_daily_streak: number;
+          current_signal_streak: number;
+          first_played_at: string;
+          hidden_at: string | null;
+          hidden_by: string | null;
+          hidden_from_leaderboards: boolean;
+          hidden_reason: string | null;
+          last_played_date: string | null;
+          rounds_burned: number;
+          rounds_failed: number;
+          rounds_played: number;
+          rounds_skipped: number;
+          rounds_solved_late: number;
+          rounds_won: number;
+          total_hints: number;
+          total_points: number;
+          total_wrong_guesses: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          best_daily_streak?: number;
+          best_signal_streak?: number;
+          current_daily_streak?: number;
+          current_signal_streak?: number;
+          first_played_at?: string;
+          hidden_at?: string | null;
+          hidden_by?: string | null;
+          hidden_from_leaderboards?: boolean;
+          hidden_reason?: string | null;
+          last_played_date?: string | null;
+          rounds_burned?: number;
+          rounds_failed?: number;
+          rounds_played?: number;
+          rounds_skipped?: number;
+          rounds_solved_late?: number;
+          rounds_won?: number;
+          total_hints?: number;
+          total_points?: number;
+          total_wrong_guesses?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          best_daily_streak?: number;
+          best_signal_streak?: number;
+          current_daily_streak?: number;
+          current_signal_streak?: number;
+          first_played_at?: string;
+          hidden_at?: string | null;
+          hidden_by?: string | null;
+          hidden_from_leaderboards?: boolean;
+          hidden_reason?: string | null;
+          last_played_date?: string | null;
+          rounds_burned?: number;
+          rounds_failed?: number;
+          rounds_played?: number;
+          rounds_skipped?: number;
+          rounds_solved_late?: number;
+          rounds_won?: number;
+          total_hints?: number;
+          total_points?: number;
+          total_wrong_guesses?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       signals: {
         Row: {
           accent: string;
@@ -3979,6 +4309,24 @@ export type Database = {
         Args: { p_ip: string; p_username: string; p_window_seconds?: number };
         Returns: boolean;
       };
+      try_claim_signal_scout_action: {
+        Args: {
+          p_action: string;
+          p_game_date: string;
+          p_identity_key: string;
+          p_window_seconds?: number;
+        };
+        Returns: boolean;
+      };
+      try_start_signal_scout_guest_round: {
+        Args: {
+          p_game_date: string;
+          p_guest_id: string;
+          p_ip_hash: string;
+          p_limit: number;
+        };
+        Returns: boolean;
+      };
     };
     Enums: {
       [_ in never]: never;
@@ -4000,12 +4348,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4027,13 +4375,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4052,13 +4399,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4077,13 +4423,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4096,11 +4441,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

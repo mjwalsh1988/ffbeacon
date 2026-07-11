@@ -32,6 +32,13 @@ export type NavItem = {
   label: string;
   href: Route;
   children?: NavChild[];
+  /** Label for the dropdown's index-page entry (the row that links to
+   * `href` itself, above the children). Defaults to "All tools" in
+   * NavDropdown for backward compatibility when omitted. */
+  overviewLabel?: string;
+  /** Description line for the dropdown's index-page entry. Defaults to
+   * "See every tool on one page" in NavDropdown when omitted. */
+  overviewDescription?: string;
 };
 
 /** Every tool on the site, in display order. Single source of truth shared
@@ -67,8 +74,26 @@ export const TOOLS_NAV: NavChild[] = [
   },
 ];
 
+/** Every game on the site, in display order. Single source of truth shared
+ * by the header dropdown, the mobile menu, and (conceptually) the footer
+ * Games column. Keep descriptions short and jargon-free. */
+export const GAMES_NAV: NavChild[] = [
+  {
+    label: "Signal Scout",
+    href: "/games/signal-scout",
+    description: "Decode the profile. Find the player.",
+  },
+];
+
 export const PRIMARY_NAV: NavItem[] = [
   { label: "Tools", href: "/tools", children: TOOLS_NAV },
+  {
+    label: "Games",
+    href: "/games",
+    children: GAMES_NAV,
+    overviewLabel: "All Games",
+    overviewDescription: "See every game on one page",
+  },
   { label: "Rankings", href: "/rankings" },
   { label: "The Beacon Brief", href: "/brief" },
   { label: "Guides", href: "/guides" },
@@ -126,6 +151,18 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["faab", "waiver", "bid", "budget", "add"],
   },
   {
+    label: "Signal Scout",
+    href: "/games/signal-scout",
+    description: "Decode the profile. Find the player.",
+    keywords: ["game", "games", "guess", "mystery", "player", "scout", "clues", "trivia"],
+  },
+  {
+    label: "Games",
+    href: "/games",
+    description: "Free fantasy football games built on real data",
+    keywords: ["games", "play", "fun", "arcade"],
+  },
+  {
     label: "The Beacon Brief",
     href: "/brief",
     description: "Fantasy football news, injuries, and transactions",
@@ -161,6 +198,13 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
     ],
   },
   {
+    heading: "Games",
+    links: [
+      { label: "All Games", href: "/games" },
+      { label: "Signal Scout", href: "/games/signal-scout" },
+    ],
+  },
+  {
     heading: "Learn",
     links: [
       { label: "The Beacon Brief", href: "/brief" },
@@ -183,7 +227,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
 /**
  * Social profiles shown as icons in the footer About column. The Discord
  * link points at the internal /join redirect so the shareable URL on
- * marketing posts is `ffbeacon.com/join` rather than the raw invite — the
+ * marketing posts is `ffbeacon.com/join` rather than the raw invite, since the
  * route serves an OG-branded landing page and then forwards the visitor.
  */
 export const SOCIAL_LINKS: Array<{

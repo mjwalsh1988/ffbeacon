@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
  * (constrained width, fully rounded) but reuses the same slide-up
  * animation so the visual language stays consistent across breakpoints.
  *
- * Differs from {@link BottomSheet} only in viewport behavior — kept as a
+ * Differs from {@link BottomSheet} only in viewport behavior, kept as a
  * separate component so existing mobile-only callers aren't accidentally
  * promoted to desktop. Wire your own header/content/footer inside.
  */
@@ -48,7 +48,7 @@ export function SlideUpDialog({
       return;
     }
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    // Wait for the sheet to be visible before moving focus — focusing into
+    // Wait for the sheet to be visible before moving focus: focusing into
     // an off-screen panel confuses screen readers.
     const focusTimer = window.setTimeout(() => {
       const focusables = sheetRef.current?.querySelectorAll<HTMLElement>(
@@ -104,19 +104,19 @@ export function SlideUpDialog({
         type="button"
         aria-label="Close dialog"
         onClick={onClose}
-        className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${
+        className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none ${
           entered ? "opacity-100" : "opacity-0"
         }`}
       />
       <div
         ref={sheetRef}
-        className={`relative flex w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out sm:rounded-modal sm:border ${
+        className={`relative flex w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:rounded-modal sm:border ${
           entered ? "translate-y-0" : "translate-y-full"
         }`}
         style={{
           paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
           // Pull desktop view slightly above center so it doesn't fight the
-          // viewport's vertical centroid — feels more "modal" than "panel".
+          // viewport's vertical centroid, feels more "modal" than "panel".
           maxHeight: "min(90vh, 720px)",
         }}
       >

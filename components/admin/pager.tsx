@@ -1,12 +1,23 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-/** Build the href for a given page. Page 1 drops the query param so the base
- * URL stays canonical. An optional hash re-anchors the scroll position to the
- * section itself instead of the page top, useful when the paginated section
- * sits partway down a long dashboard page. */
-function pageHref(basePath: string, paramName: string, page: number, hash?: string): string {
-  const base = page <= 1 ? basePath : `${basePath}?${paramName}=${page}`;
+/** Build the href for a given page. Page 1 drops the page query param so the
+ * base URL stays canonical. An optional hash re-anchors the scroll position
+ * to the section itself instead of the page top, useful when the paginated
+ * section sits partway down a long dashboard page. An optional extraParams
+ * map merges other active query params (e.g. a search term) into every page
+ * link so paginating does not silently drop them. */
+function pageHref(
+  basePath: string,
+  paramName: string,
+  page: number,
+  hash?: string,
+  extraParams?: Record<string, string>,
+): string {
+  const params = new URLSearchParams(extraParams);
+  if (page > 1) params.set(paramName, String(page));
+  const qs = params.toString();
+  const base = qs ? `${basePath}?${qs}` : basePath;
   return hash ? `${base}#${hash}` : base;
 }
 
@@ -24,6 +35,7 @@ export function Pager({
   totalPages,
   label,
   hash,
+  extraParams,
 }: {
   basePath: string;
   paramName: string;
@@ -32,6 +44,8 @@ export function Pager({
   label: string;
   /** Section id to scroll back to on navigation instead of the page top. */
   hash?: string;
+  /** Other active query params (e.g. a search term) to carry onto every page link. */
+  extraParams?: Record<string, string>;
 }) {
   if (totalPages <= 1) return null;
 
@@ -50,7 +64,7 @@ export function Pager({
     >
       {hasPrev ? (
         <Link
-          href={pageHref(basePath, paramName, currentPage - 1, hash)}
+          href={pageHref(basePath, paramName, currentPage - 1, hash, extraParams)}
           rel="prev"
           className={btn}
         >
@@ -71,7 +85,7 @@ export function Pager({
 
       {hasNext ? (
         <Link
-          href={pageHref(basePath, paramName, currentPage + 1, hash)}
+          href={pageHref(basePath, paramName, currentPage + 1, hash, extraParams)}
           rel="next"
           className={btn}
         >

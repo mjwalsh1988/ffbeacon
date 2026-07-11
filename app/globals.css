@@ -225,3 +225,54 @@
     background-image: none;
   }
 }
+
+/**
+ * Signal Scout mystery profile silhouette: a static repeating-line "scanline"
+ * texture plus one slow animated sweep line, standing in for the redacted
+ * portrait while the target is unknown. The sweep is a thin cyan-tinted
+ * gradient band translating down the portrait on a ::after; the static line
+ * pattern lives on the element itself so the texture survives even when the
+ * sweep animation is disabled. Reduced-motion keeps the static lines and
+ * removes only the moving sweep, so the "scanning" read stays legible
+ * without motion.
+ */
+.scout-scanline {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(34, 211, 238, 0.06) 0px,
+    rgba(34, 211, 238, 0.06) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+
+.scout-scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(34, 211, 238, 0.25) 48%,
+    transparent 100%
+  );
+  background-size: 100% 220%;
+  animation: scout-scanline-sweep 4.5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes scout-scanline-sweep {
+  from {
+    background-position: 0% -220%;
+  }
+  to {
+    background-position: 0% 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scout-scanline::after {
+    animation: none;
+    background-image: none;
+  }
+}

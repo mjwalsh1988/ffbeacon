@@ -11,6 +11,17 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./", import.meta.url)),
     },
   },
+  // tsconfig.json sets jsx: "preserve" for Next.js, which vitest's transform
+  // pipeline (oxc in this vitest version) will not compile, so any test
+  // importing a .tsx module (for a non-JSX export like aggregateSeasons in
+  // components/player-profile/stat-shaping.tsx) would fail at the
+  // import-analysis step. Overriding to the automatic runtime here only
+  // affects how vitest transforms sources; the Next build is untouched.
+  oxc: {
+    jsx: {
+      runtime: "automatic",
+    },
+  },
   test: {
     environment: "node",
     include: ["lib/**/*.test.ts", "app/**/*.test.ts"],

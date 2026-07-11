@@ -183,7 +183,8 @@
       "PowerShell(git commit *)",
       "Bash(echo \"EXIT: $?\")",
       "Bash(gh search *)",
-      "WebFetch(domain:lordskunk.com)"
+      "WebFetch(domain:lordskunk.com)",
+      "Bash(python *)"
     ]
   },
   "enabledMcpjsonServers": [

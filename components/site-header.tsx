@@ -30,7 +30,7 @@ async function loadHeaderData(): Promise<{
 }> {
   try {
     const supabase = await createClient();
-    // Cached helpers — page-level callers share these Promises with us.
+    // Cached helpers: page-level callers share these Promises with us.
     const [formats, sources, { data: userData }] = await Promise.all([
       getActiveFormats(supabase),
       getAvailableSources(supabase),
@@ -149,6 +149,8 @@ export async function SiteHeader() {
                 label={item.label}
                 href={item.href}
                 items={item.children}
+                overviewLabel={item.overviewLabel}
+                overviewDescription={item.overviewDescription}
               />
             ) : (
               <HeaderNavLink key={item.href} href={item.href}>

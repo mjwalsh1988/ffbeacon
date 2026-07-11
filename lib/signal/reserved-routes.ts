@@ -30,6 +30,7 @@ export const RESERVED_ROUTE_SEGMENTS = [
   "auth",
   "author",
   "brief",
+  "games",
   "guides",
   "join",
   "leagues",

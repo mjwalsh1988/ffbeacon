@@ -13,6 +13,7 @@ import {
   Scale,
   Coins,
   Timer,
+  Radar,
   type LucideIcon,
 } from "lucide-react";
 
@@ -66,6 +67,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: Timer,
     description:
       "Live draft helper settings: enable the tool, sync cooldown and limits, and the Best Available / Team Need recommendation tuning.",
+  },
+  {
+    href: "/admin/signal-scout",
+    label: "Signal Scout",
+    icon: Radar,
+    description: "Signal Scout game admin: activity, integrity, players, users, settings.",
   },
   {
     href: "/admin/system",

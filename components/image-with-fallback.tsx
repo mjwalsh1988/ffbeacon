@@ -66,10 +66,17 @@ export function ImageWithFallback({
     );
   }
 
+  // Empty alt means the caller marked this decorative (e.g. the name is
+  // already shown as visible text next to it). role="img" with no name would
+  // still surface an unlabeled graphic to assistive tech, so hide it outright
+  // instead of leaving a phantom announcement.
+  const isDecorative = alt === "";
+
   return (
     <span
-      role="img"
-      aria-label={alt || undefined}
+      role={isDecorative ? undefined : "img"}
+      aria-hidden={isDecorative ? true : undefined}
+      aria-label={isDecorative ? undefined : alt}
       title={alt || undefined}
       style={dims}
       className={`inline-flex flex-shrink-0 items-center justify-center border border-line bg-base text-ink-subtle ${shape} ${className}`}

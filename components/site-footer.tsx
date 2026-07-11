@@ -7,9 +7,10 @@ export function SiteFooter() {
   return (
     <footer className="mt-24 border-t border-line bg-surface/50">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        {/* Top grid: About column (wider) on the left, the three navigational
-            columns on the right. Mobile stacks them linearly. */}
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
+        {/* Top grid: About column (wider) on the left, the navigational
+            columns on the right. Mobile stacks them linearly, sm pairs
+            them 2-up, md fits three across, lg lays out the full row. */}
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
           <AboutColumn />
           {FOOTER_COLUMNS.map((column) => (
             <nav
