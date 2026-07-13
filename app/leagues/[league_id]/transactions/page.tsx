@@ -102,7 +102,7 @@ export default async function LeagueTransactionsPage({
   if (!league) notFound();
 
   // Shared header action data (in-view switcher + admin refresh gate).
-  const { otherLeagues, canForceRefresh } = await loadLeagueHeaderActions(
+  const { otherLeagues } = await loadLeagueHeaderActions(
     supabase,
     league.id,
     sleeperLeagueId,
@@ -255,7 +255,6 @@ export default async function LeagueTransactionsPage({
               copyAriaLabel="Copy link to this league's transactions"
               otherLeagues={otherLeagues}
               searchedUsername={searchedUsername}
-              canForceRefresh={canForceRefresh}
             />
           </div>
         </div>

@@ -58,17 +58,17 @@ describe("privateJson", () => {
   });
 });
 
-describe("clientIp", () => {
-  it("reads the first entry of x-forwarded-for, trimmed", () => {
-    expect(clientIp(req({ "x-forwarded-for": " 1.2.3.4 , 5.6.7.8" }))).toBe("1.2.3.4");
+describe("clientIp (trusted derivation, FFB-SEC-008)", () => {
+  it("uses the rightmost x-forwarded-for hop, not the client-spoofable leftmost", () => {
+    expect(clientIp(req({ "x-forwarded-for": " 1.2.3.4 , 5.6.7.8" }))).toBe("5.6.7.8");
   });
 
-  it("falls back to x-real-ip when x-forwarded-for is absent", () => {
+  it("prefers x-real-ip when x-forwarded-for is absent", () => {
     expect(clientIp(req({ "x-real-ip": "9.9.9.9" }))).toBe("9.9.9.9");
   });
 
-  it("falls back to 'unknown' when neither header is present", () => {
-    expect(clientIp(req())).toBe("unknown");
+  it("fails closed to a stable sentinel when neither header is present", () => {
+    expect(clientIp(req())).toBe("unknown-ip");
   });
 });
 

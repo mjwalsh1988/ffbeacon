@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import {
   Trophy,
@@ -51,7 +52,7 @@ export default function AuthorMichaelPage() {
       <script
         type="application/ld+json"
         suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(personSchema) }}
       />
       <Hero />
       <StorySection />

@@ -9,6 +9,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./", import.meta.url)),
+      // "server-only" is provided by Next at build time and is not resolvable under
+      // Vitest. Stub it so modules that guard with `import "server-only"` can be
+      // imported in unit tests. The guard still applies in the real Next build.
+      "server-only": fileURLToPath(new URL("./test/server-only-stub.ts", import.meta.url)),
     },
   },
   // tsconfig.json sets jsx: "preserve" for Next.js, which vitest's transform

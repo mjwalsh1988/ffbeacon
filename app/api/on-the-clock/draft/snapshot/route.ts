@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
-import { claimLookup } from "@/lib/on-the-clock/cache";
+import { claimLookup, claimIpBudget } from "@/lib/on-the-clock/cache";
 import { getOrCreateDraftSnapshot } from "@/lib/on-the-clock/draft-snapshot";
 import { isValidDraftId } from "@/lib/on-the-clock/validation";
+import { getTrustedClientIp } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,12 +36,6 @@ const LOOKUP_WINDOW_SECONDS = 10;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: PRIVATE_HEADERS });
-}
-
-function clientIp(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 /** Display-only league name hint: trimmed, control characters out, capped. */
@@ -86,15 +81,20 @@ export async function GET(req: Request) {
   }
 
   if (!existingRow) {
+    // Only the CREATE path fans out to Sleeper, so the guards live here. Per-IP budget
+    // (FFB-SEC-002) first, then the per-(ip, draft) cooldown. Fail closed.
+    const ip = getTrustedClientIp(req);
     let allowed: boolean;
     try {
-      allowed = await claimLookup(admin, {
-        ip: clientIp(req),
-        username: `snap:${draftId}`,
-        windowSeconds: LOOKUP_WINDOW_SECONDS,
-      });
+      allowed =
+        (await claimIpBudget(admin, ip)) &&
+        (await claimLookup(admin, {
+          ip,
+          username: `snap:${draftId}`,
+          windowSeconds: LOOKUP_WINDOW_SECONDS,
+        }));
     } catch (err) {
-      console.error("[on-the-clock/draft/snapshot] lookup guard failed", err);
+      console.error("[on-the-clock/draft/snapshot] rate-limit guard failed", err);
       return json({ error: "Try again in a moment." }, 503);
     }
     if (!allowed) {

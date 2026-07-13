@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeadersForNextConfig } from "./lib/security-headers";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -25,6 +26,17 @@ const nextConfig: NextConfig = {
   // to load on Vercel and crashes the function at import time with
   // FUNCTION_INVOCATION_FAILED before any handler code (or its try/catch) runs.
   serverExternalPackages: ["sharp"],
+  // Global security response headers (FFB-SEC-005). Applied to every route.
+  // CSP ships in Report-Only mode; see lib/security-headers.ts for the path to
+  // enforcement. Vercel additionally injects HSTS on production domains.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: securityHeadersForNextConfig(),
+      },
+    ];
+  },
   // The League Sync tool was renamed to League Pulse. Keep old shared links
   // and bookmarks working by redirecting the legacy path to the new one.
   async redirects() {

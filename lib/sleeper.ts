@@ -4,7 +4,19 @@ const headers = { "user-agent": "ffbeacon/1.0" };
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
-async function safeFetch<T>(url: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T | null> {
+/**
+ * Hard response-size cap for Sleeper fetches (FFB-SEC-020). Generous enough to exceed
+ * the largest legitimate payload (the full NFL players dump is only a few MB) while
+ * bounding a pathological or malformed response so it cannot exhaust server memory.
+ * Callers may override per endpoint if they ever need a different ceiling.
+ */
+export const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+
+async function safeFetch<T>(
+  url: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  maxBytes = MAX_RESPONSE_BYTES,
+): Promise<T | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -14,12 +26,45 @@ async function safeFetch<T>(url: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promis
       signal: controller.signal,
     });
     if (!response.ok) return null;
-    return (await response.json()) as T;
+
+    // Fast reject when the server declares an over-limit body up front.
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > maxBytes) return null;
+
+    // Enforce the cap while reading, since Content-Length may be absent or wrong
+    // (chunked / gzipped responses). Abort past the cap rather than buffer unbounded.
+    const text = await readCapped(response, maxBytes);
+    if (text === null) return null;
+    return JSON.parse(text) as T;
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Read a response body enforcing a hard byte cap. Returns null if the cap is exceeded.
+ * Exported for the FFB-SEC-020 size-guard tests. */
+export async function readCapped(response: Response, maxBytes: number): Promise<string | null> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const text = await response.text();
+    return Buffer.byteLength(text, "utf8") > maxBytes ? null : text;
+  }
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    received += value.byteLength;
+    if (received > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 export type SleeperUser = {

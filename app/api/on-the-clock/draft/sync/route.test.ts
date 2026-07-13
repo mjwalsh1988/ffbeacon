@@ -72,6 +72,8 @@ describe("POST /api/on-the-clock/draft/sync", () => {
       season: "2026",
       cooldownSeconds: 30,
       lockSeconds: 15,
+      // Trusted client IP threaded through for the identifier-independent budget.
+      ipKey: expect.any(String),
     });
   });
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { serializeJsonLd } from "@/lib/json-ld";
 import { Newspaper } from "lucide-react";
 import { SITE } from "@/lib/site";
 import type { BriefSidebarData, FeedArticle } from "@/lib/beacon-brief-feed";
@@ -64,7 +65,7 @@ export function BriefFeed({
       <script
         type="application/ld+json"
         suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
       />
 
       <header className="relative overflow-hidden border-b border-line">

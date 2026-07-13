@@ -22,6 +22,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/server";
+import { getTrustedClientIp } from "@/lib/client-ip";
 import { currentEasternGameDate } from "./streaks";
 import type { RoundIdentity, EngineError } from "./round-engine";
 
@@ -81,13 +82,16 @@ function readCookie(req: Request, name: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Client IP (mirrors app/api/on-the-clock/leagues/route.ts clientIp)
+// Client IP
 // ---------------------------------------------------------------------------
 
+/**
+ * Trusted client IP for the guest IP hash. Delegates to the single shared helper
+ * (FFB-SEC-008) so spoofed x-forwarded-for cannot rotate the guest rate-limit key
+ * and a missing IP fails closed to a stable sentinel rather than opening a bypass.
+ */
 export function clientIp(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
+  return getTrustedClientIp(req);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,18 +99,32 @@ export function clientIp(req: Request): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Fallback salt used only when SIGNAL_SCOUT_IP_SALT is unset. IPs are
- * low-entropy, so a secret salt is what makes the hash non-reversible in
- * practice; this fallback keeps the guest daily cap working with zero
- * setup, and the env var should be set in production for a real secret.
+ * Resolve the guest-IP hashing salt (FFB-SEC-010). IPs are low-entropy, so the secret
+ * salt is what makes the stored hash non-reversible and the guest daily cap
+ * non-precomputable.
+ *
+ * Fails CLOSED in production: a missing SIGNAL_SCOUT_IP_SALT throws rather than falling
+ * back to a repository-known value (which would make prod hashes reversible). Outside
+ * production an explicit, clearly-labelled dev/test value is used so local development
+ * and tests work with zero setup. This value is NEVER used in production.
  */
-const FALLBACK_IP_SALT = "ffbeacon-signal-scout-v1";
+const DEV_ONLY_IP_SALT = "ffbeacon-signal-scout-dev-only-not-for-production";
+
+function resolveIpSalt(): string {
+  const salt = process.env.SIGNAL_SCOUT_IP_SALT;
+  if (salt && salt.trim()) return salt;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SIGNAL_SCOUT_IP_SALT is required in production (guest rounds refused without it).",
+    );
+  }
+  return DEV_ONLY_IP_SALT;
+}
 
 /** sha256 hex of `${salt}:${ip}`. Never returns empty; input coalesces to "unknown" first. */
 export function hashGuestIp(ip: string): string {
   const value = ip && ip.trim() ? ip : "unknown";
-  const salt = process.env.SIGNAL_SCOUT_IP_SALT || FALLBACK_IP_SALT;
-  return createHash("sha256").update(`${salt}:${value}`).digest("hex");
+  return createHash("sha256").update(`${resolveIpSalt()}:${value}`).digest("hex");
 }
 
 // ---------------------------------------------------------------------------

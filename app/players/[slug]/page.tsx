@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { serializeJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
@@ -133,7 +134,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       <script
         type="application/ld+json"
         suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       <article>
         <PlayerHero

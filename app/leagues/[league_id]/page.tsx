@@ -178,10 +178,10 @@ export default async function LeagueDeepViewPage({
     : "/tools/league-pulse";
 
   // Header action data: the searched user's OTHER leagues (for the in-view
-  // switcher, fetched only when ?username= is present) plus the admin /
-  // commissioner gate for the Refresh button. Shared with every other
-  // deep-view surface via loadLeagueHeaderActions.
-  const { otherLeagues, canForceRefresh } = await loadLeagueHeaderActions(
+  // switcher, fetched only when ?username= is present). Shared with every
+  // other deep-view surface via loadLeagueHeaderActions. The Refresh button
+  // is public, so there is no per-viewer refresh gate to compute.
+  const { otherLeagues } = await loadLeagueHeaderActions(
     supabase,
     league.id,
     sleeperLeagueId,
@@ -271,7 +271,6 @@ export default async function LeagueDeepViewPage({
               copyAriaLabel="Copy link to this league"
               otherLeagues={otherLeagues}
               searchedUsername={searchedUsername}
-              canForceRefresh={canForceRefresh}
             />
           </div>
 

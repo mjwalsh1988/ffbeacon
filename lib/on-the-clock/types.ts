@@ -287,7 +287,13 @@ export interface ShapedDraftCache {
 }
 
 /** Status union the sync flow reports back. */
-export type SyncStatus = "synced" | "served-cache" | "cooldown" | "synced-by-other" | "error";
+export type SyncStatus =
+  | "synced"
+  | "served-cache"
+  | "cooldown"
+  | "synced-by-other"
+  | "rate-limited"
+  | "error";
 
 /** Result of a sync attempt: always carries the current shaped cache when available. */
 export interface SyncOutcome {

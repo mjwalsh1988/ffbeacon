@@ -47,3 +47,7 @@ next-env.d.ts
 
 # os
 Thumbs.db
+
+# stray grep/scratch dumps (FFB-SEC-021). Narrow pattern so real project JSON
+# (package.json, tsconfig.json, etc.) is never ignored.
+grep*.json

@@ -4,6 +4,7 @@ import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { readDraftCache } from "@/lib/on-the-clock/cache";
 import { performDraftSync } from "@/lib/on-the-clock/sleeper-sync";
 import { isValidDraftId } from "@/lib/on-the-clock/validation";
+import { getTrustedClientIp } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
@@ -67,9 +68,21 @@ export async function GET(req: Request) {
     season: existing?.draft.season,
     cooldownSeconds: settings.sync.cooldownSeconds,
     lockSeconds: settings.sync.lockSeconds,
+    ipKey: getTrustedClientIp(req),
   });
 
   const cache = outcome.cache ?? existing;
+
+  // Identifier-independent per-IP budget exhausted (FFB-SEC-002). Serve the existing
+  // cache if we have one so ordinary draft-room viewing is never blocked; only a cold
+  // cache with no data to show returns a clear 429.
+  if (outcome.status === "rate-limited" && !cache) {
+    return json(
+      { error: "Too many draft lookups from your network. Try again in a minute." },
+      429,
+    );
+  }
+
   if (!cache) {
     return json({ error: "We could not load that draft." }, 404);
   }

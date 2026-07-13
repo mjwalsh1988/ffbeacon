@@ -100,6 +100,31 @@ export async function claimLookup(
   return Boolean(data);
 }
 
+/**
+ * Identifier-independent per-IP budget for On The Clock Sleeper fan-outs (FFB-SEC-002).
+ * Bounds the TOTAL expensive Sleeper work one source can trigger per window, regardless
+ * of which league/draft id is requested, so a rotating-id script cannot amplify. Tuned
+ * generously so ordinary draft-room usage and shared NAT / office / carrier / VPN IPs
+ * are unaffected; only high-volume rotation trips it. Enforced in front of every Sleeper
+ * fan-out. The RPC name is not yet in the generated DB types (migration 0135), so it is
+ * cast, matching the house pattern for freshly added RPCs.
+ */
+export const IP_BUDGET_WINDOW_SECONDS = 60;
+export const IP_BUDGET_MAX_REQUESTS = 40;
+
+export async function claimIpBudget(admin: Client, ipKey: string): Promise<boolean> {
+  const { data, error } = await admin.rpc(
+    "try_claim_on_the_clock_ip_budget" as never,
+    {
+      p_ip_key: ipKey,
+      p_max_requests: IP_BUDGET_MAX_REQUESTS,
+      p_window_seconds: IP_BUDGET_WINDOW_SECONDS,
+    } as never,
+  );
+  if (error) throw new Error(`try_claim_on_the_clock_ip_budget failed: ${error.message}`);
+  return Boolean(data);
+}
+
 // ---------------------------------------------------------------------------
 // Cache read + shaping (any client; cache tables are public-read)
 // ---------------------------------------------------------------------------

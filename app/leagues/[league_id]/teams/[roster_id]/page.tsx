@@ -138,7 +138,7 @@ export default async function TeamDetailPage({
     context.coverage === "none" ? "N/A" : context.formatDisplay;
 
   // Shared header action data (in-view switcher + admin refresh gate).
-  const { otherLeagues, canForceRefresh } = await loadLeagueHeaderActions(
+  const { otherLeagues } = await loadLeagueHeaderActions(
     supabase,
     league.id,
     sleeperLeagueId,
@@ -186,7 +186,6 @@ export default async function TeamDetailPage({
               copyAriaLabel="Copy link to this team"
               otherLeagues={otherLeagues}
               searchedUsername={searchedUsername}
-              canForceRefresh={canForceRefresh}
               className="sm:col-start-2 sm:row-start-1"
             />
             <p className="text-xs uppercase tracking-wider text-brand-cyan sm:col-start-1 sm:row-start-2">

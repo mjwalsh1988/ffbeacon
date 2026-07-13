@@ -1,26 +1,37 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { pulseLeague } from "@/lib/league-pulse";
-import { getLeagueAdminContext } from "@/lib/league-auth";
 
 const RATE_LIMIT_SECONDS = 60;
 
 /**
  * POST /api/leagues/[league_id]/refresh
  *
- * Force-refresh a Sleeper league. Restricted to:
- *   1. FF Beacon users with user_preferences.is_admin=true, OR
- *   2. The Sleeper commissioner for the specific league (matched by
- *      sleeper username persisted in user_preferences)
+ * PUBLIC by design. Any visitor (guest, signed-in non-commissioner, commissioner,
+ * or FF Beacon admin) may request a refresh of a Sleeper league. There is no
+ * commissioner, admin, or logged-in requirement.
  *
- * Rate limit: one successful refresh per league per RATE_LIMIT_SECONDS.
- * Backed by the league_refresh_attempts table so the limit holds across
- * Next.js instances. Hot reloads and multi-instance deploys can't bypass it.
+ * The only protection is a shared, atomic, per-league cooldown
+ * (RATE_LIMIT_SECONDS): once anyone refreshes a league, nobody can refresh that
+ * same league again until the window elapses. Different leagues have independent
+ * cooldowns.
+ *
+ * Why no commissioner check (FFB-SEC-004 / FFB-SEC-007 reclassification): the old
+ * gate matched a self-declared Sleeper username against the commissioner display
+ * name, which proves nothing about Sleeper account ownership. Because refresh is
+ * intentionally public, that unverified check was both untrustworthy and
+ * unnecessary, so it was removed rather than replaced.
+ *
+ * The cooldown is claimed via the SECURITY DEFINER RPC through the service-role
+ * client. EXECUTE on that RPC is service_role-only (migration 0134), so a guest
+ * cannot occupy the slot by calling PostgREST directly, and cannot spoof the audit
+ * identity: the optional actor id below is derived server-side from the session
+ * cookie, never from the request body. No secret ever reaches the browser.
  *
  * Response shape:
  *   200 OK { ok: true, cached: false, counts: { rosters, users, transactions } }
- *   401     { error: "Authentication required" }
- *   403     { error: "Not authorized to refresh this league" }
+ *   400     { error: "Invalid league id" }
+ *   403     { error: "Invalid request" }        (missing same-origin header)
  *   404     { error: "League not found" }
  *   429     { error: "Rate limited", retryInSeconds: number }
  *   500     { error: <message> }
@@ -30,15 +41,15 @@ export async function POST(
   { params }: { params: Promise<{ league_id: string }> },
 ) {
   const { league_id: sleeperLeagueId } = await params;
-  if (!sleeperLeagueId || sleeperLeagueId.length > 64) {
+  if (!sleeperLeagueId || !/^[a-zA-Z0-9_-]{1,64}$/.test(sleeperLeagueId)) {
     return NextResponse.json({ error: "Invalid league id" }, { status: 400 });
   }
 
-  // Cheap CSRF defense: require a custom header. Same-origin fetches
-  // always set this; cross-origin form posts cannot set custom headers
-  // without a CORS preflight, which we never grant.
-  const requestedWith = _req.headers.get("x-requested-with");
-  if (requestedWith !== "ff-beacon") {
+  // Same-origin defense: require a custom header. Same-origin fetches always set
+  // this; cross-origin form posts cannot set custom headers without a CORS
+  // preflight, which we never grant. This does not restrict guests on our own
+  // site; it only blocks cross-site requests.
+  if (_req.headers.get("x-requested-with") !== "ff-beacon") {
     return NextResponse.json({ error: "Invalid request" }, { status: 403 });
   }
 
@@ -59,28 +70,23 @@ export async function POST(
     return NextResponse.json({ error: "League not found" }, { status: 404 });
   }
 
-  // AUTH: re-validate independent of the client.
-  const auth = await getLeagueAdminContext(supabase, leagueRow.id);
-  if (!auth.userId) {
-    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-  }
-  if (!auth.canForceRefresh) {
-    return NextResponse.json(
-      { error: "Not authorized to refresh this league" },
-      { status: 403 },
-    );
-  }
+  // Optional actor for the audit ledger only. Derived server-side from the
+  // session (trustworthy); guests resolve to null. Never used for authorization
+  // and never read from the request body.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // RATE LIMIT: atomic claim via the SECURITY DEFINER function. The
-  // function returns true when the caller has won the rate-limit race
-  // for this window, false otherwise. This avoids the TOCTOU window
-  // between read-and-write that two concurrent admins could exploit.
+  // RATE LIMIT: atomic claim via the SECURITY DEFINER function, called through the
+  // service-role client. Returns true when the caller wins the cooldown race for
+  // this window, false otherwise. This closes the TOCTOU window between read and
+  // write, so concurrent requests for the same league collapse to a single sync.
   const { data: claimed, error: claimErr } = await adminClient.rpc(
     "try_claim_league_refresh" as never,
     {
       p_league_id: leagueRow.id,
-      p_user_id: auth.userId,
-      p_triggered_via: auth.isAdmin ? "admin" : "commissioner",
+      p_user_id: user?.id ?? null,
+      p_triggered_via: "public",
       p_window_seconds: RATE_LIMIT_SECONDS,
     } as never,
   );

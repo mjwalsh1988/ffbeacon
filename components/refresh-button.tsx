@@ -6,10 +6,6 @@ import { useRouter } from "next/navigation";
 type RefreshButtonProps = {
   /** Sleeper league id used in the POST URL. */
   sleeperLeagueId: string;
-  /** Visible only after the server confirms admin/commissioner. The
-   * server is the source of truth (this prop is a hint, not a security
-   * boundary). The API endpoint re-validates auth. */
-  isAuthorized: boolean;
   /** When true, the button stretches to full width on mobile and reverts
    * to inline content width at sm+. Used in the league header where the
    * mobile action row stacks Refresh below the other controls. */
@@ -17,23 +13,25 @@ type RefreshButtonProps = {
 };
 
 /**
- * Admin / commissioner force-refresh button.
+ * Public force-refresh button.
+ *
+ * Refresh is intentionally available to everyone (guests included); the server
+ * protects the feature with a shared per-league cooldown, not an auth check.
+ * This button therefore always renders.
  *
  * Behavior:
- * - Hidden when `isAuthorized` is false (server determines this)
  * - On click: POST /api/leagues/[id]/refresh
  * - Loading state with aria-live announcement
  * - On success: router.refresh() to re-render the page with fresh data
  * - On rate-limit (429): inline message "Try again in N seconds"
  * - On other error: inline message with the server's reason
  *
- * The endpoint enforces a 60s/league rate limit. This component does
- * NOT pre-check the limit client-side; we let the server be the
- * source of truth so refreshing the page can never bypass it.
+ * The endpoint enforces the shared 60s/league cooldown. This component does
+ * NOT pre-check the limit client-side; we let the server be the source of
+ * truth so refreshing the page can never bypass it.
  */
 export function RefreshButton({
   sleeperLeagueId,
-  isAuthorized,
   mobileFullWidth = false,
 }: RefreshButtonProps) {
   const router = useRouter();
@@ -41,8 +39,6 @@ export function RefreshButton({
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "success" } | { kind: "error"; message: string }
   >({ kind: "idle" });
-
-  if (!isAuthorized) return null;
 
   const handleClick = () => {
     startTransition(async () => {

@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse, after } from "next/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { getTrustedClientIp } from "@/lib/client-ip";
 import { sendEmail } from "@/lib/email/send";
 import { buildFormatReportEmail } from "@/lib/email/report-emails";
 import { validateFormatReportInput } from "@/lib/on-the-clock/report-validate";
@@ -8,59 +10,30 @@ import { validateFormatReportInput } from "@/lib/on-the-clock/report-validate";
  * POST /api/on-the-clock/report-format
  *
  * A visitor reports that On The Clock detected the wrong format for their Sleeper
- * league. We email the report to the team; there is no DB write (the report is a
- * one-off notification, not a queued record). Defenses, in order:
+ * league. We email the report to the team. Defenses, in order:
  *   1. Same-origin check (cheap CSRF/forgery guard for this state-changing POST).
  *   2. Honeypot: a non-empty hidden `company` field means a bot; reject generically.
  *   3. Shared server-side validation (same rules as the client dialog).
- *   4. Coarse per-IP rate limit (hashed IP, in-memory rolling window) so a script
- *      cannot spam the team inbox. In-memory is best-effort on serverless (state is
- *      per-instance) but pairs with the same-origin + honeypot guards; this endpoint
- *      writes no database rows and sends only to the fixed team address, so the blast
- *      radius of the weak limit is one inbox, not user data.
+ *   4. DURABLE per-IP rate limit (FFB-SEC-011): a DB-backed fixed window keyed by a
+ *      hashed, trusted client IP, so the cap holds across serverless instances instead
+ *      of the old per-instance in-memory window that multiplied across cold starts.
  * The email is sent inside after() so a slow provider never adds request latency.
  */
 
 export const runtime = "nodejs";
 
-const RATE_WINDOW_MS = 10 * 60 * 1000;
+const RATE_WINDOW_SECONDS = 10 * 60;
 const RATE_MAX = 4;
+const RATE_BUCKET = "otc_report_format";
 
 const HONEYPOT_MESSAGE =
   "Unable to complete request. Please contact our support team at michael@ffbeacon.com or join our Discord for assistance.";
 
 const ADMIN_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL ?? "michael@ffbeacon.com";
 
-// Per-instance rolling window of report timestamps keyed by hashed IP. Best-effort
-// abuse guard; see the route header for why in-memory is acceptable here.
-const recentByIp = new Map<string, number[]>();
-
-function clientIpHash(req: Request): string | null {
-  const fwd = req.headers.get("x-forwarded-for");
-  const ip = (fwd ? fwd.split(",")[0] : req.headers.get("x-real-ip"))?.trim();
-  if (!ip) return null;
-  return createHash("sha256").update(ip).digest("hex");
-}
-
-/** Returns true when this IP is over the limit; records the attempt when allowed. */
-function isRateLimited(ipHash: string | null): boolean {
-  if (!ipHash) return false;
-  const now = Date.now();
-  const cutoff = now - RATE_WINDOW_MS;
-  const hits = (recentByIp.get(ipHash) ?? []).filter((t) => t > cutoff);
-  if (hits.length >= RATE_MAX) {
-    recentByIp.set(ipHash, hits);
-    return true;
-  }
-  hits.push(now);
-  recentByIp.set(ipHash, hits);
-  // Opportunistic cleanup so the map cannot grow unbounded across cold-lived instances.
-  if (recentByIp.size > 5000) {
-    for (const [key, times] of recentByIp) {
-      if (times.every((t) => t <= cutoff)) recentByIp.delete(key);
-    }
-  }
-  return false;
+/** Hashed, trusted client IP used as the durable rate-limit key (no raw IP stored). */
+function rateLimitKey(req: Request): string {
+  return createHash("sha256").update(getTrustedClientIp(req)).digest("hex");
 }
 
 function sameOrigin(req: Request): boolean {
@@ -124,7 +97,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: v.error }, { status: 400 });
   }
 
-  if (isRateLimited(clientIpHash(req))) {
+  // Durable per-IP limit. Fail closed: if the check cannot be evaluated, do not email.
+  const admin = createAdminClient();
+  let allowed: boolean;
+  try {
+    const { data, error } = await admin.rpc("try_claim_rate_limit" as never, {
+      p_bucket: RATE_BUCKET,
+      p_key: rateLimitKey(req),
+      p_max_requests: RATE_MAX,
+      p_window_seconds: RATE_WINDOW_SECONDS,
+    } as never);
+    if (error) throw new Error(error.message);
+    allowed = Boolean(data);
+  } catch (err) {
+    console.error("[on-the-clock/report-format] rate-limit check failed", err);
+    return NextResponse.json({ ok: false, error: "Try again in a moment." }, { status: 503 });
+  }
+  if (!allowed) {
     return NextResponse.json(
       {
         ok: false,

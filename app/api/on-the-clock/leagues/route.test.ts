@@ -1,18 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Hoisted mocks so tests can control return values and assert call counts.
-const { getSleeperUserMock, getSleeperLeaguesMock, claimLookupMock, loadSettingsMock } = vi.hoisted(
-  () => ({
-    getSleeperUserMock: vi.fn(),
-    getSleeperLeaguesMock: vi.fn(),
-    claimLookupMock: vi.fn(),
-    loadSettingsMock: vi.fn(),
-  }),
-);
+const {
+  getSleeperUserMock,
+  getSleeperLeaguesMock,
+  claimLookupMock,
+  claimIpBudgetMock,
+  loadSettingsMock,
+} = vi.hoisted(() => ({
+  getSleeperUserMock: vi.fn(),
+  getSleeperLeaguesMock: vi.fn(),
+  claimLookupMock: vi.fn(),
+  claimIpBudgetMock: vi.fn(),
+  loadSettingsMock: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/server", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/on-the-clock/settings", () => ({ loadOnTheClockSettings: loadSettingsMock }));
-vi.mock("@/lib/on-the-clock/cache", () => ({ claimLookup: claimLookupMock }));
+vi.mock("@/lib/on-the-clock/cache", () => ({
+  claimLookup: claimLookupMock,
+  claimIpBudget: claimIpBudgetMock,
+}));
 // Format detection is exercised in its own unit test; here we stub it so the route
 // test stays focused on the guard/validation/shaping behavior and does not touch the
 // (empty) admin client. detectLeagueFormat returns a canned detected format.
@@ -43,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   loadSettingsMock.mockResolvedValue(ENABLED);
   claimLookupMock.mockResolvedValue(true);
+  claimIpBudgetMock.mockResolvedValue(true);
 });
 
 describe("GET /api/on-the-clock/leagues", () => {

@@ -32,7 +32,7 @@ import {
 } from "@/lib/sleeper";
 import { mapSleeperToPlayerIds } from "@/lib/players/sleeper-map";
 import { sanitizeSleeperPlayerId } from "./validation";
-import { claimSync, completeSync, releaseSync, readDraftCache } from "./cache";
+import { claimSync, completeSync, releaseSync, readDraftCache, claimIpBudget, IP_BUDGET_WINDOW_SECONDS } from "./cache";
 import type { SyncOutcome } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -46,11 +46,35 @@ export interface PerformSyncParams {
   season?: string;
   cooldownSeconds: number;
   lockSeconds: number;
+  /** Trusted client IP for the identifier-independent Sleeper fan-out budget
+   * (FFB-SEC-002). Checked only after the per-draft claim is won, so cache hits and
+   * cooldown denials never consume budget. Omit to skip (e.g. server-internal syncs). */
+  ipKey?: string;
 }
 
 /** Sleeper uses "0" as an empty-roster-slot placeholder; never store it. */
 function validPlayerId(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && id !== "0";
+}
+
+/**
+ * FFB-SEC-003: resolve the AUTHORITATIVE league binding for a draft. The Sleeper draft
+ * object is the source of truth; any client-supplied league_id/season are hints only.
+ * A hint that disagrees with the draft object is ignored (and flagged as mismatched) so
+ * a crafted request can never bind a draft to the wrong league in the shared cache.
+ * When the draft object omits a value, the hint is used as a fallback.
+ */
+export function resolveAuthoritativeBinding(
+  draft: { league_id?: string | null; season?: string | null },
+  hintLeagueId: string,
+  hintSeason: string,
+): { leagueId: string; season: string; mismatched: boolean } {
+  const leagueId = draft.league_id || hintLeagueId;
+  const season = draft.season || hintSeason;
+  const mismatched = Boolean(
+    draft.league_id && hintLeagueId && draft.league_id !== hintLeagueId,
+  );
+  return { leagueId, season, mismatched };
 }
 
 async function cacheOutcome(
@@ -125,21 +149,57 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
   //    so the user can retry before the cooldown.
   try {
     if (!draftObj) draftObj = await getSleeperDraft(draftId);
-    // traded_picks is fetched alongside the rest; getSleeperTradedPicks returns []
-    // on any failure, so a traded-picks outage degrades to "no traded picks"
-    // (pick ownership falls back to the original draft order) without breaking the
-    // sync. This is the ONLY new Sleeper call: one per sync, inside the same lock.
-    const [picks, users, rosters, tradedPicks] = await Promise.all([
-      getSleeperDraftPicks(draftId),
-      getSleeperLeagueUsers(leagueId),
-      getSleeperRosters(leagueId),
-      getSleeperTradedPicks(leagueId),
-    ]);
-
     if (!draftObj) {
       await releaseSync(admin, draftId);
       return cacheOutcome(admin, draftId, "error", 0, "Could not reach Sleeper. Try again shortly.");
     }
+
+    // FFB-SEC-002: identifier-independent per-IP budget for the Sleeper fan-out. Checked
+    // only here, after the per-draft claim was won and a real fan-out is imminent, so
+    // cache hits and cooldown denials (passive polling) never consume budget. Fails
+    // closed and releases the lock so the cooldown does not advance on a denial.
+    if (params.ipKey) {
+      let withinBudget: boolean;
+      try {
+        withinBudget = await claimIpBudget(admin, params.ipKey);
+      } catch {
+        withinBudget = false;
+      }
+      if (!withinBudget) {
+        await releaseSync(admin, draftId);
+        return cacheOutcome(
+          admin,
+          draftId,
+          "rate-limited",
+          IP_BUDGET_WINDOW_SECONDS,
+          "Too many draft lookups from your network. Try again in a minute.",
+        );
+      }
+    }
+
+    // FFB-SEC-003: the Sleeper draft object is the AUTHORITATIVE league binding. Any
+    // client-supplied league_id/season are hints only; a mismatch is ignored in favor
+    // of the draft's true league so a crafted request cannot poison the shared cache,
+    // and every resync self-heals a previously poisoned row.
+    const binding = resolveAuthoritativeBinding(draftObj, leagueId, season);
+    if (binding.mismatched) {
+      console.warn(
+        `[on-the-clock] ignoring mismatched league_id hint for draft ${draftId} (authoritative league from draft object used)`,
+      );
+    }
+    const authoritativeLeagueId = binding.leagueId;
+    const authoritativeSeason = binding.season;
+
+    // traded_picks is fetched alongside the rest; getSleeperTradedPicks returns []
+    // on any failure, so a traded-picks outage degrades to "no traded picks"
+    // (pick ownership falls back to the original draft order) without breaking the
+    // sync. All league fetches use the AUTHORITATIVE league id, never the hint.
+    const [picks, users, rosters, tradedPicks] = await Promise.all([
+      getSleeperDraftPicks(draftId),
+      getSleeperLeagueUsers(authoritativeLeagueId),
+      getSleeperRosters(authoritativeLeagueId),
+      getSleeperTradedPicks(authoritativeLeagueId),
+    ]);
 
     // Resolve every drafted player's id once, here.
     const sleeperPlayerIds = picks
@@ -167,8 +227,8 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
     const { error: draftErr } = await admin.from("on_the_clock_draft_cache").upsert(
       {
         sleeper_draft_id: draftId,
-        sleeper_league_id: leagueId,
-        season,
+        sleeper_league_id: authoritativeLeagueId,
+        season: authoritativeSeason,
         draft_status: draftObj.status ?? null,
         draft_type: draftObj.type ?? null,
         pick_count: picks.length,

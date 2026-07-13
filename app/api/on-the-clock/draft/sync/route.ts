@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { performDraftSync } from "@/lib/on-the-clock/sleeper-sync";
 import { isValidDraftId, isValidLeagueId, isValidSeason } from "@/lib/on-the-clock/validation";
+import { getTrustedClientIp } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,19 @@ export async function POST(req: Request) {
       season,
       cooldownSeconds: settings.sync.cooldownSeconds,
       lockSeconds: settings.sync.lockSeconds,
+      ipKey: getTrustedClientIp(req),
     });
+    // Identifier-independent per-IP Sleeper fan-out budget exhausted (FFB-SEC-002).
+    if (outcome.status === "rate-limited") {
+      return json(
+        {
+          error: outcome.error ?? "Too many draft lookups from your network. Try again in a minute.",
+          cache: outcome.cache,
+          retryInSeconds: outcome.cooldownRemainingSeconds,
+        },
+        429,
+      );
+    }
     return json({
       ok: outcome.status !== "error",
       status: outcome.status,

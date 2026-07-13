@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getAllSleeperTransactions } from "@/lib/sleeper";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
-import { claimLookup } from "@/lib/on-the-clock/cache";
+import { claimLookup, claimIpBudget } from "@/lib/on-the-clock/cache";
 import { isValidLeagueId } from "@/lib/on-the-clock/validation";
 import { shapeLeagueTrades } from "@/lib/on-the-clock/transactions-shape";
+import { getTrustedClientIp } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +40,6 @@ function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: PRIVATE_HEADERS });
 }
 
-function clientIp(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
 export async function GET(req: Request) {
   if (req.headers.get("x-requested-with") !== "ff-beacon") {
     return json({ error: "Invalid request" }, 403);
@@ -62,17 +57,22 @@ export async function GET(req: Request) {
     return json({ error: "On The Clock is not available yet." }, 503);
   }
 
-  // Durable abuse guard BEFORE the Sleeper fan-out (this walks the league's weekly
-  // transaction feed). Keyed per (ip, league); fail closed if it cannot evaluate.
+  // Durable abuse guards BEFORE the Sleeper fan-out (this walks the league's weekly
+  // transaction feed). First the identifier-independent per-IP budget (FFB-SEC-002),
+  // then the per-(ip, league) cooldown. Short-circuits so a globally throttled caller
+  // never consumes the per-league slot. Fail closed if either cannot evaluate.
+  const ip = getTrustedClientIp(req);
   let allowed: boolean;
   try {
-    allowed = await claimLookup(admin, {
-      ip: clientIp(req),
-      username: `txns:${leagueId}`,
-      windowSeconds: LOOKUP_WINDOW_SECONDS,
-    });
+    allowed =
+      (await claimIpBudget(admin, ip)) &&
+      (await claimLookup(admin, {
+        ip,
+        username: `txns:${leagueId}`,
+        windowSeconds: LOOKUP_WINDOW_SECONDS,
+      }));
   } catch (err) {
-    console.error("[on-the-clock/transactions] lookup guard failed", err);
+    console.error("[on-the-clock/transactions] rate-limit guard failed", err);
     return json({ error: "Try again in a moment." }, 503);
   }
   if (!allowed) {

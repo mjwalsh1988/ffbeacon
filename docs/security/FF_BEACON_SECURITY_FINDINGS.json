@@ -1,0 +1,2036 @@
+{
+  "audit_metadata": {
+    "project": "FF Beacon",
+    "audit_date": "2026-07-11",
+    "commit": "f5b698604922ed705bb8f01c60fd745f12d624bf",
+    "branch": "main",
+    "auditor": "Claude",
+    "report_path": "docs/security/FF_BEACON_END_TO_END_SECURITY_AUDIT.md",
+    "scope": "Full repository static review plus read-only dynamic validation against Supabase project cilvpyivysjxpxbudkfa via MCP. No production writes performed.",
+    "no_remediation_statement": "No application code, migration, configuration, dependency, lockfile, or test was modified. No production data was modified. The two report files are the only intended repository changes.",
+    "remediation_report_path": "docs/security/FF_BEACON_SECURITY_REMEDIATION_REPORT.md",
+    "remediation_date": "2026-07-13",
+    "remediation_note": "Remediation completed 2026-07-13. Migrations 0133-0138 were applied to production (project cilvpyivysjxpxbudkfa) in the documented order and verified; the full remediation was committed and pushed to main. Database findings are live; application-code findings go live on the next Vercel deploy of the pushed commit. Deferred/accepted/manual items are unchanged. See FF_BEACON_SECURITY_REMEDIATION_REPORT.md.",
+    "remediation_applied_date": "2026-07-13"
+  },
+  "summary": {
+    "critical": 1,
+    "high": 0,
+    "medium": 6,
+    "low": 6,
+    "informational": 8,
+    "total": 21
+  },
+  "findings": [
+    {
+      "id": "FFB-SEC-001",
+      "title": "user_preferences.is_admin self-promotion via INSERT",
+      "severity": "critical",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "authorization",
+        "privilege-escalation"
+      ],
+      "owasp": [
+        "A01:2021 Broken Access Control"
+      ],
+      "cwe": [
+        "CWE-269",
+        "CWE-284"
+      ],
+      "affected_components": [
+        "Supabase user_preferences RLS",
+        "admin surface",
+        "lib/admin-auth.ts"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0008_user_preferences.sql",
+          "start_line": 26,
+          "end_line": 40,
+          "symbol": "user_preferences_insert_own, user_preferences_delete_own",
+          "reason": "insert_own has no is_admin column guard; delete_own lets owner remove their row"
+        },
+        {
+          "path": "supabase/migrations/0018_user_preferences_is_admin.sql",
+          "start_line": 20,
+          "end_line": 41,
+          "symbol": "user_preferences_block_is_admin_change trigger",
+          "reason": "guard fires BEFORE UPDATE only, not INSERT"
+        },
+        {
+          "path": "lib/admin-auth.ts",
+          "start_line": 24,
+          "end_line": 64,
+          "symbol": "getIsAdmin, requireAdmin",
+          "reason": "read is_admin as the authorization source"
+        }
+      ],
+      "affected_routes": [
+        "/admin/*",
+        "all admin APIs and server actions"
+      ],
+      "affected_tables": [
+        "user_preferences"
+      ],
+      "technical_description": "The insert_own RLS policy only checks auth.uid() = user_id with no restriction on the is_admin column, delete_own lets the owner delete their row, and the protective trigger fires only on UPDATE. Live schema confirms authenticated has table INSERT and DELETE plus INSERT on the is_admin column, the PK is user_id, and no auth.users trigger creates the row. An authenticated user can INSERT (or DELETE then INSERT) their own row with is_admin true and pass requireAdmin.",
+      "laymans_description": "The app decides admin status from a single flag in each user's settings row. There is a lock that stops flipping it on an existing row but none that stops deleting the row and creating a new one with the flag already true. Any logged-in user can do this through the public database API and become an administrator.",
+      "impact": "Complete administrative takeover: read/write of admin-managed config, AI prompts, Discord webhook secret URLs, the users table, and all admin operations, plus integrity control over content shown to all users.",
+      "likelihood": "High. A normal registered account plus the browser-embedded publishable key. Two-line automatable script. No victim interaction.",
+      "prerequisites": [
+        "registered authenticated account",
+        "publishable key (public)"
+      ],
+      "existing_mitigations": [
+        "BEFORE UPDATE trigger blocks the flip on an existing row",
+        "requireAdmin enforced server-side"
+      ],
+      "recommended_remediation": [
+        "Replace the trigger to fire BEFORE INSERT OR UPDATE and reject non-service_role writes that set is_admin true, failing closed on null jwt claims.",
+        "Add column-level grants: revoke INSERT/UPDATE on user_preferences from authenticated and grant only the non-admin columns.",
+        "After deploy, re-audit the user_preferences admin set."
+      ],
+      "required_tests": [
+        "Negative: authenticated DELETE-then-INSERT with is_admin true is rejected or coerced to false.",
+        "Negative: fresh user direct INSERT of is_admin true is rejected or coerced to false.",
+        "Positive: authenticated can still upsert non-admin preferences.",
+        "Positive: service_role can still set is_admin."
+      ],
+      "verification_criteria": [
+        "A scripted authenticated attempt (INSERT or UPDATE, with or without prior DELETE) cannot result in is_admin true; requireAdmin stays false."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 1,
+      "related_findings": [
+        "FFB-SEC-014"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "Migration 0133: BEFORE INSERT OR UPDATE trigger (SECURITY INVOKER, fails closed for anon/authenticated) plus column-level GRANTs that deny is_admin INSERT/UPDATE to anon+authenticated while preserving all other preference columns. Verified in a rolled-back production transaction (15/15 scenarios) and by supabase/tests/security/is_admin_write_hardening.test.sql.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-002",
+      "title": "On The Clock throttle keyed on rotating identifier enables Sleeper call amplification",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "rate-limiting",
+        "business-logic"
+      ],
+      "owasp": [
+        "A04:2021 Insecure Design"
+      ],
+      "cwe": [
+        "CWE-770",
+        "CWE-799"
+      ],
+      "affected_components": [
+        "app/api/on-the-clock/*",
+        "lib/on-the-clock/cache.ts",
+        "lib/sleeper.ts"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0111_try_claim_on_the_clock_lookup.sql",
+          "start_line": 22,
+          "end_line": 22,
+          "symbol": "try_claim_on_the_clock_lookup key",
+          "reason": "throttle key includes the rotating value"
+        },
+        {
+          "path": "lib/on-the-clock/cache.ts",
+          "start_line": 90,
+          "end_line": 101,
+          "symbol": "claimLookup",
+          "reason": "callers pass rotating id in the key"
+        },
+        {
+          "path": "app/api/on-the-clock/transactions/route.ts",
+          "start_line": 67,
+          "end_line": 80,
+          "symbol": "GET",
+          "reason": "txns:leagueId key; up to ~19 Sleeper calls"
+        },
+        {
+          "path": "app/api/on-the-clock/draft/sync/route.ts",
+          "start_line": 39,
+          "end_line": 91,
+          "symbol": "POST",
+          "reason": "no per-IP limit"
+        }
+      ],
+      "affected_routes": [
+        "/api/on-the-clock/leagues",
+        "/api/on-the-clock/transactions",
+        "/api/on-the-clock/draft",
+        "/api/on-the-clock/draft/sync",
+        "/api/on-the-clock/draft/snapshot"
+      ],
+      "affected_tables": [
+        "on_the_clock_lookup_attempts",
+        "on_the_clock_draft_cache"
+      ],
+      "technical_description": "The durable throttle keys on lower(ip||':'||username) and every caller places the attacker-chosen resource id inside the key, so a fresh id is a fresh claimable key. /draft and /draft/sync have no per-IP claim at all. Each rotated id triggers a multi-call Sleeper fan-out and a service-role ledger insert that is never pruned.",
+      "laymans_description": "The tool's speed limit is counted separately per league or draft, so a script asking about many different ones never trips it, and each question makes many Sleeper calls. One attacker can push heavy traffic to Sleeper and grow a tracking table without bound.",
+      "impact": "Sleeper could rate-limit or block FF Beacon egress, Vercel cost rises, and the lookup-attempts ledger grows unbounded.",
+      "likelihood": "Moderate. Scripted client with the x-requested-with header iterating real ids. No auth needed.",
+      "prerequisites": [
+        "x-requested-with header",
+        "valid Sleeper ids"
+      ],
+      "existing_mitigations": [
+        "per-call timeouts",
+        "no retry storm",
+        "per-response caps",
+        "feature flag",
+        "per-draft lock collapses same-draft hits"
+      ],
+      "recommended_remediation": [
+        "Add an identifier-independent per-IP token bucket in front of every Sleeper fan-out, including /draft and /draft/sync.",
+        "Add a retention job for on_the_clock_lookup_attempts.",
+        "Fix FFB-SEC-008 first so the IP is trustworthy."
+      ],
+      "required_tests": [
+        "Negative: rotating ids from one IP throttled after the per-IP budget.",
+        "Positive: normal single-user usage unaffected."
+      ],
+      "verification_criteria": [
+        "Per-source Sleeper call count is bounded; rotating ids from one IP get 429 after the budget."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "moderate",
+      "remediation_order": 8,
+      "related_findings": [
+        "FFB-SEC-008",
+        "FFB-SEC-003"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "Migration 0135: identifier-independent per-IP fixed-window budget RPC (try_claim_on_the_clock_ip_budget) enforced before every Sleeper fan-out across /leagues, /transactions, /draft, /draft/sync, /draft/snapshot; ledger retention prune wired into the nightly cron. Verified by SQL harness + unit tests.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-003",
+      "title": "Draft-cache poisoning via unvalidated client league_id in /draft/sync",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "business-logic",
+        "data-integrity"
+      ],
+      "owasp": [
+        "A04:2021 Insecure Design",
+        "A08:2021 Software and Data Integrity Failures"
+      ],
+      "cwe": [
+        "CWE-345"
+      ],
+      "affected_components": [
+        "lib/on-the-clock/sleeper-sync.ts",
+        "on_the_clock_draft_cache"
+      ],
+      "affected_files": [
+        {
+          "path": "lib/on-the-clock/sleeper-sync.ts",
+          "start_line": 84,
+          "end_line": 182,
+          "symbol": "performDraftSync",
+          "reason": "trusts client league_id/season; upserts mismatched league data"
+        },
+        {
+          "path": "app/api/on-the-clock/draft/sync/route.ts",
+          "start_line": 56,
+          "end_line": 79,
+          "symbol": "POST",
+          "reason": "passes client league_id through"
+        }
+      ],
+      "affected_routes": [
+        "/api/on-the-clock/draft/sync",
+        "/api/on-the-clock/draft"
+      ],
+      "affected_tables": [
+        "on_the_clock_draft_cache"
+      ],
+      "technical_description": "When league_id and season are supplied, performDraftSync fetches league users, rosters, and traded picks with the attacker-supplied league id while draft picks use the real draft id, then upserts the mismatched league data into the shared cache row keyed by draft id. The draft object is fetched but not used to validate the league binding. GET /draft re-syncs from the poisoned value, persisting the corruption.",
+      "laymans_description": "When loading a draft, the tool believes whatever league id the caller sends instead of checking which league the draft actually belongs to, so an attacker can make everyone viewing a draft see the wrong teams and rosters.",
+      "impact": "Corrupted shared draft data for all viewers, including wrong pick ownership in the Trade Analyzer. Persistent until re-synced correctly.",
+      "likelihood": "Moderate. A single crafted POST. Automatable. No auth needed.",
+      "prerequisites": [
+        "valid public draft id",
+        "different valid league id"
+      ],
+      "existing_mitigations": [
+        "ids validated as well-formed",
+        "RLS blocks direct client writes",
+        "no private data exposed"
+      ],
+      "recommended_remediation": [
+        "Treat client league_id and season as hints only; use draftObj.league_id and draftObj.season as authoritative and reject a mismatched supplied league_id before fetching users/rosters/traded_picks."
+      ],
+      "required_tests": [
+        "Negative: mismatched league_id is ignored and the draft's true league is used.",
+        "Positive: correct or absent league_id yields correct data."
+      ],
+      "verification_criteria": [
+        "With a mismatched league_id, the stored cache row reflects the draft's true league."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "moderate",
+      "remediation_order": 9,
+      "related_findings": [
+        "FFB-SEC-002"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "lib/on-the-clock/sleeper-sync.ts now derives the authoritative league/season from the Sleeper draft object (resolveAuthoritativeBinding); client-supplied hints are ignored on mismatch. Resyncs self-heal poisoned rows. Unit-tested.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-004",
+      "title": "Commissioner authorization based on unverified self-declared Sleeper username",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "status": "reclassified",
+      "classifications": [
+        "authorization",
+        "authentication"
+      ],
+      "owasp": [
+        "A01:2021 Broken Access Control",
+        "A07:2021 Identification and Authentication Failures"
+      ],
+      "cwe": [
+        "CWE-290",
+        "CWE-639"
+      ],
+      "affected_components": [
+        "lib/league-auth.ts",
+        "app/my-beacon/sleeper-leagues",
+        "league refresh"
+      ],
+      "affected_files": [
+        {
+          "path": "lib/league-auth.ts",
+          "start_line": 59,
+          "end_line": 72,
+          "symbol": "getLeagueAdminContext",
+          "reason": "matches self-declared username to commissioner display_name"
+        },
+        {
+          "path": "app/my-beacon/sleeper-leagues/save-username-form.tsx",
+          "start_line": 40,
+          "end_line": 52,
+          "symbol": "save-username-form",
+          "reason": "stores arbitrary username with no ownership proof"
+        },
+        {
+          "path": "app/api/leagues/[league_id]/refresh/route.ts",
+          "start_line": 63,
+          "end_line": 72,
+          "symbol": "POST",
+          "reason": "consumes canForceRefresh"
+        }
+      ],
+      "affected_routes": [
+        "/api/leagues/[league_id]/refresh"
+      ],
+      "affected_tables": [
+        "user_preferences",
+        "league_users"
+      ],
+      "technical_description": "user_preferences.sleeper_league_settings.username is written client-side to any string with no Sleeper handshake proving ownership. getLeagueAdminContext grants isCommissionerForLeague and canForceRefresh to whoever's stored username equals the league's commissioner display_name. An attacker who knows a commissioner's Sleeper display name can impersonate them.",
+      "laymans_description": "To act as a league commissioner the app checks whether your typed-in Sleeper username matches the commissioner's name, but never verifies you own that Sleeper account. Knowing the commissioner's name is enough to be treated as them.",
+      "impact": "Impersonate a commissioner to trigger a targeted, rate-limited force-refresh today; larger impact if canForceRefresh is reused for heavier actions.",
+      "likelihood": "Moderate. Registered account plus the target commissioner's public display name.",
+      "prerequisites": [
+        "registered account",
+        "target commissioner display name"
+      ],
+      "existing_mitigations": [
+        "force-refresh re-validates auth server-side and is rate-limited",
+        "only gates a low-impact action today"
+      ],
+      "recommended_remediation": [
+        "Verify Sleeper account ownership before trusting the username; store and match sleeper_user_id rather than display_name; until then restrict force-refresh to admins."
+      ],
+      "required_tests": [
+        "Negative: unverified matching username is denied.",
+        "Positive: verified commissioner allowed."
+      ],
+      "verification_criteria": [
+        "Commissioner authorization no longer succeeds on an unverified matching username string."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "moderate",
+      "remediation_order": 6,
+      "related_findings": [
+        "FFB-SEC-007"
+      ],
+      "remediation": {
+        "status": "reclassified",
+        "note": "Refresh-related commissioner authorization removed. Public league refresh is intentional; the unverified self-declared Sleeper-username check was removed rather than replaced (getLeagueAdminContext / lib/league-auth.ts deleted; refresh route no longer gates on identity). Sleeper account-ownership verification was NOT implemented because it is unnecessary for the public feature. The shared per-league cooldown remains the protection.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-005",
+      "title": "Missing global security response headers",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "configuration",
+        "defense-in-depth"
+      ],
+      "owasp": [
+        "A05:2021 Security Misconfiguration"
+      ],
+      "cwe": [
+        "CWE-1021",
+        "CWE-693"
+      ],
+      "affected_components": [
+        "next.config.ts",
+        "all pages"
+      ],
+      "affected_files": [
+        {
+          "path": "next.config.ts",
+          "start_line": 3,
+          "end_line": 57,
+          "symbol": "nextConfig",
+          "reason": "no headers() function; no CSP, XFO, nosniff, Referrer-Policy, Permissions-Policy"
+        }
+      ],
+      "affected_routes": [
+        "all"
+      ],
+      "affected_tables": [],
+      "technical_description": "next.config.ts defines no headers() and vercel.json sets none, so the site ships without CSP, X-Frame-Options/frame-ancestors, X-Content-Type-Options, Referrer-Policy, and Permissions-Policy. Vercel injects HSTS only. A few API routes set local Referrer-Policy but there is no site-wide baseline.",
+      "laymans_description": "Modern sites send a few safety headers that stop hostile framing, MIME guessing, and unrestricted scripts. This site is not sending them, so a few attack classes have no backstop.",
+      "impact": "Clickjacking of authenticated surfaces; no CSP backstop for the JSON-LD XSS gap; content-type confusion risk.",
+      "likelihood": "Enabling condition; clickjacking requires luring a victim to a hostile framing page.",
+      "prerequisites": [
+        "victim visits a hostile page (for clickjacking)"
+      ],
+      "existing_mitigations": [
+        "state changes use auth plus server actions and the x-requested-with guard",
+        "some API routes set local headers"
+      ],
+      "recommended_remediation": [
+        "Add headers() in next.config.ts with frame-ancestors none (or X-Frame-Options DENY), X-Content-Type-Options nosniff, Referrer-Policy strict-origin-when-cross-origin, a Permissions-Policy, and a starter CSP (Report-Only first)."
+      ],
+      "required_tests": [
+        "Response-header test asserting the headers on sampled routes.",
+        "Manual: OG images, analytics, and inline JSON-LD still function under the CSP."
+      ],
+      "verification_criteria": [
+        "The headers appear on page responses with no functionality regression."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 4,
+      "related_findings": [
+        "FFB-SEC-006"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "next.config.ts headers() applies baseline security headers (nosniff, X-Frame-Options DENY, Referrer-Policy, Permissions-Policy, COOP, CORP) enforced now, plus a Content-Security-Policy-Report-Only. Verified live on a production build response. CSP enforcement is the documented next step in lib/security-headers.ts.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-006",
+      "title": "JSON-LD cross-site scripting via unescaped less-than in a script tag",
+      "severity": "medium",
+      "confidence": "high",
+      "status": "fixed",
+      "classifications": [
+        "injection",
+        "data-exposure"
+      ],
+      "owasp": [
+        "A03:2021 Injection"
+      ],
+      "cwe": [
+        "CWE-79"
+      ],
+      "affected_components": [
+        "app/brief/[slug]/page.tsx",
+        "components/beacon-brief/brief-feed.tsx",
+        "app/players/[slug]/page.tsx"
+      ],
+      "affected_files": [
+        {
+          "path": "app/brief/[slug]/page.tsx",
+          "start_line": 112,
+          "end_line": 112,
+          "symbol": "jsonLd script",
+          "reason": "JSON.stringify with article.title into a script tag, no less-than escaping"
+        },
+        {
+          "path": "components/beacon-brief/brief-feed.tsx",
+          "start_line": 67,
+          "end_line": 67,
+          "symbol": "breadcrumb jsonLd",
+          "reason": "c.label from filter names"
+        },
+        {
+          "path": "app/players/[slug]/page.tsx",
+          "start_line": 136,
+          "end_line": 136,
+          "symbol": "jsonLd script",
+          "reason": "fullName/college/team from Sleeper"
+        }
+      ],
+      "affected_routes": [
+        "/brief/[slug]",
+        "/brief listing",
+        "/players/[slug]"
+      ],
+      "affected_tables": [
+        "articles",
+        "players"
+      ],
+      "technical_description": "Three locations render dangerouslySetInnerHTML with JSON.stringify(jsonLd) into a script type application/ld+json tag. JSON.stringify does not escape the less-than character, so a value containing a closing-then-opening script sequence terminates the JSON-LD block and injects an executing script. Interpolated values are externally influenced (AI-generated brief titles, Sleeper player fields).",
+      "laymans_description": "The site embeds machine-readable data inside a special script block without escaping one character. A poisoned auto-generated title or player field could break out of that block and run as code in visitors' browsers.",
+      "impact": "Stored XSS on public pages, with no CSP to contain it.",
+      "likelihood": "Low. Requires poisoning upstream ingestion or a player field; direct DB writes are blocked by RLS.",
+      "prerequisites": [
+        "poisoned upstream content or player field"
+      ],
+      "existing_mitigations": [
+        "RLS prevents direct row writes",
+        "other renderers are safe"
+      ],
+      "recommended_remediation": [
+        "Escape the less-than character before injection (for example replace < with its unicode escape) via one shared jsonLdScript helper; add the CSP from FFB-SEC-005 as a backstop."
+      ],
+      "required_tests": [
+        "A title containing the closing-script sequence is escaped in emitted HTML.",
+        "Valid structured data still parses."
+      ],
+      "verification_criteria": [
+        "A crafted title cannot break out of the JSON-LD script block in rendered output."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 5,
+      "related_findings": [
+        "FFB-SEC-005"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "lib/json-ld.ts serializeJsonLd escapes <,>,&,U+2028,U+2029; used by all four JSON-LD emitters. Unit-tested with hostile </script> payloads.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-007",
+      "title": "try_claim_league_refresh EXECUTE granted to anon and authenticated",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "authorization",
+        "configuration"
+      ],
+      "owasp": [
+        "A01:2021 Broken Access Control",
+        "A04:2021 Insecure Design"
+      ],
+      "cwe": [
+        "CWE-732",
+        "CWE-639"
+      ],
+      "affected_components": [
+        "try_claim_league_refresh RPC",
+        "league_refresh_attempts"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0028_rename_league_sync_to_pulse.sql",
+          "start_line": 36,
+          "end_line": 69,
+          "symbol": "try_claim_league_refresh",
+          "reason": "SECURITY DEFINER, EXECUTE to anon+authenticated, trusts p_user_id"
+        },
+        {
+          "path": "supabase/migrations/0026_try_claim_league_resync.sql",
+          "start_line": 46,
+          "end_line": 47,
+          "symbol": "grant",
+          "reason": "original grant shape"
+        },
+        {
+          "path": "app/api/leagues/[league_id]/refresh/route.ts",
+          "start_line": 78,
+          "end_line": 99,
+          "symbol": "POST",
+          "reason": "calls the RPC via service-role client"
+        }
+      ],
+      "affected_routes": [
+        "/rest/v1/rpc/try_claim_league_refresh"
+      ],
+      "affected_tables": [
+        "league_refresh_attempts"
+      ],
+      "technical_description": "The SECURITY DEFINER function is EXECUTE-granted to anon, authenticated, and service_role (confirmed by live ACL). It writes the service-role-only ledger and records triggered_by_user_id from a caller-supplied p_user_id with no auth.uid() validation. The API calls it via service role, so the anon and authenticated grants are unnecessary. Direct RPC calls let any user grief the 60s slot and spoof audit provenance.",
+      "laymans_description": "The function that enforces the once-per-minute refresh limit can be called directly by anyone through the public database API. They cannot trigger the real refresh, but they can occupy the slot so the real commissioner is rate-limited and can write a fake user id into the audit log.",
+      "impact": "Denial of the force-refresh feature for a targeted league, audit-ledger pollution, and anon write access to a table intended service-role-only.",
+      "likelihood": "Easy. A single direct RPC call with the publishable key; no account needed.",
+      "prerequisites": [
+        "publishable key"
+      ],
+      "existing_mitigations": [
+        "the API handler re-validates admin/commissioner before the actual sync"
+      ],
+      "recommended_remediation": [
+        "Revoke EXECUTE from anon and authenticated so only service_role can call it; derive triggered_by_user_id from auth.uid() inside the function or drop the p_user_id parameter."
+      ],
+      "required_tests": [
+        "Negative: anon and authenticated cannot execute the RPC.",
+        "Positive: the refresh endpoint still works via service_role."
+      ],
+      "verification_criteria": [
+        "Direct RPC calls as anon or authenticated are denied; the refresh feature still functions."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 2,
+      "related_findings": [
+        "FFB-SEC-004"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "Migration 0134: revoked EXECUTE on try_claim_league_refresh from public/anon/authenticated (service_role only). Refresh route calls it via the service-role client; actor id is server-derived. Verified by SQL harness.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-008",
+      "title": "IP-based rate limits trust x-forwarded-for and fail open without it",
+      "severity": "low",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "rate-limiting",
+        "defense-in-depth"
+      ],
+      "owasp": [
+        "A04:2021 Insecure Design"
+      ],
+      "cwe": [
+        "CWE-348",
+        "CWE-770"
+      ],
+      "affected_components": [
+        "route IP helpers",
+        "lib/signal-scout/route-helpers.ts"
+      ],
+      "affected_files": [
+        {
+          "path": "app/api/guide/submit/route.ts",
+          "start_line": 100,
+          "end_line": 120,
+          "symbol": "rate-limit branch",
+          "reason": "leftmost XFF; skips limit when no IP"
+        },
+        {
+          "path": "lib/signal-scout/route-helpers.ts",
+          "start_line": 87,
+          "end_line": 91,
+          "symbol": "clientIpHash",
+          "reason": "leftmost XFF"
+        },
+        {
+          "path": "app/api/on-the-clock/transactions/route.ts",
+          "start_line": 42,
+          "end_line": 46,
+          "symbol": "clientIp",
+          "reason": "leftmost XFF"
+        }
+      ],
+      "affected_routes": [
+        "/api/guide/submit",
+        "/api/on-the-clock/*",
+        "/api/games/signal-scout/*"
+      ],
+      "affected_tables": [
+        "on_the_clock_lookup_attempts",
+        "signal_scout ledgers"
+      ],
+      "technical_description": "Helpers read the leftmost x-forwarded-for entry. On Vercel the platform sets this to the real client IP so it is currently trustworthy; under a different proxy the leftmost entry becomes attacker-controlled. guide/submit also skips its limit entirely when no IP resolves. The header is used only for rate-limit keys, not authorization.",
+      "laymans_description": "The speed limits are keyed on an IP read from a header. On the current host that header is reliable, but under a different proxy a visitor could fake it and dodge limits. One form skips its limit if it cannot read an IP at all.",
+      "impact": "Under a non-Vercel proxy, self-chosen IP keys defeat every IP throttle. On Vercel today the exposure is minimal.",
+      "likelihood": "Hard on Vercel as deployed; requires a hosting change or misconfiguration.",
+      "prerequisites": [
+        "non-Vercel or misconfigured proxy for full exploit"
+      ],
+      "existing_mitigations": [
+        "Vercel overwrites x-forwarded-for",
+        "header never used for authorization"
+      ],
+      "recommended_remediation": [
+        "Derive the client IP from a trusted platform header or the rightmost hop in one shared helper, and fail closed when no trusted IP resolves."
+      ],
+      "required_tests": [
+        "Spoofed x-forwarded-for does not change the derived key.",
+        "Missing IP does not disable the limit."
+      ],
+      "verification_criteria": [
+        "The derived key is stable against client-supplied x-forwarded-for and never fails open."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 7,
+      "related_findings": [
+        "FFB-SEC-002",
+        "FFB-SEC-011"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "lib/client-ip.ts getTrustedClientIp: prefers x-vercel-forwarded-for / x-real-ip, uses the rightmost x-forwarded-for hop otherwise, fails closed to a stable sentinel (never skips the limit). Adopted by On The Clock routes, Signal Scout helper, guide/submit, report-format. Unit-tested.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-009",
+      "title": "Non-constant-time CRON_SECRET comparison in seven cron routes",
+      "severity": "low",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "configuration"
+      ],
+      "owasp": [
+        "A02:2021 Cryptographic Failures"
+      ],
+      "cwe": [
+        "CWE-208"
+      ],
+      "affected_components": [
+        "app/api/cron/*"
+      ],
+      "affected_files": [
+        {
+          "path": "app/api/cron/sync-ktc/route.ts",
+          "start_line": 30,
+          "end_line": 30,
+          "symbol": "GET",
+          "reason": "!== string compare"
+        },
+        {
+          "path": "app/api/cron/recalculate-derived/route.ts",
+          "start_line": 40,
+          "end_line": 40,
+          "symbol": "GET",
+          "reason": "!== string compare"
+        },
+        {
+          "path": "app/api/cron/sync-sleeper-market/route.ts",
+          "start_line": 37,
+          "end_line": 37,
+          "symbol": "GET",
+          "reason": "!== string compare"
+        }
+      ],
+      "affected_routes": [
+        "/api/cron/sync-ktc",
+        "/api/cron/sync-fantasycalc",
+        "/api/cron/sync-dynastyprocess",
+        "/api/cron/sync-sleeper-stats",
+        "/api/cron/sync-sleeper-market",
+        "/api/cron/recalculate-derived",
+        "/api/cron/recalculate-beacon"
+      ],
+      "affected_tables": [],
+      "technical_description": "Seven cron routes compare the bearer with a plain string inequality; beacon-brief and beacon-brief-worker already use crypto.timingSafeEqual. All routes fail closed (500) when the secret is unset, and the secret is never logged.",
+      "laymans_description": "The cron endpoints check their secret in a way that could, in theory, leak timing information. Network noise makes this impractical, and two routes already use the safer comparison; the rest should match.",
+      "impact": "Theoretical timing oracle against a high-entropy secret; practically negligible.",
+      "likelihood": "Very low.",
+      "prerequisites": [
+        "precise network timing against a random secret"
+      ],
+      "existing_mitigations": [
+        "fail-closed on missing secret",
+        "secret not logged",
+        "high entropy"
+      ],
+      "recommended_remediation": [
+        "Use crypto.timingSafeEqual via a shared cron-auth helper in all cron routes."
+      ],
+      "required_tests": [
+        "Wrong secret rejected and correct secret accepted through the shared helper."
+      ],
+      "verification_criteria": [
+        "All cron routes use the constant-time helper."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 10,
+      "related_findings": [],
+      "remediation": {
+        "status": "fixed",
+        "note": "lib/cron-auth.ts verifyCronRequest uses crypto.timingSafeEqual; all nine cron routes use it (the two local copies removed). Fails closed on missing secret. Unit-tested.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-010",
+      "title": "Hard-coded fallback IP-hash salt",
+      "severity": "low",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "configuration"
+      ],
+      "owasp": [
+        "A02:2021 Cryptographic Failures",
+        "A05:2021 Security Misconfiguration"
+      ],
+      "cwe": [
+        "CWE-1188",
+        "CWE-760"
+      ],
+      "affected_components": [
+        "lib/signal-scout/route-helpers.ts"
+      ],
+      "affected_files": [
+        {
+          "path": "lib/signal-scout/route-helpers.ts",
+          "start_line": 103,
+          "end_line": 108,
+          "symbol": "FALLBACK_IP_SALT",
+          "reason": "public fallback used when SIGNAL_SCOUT_IP_SALT unset"
+        },
+        {
+          "path": ".env.local.example",
+          "start_line": 36,
+          "end_line": 39,
+          "symbol": "SIGNAL_SCOUT_IP_SALT",
+          "reason": "documented as required in production"
+        }
+      ],
+      "affected_routes": [
+        "/api/games/signal-scout/*"
+      ],
+      "affected_tables": [
+        "signal_scout ledgers"
+      ],
+      "technical_description": "A public fallback salt is used when SIGNAL_SCOUT_IP_SALT is unset. With low-entropy IPs, a public salt makes stored guest IP hashes reversible and the guest daily cap precomputable. Conditional on the production configuration.",
+      "laymans_description": "The game hashes guest IPs with a secret salt. If that secret is not set in production, it uses a value checked into the repo, making the hashes guessable and the guest limit easy to precompute.",
+      "impact": "If the salt is unset in production, guest IP hashes are de-pseudonymizable and the guest cap is bypassable.",
+      "likelihood": "Conditional on SIGNAL_SCOUT_IP_SALT not being set in production.",
+      "prerequisites": [
+        "salt unset in production"
+      ],
+      "existing_mitigations": [
+        "documented requirement",
+        "used only for a rate-limit ledger"
+      ],
+      "recommended_remediation": [
+        "Confirm the variable is set in production; consider failing closed (refuse guest rounds) when unset instead of using the public fallback."
+      ],
+      "required_tests": [
+        "Production behavior fails closed when the salt is unset."
+      ],
+      "verification_criteria": [
+        "With the salt unset in a production-like build, guest rounds are refused."
+      ],
+      "migration_required": false,
+      "environment_changes_required": true,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 11,
+      "related_findings": [],
+      "remediation": {
+        "status": "fixed",
+        "note": "lib/signal-scout/route-helpers.ts now fails closed in production when SIGNAL_SCOUT_IP_SALT is unset (throws, refusing guest rounds); a clearly-labelled dev-only value is used outside production. The repository-known prod fallback is removed. Production env var still required (manual checklist).",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-011",
+      "title": "Weak cross-instance limits on admin-inbox email endpoints",
+      "severity": "low",
+      "confidence": "confirmed",
+      "status": "partially_fixed",
+      "classifications": [
+        "rate-limiting"
+      ],
+      "owasp": [
+        "A04:2021 Insecure Design"
+      ],
+      "cwe": [
+        "CWE-770",
+        "CWE-799"
+      ],
+      "affected_components": [
+        "app/api/on-the-clock/report-format/route.ts",
+        "app/api/guide/submit/route.ts"
+      ],
+      "affected_files": [
+        {
+          "path": "app/api/on-the-clock/report-format/route.ts",
+          "start_line": 36,
+          "end_line": 64,
+          "symbol": "POST",
+          "reason": "per-instance in-memory limit"
+        },
+        {
+          "path": "app/api/guide/submit/route.ts",
+          "start_line": 183,
+          "end_line": 193,
+          "symbol": "POST",
+          "reason": "emails arbitrary user-supplied address"
+        }
+      ],
+      "affected_routes": [
+        "/api/on-the-clock/report-format",
+        "/api/guide/submit"
+      ],
+      "affected_tables": [],
+      "technical_description": "report-format uses a per-serverless-instance in-memory window so multiple instances each allow the cap; guide/submit emails an arbitrary user-supplied address bounded to 5 per 10 minutes per IP. Both are same-origin and honeypot guarded.",
+      "laymans_description": "Two endpoints send email. One counts its limit only in a single server's memory, and the other can be pointed at any typed-in email address. The result is a limited spam or email-relay opportunity.",
+      "impact": "Inbox spam to a fixed admin address and bounded confirmation-email relay, consuming Resend quota.",
+      "likelihood": "Moderate; bounded by the per-IP limits which depend on FFB-SEC-008.",
+      "prerequisites": [
+        "satisfy same-origin and honeypot checks"
+      ],
+      "existing_mitigations": [
+        "same-origin fails closed",
+        "honeypot",
+        "per-IP DB limit on guide submit",
+        "fixed recipient for report-format"
+      ],
+      "recommended_remediation": [
+        "Move report-format to a durable ledger; cap or verify the guide-submit confirmation address; keep the durable per-IP limit with the FFB-SEC-008 fix."
+      ],
+      "required_tests": [
+        "Limits hold across simulated instances.",
+        "Confirmation email cannot be sent to an unrelated address at volume."
+      ],
+      "verification_criteria": [
+        "The report-format limit is enforced globally; guide submit cannot be used as an open relay."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 12,
+      "related_findings": [
+        "FFB-SEC-008"
+      ],
+      "remediation": {
+        "status": "partially_fixed",
+        "note": "report-format email endpoint moved to a durable DB rate limit (migration 0137 try_claim_rate_limit, keyed by hashed trusted IP), replacing the per-instance in-memory window. guide/submit already enforces a durable per-IP limit and now uses the trusted IP; the arbitrary confirmation-email address is bounded by that durable per-IP limit (5/10min) rather than additionally capped/verified, which is judged proportionate for a Low finding. Further address verification is a documented option.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-012",
+      "title": "user-avatars storage bucket has no MIME allowlist",
+      "severity": "low",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "configuration"
+      ],
+      "owasp": [
+        "A05:2021 Security Misconfiguration"
+      ],
+      "cwe": [
+        "CWE-434"
+      ],
+      "affected_components": [
+        "storage.buckets user-avatars"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0057_user_profile_fields.sql",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "user-avatars bucket (verify creating migration)",
+          "reason": "bucket config; MIME allowlist null (confirmed via live storage.buckets)"
+        }
+      ],
+      "affected_routes": [
+        "avatar upload"
+      ],
+      "affected_tables": [
+        "storage.objects"
+      ],
+      "technical_description": "Live storage config shows user-avatars with public false, size limit 10 MB, and allowed_mime_types null, while signal-media and signal-reaction-emojis enforce raster-only allowlists. The bucket is private (signed-URL access) and writes are own-folder scoped, so the risk is lower, but arbitrary file types (including SVG or HTML) can be stored.",
+      "laymans_description": "Two of the three file buckets only accept safe image types. The avatar bucket accepts any file. It is private so the risk is limited, but it should still restrict to safe image formats.",
+      "impact": "Arbitrary file types stored in the avatar bucket; impact depends on serving and rendering, mitigated by the private bucket and signed URLs.",
+      "likelihood": "Moderate; an authenticated user uploading to their own folder.",
+      "prerequisites": [
+        "authenticated account"
+      ],
+      "existing_mitigations": [
+        "private bucket",
+        "signed-URL access",
+        "own-folder write scoping"
+      ],
+      "recommended_remediation": [
+        "Set allowed_mime_types on user-avatars to the raster allowlist and confirm avatars pass a server-side re-encode with metadata stripped."
+      ],
+      "required_tests": [
+        "Non-image upload to user-avatars is rejected."
+      ],
+      "verification_criteria": [
+        "user-avatars enforces a raster MIME allowlist."
+      ],
+      "migration_required": true,
+      "environment_changes_required": true,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 13,
+      "related_findings": [],
+      "remediation": {
+        "status": "fixed",
+        "note": "Migration 0138 sets user-avatars allowed_mime_types to the safe raster set the uploader advertises: image/jpeg, image/png, image/webp, image/gif. GIF is included so the existing advertised GIF avatar feature keeps working; SVG/HTML/HEIC/HEIF stay blocked. The migration only sets allowed_mime_types (bucket stays private, ownership policies unchanged, no permission broadened). Verified against production in a rolled-back transaction. Applies on migration deploy.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-013",
+      "title": "Logout CSRF",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "authentication",
+        "defense-in-depth"
+      ],
+      "owasp": [
+        "A01:2021 Broken Access Control"
+      ],
+      "cwe": [
+        "CWE-352"
+      ],
+      "affected_components": [
+        "app/auth/signout/route.ts"
+      ],
+      "affected_files": [
+        {
+          "path": "app/auth/signout/route.ts",
+          "start_line": 4,
+          "end_line": 9,
+          "symbol": "POST",
+          "reason": "no origin/CSRF check"
+        }
+      ],
+      "affected_routes": [
+        "/auth/signout"
+      ],
+      "affected_tables": [],
+      "technical_description": "The signout POST handler has no origin, x-requested-with, or CSRF-token check, so any cross-site form can sign the user out. The redirect target is fixed to origin.",
+      "laymans_description": "A malicious page could quietly log a visitor out of FF Beacon. It is a nuisance, not a data risk.",
+      "impact": "Forced sign-out; no data exposure or state change beyond the session.",
+      "likelihood": "Easy but low-value.",
+      "prerequisites": [
+        "victim visits a hostile page while logged in"
+      ],
+      "existing_mitigations": [
+        "fixed redirect target"
+      ],
+      "recommended_remediation": [
+        "Add the same-origin check used by guide/submit or require the x-requested-with header."
+      ],
+      "required_tests": [
+        "Cross-origin POST rejected; same-origin logout succeeds."
+      ],
+      "verification_criteria": [
+        "Cross-site logout is blocked."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 18,
+      "related_findings": [],
+      "remediation": {
+        "status": "fixed",
+        "note": "app/auth/signout/route.ts now requires same-origin via lib/http-origin.ts isSameOrigin (Origin then Referer, fail closed); cross-site POST is rejected without touching the session. Redirect target unchanged. Unit-tested.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-014",
+      "title": "is_admin trigger fails open when jwt claims are null",
+      "severity": "low",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "authorization",
+        "defense-in-depth"
+      ],
+      "owasp": [
+        "A01:2021 Broken Access Control"
+      ],
+      "cwe": [
+        "CWE-636"
+      ],
+      "affected_components": [
+        "user_preferences_block_is_admin_change"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0018_user_preferences_is_admin.sql",
+          "start_line": 27,
+          "end_line": 33,
+          "symbol": "user_preferences_block_is_admin_change",
+          "reason": "guard skipped when request.jwt.claims is null"
+        }
+      ],
+      "affected_routes": [],
+      "affected_tables": [
+        "user_preferences"
+      ],
+      "technical_description": "The trigger raises only when request.jwt.claims is not null and the role is not service_role. When claims are null the change is permitted. Normal PostgREST authenticated requests carry claims (role authenticated) so the UPDATE path is blocked in practice; the residual risk is null-claims contexts. Compounds FFB-SEC-001.",
+      "laymans_description": "The lock that stops non-admins from flipping the admin flag only engages when it can read the caller's role. If it cannot read a role it lets the change through. Normal requests always carry a role, so this layers on top of the bigger INSERT gap.",
+      "impact": "Weakens the admin-flag guard in unusual contexts; not exploitable by ordinary authenticated requests.",
+      "likelihood": "Very low.",
+      "prerequisites": [
+        "null-claims non-service_role context"
+      ],
+      "existing_mitigations": [
+        "normal requests carry claims and are blocked"
+      ],
+      "recommended_remediation": [
+        "Fold into the FFB-SEC-001 fix: default to rejecting non-service_role is_admin writes when claims are absent."
+      ],
+      "required_tests": [
+        "A null-claims non-service_role context cannot set is_admin true."
+      ],
+      "verification_criteria": [
+        "The guard fails closed when claims are absent."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 1,
+      "related_findings": [
+        "FFB-SEC-001"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "Folded into migration 0133: the guard keys on current_user (SECURITY INVOKER), not request.jwt.claims, so it fails closed when claims are null. Verified by the null-claims scenario in the SQL harness.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-015",
+      "title": "Functions with mutable search_path and pg_trgm in public schema",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "partially_fixed",
+      "classifications": [
+        "configuration",
+        "defense-in-depth"
+      ],
+      "owasp": [
+        "A05:2021 Security Misconfiguration"
+      ],
+      "cwe": [
+        "CWE-426"
+      ],
+      "affected_components": [
+        "signal_links_valid",
+        "signal_gif_valid",
+        "bb_claim_jobs",
+        "bb_player_match_candidates",
+        "pg_trgm"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0093_bb_claim_jobs.sql",
+          "start_line": 15,
+          "end_line": 18,
+          "symbol": "bb_claim_jobs",
+          "reason": "no search_path (INVOKER, SR-only)"
+        },
+        {
+          "path": "supabase/migrations/0098_bb_player_match_candidates.sql",
+          "start_line": 29,
+          "end_line": 31,
+          "symbol": "bb_player_match_candidates",
+          "reason": "no search_path (INVOKER, SR-only)"
+        }
+      ],
+      "affected_routes": [],
+      "affected_tables": [],
+      "technical_description": "The advisor flags four functions with mutable search_path; all are SECURITY INVOKER and either argument-only or service-role-only EXECUTE, so no definer-hijack path exists. pg_trgm is installed in the public schema. Hygiene items.",
+      "laymans_description": "A few database helper functions and one extension are not pinned to a fixed schema. None run with elevated privileges in a hijackable way, so this is cleanup, not an active hole.",
+      "impact": "Minimal; latent hygiene concern.",
+      "likelihood": "Not exploitable under current grants.",
+      "prerequisites": [],
+      "existing_mitigations": [
+        "INVOKER execution",
+        "restrictive EXECUTE grants",
+        "authenticated cannot create functions in public"
+      ],
+      "recommended_remediation": [
+        "Set search_path on the four functions and move pg_trgm to an extensions schema."
+      ],
+      "required_tests": [
+        "Functions behave after pinning search_path."
+      ],
+      "verification_criteria": [
+        "The advisor no longer flags these items."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 15,
+      "related_findings": [
+        "FFB-SEC-016"
+      ],
+      "remediation": {
+        "status": "partially_fixed",
+        "note": "Migration 0136 pins search_path on signal_links_valid, signal_gif_valid, bb_claim_jobs, bb_player_match_candidates. pg_trgm relocation out of public is DEFERRED as risky (would break trigram indexes/operators and generated search SQL) and documented.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-016",
+      "title": "Inert trigger and utility SECURITY DEFINER functions callable by anon via RPC",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "configuration",
+        "defense-in-depth"
+      ],
+      "owasp": [
+        "A05:2021 Security Misconfiguration"
+      ],
+      "cwe": [
+        "CWE-732"
+      ],
+      "affected_components": [
+        "rls_auto_enable",
+        "user_preferences_block_is_admin_change"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0018_user_preferences_is_admin.sql",
+          "start_line": 20,
+          "end_line": 41,
+          "symbol": "user_preferences_block_is_admin_change",
+          "reason": "anon-executable via RPC but inert"
+        }
+      ],
+      "affected_routes": [
+        "/rest/v1/rpc/rls_auto_enable",
+        "/rest/v1/rpc/user_preferences_block_is_admin_change"
+      ],
+      "affected_tables": [],
+      "technical_description": "The advisor reports rls_auto_enable and user_preferences_block_is_admin_change are EXECUTE-granted to anon and authenticated and reachable via RPC. Calling them outside their trigger context is inert, but the grants are unnecessary. signal_target_publicly_viewable is also anon-executable but must be (used in RLS).",
+      "laymans_description": "A couple of internal database helpers are technically callable through the public API. Calling them does nothing useful or harmful, but they should not be exposed.",
+      "impact": "None practical; least-privilege concern.",
+      "likelihood": "n/a",
+      "prerequisites": [],
+      "existing_mitigations": [
+        "the functions are inert when called directly"
+      ],
+      "recommended_remediation": [
+        "Revoke EXECUTE from anon and authenticated on rls_auto_enable and user_preferences_block_is_admin_change; leave signal_target_publicly_viewable as required by RLS."
+      ],
+      "required_tests": [
+        "Triggers still fire after revoking direct EXECUTE."
+      ],
+      "verification_criteria": [
+        "The advisor no longer flags these two functions."
+      ],
+      "migration_required": true,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 16,
+      "related_findings": [
+        "FFB-SEC-015"
+      ],
+      "remediation": {
+        "status": "fixed",
+        "note": "Migration 0136 revokes EXECUTE (incl. PUBLIC) on rls_auto_enable from anon/authenticated; user_preferences_block_is_admin_change revoked in 0133. signal_target_publicly_viewable intentionally retains anon EXECUTE (used inside RLS). Verified in a rolled-back transaction.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-017",
+      "title": "Supabase leaked-password protection disabled",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "deferred",
+      "classifications": [
+        "configuration",
+        "authentication"
+      ],
+      "owasp": [
+        "A07:2021 Identification and Authentication Failures"
+      ],
+      "cwe": [
+        "CWE-521"
+      ],
+      "affected_components": [
+        "Supabase Auth"
+      ],
+      "affected_files": [],
+      "affected_routes": [
+        "sign-up",
+        "password reset"
+      ],
+      "affected_tables": [],
+      "technical_description": "The security advisor reports leaked-password protection is disabled. Enabling it checks new passwords against HaveIBeenPwned and blocks known-compromised passwords.",
+      "laymans_description": "The sign-up flow does not reject passwords known to have leaked in past breaches. Turning on this option makes accounts harder to guess.",
+      "impact": "Users can choose breached passwords, easing credential-stuffing.",
+      "likelihood": "Depends on user password choices.",
+      "prerequisites": [],
+      "existing_mitigations": [
+        "standard Supabase password hashing"
+      ],
+      "recommended_remediation": [
+        "Enable leaked-password protection in Supabase Auth settings."
+      ],
+      "required_tests": [
+        "Registering with a known-breached password is rejected."
+      ],
+      "verification_criteria": [
+        "The advisor no longer flags this item."
+      ],
+      "migration_required": false,
+      "environment_changes_required": true,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 19,
+      "related_findings": [],
+      "remediation": {
+        "status": "deferred",
+        "note": "Dashboard-only setting. Not changed via code. Listed in the manual-actions checklist with exact Supabase Auth steps and verification (get_advisors).",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": false,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-018",
+      "title": "signal_follows full social graph readable by any authenticated user",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "accepted",
+      "classifications": [
+        "data-exposure",
+        "business-logic"
+      ],
+      "owasp": [
+        "A01:2021 Broken Access Control"
+      ],
+      "cwe": [
+        "CWE-1230"
+      ],
+      "affected_components": [
+        "signal_follows"
+      ],
+      "affected_files": [
+        {
+          "path": "supabase/migrations/0063_signal_follows.sql",
+          "start_line": 29,
+          "end_line": 31,
+          "symbol": "signal_follows_select_authed",
+          "reason": "select to authenticated using (true)"
+        }
+      ],
+      "affected_routes": [],
+      "affected_tables": [
+        "signal_follows"
+      ],
+      "technical_description": "signal_follows_select_authed is for select to authenticated using (true), so any logged-in user can read the entire follower and following graph. The migration header states this is intentional.",
+      "laymans_description": "Any logged-in user can see the full list of who follows whom. This appears intentional for the social feature and is not secret data, but it is broader than showing only your own connections.",
+      "impact": "Social-graph disclosure to any authenticated user. By design.",
+      "likelihood": "Easy for any authenticated user.",
+      "prerequisites": [
+        "authenticated account"
+      ],
+      "existing_mitigations": [
+        "no secret data in the table"
+      ],
+      "recommended_remediation": [
+        "Confirm this matches product intent; if edges should be private, scope SELECT to own edges and expose aggregate counts via a view or counters."
+      ],
+      "required_tests": [
+        "If scoped, a user reads only their own edges."
+      ],
+      "verification_criteria": [
+        "Follow-graph visibility matches product intent."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 17,
+      "related_findings": [],
+      "remediation": {
+        "status": "accepted",
+        "note": "Product decision: the follower/following graph readable by any authenticated user appears intentional for the social feature and contains no secret data. Documented (current behavior, consequences, a private-edges + public-counts future design). No policy change without an explicit product decision.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": false,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-019",
+      "title": "Public league and draft data enumerable by identifier",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "accepted",
+      "classifications": [
+        "data-exposure",
+        "privacy"
+      ],
+      "owasp": [
+        "A01:2021 Broken Access Control"
+      ],
+      "cwe": [
+        "CWE-200"
+      ],
+      "affected_components": [
+        "leagues",
+        "rosters",
+        "league_users",
+        "league_transactions",
+        "on_the_clock caches",
+        "OG routes"
+      ],
+      "affected_files": [
+        {
+          "path": "app/api/og/league/[league_id]/route.tsx",
+          "start_line": 47,
+          "end_line": 101,
+          "symbol": "GET",
+          "reason": "serves public league data unauthenticated via service role"
+        }
+      ],
+      "affected_routes": [
+        "/api/og/league/[league_id]",
+        "/api/og/team/[league_id]/[roster_id]",
+        "/api/og/trade/[transaction_id]",
+        "/leagues/*",
+        "/tools/on-the-clock"
+      ],
+      "affected_tables": [
+        "leagues",
+        "rosters",
+        "league_users",
+        "league_transactions",
+        "league_drafts",
+        "on_the_clock_draft_cache",
+        "on_the_clock_pick_cache"
+      ],
+      "technical_description": "These tables have public SELECT policies and the OG routes serve the data unauthenticated. CLAUDE.md designates them as public read-only data, and the underlying data is already public via Sleeper's unauthenticated API. No FF Beacon private data (emails, user_preferences, auth) is reachable from these queries; OG column lists were verified.",
+      "laymans_description": "Anyone can look up any league or draft the site has loaded, by its id, and see team names, member display names, rosters, and trades. This is the same information Sleeper already exposes publicly, so it is a privacy note rather than a leak.",
+      "impact": "Enumerable disclosure of Sleeper-public league and draft data. No FF Beacon private data exposed.",
+      "likelihood": "Easy with a known league or draft id.",
+      "prerequisites": [
+        "knowledge of a league or draft id"
+      ],
+      "existing_mitigations": [
+        "data already public via Sleeper",
+        "no FF Beacon private data exposed",
+        "Signal OG routes gate on published/public and use generic fallbacks"
+      ],
+      "recommended_remediation": [
+        "Confirm product intent; if any league or draft data should be private, add ownership scoping to policies and OG routes."
+      ],
+      "required_tests": [
+        "If scoped, non-owners cannot read private league data."
+      ],
+      "verification_criteria": [
+        "League and draft visibility matches product intent."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "moderate",
+      "remediation_order": 20,
+      "related_findings": [],
+      "remediation": {
+        "status": "accepted",
+        "note": "Product decision: league/draft data is Sleeper-public and the tools are designed to be shareable. Confirmed the OG routes and public caches select only public fields (names, ranks, values, avatars); no FF Beacon emails, auth metadata, or private preferences are exposed. Documented; no restriction without an explicit product decision.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": false,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-020",
+      "title": "No response-size cap on Sleeper fetches",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "external-integration",
+        "defense-in-depth"
+      ],
+      "owasp": [
+        "A04:2021 Insecure Design"
+      ],
+      "cwe": [
+        "CWE-770"
+      ],
+      "affected_components": [
+        "lib/sleeper.ts"
+      ],
+      "affected_files": [
+        {
+          "path": "lib/sleeper.ts",
+          "start_line": 5,
+          "end_line": 23,
+          "symbol": "safeFetch, timeouts",
+          "reason": "json() with no size guard"
+        }
+      ],
+      "affected_routes": [
+        "all Sleeper-backed routes"
+      ],
+      "affected_tables": [],
+      "technical_description": "safeFetch calls response.json() with no byte cap. The host is a fixed, trusted Sleeper endpoint, so the risk is low. Timeouts are present and there is no retry storm.",
+      "laymans_description": "When the server downloads data from Sleeper it does not limit how large that download can be. Because Sleeper is trusted, this is a minor robustness note.",
+      "impact": "Theoretical memory pressure if Sleeper returned an abnormally large payload.",
+      "likelihood": "Hard; requires Sleeper to serve an oversized response.",
+      "prerequisites": [],
+      "existing_mitigations": [
+        "trusted fixed host",
+        "timeouts",
+        "no retries",
+        "per-response caps in callers"
+      ],
+      "recommended_remediation": [
+        "Add a maximum response-size guard in safeFetch."
+      ],
+      "required_tests": [
+        "An over-limit response is rejected."
+      ],
+      "verification_criteria": [
+        "safeFetch enforces a size cap."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 21,
+      "related_findings": [],
+      "remediation": {
+        "status": "fixed",
+        "note": "lib/sleeper.ts safeFetch enforces a 32 MB response cap (Content-Length fast-reject plus streamed byte-count abort), preserving timeouts and null-on-failure. Unit-tested via readCapped.",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    },
+    {
+      "id": "FFB-SEC-021",
+      "title": "Stray untracked HTML dumps at repo root",
+      "severity": "informational",
+      "confidence": "confirmed",
+      "status": "fixed",
+      "classifications": [
+        "configuration"
+      ],
+      "owasp": [],
+      "cwe": [
+        "CWE-540"
+      ],
+      "affected_components": [
+        "grep1.json",
+        "grep2.json"
+      ],
+      "affected_files": [
+        {
+          "path": "grep1.json",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "n/a",
+          "reason": "saved Vercel Security Checkpoint HTML, no secrets, untracked"
+        },
+        {
+          "path": "grep2.json",
+          "start_line": 1,
+          "end_line": 1,
+          "symbol": "n/a",
+          "reason": "saved Vercel Security Checkpoint HTML, no secrets, untracked"
+        }
+      ],
+      "affected_routes": [],
+      "affected_tables": [],
+      "technical_description": "grep1.json and grep2.json (untracked) are saved Vercel Security Checkpoint pages containing only ephemeral challenge tokens and obfuscated third-party JavaScript. No credentials.",
+      "laymans_description": "Two leftover files at the top of the project are just saved copies of a Vercel bot-check page. They hold no secrets but should be deleted.",
+      "impact": "None; housekeeping.",
+      "likelihood": "n/a",
+      "prerequisites": [],
+      "existing_mitigations": [
+        "untracked, not committed"
+      ],
+      "recommended_remediation": [
+        "Delete the files and add a gitignore entry (grep*.json). Deletion is outside this read-only audit's scope."
+      ],
+      "required_tests": [],
+      "verification_criteria": [
+        "The files are removed and ignored."
+      ],
+      "migration_required": false,
+      "environment_changes_required": false,
+      "secret_rotation_required": false,
+      "complexity": "small",
+      "remediation_order": 22,
+      "related_findings": [],
+      "remediation": {
+        "status": "fixed",
+        "note": "grep1.json / grep2.json deleted; .gitignore now ignores grep*.json (narrow pattern, does not hide real project JSON).",
+        "remediation_date": "2026-07-13",
+        "applied_to_production": true,
+        "verified": true
+      }
+    }
+  ],
+  "files_requiring_remediation": [
+    {
+      "path": "supabase/migrations/0133_user_preferences_is_admin_insert_guard.sql",
+      "status": "new",
+      "findings": [
+        "FFB-SEC-001",
+        "FFB-SEC-014"
+      ],
+      "required": true,
+      "complexity": "small"
+    },
+    {
+      "path": "supabase/migrations/0134_revoke_league_refresh_grant.sql",
+      "status": "new",
+      "findings": [
+        "FFB-SEC-007"
+      ],
+      "required": true,
+      "complexity": "small"
+    },
+    {
+      "path": "supabase/migrations/0135_function_search_path_and_grants.sql",
+      "status": "new",
+      "findings": [
+        "FFB-SEC-015",
+        "FFB-SEC-016"
+      ],
+      "required": false,
+      "complexity": "small"
+    },
+    {
+      "path": "lib/league-auth.ts",
+      "lines": "59-72",
+      "findings": [
+        "FFB-SEC-004"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "lib/on-the-clock/sleeper-sync.ts",
+      "lines": "84-182",
+      "findings": [
+        "FFB-SEC-003"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "lib/on-the-clock/cache.ts",
+      "lines": "90-101",
+      "findings": [
+        "FFB-SEC-002"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "app/api/on-the-clock/draft/sync/route.ts",
+      "findings": [
+        "FFB-SEC-002",
+        "FFB-SEC-003"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "app/api/on-the-clock/draft/route.ts",
+      "findings": [
+        "FFB-SEC-002"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "app/api/on-the-clock/transactions/route.ts",
+      "findings": [
+        "FFB-SEC-002",
+        "FFB-SEC-008"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "app/api/on-the-clock/leagues/route.ts",
+      "findings": [
+        "FFB-SEC-002",
+        "FFB-SEC-008"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "app/api/on-the-clock/draft/snapshot/route.ts",
+      "findings": [
+        "FFB-SEC-002",
+        "FFB-SEC-008"
+      ],
+      "required": true,
+      "complexity": "moderate"
+    },
+    {
+      "path": "app/api/on-the-clock/report-format/route.ts",
+      "lines": "36-64",
+      "findings": [
+        "FFB-SEC-011",
+        "FFB-SEC-008"
+      ],
+      "required": false,
+      "complexity": "small"
+    },
+    {
+      "path": "app/api/guide/submit/route.ts",
+      "lines": "100-193",
+      "findings": [
+        "FFB-SEC-008",
+        "FFB-SEC-011"
+      ],
+      "required": false,
+      "complexity": "small"
+    },
+    {
+      "path": "app/api/leagues/[league_id]/refresh/route.ts",
+      "lines": "78-99",
+      "findings": [
+        "FFB-SEC-007"
+      ],
+      "required": true,
+      "complexity": "small"
+    },
+    {
+      "path": "app/brief/[slug]/page.tsx",
+      "lines": "112",
+      "findings": [
+        "FFB-SEC-006"
+      ],
+      "required": true,
+      "complexity": "small"
+    },
+    {
+      "path": "components/beacon-brief/brief-feed.tsx",
+      "lines": "67",
+      "findings": [
+        "FFB-SEC-006"
+      ],
+      "required": true,
+      "complexity": "small"
+    },
+    {
+      "path": "app/players/[slug]/page.tsx",
+      "lines": "136",
+      "findings": [
+        "FFB-SEC-006"
+      ],
+      "required": true,
+      "complexity": "small"
+    },
+    {
+      "path": "next.config.ts",
+      "findings": [
+        "FFB-SEC-005"
+      ],
+      "required": true,
+      "complexity": "small"
+    },
+    {
+      "path": "app/auth/signout/route.ts",
+      "lines": "4-9",
+      "findings": [
+        "FFB-SEC-013"
+      ],
+      "required": false,
+      "complexity": "small"
+    },
+    {
+      "path": "lib/signal-scout/route-helpers.ts",
+      "lines": "87-108",
+      "findings": [
+        "FFB-SEC-008",
+        "FFB-SEC-010"
+      ],
+      "required": false,
+      "complexity": "small"
+    },
+    {
+      "path": "lib/sleeper.ts",
+      "findings": [
+        "FFB-SEC-020"
+      ],
+      "required": false,
+      "complexity": "small"
+    },
+    {
+      "path": ".gitignore",
+      "findings": [
+        "FFB-SEC-021"
+      ],
+      "required": false,
+      "complexity": "small"
+    }
+  ],
+  "proposed_new_files": [
+    {
+      "path": "supabase/migrations/0133_user_preferences_is_admin_insert_guard.sql",
+      "responsibility": "Block non-service_role is_admin writes on INSERT and UPDATE, fail closed on null claims.",
+      "findings": [
+        "FFB-SEC-001",
+        "FFB-SEC-014"
+      ]
+    },
+    {
+      "path": "supabase/migrations/0134_revoke_league_refresh_grant.sql",
+      "responsibility": "Revoke EXECUTE from anon and authenticated on try_claim_league_refresh; derive triggered_by_user_id from auth.uid().",
+      "findings": [
+        "FFB-SEC-007"
+      ]
+    },
+    {
+      "path": "supabase/migrations/0135_function_search_path_and_grants.sql",
+      "responsibility": "Pin search_path on flagged functions, revoke inert RPC grants, relocate pg_trgm.",
+      "findings": [
+        "FFB-SEC-015",
+        "FFB-SEC-016"
+      ]
+    },
+    {
+      "path": "lib/client-ip.ts",
+      "responsibility": "Single trusted-IP derivation helper that fails closed.",
+      "findings": [
+        "FFB-SEC-008"
+      ]
+    },
+    {
+      "path": "lib/cron-auth.ts",
+      "responsibility": "Shared constant-time cron bearer verification.",
+      "findings": [
+        "FFB-SEC-009"
+      ]
+    },
+    {
+      "path": "lib/json-ld.ts",
+      "responsibility": "Safe JSON-LD serialization escaping the closing-script sequence.",
+      "findings": [
+        "FFB-SEC-006"
+      ]
+    },
+    {
+      "path": "lib/security-headers.ts",
+      "responsibility": "Centralized security header configuration consumed by next.config.ts.",
+      "findings": [
+        "FFB-SEC-005"
+      ]
+    }
+  ],
+  "manual_verification_items": [
+    {
+      "item": "Vercel deployment protection and preview/production env separation",
+      "steps": "Vercel dashboard, Project, Settings, Deployment Protection and Environment Variables."
+    },
+    {
+      "item": "SIGNAL_SCOUT_IP_SALT set in Production",
+      "steps": "Vercel Environment Variables; confirm Production-scoped.",
+      "findings": [
+        "FFB-SEC-010"
+      ]
+    },
+    {
+      "item": "Supabase leaked-password protection enabled",
+      "steps": "Supabase Auth settings.",
+      "findings": [
+        "FFB-SEC-017"
+      ]
+    },
+    {
+      "item": "OAuth redirect allowlist and Site URL restricted",
+      "steps": "Supabase Auth URL configuration."
+    },
+    {
+      "item": "user-avatars MIME allowlist",
+      "steps": "Supabase Storage bucket settings or a config migration.",
+      "findings": [
+        "FFB-SEC-012"
+      ]
+    },
+    {
+      "item": "Point-in-time recovery enabled",
+      "steps": "Supabase project database settings."
+    },
+    {
+      "item": "Production RLS matches migrations after applying 0133",
+      "steps": "Re-run get_advisors and re-query pg_policies.",
+      "findings": [
+        "FFB-SEC-001"
+      ]
+    },
+    {
+      "item": "npm audit",
+      "steps": "Run npm audit locally and triage."
+    },
+    {
+      "item": "HSTS on custom domain",
+      "steps": "Inspect response headers on ffbeacon.com."
+    }
+  ],
+  "commands_executed": [
+    {
+      "command": "git rev-parse HEAD; git branch --show-current; git log -1",
+      "purpose": "Identify commit and branch",
+      "result": "f5b6986..., main, 2026-07-11",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "git status --porcelain -uall",
+      "purpose": "Working tree state",
+      "result": "only grep1.json, grep2.json untracked",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "git ls-files (routes, migrations, lib)",
+      "purpose": "Inventory",
+      "result": "817 files; 44 routes; 132 migrations",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "mcp get_advisors security",
+      "purpose": "Live advisories",
+      "result": "WARN-level only; no RLS-disabled tables",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "mcp execute_sql pg_class rowsecurity",
+      "purpose": "RLS per table",
+      "result": "all 79 tables RLS-on with policies",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "mcp execute_sql pg_policies (writes+anon, select-own)",
+      "purpose": "Policy review",
+      "result": "writes SR or auth-own; no anon writes; sensitive reads owner-scoped",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "mcp execute_sql pg_proc prosecdef + column grants + triggers + PK on user_preferences",
+      "purpose": "Confirm escalation",
+      "result": "authenticated INSERT+DELETE, is_admin column INSERT grant, PK user_id, trigger BEFORE UPDATE only, no auth.users row-creation trigger",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "mcp execute_sql admin count",
+      "purpose": "Compromise check",
+      "result": "16 users, 1 admin (legitimate)",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "mcp execute_sql storage.buckets + objects policies + views",
+      "purpose": "Storage and view review",
+      "result": "user-avatars null MIME; only player_market_latest view (security_invoker)",
+      "exit": 0,
+      "truncated": false
+    },
+    {
+      "command": "node lockfile inspection",
+      "purpose": "Dependency versions",
+      "result": "next 15.5.18, current tree, no lifecycle scripts",
+      "exit": 0,
+      "truncated": false
+    }
+  ]
+}

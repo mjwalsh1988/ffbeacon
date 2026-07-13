@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
-import { claimLookup } from "@/lib/on-the-clock/cache";
+import { claimLookup, claimIpBudget } from "@/lib/on-the-clock/cache";
 import { isValidUsername, isValidSeason, normalizeUsername } from "@/lib/on-the-clock/validation";
+import { getTrustedClientIp } from "@/lib/client-ip";
 import { ffbeaconFormatCandidates, detectLeagueFormat } from "@/lib/on-the-clock/format-detect";
 import type { LeagueCard } from "@/lib/on-the-clock/types";
 
@@ -42,12 +43,6 @@ function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: PRIVATE_HEADERS });
 }
 
-function clientIp(req: Request): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
 /** Picker stage for a Sleeper league status. Anything past pre_draft/drafting
  * (in_season, complete, post_season, ...) means the draft already happened. */
 function stageOf(status: string): "drafting" | "pre_draft" | "completed" {
@@ -80,19 +75,24 @@ export async function GET(req: Request) {
     return json({ error: "On The Clock is not available yet." }, 503);
   }
 
-  // Durable abuse guard, BEFORE any Sleeper call. normalizeUsername already
+  // Durable abuse guards, BEFORE any Sleeper call. First the identifier-independent
+  // per-IP budget (FFB-SEC-002) so a rotated-username attack cannot amplify Sleeper
+  // fan-out, then the per-(ip, username) cooldown. normalizeUsername already
   // re-validates, so the non-null assertion is safe after isValidUsername.
   const normalized = normalizeUsername(usernameRaw)!;
+  const ip = getTrustedClientIp(req);
   let allowed: boolean;
   try {
-    allowed = await claimLookup(admin, {
-      ip: clientIp(req),
-      username: normalized,
-      windowSeconds: LOOKUP_WINDOW_SECONDS,
-    });
+    // Fail closed: if a guard cannot be evaluated, do not fan out to Sleeper.
+    allowed =
+      (await claimIpBudget(admin, ip)) &&
+      (await claimLookup(admin, {
+        ip,
+        username: normalized,
+        windowSeconds: LOOKUP_WINDOW_SECONDS,
+      }));
   } catch (err) {
-    // Fail closed: if the guard cannot be evaluated, do not fan out to Sleeper.
-    console.error("[on-the-clock/leagues] lookup guard failed", err);
+    console.error("[on-the-clock/leagues] rate-limit guard failed", err);
     return json({ error: "Try again in a moment." }, 503);
   }
   if (!allowed) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { verifyCronRequest } from "@/lib/cron-auth";
 import { runSleeperStatsSync } from "@/lib/sync-sleeper-stats";
 import { recordCronRun } from "@/lib/cron-runs";
 
@@ -19,16 +20,9 @@ export const maxDuration = 300;
  * runSleeperStatsSync() the CLI uses and returns its JSON summary.
  */
 export async function GET(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json(
-      { error: "CRON_SECRET not configured" },
-      { status: 500 },
-    );
-  }
-  if (auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const cronAuth = verifyCronRequest(req);
+  if (!cronAuth.ok) {
+    return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   }
 
   const supabase = createAdminClient();

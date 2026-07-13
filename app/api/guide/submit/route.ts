@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse, after } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { getTrustedClientIp } from "@/lib/client-ip";
 import { validateSubmissionInput } from "@/lib/guide/validate";
 import { sendEmail } from "@/lib/email/send";
 import { EMAIL_SITE_URL } from "@/lib/email/layout";
@@ -35,11 +36,9 @@ const HONEYPOT_MESSAGE =
 
 const ADMIN_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL ?? "michael@ffbeacon.com";
 
-function clientIpHash(req: Request): string | null {
-  const fwd = req.headers.get("x-forwarded-for");
-  const ip = (fwd ? fwd.split(",")[0] : req.headers.get("x-real-ip"))?.trim();
-  if (!ip) return null;
-  return createHash("sha256").update(ip).digest("hex");
+/** Hashed, trusted client IP for the durable per-IP submission limit (FFB-SEC-008). */
+function clientIpHash(req: Request): string {
+  return createHash("sha256").update(getTrustedClientIp(req)).digest("hex");
 }
 
 function sameOrigin(req: Request): boolean {

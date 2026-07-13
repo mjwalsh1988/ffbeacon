@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Users, Shield } from "lucide-react";
@@ -109,7 +110,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
       <script
         type="application/ld+json"
         suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">

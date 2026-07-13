@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { verifyCronRequest } from "@/lib/cron-auth";
 import { runSeedRankings } from "@/lib/seed-rankings";
 import { runCalculateTrends } from "@/lib/calculate-trends";
 import { recordCronRun } from "@/lib/cron-runs";
@@ -29,16 +30,9 @@ export const maxDuration = 300;
  * Auth: `Authorization: Bearer <CRON_SECRET>` only.
  */
 export async function GET(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json(
-      { error: "CRON_SECRET not configured" },
-      { status: 500 },
-    );
-  }
-  if (auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const cronAuth = verifyCronRequest(req);
+  if (!cronAuth.ok) {
+    return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   }
 
   const supabase = createAdminClient();
@@ -47,10 +41,33 @@ export async function GET(req: Request) {
       const started = Date.now();
       const rankings = await runSeedRankings(supabase);
       const trends = await runCalculateTrends(supabase);
+
+      // Bounded retention prune for the On The Clock rate-limit ledgers (FFB-SEC-002).
+      // Global and deletion-only (never per-league), so it belongs on this global cron.
+      // Non-fatal: a prune failure must never fail the derived recalc.
+      let rateLimitLedgerRowsDeleted: number | null = null;
+      try {
+        const { data } = await supabase.rpc(
+          "cleanup_on_the_clock_rate_limits" as never,
+          { p_max_age_hours: 24 } as never,
+        );
+        rateLimitLedgerRowsDeleted = typeof data === "number" ? data : null;
+        const { data: genericDeleted } = await supabase.rpc(
+          "cleanup_rate_limit_hits" as never,
+          { p_max_age_hours: 24 } as never,
+        );
+        if (typeof genericDeleted === "number") {
+          rateLimitLedgerRowsDeleted = (rateLimitLedgerRowsDeleted ?? 0) + genericDeleted;
+        }
+      } catch (pruneErr) {
+        console.error("[cron/recalculate-derived] rate-limit ledger prune failed", pruneErr);
+      }
+
       return {
         ok: true as const,
         rankings,
         trends,
+        rateLimitLedgerRowsDeleted,
         durationMs: Date.now() - started,
       };
     });

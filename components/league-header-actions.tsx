@@ -6,7 +6,7 @@ import { RefreshButton } from "@/components/refresh-button";
  * Shared header action cluster for every League Pulse deep-view surface
  * (overview, teams, transactions feed, team detail). Renders, in order:
  * the in-view League Switcher (only when the searched user has other
- * leagues), a Copy link button, and the admin/commissioner Refresh button.
+ * leagues), a Copy link button, and the public Refresh button.
  *
  * Layout matches the league overview header: on mobile the switcher and
  * copy link share a row (50/50 when both present, full width when the
@@ -21,7 +21,6 @@ export function LeagueHeaderActions({
   copyAriaLabel,
   otherLeagues,
   searchedUsername,
-  canForceRefresh,
   className,
 }: {
   sleeperLeagueId: string;
@@ -29,7 +28,6 @@ export function LeagueHeaderActions({
   copyAriaLabel: string;
   otherLeagues: SwitcherLeague[];
   searchedUsername: string | null;
-  canForceRefresh: boolean;
   className?: string;
 }) {
   return (
@@ -49,11 +47,7 @@ export function LeagueHeaderActions({
         )}
         <CopyLinkButton href={copyHref} ariaLabel={copyAriaLabel} />
       </div>
-      <RefreshButton
-        sleeperLeagueId={sleeperLeagueId}
-        isAuthorized={canForceRefresh}
-        mobileFullWidth
-      />
+      <RefreshButton sleeperLeagueId={sleeperLeagueId} mobileFullWidth />
     </div>
   );
 }
