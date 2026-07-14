@@ -8,7 +8,8 @@ import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { SignalCheckBuilder, type FormatOption } from "./signal-check-builder";
 import { SleeperImportPanel } from "./sleeper-import-panel";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { DiscordGlyph } from "@/components/discord-glyph";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const dynamic = "force-dynamic";
 
@@ -50,11 +51,23 @@ export default async function SignalCheckPage() {
 
   const showImport = settings.enabled && settings.sleeperImportsEnabled;
 
+  // Confirmed Discord members skip the invite: the hero button scrolls to the
+  // builder and the bottom CTA points them at the rest of the toolkit.
+  const isMember = await isDiscordMember();
+
   return (
     <main id="main">
-      <Hero featureLabel={settings.publicLabel} resultLabel={settings.resultLabel} />
+      <Hero
+        featureLabel={settings.publicLabel}
+        resultLabel={settings.resultLabel}
+        isMember={isMember}
+      />
 
-      <section aria-labelledby="builder-heading" className="border-b border-line">
+      <section
+        id="signal-check-builder-section"
+        aria-labelledby="builder-heading"
+        className="scroll-mt-24 border-b border-line"
+      >
         <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
           <h2 id="builder-heading" className="sr-only">
             Build a trade
@@ -87,12 +100,23 @@ export default async function SignalCheckPage() {
         eyebrow="Not sure about the verdict?"
         heading="Get a second opinion before you hit send."
         body="A Beacon Verdict is a great starting point, but our Discord is full of real managers who will sanity-check any trade with you for free. Curious how the values behind it are built? Read about FF Beacon."
+        isMember={isMember}
+        memberHeading="Verdict in hand? Put the rest of the toolkit to work."
+        memberBody="You're already in the crew, so skip the invite. Explore the other free FF Beacon tools to keep building a smarter roster."
       />
     </main>
   );
 }
 
-function Hero({ featureLabel, resultLabel }: { featureLabel: string; resultLabel: string }) {
+function Hero({
+  featureLabel,
+  resultLabel,
+  isMember,
+}: {
+  featureLabel: string;
+  resultLabel: string;
+  isMember: boolean;
+}) {
   return (
     <header className="relative overflow-hidden border-b border-line">
       <div
@@ -134,16 +158,14 @@ function Hero({ featureLabel, resultLabel }: { featureLabel: string; resultLabel
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <a
-            href="/join"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Join our Discord (opens in new tab)"
-            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <DiscordGlyph className="h-5 w-5" />
-            Join our Discord
-          </a>
+          <MemberHeroCta
+            isMember={isMember}
+            size="lg"
+            memberMode="scroll"
+            memberScrollTargetId="signal-check-builder-section"
+            memberLabel="Build a trade"
+            memberIcon="arrow-down"
+          />
           <Link
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

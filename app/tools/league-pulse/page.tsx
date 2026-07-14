@@ -9,7 +9,8 @@ import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleep
 import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { DiscordGlyph } from "@/components/discord-glyph";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   title: "Sleeper League Pulse",
@@ -67,12 +68,17 @@ export default async function LeaguePulsePage({
   // flow has advanced to "choose a league". A failed lookup stays on step 1.
   const currentStep: 1 | 2 | 3 = user ? 2 : 1;
 
+  // Confirmed Discord members skip the invite: the hero button scrolls them
+  // down to the lookup form, and the bottom CTA points at the rest of the tools.
+  const isMember = await isDiscordMember();
+
   return (
     <main id="main">
-      <Hero />
+      <Hero isMember={isMember} />
       <section
+        id="league-pulse-connect"
         aria-labelledby="sync-heading"
-        className="border-b border-line bg-surface/30"
+        className="scroll-mt-24 border-b border-line bg-surface/30"
       >
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
           {/* Contained lookup shell: the form lives inside a centered cockpit
@@ -206,6 +212,9 @@ export default async function LeaguePulsePage({
         eyebrow="Need a hand with your league?"
         heading="Questions about your league? Ask a real person."
         body="Confused by a power ranking or an odd Sleeper setting? Drop into our Discord and a real fantasy player will help you sort it out, free. Curious what else drives FF Beacon? Read about the project."
+        isMember={isMember}
+        memberHeading="League loaded. Explore the rest of the toolkit."
+        memberBody="You're already in the crew, so we'll skip the invite. Take the other free FF Beacon tools for a spin to get even more out of your leagues."
       />
     </main>
   );
@@ -213,7 +222,7 @@ export default async function LeaguePulsePage({
 
 /* ---------- Hero ---------- */
 
-function Hero() {
+function Hero({ isMember }: { isMember: boolean }) {
   return (
     <header className="relative overflow-hidden border-b border-line">
       {/* Beacon-gradient accent bar — matches home/about/author/my-beacon. */}
@@ -268,16 +277,14 @@ function Hero() {
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <a
-            href="/join"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Join our Discord (opens in new tab)"
-            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <DiscordGlyph className="h-5 w-5" />
-            Join our Discord
-          </a>
+          <MemberHeroCta
+            isMember={isMember}
+            size="lg"
+            memberMode="scroll"
+            memberScrollTargetId="league-pulse-connect"
+            memberLabel="Find your leagues"
+            memberIcon="arrow-down"
+          />
           <Link
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

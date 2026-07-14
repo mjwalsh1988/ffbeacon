@@ -7,6 +7,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   title: "Fantasy Football Guides",
@@ -14,7 +15,10 @@ export const metadata: Metadata = {
     "Plain-English guides to fantasy analytics, dynasty strategy, and accessible play. Long-form explainers built so any reader can keep up.",
 };
 
-export default function GuidesPage() {
+export default async function GuidesPage() {
+  // Confirmed Discord members already have the community; point the closing CTA
+  // at the live tools instead of the invite.
+  const isMember = await isDiscordMember();
   return (
     <main id="main">
       <Hero />
@@ -23,6 +27,9 @@ export default function GuidesPage() {
         eyebrow="While you wait"
         heading="Waiting on a guide? Ask a real person right now."
         body="Guides are being written while we build out the rest of the platform. In the meantime, drop into our Discord and real fantasy players will walk you through any concept, free. Want to know what's already live? Read about FF Beacon."
+        isMember={isMember}
+        memberHeading="While the guides cook, explore the tools."
+        memberBody="You're already in the crew, so hang tight on the guides. In the meantime, the free FF Beacon tools are live and ready to put to work on your team."
       />
     </main>
   );

@@ -20,7 +20,8 @@ import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { OnTheClockClient } from "./on-the-clock-client";
 import { StartDraftingButton } from "./start-drafting-button";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { DiscordGlyph } from "@/components/discord-glyph";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   title: "On The Clock",
@@ -68,9 +69,14 @@ export default async function OnTheClockPage() {
     savedUsername = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? "";
   }
 
+  // Confirmed Discord members don't need the "Join our Discord" CTAs; the hero
+  // button becomes a scroll-to-draft shortcut and the bottom CTA points them
+  // at the rest of the toolkit instead.
+  const isMember = await isDiscordMember();
+
   return (
     <main id="main">
-      <Hero />
+      <Hero isMember={isMember} />
       <section
         id="otc-connect"
         aria-labelledby="otc-app-heading"
@@ -97,6 +103,9 @@ export default async function OnTheClockPage() {
         eyebrow="Need a hand mid-draft?"
         heading="Stuck on a pick? Real people are watching the clock too."
         body="Our Discord is full of drafters who will help you weigh a pick or a trade in real time, free, no matter how many rounds are left. Want to know what powers the recommendations? Read about FF Beacon."
+        isMember={isMember}
+        memberHeading="Draft handled. See what else FF Beacon can do."
+        memberBody="You're already part of the crew, so we'll skip the invite. Explore the rest of the free FF Beacon toolkit for the moves you make after the clock stops."
       />
     </main>
   );
@@ -139,7 +148,7 @@ const OTC_FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: Accessibility, title: "Screen-reader native", body: "Read it or hear it" },
 ];
 
-function Hero() {
+function Hero({ isMember }: { isMember: boolean }) {
   return (
     <header className="relative overflow-hidden border-b border-line">
       <div
@@ -182,19 +191,21 @@ function Hero() {
           and awards. Every view works the same whether you read it or hear it.
         </p>
 
-        <StartDraftingButton />
+        {/* Mobile-only skip-to-form shortcut for anyone still seeing the
+            Discord invite. Members get the same scroll behavior from the
+            primary button below (on every breakpoint), so hide it for them
+            to avoid a duplicate "Start drafting". */}
+        {!isMember && <StartDraftingButton />}
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <a
-            href="/join"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Join our Discord (opens in new tab)"
-            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <DiscordGlyph className="h-5 w-5" />
-            Join our Discord
-          </a>
+          <MemberHeroCta
+            isMember={isMember}
+            size="lg"
+            memberMode="scroll"
+            memberScrollTargetId="otc-connect"
+            memberLabel="Start drafting"
+            memberIcon="arrow-down"
+          />
           <Link
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AuthorPortrait } from "@/components/author-portrait";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   title: "About FF Beacon",
@@ -20,7 +21,10 @@ export const metadata: Metadata = {
     "FF Beacon is fantasy football built accessibility-first, for casual fans and screen reader users alike.",
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  // Confirmed Discord members already have the community; point the closing CTA
+  // at the product instead of the invite.
+  const isMember = await isDiscordMember();
   return (
     <main id="main">
       <Hero />
@@ -34,6 +38,11 @@ export default function AboutPage() {
         body="The best way to understand FF Beacon is to use it. Drop into our Discord and real fantasy players will show you around, free, or jump straight into the tools built on everything above."
         secondaryHref="/tools"
         secondaryLabel="See every free tool"
+        isMember={isMember}
+        memberHeading="You get the mission. Now go use it."
+        memberBody="You're already part of the crew, so we'll skip the invite. The best way to feel the difference is to use it, so dive into the rankings and the rest of the free toolkit."
+        memberCtaHref="/rankings"
+        memberCtaLabel="Open the rankings"
       />
     </main>
   );

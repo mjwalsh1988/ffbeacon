@@ -11,6 +11,7 @@ import { ArticleMarkdown } from "@/components/beacon-brief/article-markdown";
 import { ArticleCard, articleTypeLabel } from "@/components/beacon-brief/article-card";
 import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -60,6 +61,9 @@ export default async function BriefArticlePage({ params }: PageProps) {
   if (!article) notFound();
 
   const related = await loadRelatedArticles(supabase, article);
+  // Confirmed Discord members already have the community; point the closing CTA
+  // at the tools instead of the invite.
+  const isMember = await isDiscordMember();
   const canonical = article.canonicalUrl?.trim() || `${SITE.url}/brief/${slug}`;
   const categoryLabel = article.category?.name ?? articleTypeLabel(article.articleType);
   const description =
@@ -281,6 +285,9 @@ export default async function BriefArticlePage({ params }: PageProps) {
         heading="What does this mean for your team? Ask real people."
         body="Bring this story into our Discord and real fantasy managers will help you work out the fantasy impact for your specific roster, free. Curious what else FF Beacon is building? Read about the project."
         className="mt-4 border-t border-line"
+        isMember={isMember}
+        memberHeading="Read the story. Now act on it."
+        memberBody="You're already in the crew, so we'll skip the invite. Take this news into the free FF Beacon tools and turn it into a real roster decision."
       />
     </main>
   );

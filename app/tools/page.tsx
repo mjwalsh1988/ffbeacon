@@ -7,12 +7,15 @@ import {
   Swords,
   Timer,
   ArrowRight,
+  Gamepad2,
   Accessibility,
   BookOpen,
   Sliders,
   Check,
   type LucideIcon,
 } from "lucide-react";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   title: "Fantasy Football Tools",
@@ -20,22 +23,26 @@ export const metadata: Metadata = {
     "Sleeper league sync, live draft help, trade grades, player comparisons, and a FAAB calculator. Accessible fantasy football tools for redraft and dynasty managers.",
 };
 
-export default function ToolsPage() {
+export default async function ToolsPage() {
+  // Confirmed Discord members are already in the community, and linking them
+  // back to /tools from the tools page is circular, so we point them at the
+  // newly launched free games instead.
+  const isMember = await isDiscordMember();
   return (
     <main id="main">
-      <Hero />
+      <Hero isMember={isMember} />
       {TOOLS.map((tool, i) => (
         <ToolSection key={tool.href} tool={tool} tinted={i % 2 === 1} />
       ))}
       <PrinciplesSection />
-      <CtaSection />
+      <CtaSection isMember={isMember} />
     </main>
   );
 }
 
 /* ---------- Hero ---------- */
 
-function Hero() {
+function Hero({ isMember }: { isMember: boolean }) {
   return (
     <header className="relative overflow-hidden border-b border-line">
       {/* Beacon-gradient accent bar pinned to the very top. */}
@@ -84,16 +91,14 @@ function Hero() {
           eye or by ear.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <a
-            href="/join"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Join our Discord (opens in new tab)"
-            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <DiscordGlyph className="h-5 w-5" />
-            Join our Discord
-          </a>
+          <MemberHeroCta
+            isMember={isMember}
+            size="lg"
+            memberMode="link"
+            memberHref="/games"
+            memberLabel="Explore our free games"
+            memberIcon="games"
+          />
           <Link
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -329,7 +334,7 @@ function PrincipleCard({
 
 /* ---------- CTA ---------- */
 
-function CtaSection() {
+function CtaSection({ isMember }: { isMember: boolean }) {
   return (
     <section aria-labelledby="cta-heading">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -340,29 +345,43 @@ function CtaSection() {
               "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
           }}
         >
-          <SectionEyebrow>More on the way</SectionEyebrow>
+          <SectionEyebrow>
+            {isMember ? "New: free games" : "More on the way"}
+          </SectionEyebrow>
           <h2
             id="cta-heading"
             className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
           >
-            Stuck on a tool? Real people are a message away.
+            {isMember
+              ? "Already in the Discord? Come play something."
+              : "Stuck on a tool? Real people are a message away."}
           </h2>
           <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
-            Drop into our Discord for free help from real fantasy players on
-            any tool here, and more tools are on the way. Want to know what
-            shaped these ones and who is behind them? Read about FF Beacon.
+            {isMember
+              ? "You're already part of the crew, so we'll skip the invite. We just launched free fantasy games. Take a break from the tools and see how sharp your instincts really are."
+              : "Drop into our Discord for free help from real fantasy players on any tool here, and more tools are on the way. Want to know what shaped these ones and who is behind them? Read about FF Beacon."}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href="/join"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Join our Discord (opens in new tab)"
-              className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <DiscordGlyph className="h-4 w-4" />
-              Join our Discord
-            </a>
+            {isMember ? (
+              <Link
+                href="/games"
+                className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                <Gamepad2 aria-hidden="true" className="h-4 w-4" />
+                Explore our free games
+              </Link>
+            ) : (
+              <a
+                href="/join"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Join our Discord (opens in new tab)"
+                className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                <DiscordGlyph className="h-4 w-4" />
+                Join our Discord
+              </a>
+            )}
             <Link
               href="/about"
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

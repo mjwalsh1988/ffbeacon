@@ -15,7 +15,8 @@ import {
 import { SITE } from "@/lib/site";
 import { AuthorPortrait } from "@/components/author-portrait";
 import { EmailReveal } from "@/components/email-reveal";
-import { DiscordGlyph } from "@/components/discord-glyph";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   title: "Michael, founder of FF Beacon",
@@ -46,7 +47,10 @@ const personSchema = {
   ],
 };
 
-export default function AuthorMichaelPage() {
+export default async function AuthorMichaelPage() {
+  // Confirmed Discord members already have the community; the Connect section's
+  // primary button points them at the toolkit instead of the invite.
+  const isMember = await isDiscordMember();
   return (
     <main id="main">
       <script
@@ -60,7 +64,7 @@ export default function AuthorMichaelPage() {
       <AtAGlanceSection />
       <ToolsSection />
       <SpeakingSection />
-      <ConnectSection />
+      <ConnectSection isMember={isMember} />
     </main>
   );
 }
@@ -471,7 +475,7 @@ function PlaceholderCard({
 
 /* ---------- Connect / CTA ---------- */
 
-function ConnectSection() {
+function ConnectSection({ isMember }: { isMember: boolean }) {
   return (
     <section aria-labelledby="connect-heading">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -500,22 +504,19 @@ function ConnectSection() {
               Want to talk about accessibility, fantasy, or analytics?
             </h2>
             <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
-              Our Discord is the fastest way to reach the whole community,
-              myself included. Prefer a direct line? Email works too, and the
-              social accounts in the footer will start posting as the site
-              grows.
+              {isMember
+                ? "You're already in the Discord, so you know where to find the community, myself included. Prefer a direct line? Email works too, and everything I've built is free to use whenever you want to dig in."
+                : "Our Discord is the fastest way to reach the whole community, myself included. Prefer a direct line? Email works too, and the social accounts in the footer will start posting as the site grows."}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a
-                href="/join"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Join our Discord (opens in new tab)"
-                className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                <DiscordGlyph className="h-4 w-4" />
-                Join our Discord
-              </a>
+              <MemberHeroCta
+                isMember={isMember}
+                size="md"
+                memberMode="link"
+                memberHref="/tools"
+                memberLabel="Explore our fantasy tools"
+                memberIcon="tools"
+              />
               <EmailReveal variant="secondary" />
               <Link
                 href="/about"

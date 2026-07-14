@@ -15,7 +15,8 @@ import { BreakdownTabs } from "./breakdown-tabs";
 import { StatsCompare } from "./stats-compare";
 import { loadBreakdownStats } from "./load-stats";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { DiscordGlyph } from "@/components/discord-glyph";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export const dynamic = "force-dynamic";
 
@@ -89,11 +90,19 @@ export default async function BeaconBreakdownPage({
     ? describeSource(registry, valueResolution.source)
     : null;
 
+  // Confirmed Discord members skip the invite: the hero button scrolls to the
+  // comparison and the bottom CTA points them at the rest of the toolkit.
+  const isMember = await isDiscordMember();
+
   return (
     <main id="main">
-      <Hero />
+      <Hero isMember={isMember} />
 
-      <section aria-labelledby="breakdown-heading" className="border-b border-line">
+      <section
+        id="beacon-breakdown-section"
+        aria-labelledby="breakdown-heading"
+        className="scroll-mt-24 border-b border-line"
+      >
         <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
           <h2 id="breakdown-heading" className="sr-only">
             Run a Beacon Breakdown
@@ -119,6 +128,9 @@ export default async function BeaconBreakdownPage({
         eyebrow="Torn on the verdict?"
         heading="Still can't decide? Talk it out with real people."
         body="The Beacon Edge gives you a clear lean, but a trade or a start/sit call can still be close. Bring the matchup to our Discord and real fantasy managers will help you settle it for free. Want to know what's behind FF Beacon? Read about the project."
+        isMember={isMember}
+        memberHeading="Call made? Explore the rest of the toolkit."
+        memberBody="You're already in the crew, so we'll skip the invite. Dig into the other free FF Beacon tools for your next close call."
       />
     </main>
   );
@@ -325,7 +337,7 @@ function ResultSkeleton() {
   );
 }
 
-function Hero() {
+function Hero({ isMember }: { isMember: boolean }) {
   return (
     <header className="relative overflow-hidden border-b border-line">
       <div
@@ -369,16 +381,14 @@ function Hero() {
           call.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <a
-            href="/join"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Join our Discord (opens in new tab)"
-            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <DiscordGlyph className="h-5 w-5" />
-            Join our Discord
-          </a>
+          <MemberHeroCta
+            isMember={isMember}
+            size="lg"
+            memberMode="scroll"
+            memberScrollTargetId="beacon-breakdown-section"
+            memberLabel="Break down a matchup"
+            memberIcon="arrow-down"
+          />
           <Link
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

@@ -49,14 +49,46 @@ export function DiscordCta() {
       setVisible(false);
       return;
     }
+
+    // Honor an earlier dismissal before doing any network work.
+    let dismissed = false;
     try {
-      const dismissed = window.localStorage.getItem(STORAGE_KEY) === "1";
-      setVisible(!dismissed);
+      dismissed = window.localStorage.getItem(STORAGE_KEY) === "1";
     } catch {
-      // localStorage can throw in private mode / hardened browsers. Default
-      // to showing — the dismiss button still works for the session.
-      setVisible(true);
+      // localStorage can throw in private mode / hardened browsers; treat as
+      // "not dismissed" and fall through to the membership check.
+      dismissed = false;
     }
+    if (dismissed) {
+      setVisible(false);
+      return;
+    }
+
+    // Ask the server whether the signed-in user is already in our Discord.
+    // The endpoint derives identity from the session cookie (never trusts the
+    // client) and the bot token stays server-side. We stay in the "undecided"
+    // (render nothing) state until this resolves so a confirmed member never
+    // sees the invite flash in. Anyone we can't confirm as a member (logged
+    // out, no Discord linked, or an unverifiable check) still sees the CTA.
+    const controller = new AbortController();
+    let active = true;
+    fetch("/api/discord/membership", {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    })
+      .then((res) => (res.ok ? res.json() : { member: false }))
+      .then((data: { member?: boolean }) => {
+        if (active) setVisible(data.member !== true);
+      })
+      .catch(() => {
+        // Network/abort error: fail open to showing the invite.
+        if (active) setVisible(true);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   const dismiss = () => {

@@ -9,6 +9,7 @@ import { BriefShell } from "@/components/beacon-brief/brief-shell";
 import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
 import { BriefPagination } from "@/components/beacon-brief/brief-pagination";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { isDiscordMember } from "@/lib/discord-membership";
 
 export type Breadcrumb = { label: string; href?: string };
 
@@ -18,7 +19,7 @@ export type Breadcrumb = { label: string; href?: string };
  * data, then hand it here so the header, breadcrumb, sidebar, card grid, and
  * pagination stay identical across all of them.
  */
-export function BriefFeed({
+export async function BriefFeed({
   eyebrow,
   heading,
   description,
@@ -44,6 +45,10 @@ export function BriefFeed({
   basePath: string;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // Confirmed Discord members already have the community; point the closing CTA
+  // at the tools instead of the invite.
+  const isMember = await isDiscordMember();
 
   // BreadcrumbList structured data. The visible trail leads with the FF Beacon
   // logo (the Beacon Brief home); the structured data prepends the site Home so
@@ -152,6 +157,9 @@ export function BriefFeed({
         heading="Got questions about what this means for your team?"
         body="Drop into our Discord and real fantasy players will help you turn this news into a lineup decision, free. Want to know what's behind FF Beacon? Read about the project."
         className="border-t border-line"
+        isMember={isMember}
+        memberHeading="Caught up on the news? Put it to work."
+        memberBody="You're already part of the crew, so we'll skip the invite. Carry the latest into the free FF Beacon tools and turn headlines into lineup calls."
       />
     </main>
   );

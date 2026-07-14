@@ -15,7 +15,8 @@ import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { RankingsTable, type RankingsRow } from "@/components/rankings-table";
 import { ScrollToRankings } from "./scroll-to-rankings";
 import { POSITIONS } from "@/lib/site";
-import { DiscordGlyph } from "@/components/discord-glyph";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 
 export const metadata: Metadata = {
@@ -229,6 +230,10 @@ export default async function RankingsPage({
     };
   });
 
+  // Confirmed Discord members skip the invite: the hero button scrolls straight
+  // to the board and the bottom CTA points at the rest of the toolkit.
+  const isMember = await isDiscordMember();
+
   return (
     <main id="main">
       <header className="relative overflow-hidden border-b border-line">
@@ -303,16 +308,14 @@ export default async function RankingsPage({
             without losing your place.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a
-              href="/join"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Join our Discord (opens in new tab)"
-              className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <DiscordGlyph className="h-5 w-5" />
-              Join our Discord
-            </a>
+            <MemberHeroCta
+              isMember={isMember}
+              size="lg"
+              memberMode="scroll"
+              memberScrollTargetId="rankings-board"
+              memberLabel="Jump to the rankings"
+              memberIcon="arrow-down"
+            />
             <Link
               href="/tools"
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -458,6 +461,9 @@ export default async function RankingsPage({
         eyebrow="Need help reading the board?"
         heading="Stuck on a ranking? Real people are a message away."
         body="Drop into our Discord for a free gut check on any player or tier from real fantasy managers, and the board updates automatically as new data comes in. Want to know what powers the FF Beacon number? Read about FF Beacon."
+        isMember={isMember}
+        memberHeading="Board in view. Put it to work in the tools."
+        memberBody="You're already part of the crew, so we'll skip the invite. Carry these rankings into the rest of the free FF Beacon toolkit for trades, waivers, and drafts."
       />
     </main>
   );

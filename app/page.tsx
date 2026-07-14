@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { MemberHeroCta } from "@/components/member-hero-cta";
+import { isDiscordMember } from "@/lib/discord-membership";
 import {
   Workflow,
   Calculator,
@@ -131,21 +133,25 @@ export default async function HomePage() {
         .order("priority"),
     ]);
 
+  // Confirmed Discord members don't need the "Join our Discord" hero/CTA
+  // buttons; they get pointed at the toolkit instead.
+  const isMember = await isDiscordMember();
+
   return (
     <main id="main">
-      <Hero />
+      <Hero isMember={isMember} />
       <ToolsSection />
       <GamesSection />
       <SourcesFormatsSection formats={formats ?? []} sources={sources ?? []} />
       <ArticlesSection articles={articles ?? []} />
-      <CtaSection />
+      <CtaSection isMember={isMember} />
     </main>
   );
 }
 
 /* ---------- Hero ---------- */
 
-function Hero() {
+function Hero({ isMember }: { isMember: boolean }) {
   return (
     <header className="relative overflow-hidden border-b border-line">
       {/* Beacon-gradient accent bar pinned to the very top of the page. */}
@@ -198,16 +204,14 @@ function Hero() {
           are. No paywall, no gatekeeping.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <a
-            href="/join"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Join our Discord (opens in new tab)"
-            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <DiscordGlyph className="h-5 w-5" />
-            Join our Discord
-          </a>
+          <MemberHeroCta
+            isMember={isMember}
+            size="lg"
+            memberMode="link"
+            memberHref="/tools"
+            memberLabel="Explore our fantasy tools"
+            memberIcon="tools"
+          />
           <Link
             href="/tools/on-the-clock"
             className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -247,23 +251,6 @@ function HeroStat({ value, label }: { value: string; label: string }) {
         {label}
       </p>
     </li>
-  );
-}
-
-/** Discord wordmark glyph, matching the icon used in the footer and the
- *  floating Discord CTA. Lucide ships no Discord icon, so we inline the
- *  official brand path. Decorative: the surrounding link carries the label. */
-function DiscordGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-      focusable={false}
-    >
-      <path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.07.07 0 0 0-.075.035c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.075-.035 19.74 19.74 0 0 0-4.885 1.515.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.2 14.2 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-    </svg>
   );
 }
 
@@ -829,7 +816,7 @@ function ArticleCard({ article }: { article: ArticleRow }) {
 
 /* ---------- CTA ---------- */
 
-function CtaSection() {
+function CtaSection({ isMember }: { isMember: boolean }) {
   return (
     <section aria-labelledby="cta-heading">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -850,30 +837,31 @@ function CtaSection() {
             }}
           />
           <div className="relative">
-            <SectionEyebrow>Ready when you are</SectionEyebrow>
+            <SectionEyebrow>
+              {isMember ? "Already in the crew" : "Ready when you are"}
+            </SectionEyebrow>
             <h2
               id="cta-heading"
               className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
             >
-              Real people in the Discord, real help on the clock.
+              {isMember
+                ? "You're in the Discord. Now let the tools go to work."
+                : "Real people in the Discord, real help on the clock."}
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-              Jump into our Discord for free lineup, trade, and draft advice
-              from real fantasy players, no matter how new you are. Drafting
-              tonight? Connect your live Sleeper draft and let On The Clock
-              call out your team's needs pick by pick. No paywall, ever.
+              {isMember
+                ? "Thanks for being part of the crew, so we'll skip the invite. Everything we build is free and ready to use, from live draft help to trade grades and waiver bids. Drafting tonight? Connect your live Sleeper draft and let On The Clock call out your team's needs pick by pick."
+                : "Jump into our Discord for free lineup, trade, and draft advice from real fantasy players, no matter how new you are. Drafting tonight? Connect your live Sleeper draft and let On The Clock call out your team's needs pick by pick. No paywall, ever."}
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <a
-                href="/join"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Join our Discord (opens in new tab)"
-                className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                <DiscordGlyph className="h-4 w-4" />
-                Join our Discord
-              </a>
+              <MemberHeroCta
+                isMember={isMember}
+                size="md"
+                memberMode="link"
+                memberHref="/tools"
+                memberLabel="Explore our fantasy tools"
+                memberIcon="tools"
+              />
               <Link
                 href="/tools/on-the-clock"
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
