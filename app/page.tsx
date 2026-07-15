@@ -22,6 +22,7 @@ import {
   BarChart3,
   Users2,
   CheckCircle2,
+  Flame,
   type LucideIcon,
 } from "lucide-react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
@@ -72,6 +73,10 @@ type FeaturedTool = {
   description: string;
   cta: string;
   icon: LucideIcon;
+  /** Optional highlight pill (e.g. "Draft season") shown in the card corner. */
+  badge?: string;
+  /** When true, the card gets the accented "featured" treatment. */
+  featured?: boolean;
 };
 
 const FEATURED_TOOLS: FeaturedTool[] = [
@@ -90,6 +95,8 @@ const FEATURED_TOOLS: FeaturedTool[] = [
       "Drafting right now? Connect your live Sleeper draft and we will call out where your team needs help, run trade offers with a calculator and an analyzer for startup and rookie drafts, and open every team roster, the full trade history, live power rankings, and startup draft grades and awards.",
     cta: "Open the draft room",
     icon: Timer,
+    badge: "Draft season",
+    featured: true,
   },
   {
     href: "/tools/beacon-breakdown",
@@ -448,7 +455,7 @@ function ToolsSection() {
             id="tools-heading"
             className="text-3xl font-semibold tracking-tight sm:text-4xl"
           >
-            Rank your players, read your league, win your waivers.
+            Read your league, ace your draft, win your week.
           </h2>
           <Link
             href="/tools"
@@ -459,8 +466,8 @@ function ToolsSection() {
           </Link>
         </div>
 
-        {/* Top row: 2 across (Signal Check, On The Clock). Bottom row: 3 across
-            (Rankings, League Pulse, FAAB). Everything stacks on mobile. */}
+        {/* Top row: 2 across (League Pulse, On The Clock). Bottom row: 3 across
+            (Beacon Breakdown, Signal Check, FAAB). Everything stacks on mobile. */}
         <div className="mt-12 grid gap-5 md:grid-cols-2">
           {FEATURED_TOOLS.slice(0, 2).map((tool, i) => (
             <ToolCard key={tool.href} tool={tool} index={i} />
@@ -477,31 +484,53 @@ function ToolsSection() {
 }
 
 function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
-  const { href, title, description, cta, icon: Icon } = tool;
+  const { href, title, description, cta, icon: Icon, badge, featured } = tool;
   return (
     <Link
       href={href}
-      className="group relative flex flex-col rounded-card border border-line bg-surface-elevated p-6 shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-brand-purple/60 hover:shadow-xl hover:shadow-brand-purple/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      className={`group relative flex flex-col overflow-hidden rounded-card border p-6 shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+        featured
+          ? "border-brand-purple/60 bg-surface-elevated shadow-brand-purple/20 ring-1 ring-brand-purple/20 hover:border-brand-purple hover:shadow-brand-purple/30"
+          : "border-line bg-surface-elevated shadow-black/20 hover:border-brand-purple/60 hover:shadow-brand-purple/10"
+      }`}
     >
-      <div className="flex items-center justify-between">
+      {/* Featured cards get a beacon glow wash in the corner. Decorative. */}
+      {featured && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(168, 85, 247, 0.20) 0%, rgba(34, 211, 238, 0.09) 50%, transparent 72%)",
+          }}
+        />
+      )}
+      <div className="relative flex items-center justify-between">
         <span
           aria-hidden="true"
           className="flex h-12 w-12 items-center justify-center rounded-card bg-beacon text-black"
         >
           <Icon className="h-6 w-6" />
         </span>
-        <span
-          aria-hidden="true"
-          className="font-mono text-sm font-semibold tracking-[0.2em] text-ink-subtle"
-        >
-          {String(index + 1).padStart(2, "0")}
-        </span>
+        {badge ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-beacon px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-black">
+            <Flame aria-hidden="true" className="h-3.5 w-3.5" />
+            {badge}
+          </span>
+        ) : (
+          <span
+            aria-hidden="true"
+            className="font-mono text-sm font-semibold tracking-[0.2em] text-ink-subtle"
+          >
+            {String(index + 1).padStart(2, "0")}
+          </span>
+        )}
       </div>
-      <h3 className="mt-5 text-xl font-semibold text-ink">{title}</h3>
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">
+      <h3 className="relative mt-5 text-xl font-semibold text-ink">{title}</h3>
+      <p className="relative mt-2 flex-1 text-sm leading-relaxed text-ink-muted">
         {description}
       </p>
-      <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
+      <span className="relative mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
         {cta}
         <ArrowRight
           aria-hidden="true"
