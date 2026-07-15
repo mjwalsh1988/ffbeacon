@@ -16,7 +16,6 @@ import {
   Radar,
   Layers,
   BookOpen,
-  Gift,
   Unlock,
   Users,
   BarChart3,
@@ -174,7 +173,6 @@ export default async function HomePage() {
 type HeroFeature = { icon: LucideIcon; label: string };
 
 const HERO_FEATURES: HeroFeature[] = [
-  { icon: Gift, label: "Free tools" },
   { icon: Unlock, label: "No paywall" },
   { icon: Users, label: "Real community help" },
   { icon: BarChart3, label: "League-specific insights" },

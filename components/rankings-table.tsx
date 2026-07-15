@@ -50,55 +50,103 @@ type SortDir = "asc" | "desc";
 // calculate-trends.ts via the cadence-aware bookend rule): show movement only
 // when the source has a data point near both ends of the 7-day window.
 
-// Desktop columns. Mobile renders a different layout (Rank, Player, dynamic
-// metric column driven by the active sort chip) so it does not consume this
-// list — see MOBILE_SORT_OPTIONS below.
-const COLUMNS: Array<{
+type Column = { key: SortKey; label: string; numeric: boolean };
+type MobileSortOption = {
   key: SortKey;
   label: string;
-  numeric: boolean;
-}> = [
-  { key: "overall_rank", label: "Rank", numeric: true },
-  { key: "name", label: "Player", numeric: false },
-  { key: "team", label: "Team", numeric: false },
-  { key: "position", label: "Pos", numeric: false },
-  { key: "position_rank", label: "Pos rank", numeric: true },
-  { key: "tier", label: "Tier", numeric: true },
-  { key: "value", label: "Value", numeric: true },
-  { key: "rank_change_7d", label: "Rank 7d", numeric: true },
-  { key: "change_7d", label: "Value 7d", numeric: true },
-];
+  short: string;
+  defaultDir: SortDir;
+};
+
+// Desktop columns. Mobile renders a different layout (Rank, Player, dynamic
+// metric column driven by the active sort chip) so it does not consume this
+// list — see buildMobileSortOptions below.
+//
+// On the overall board the primary "Rank" column is the overall rank. On a
+// positional board (a position filter is active) the primary "Rank" column
+// switches to the positional rank (RB1, RB2... shown as 1, 2...) so the reader
+// sees "which RB is this" at a glance, and a dedicated "OVR Rank" column is
+// added right after it to preserve the overall rank. The redundant "Pos rank"
+// column is dropped on positional boards because the primary Rank already
+// carries that number.
+function buildColumns(positional: boolean): Column[] {
+  if (positional) {
+    return [
+      { key: "position_rank", label: "Rank", numeric: true },
+      { key: "overall_rank", label: "OVR Rank", numeric: true },
+      { key: "name", label: "Player", numeric: false },
+      { key: "team", label: "Team", numeric: false },
+      { key: "position", label: "Pos", numeric: false },
+      { key: "tier", label: "Tier", numeric: true },
+      { key: "value", label: "Value", numeric: true },
+      { key: "rank_change_7d", label: "Rank 7d", numeric: true },
+      { key: "change_7d", label: "Value 7d", numeric: true },
+    ];
+  }
+  return [
+    { key: "overall_rank", label: "Rank", numeric: true },
+    { key: "name", label: "Player", numeric: false },
+    { key: "team", label: "Team", numeric: false },
+    { key: "position", label: "Pos", numeric: false },
+    { key: "position_rank", label: "Pos rank", numeric: true },
+    { key: "tier", label: "Tier", numeric: true },
+    { key: "value", label: "Value", numeric: true },
+    { key: "rank_change_7d", label: "Rank 7d", numeric: true },
+    { key: "change_7d", label: "Value 7d", numeric: true },
+  ];
+}
 
 // Mobile sort chip row. Each chip both selects the sort key AND determines
 // which metric the dynamic third column on mobile renders. Tap the active
 // chip again to flip the sort direction; tap an inactive chip to switch
 // metrics (resets direction to the chip's natural default — Rank low→high,
-// values/trends high→low).
-const MOBILE_SORT_OPTIONS: Array<{
-  key: SortKey;
-  label: string;
-  short: string;
-  defaultDir: SortDir;
-}> = [
-  { key: "overall_rank", label: "Rank", short: "Rank", defaultDir: "asc" },
-  { key: "value", label: "Value", short: "Value", defaultDir: "desc" },
-  { key: "tier", label: "Tier", short: "Tier", defaultDir: "asc" },
-  { key: "position_rank", label: "Pos rank", short: "Pos #", defaultDir: "asc" },
-  { key: "rank_change_7d", label: "Rank 7d", short: "Rank 7d", defaultDir: "desc" },
-  { key: "change_7d", label: "Value 7d", short: "Val 7d", defaultDir: "desc" },
-];
+// values/trends high→low). On a positional board the "Rank" chip sorts by the
+// positional rank; the "Pos rank" chip is dropped because Rank already is it.
+function buildMobileSortOptions(positional: boolean): MobileSortOption[] {
+  if (positional) {
+    return [
+      { key: "position_rank", label: "Rank", short: "Rank", defaultDir: "asc" },
+      { key: "value", label: "Value", short: "Value", defaultDir: "desc" },
+      { key: "tier", label: "Tier", short: "Tier", defaultDir: "asc" },
+      { key: "rank_change_7d", label: "Rank 7d", short: "Rank 7d", defaultDir: "desc" },
+      { key: "change_7d", label: "Value 7d", short: "Val 7d", defaultDir: "desc" },
+    ];
+  }
+  return [
+    { key: "overall_rank", label: "Rank", short: "Rank", defaultDir: "asc" },
+    { key: "value", label: "Value", short: "Value", defaultDir: "desc" },
+    { key: "tier", label: "Tier", short: "Tier", defaultDir: "asc" },
+    { key: "position_rank", label: "Pos rank", short: "Pos #", defaultDir: "asc" },
+    { key: "rank_change_7d", label: "Rank 7d", short: "Rank 7d", defaultDir: "desc" },
+    { key: "change_7d", label: "Value 7d", short: "Val 7d", defaultDir: "desc" },
+  ];
+}
 
 export function RankingsTable({
   rows,
   valueIsBeacon = false,
+  positionFilter = null,
 }: {
   rows: RankingsRow[];
   /** True when the source backing the Value column is FF Beacon. Drives the
    *  small FF Beacon mark shown to the left of every value number so readers
    *  recognize the proprietary values as ours. */
   valueIsBeacon?: boolean;
+  /** Active position filter (e.g. "RB"), or null on the overall board. When
+   *  set, the primary Rank column shows the positional rank and an "OVR Rank"
+   *  column carries the overall rank. The parent keys this component on the
+   *  position so the default sort re-initializes on each position switch. */
+  positionFilter?: string | null;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("overall_rank");
+  const positional = Boolean(positionFilter);
+  const columns = useMemo(() => buildColumns(positional), [positional]);
+  const mobileSortOptions = useMemo(
+    () => buildMobileSortOptions(positional),
+    [positional],
+  );
+  const [sortKey, setSortKey] = useState<SortKey>(
+    positional ? "position_rank" : "overall_rank",
+  );
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [openRow, setOpenRow] = useState<RankingsRow | null>(null);
 
@@ -156,7 +204,7 @@ export function RankingsTable({
           aria-label="Sort rankings by"
           className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
         >
-          {MOBILE_SORT_OPTIONS.map((opt) => {
+          {mobileSortOptions.map((opt) => {
             const isActive = opt.key === sortKey;
             return (
               <button
@@ -203,10 +251,10 @@ export function RankingsTable({
               compact 3-column body handle sort + columns differently. */}
           <thead className="hidden bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle md:table-header-group">
             <tr>
-              {COLUMNS.map((col, idx) => {
+              {columns.map((col, idx) => {
                 const isActive = col.key === sortKey;
                 const isFirst = idx === 0;
-                const isLast = idx === COLUMNS.length - 1;
+                const isLast = idx === columns.length - 1;
                 const sortAttr: "ascending" | "descending" | "none" = isActive
                   ? sortDir === "asc"
                     ? "ascending"
@@ -221,7 +269,10 @@ export function RankingsTable({
                     ? "text-left"
                     : "text-center";
                 const sidePad = isFirst ? "pl-4" : isLast ? "pr-4" : "";
-                const widthHint = col.key === "overall_rank" ? "w-16" : "";
+                const widthHint =
+                  col.key === "overall_rank" || col.key === "position_rank"
+                    ? "w-16"
+                    : "";
                 return (
                   <th
                     key={`${col.key}-${idx}`}
@@ -262,7 +313,7 @@ export function RankingsTable({
                 Player
               </th>
               <th scope="col" className="py-3 pl-2 pr-4 text-center">
-                {mobileMetricLabel(sortKey)}
+                {mobileMetricLabel(sortKey, mobileSortOptions)}
               </th>
             </tr>
           </thead>
@@ -271,8 +322,18 @@ export function RankingsTable({
             {sorted.map((row) => (
               <tr key={row.slug} className="hover:bg-surface">
                 <td className="w-14 py-3 pl-4 pr-2 text-center font-mono tabular-nums text-ink-muted md:w-16 md:px-3">
-                  {row.overall_rank}
+                  {positional ? row.position_rank : row.overall_rank}
+                  {positional && (
+                    <span className="mt-0.5 block text-[10px] leading-tight text-ink-subtle md:hidden">
+                      OVR {row.overall_rank}
+                    </span>
+                  )}
                 </td>
+                {positional && (
+                  <td className="hidden w-16 px-3 py-3 text-center font-mono tabular-nums text-ink-muted md:table-cell">
+                    {row.overall_rank}
+                  </td>
+                )}
                 <td className="px-3 py-3 text-left">
                   {/* Mobile: tap-to-open sheet. Desktop: link to full player profile. */}
                   <button
@@ -334,6 +395,7 @@ export function RankingsTable({
                     row={row}
                     sortKey={sortKey}
                     valueIsBeacon={valueIsBeacon}
+                    positional={positional}
                   />
                 </td>
 
@@ -344,10 +406,12 @@ export function RankingsTable({
                 <td className="hidden px-3 py-3 text-center md:table-cell">
                   <span className="font-mono text-xs text-brand-cyan">{row.position}</span>
                 </td>
-                <td className="hidden px-3 py-3 text-center font-mono tabular-nums text-ink-muted md:table-cell">
-                  {row.position}
-                  {row.position_rank}
-                </td>
+                {!positional && (
+                  <td className="hidden px-3 py-3 text-center font-mono tabular-nums text-ink-muted md:table-cell">
+                    {row.position}
+                    {row.position_rank}
+                  </td>
+                )}
                 <td className="hidden px-3 py-3 text-center md:table-cell">
                   {row.tier ? (
                     <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
@@ -391,8 +455,11 @@ export function RankingsTable({
   );
 }
 
-function mobileMetricLabel(sortKey: SortKey): string {
-  const opt = MOBILE_SORT_OPTIONS.find((o) => o.key === sortKey);
+function mobileMetricLabel(
+  sortKey: SortKey,
+  options: MobileSortOption[],
+): string {
+  const opt = options.find((o) => o.key === sortKey);
   // When the active sort is one of the "name"-style sort keys that don't
   // have a mobile chip (e.g. desktop sorted by team/name then user came to
   // mobile), default the third column to Value to preserve the user's
@@ -404,42 +471,45 @@ function MobileMetricCell({
   row,
   sortKey,
   valueIsBeacon,
+  positional,
 }: {
   row: RankingsRow;
   sortKey: SortKey;
   valueIsBeacon: boolean;
+  positional: boolean;
 }) {
-  switch (sortKey) {
-    case "tier":
-      return row.tier !== null ? (
-        <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
-          T{row.tier}
-        </span>
-      ) : (
-        <span className="text-ink-subtle">—</span>
-      );
-    case "position_rank":
-      return (
-        <span className="text-ink">
-          {row.position}
-          {row.position_rank}
-        </span>
-      );
-    case "rank_change_7d":
-      return <RankTrendCell row={row} />;
-    case "change_7d":
-      return <ValueTrendCell row={row} />;
-    case "value":
-    case "overall_rank":
-    default:
-      return row.value !== null ? (
-        <BeaconValue show={valueIsBeacon}>
-          {row.value.toLocaleString()}
-        </BeaconValue>
-      ) : (
-        <span>—</span>
-      );
+  if (sortKey === "tier") {
+    return row.tier !== null ? (
+      <span className="inline-flex rounded bg-surface-elevated px-2 py-0.5 text-xs">
+        T{row.tier}
+      </span>
+    ) : (
+      <span className="text-ink-subtle">—</span>
+    );
   }
+  // On a positional board the "Pos rank" chip is dropped and the "Rank" chip
+  // sorts by position_rank; that number already lives in the left Rank column,
+  // so the dynamic metric cell falls through to Value (matching how the
+  // overall board treats its Rank sort).
+  if (sortKey === "position_rank" && !positional) {
+    return (
+      <span className="text-ink">
+        {row.position}
+        {row.position_rank}
+      </span>
+    );
+  }
+  if (sortKey === "rank_change_7d") {
+    return <RankTrendCell row={row} />;
+  }
+  if (sortKey === "change_7d") {
+    return <ValueTrendCell row={row} />;
+  }
+  return row.value !== null ? (
+    <BeaconValue show={valueIsBeacon}>{row.value.toLocaleString()}</BeaconValue>
+  ) : (
+    <span>—</span>
+  );
 }
 
 /**

@@ -449,7 +449,9 @@ export default async function RankingsPage({
               </p>
             ) : (
               <RankingsTable
+                key={positionFilter ?? "all"}
                 rows={rows}
+                positionFilter={positionFilter}
                 valueIsBeacon={valueHistoryResolution.source === "ffbeacon"}
               />
             )}
