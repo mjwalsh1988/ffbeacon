@@ -17,6 +17,7 @@ import { SiteSearch } from "@/components/site-search";
 import { PreferencesMenu } from "@/components/preferences-menu";
 import { HeaderNavLink } from "@/components/header-nav-link";
 import { NavDropdown } from "@/components/nav-dropdown";
+import { HeaderShell } from "@/components/header-shell";
 
 async function loadHeaderData(): Promise<{
   formats: FormatOption[];
@@ -136,12 +137,14 @@ export async function SiteHeader() {
   const supportedFormatSlugs = activeSource?.supported_format_slugs ?? null;
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-base/85 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex shrink-0 items-center text-lg" aria-label="FF Beacon home">
-          <BeaconMark />
-        </Link>
-        <nav aria-label="Primary" className="ml-6 hidden flex-1 items-center gap-1 md:flex">
+    <HeaderShell>
+      <Link href="/" className="flex shrink-0 items-center text-lg" aria-label="FF Beacon home">
+        <BeaconMark />
+      </Link>
+      <nav
+        aria-label="Primary"
+        className="hidden flex-1 items-center justify-center gap-1 md:flex"
+      >
           {PRIMARY_NAV.map((item) =>
             item.children && item.children.length > 0 ? (
               <NavDropdown
@@ -243,8 +246,7 @@ export async function SiteHeader() {
             />
           </Suspense>
         </div>
-      </div>
-    </header>
+    </HeaderShell>
   );
 }
 

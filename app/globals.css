@@ -276,3 +276,115 @@
     background-image: none;
   }
 }
+
+/**
+ * Homepage hero animated background. Three decorative layers combine into a
+ * living "signal" motif that draws the eye without distracting from the copy:
+ *   1. `.hero-wave` bands: two stacked signal waves along the bottom that drift
+ *      sideways on a loop. Each SVG is drawn 200% wide with the left half equal
+ *      to the right half, so translating by -50% loops seamlessly (same trick as
+ *      the OTC marquee). A slower, dimmer second band adds depth/parallax.
+ *   2. `.hero-signal-line`: the rising "line goes up" chart in the top-right,
+ *      drawn on first paint via a stroke-dashoffset sweep, then left static.
+ *   3. `.hero-pulse-dot`: a soft beacon pulse at the tip of the rising line.
+ * All three are purely decorative (the hero content is aria-labelled on its
+ * own) and every animation is disabled under prefers-reduced-motion, leaving a
+ * fully rendered, still-branded static background.
+ */
+@keyframes hero-wave-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.hero-wave {
+  animation: hero-wave-drift 22s linear infinite;
+  will-change: transform;
+}
+
+.hero-wave--slow {
+  animation-duration: 34s;
+}
+
+@keyframes hero-line-draw {
+  from {
+    stroke-dashoffset: var(--hero-line-len, 1600);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.hero-signal-line {
+  stroke-dasharray: var(--hero-line-len, 1600);
+  animation: hero-line-draw 3.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes hero-pulse-dot {
+  0%,
+  100% {
+    opacity: 0.55;
+    r: 3;
+  }
+  50% {
+    opacity: 1;
+    r: 6;
+  }
+}
+
+.hero-pulse-dot {
+  animation: hero-pulse-dot 2.6s ease-in-out infinite;
+}
+
+@keyframes hero-pulse-halo {
+  0% {
+    opacity: 0.5;
+    r: 4;
+  }
+  100% {
+    opacity: 0;
+    r: 18;
+  }
+}
+
+.hero-pulse-halo {
+  animation: hero-pulse-halo 2.6s ease-out infinite;
+}
+
+/* Live "online now" indicator dot, used on the Discord stats card. */
+@keyframes hero-live-dot {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55);
+  }
+  70% {
+    opacity: 0.85;
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+}
+
+.hero-live-dot {
+  animation: hero-live-dot 2s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-wave,
+  .hero-signal-line,
+  .hero-pulse-dot,
+  .hero-pulse-halo,
+  .hero-live-dot {
+    animation: none;
+  }
+
+  .hero-signal-line {
+    stroke-dashoffset: 0;
+  }
+
+  .hero-pulse-halo {
+    opacity: 0;
+  }
+}

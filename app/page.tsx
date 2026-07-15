@@ -3,6 +3,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
+import { getDiscordGuildStats, type DiscordGuildStats } from "@/lib/discord-stats";
+import { HeroSignalBackdrop } from "@/components/hero-signal-backdrop";
+import { DiscordGlyph } from "@/components/discord-glyph";
 import {
   Workflow,
   Calculator,
@@ -13,6 +16,12 @@ import {
   Radar,
   Layers,
   BookOpen,
+  Gift,
+  Unlock,
+  Users,
+  BarChart3,
+  Users2,
+  CheckCircle2,
   type LucideIcon,
 } from "lucide-react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
@@ -134,12 +143,16 @@ export default async function HomePage() {
     ]);
 
   // Confirmed Discord members don't need the "Join our Discord" hero/CTA
-  // buttons; they get pointed at the toolkit instead.
-  const isMember = await isDiscordMember();
+  // buttons; they get pointed at the toolkit instead. Live guild stats power the
+  // hero's community card (null when Discord can't be reached, handled below).
+  const [isMember, discordStats] = await Promise.all([
+    isDiscordMember(),
+    getDiscordGuildStats(),
+  ]);
 
   return (
     <main id="main">
-      <Hero isMember={isMember} />
+      <Hero isMember={isMember} discordStats={discordStats} />
       <ToolsSection />
       <GamesSection />
       <SourcesFormatsSection formats={formats ?? []} sources={sources ?? []} />
@@ -151,107 +164,255 @@ export default async function HomePage() {
 
 /* ---------- Hero ---------- */
 
-function Hero({ isMember }: { isMember: boolean }) {
+type HeroFeature = { icon: LucideIcon; label: string };
+
+const HERO_FEATURES: HeroFeature[] = [
+  { icon: Gift, label: "Free tools" },
+  { icon: Unlock, label: "No paywall" },
+  { icon: Users, label: "Real community help" },
+  { icon: BarChart3, label: "League-specific insights" },
+];
+
+function Hero({
+  isMember,
+  discordStats,
+}: {
+  isMember: boolean;
+  discordStats: DiscordGuildStats | null;
+}) {
   return (
-    <header className="relative overflow-hidden border-b border-line">
+    <header className="relative -mt-16 overflow-hidden border-b border-line">
+      {/* The negative top margin pulls the hero up behind the transparent site
+          header so this animated backdrop shows through it and the nav floats
+          in the hero. The content wrapper below adds top padding to clear the
+          nav. */}
       {/* Beacon-gradient accent bar pinned to the very top of the page. */}
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="absolute inset-x-0 top-0 z-10 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-32 left-1/2 h-[460px] w-[900px] -translate-x-1/2"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
-        }}
-      />
-      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Fantasy football, built for everyone
-        </p>
-        {/* aria-label gives the h1 a single accessible name covering the
-            entire headline, so heading navigation announces it as one piece
-            even though the gradient is achieved via a nested span. We
-            intentionally do NOT aria-hide the inner content, which would
-            remove the text from the accessibility tree and break
-            mouse-hover-to-read features. */}
-        <h1
-          id="hero-heading"
-          aria-label="Your signal through the fantasy noise."
-          className="max-w-4xl text-5xl font-semibold leading-tight tracking-tight sm:text-6xl md:text-7xl"
-        >
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
+      <HeroSignalBackdrop />
+
+      <div className="relative mx-auto max-w-7xl px-4 pb-14 pt-24 sm:px-6 sm:pb-20 sm:pt-28 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-center lg:gap-12 lg:px-8 lg:pb-28 lg:pt-36 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
+        {/* Left column: headline, copy, CTAs, feature pills. */}
+        <div className="max-w-2xl">
+          {/* aria-label gives the h1 a single accessible name covering the
+              entire headline, so heading navigation announces it as one piece
+              even though the gradient is achieved via nested spans. We
+              intentionally do NOT aria-hide the inner content, which would
+              remove the text from the accessibility tree and break
+              mouse-hover-to-read features. */}
+          <h1
+            id="hero-heading"
+            aria-label="Your signal through the fantasy noise."
+            className="text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.25rem]"
           >
-            Your signal
-          </span>{" "}
-          through the fantasy noise.
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-          We are a community first, and everything we build grows out of that.
-          Our mission is simple: keep sharp fantasy football help free for
-          everyone. The heart of it lives in our Discord, where real people
-          answer your lineup, trade, and draft questions, no matter how new you
-          are. No paywall, no gatekeeping.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <MemberHeroCta
-            isMember={isMember}
-            size="lg"
-            memberMode="link"
-            memberHref="/tools"
-            memberLabel="Explore our fantasy tools"
-            memberIcon="tools"
-          />
-          <Link
-            href="/tools/on-the-clock"
-            className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            Your <GradientWord>signal</GradientWord> through the{" "}
+            <GradientWord>fantasy</GradientWord> noise.
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-muted">
+            We are a community first, and everything we build grows out of that.
+            Our mission is simple: keep sharp fantasy football help free for
+            everyone. The heart of it lives in our Discord, where real people
+            answer your lineup, trade, and draft questions, no matter how new you
+            are. No paywall, no gatekeeping.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <MemberHeroCta
+              isMember={isMember}
+              size="lg"
+              memberMode="link"
+              memberHref="/tools"
+              memberLabel="Explore our fantasy tools"
+              memberIcon="tools"
+            />
+            <Link
+              href="/tools/on-the-clock"
+              className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface/70 px-5 py-3 text-sm font-medium text-ink backdrop-blur-sm transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <Timer aria-hidden="true" className="h-4 w-4" />
+              Live draft help
+            </Link>
+          </div>
+
+          <ul
+            className="mt-10 flex flex-wrap gap-2.5"
+            role="list"
+            aria-label="What sets FF Beacon apart"
           >
-            <Timer aria-hidden="true" className="h-4 w-4" />
-            Live draft help
-          </Link>
+            {HERO_FEATURES.map(({ icon: Icon, label }) => (
+              <li
+                key={label}
+                className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3.5 py-2 text-sm font-medium text-ink-muted backdrop-blur-sm"
+              >
+                <Icon
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-brand-cyan"
+                />
+                {label}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <ul
-          className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4"
-          role="list"
-          aria-label="What sets FF Beacon apart"
-        >
-          <HeroStat value="All" label="League formats" />
-          <HeroStat value="Multi" label="Source-agnostic data" />
-          <HeroStat value="AAA" label="WCAG contrast target" />
-          <HeroStat value="Free" label="No paywall" />
-        </ul>
+        {/* Right column: the Discord community card with live guild stats. */}
+        <div className="mt-12 lg:mt-0">
+          <DiscordCommunityCard isMember={isMember} stats={discordStats} />
+        </div>
       </div>
     </header>
   );
 }
 
-function HeroStat({ value, label }: { value: string; label: string }) {
+/** A single word painted with the beacon purple->cyan gradient. */
+function GradientWord({ children }: { children: React.ReactNode }) {
   return (
-    <li className="rounded-card border border-line bg-surface/60 p-4">
-      <p
-        className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
-        style={{
-          backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-        }}
-      >
-        {value}
-      </p>
-      <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-        {label}
-      </p>
-    </li>
+    <span
+      className="bg-clip-text text-transparent"
+      style={{
+        backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+      }}
+    >
+      {children}
+    </span>
   );
+}
+
+/**
+ * "The heart of FF Beacon" hero card. Shows LIVE Discord guild numbers (total
+ * members and how many are online right now) pulled from Discord's own API, and
+ * adapts its footer CTA to membership: non-members get the Join invite, confirmed
+ * members get a welcome-back note pointing at the tools. When live stats can't be
+ * fetched the card still renders, just without the number tiles.
+ */
+function DiscordCommunityCard({
+  isMember,
+  stats,
+}: {
+  isMember: boolean;
+  stats: DiscordGuildStats | null;
+}) {
+  const memberCount = stats ? formatCount(stats.memberCount) : null;
+  const onlineCount = stats ? formatCount(stats.onlineCount) : null;
+
+  return (
+    <section
+      aria-labelledby="discord-card-heading"
+      className="relative overflow-hidden rounded-modal border border-brand-purple/40 bg-surface-elevated/80 p-6 shadow-xl shadow-black/40 backdrop-blur-md sm:p-7"
+    >
+      {/* Beacon wash in the corner. Decorative. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
+        style={{
+          background:
+            "radial-gradient(circle, rgba(168, 85, 247, 0.22) 0%, rgba(34, 211, 238, 0.10) 50%, transparent 72%)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
+        }}
+      />
+
+      <div className="relative flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-card bg-beacon text-black"
+        >
+          <DiscordGlyph className="h-6 w-6" />
+        </span>
+        <div>
+          <h2
+            id="discord-card-heading"
+            className="text-lg font-semibold text-ink"
+          >
+            The heart of FF Beacon
+          </h2>
+          <p className="text-sm text-ink-subtle">Our Discord community</p>
+        </div>
+      </div>
+
+      {stats ? (
+        <dl className="relative mt-6 grid grid-cols-2 gap-3">
+          <div className="rounded-card border border-line bg-base/60 p-4">
+            <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+              <Users2 aria-hidden="true" className="h-3.5 w-3.5" />
+              Members
+            </dt>
+            <dd className="mt-1.5 font-mono text-3xl font-bold tabular-nums text-ink">
+              {memberCount}
+            </dd>
+          </div>
+          <div className="rounded-card border border-line bg-base/60 p-4">
+            <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+              <span
+                aria-hidden="true"
+                className="hero-live-dot inline-block h-2 w-2 rounded-full bg-signal-success"
+              />
+              Online now
+            </dt>
+            <dd className="mt-1.5 font-mono text-3xl font-bold tabular-nums text-signal-success">
+              {onlineCount}
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="relative mt-6 rounded-card border border-line bg-base/60 p-4 text-sm leading-relaxed text-ink-muted">
+          Real people answering real fantasy questions, every day. Lineup calls,
+          trade gut-checks, and draft help, all free.
+        </p>
+      )}
+
+      <p className="relative mt-5 flex items-center gap-2 text-sm font-medium text-ink-muted">
+        <span
+          aria-hidden="true"
+          className="bg-clip-text font-semibold text-transparent"
+          style={{
+            backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+          }}
+        >
+          Real people. Real answers. Real results.
+        </span>
+      </p>
+
+      {/* Membership-aware footer CTA. Non-members see the Join invite; confirmed
+          members get a welcome-back note instead of a redundant invite. */}
+      {isMember ? (
+        <div className="relative mt-5 flex items-center gap-2 rounded-card border border-signal-success/30 bg-signal-success/10 px-4 py-3 text-sm font-medium text-ink">
+          <CheckCircle2
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-signal-success"
+          />
+          You are in the crew. Thanks for being here.
+        </div>
+      ) : (
+        <a
+          href="/join"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Join our Discord (opens in new tab)"
+          className="relative mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          <DiscordGlyph className="h-5 w-5" />
+          Join our Discord
+        </a>
+      )}
+    </section>
+  );
+}
+
+/** Compact human count: 1,243 stays as-is; 12,842 -> 12.8K. */
+function formatCount(n: number): string {
+  if (n < 10_000) return n.toLocaleString("en-US");
+  return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;
 }
 
 /* ---------- Featured tools ---------- */
