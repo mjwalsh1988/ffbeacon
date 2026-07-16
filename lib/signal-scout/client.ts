@@ -17,6 +17,7 @@ import type {
   CompletedRoundDto,
   PurchaseHintSuccess,
 } from "@/lib/signal-scout/round-engine";
+import type { Board, LeaderboardRow } from "@/lib/signal-scout/leaderboards";
 import type { SignalTierKey } from "@/lib/signal-scout/scoring";
 
 /** Header that every Signal Scout route requires (CSRF-lite / bot filter). */
@@ -47,6 +48,8 @@ export type ApiErrorCode =
   | "round_not_active"
   | "invalid_request"
   | "forbidden"
+  | "leaderboards_disabled"
+  | "login_required"
   | "server_error"
   | "network";
 
@@ -73,6 +76,8 @@ const ERROR_MESSAGES: Record<ApiErrorCode, string> = {
   round_not_active: "That round is no longer active.",
   invalid_request: "Please check what you entered and try again.",
   forbidden: "This request was blocked. Reload the page and try again.",
+  leaderboards_disabled: "Leaderboards are offline right now. Check back soon.",
+  login_required: "Sign in to see the leaderboards.",
   server_error: "Something went wrong. Try again shortly.",
   network: "Network error. Check your connection and try again.",
 };
@@ -197,6 +202,36 @@ export interface SearchPlayerResult {
   position: string | null;
   team: string | null;
   sleeperId: string | null;
+}
+
+/**
+ * One board page, exactly as lib/signal-scout/leaderboards.ts LeaderboardView
+ * models it server-side, plus the (board, page) echo the route sends back.
+ */
+export interface LeaderboardViewDto {
+  board: Board;
+  page: number;
+  rows: LeaderboardRow[];
+  yourRank: LeaderboardRow | null;
+  totalPages: number;
+}
+
+/**
+ * GET /api/games/signal-scout/leaderboards?board=&page=
+ *
+ * Drives the in-place board switching and pagination in the game page's
+ * leaderboard rail. The rail server-renders page 1 of the default board, so
+ * this only fires once the visitor changes board or page.
+ */
+export function fetchLeaderboard(board: Board, page: number): Promise<ApiResult<LeaderboardViewDto>> {
+  const qs = new URLSearchParams({ board, page: String(page) }).toString();
+  return request(`/api/games/signal-scout/leaderboards?${qs}`, { method: "GET" }, (body) => ({
+    board: body.board as Board,
+    page: Number(body.page ?? 1),
+    rows: Array.isArray(body.rows) ? (body.rows as LeaderboardRow[]) : [],
+    yourRank: (body.yourRank ?? null) as LeaderboardRow | null,
+    totalPages: Number(body.totalPages ?? 1),
+  }));
 }
 
 /** GET /api/games/signal-scout/search?q= (round-independent; safe to call before a round exists). */

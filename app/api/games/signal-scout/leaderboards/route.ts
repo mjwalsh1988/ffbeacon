@@ -12,7 +12,19 @@ import { boardSchema, MAX_PAGE, loadLeaderboardView, type Board } from "@/lib/si
 
 export const dynamic = "force-dynamic";
 
-const LEADERBOARDS_WINDOW_SECONDS = 2;
+// Min-interval claim: at most one successful call per identity per N seconds
+// (see migration 0131). This is 1 rather than the 2 it shipped with, because
+// the game page's leaderboard rail now calls this route from the browser on
+// every board switch and page turn; at 2 seconds, a visitor clicking from
+// Today to All-Time and on to Streak would be told "too fast" for doing
+// nothing unusual. The amplification vector the Phase 5 security review
+// flagged (per-user auth admin lookups in lib/user-identity.ts) is separately
+// bounded by the 60-second identity cache (cachedResolveIdentities), so the
+// claim here is a backstop against scripted loops rather than the primary
+// guard, and 1 second still caps a loop at 60 calls/minute/identity. The rail
+// additionally caches every (board, page) it has already loaded and retries
+// once on a 429, so a human never sees the limit.
+const LEADERBOARDS_WINDOW_SECONDS = 1;
 
 /**
  * GET /api/games/signal-scout/leaderboards
@@ -25,13 +37,12 @@ const LEADERBOARDS_WINDOW_SECONDS = 2;
  * app/games/signal-scout/leaderboards server page, so this route and the
  * page share one query implementation.
  *
- * Rate claim: nothing client-side calls this route today (the game page and
- * the leaderboard preview panel both read through lib/signal-scout/leaderboards.ts
- * server-side, not this HTTP endpoint), so the tight 2-second window only
- * affects scripted callers. The limit exists because identity resolution
- * fans out to per-user auth admin lookups (lib/user-identity.ts), which the
- * Phase 5 security review flagged as an amplification vector worth guarding
- * even on a read-only endpoint.
+ * Rate claim: the game page's leaderboard rail
+ * (app/games/signal-scout/leaderboard-rail.tsx) calls this route from the
+ * browser whenever the visitor switches board or turns a page, so the window
+ * has to leave room for ordinary clicking. See LEADERBOARDS_WINDOW_SECONDS
+ * below for why it is 1 second and what still bounds the amplification vector
+ * the Phase 5 security review flagged.
  */
 export async function GET(req: Request) {
   if (!requireFfBeaconHeader(req)) {

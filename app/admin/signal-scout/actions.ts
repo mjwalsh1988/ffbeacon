@@ -143,7 +143,7 @@ export async function hideSignalScoutUser(userId: string, reason: string): Promi
   }
 
   revalidatePath("/admin/signal-scout/users");
-  revalidatePath("/games/signal-scout/leaderboards");
+  revalidatePath("/games/signal-scout");
   return { ok: true };
 }
 
@@ -174,7 +174,7 @@ export async function unhideSignalScoutUser(userId: string): Promise<ActionResul
   }
 
   revalidatePath("/admin/signal-scout/users");
-  revalidatePath("/games/signal-scout/leaderboards");
+  revalidatePath("/games/signal-scout");
   return { ok: true };
 }
 
@@ -212,7 +212,6 @@ export async function saveSignalScoutSettings(raw: unknown): Promise<ActionResul
 
   revalidatePath("/admin/signal-scout/settings");
   revalidatePath("/games/signal-scout");
-  revalidatePath("/games/signal-scout/leaderboards");
   return { ok: true };
 }
 
@@ -260,6 +259,5 @@ export async function resetSignalScoutSettings(): Promise<
 
   revalidatePath("/admin/signal-scout/settings");
   revalidatePath("/games/signal-scout");
-  revalidatePath("/games/signal-scout/leaderboards");
   return { ok: true, settings: next };
 }

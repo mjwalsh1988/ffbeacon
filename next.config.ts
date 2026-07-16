@@ -64,6 +64,17 @@ const nextConfig: NextConfig = {
         destination: "/:handle",
         permanent: true,
       },
+      // Signal Scout's leaderboards moved off their own route and into a
+      // sidebar on the game page itself, so the standalone page is gone. Old
+      // bookmarks and any indexed links land on the game page, which now
+      // hosts the same three boards. Same reasoning as the /u/:handle
+      // redirects above: handled in the routing layer, so it emits a real 308
+      // rather than a soft client-side redirect.
+      {
+        source: "/games/signal-scout/leaderboards",
+        destination: "/games/signal-scout",
+        permanent: true,
+      },
     ];
   },
 };

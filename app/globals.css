@@ -278,6 +278,91 @@
 }
 
 /**
+ * Signal Scout score meter "live current": makes the remaining-signal bar read
+ * as an energized wire rather than a static progress fill. Two decorative
+ * layers ride on the fill's purple->cyan gradient, both drawn INSIDE the fill
+ * (which clips them), so neither can ever paint past the score's real value
+ * and imply signal that is not there:
+ *   1. ::before, a bright narrow band that travels the length of the fill on a
+ *      loop, like a charge running down a wire. Translated rather than
+ *      background-positioned so it animates on the compositor. Its width is a
+ *      percentage of the fill, so the charge stays proportional as the score
+ *      drops and the fill shrinks.
+ *   2. ::after, a bright edge pinned to the fill's leading tip, pulsing so the
+ *      frontier of the signal looks alive.
+ * The caller only applies this class while the signal is live (score above
+ * zero and not burned out): a burned signal is dead and must look dead.
+ * Purely decorative. The bar is aria-hidden and the meter's real value is
+ * announced by the sr-only summary sentence in score-meter.tsx, so nothing
+ * here is load-bearing for a screen reader. Under reduced-motion the
+ * travelling band is removed outright and the leading edge settles to a steady
+ * unpulsing glow, keeping the energized look with zero movement.
+ */
+@keyframes scout-current-flow {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    /* Fully clears the right edge: the band is 45% of the fill, so it must
+       travel (100 / 45) * 100 of its own width to put its left edge at the
+       fill's right edge. */
+    transform: translateX(222%);
+  }
+}
+
+.scout-current::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(236, 254, 255, 0.85) 50%,
+    transparent 100%
+  );
+  animation: scout-current-flow 2.4s linear infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+
+@keyframes scout-current-tip {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.scout-current::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  background-image: linear-gradient(90deg, transparent 0%, rgba(236, 254, 255, 0.9) 100%);
+  animation: scout-current-tip 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scout-current::before {
+    animation: none;
+    background-image: none;
+  }
+
+  .scout-current::after {
+    animation: none;
+    opacity: 0.75;
+  }
+}
+
+/**
  * Homepage hero animated background. Three decorative layers combine into a
  * living "signal" motif that draws the eye without distracting from the copy:
  *   1. `.hero-wave` bands: two stacked signal waves along the bottom that drift

@@ -3,7 +3,9 @@ import { cookies, headers } from "next/headers";
 import { Radar, Zap, Target, type LucideIcon } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalScoutSettings } from "@/lib/signal-scout/settings";
-import { loadLeaderboardPreview, type DailyBoardRow } from "@/lib/signal-scout/leaderboards";
+import { loadLeaderboardView, type Board } from "@/lib/signal-scout/leaderboards";
+import type { LeaderboardViewDto } from "@/lib/signal-scout/client";
+import { LeaderboardRail } from "./leaderboard-rail";
 import {
   findActiveRoundId,
   getRound,
@@ -24,6 +26,9 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
+
+/** Display order of the leaderboard boards; filtered by admin settings below. */
+const BOARD_ORDER: Board[] = ["daily", "all_time", "streak"];
 
 function isCompletedRound(round: ActiveRoundDto | CompletedRoundDto): round is CompletedRoundDto {
   return "status" in round;
@@ -139,69 +144,124 @@ export default async function SignalScoutPage() {
     guestRoundsRemaining = Math.max(0, settings.guest_daily_round_limit - Math.max(guestCount, ipCount, 0));
   }
 
-  // Preview panel (plan sections 3, 21): computed only when the daily board
-  // is actually reachable. loadLeaderboardPreview never throws (it swallows
-  // its own errors), so a leaderboard outage never fails the game page.
-  //
-  // SignalScoutClient is a client component, so any prop passed to it is
+  // Leaderboard rail (plan sections 3, 8, 21). The boards live in a sidebar
+  // on this page now; /games/signal-scout/leaderboards is a permanent
+  // redirect back here (see next.config.ts).
+  const { leaderboards } = settings;
+  const perBoardEnabled: Record<Board, boolean> = {
+    daily: leaderboards.daily_enabled,
+    all_time: leaderboards.all_time_enabled,
+    streak: leaderboards.streak_enabled,
+  };
+  const enabledBoards = BOARD_ORDER.filter((b) => perBoardEnabled[b]);
+  const railEnabled = leaderboards.leaderboard_enabled && enabledBoards.length > 0;
+  const initialBoard = enabledBoards[0] ?? "daily";
+
+  // LeaderboardRail is a client component, so any prop passed to it is
   // serialized into the RSC/flight payload in the page source regardless of
   // what actually renders on screen. When leaderboards.require_login is on
-  // and there is no session, the UI shows only the signup teaser, but a
-  // signed-out guest could still read real leaderboard rows out of the
-  // flight payload via view-source. So gated guests must never receive row
-  // data: skip loadLeaderboardPreview entirely and pass an empty array. The
-  // teaser branch in LeaderboardPreview never reads rows, so the panel still
-  // renders correctly with zero row data ever leaving the server. null stays
-  // reserved for the disabled case, where the whole panel is absent.
-  let leaderboardPreview: DailyBoardRow[] | null = null;
-  if (settings.leaderboards.leaderboard_enabled && settings.leaderboards.daily_enabled) {
-    const gatedGuest = settings.leaderboards.require_login && !user;
-    leaderboardPreview = gatedGuest
-      ? []
-      : await loadLeaderboardPreview(admin, settings.leaderboards.hide_admin_users, user?.id ?? null);
+  // and there is no session, the UI shows only the sign-in card, but a
+  // signed-out guest could still read real leaderboard rows out of the flight
+  // payload via view-source. So gated guests must never receive row data:
+  // skip the load entirely and send null. The rail's `teaser` branch never
+  // reads rows and never fetches, so the panel still renders correctly with
+  // zero row data ever leaving the server.
+  //
+  // Unlike the loadLeaderboardPreview call this replaced, loadLeaderboardView
+  // throws on a query failure, so it is wrapped: a leaderboard outage must
+  // degrade to the rail's own error state, never take the game page down with
+  // it. Only page 1 of the first enabled board is server-rendered; every
+  // other board and page is fetched by the rail on demand.
+  let initialView: LeaderboardViewDto | null = null;
+  if (railEnabled && !(leaderboards.require_login && !user)) {
+    try {
+      const loaded = await loadLeaderboardView(
+        admin,
+        initialBoard,
+        1,
+        user?.id ?? null,
+        leaderboards.hide_admin_users,
+      );
+      initialView = { board: initialBoard, page: 1, ...loaded };
+    } catch (err) {
+      console.error("[signal-scout]", err);
+    }
   }
+
+  const gameSection = (
+    <section aria-labelledby="signal-scout-app-heading">
+      <h2 id="signal-scout-app-heading" className="sr-only">
+        Play Signal Scout
+      </h2>
+      {settings.game_enabled ? (
+        <SignalScoutClient
+          initialRound={initialRound}
+          isAuthenticated={isAuthenticated}
+          initialStreaks={initialStreaks}
+          myStats={myStats}
+          guestRoundsRemaining={guestRoundsRemaining}
+          guestPlayEnabled={settings.guest_play_enabled}
+          guestDailyLimit={settings.guest_daily_round_limit}
+          maxWrongGuesses={settings.scoring.max_wrong_guesses}
+          startingScore={settings.scoring.starting_score}
+          wrongGuessPenalty={settings.scoring.wrong_guess_penalty}
+          showPlayerImages={settings.reveal.show_player_images}
+        />
+      ) : (
+        <SignalOfflineNotice />
+      )}
+    </section>
+  );
+
+  // How It Works rides along in the rail's secondary column, under the boards
+  // in both the desktop sidebar and the mobile modal. The rail renders that
+  // column twice and both copies coexist in the DOM while the modal is open,
+  // so each gets its own heading id (see the note in how-it-works.tsx).
+  const howItWorksProps = {
+    startingScore: settings.scoring.starting_score,
+    guestDailyLimit: settings.guest_daily_round_limit,
+    maxWrongGuesses: settings.scoring.max_wrong_guesses,
+    tierCosts: {
+      weak: settings.scoring.weak_signal_cost,
+      clear: settings.scoring.clear_signal_cost,
+      ping: settings.scoring.beacon_ping_cost,
+      scan: settings.scoring.full_scan_cost,
+    },
+  };
 
   return (
     <main id="main">
       <Hero />
-      <section
-        aria-labelledby="signal-scout-app-heading"
-        className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8"
-      >
-        <h2 id="signal-scout-app-heading" className="sr-only">
-          Play Signal Scout
-        </h2>
-        {settings.game_enabled ? (
-          <SignalScoutClient
-            initialRound={initialRound}
-            isAuthenticated={isAuthenticated}
-            initialStreaks={initialStreaks}
-            myStats={myStats}
-            guestRoundsRemaining={guestRoundsRemaining}
-            guestPlayEnabled={settings.guest_play_enabled}
-            guestDailyLimit={settings.guest_daily_round_limit}
-            maxWrongGuesses={settings.scoring.max_wrong_guesses}
-            startingScore={settings.scoring.starting_score}
-            wrongGuessPenalty={settings.scoring.wrong_guess_penalty}
-            showPlayerImages={settings.reveal.show_player_images}
-            leaderboardPreview={leaderboardPreview}
-            requireLogin={settings.leaderboards.require_login}
-          />
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {railEnabled ? (
+          <LeaderboardRail
+            boards={enabledBoards}
+            initialBoard={initialBoard}
+            initialView={initialView}
+            requireLogin={leaderboards.require_login}
+            viewerSignedIn={isAuthenticated}
+            howItWorksRail={
+              <HowItWorks {...howItWorksProps} headingId="signal-scout-how-it-works-rail" />
+            }
+            howItWorksSheet={
+              <HowItWorks {...howItWorksProps} headingId="signal-scout-how-it-works-sheet" />
+            }
+          >
+            {gameSection}
+          </LeaderboardRail>
         ) : (
-          <SignalOfflineNotice />
+          // Leaderboards off entirely: no sidebar and no mobile button, so the
+          // game gets the full width back and How It Works, which normally
+          // rides in the rail, has to be placed here or it would vanish with
+          // the rail that carries it.
+          <>
+            {gameSection}
+            <div className="mt-6">
+              <HowItWorks {...howItWorksProps} headingId="signal-scout-how-it-works" />
+            </div>
+          </>
         )}
-      </section>
-      <HowItWorks
-        startingScore={settings.scoring.starting_score}
-        guestDailyLimit={settings.guest_daily_round_limit}
-        maxWrongGuesses={settings.scoring.max_wrong_guesses}
-        tierCosts={{
-          weak: settings.scoring.weak_signal_cost,
-          clear: settings.scoring.clear_signal_cost,
-          ping: settings.scoring.beacon_ping_cost,
-          scan: settings.scoring.full_scan_cost,
-        }}
-      />
+      </div>
     </main>
   );
 }
@@ -269,7 +329,11 @@ function Hero() {
           burns out.
         </p>
 
-        <ul role="list" aria-label="How Signal Scout works" className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        <ul
+          role="list"
+          aria-label="How Signal Scout works"
+          className="mt-6 grid grid-cols-3 gap-2 sm:mt-8 sm:gap-4"
+        >
           {HERO_BULLETS.map((bullet) => (
             <HeroBullet key={bullet.title} {...bullet} />
           ))}
@@ -281,15 +345,15 @@ function Hero() {
 
 function HeroBullet({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
   return (
-    <li className="rounded-card border border-line bg-surface/60 p-4">
+    <li className="flex flex-col items-center rounded-card border border-line bg-surface/60 p-2.5 text-center sm:items-start sm:p-4 sm:text-left">
       <span
         aria-hidden="true"
-        className="flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        className="flex h-7 w-7 items-center justify-center rounded-card border border-line bg-base text-brand-cyan sm:h-9 sm:w-9"
       >
-        <Icon className="h-4 w-4" />
+        <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
       </span>
-      <p className="mt-3 text-sm font-semibold text-ink">{title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
+      <p className="mt-2 text-xs font-semibold leading-tight text-ink sm:mt-3 sm:text-sm">{title}</p>
+      <p className="mt-1 text-[11px] leading-snug text-ink-muted sm:text-xs sm:leading-relaxed">{body}</p>
     </li>
   );
 }

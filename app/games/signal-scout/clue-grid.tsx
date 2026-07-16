@@ -44,6 +44,16 @@ export interface ClueGridProps {
    * never purchased before the round ended). Absent for active-round usage.
    */
   unseenKeys?: string[];
+  /**
+   * Draw the section as its own gradient-backed panel instead of a bare
+   * heading + grid. On for the active round, where these clues are the thing
+   * the player is actually reading and every sibling section (Buy a hint, Bad
+   * Reads) is bare, so the border and beacon gradient are what lift it out of
+   * the stack. Off for result-card's full clue sheet, which already sits
+   * inside its own toned result panel and would only end up with a box in a
+   * box.
+   */
+  highlight?: boolean;
 }
 
 export function ClueGrid({
@@ -52,12 +62,41 @@ export function ClueGrid({
   heading = "Revealed clues",
   headingId = "clue-grid-heading",
   unseenKeys,
+  highlight = false,
 }: ClueGridProps) {
   const sorted = [...clues].sort((a, b) => (a.revealOrder ?? -1) - (b.revealOrder ?? -1));
   const unseenSet = new Set(unseenKeys ?? []);
 
   return (
-    <section aria-labelledby={headingId} className="mt-6">
+    <section
+      aria-labelledby={headingId}
+      className={
+        highlight
+          ? "relative mt-6 overflow-hidden rounded-modal border border-brand-cyan/30 p-4 shadow-[0_0_70px_-40px_rgba(34,211,238,0.9)] sm:p-5"
+          : "mt-6"
+      }
+      style={
+        highlight
+          ? {
+              // The beacon gradient's own 135deg purple-to-cyan direction, run
+              // at low alpha so it tints the panel without touching the
+              // contrast of the clue values sitting on top of it.
+              backgroundImage:
+                "linear-gradient(135deg, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.12) 55%, rgba(34, 211, 238, 0.04) 100%)",
+            }
+          : undefined
+      }
+    >
+      {highlight && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+          }}
+        />
+      )}
       <h4 id={headingId} className="text-sm font-semibold text-ink">
         {heading}
       </h4>

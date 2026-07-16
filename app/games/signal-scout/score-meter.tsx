@@ -21,6 +21,12 @@ export function ScoreMeter({ score, startingScore, burned }: ScoreMeterProps) {
   // trade-margin-graph.tsx.
   const fillPct = burned ? 0 : clampedPct === 0 ? 0 : Math.max(clampedPct, 4);
 
+  // The travelling-current animation runs only while there is signal left to
+  // carry it. A burned-out or zeroed meter has no fill to draw it in anyway,
+  // and a dead signal should read as dead rather than still humming.
+  // See the .scout-current block in app/globals.css.
+  const live = !burned && fillPct > 0;
+
   const summary = burned
     ? "Score zero. The signal has burned out; this round can no longer score."
     : `Score ${score} of ${startingScore} points remaining. The signal burns out at zero.`;
@@ -50,8 +56,12 @@ export function ScoreMeter({ score, startingScore, burned }: ScoreMeterProps) {
           aria-hidden="true"
           className="absolute inset-y-0 left-0 z-10 w-0.5 bg-signal-danger"
         />
+        {/* overflow-hidden so the current layers clip to the fill's own pill
+            shape instead of squaring off its leading edge. */}
         <span
-          className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 motion-reduce:transition-none"
+          className={`absolute inset-y-0 left-0 overflow-hidden rounded-full transition-[width] duration-500 motion-reduce:transition-none ${
+            live ? "scout-current" : ""
+          }`}
           style={{
             width: `${fillPct}%`,
             backgroundImage: "linear-gradient(90deg, #7C3AED 0%, #A855F7 45%, #22D3EE 100%)",

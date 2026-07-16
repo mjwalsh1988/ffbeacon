@@ -19,15 +19,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Radar } from "lucide-react";
+import { AlertTriangle, Crosshair, OctagonX, Radar } from "lucide-react";
 import type {
   ActiveRoundDto,
   CompletedRoundDto,
   CompletedStatus,
   SignalScoutStreaks,
 } from "@/lib/signal-scout/round-engine";
-import type { DailyBoardRow } from "@/lib/signal-scout/leaderboards";
-import { LeaderboardPreview } from "./leaderboard-preview";
 import { MyStatsPanel } from "./my-stats-panel";
 import type { SignalTierKey } from "@/lib/signal-scout/scoring";
 import {
@@ -42,11 +40,11 @@ import { applyRoundOutcomeToStreaks, currentEasternGameDate } from "@/lib/signal
 import { SignalScoutStatusBar } from "./status-bar";
 import { MysteryProfileCard } from "./mystery-profile-card";
 import { ClueGrid, TIER_DISPLAY_NAMES } from "./clue-grid";
-import { LockedSlots } from "./locked-slots";
 import { HintControls } from "./hint-controls";
 import { GuessCombobox } from "./guess-combobox";
 import { BadReads } from "./bad-reads";
 import { BurnConfirmDialog } from "./burn-confirm-dialog";
+import { SkipConfirmDialog } from "./skip-confirm-dialog";
 import { ScoreMeter } from "./score-meter";
 import { BurnedBanner } from "./burned-banner";
 import { ResultCard } from "./result-card";
@@ -104,14 +102,6 @@ export interface SignalScoutClientProps {
   // result card. Only affects the completed-round reveal, never anything
   // pre-completion, so it carries no anti-cheat weight.
   showPlayerImages: boolean;
-  // Today's top-5 daily board, server-resolved via loadLeaderboardPreview.
-  // Null when the daily board is disabled in admin settings (the panel does
-  // not render at all); an empty array means the board is enabled but has no
-  // scores yet today (the panel renders its own empty-state copy).
-  leaderboardPreview: DailyBoardRow[] | null;
-  // The LIVE leaderboards.require_login setting. When true and the viewer is
-  // a guest, the preview panel renders the sign-up teaser instead of rows.
-  requireLogin: boolean;
 }
 
 export function SignalScoutClient({
@@ -126,8 +116,6 @@ export function SignalScoutClient({
   startingScore,
   wrongGuessPenalty,
   showPlayerImages,
-  leaderboardPreview,
-  requireLogin,
 }: SignalScoutClientProps) {
   const [round, setRound] = useState<ActiveRoundDto | CompletedRoundDto | null>(initialRound);
   const [phase, setPhase] = useState<GamePhase>(() => {
@@ -169,6 +157,9 @@ export function SignalScoutClient({
   const [guessPending, setGuessPending] = useState(false);
   const [guessError, setGuessError] = useState<string | null>(null);
   const [skipPending, setSkipPending] = useState(false);
+  // Skipping is irreversible (no score, streak reset) and the server does not
+  // ask twice, so the button opens this confirmation rather than skipping.
+  const [skipDialogOpen, setSkipDialogOpen] = useState(false);
 
   const handleStartRound = useCallback(async () => {
     setStartLoading(true);
@@ -458,6 +449,12 @@ export function SignalScoutClient({
 
     const result = await requestSkipRound(activeRound.roundId);
 
+    // The dialog is rendered outside the phase branches, so it would sit open
+    // over the result card once the skip lands. Closed on every outcome, not
+    // just success: a failure surfaces in the answer panel's error slot, which
+    // is behind the dialog.
+    setSkipDialogOpen(false);
+
     if (result.ok) {
       const nextRound = result.data.round;
       setRound(nextRound);
@@ -576,14 +573,6 @@ export function SignalScoutClient({
           </div>
 
           {myStats && <MyStatsPanel stats={myStats} />}
-
-          {leaderboardPreview !== null && (
-            <LeaderboardPreview
-              rows={leaderboardPreview}
-              requireLogin={requireLogin}
-              viewerSignedIn={isAuthenticated}
-            />
-          )}
         </div>
       )}
 
@@ -622,13 +611,7 @@ export function SignalScoutClient({
             <MysteryProfileCard />
           </div>
 
-          <ClueGrid clues={activeRound.revealedClues} newestClueKey={newestClueKey} />
-
-          <LockedSlots
-            lockedCounts={activeRound.lockedCounts}
-            purchasesRemaining={activeRound.purchasesRemaining}
-            tierCosts={activeRound.tierCosts}
-          />
+          <ClueGrid clues={activeRound.revealedClues} newestClueKey={newestClueKey} highlight />
 
           {hintError && (
             <div
@@ -652,36 +635,77 @@ export function SignalScoutClient({
 
           {activeRound.burned && <BurnedBanner />}
 
-          {guessError && (
-            <div
-              role="alert"
-              className="mt-4 flex items-start gap-2 rounded-card border border-signal-danger/40 bg-signal-danger/10 px-4 py-3 text-sm text-signal-danger"
-            >
-              <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{guessError}</span>
-            </div>
-          )}
+          {/* The answer panel: deliberately NOT styled like the clue panel it
+              sits below. Clues are a cool cyan-bordered surface you read; this
+              is the warm purple-bordered surface you act on, lit from below so
+              it reads as the round's live call to action rather than another
+              slab of information.
 
-          <div className="mt-6">
-            <GuessCombobox
-              disabled={guessPending || skipPending}
-              ruledOutIds={activeRound.badReads.map((b) => b.playerId)}
-              wrongGuessPenalty={wrongGuessPenalty}
-              onSelect={(player) => void handleSubmitGuess(player)}
-            />
-          </div>
+              NO overflow-hidden here, unlike the clue panel: the combobox's
+              results listbox is absolutely positioned and would be clipped by
+              it. The gradient follows the border radius on its own, and this
+              panel skips the top hairline that would have needed the clipping
+              anyway. */}
+          <section
+            aria-labelledby="signal-scout-answer-heading"
+            className="relative mt-6 rounded-modal border border-brand-purple/45 p-4 shadow-[0_0_70px_-38px_rgba(168,85,247,0.95)] sm:p-5"
+            style={{
+              backgroundImage:
+                "radial-gradient(ellipse at 50% 118%, rgba(168, 85, 247, 0.30) 0%, rgba(168, 85, 247, 0.12) 42%, transparent 72%)",
+            }}
+          >
+            <div className="flex items-center gap-2.5">
+              <span
+                aria-hidden="true"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card border border-brand-purple/50 bg-base text-brand-purple"
+              >
+                <Crosshair className="h-4 w-4" />
+              </span>
+              <h4 id="signal-scout-answer-heading" className="text-sm font-semibold text-ink">
+                Make the call
+              </h4>
+            </div>
+
+            {guessError && (
+              <div
+                role="alert"
+                className="mt-3 flex items-start gap-2 rounded-card border border-signal-danger/40 bg-signal-danger/10 px-4 py-3 text-sm text-signal-danger"
+              >
+                <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{guessError}</span>
+              </div>
+            )}
+
+            <div className="mt-3">
+              <GuessCombobox
+                disabled={guessPending || skipPending}
+                ruledOutIds={activeRound.badReads.map((b) => b.playerId)}
+                wrongGuessPenalty={wrongGuessPenalty}
+                onSelect={(player) => void handleSubmitGuess(player)}
+              />
+            </div>
+          </section>
 
           <BadReads badReads={activeRound.badReads} />
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+          {/* Skipping is the one irreversible thing on this screen, so it is
+              toned as the destructive action it is. It used to be a neutral
+              button that hovered CYAN, the same tone every safe, encouraged
+              action on this page uses, which read as a friendly next step
+              rather than "this ends your round and resets your streak". It now
+              opens a confirmation instead of firing the skip on click. */}
+          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-5">
             <button
               type="button"
-              onClick={() => void handleSkipRound()}
+              onClick={() => setSkipDialogOpen(true)}
               disabled={guessPending || skipPending}
               aria-busy={skipPending}
+              aria-haspopup="dialog"
+              aria-expanded={skipDialogOpen}
               aria-describedby="signal-scout-skip-consequence"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-signal-danger/50 bg-signal-danger/10 px-5 py-3 text-sm font-semibold text-signal-danger transition-colors hover:border-signal-danger hover:bg-signal-danger/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-60"
             >
+              <OctagonX aria-hidden="true" className="h-4 w-4 shrink-0" />
               {skipPending ? "Skipping..." : "Skip round"}
             </button>
             <span id="signal-scout-skip-consequence" className="text-xs text-ink-subtle">
@@ -810,20 +834,6 @@ export function SignalScoutClient({
               )}
             </div>
           )}
-
-          {/* Suppressed when the "That is it for today, scout" signup wall
-              above is already showing (guest, no rounds left): stacking a
-              second "Create a free account" CTA from the preview's teaser
-              variant would double up the same ask. Guests who still have
-              rounds left keep the preview, teaser variant if requireLogin
-              is on. */}
-          {leaderboardPreview !== null && !(!isAuthenticated && guestRoundsLeft === 0) && (
-            <LeaderboardPreview
-              rows={leaderboardPreview}
-              requireLogin={requireLogin}
-              viewerSignedIn={isAuthenticated}
-            />
-          )}
         </div>
       )}
 
@@ -835,6 +845,17 @@ export function SignalScoutClient({
         pending={hintPendingTier !== null && hintPendingTier === burnDialogTier}
         onConfirm={handleConfirmBurn}
         onClose={() => setBurnDialogTier(null)}
+      />
+
+      {/* Gated on activeRound as well as its own open flag: without that, a
+          round that completes underneath the dialog (a guess landing in
+          another tab) would leave a confirmation open for a round that can no
+          longer be skipped. */}
+      <SkipConfirmDialog
+        open={skipDialogOpen && activeRound !== null}
+        pending={skipPending}
+        onConfirm={() => void handleSkipRound()}
+        onClose={() => setSkipDialogOpen(false)}
       />
     </div>
   );

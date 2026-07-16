@@ -8,6 +8,17 @@
  * (scoring.starting_score, guest_daily_round_limit, scoring.max_wrong_guesses,
  * and the four tier costs). Never hardcode a number here; if the admin
  * changes a cost, this copy must reflect it on the next page load.
+ *
+ * LAYOUT: this component carries no page-level layout of its own (no max
+ * width, no horizontal padding, no outer margin). It lives under the boards
+ * inside leaderboard-rail.tsx, which decides where it sits and how much room
+ * it gets.
+ *
+ * RENDERED TWICE: the rail puts it under the boards in the desktop sidebar
+ * AND under the boards in the mobile slide-up modal. Both copies are in the
+ * DOM at once whenever the modal is open (the sidebar copy is only
+ * display:none), so the heading id CANNOT be hardcoded or the page would ship
+ * a duplicate id. Every caller passes its own headingId.
  */
 
 import { ChevronDown } from "lucide-react";
@@ -22,6 +33,8 @@ export interface HowItWorksProps {
     ping: number;
     scan: number;
   };
+  /** Unique per rendered copy. See the RENDERED TWICE note above. */
+  headingId: string;
 }
 
 export function HowItWorks({
@@ -29,17 +42,26 @@ export function HowItWorks({
   guestDailyLimit,
   maxWrongGuesses,
   tierCosts,
+  headingId,
 }: HowItWorksProps) {
   return (
-    <section
-      aria-labelledby="signal-scout-how-it-works-heading"
-      className="mx-auto max-w-7xl border-t border-line px-4 py-8 sm:px-6 lg:px-8"
-    >
-      <h2 id="signal-scout-how-it-works-heading" className="sr-only">
+    <section aria-labelledby={headingId}>
+      <h2 id={headingId} className="sr-only">
         How it works
       </h2>
       <details className="group rounded-modal border border-line bg-surface/50">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-base font-semibold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan [&::-webkit-details-marker]:hidden">
+        {/* tabIndex={0} is load-bearing, not redundant: <summary> is already
+            focusable, but the focus trap in components/slide-up-dialog.tsx
+            enumerates focusables with
+            'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            which <summary> matches none of. This explainer is the LAST thing
+            in that modal, so without an explicit tabindex the trap treats the
+            element before it as the final stop and wraps Tab back to the top,
+            making this disclosure unreachable by keyboard inside the modal. */}
+        <summary
+          tabIndex={0}
+          className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-base font-semibold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan [&::-webkit-details-marker]:hidden"
+        >
           How Signal Scout works
           <ChevronDown
             aria-hidden="true"

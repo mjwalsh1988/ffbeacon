@@ -5,8 +5,14 @@
  * all_time, streak): board ordering and tie-breakers, the hidden/admin
  * exclusion set, page-aware ranks, the personal "your rank" strip, and the
  * total-pages count. It is consumed by app/api/games/signal-scout/leaderboards/route.ts
- * (the JSON API) and app/games/signal-scout/leaderboards/page.tsx (the
- * leaderboards page), so both surfaces share one query implementation.
+ * (the JSON API) and app/games/signal-scout/page.tsx (which server-renders
+ * page 1 of the default board into the game page's leaderboard rail), so both
+ * surfaces share one query implementation. The rail then calls the JSON API
+ * for every other board and page.
+ *
+ * NOTE: loadLeaderboardPreview at the bottom of this file is currently unused.
+ * It powered the top-5 "Today's Top Scouts" panel on the game page, which the
+ * leaderboard rail replaced.
  *
  * Identity resolution: public display names and avatars come from
  * lib/user-identity.ts resolveUserIdentities(), called once per request with
