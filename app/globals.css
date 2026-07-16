@@ -278,6 +278,27 @@
 }
 
 /**
+ * Reserves the space taken by a bottom-docked bar, so nothing at the end of the
+ * page (the site footer included) can be trapped underneath it.
+ *
+ * --ffb-dock-h is published on <html> by whatever is currently docked, carrying
+ * its measured height, and removed the moment that element undocks or unmounts.
+ * Today the only publisher is the Signal Scout score meter, which docks during
+ * an active round and releases once the reader scrolls to it (see
+ * app/games/signal-scout/score-meter.tsx). The var is unset everywhere else and
+ * at every other moment, so the fallback keeps this a no-op site-wide.
+ *
+ * The media query is belt and braces. The publisher already only docks below
+ * sm, so the var should never be set at a wider viewport; this guarantees the
+ * padding cannot appear on a layout that never had a bar over it.
+ */
+@media (max-width: 639px) {
+  body {
+    padding-bottom: var(--ffb-dock-h, 0px);
+  }
+}
+
+/**
  * Signal Scout score meter "live current": makes the remaining-signal bar read
  * as an energized wire rather than a static progress fill. Two decorative
  * layers ride on the fill's purple->cyan gradient, both drawn INSIDE the fill

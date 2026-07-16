@@ -104,9 +104,18 @@ export function DiscordCta() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-end px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-end px-4 pb-[calc(max(1rem,env(safe-area-inset-bottom))+var(--ffb-dock-h,0px))] sm:px-6 sm:pb-[max(1rem,env(safe-area-inset-bottom))]"
       // The outer wrapper is non-interactive so it doesn't block clicks on
       // page content; only the inner pill + dismiss button capture pointer events.
+      //
+      // The bottom padding also clears whatever is docked to the bottom of the
+      // viewport, via --ffb-dock-h (see app/globals.css). Without it this pill
+      // would land on top of the Signal Scout meter's score readout during a
+      // round. The var is unset on every other page, and cleared the moment the
+      // meter undocks, so the calc collapses back to the plain safe-area
+      // padding and the pill drops to its usual spot. The sm rule is belt and
+      // braces: docking is mobile-only, so the offset must never reach a wider
+      // viewport even if a future publisher sets the var at every width.
     >
       <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-brand-purple/40 bg-surface/95 p-1 pl-2 shadow-lg backdrop-blur">
         <a

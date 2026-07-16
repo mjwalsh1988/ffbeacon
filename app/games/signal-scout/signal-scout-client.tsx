@@ -688,6 +688,12 @@ export function SignalScoutClient({
 
           <BadReads badReads={activeRound.badReads} />
 
+          {/* The meter sits directly under the round's controls and above the
+              skip action, so its docked home on mobile is the end of the game
+              proper rather than the end of the card. Scrolling to it undocks
+              it (see score-meter.tsx); everything below it is exit, not play. */}
+          <ScoreMeter score={activeRound.score} startingScore={startingScore} burned={activeRound.burned} />
+
           {/* Skipping is the one irreversible thing on this screen, so it is
               toned as the destructive action it is. It used to be a neutral
               button that hovered CYAN, the same tone every safe, encouraged
@@ -712,8 +718,6 @@ export function SignalScoutClient({
               Ends the round with no score. Your Signal Streak resets.
             </span>
           </div>
-
-          <ScoreMeter score={activeRound.score} startingScore={startingScore} burned={activeRound.burned} />
         </div>
       )}
 
