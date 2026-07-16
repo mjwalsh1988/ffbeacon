@@ -15,6 +15,7 @@ import {
   Download,
   GripVertical,
   Layers,
+  ListFilter,
   Plus,
   X,
 } from "lucide-react";
@@ -23,19 +24,30 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { revalidateBoardCache } from "../actions";
 import {
+  computeBoardRanks,
+  ELIGIBLE_POSITIONS,
+  isUntiered,
   MAX_BOARD_NAME_LENGTH,
   MAX_TIERS,
+  orderBoardForDisplay,
   scopeLabel,
   tierLabel,
   type BoardPlayer,
+  type BoardRank,
   type BoardScope,
   type ImportedRankingPlayer,
   type SearchablePlayer,
 } from "@/lib/ranking-boards";
 
+import type { Position } from "@/lib/site";
+
 const SAVE_DEBOUNCE_MS = 700;
 const SEARCH_DEBOUNCE_MS = 250;
 const FETCH_HEADERS = { "x-requested-with": "ff-beacon" } as const;
+
+/** The board's position filter: every player, or one position in isolation.
+ * Filtering is a read-only view (see PositionFilterBar for why). */
+type PositionFilter = "all" | Position;
 
 type ImportSource = {
   slug: string;
@@ -68,6 +80,8 @@ export function BoardEditor({
   defaultSourceSlug: string | null;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  // Ties the position chips to the list they filter, for aria-controls.
+  const listId = useId();
 
   const [name, setName] = useState(initialName);
   const [tiersEnabled, setTiersEnabled] = useState(initialTiersEnabled);
@@ -75,6 +89,9 @@ export function BoardEditor({
   const [tierLabels, setTierLabels] =
     useState<Record<string, string>>(initialTierLabels);
   const [players, setPlayers] = useState<BoardPlayer[]>(initialPlayers);
+  // Overall boards can be viewed one position at a time. Positional boards are
+  // already a single position, so the filter never applies to them.
+  const [positionFilter, setPositionFilter] = useState<PositionFilter>("all");
 
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
@@ -83,16 +100,28 @@ export function BoardEditor({
   // screen readers (the visual list updates instantly for sighted users).
   const [announcement, setAnnouncement] = useState("");
 
+  // The board in the exact order it renders, which is the order rank_position
+  // is persisted in. Derived here rather than from the tier groups below so
+  // the debounced save can read it without depending on render internals.
+  const orderedPlayers = useMemo(
+    () => orderBoardForDisplay(players, tiersEnabled, tierCount),
+    [players, tiersEnabled, tierCount],
+  );
+
   // ----- persistence plumbing -------------------------------------------
   // Player rows removed since the last flush; deleted by player_id on save.
   const pendingRemovals = useRef<Set<string>>(new Set());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Always read the freshest players inside the debounced flush.
-  const playersRef = useRef(players);
-  playersRef.current = players;
+  // Always read the freshest order inside the debounced flush.
+  const orderedPlayersRef = useRef(orderedPlayers);
+  orderedPlayersRef.current = orderedPlayers;
 
   const flushPlayers = useCallback(async () => {
-    const snapshot = playersRef.current;
+    // Persist in display order so a stored rank_position always means the same
+    // thing as the number the user sees. Anything reading the board back by
+    // rank_position (the public profile's Top N, for one) then agrees with the
+    // editor instead of reconstructing a different board.
+    const snapshot = orderedPlayersRef.current;
     const removals = Array.from(pendingRemovals.current);
     pendingRemovals.current = new Set();
     setSaveState("saving");
@@ -144,6 +173,54 @@ export function BoardEditor({
     };
   }, [flushPlayers]);
 
+  // ----- board meta persistence -----------------------------------------
+  // Queued board-meta patch. Held as data rather than captured in the timer
+  // closure so a burst of edits collapses into one write, and so an import can
+  // take the queue over instead of racing whatever is still in it.
+  const pendingMeta = useRef<Record<string, unknown>>({});
+  const metaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const writeMeta = useCallback(
+    async (patch: Record<string, unknown>): Promise<boolean> => {
+      setSaveState("saving");
+      const { error } = await supabase
+        .from("user_ranking_boards")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", boardId);
+      setSaveState(error ? "error" : "saved");
+      if (!error) void revalidateBoardCache(boardId);
+      return !error;
+    },
+    [supabase, boardId],
+  );
+
+  const saveMeta = useCallback(
+    (patch: Record<string, unknown>) => {
+      pendingMeta.current = { ...pendingMeta.current, ...patch };
+      if (metaTimer.current) clearTimeout(metaTimer.current);
+      metaTimer.current = setTimeout(() => {
+        metaTimer.current = null;
+        const toWrite = pendingMeta.current;
+        pendingMeta.current = {};
+        if (Object.keys(toWrite).length > 0) void writeMeta(toWrite);
+      }, SAVE_DEBOUNCE_MS);
+    },
+    [writeMeta],
+  );
+
+  /** Cancel and hand back any queued meta patch, so a caller doing its own
+   * meta write can fold the queue into that write rather than let it land
+   * afterwards and clobber the newer values. */
+  const takePendingMeta = useCallback((): Record<string, unknown> => {
+    if (metaTimer.current) {
+      clearTimeout(metaTimer.current);
+      metaTimer.current = null;
+    }
+    const queued = pendingMeta.current;
+    pendingMeta.current = {};
+    return queued;
+  }, []);
+
   // Replace the whole board with our current rankings for a (source, format).
   // Cancels any pending debounced save and writes atomically (delete all rows,
   // then insert) so the board ends up as exactly the imported set.
@@ -159,6 +236,10 @@ export function BoardEditor({
         saveTimer.current = null;
       }
       pendingRemovals.current = new Set();
+      // Take the queued meta patch too. A tier_count write left over from the
+      // tier controls would otherwise fire after this import and shrink the
+      // board back, stranding the rows we are about to write above it.
+      const queuedMeta = takePendingMeta();
 
       // Build the source-tier to board-tier remap when tiers are on.
       const tierByPlayer = new Map<string, number | null>();
@@ -214,23 +295,27 @@ export function BoardEditor({
         return false;
       }
 
-      if (importedTiers) {
-        const { error: metaError } = await supabase
-          .from("user_ranking_boards")
-          .update({
-            tier_count: nextTierCount,
-            tier_labels: {},
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", boardId);
-        if (metaError) {
+      // Fold the queued patch in behind this import's own values, so a pending
+      // rename still lands while the tier fields we just derived win.
+      const metaPatch = importedTiers
+        ? { ...queuedMeta, tier_count: nextTierCount, tier_labels: {} }
+        : queuedMeta;
+      if (Object.keys(metaPatch).length > 0) {
+        const ok = await writeMeta(metaPatch);
+        if (!ok) {
           setSaveState("error");
           return false;
         }
       }
 
       if (next.length > 0) {
-        const rows = next.map((p, index) => ({
+        // Same invariant as flushPlayers: rank_position is the display order.
+        const orderedNext = orderBoardForDisplay(
+          next,
+          tiersEnabled,
+          importedTiers ? nextTierCount : tierCount,
+        );
+        const rows = orderedNext.map((p, index) => ({
           board_id: boardId,
           player_id: p.playerId,
           rank_position: index + 1,
@@ -255,25 +340,7 @@ export function BoardEditor({
       );
       return true;
     },
-    [supabase, boardId, tiersEnabled, tierCount],
-  );
-
-  // ----- board meta persistence -----------------------------------------
-  const metaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveMeta = useCallback(
-    (patch: Record<string, unknown>) => {
-      if (metaTimer.current) clearTimeout(metaTimer.current);
-      metaTimer.current = setTimeout(async () => {
-        setSaveState("saving");
-        const { error } = await supabase
-          .from("user_ranking_boards")
-          .update({ ...patch, updated_at: new Date().toISOString() })
-          .eq("id", boardId);
-        setSaveState(error ? "error" : "saved");
-        if (!error) void revalidateBoardCache(boardId);
-      }, SAVE_DEBOUNCE_MS);
-    },
-    [supabase, boardId],
+    [supabase, boardId, tiersEnabled, tierCount, takePendingMeta, writeMeta],
   );
 
   // ----- mutations -------------------------------------------------------
@@ -294,10 +361,17 @@ export function BoardEditor({
         };
         return [...prev, next];
       });
-      setAnnouncement(`Added ${p.name} to the board.`);
+      // A player added while a different position is on view lands on the
+      // board but not in the visible list, so say so rather than report a
+      // success the reader cannot find.
+      setAnnouncement(
+        positionFilter !== "all" && p.position !== positionFilter
+          ? `Added ${p.name} to the board. They are a ${p.position}, so they are not shown in the current ${positionFilter} view.`
+          : `Added ${p.name} to the board.`,
+      );
       schedulePlayerSave();
     },
-    [schedulePlayerSave],
+    [schedulePlayerSave, positionFilter],
   );
 
   const removePlayer = useCallback(
@@ -440,7 +514,9 @@ export function BoardEditor({
   );
 
   // Tier groups for rendering when tiers are on: each numbered tier plus a
-  // trailing "No tier" bucket. Within-group order follows array order.
+  // trailing "No tier" bucket. Sliced out of the already-ordered list, so
+  // flattening these groups reproduces orderedPlayers exactly and the ranks
+  // below always match the rows on screen.
   const tierGroups = useMemo(() => {
     if (!tiersEnabled) return null;
     const groups: { tier: number | null; label: string; items: BoardPlayer[] }[] =
@@ -449,16 +525,88 @@ export function BoardEditor({
       groups.push({
         tier: t,
         label: tierLabel(tierLabels, t),
-        items: players.filter((p) => p.tier === t),
+        items: orderedPlayers.filter((p) => p.tier === t),
       });
     }
     groups.push({
       tier: null,
       label: "No tier",
-      items: players.filter((p) => p.tier == null),
+      items: orderedPlayers.filter((p) => isUntiered(p.tier, tierCount)),
     });
     return groups;
-  }, [tiersEnabled, tierCount, tierLabels, players]);
+  }, [tiersEnabled, tierCount, tierLabels, orderedPlayers]);
+
+  // Overall and positional rank for every player, computed once per change and
+  // read by each row. Positional ranks are what let one overall board answer
+  // "who is my QB3" without the user building a separate QB board.
+  const ranks = useMemo(() => computeBoardRanks(orderedPlayers), [orderedPlayers]);
+
+  // Only overall boards get positional ranks and filters: on a QB board the
+  // positional rank is just the overall rank, so both would be noise.
+  const supportsPositionViews = scope === "overall";
+
+  // Counted over the rendered order, not the raw array, so a chip can never
+  // promise more players than the filtered view can show.
+  const positionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    orderedPlayers.forEach((p) =>
+      counts.set(p.position, (counts.get(p.position) ?? 0) + 1),
+    );
+    return counts;
+  }, [orderedPlayers]);
+
+  // Chips for positions actually on the board, in canonical position order.
+  const filterPositions = useMemo(
+    () => ELIGIBLE_POSITIONS.filter((pos) => (positionCounts.get(pos) ?? 0) > 0),
+    [positionCounts],
+  );
+
+  const activeFilter: PositionFilter = supportsPositionViews
+    ? positionFilter
+    : "all";
+  const isFiltered = activeFilter !== "all";
+
+  // An import can replace the board while a filter is active, leaving the
+  // filter pointed at a position that is gone, or leaving one position on the
+  // board. Either way the chips stop rendering, so the filter must release or
+  // the board would sit read-only with no control left to clear it.
+  useEffect(() => {
+    if (
+      positionFilter !== "all" &&
+      (filterPositions.length <= 1 || !filterPositions.includes(positionFilter))
+    ) {
+      setPositionFilter("all");
+    }
+  }, [positionFilter, filterPositions]);
+
+  const visibleGroups = useMemo(() => {
+    if (!tierGroups) return null;
+    if (!isFiltered) return tierGroups;
+    // Drop tiers with no players at this position so the filtered view reads
+    // as a clean positional list instead of a wall of empty tiers.
+    return tierGroups
+      .map((g) => ({ ...g, items: g.items.filter((p) => p.position === activeFilter) }))
+      .filter((g) => g.items.length > 0);
+  }, [tierGroups, isFiltered, activeFilter]);
+
+  const visiblePlayers = useMemo(
+    () =>
+      isFiltered
+        ? orderedPlayers.filter((p) => p.position === activeFilter)
+        : orderedPlayers,
+    [orderedPlayers, isFiltered, activeFilter],
+  );
+
+  const changeFilter = (next: PositionFilter) => {
+    setPositionFilter(next);
+    const total = orderedPlayers.length;
+    const count = next === "all" ? total : positionCounts.get(next) ?? 0;
+    setAnnouncement(
+      next === "all"
+        ? `Showing all ${total} player${total === 1 ? "" : "s"}. Reordering is back on.`
+        : `Showing ${count} ${next} player${count === 1 ? "" : "s"}. Reordering is off.`,
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -498,48 +646,60 @@ export function BoardEditor({
         onAdd={addPlayer}
       />
 
-      {players.length === 0 ? (
-        <p className="rounded-card border border-dashed border-line bg-base/40 p-6 text-sm text-ink-muted">
-          No players on this board yet. Search above to add your first one.
-        </p>
-      ) : tierGroups ? (
-        <div className="space-y-6">
-          {(() => {
-            // Numbering runs continuously across tiers, so each group starts
-            // where the previous one ended rather than restarting at 1.
-            let runningStart = 0;
-            return tierGroups.map((group) => {
-              const startIndex = runningStart;
-              runningStart += group.items.length;
-              return (
-                <TierGroup
-                  key={group.tier ?? "none"}
-                  group={group}
-                  startIndex={startIndex}
-                  tierCount={tierCount}
-                  tierLabels={tierLabels}
-                  onRenameTier={renameTier}
-                  onMove={movePlayer}
-                  onRemove={removePlayer}
-                  onAssignTier={assignTier}
-                  onReorderDrag={reorderByDrag}
-                />
-              );
-            });
-          })()}
-        </div>
-      ) : (
-        <PlayerList
-          players={players}
-          tiersEnabled={false}
-          tierCount={tierCount}
-          tierLabels={tierLabels}
-          onMove={movePlayer}
-          onRemove={removePlayer}
-          onAssignTier={assignTier}
-          onReorderDrag={reorderByDrag}
+      {/* With fewer than two positions on the board, every chip would show the
+          same list, so the filter earns nothing. */}
+      {supportsPositionViews && filterPositions.length > 1 && (
+        <PositionFilterBar
+          positions={filterPositions}
+          counts={positionCounts}
+          active={activeFilter}
+          totalCount={orderedPlayers.length}
+          visibleCount={visiblePlayers.length}
+          listId={listId}
+          onChange={changeFilter}
         />
       )}
+
+      <div id={listId}>
+        {players.length === 0 ? (
+          <p className="rounded-card border border-dashed border-line bg-base/40 p-6 text-sm text-ink-muted">
+            No players on this board yet. Search above to add your first one.
+          </p>
+        ) : visibleGroups ? (
+          <div className="space-y-6">
+            {visibleGroups.map((group) => (
+              <TierGroup
+                key={group.tier ?? "none"}
+                group={group}
+                ranks={ranks}
+                showPositionRank={supportsPositionViews}
+                readOnly={isFiltered}
+                tierCount={tierCount}
+                tierLabels={tierLabels}
+                onRenameTier={renameTier}
+                onMove={movePlayer}
+                onRemove={removePlayer}
+                onAssignTier={assignTier}
+                onReorderDrag={reorderByDrag}
+              />
+            ))}
+          </div>
+        ) : (
+          <PlayerList
+            players={visiblePlayers}
+            ranks={ranks}
+            showPositionRank={supportsPositionViews}
+            readOnly={isFiltered}
+            tiersEnabled={false}
+            tierCount={tierCount}
+            tierLabels={tierLabels}
+            onMove={movePlayer}
+            onRemove={removePlayer}
+            onAssignTier={assignTier}
+            onReorderDrag={reorderByDrag}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -695,7 +855,9 @@ function TierControls({
 
 function TierGroup({
   group,
-  startIndex,
+  ranks,
+  showPositionRank,
+  readOnly,
   tierCount,
   tierLabels,
   onRenameTier,
@@ -705,8 +867,9 @@ function TierGroup({
   onReorderDrag,
 }: {
   group: { tier: number | null; label: string; items: BoardPlayer[] };
-  /** Running count of players in all earlier tiers, so numbering continues. */
-  startIndex: number;
+  ranks: Map<string, BoardRank>;
+  showPositionRank: boolean;
+  readOnly: boolean;
   tierCount: number;
   tierLabels: Record<string, string>;
   onRenameTier: (tier: number, label: string) => void;
@@ -715,12 +878,15 @@ function TierGroup({
   onAssignTier: (playerId: string, tier: number | null) => void;
   onReorderDrag: (fromId: string, toId: string) => void;
 }) {
-  const headingId = useId();
+  const inputId = useId();
   return (
-    <section aria-labelledby={headingId} className="rounded-card border border-line bg-surface/40 p-4">
+    // Named directly rather than via aria-labelledby: in the editable branch
+    // the name would otherwise resolve to the rename input's value, which is
+    // empty for an untitled tier and would leave this landmark unnamed.
+    <section aria-label={group.label} className="rounded-card border border-line bg-surface/40 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         {group.tier === null ? (
-          <h3 id={headingId} className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-subtle">
             {group.label}
           </h3>
         ) : (
@@ -731,17 +897,27 @@ function TierGroup({
             >
               {group.tier}
             </span>
-            <label htmlFor={headingId} className="sr-only">
-              Tier {group.tier} label
-            </label>
-            <input
-              id={headingId}
-              defaultValue={tierLabels[String(group.tier)] ?? ""}
-              placeholder={`Tier ${group.tier}`}
-              maxLength={40}
-              onBlur={(event) => onRenameTier(group.tier as number, event.target.value)}
-              className="w-40 max-w-full rounded-card border border-transparent bg-transparent px-1 py-1.5 text-base font-semibold text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-2 focus:outline-none sm:w-auto sm:py-0.5 sm:text-sm"
-            />
+            {readOnly ? (
+              // Filtering turns off retiering, so the tier name is a plain
+              // heading rather than an editable field.
+              <h3 className="text-base font-semibold text-ink sm:text-sm">
+                {group.label}
+              </h3>
+            ) : (
+              <>
+                <label htmlFor={inputId} className="sr-only">
+                  Tier {group.tier} label
+                </label>
+                <input
+                  id={inputId}
+                  defaultValue={tierLabels[String(group.tier)] ?? ""}
+                  placeholder={`Tier ${group.tier}`}
+                  maxLength={40}
+                  onBlur={(event) => onRenameTier(group.tier as number, event.target.value)}
+                  className="w-40 max-w-full rounded-card border border-transparent bg-transparent px-1 py-1.5 text-base font-semibold text-ink hover:border-line focus:border-brand-purple focus:bg-base focus:px-2 focus:outline-none sm:w-auto sm:py-0.5 sm:text-sm"
+                />
+              </>
+            )}
           </div>
         )}
         <span className="text-xs text-ink-subtle">
@@ -755,7 +931,9 @@ function TierGroup({
       ) : (
         <PlayerList
           players={group.items}
-          startIndex={startIndex}
+          ranks={ranks}
+          showPositionRank={showPositionRank}
+          readOnly={readOnly}
           tiersEnabled
           tierCount={tierCount}
           tierLabels={tierLabels}
@@ -769,11 +947,126 @@ function TierGroup({
   );
 }
 
+/* ---------------- Position filter ---------------- */
+
+function filterChipClass(active: boolean): string {
+  return active
+    ? "border-brand-purple/70 bg-brand-purple/15 text-ink hover:bg-brand-purple/25"
+    : "border-line bg-surface/60 text-ink-muted hover:border-brand-cyan/50 hover:text-ink";
+}
+
+/**
+ * Quick filters that narrow an overall board to a single position, turning it
+ * into that positional list without the user maintaining a separate board.
+ *
+ * Filtering is deliberately read-only. Reordering inside a filtered subset is
+ * ambiguous: moving your QB3 "up one" says nothing about where he belongs in
+ * the overall order, so we show the positional view and keep edits on the full
+ * board. Chips are single-select toggle buttons in a group, matching the chip
+ * bars elsewhere on the site.
+ */
+function PositionFilterBar({
+  positions,
+  counts,
+  active,
+  totalCount,
+  visibleCount,
+  listId,
+  onChange,
+}: {
+  positions: readonly Position[];
+  counts: Map<string, number>;
+  active: PositionFilter;
+  totalCount: number;
+  visibleCount: number;
+  /** Id of the list these chips filter, for aria-controls. */
+  listId: string;
+  onChange: (next: PositionFilter) => void;
+}) {
+  const headingId = useId();
+  // The explanation lives once on the group rather than on all seven chips,
+  // so arrowing across them does not repeat it every time.
+  const descId = useId();
+  const isFiltered = active !== "all";
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="rounded-card border border-line bg-surface p-4"
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h3
+          id={headingId}
+          className="flex items-center gap-2 text-sm font-medium text-ink"
+        >
+          <ListFilter aria-hidden="true" className="h-4 w-4 text-brand-purple" />
+          View by position
+        </h3>
+        <div
+          role="group"
+          aria-label="Filter the board by position"
+          aria-describedby={descId}
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          <button
+            type="button"
+            onClick={() => onChange("all")}
+            aria-pressed={active === "all"}
+            aria-controls={listId}
+            aria-label={`Show all positions, ${totalCount} player${totalCount === 1 ? "" : "s"}`}
+            className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0 sm:min-w-0 ${filterChipClass(
+              active === "all",
+            )}`}
+          >
+            <span>All</span>
+            <span className="font-mono text-[10px] tabular-nums opacity-70">
+              {totalCount}
+            </span>
+          </button>
+
+          {positions.map((pos) => {
+            const count = counts.get(pos) ?? 0;
+            const isOn = active === pos;
+            return (
+              <button
+                key={pos}
+                type="button"
+                onClick={() => onChange(pos)}
+                aria-pressed={isOn}
+                aria-controls={listId}
+                aria-label={`Show ${pos} only, ${count} player${count === 1 ? "" : "s"}`}
+                className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0 sm:min-w-0 ${filterChipClass(
+                  isOn,
+                )}`}
+              >
+                <span>{pos}</span>
+                <span className="font-mono text-[10px] tabular-nums opacity-70">
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Names only what filtering actually turns off. Adding, importing, and
+          the tier controls above stay live in this view. */}
+      <p id={descId} className="mt-2 text-xs text-ink-muted">
+        {isFiltered
+          ? `Showing your ${visibleCount} ranked ${active}${visibleCount === 1 ? "" : "s"} of ${totalCount} players, in board order. Reordering, retiering, and removing are off here. Choose All to edit the board.`
+          : "Each player shows their overall rank and their rank at their position. Pick a position to see just that list."}
+      </p>
+    </section>
+  );
+}
+
 /* ---------------- Player list + row ---------------- */
 
 function PlayerList({
   players,
-  startIndex = 0,
+  ranks,
+  showPositionRank,
+  readOnly,
   tiersEnabled,
   tierCount,
   tierLabels,
@@ -783,8 +1076,10 @@ function PlayerList({
   onReorderDrag,
 }: {
   players: BoardPlayer[];
-  /** Position number offset so numbering can continue across tier groups. */
-  startIndex?: number;
+  ranks: Map<string, BoardRank>;
+  showPositionRank: boolean;
+  /** True while a position filter is on: rows render as display-only. */
+  readOnly: boolean;
   tiersEnabled: boolean;
   tierCount: number;
   tierLabels: Record<string, string>;
@@ -798,34 +1093,39 @@ function PlayerList({
 
   return (
     <ol role="list" className="flex flex-col gap-2">
-      {players.map((player, index) => (
-        <PlayerRow
-          key={player.playerId}
-          player={player}
-          position={startIndex + index + 1}
-          isFirst={index === 0}
-          isLast={index === players.length - 1}
-          tiersEnabled={tiersEnabled}
-          tierCount={tierCount}
-          tierLabels={tierLabels}
-          isDragging={dragId === player.playerId}
-          isDropTarget={overId === player.playerId && dragId !== player.playerId}
-          onMove={onMove}
-          onRemove={onRemove}
-          onAssignTier={onAssignTier}
-          onDragStart={() => setDragId(player.playerId)}
-          onDragEnterRow={() => setOverId(player.playerId)}
-          onDragEndRow={() => {
-            setDragId(null);
-            setOverId(null);
-          }}
-          onDropRow={() => {
-            if (dragId) onReorderDrag(dragId, player.playerId);
-            setDragId(null);
-            setOverId(null);
-          }}
-        />
-      ))}
+      {players.map((player, index) => {
+        const rank = ranks.get(player.playerId);
+        return (
+          <PlayerRow
+            key={player.playerId}
+            player={player}
+            position={rank?.overall ?? index + 1}
+            positionRank={showPositionRank ? rank?.positionRank ?? null : null}
+            isFirst={index === 0}
+            isLast={index === players.length - 1}
+            readOnly={readOnly}
+            tiersEnabled={tiersEnabled}
+            tierCount={tierCount}
+            tierLabels={tierLabels}
+            isDragging={dragId === player.playerId}
+            isDropTarget={overId === player.playerId && dragId !== player.playerId}
+            onMove={onMove}
+            onRemove={onRemove}
+            onAssignTier={onAssignTier}
+            onDragStart={() => setDragId(player.playerId)}
+            onDragEnterRow={() => setOverId(player.playerId)}
+            onDragEndRow={() => {
+              setDragId(null);
+              setOverId(null);
+            }}
+            onDropRow={() => {
+              if (dragId) onReorderDrag(dragId, player.playerId);
+              setDragId(null);
+              setOverId(null);
+            }}
+          />
+        );
+      })}
     </ol>
   );
 }
@@ -833,8 +1133,10 @@ function PlayerList({
 function PlayerRow({
   player,
   position,
+  positionRank,
   isFirst,
   isLast,
+  readOnly,
   tiersEnabled,
   tierCount,
   tierLabels,
@@ -850,8 +1152,12 @@ function PlayerRow({
 }: {
   player: BoardPlayer;
   position: number;
+  /** Rank among same-position players, or null when the board is already
+   * scoped to one position (where it would just repeat the overall rank). */
+  positionRank: number | null;
   isFirst: boolean;
   isLast: boolean;
+  readOnly: boolean;
   tiersEnabled: boolean;
   tierCount: number;
   tierLabels: Record<string, string>;
@@ -866,23 +1172,29 @@ function PlayerRow({
   onDropRow: () => void;
 }) {
   const tierSelectId = useId();
+  const dragProps = readOnly
+    ? {}
+    : {
+        draggable: true,
+        onDragStart: (event: React.DragEvent<HTMLLIElement>) => {
+          event.dataTransfer.effectAllowed = "move";
+          onDragStart();
+        },
+        onDragOver: (event: React.DragEvent<HTMLLIElement>) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        },
+        onDragEnter: onDragEnterRow,
+        onDragEnd: onDragEndRow,
+        onDrop: (event: React.DragEvent<HTMLLIElement>) => {
+          event.preventDefault();
+          onDropRow();
+        },
+      };
+
   return (
     <li
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "move";
-        onDragStart();
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-      }}
-      onDragEnter={onDragEnterRow}
-      onDragEnd={onDragEndRow}
-      onDrop={(event) => {
-        event.preventDefault();
-        onDropRow();
-      }}
+      {...dragProps}
       className={`flex flex-col gap-2 rounded-card border bg-base p-2.5 transition-colors sm:flex-row sm:items-center sm:gap-3 ${
         isDropTarget
           ? "border-brand-cyan"
@@ -893,16 +1205,36 @@ function PlayerRow({
     >
       {/* Identity: full-width on mobile, flexes on desktop. */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
+        {!readOnly && (
+          <span
+            aria-hidden="true"
+            title="Drag to reorder"
+            className="hidden cursor-grab text-ink-subtle sm:block"
+          >
+            <GripVertical className="h-4 w-4" />
+          </span>
+        )}
+
+        {/* Ranks read as one sentence for screen readers; the visual split of
+            overall number plus positional badge is decorative. */}
+        <span className="sr-only">
+          {positionRank == null
+            ? `Rank ${position}.`
+            : `Overall rank ${position}, ${player.position} rank ${positionRank}.`}
+        </span>
         <span
           aria-hidden="true"
-          title="Drag to reorder"
-          className="hidden cursor-grab text-ink-subtle sm:block"
+          className="flex shrink-0 items-center gap-1.5"
         >
-          <GripVertical className="h-4 w-4" />
-        </span>
-
-        <span className="w-6 shrink-0 text-center font-mono text-sm tabular-nums text-ink-subtle">
-          {position}
+          <span className="w-6 text-center font-mono text-sm tabular-nums text-ink-subtle">
+            {position}
+          </span>
+          {positionRank != null && (
+            <span className="rounded-full border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-brand-cyan">
+              {player.position}
+              {positionRank}
+            </span>
+          )}
         </span>
 
         <PlayerHeadshot
@@ -922,7 +1254,10 @@ function PlayerRow({
       </div>
 
       {/* Controls: drop onto their own right-aligned row on mobile so nothing
-          gets crushed. 44px tap targets on mobile, compact on desktop. */}
+          gets crushed. 44px tap targets on mobile, compact on desktop.
+          A filtered view is display-only, so the row carries no controls: a
+          move inside one position has no meaning for the full board's order. */}
+      {!readOnly && (
       <div className="flex items-center justify-end gap-1.5 sm:shrink-0 sm:gap-1">
         {tiersEnabled && (
           <>
@@ -977,6 +1312,7 @@ function PlayerRow({
           <X aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
+      )}
     </li>
   );
 }
