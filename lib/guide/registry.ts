@@ -22,6 +22,8 @@ export type GuidePageKey =
   | "league-pulse"
   | "faab"
   | "guides"
+  | "games"
+  | "signal-scout"
   | "player-profile"
   | "league-overview"
   | "league-team"
@@ -80,6 +82,9 @@ export const GUIDE_PAGES: GuidePageDef[] = [
   { key: "faab", title: "FAAB Calculator", match: (p) => p === "/tools/faab" },
   { key: "tools", title: "Tools", match: (p) => p === "/tools" },
   { key: "rankings", title: "Rankings", match: (p) => p === "/rankings" },
+  // Games sub-routes before the games hub.
+  { key: "signal-scout", title: "Signal Scout", match: (p) => p === "/games/signal-scout" },
+  { key: "games", title: "Games", match: (p) => p === "/games" },
   { key: "guides", title: "Guides", match: (p) => p === "/guides" || p.startsWith("/guides/") },
   // My Beacon sub-routes before the dashboard catch.
   { key: "account", title: "Account", match: (p) => p === "/my-beacon/account" },
