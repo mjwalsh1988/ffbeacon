@@ -1850,6 +1850,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      on_the_clock_ip_budget: {
+        Row: {
+          ip_key: string;
+          request_count: number;
+          updated_at: string;
+          window_started_at: string;
+        };
+        Insert: {
+          ip_key: string;
+          request_count?: number;
+          updated_at?: string;
+          window_started_at?: string;
+        };
+        Update: {
+          ip_key?: string;
+          request_count?: number;
+          updated_at?: string;
+          window_started_at?: string;
+        };
+        Relationships: [];
+      };
       on_the_clock_lookup_attempts: {
         Row: {
           key: string;
@@ -2568,6 +2589,74 @@ export type Database = {
           },
         ];
       };
+      player_weekly_projections: {
+        Row: {
+          game_id: string | null;
+          generated_at: string;
+          id: string;
+          metadata: Json | null;
+          opponent: string | null;
+          player_id: string | null;
+          projected_pts_half_ppr: number | null;
+          projected_pts_ppr: number | null;
+          projected_pts_std: number | null;
+          season: number;
+          season_type: string;
+          sleeper_player_id: string;
+          source: string;
+          stat_line: Json | null;
+          team: string | null;
+          updated_at: string;
+          week: number;
+        };
+        Insert: {
+          game_id?: string | null;
+          generated_at?: string;
+          id?: string;
+          metadata?: Json | null;
+          opponent?: string | null;
+          player_id?: string | null;
+          projected_pts_half_ppr?: number | null;
+          projected_pts_ppr?: number | null;
+          projected_pts_std?: number | null;
+          season: number;
+          season_type?: string;
+          sleeper_player_id: string;
+          source?: string;
+          stat_line?: Json | null;
+          team?: string | null;
+          updated_at?: string;
+          week: number;
+        };
+        Update: {
+          game_id?: string | null;
+          generated_at?: string;
+          id?: string;
+          metadata?: Json | null;
+          opponent?: string | null;
+          player_id?: string | null;
+          projected_pts_half_ppr?: number | null;
+          projected_pts_ppr?: number | null;
+          projected_pts_std?: number | null;
+          season?: number;
+          season_type?: string;
+          sleeper_player_id?: string;
+          source?: string;
+          stat_line?: Json | null;
+          team?: string | null;
+          updated_at?: string;
+          week?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_weekly_projections_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       players: {
         Row: {
           birth_date: string | null;
@@ -2643,69 +2732,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      projections: {
-        Row: {
-          ceiling_points: number | null;
-          confidence: string | null;
-          floor_points: number | null;
-          format_config_id: string;
-          generated_at: string;
-          id: string;
-          metadata: Json | null;
-          player_id: string;
-          projected_points: number;
-          reasoning: string | null;
-          season: number;
-          start_sit_verdict: string | null;
-          week: number;
-        };
-        Insert: {
-          ceiling_points?: number | null;
-          confidence?: string | null;
-          floor_points?: number | null;
-          format_config_id: string;
-          generated_at?: string;
-          id?: string;
-          metadata?: Json | null;
-          player_id: string;
-          projected_points: number;
-          reasoning?: string | null;
-          season: number;
-          start_sit_verdict?: string | null;
-          week: number;
-        };
-        Update: {
-          ceiling_points?: number | null;
-          confidence?: string | null;
-          floor_points?: number | null;
-          format_config_id?: string;
-          generated_at?: string;
-          id?: string;
-          metadata?: Json | null;
-          player_id?: string;
-          projected_points?: number;
-          reasoning?: string | null;
-          season?: number;
-          start_sit_verdict?: string | null;
-          week?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "projections_format_config_id_fkey";
-            columns: ["format_config_id"];
-            isOneToOne: false;
-            referencedRelation: "format_configs";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "projections_player_id_fkey";
-            columns: ["player_id"];
-            isOneToOne: false;
-            referencedRelation: "players";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       rankings: {
         Row: {
           confidence: string | null;
@@ -2771,6 +2797,30 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      rate_limit_hits: {
+        Row: {
+          bucket: string;
+          key: string;
+          request_count: number;
+          updated_at: string;
+          window_started_at: string;
+        };
+        Insert: {
+          bucket: string;
+          key: string;
+          request_count?: number;
+          updated_at?: string;
+          window_started_at?: string;
+        };
+        Update: {
+          bucket?: string;
+          key?: string;
+          request_count?: number;
+          updated_at?: string;
+          window_started_at?: string;
+        };
+        Relationships: [];
       };
       rosters: {
         Row: {
@@ -4257,6 +4307,14 @@ export type Database = {
         };
         Returns: number;
       };
+      cleanup_on_the_clock_rate_limits: {
+        Args: { p_max_age_hours?: number };
+        Returns: number;
+      };
+      cleanup_rate_limit_hits: {
+        Args: { p_max_age_hours?: number };
+        Returns: number;
+      };
       complete_on_the_clock_sync: {
         Args: { p_draft_id: string; p_pick_count: number; p_status?: string };
         Returns: undefined;
@@ -4305,8 +4363,25 @@ export type Database = {
         };
         Returns: boolean;
       };
+      try_claim_on_the_clock_ip_budget: {
+        Args: {
+          p_ip_key: string;
+          p_max_requests: number;
+          p_window_seconds: number;
+        };
+        Returns: boolean;
+      };
       try_claim_on_the_clock_lookup: {
         Args: { p_ip: string; p_username: string; p_window_seconds?: number };
+        Returns: boolean;
+      };
+      try_claim_rate_limit: {
+        Args: {
+          p_bucket: string;
+          p_key: string;
+          p_max_requests: number;
+          p_window_seconds: number;
+        };
         Returns: boolean;
       };
       try_claim_signal_scout_action: {

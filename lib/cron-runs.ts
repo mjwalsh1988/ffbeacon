@@ -23,6 +23,7 @@ export type CronJobName =
   | "recalculate-derived"
   | "sync-sleeper-stats"
   | "sync-sleeper-market"
+  | "sync-weekly-projections"
   | "beacon-brief-curate"
   | "beacon-brief-worker";
 
@@ -95,6 +96,14 @@ export const CRON_JOBS: ReadonlyArray<{
     scheduleHuman: "Daily, 11:00 UTC",
     description:
       "Refreshes Sleeper ADP (every format) + season projections into player_market_snapshots, then rookie ADP (FantasyPros rookie rankings via DynastyProcess) under the 'rookie' key. Historical: one partition per night.",
+  },
+  {
+    name: "sync-weekly-projections",
+    label: "Weekly projections sync",
+    schedule: "0 12 * * *",
+    scheduleHuman: "Daily, 12:00 UTC",
+    description:
+      "Refreshes Sleeper per-week projected points for the current season's upcoming weeks into player_weekly_projections (overwrite in place). Skips cleanly when nothing is published yet.",
   },
   {
     name: "beacon-brief-curate",

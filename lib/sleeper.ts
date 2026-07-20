@@ -350,6 +350,35 @@ export async function getSleeperSeasonProjections(
   return (await safeFetch<SleeperSeasonProjection[]>(url, 45_000)) ?? [];
 }
 
+/**
+ * One row from Sleeper's per-week projections endpoint. Same `stats` shape as
+ * the season projection (pts_ppr / pts_half_ppr / pts_std plus component stats),
+ * but a single week and with the game context (opponent / team / game_id) at the
+ * top level, matching the weekly stats endpoint.
+ */
+export type SleeperWeeklyProjection = SleeperSeasonProjection & {
+  opponent?: string | null;
+  team?: string | null;
+  game_id?: string | null;
+};
+
+/**
+ * Per-player projected points for one week, from Sleeper's projections host.
+ * Same host and empty-on-failure convention as getSleeperSeasonProjections, but
+ * the URL carries the week segment. A single week is far smaller than the season
+ * dump, but the timeout is kept generous for parity. Returns [] on any failure.
+ */
+export async function getSleeperWeeklyProjections(
+  season: number,
+  week: number,
+  seasonType: SleeperSeasonType = "regular",
+): Promise<SleeperWeeklyProjection[]> {
+  const params = new URLSearchParams({ season_type: seasonType, order_by: "pts_ppr" });
+  for (const pos of PROJECTION_POSITIONS) params.append("position[]", pos);
+  const url = `${PROJECTIONS_BASE}/projections/nfl/${season}/${week}?${params.toString()}`;
+  return (await safeFetch<SleeperWeeklyProjection[]>(url, 45_000)) ?? [];
+}
+
 export function currentNflSeason(): string {
   const now = new Date();
   // NFL season "year" rolls over March-ish. If we're past March, this year is the season.
