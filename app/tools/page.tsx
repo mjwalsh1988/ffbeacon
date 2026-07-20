@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { MemberHeroCta } from "@/components/member-hero-cta";
+import { HeroAmbience } from "@/components/hero-ambience";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -63,10 +64,8 @@ function Hero({ isMember }: { isMember: boolean }) {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
+      <HeroAmbience variant="right" />
       <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Fantasy football tools
-        </p>
         {/* aria-label collapses the gradient-split headline into one
             accessible name for screen-reader navigation. The visible
             content keeps its visual gradient. */}

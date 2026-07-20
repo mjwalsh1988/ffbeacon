@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
+import { HeroAmbience } from "@/components/hero-ambience";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -242,10 +243,8 @@ function Hero({ isMember }: { isMember: boolean }) {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
         }}
       />
+      <HeroAmbience variant="left" />
       <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Tools · Sleeper League Pulse
-        </p>
         {/* aria-label gives the h1 a clean accessible name covering the
             entire headline even though the gradient is achieved via a
             nested span. */}

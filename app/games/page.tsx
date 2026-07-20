@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Radar, Sparkles, ArrowRight, type LucideIcon } from "lucide-react";
+import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
   title: "Fantasy Football Games",
@@ -78,10 +79,8 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
+      <HeroAmbience variant="center" />
       <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Fantasy football games
-        </p>
         {/* aria-label collapses the gradient-split headline into one
             accessible name for screen-reader navigation, matching the
             pattern on the homepage and tools hero. */}

@@ -12,6 +12,7 @@ import { loadFaabSettings } from "@/lib/faab/settings";
 import { FaabForm, type FaabPlayer } from "./faab-form";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
+import { HeroAmbience } from "@/components/hero-ambience";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -190,6 +191,7 @@ export default async function FaabPage({
               "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
           }}
         />
+        <HeroAmbience variant="right" />
         <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
           {fallbackBanner && (
             <p
@@ -201,9 +203,6 @@ export default async function FaabPage({
               {format?.display_name ?? "this format"}. Showing {fallbackBanner.actual} data instead.
             </p>
           )}
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            Tools
-          </p>
           <h1
             aria-label="FAAB Calculator"
             className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"

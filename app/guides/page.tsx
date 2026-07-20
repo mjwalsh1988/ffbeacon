@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
+import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
   title: "Fantasy Football Guides",
@@ -58,10 +59,8 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
         }}
       />
+      <HeroAmbience variant="center" />
       <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Fantasy football guides
-        </p>
         {/* aria-label collapses the gradient-split headline into one
             accessible name for screen-reader navigation. */}
         <h1

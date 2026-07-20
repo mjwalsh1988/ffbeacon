@@ -14,6 +14,7 @@ import {
 import { AuthorPortrait } from "@/components/author-portrait";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
+import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
   title: "About FF Beacon",
@@ -80,10 +81,8 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
         }}
       />
+      <HeroAmbience variant="right" />
       <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          About FF Beacon
-        </p>
         {/* aria-label gives the h1 a single accessible name covering the
             entire headline, so heading navigation announces it as one piece
             even though the gradient is achieved via a nested span. We

@@ -18,6 +18,7 @@ import { POSITIONS } from "@/lib/site";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
   title: "Fantasy Football Rankings",
@@ -255,6 +256,7 @@ export default async function RankingsPage({
               "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
           }}
         />
+        <HeroAmbience variant="right" />
         <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
           {reconciled.fallback && (
             <p
@@ -278,9 +280,6 @@ export default async function RankingsPage({
               {describeSource(registry, rankingsResolution.source)} data instead.
             </p>
           )}
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            Rankings board
-          </p>
           {/* Static SEO headline. We keep the format/source surfaced
               separately in the status strip below so crawlers see one
               stable h1 across every searchParam combination, while

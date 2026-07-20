@@ -18,6 +18,7 @@ import { SCOUT_GUEST_COOKIE, uuidSchema, hashGuestIp } from "@/lib/signal-scout/
 import { currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { SignalScoutClient, type MyScoutStats } from "./signal-scout-client";
 import { HowItWorks } from "./how-it-works";
+import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
   title: "Signal Scout",
@@ -306,10 +307,8 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
         }}
       />
+      <HeroAmbience variant="right" />
       <div className="relative mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Games, Signal Scout
-        </p>
         <h1
           aria-label="Signal Scout: decode the profile. Find the player."
           className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"

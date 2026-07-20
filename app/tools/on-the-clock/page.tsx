@@ -22,6 +22,7 @@ import { StartDraftingButton } from "./start-drafting-button";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
+import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
   title: "On The Clock",
@@ -167,10 +168,8 @@ function Hero({ isMember }: { isMember: boolean }) {
             "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
         }}
       />
+      <HeroAmbience variant="right" />
       <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Tools · On The Clock
-        </p>
         <h1
           aria-label="Your signal on the clock, live draft help by eye or by ear."
           className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"

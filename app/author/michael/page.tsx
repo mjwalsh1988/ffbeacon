@@ -17,6 +17,7 @@ import { AuthorPortrait } from "@/components/author-portrait";
 import { EmailReveal } from "@/components/email-reveal";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
+import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
   title: "Michael, founder of FF Beacon",
@@ -99,6 +100,7 @@ function Hero() {
             "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
         }}
       />
+      <HeroAmbience variant="left" />
       <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-8 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
         {/* Beacon gradient ring around the portrait. */}
         <span
@@ -113,9 +115,6 @@ function Hero() {
           </span>
         </span>
         <div className="min-w-0 flex-1">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            Author
-          </p>
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
             Michael
           </h1>
