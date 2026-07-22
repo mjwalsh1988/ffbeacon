@@ -129,9 +129,12 @@ export async function StatsTab({
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="grid gap-6 lg:grid-cols-4">
+      {/* grid-cols-1 caps the mobile track at the viewport; min-w-0 on each column
+          lets it shrink below its content so inner tables/charts stay contained
+          (scroll within) instead of forcing the whole page horizontally wide. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {/* Left sidebar: condensed positional finishes */}
-        <aside aria-label="Positional finishes by season" className="lg:col-span-1">
+        <aside aria-label="Positional finishes by season" className="min-w-0 lg:col-span-1">
           <Panel
             eyebrow="Production"
             title="Positional finishes"
@@ -142,7 +145,7 @@ export async function StatsTab({
         </aside>
 
         {/* Main column: projections, career, weekly game log */}
-        <div className="space-y-6 lg:col-span-3">
+        <div className="min-w-0 space-y-6 lg:col-span-3">
           {/* Weekly projections: distinct card-based outlook, not a stat table. */}
           {hasProjections && (
             <WeeklyProjections
