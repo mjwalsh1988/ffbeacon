@@ -34,6 +34,30 @@ export type GameRow = StatLine & {
   gp: number | null;
 };
 
+/** A game row enriched with active-scoring actual + projected points, used by the
+ *  weekly game log and the projected-vs-actual chart. Kept separate from GameRow
+ *  so unrelated GameRow consumers (Beacon Breakdown, Signal Scout) are untouched. */
+export type WeeklyGameRow = GameRow & {
+  /** Actual fantasy points in the active scoring (TE premium applied). */
+  pts_active: number;
+  /** Projected points for the same week/scoring (TE premium applied), null when
+   *  no projection is on file for that week. */
+  proj_active: number | null;
+};
+
+/** One week of projected-vs-actual points for the accuracy chart. `actual` is
+ *  null for weeks not yet played (so a current-season chart can show just the
+ *  projection line until games happen). `prior` is the previous season's actual
+ *  output for the same week number, drawn as a subtle comparison line (null when
+ *  the player has no prior-season game that week). */
+export type AccuracyPoint = {
+  week: number;
+  opponent: string | null;
+  projected: number | null;
+  actual: number | null;
+  prior: number | null;
+};
+
 export type SeasonAgg = { season: number; games: number; line: StatLine };
 
 export type StatCol = { label: string; get: (s: StatLine) => string };
@@ -134,6 +158,72 @@ export function statColumns(position: string): StatCol[] {
     { label: "Rec", get: (s) => fmt(s.rec) },
     { label: "Rec Yd", get: (s) => fmt(s.rec_yd) },
   ];
+}
+
+// ---------- projection shaping ----------
+
+/** One decimal (projections are expected values, e.g. 0.8 rush TD). */
+function fmt1(v: number): string {
+  return num(v).toFixed(1);
+}
+
+/** Build a StatLine from a projection's stat_line jsonb (same keys as stats). */
+export function lineFromProjection(stats: Record<string, unknown> | null): StatLine {
+  const g = (key: string): number => {
+    const v = stats?.[key];
+    return typeof v === "number" && Number.isFinite(v) ? v : 0;
+  };
+  return {
+    pass_cmp: g("pass_cmp"),
+    pass_att: g("pass_att"),
+    pass_yd: g("pass_yd"),
+    pass_td: g("pass_td"),
+    pass_int: g("pass_int"),
+    rush_att: g("rush_att"),
+    rush_yd: g("rush_yd"),
+    rush_td: g("rush_td"),
+    rec: g("rec"),
+    rec_tgt: g("rec_tgt"),
+    rec_yd: g("rec_yd"),
+    rec_td: g("rec_td"),
+    pts_ppr: g("pts_ppr"),
+  };
+}
+
+/**
+ * Position-specific projected stat columns. Mirrors statColumns but formats for
+ * expected values: yardage/attempts stay whole, low-magnitude counts (TDs,
+ * receptions, INTs) keep one decimal so a 0.8 projected TD does not round to 1.
+ * K / DEF return no component columns (their stat_line is not skill-position
+ * shaped); those rows lean on the projected-points column alone.
+ */
+export function projectionStatColumns(position: string): StatCol[] {
+  const p = (position || "").toUpperCase();
+  if (p === "QB")
+    return [
+      { label: "Pass Yd", get: (s) => fmt(s.pass_yd) },
+      { label: "Pass TD", get: (s) => fmt1(s.pass_td) },
+      { label: "INT", get: (s) => fmt1(s.pass_int) },
+      { label: "Rush Yd", get: (s) => fmt(s.rush_yd) },
+      { label: "Rush TD", get: (s) => fmt1(s.rush_td) },
+    ];
+  if (p === "RB")
+    return [
+      { label: "Car", get: (s) => fmt1(s.rush_att) },
+      { label: "Rush Yd", get: (s) => fmt(s.rush_yd) },
+      { label: "Rush TD", get: (s) => fmt1(s.rush_td) },
+      { label: "Rec", get: (s) => fmt1(s.rec) },
+      { label: "Rec Yd", get: (s) => fmt(s.rec_yd) },
+      { label: "Rec TD", get: (s) => fmt1(s.rec_td) },
+    ];
+  if (p === "WR" || p === "TE")
+    return [
+      { label: "Tgt", get: (s) => fmt1(s.rec_tgt) },
+      { label: "Rec", get: (s) => fmt1(s.rec) },
+      { label: "Rec Yd", get: (s) => fmt(s.rec_yd) },
+      { label: "Rec TD", get: (s) => fmt1(s.rec_td) },
+    ];
+  return [];
 }
 
 export function aggregateSeasons(rows: GameRow[]): SeasonAgg[] {

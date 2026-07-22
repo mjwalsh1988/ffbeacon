@@ -19,6 +19,8 @@ import {
   loadTrends,
   loadLatestValue,
   loadDepthChart,
+  loadWeeklyProjections,
+  summarizeProjections,
   SCORING_KEYS,
   type PlayerContext,
   type PlayerRow,
@@ -62,17 +64,25 @@ export async function OverviewTab({
     player.full_name ?? `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
   const nowMs = Date.now();
 
-  const [valueSeries, trends, latestValue, trades, article, depthChart] = await Promise.all([
-    loadValueSeries(supabase, player.id, context.formatConfigId, context.valueSourceSlug, 30),
-    loadTrends(supabase, player.id, context.formatConfigId, context.valueSourceSlug),
-    loadLatestValue(supabase, player.id, context.formatConfigId, context.valueSourceSlug),
-    sleeperId ? findPlayerTrades(supabase, sleeperId, { limit: 3 }) : Promise.resolve([]),
-    loadLatestArticle(supabase, player.id),
-    loadDepthChart(supabase, player),
-  ]);
+  const [valueSeries, trends, latestValue, trades, article, depthChart, projections] =
+    await Promise.all([
+      loadValueSeries(supabase, player.id, context.formatConfigId, context.valueSourceSlug, 30),
+      loadTrends(supabase, player.id, context.formatConfigId, context.valueSourceSlug),
+      loadLatestValue(supabase, player.id, context.formatConfigId, context.valueSourceSlug),
+      sleeperId ? findPlayerTrades(supabase, sleeperId, { limit: 3 }) : Promise.resolve([]),
+      loadLatestArticle(supabase, player.id),
+      loadDepthChart(supabase, player),
+      loadWeeklyProjections(supabase, player.id),
+    ]);
 
   const scoringLabel =
     SCORING_KEYS.find((s) => s.key === context.scoringKey)?.label ?? "PPR";
+  const tePremiumBonus = player.position === "TE" ? context.tePremiumBonus : 0;
+  const projectionSummary = summarizeProjections(
+    projections,
+    context.scoringKey,
+    tePremiumBonus,
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -101,6 +111,8 @@ export async function OverviewTab({
             position={player.position}
             scoringLabel={scoringLabel}
             finishes={finishesLast3}
+            projectionSummary={projectionSummary}
+            tePremiumBonus={tePremiumBonus}
             trades={trades}
             focusSleeperId={sleeperId ?? ""}
             nowMs={nowMs}

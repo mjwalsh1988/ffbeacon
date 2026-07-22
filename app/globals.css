@@ -156,15 +156,19 @@
 
 /**
  * Team anthem banner (player profile). A compact pennant that flows a team's
- * three brand colors and carries the crowd chant. Three layers stack:
- *   1. `.team-anthem-sweep` background: a looping gradient built from the team's
+ * three brand colors and carries the crowd chant. Layers stack:
+ *   1. `.team-anthem-sweep`: a looping linear gradient built from the team's
  *      three colors (set inline as --anthem-c1/2/3), animated by shifting its
- *      background-position so the colors drift across the banner.
- *   2. a dark scrim div (Tailwind bg) the component adds for legibility, so the
- *      white chant text stays readable regardless of how light a team color is.
- *   3. `.team-anthem` ::after sheen: a soft diagonal highlight that sweeps across
- *      once every few seconds for a premium "trophy shine" feel.
- * Both animations halt under prefers-reduced-motion, leaving a static, still
+ *      background-position so the colors flow across the banner.
+ *   2. `.team-anthem-glow`: drifting, pulsing radial "spotlights" in the same
+ *      three colors, screen-blended over the sweep for a lively stadium-lights
+ *      feel (this is what makes each team's banner read as distinct and hype).
+ *   3. a soft corner vignette (Tailwind bg on the component) for framing only.
+ *   4. a faded-black plate behind the chant text (on the component) so the white
+ *      text stays legible over any color without darkening the whole banner.
+ *   5. `.team-anthem` ::after sheen: a diagonal highlight sweeping across for a
+ *      premium "trophy shine".
+ * All animation halts under prefers-reduced-motion, leaving a static, still
  * fully legible and fully colored banner.
  */
 @keyframes anthem-sweep {
@@ -180,14 +184,52 @@
   background-image: linear-gradient(
     110deg,
     var(--anthem-c1) 0%,
-    var(--anthem-c2) 28%,
+    var(--anthem-c2) 25%,
     var(--anthem-c3) 50%,
-    var(--anthem-c2) 72%,
+    var(--anthem-c2) 75%,
     var(--anthem-c1) 100%
   );
   background-size: 200% 100%;
-  animation: anthem-sweep 9s linear infinite;
+  animation: anthem-sweep 7s linear infinite;
   will-change: background-position;
+}
+
+/* Drifting team-color spotlights that also pulse in brightness. Screen blend
+   keeps the team hues vivid rather than muddy. */
+@keyframes anthem-drift {
+  0% {
+    background-position: 12% 22%, 88% 76%, 50% 48%;
+  }
+  50% {
+    background-position: 72% 60%, 24% 32%, 36% 70%;
+  }
+  100% {
+    background-position: 12% 22%, 88% 76%, 50% 48%;
+  }
+}
+
+@keyframes anthem-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.team-anthem-glow {
+  background-image:
+    radial-gradient(circle at center, var(--anthem-c1) 0%, transparent 68%),
+    radial-gradient(circle at center, var(--anthem-c2) 0%, transparent 68%),
+    radial-gradient(circle at center, var(--anthem-c3) 0%, transparent 64%);
+  background-repeat: no-repeat;
+  background-size: 65% 130%, 60% 130%, 52% 120%;
+  mix-blend-mode: screen;
+  animation:
+    anthem-drift 11s ease-in-out infinite,
+    anthem-pulse 4.5s ease-in-out infinite;
+  will-change: background-position, opacity;
 }
 
 @keyframes anthem-sheen {
@@ -205,12 +247,12 @@
   inset: 0;
   background-image: linear-gradient(
     105deg,
-    transparent 42%,
-    rgba(255, 255, 255, 0.22) 50%,
-    transparent 58%
+    transparent 40%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 60%
   );
   background-size: 250% 100%;
-  animation: anthem-sheen 5.5s ease-in-out infinite;
+  animation: anthem-sheen 4.8s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -218,6 +260,11 @@
   .team-anthem-sweep {
     animation: none;
     background-position: 0% 50%;
+  }
+
+  .team-anthem-glow {
+    animation: none;
+    opacity: 0.75;
   }
 
   .team-anthem::after {

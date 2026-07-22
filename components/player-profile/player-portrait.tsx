@@ -37,7 +37,7 @@ export function PlayerPortrait({
 
   return (
     <div
-      className={`relative h-[248px] w-[208px] overflow-hidden rounded-card border border-line/80 bg-surface/50 ${className}`}
+      className={`relative h-[210px] w-[176px] overflow-hidden rounded-card border border-line/80 bg-surface/50 sm:h-[248px] sm:w-[208px] ${className}`}
     >
       {accentColor && (
         <span

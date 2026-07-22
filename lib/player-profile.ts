@@ -79,6 +79,8 @@ export type PlayerContext = {
   formatDisplay: string;
   scoringType: string;
   scoringKey: ScoringKey;
+  /** Tight-end premium bonus (points per reception) for the active format, 0 when none. */
+  tePremiumBonus: number;
   requestedSourceSlug: string | null;
   /** Source resolved for value tables (may fall back from the requested one). */
   valueSourceSlug: string | null;
@@ -133,7 +135,7 @@ export async function loadPlayerAndContext(
   const [{ data: formatConfig }, registry] = await Promise.all([
     db
       .from("format_configs")
-      .select("id, slug, display_name, scoring_type")
+      .select("id, slug, display_name, scoring_type, te_premium_bonus")
       .eq("slug", selectedFormatSlug)
       .maybeSingle(),
     getAvailableSources(db),
@@ -143,6 +145,7 @@ export async function loadPlayerAndContext(
   const formatConfigId = formatConfig?.id ?? null;
   const formatDisplay = formatConfig?.display_name ?? selectedFormatSlug;
   const scoringType = formatConfig?.scoring_type ?? "ppr";
+  const tePremiumBonus = Number(formatConfig?.te_premium_bonus ?? 0) || 0;
 
   const valueResolution = formatConfig
     ? resolveSourceForFormat(registry, "player_value_history", formatConfig.slug, requestedSourceSlug)
@@ -166,6 +169,7 @@ export async function loadPlayerAndContext(
     formatDisplay,
     scoringType,
     scoringKey: scoringKeyForType(scoringType),
+    tePremiumBonus,
     requestedSourceSlug,
     valueSourceSlug: valueResolution.source,
     valueSourceDisplay: valueResolution.source
@@ -415,6 +419,245 @@ export function readPoints(metadata: unknown, key: ScoringKey): number {
     return Number.isFinite(num) ? num : 0;
   }
   return 0;
+}
+
+// ---------- weekly projections ----------
+
+export type WeeklyProjectionRow = {
+  season: number;
+  week: number;
+  opponent: string | null;
+  team: string | null;
+  /** Projected points per scoring base. Null when Sleeper did not publish it. */
+  ppr: number | null;
+  half_ppr: number | null;
+  std: number | null;
+  /** The raw projected stat map (pass/rush/rec components) for detail columns. */
+  stats: Record<string, unknown> | null;
+  /** True when a real stat line already exists for this (season, week). */
+  played: boolean;
+};
+
+export type PlayerProjections = {
+  /** The latest season we hold projections for, or null when none exist. */
+  season: number | null;
+  /** All weekly rows for that season, ascending by week. */
+  rows: WeeklyProjectionRow[];
+  /** True once at least one projected week has been played (regular season live). */
+  seasonStarted: boolean;
+};
+
+function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === "string" ? parseFloat(v) : typeof v === "number" ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Map the active scoring key to a base projected-points value on a projection row. */
+export function projectedPointsForScoring(
+  row: WeeklyProjectionRow,
+  key: ScoringKey,
+): number | null {
+  if (key === "pts_half_ppr") return row.half_ppr;
+  if (key === "pts_std") return row.std;
+  return row.ppr;
+}
+
+/** Projected receptions for a week, read from the raw stat_line (0 when absent). */
+function projectedReceptions(stats: Record<string, unknown> | null): number {
+  const v = stats?.["rec"];
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/**
+ * Projected points for the active scoring, plus a tight-end premium when the
+ * format carries one. TEP adds `tepBonusPerReception` points for every projected
+ * reception. The caller passes 0 for non-TEP formats or non-TE players, so the
+ * base projection is returned unchanged in every other case. Null base (Sleeper
+ * did not publish this scoring) stays null; the premium never invents points.
+ */
+export function effectiveProjectedPoints(
+  row: WeeklyProjectionRow,
+  key: ScoringKey,
+  tepBonusPerReception = 0,
+): number | null {
+  const base = projectedPointsForScoring(row, key);
+  if (base == null) return null;
+  if (!tepBonusPerReception) return base;
+  return base + tepBonusPerReception * projectedReceptions(row.stats);
+}
+
+/**
+ * Weekly point projections for the player's latest projected season (Sleeper,
+ * regular season). Loads every stored week ascending, then marks each week
+ * `played` by checking player_stats for a real game (gp > 0). Numeric columns
+ * come back from PostgREST as strings, so they are coerced here. Empty when the
+ * player has no projections on file (deep bench / non-fantasy players).
+ */
+export async function loadWeeklyProjections(
+  supabase: AnySupabase,
+  playerId: string,
+): Promise<PlayerProjections> {
+  const db = supabase as SupabaseClient<Database>;
+  const { data } = await db
+    .from("player_weekly_projections")
+    .select(
+      "season, week, opponent, team, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, stat_line",
+    )
+    .eq("player_id", playerId)
+    .eq("season_type", "regular")
+    .order("season", { ascending: false })
+    .order("week", { ascending: true });
+
+  const all = data ?? [];
+  if (all.length === 0) return { season: null, rows: [], seasonStarted: false };
+
+  const season = Number(all[0].season);
+  const seasonRows = all.filter((r) => Number(r.season) === season);
+
+  const { data: statWeeks } = await db
+    .from("player_stats")
+    .select("week, gp")
+    .eq("player_id", playerId)
+    .eq("season", season)
+    .eq("season_type", "regular");
+
+  const playedWeeks = new Set<number>();
+  for (const s of statWeeks ?? []) {
+    const gp = Number((s as { gp: unknown }).gp);
+    if (Number.isFinite(gp) && gp > 0) playedWeeks.add(Number((s as { week: unknown }).week));
+  }
+
+  const rows: WeeklyProjectionRow[] = seasonRows.map((r) => ({
+    season: Number(r.season),
+    week: Number(r.week),
+    opponent: r.opponent ?? null,
+    team: r.team ?? null,
+    ppr: numOrNull(r.projected_pts_ppr),
+    half_ppr: numOrNull(r.projected_pts_half_ppr),
+    std: numOrNull(r.projected_pts_std),
+    stats: (r.stat_line as Record<string, unknown> | null) ?? null,
+    played: playedWeeks.has(Number(r.week)),
+  }));
+
+  return { season, rows, seasonStarted: rows.some((r) => r.played) };
+}
+
+export type ProjectionSummary = {
+  season: number | null;
+  /** True once the season is underway (some weeks played). */
+  seasonStarted: boolean;
+  /** Upcoming (unplayed) weeks with a projection for the active scoring. */
+  upcomingWeeks: number;
+  /** Summed projected points across the upcoming weeks, active scoring. */
+  totalPoints: number;
+  /** Average projected points per upcoming week, or null when none remain. */
+  perGame: number | null;
+  /** The soonest unplayed week's projection row, or null. */
+  nextGame: WeeklyProjectionRow | null;
+  /** The soonest unplayed week's projected points for the active scoring. */
+  nextGamePoints: number | null;
+};
+
+/**
+ * Roll the upcoming (unplayed) weeks into a season outlook for the active
+ * scoring. In the off-season every week is upcoming, so totalPoints is the full
+ * projected season; once games are played it becomes the rest-of-season outlook.
+ * `tepBonusPerReception` applies a tight-end premium to every week and the
+ * roll-up (0 leaves the base projections untouched).
+ */
+export function summarizeProjections(
+  proj: PlayerProjections,
+  key: ScoringKey,
+  tepBonusPerReception = 0,
+): ProjectionSummary {
+  const upcoming = proj.rows.filter(
+    (r) => !r.played && effectiveProjectedPoints(r, key, tepBonusPerReception) != null,
+  );
+  let total = 0;
+  for (const r of upcoming) total += effectiveProjectedPoints(r, key, tepBonusPerReception) ?? 0;
+  const nextGame = upcoming[0] ?? null;
+  return {
+    season: proj.season,
+    seasonStarted: proj.seasonStarted,
+    upcomingWeeks: upcoming.length,
+    totalPoints: total,
+    perGame: upcoming.length > 0 ? total / upcoming.length : null,
+    nextGame,
+    nextGamePoints: nextGame
+      ? effectiveProjectedPoints(nextGame, key, tepBonusPerReception)
+      : null,
+  };
+}
+
+// ---------- projected vs actual ----------
+
+/** Projected points per scoring base for one week, plus projected receptions. */
+export type ProjectedPointsSet = {
+  ppr: number | null;
+  half_ppr: number | null;
+  std: number | null;
+  rec: number;
+};
+
+/**
+ * Every stored weekly projection for the player, keyed by `${season}-${week}`,
+ * across ALL seasons (nightly upcoming rows plus the historical backfill). Used
+ * to overlay the projection line on played weeks in the statistics tab. Numeric
+ * columns arrive as strings from PostgREST, so they are coerced here.
+ */
+export async function loadProjectionsMap(
+  supabase: AnySupabase,
+  playerId: string,
+): Promise<Map<string, ProjectedPointsSet>> {
+  const db = supabase as SupabaseClient<Database>;
+  const { data } = await db
+    .from("player_weekly_projections")
+    .select(
+      "season, week, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, stat_line",
+    )
+    .eq("player_id", playerId)
+    .eq("season_type", "regular");
+
+  const map = new Map<string, ProjectedPointsSet>();
+  for (const r of data ?? []) {
+    const recRaw = (r.stat_line as { rec?: unknown } | null)?.rec;
+    const rec = typeof recRaw === "number" && Number.isFinite(recRaw) ? recRaw : 0;
+    map.set(`${Number(r.season)}-${Number(r.week)}`, {
+      ppr: numOrNull(r.projected_pts_ppr),
+      half_ppr: numOrNull(r.projected_pts_half_ppr),
+      std: numOrNull(r.projected_pts_std),
+      rec,
+    });
+  }
+  return map;
+}
+
+/** Projected points for the active scoring from a set, with any TE premium. */
+export function pointsFromProjectedSet(
+  set: ProjectedPointsSet | undefined | null,
+  key: ScoringKey,
+  tepBonusPerReception = 0,
+): number | null {
+  if (!set) return null;
+  const base = key === "pts_half_ppr" ? set.half_ppr : key === "pts_std" ? set.std : set.ppr;
+  if (base == null) return null;
+  return base + tepBonusPerReception * set.rec;
+}
+
+/**
+ * Actual fantasy points for the active scoring from a weekly stat row's metadata,
+ * with any TE premium applied to the real receptions. Mirrors
+ * pointsFromProjectedSet so projected and actual lines are computed identically.
+ */
+export function actualPointsForScoring(
+  metadata: unknown,
+  actualReceptions: number | null,
+  key: ScoringKey,
+  tepBonusPerReception = 0,
+): number {
+  const base = readPoints(metadata, key);
+  return base + tepBonusPerReception * (actualReceptions ?? 0);
 }
 
 // ---------- depth chart ----------

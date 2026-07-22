@@ -170,7 +170,14 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
             finishesLast3={last3}
           />
         )}
-        {activeTab === "statistics" && <StatsTab player={player} />}
+        {activeTab === "statistics" && (
+          <StatsTab
+            player={player}
+            scoringKey={context.scoringKey}
+            scoringLabel={scoringLabel}
+            tePremiumBonus={player.position === "TE" ? context.tePremiumBonus : 0}
+          />
+        )}
         {activeTab === "trades" && (
           <TradesTab player={player} sleeperId={sleeperId} context={context} />
         )}

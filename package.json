@@ -32,6 +32,7 @@
     "sync:stats": "tsx --env-file=.env.local scripts/sync-sleeper-stats.ts",
     "sync:market": "tsx --env-file=.env.local scripts/sync-sleeper-market.ts",
     "sync:weekly-projections": "tsx --env-file=.env.local scripts/sync-weekly-projections.ts",
+    "backfill:weekly-projections": "tsx --env-file=.env.local scripts/backfill-weekly-projections.ts",
     "sync:rookie-adp": "tsx --env-file=.env.local scripts/sync-rookie-adp.ts",
     "seed:rankings": "tsx --env-file=.env.local scripts/seed-rankings.ts",
     "calculate:trends": "tsx --env-file=.env.local scripts/calculate-trends.ts",

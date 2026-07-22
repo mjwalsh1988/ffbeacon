@@ -45,6 +45,21 @@ export function PlayerHero({
   // accent for free agents / unmapped teams.
   const teamColor = team?.primary_color ?? accent;
 
+  // Last-3-finishes block, rendered in the identity column beside the photo.
+  const finishesBlock = (
+    <div>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+        Last 3 finishes
+        <span className="ml-1.5 font-medium normal-case tracking-normal text-ink-subtle">
+          ({scoringLabel})
+        </span>
+      </p>
+      <div>
+        <LastThreeFinishes position={player.position} finishes={finishes} compact />
+      </div>
+    </div>
+  );
+
   return (
     <header className="relative overflow-hidden border-b border-line">
       {/* Beacon hairline + a position-tinted corner wash. */}
@@ -79,9 +94,11 @@ export function PlayerHero({
         </nav>
 
         {/* Player photo beside the identity; the full-width Team Anthem banner
-            sits below with breathing room. The headshot is a large rounded
-            photo shown in full (object-contain, no crop) with no border. */}
-        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-7">
+            sits below with breathing room. The headshot is a rounded photo shown
+            in full (object-contain, no crop) with no border. On mobile the name
+            and badges sit to the RIGHT of a slightly smaller photo to save
+            vertical space, with the last-3 finishes dropping below the photo. */}
+        <div className="flex items-center gap-4 sm:gap-7">
           <PlayerPortrait
             sleeperId={sleeperId}
             name=""
@@ -89,8 +106,8 @@ export function PlayerHero({
             className="shrink-0 drop-shadow-[0_16px_34px_rgba(0,0,0,0.5)]"
           />
 
-          <div className="min-w-0 flex-1 text-center sm:text-left">
-            <div className="mb-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+          <div className="min-w-0 flex-1 text-left">
+            <div className="mb-2 flex flex-wrap items-center justify-start gap-2">
               <span
                 className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-[0.16em]"
                 style={{ backgroundColor: `${accent}22`, color: accent }}
@@ -114,17 +131,9 @@ export function PlayerHero({
               {fullName}
             </h1>
 
-            <div className="mt-4">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-                Last 3 finishes
-                <span className="ml-1.5 font-medium normal-case tracking-normal text-ink-subtle">
-                  ({scoringLabel})
-                </span>
-              </p>
-              <div className="flex justify-center sm:justify-start">
-                <LastThreeFinishes position={player.position} finishes={finishes} />
-              </div>
-            </div>
+            {/* Finishes sit in the identity column beside the photo at every
+                breakpoint. */}
+            <div className="mt-4">{finishesBlock}</div>
           </div>
         </div>
 

@@ -10,8 +10,14 @@ import { Panel } from "@/components/dashboard-panel";
 import { TrendChip } from "@/components/trend-chip";
 import { ValueTrendChart } from "@/components/player-profile/value-trend-chart";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
+import { ProjectionOutlook } from "@/components/player-profile/projection-outlook";
 import { MiniTrade } from "@/components/player-profile/mini-trade";
-import type { PositionalFinish, TrendsRow, ValuePoint } from "@/lib/player-profile";
+import type {
+  PositionalFinish,
+  ProjectionSummary,
+  TrendsRow,
+  ValuePoint,
+} from "@/lib/player-profile";
 import type { PlayerTrade } from "@/lib/player-trades";
 
 export function OverviewSidebar({
@@ -24,6 +30,8 @@ export function OverviewSidebar({
   position,
   scoringLabel,
   finishes,
+  projectionSummary,
+  tePremiumBonus = 0,
   trades,
   focusSleeperId,
   nowMs,
@@ -37,10 +45,15 @@ export function OverviewSidebar({
   position: string;
   scoringLabel: string;
   finishes: PositionalFinish[];
+  projectionSummary: ProjectionSummary;
+  tePremiumBonus?: number;
   trades: PlayerTrade[];
   focusSleeperId: string;
   nowMs: number;
 }) {
+  const hasProjections =
+    projectionSummary.season != null &&
+    (projectionSummary.nextGame != null || projectionSummary.upcomingWeeks > 0);
   return (
     <div className="space-y-5">
       {/* 1. Value trend */}
@@ -87,7 +100,23 @@ export function OverviewSidebar({
         <LastThreeFinishes position={position} finishes={finishes} />
       </Panel>
 
-      {/* 3. Recent trades */}
+      {/* 3. Projected outlook (only when we hold projections) */}
+      {hasProjections && (
+        <Panel
+          eyebrow="Outlook"
+          title="Projected points"
+          helper={`Sleeper projections, ${scoringLabel} scoring`}
+          headingLevel={3}
+        >
+          <ProjectionOutlook
+            summary={projectionSummary}
+            scoringLabel={scoringLabel}
+            tePremiumBonus={tePremiumBonus}
+          />
+        </Panel>
+      )}
+
+      {/* 4. Recent trades */}
       <Panel
         eyebrow="Market"
         title="Recent trades"
