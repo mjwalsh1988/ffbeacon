@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -6,17 +7,18 @@ import { SITE } from "@/lib/site";
 import {
   loadPlayerAndContext,
   loadTeamRow,
-  loadPositionalFinishes,
   recentFinishesForScoring,
   depthRoleForPlayer,
   SCORING_KEYS,
 } from "@/lib/player-profile";
+import { loadPositionalFinishesCached } from "@/lib/player-profile-cache";
 import { PlayerHero } from "@/components/player-profile/player-hero";
 import { PlayerTabs, type PlayerTabId } from "@/components/player-profile/player-tabs";
 import { OverviewTab } from "@/components/player-profile/overview-tab";
 import { StatsTab } from "@/components/player-profile/stats-tab";
 import { TradesTab } from "@/components/player-profile/trades-tab";
 import { BeaconBriefTab } from "@/components/player-profile/beacon-brief-tab";
+import { TabLoading } from "@/components/player-profile/tab-loading";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +89,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   // shared by the hero and the overview sidebar so the RPC runs a single time.
   const [team, allFinishes] = await Promise.all([
     loadTeamRow(supabase, player.team),
-    loadPositionalFinishes(supabase, player.id),
+    loadPositionalFinishesCached(player.id),
   ]);
   const last3 = recentFinishesForScoring(allFinishes, context.scoringKey, 3);
   const scoringLabel = SCORING_KEYS.find((s) => s.key === context.scoringKey)?.label ?? "PPR";
@@ -162,26 +164,30 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
         <PlayerTabs slug={player.slug} activeTab={activeTab} source={source} format={format} />
 
-        {activeTab === "overview" && (
-          <OverviewTab
-            player={player}
-            sleeperId={sleeperId}
-            context={context}
-            finishesLast3={last3}
-          />
-        )}
-        {activeTab === "statistics" && (
-          <StatsTab
-            player={player}
-            scoringKey={context.scoringKey}
-            scoringLabel={scoringLabel}
-            tePremiumBonus={player.position === "TE" ? context.tePremiumBonus : 0}
-          />
-        )}
-        {activeTab === "trades" && (
-          <TradesTab player={player} sleeperId={sleeperId} context={context} />
-        )}
-        {activeTab === "beacon-brief" && <BeaconBriefTab player={player} playerName={fullName} />}
+        {/* Stream each tab behind a skeleton so the hero + tab bar paint
+            immediately instead of blocking on the active tab's data. */}
+        <Suspense key={activeTab} fallback={<TabLoading />}>
+          {activeTab === "overview" && (
+            <OverviewTab
+              player={player}
+              sleeperId={sleeperId}
+              context={context}
+              finishesLast3={last3}
+            />
+          )}
+          {activeTab === "statistics" && (
+            <StatsTab
+              player={player}
+              scoringKey={context.scoringKey}
+              scoringLabel={scoringLabel}
+              tePremiumBonus={player.position === "TE" ? context.tePremiumBonus : 0}
+            />
+          )}
+          {activeTab === "trades" && (
+            <TradesTab player={player} sleeperId={sleeperId} context={context} />
+          )}
+          {activeTab === "beacon-brief" && <BeaconBriefTab player={player} playerName={fullName} />}
+        </Suspense>
       </article>
     </main>
   );

@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/lib/database.types";
 
@@ -24,6 +25,22 @@ export async function createClient() {
         },
       },
     },
+  );
+}
+
+/**
+ * A cookie-less anon client for use inside unstable_cache (#1 performance).
+ * unstable_cache forbids cookies()/headers() access, so the request-scoped
+ * createClient() cannot be used there. This client carries the publishable
+ * (anon) key, so RLS still applies and only public-read data is reachable, which
+ * is exactly what the cached player-scoped loaders read. Not for user-scoped or
+ * write paths.
+ */
+export function createCachedReadClient() {
+  return createSupabaseClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
 }
 

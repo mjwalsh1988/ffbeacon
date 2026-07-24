@@ -17,7 +17,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { readPoints, type WeeklyStatRow } from "@/lib/player-profile";
+import { type WeeklyStatRow } from "@/lib/player-profile";
 import { aggregateSeasons, type GameRow, type SeasonAgg } from "@/components/player-profile/stat-shaping";
 
 const STATS_FLOOR_SEASON = 2020;
@@ -67,7 +67,7 @@ function toGameRow(r: WeeklyStatRow): GameRow {
     rec_tgt: r.rec_tgt ?? 0,
     rec_yd: r.rec_yd ?? 0,
     rec_td: r.rec_td ?? 0,
-    pts_ppr: readPoints(r.metadata, "pts_ppr"),
+    pts_ppr: r.pts_ppr ?? 0,
   };
 }
 
@@ -163,7 +163,7 @@ export async function loadStatsBundle(
   const { data, error } = await supabase
     .from("player_stats")
     .select(
-      "season, week, opponent, snap_pct, gp, pass_cmp, pass_att, pass_yd, pass_td, pass_int, rush_att, rush_yd, rush_td, rec, rec_tgt, rec_yd, rec_td, metadata",
+      "season, week, opponent, snap_pct, gp, pass_cmp, pass_att, pass_yd, pass_td, pass_int, rush_att, rush_yd, rush_td, rec, rec_tgt, rec_yd, rec_td, pts_ppr, pts_half_ppr, pts_std",
     )
     .eq("player_id", playerId)
     .eq("season_type", "regular")

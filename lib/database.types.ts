@@ -2113,6 +2113,47 @@ export type Database = {
           },
         ];
       };
+      player_positional_finishes: {
+        Row: {
+          computed_at: string;
+          finish: number;
+          player_id: string;
+          players_ranked: number;
+          position: string;
+          scoring: string;
+          season: number;
+          total_points: number;
+        };
+        Insert: {
+          computed_at?: string;
+          finish: number;
+          player_id: string;
+          players_ranked: number;
+          position: string;
+          scoring: string;
+          season: number;
+          total_points: number;
+        };
+        Update: {
+          computed_at?: string;
+          finish?: number;
+          player_id?: string;
+          players_ranked?: number;
+          position?: string;
+          scoring?: string;
+          season?: number;
+          total_points?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_positional_finishes_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       player_stats: {
         Row: {
           blk_kick: number;
@@ -2173,6 +2214,9 @@ export type Database = {
           pts_allow_28_34: number;
           pts_allow_35p: number;
           pts_allow_7_13: number;
+          pts_half_ppr: number | null;
+          pts_ppr: number | null;
+          pts_std: number | null;
           rec: number;
           rec_0_4: number;
           rec_10_19: number;
@@ -2274,6 +2318,9 @@ export type Database = {
           pts_allow_28_34?: number;
           pts_allow_35p?: number;
           pts_allow_7_13?: number;
+          pts_half_ppr?: number | null;
+          pts_ppr?: number | null;
+          pts_std?: number | null;
           rec?: number;
           rec_0_4?: number;
           rec_10_19?: number;
@@ -2375,6 +2422,9 @@ export type Database = {
           pts_allow_28_34?: number;
           pts_allow_35p?: number;
           pts_allow_7_13?: number;
+          pts_half_ppr?: number | null;
+          pts_ppr?: number | null;
+          pts_std?: number | null;
           rec?: number;
           rec_0_4?: number;
           rec_10_19?: number;
@@ -4319,6 +4369,32 @@ export type Database = {
         Args: { p_draft_id: string; p_pick_count: number; p_status?: string };
         Returns: undefined;
       };
+      find_player_trade_transactions: {
+        Args: { p_limit?: number; p_sleeper_id: string };
+        Returns: {
+          adds: Json;
+          created_at: string;
+          created_at_sleeper: string | null;
+          draft_picks: Json;
+          drops: Json;
+          id: string;
+          league_id: string;
+          metadata: Json;
+          roster_ids: Json;
+          season: number | null;
+          sleeper_transaction_id: string;
+          status: string | null;
+          type: string;
+          waiver_budget: Json;
+          week: number | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "league_transactions";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       get_my_active_sessions: {
         Args: never;
         Returns: {
@@ -4341,6 +4417,7 @@ export type Database = {
           total_points: number;
         }[];
       };
+      rebuild_positional_finishes: { Args: never; Returns: number };
       release_on_the_clock_sync: {
         Args: { p_draft_id: string };
         Returns: undefined;

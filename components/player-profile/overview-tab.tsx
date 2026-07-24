@@ -15,17 +15,19 @@ import { DepthChartCard } from "@/components/player-profile/depth-chart-card";
 import { OverviewSidebar } from "@/components/player-profile/overview-sidebar";
 import { findPlayerTrades } from "@/lib/player-trades";
 import {
-  loadValueSeries,
-  loadTrends,
-  loadLatestValue,
-  loadDepthChart,
-  loadWeeklyProjections,
   summarizeProjections,
   SCORING_KEYS,
   type PlayerContext,
   type PlayerRow,
   type PositionalFinish,
 } from "@/lib/player-profile";
+import {
+  loadValueSeriesCached,
+  loadTrendsCached,
+  loadLatestValueCached,
+  loadDepthChartCached,
+  loadWeeklyProjectionsCached,
+} from "@/lib/player-profile-cache";
 
 async function loadLatestArticle(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -66,13 +68,13 @@ export async function OverviewTab({
 
   const [valueSeries, trends, latestValue, trades, article, depthChart, projections] =
     await Promise.all([
-      loadValueSeries(supabase, player.id, context.formatConfigId, context.valueSourceSlug, 30),
-      loadTrends(supabase, player.id, context.formatConfigId, context.valueSourceSlug),
-      loadLatestValue(supabase, player.id, context.formatConfigId, context.valueSourceSlug),
+      loadValueSeriesCached(player.id, context.formatConfigId, context.valueSourceSlug, 30),
+      loadTrendsCached(player.id, context.formatConfigId, context.valueSourceSlug),
+      loadLatestValueCached(player.id, context.formatConfigId, context.valueSourceSlug),
       sleeperId ? findPlayerTrades(supabase, sleeperId, { limit: 3 }) : Promise.resolve([]),
       loadLatestArticle(supabase, player.id),
-      loadDepthChart(supabase, player),
-      loadWeeklyProjections(supabase, player.id),
+      loadDepthChartCached(player),
+      loadWeeklyProjectionsCached(player.id),
     ]);
 
   const scoringLabel =

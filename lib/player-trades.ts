@@ -91,20 +91,17 @@ export async function findPlayerTrades(
   const limit = Math.min(opts.limit ?? 50, 100);
   if (!/^\d+$/.test(sleeperId)) return [];
 
-  // adds/drops are jsonb maps keyed by the Sleeper player id. A row involves the
+  // adds/drops are jsonb maps keyed by the Sleeper player id; a row involves the
   // player when the key exists (its value is the receiving/leaving roster id).
-  // The key MUST be double-quoted in the filter: PostgREST reads an unquoted
-  // all-digits key (adds->>8146) as an array index and matches nothing. sleeperId
-  // is validated /^\d+$/ above, so quoting it is injection-safe.
-  const { data: txRows } = await db
-    .from("league_transactions")
-    .select(
-      "sleeper_transaction_id, league_id, week, season, adds, drops, draft_picks, created_at_sleeper",
-    )
-    .eq("type", "trade")
-    .or(`adds->>"${sleeperId}".not.is.null,drops->>"${sleeperId}".not.is.null`)
-    .order("created_at_sleeper", { ascending: false, nullsFirst: false })
-    .limit(limit);
+  // We go through the find_player_trade_transactions RPC (migration 0143) whose
+  // `adds ? id OR drops ? id` predicate is served by the jsonb_ops GIN indexes,
+  // instead of the old `adds->>"id" is not null` expression filter that forced a
+  // seq scan. The RPC already filters type='trade', orders newest-first, and caps
+  // the limit. sleeperId is validated /^\d+$/ above.
+  const { data: txRows } = await db.rpc("find_player_trade_transactions", {
+    p_sleeper_id: sleeperId,
+    p_limit: limit,
+  });
 
   const trades = txRows ?? [];
   if (trades.length === 0) return [];

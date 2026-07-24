@@ -21,8 +21,10 @@
  *    missing denominator can never produce a 0 or a divide-by-zero.
  *
  * The full raw payload is preserved separately in player_stats.metadata by the
- * caller, so keys we have no column for (pts_ppr, pts_half_ppr, pts_std,
- * pos_rank_*, and any future Sleeper keys) are never lost.
+ * caller, so keys we have no column for (pos_rank_* and any future Sleeper keys)
+ * are never lost. The three fantasy-point bases (pts_ppr, pts_half_ppr, pts_std)
+ * ARE denormalized into columns (migration 0141) so the profile can read them
+ * without parsing metadata; they are still preserved in metadata as well.
  */
 
 // NOT NULL integer columns: absent key -> 0.
@@ -95,6 +97,14 @@ export function mapStatPayloadToRow(payload: Record<string, unknown>): StatRow {
   const offSnp = num(stats.off_snp);
   const tmOffSnp = num(stats.tm_off_snp);
   row.snap_pct = offSnp !== null && tmOffSnp !== null && tmOffSnp > 0 ? offSnp / tmOffSnp : null;
+
+  // Denormalized fantasy points (migration 0141): copy the three scoring bases
+  // out of the same stat map readPoints() uses, so the profile reads columns
+  // instead of parsing metadata. Nullable: absent key -> NULL (readers coalesce
+  // to 0). The raw payload is still preserved verbatim in metadata by the caller.
+  row.pts_ppr = num(stats.pts_ppr);
+  row.pts_half_ppr = num(stats.pts_half_ppr);
+  row.pts_std = num(stats.pts_std);
 
   // Game context comes from the top-level api.sleeper.com fields. A flat legacy
   // payload has neither, so these resolve to NULL there.

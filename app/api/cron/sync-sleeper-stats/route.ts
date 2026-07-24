@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runSleeperStatsSync } from "@/lib/sync-sleeper-stats";
+import { runCalculatePositionalFinishes } from "@/lib/calculate-positional-finishes";
 import { recordCronRun } from "@/lib/cron-runs";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,9 +30,18 @@ export async function GET(req: Request) {
 
   const supabase = createAdminClient();
   try {
-    const result = await recordCronRun(supabase, "sync-sleeper-stats", () =>
-      runSleeperStatsSync(supabase),
-    );
+    const result = await recordCronRun(supabase, "sync-sleeper-stats", async () => {
+      const sync = await runSleeperStatsSync(supabase);
+      // New stats -> rebuild the positional-finishes cache and bust the profile
+      // caches that read stats/finishes. Skipped runs (offseason) touched nothing.
+      if (!sync.skipped) {
+        const finishes = await runCalculatePositionalFinishes(supabase);
+        revalidateTag(CACHE_TAGS.playerStats);
+        revalidateTag(CACHE_TAGS.playerFinishes);
+        return { ...sync, finishes };
+      }
+      return sync;
+    });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

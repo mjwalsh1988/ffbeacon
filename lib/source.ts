@@ -48,13 +48,16 @@ export const getAvailableSources = cache(
 export type ActiveFormatRow = FormatLike & {
   id: string;
   is_default: boolean;
+  te_premium_bonus: number | null;
 };
 
 export const getActiveFormats = cache(
   async (supabase: SupabaseClient<Database>): Promise<ActiveFormatRow[]> => {
     const { data } = await supabase
       .from("format_configs")
-      .select("id, slug, display_name, is_default, league_type, scoring_type, is_superflex, display_order")
+      .select(
+        "id, slug, display_name, is_default, league_type, scoring_type, is_superflex, display_order, te_premium_bonus",
+      )
       .eq("is_active", true)
       .order("display_order");
     return data ?? [];

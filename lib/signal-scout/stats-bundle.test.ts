@@ -138,7 +138,9 @@ function makeRow(season: number, week: number, pts: number, gp = 1): WeeklyStatR
     rec_tgt: 8,
     rec_yd: 60,
     rec_td: 1,
-    metadata: { stats: { pts_ppr: pts } },
+    pts_ppr: pts,
+    pts_half_ppr: pts,
+    pts_std: pts,
   };
 }
 

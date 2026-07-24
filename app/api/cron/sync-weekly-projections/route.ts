@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runWeeklyProjectionsSync } from "@/lib/sync-weekly-projections";
 import { recordCronRun } from "@/lib/cron-runs";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,9 +30,12 @@ export async function GET(req: Request) {
 
   const supabase = createAdminClient();
   try {
-    const result = await recordCronRun(supabase, "sync-weekly-projections", () =>
-      runWeeklyProjectionsSync(supabase),
-    );
+    const result = await recordCronRun(supabase, "sync-weekly-projections", async () => {
+      const sync = await runWeeklyProjectionsSync(supabase);
+      // Fresh projections -> bust the profile projection caches.
+      if (!sync.skipped) revalidateTag(CACHE_TAGS.playerProjections);
+      return sync;
+    });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -1,15 +1,14 @@
 /**
  * Server-side loader for the Beacon Breakdown "Stats" tab. Pulls each player's
  * weekly regular-season stats, maps them to the profile's GameRow shape (with
- * PPR points read from the metadata jsonb), aggregates per season, and groups
- * the weekly rows by season for the client comparison UI.
+ * PPR points read from the denormalized pts_ppr column), aggregates per season,
+ * and groups the weekly rows by season for the client comparison UI.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import {
   loadWeeklyStats,
-  readPoints,
   type WeeklyStatRow,
 } from "@/lib/player-profile";
 import { aggregateSeasons, type GameRow } from "@/components/player-profile/stat-shaping";
@@ -41,7 +40,7 @@ function toGameRow(r: WeeklyStatRow): GameRow {
     rec_tgt: r.rec_tgt ?? 0,
     rec_yd: r.rec_yd ?? 0,
     rec_td: r.rec_td ?? 0,
-    pts_ppr: readPoints(r.metadata, "pts_ppr"),
+    pts_ppr: r.pts_ppr ?? 0,
   };
 }
 

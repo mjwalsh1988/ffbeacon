@@ -18,6 +18,7 @@ import type { Database } from "@/lib/database.types";
 import {
   resolveSourceForFormat,
   getAvailableSources,
+  getActiveFormats,
   describeSource,
   type SourceRegistryRow,
 } from "@/lib/source";
@@ -114,17 +115,25 @@ export async function loadPlayerAndContext(
 ): Promise<{ player: PlayerRow; sleeperId: string | null; context: PlayerContext } | null> {
   const db = supabase as SupabaseClient<Database>;
 
-  const [formatResolution, sourceResolution, { data: playerRaw }] = await Promise.all([
-    resolveFormatSlug(db, params.formatParam),
-    resolveSourceSlug(db, params.sourceParam),
-    db
-      .from("players")
-      .select(
-        "id, slug, first_name, last_name, full_name, position, team, status, birth_date, height_inches, weight_lbs, college, years_experience, draft_year, draft_round, draft_pick, external_ids, metadata",
-      )
-      .eq("slug", slug)
-      .maybeSingle(),
-  ]);
+  // One wave: format/source resolution, the player row, the active-format list,
+  // and the source registry all in parallel. Folding the active-format list in
+  // here (a request-cached fetch shared with SiteHeader) lets us pick the format
+  // row in memory instead of a second, slug-keyed round trip, collapsing a whole
+  // query wave off the profile's critical path.
+  const [formatResolution, sourceResolution, { data: playerRaw }, activeFormats, registry] =
+    await Promise.all([
+      resolveFormatSlug(db, params.formatParam),
+      resolveSourceSlug(db, params.sourceParam),
+      db
+        .from("players")
+        .select(
+          "id, slug, first_name, last_name, full_name, position, team, status, birth_date, height_inches, weight_lbs, college, years_experience, draft_year, draft_round, draft_pick, external_ids, metadata",
+        )
+        .eq("slug", slug)
+        .maybeSingle(),
+      getActiveFormats(db),
+      getAvailableSources(db),
+    ]);
 
   if (!playerRaw) return null;
   const player = playerRaw as unknown as PlayerRow;
@@ -132,14 +141,10 @@ export async function loadPlayerAndContext(
   const selectedFormatSlug = formatResolution.slug;
   const requestedSourceSlug = sourceResolution.slug;
 
-  const [{ data: formatConfig }, registry] = await Promise.all([
-    db
-      .from("format_configs")
-      .select("id, slug, display_name, scoring_type, te_premium_bonus")
-      .eq("slug", selectedFormatSlug)
-      .maybeSingle(),
-    getAvailableSources(db),
-  ]);
+  // Active formats only (the format dropdown never offers inactive ones); an
+  // unknown/inactive slug resolves to null and falls through to the defaults
+  // below, same as a missing format_config row did.
+  const formatConfig = activeFormats.find((f) => f.slug === selectedFormatSlug) ?? null;
 
   const registrySlugs = registry.map((r) => r.slug);
   const formatConfigId = formatConfig?.id ?? null;
@@ -218,8 +223,13 @@ export async function loadTeamRow(
 }
 
 /**
- * Positional finishes via the RPC. Returns one entry per (season, scoring).
- * Pass seasons to limit; omit for every season the player has stats.
+ * Positional finishes from the nightly-rebuilt player_positional_finishes cache
+ * (migration 0142, populated by rebuild_positional_finishes()). Returns one entry
+ * per (season, scoring). Pass seasons to limit; omit for every season the player
+ * has stats. This is a single indexed SELECT: the heavy rank-the-whole-position
+ * aggregation now runs once nightly, not live on every profile load. The
+ * get_player_positional_finishes RPC remains the source of truth / parity oracle
+ * behind the rebuild.
  */
 export async function loadPositionalFinishes(
   supabase: AnySupabase,
@@ -227,12 +237,16 @@ export async function loadPositionalFinishes(
   seasons?: number[],
 ): Promise<PositionalFinish[]> {
   const db = supabase as SupabaseClient<Database>;
-  const { data, error } = await db.rpc("get_player_positional_finishes", {
-    p_player_id: playerId,
-    p_seasons: seasons,
-  });
+  let query = db
+    .from("player_positional_finishes")
+    .select("season, scoring, finish, total_points, players_ranked")
+    .eq("player_id", playerId);
+  if (seasons && seasons.length > 0) {
+    query = query.in("season", seasons);
+  }
+  const { data, error } = await query;
   if (error || !data) return [];
-  return (data as Array<Record<string, unknown>>).map((r) => ({
+  return data.map((r) => ({
     season: Number(r.season),
     scoring: String(r.scoring) as ScoringKey,
     finish: Number(r.finish),
@@ -383,10 +397,42 @@ export type WeeklyStatRow = {
   rec_tgt: number | null;
   rec_yd: number | null;
   rec_td: number | null;
-  metadata: unknown;
+  /** Denormalized fantasy points (migration 0141). Read these instead of parsing
+   *  metadata; NULL when Sleeper never published that base, so coalesce to 0. */
+  pts_ppr: number | null;
+  pts_half_ppr: number | null;
+  pts_std: number | null;
+  /** Raw source payload. Optional here because the profile weekly-stats read no
+   *  longer selects it (the pts_* columns replaced the jsonb parse); callers that
+   *  still need the raw object select it explicitly (see signal-scout). */
+  metadata?: unknown;
 };
 
-/** Every regular-season weekly stat row for the player, newest first. */
+/** Read a fantasy-points base off the denormalized stat columns, NULL-safe (0
+ *  when the column is NULL). Mirrors readPoints() but with no jsonb parse. */
+export function pointsFromStatRow(
+  row: Pick<WeeklyStatRow, "pts_ppr" | "pts_half_ppr" | "pts_std">,
+  key: ScoringKey,
+): number {
+  const v =
+    key === "pts_half_ppr" ? row.pts_half_ppr : key === "pts_std" ? row.pts_std : row.pts_ppr;
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/** Active-scoring actual points from the denormalized columns, plus any TE
+ *  premium on the real receptions. Column-based analogue of
+ *  actualPointsForScoring (which still reads metadata for other callers/tests). */
+export function activePointsFromStatRow(
+  row: Pick<WeeklyStatRow, "pts_ppr" | "pts_half_ppr" | "pts_std">,
+  actualReceptions: number | null,
+  key: ScoringKey,
+  tepBonusPerReception = 0,
+): number {
+  return pointsFromStatRow(row, key) + tepBonusPerReception * (actualReceptions ?? 0);
+}
+
+/** Every regular-season weekly stat row for the player, newest first. Selects the
+ *  denormalized pts_* columns instead of the heavy metadata jsonb. */
 export async function loadWeeklyStats(
   supabase: AnySupabase,
   playerId: string,
@@ -395,7 +441,7 @@ export async function loadWeeklyStats(
   const { data } = await db
     .from("player_stats")
     .select(
-      "season, week, opponent, snap_pct, gp, pass_cmp, pass_att, pass_yd, pass_td, pass_int, rush_att, rush_yd, rush_td, rec, rec_tgt, rec_yd, rec_td, metadata",
+      "season, week, opponent, snap_pct, gp, pass_cmp, pass_att, pass_yd, pass_td, pass_int, rush_att, rush_yd, rush_td, rec, rec_tgt, rec_yd, rec_td, pts_ppr, pts_half_ppr, pts_std",
     )
     .eq("player_id", playerId)
     .eq("season_type", "regular")

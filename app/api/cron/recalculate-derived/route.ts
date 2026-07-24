@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runSeedRankings } from "@/lib/seed-rankings";
 import { runCalculateTrends } from "@/lib/calculate-trends";
 import { recordCronRun } from "@/lib/cron-runs";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +43,9 @@ export async function GET(req: Request) {
       const started = Date.now();
       const rankings = await runSeedRankings(supabase);
       const trends = await runCalculateTrends(supabase);
+
+      // Fresh values/trends -> bust the profile value caches.
+      revalidateTag(CACHE_TAGS.playerValues);
 
       // Bounded retention prune for the On The Clock rate-limit ledgers (FFB-SEC-002).
       // Global and deletion-only (never per-league), so it belongs on this global cron.

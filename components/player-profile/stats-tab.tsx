@@ -7,7 +7,6 @@
  * GameRows so the client table needs no server imports.
  */
 
-import { createClient } from "@/lib/supabase/server";
 import { Panel } from "@/components/dashboard-panel";
 import { SeasonFinishesRail } from "@/components/player-profile/positional-finishes";
 import { WeeklyStats } from "@/components/player-profile/weekly-stats";
@@ -25,18 +24,19 @@ import {
 } from "@/components/player-profile/stat-shaping";
 import { getNflState, type SleeperNflState } from "@/lib/sleeper";
 import {
-  loadPositionalFinishes,
-  loadWeeklyStats,
-  loadWeeklyProjections,
-  loadProjectionsMap,
   effectiveProjectedPoints,
   summarizeProjections,
   pointsFromProjectedSet,
-  actualPointsForScoring,
-  readPoints,
+  activePointsFromStatRow,
   type PlayerRow,
   type ScoringKey,
 } from "@/lib/player-profile";
+import {
+  loadPositionalFinishesCached,
+  loadWeeklyStatsCached,
+  loadWeeklyProjectionsCached,
+  loadProjectionsMapCached,
+} from "@/lib/player-profile-cache";
 
 export async function StatsTab({
   player,
@@ -49,12 +49,11 @@ export async function StatsTab({
   scoringLabel: string;
   tePremiumBonus?: number;
 }) {
-  const supabase = await createClient();
   const [finishes, weeklyRaw, projections, projMap, nflState] = await Promise.all([
-    loadPositionalFinishes(supabase, player.id),
-    loadWeeklyStats(supabase, player.id),
-    loadWeeklyProjections(supabase, player.id),
-    loadProjectionsMap(supabase, player.id),
+    loadPositionalFinishesCached(player.id),
+    loadWeeklyStatsCached(player.id),
+    loadWeeklyProjectionsCached(player.id),
+    loadProjectionsMapCached(player.id),
     getNflState(),
   ]);
   // Upcoming weeks become clickable cards; points carry any TE premium already.
@@ -90,8 +89,8 @@ export async function StatsTab({
     rec_tgt: r.rec_tgt ?? 0,
     rec_yd: r.rec_yd ?? 0,
     rec_td: r.rec_td ?? 0,
-    pts_ppr: readPoints(r.metadata, "pts_ppr"),
-    pts_active: actualPointsForScoring(r.metadata, r.rec, scoringKey, tePremiumBonus),
+    pts_ppr: r.pts_ppr ?? 0,
+    pts_active: activePointsFromStatRow(r, r.rec, scoringKey, tePremiumBonus),
     proj_active: pointsFromProjectedSet(
       projMap.get(`${r.season}-${r.week}`),
       scoringKey,
