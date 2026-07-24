@@ -12,7 +12,7 @@
  */
 
 import type { ReactNode } from "react";
-import type { AccuracyPoint } from "@/components/player-profile/stat-shaping";
+import type { AccuracyPoint, BeatRate } from "@/components/player-profile/stat-shaping";
 
 /** Near-black tile so the bright numbers stand out (matches the hero cards). */
 const TILE = "#0A0A12";
@@ -28,13 +28,35 @@ function diffClass(v: number): string {
 export function AccuracyStatCards({
   points,
   mode,
+  beatRate,
 }: {
   points: AccuracyPoint[];
   mode: "projection" | "historical";
+  /**
+   * Season-wide beat rate (counts weeks the player was projected but missed, so
+   * an injured stretch is not dropped from the denominator). When provided it
+   * drives the beat rate tile; when omitted the tile falls back to the
+   * played-weeks-only derivation below. The other two tiles always use the
+   * played weeks in `points`, unchanged.
+   */
+  beatRate?: BeatRate | null;
 }) {
   const comparable = points.filter((p) => p.projected != null && p.actual != null);
-  const beats = comparable.filter((p) => (p.actual as number) >= (p.projected as number)).length;
-  const beatPct = comparable.length ? Math.round((beats / comparable.length) * 100) : null;
+  // Beat rate: prefer the season-wide rate (missed weeks count as misses); fall
+  // back to played-weeks-only when no precomputed rate is supplied.
+  const resolvedBeat =
+    beatRate !== undefined
+      ? beatRate
+      : comparable.length
+        ? {
+            beats: comparable.filter((p) => (p.actual as number) >= (p.projected as number)).length,
+            total: comparable.length,
+          }
+        : null;
+  const beatPct =
+    resolvedBeat && resolvedBeat.total
+      ? Math.round((resolvedBeat.beats / resolvedBeat.total) * 100)
+      : null;
   const avgDiff = comparable.length
     ? comparable.reduce((s, p) => s + ((p.actual as number) - (p.projected as number)), 0) /
       comparable.length
@@ -102,7 +124,7 @@ export function AccuracyStatCards({
           {beatPct != null ? `${beatPct}%` : "--"}
         </dd>
         <p className="mt-0.5 text-[10px] leading-tight text-ink-subtle">
-          {comparable.length ? `${beats} of ${comparable.length} weeks over` : "no results yet"}
+          {resolvedBeat ? `${resolvedBeat.beats} of ${resolvedBeat.total} weeks over` : "no results yet"}
         </p>
       </div>
 

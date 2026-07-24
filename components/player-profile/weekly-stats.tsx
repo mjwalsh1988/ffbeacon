@@ -18,6 +18,7 @@ import {
   lineFromGame,
   type WeeklyGameRow,
   type AccuracyPoint,
+  type BeatRate,
 } from "@/components/player-profile/stat-shaping";
 import { ProjectionActualChart } from "@/components/player-profile/projection-actual-chart";
 import { AccuracyStatCards } from "@/components/player-profile/accuracy-stat-cards";
@@ -27,11 +28,14 @@ export function WeeklyStats({
   rowsBySeason,
   seasons,
   scoringLabel,
+  beatRateBySeason,
 }: {
   position: string;
   rowsBySeason: Record<number, WeeklyGameRow[]>;
   seasons: number[];
   scoringLabel: string;
+  /** Season-wide beat rate per season (missed weeks count as misses). */
+  beatRateBySeason?: Record<number, BeatRate>;
 }) {
   const [season, setSeason] = useState<number>(seasons[0]);
   const cols = statColumns(position);
@@ -86,7 +90,11 @@ export function WeeklyStats({
             scoringLabel={scoringLabel}
             season={season}
           />
-          <AccuracyStatCards points={accuracyPoints} mode="historical" />
+          <AccuracyStatCards
+            points={accuracyPoints}
+            mode="historical"
+            beatRate={beatRateBySeason?.[season] ?? null}
+          />
         </div>
       )}
 

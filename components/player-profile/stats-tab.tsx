@@ -16,9 +16,14 @@ import {
   aggregateSeasons,
   statColumns,
   StatScroll,
+  beatRateOverSeason,
+  weekHasElapsed,
   type WeeklyGameRow,
   type AccuracyPoint,
+  type BeatRate,
+  type BeatRateWeek,
 } from "@/components/player-profile/stat-shaping";
+import { getNflState, type SleeperNflState } from "@/lib/sleeper";
 import {
   loadPositionalFinishes,
   loadWeeklyStats,
@@ -45,11 +50,12 @@ export async function StatsTab({
   tePremiumBonus?: number;
 }) {
   const supabase = await createClient();
-  const [finishes, weeklyRaw, projections, projMap] = await Promise.all([
+  const [finishes, weeklyRaw, projections, projMap, nflState] = await Promise.all([
     loadPositionalFinishes(supabase, player.id),
     loadWeeklyStats(supabase, player.id),
     loadWeeklyProjections(supabase, player.id),
     loadProjectionsMap(supabase, player.id),
+    getNflState(),
   ]);
   // Upcoming weeks become clickable cards; points carry any TE premium already.
   const upcomingProjections = projections.rows.filter((r) => !r.played);
@@ -127,6 +133,41 @@ export async function StatsTab({
             prior: actualByKey.get(`${currentSeason - 1}-${row.week}`) ?? null,
           }));
 
+  // Season-wide beat rate: the denominator is every week the player's team has
+  // already played (one gameRow per team game, byes excluded because they have no
+  // row), not just the weeks the player suited up for. Each week pairs its
+  // projection (null once Sleeper stops projecting an injured player) with the
+  // actual (null when the player did not play), so a missed week counts as a miss
+  // and the rate reflects the full season. Future weeks have no gameRow yet, so
+  // an in-progress season is never diluted by games that have not happened.
+  // Keyed by season for the game-log picker; the current projection season
+  // doubles as the projections card's rate.
+  const live = liveWindow(nflState, currentSeason ?? weeklySeasons[0] ?? 0);
+  const beatWeeksBySeason = new Map<number, BeatRateWeek[]>();
+  for (const r of gameRows) {
+    const played = (r.gp ?? 0) > 0;
+    const projected = pointsFromProjectedSet(
+      projMap.get(`${r.season}-${r.week}`),
+      scoringKey,
+      tePremiumBonus,
+    );
+    const actual = played ? r.pts_active : null;
+    const elapsed = weekHasElapsed(r.season, r.week, live) || played;
+    let weeks = beatWeeksBySeason.get(r.season);
+    if (!weeks) {
+      weeks = [];
+      beatWeeksBySeason.set(r.season, weeks);
+    }
+    weeks.push({ projected, actual, elapsed });
+  }
+  const beatRateBySeason: Record<number, BeatRate> = {};
+  for (const [s, weeks] of beatWeeksBySeason) {
+    const rate = beatRateOverSeason(weeks);
+    if (rate) beatRateBySeason[s] = rate;
+  }
+  const projectionBeatRate =
+    currentSeason != null ? (beatRateBySeason[currentSeason] ?? null) : null;
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* grid-cols-1 caps the mobile track at the viewport; min-w-0 on each column
@@ -159,6 +200,7 @@ export async function StatsTab({
               seasonStarted={projectionSummary.seasonStarted}
               tePremiumBonus={tePremiumBonus}
               accuracyPoints={currentSeasonAccuracy}
+              beatRate={projectionBeatRate}
             />
           )}
 
@@ -246,6 +288,7 @@ export async function StatsTab({
                 rowsBySeason={rowsBySeason}
                 seasons={weeklySeasons}
                 scoringLabel={scoringLabel}
+                beatRateBySeason={beatRateBySeason}
               />
             ) : (
               <p className="text-sm text-ink-muted">No weekly stat lines on file yet.</p>
@@ -255,4 +298,33 @@ export async function StatsTab({
       </div>
     </div>
   );
+}
+
+/**
+ * Translate the live Sleeper NFL state into the (season, lastCompletedWeek)
+ * window the beat-rate elapsed check needs. During the regular season only weeks
+ * before the current one are complete; once the season reaches the post/off
+ * phase every regular week (through 18) is done; the preseason has none. When
+ * Sleeper is unreachable we return a window with lastCompletedWeek -1 for the
+ * fallback season, so completed prior seasons still count fully and the current
+ * season leans on per-week played evidence rather than penalizing missed weeks
+ * we cannot confirm have elapsed.
+ */
+function liveWindow(
+  state: SleeperNflState | null,
+  fallbackSeason: number,
+): { season: number; lastCompletedWeek: number } {
+  if (!state) return { season: fallbackSeason, lastCompletedWeek: -1 };
+  const season = Number(state.season);
+  const type = state.season_type;
+  const lastCompletedWeek =
+    type === "post" || type === "off"
+      ? 18
+      : type === "pre"
+        ? 0
+        : Math.max(0, Number(state.week) - 1);
+  return {
+    season: Number.isFinite(season) ? season : fallbackSeason,
+    lastCompletedWeek,
+  };
 }

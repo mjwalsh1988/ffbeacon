@@ -20,6 +20,7 @@ import {
   lineFromProjection,
   projectionStatColumns,
   type AccuracyPoint,
+  type BeatRate,
 } from "@/components/player-profile/stat-shaping";
 
 /** Near-black tile so the bright stat numbers stand out. */
@@ -50,6 +51,7 @@ export function WeeklyProjections({
   seasonStarted,
   tePremiumBonus = 0,
   accuracyPoints = [],
+  beatRate = null,
 }: {
   cards: ProjectionWeekCard[];
   position: string;
@@ -62,6 +64,8 @@ export function WeeklyProjections({
   tePremiumBonus?: number;
   /** Current-season projected-vs-actual weeks; actual fills in as games play. */
   accuracyPoints?: AccuracyPoint[];
+  /** Season-wide beat rate (missed weeks count as misses) for the beat rate tile. */
+  beatRate?: BeatRate | null;
 }) {
   const [openWeek, setOpenWeek] = useState<number | null>(null);
   const selected = cards.find((c) => c.week === openWeek) ?? null;
@@ -139,7 +143,7 @@ export function WeeklyProjections({
                 </div>
                 <ProjectionActualChart points={accuracyPoints} scoringLabel={scoringLabel} season={season} />
               </div>
-              <AccuracyStatCards points={accuracyPoints} mode="projection" />
+              <AccuracyStatCards points={accuracyPoints} mode="projection" beatRate={beatRate} />
             </>
           )}
 
