@@ -52,12 +52,17 @@ export function loadWeeklyProjectionsCached(playerId: string) {
   )();
 }
 
-export function loadProjectionsMapCached(playerId: string) {
-  return unstable_cache(
-    () => loadProjectionsMap(createCachedReadClient(), playerId),
+export async function loadProjectionsMapCached(playerId: string) {
+  // unstable_cache JSON-serializes its result, and a Map does not survive that
+  // round trip (it comes back as {} with no .get). Cache the entries array
+  // instead and rebuild the Map on the way out so callers get a real Map.
+  const entries = await unstable_cache(
+    async () =>
+      Array.from((await loadProjectionsMap(createCachedReadClient(), playerId)).entries()),
     ["player-projections-map", playerId],
     { revalidate: CACHE_TTL.daily, tags: [CACHE_TAGS.playerProjections] },
   )();
+  return new Map(entries);
 }
 
 export function loadDepthChartCached(player: Pick<PlayerRow, "slug" | "team" | "position">) {

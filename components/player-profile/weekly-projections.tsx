@@ -16,11 +16,13 @@ import { Target, ChevronRight, LineChart } from "lucide-react";
 import { SidePanel } from "@/components/side-panel";
 import { ProjectionActualChart } from "@/components/player-profile/projection-actual-chart";
 import { AccuracyStatCards } from "@/components/player-profile/accuracy-stat-cards";
+import { StatAccuracyBreakdown } from "@/components/player-profile/stat-accuracy-breakdown";
 import {
   lineFromProjection,
   projectionStatColumns,
   type AccuracyPoint,
   type BeatRate,
+  type StatAccuracy,
 } from "@/components/player-profile/stat-shaping";
 
 /** Near-black tile so the bright stat numbers stand out. */
@@ -52,6 +54,7 @@ export function WeeklyProjections({
   tePremiumBonus = 0,
   accuracyPoints = [],
   beatRate = null,
+  statAccuracy = [],
 }: {
   cards: ProjectionWeekCard[];
   position: string;
@@ -66,6 +69,8 @@ export function WeeklyProjections({
   accuracyPoints?: AccuracyPoint[];
   /** Season-wide beat rate (missed weeks count as misses) for the beat rate tile. */
   beatRate?: BeatRate | null;
+  /** Current-season per-stat accuracy (targets, yards, TDs, ...) for played weeks. */
+  statAccuracy?: StatAccuracy[];
 }) {
   const [openWeek, setOpenWeek] = useState<number | null>(null);
   const selected = cards.find((c) => c.week === openWeek) ?? null;
@@ -144,6 +149,11 @@ export function WeeklyProjections({
                 <ProjectionActualChart points={accuracyPoints} scoringLabel={scoringLabel} season={season} />
               </div>
               <AccuracyStatCards points={accuracyPoints} mode="projection" beatRate={beatRate} />
+              <StatAccuracyBreakdown
+                stats={statAccuracy}
+                heading="Per-stat accuracy"
+                caption={`How often each stat has hit its weekly projection in ${season}, and the average gap.`}
+              />
             </>
           )}
 

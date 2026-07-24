@@ -43,6 +43,10 @@ export type WeeklyGameRow = GameRow & {
   /** Projected points for the same week/scoring (TE premium applied), null when
    *  no projection is on file for that week. */
   proj_active: number | null;
+  /** Projected component stat line (targets, yards, TDs, etc.) for the same week,
+   *  null when no projection is on file. Drives the per-stat beat/miss deltas in
+   *  the weekly table and the season per-stat accuracy breakdown. */
+  proj_line: StatLine | null;
 };
 
 /** One week of projected-vs-actual points for the accuracy chart. `actual` is
@@ -60,7 +64,84 @@ export type AccuracyPoint = {
 
 export type SeasonAgg = { season: number; games: number; line: StatLine };
 
-export type StatCol = { label: string; get: (s: StatLine) => string };
+/** The component stat keys we compare actual-vs-projected (points excluded). */
+export type StatKey =
+  | "pass_cmp"
+  | "pass_att"
+  | "pass_yd"
+  | "pass_td"
+  | "pass_int"
+  | "rush_att"
+  | "rush_yd"
+  | "rush_td"
+  | "rec_tgt"
+  | "rec"
+  | "rec_yd"
+  | "rec_td";
+
+/** One comparable stat: which StatLine field, a short label, and the decimal
+ *  precision for its differential (yards read whole; low counts like TDs keep one
+ *  place so a fractional projection is not lost). `lowerIsBetter` flips the
+ *  good/bad direction for stats where exceeding the projection is bad (INT), so
+ *  color and "hit rate" stay honest. */
+export type StatMetric = {
+  key: StatKey;
+  label: string;
+  digits: number;
+  lowerIsBetter?: boolean;
+};
+
+/** Canonical label + precision for every comparable stat, so the weekly-table
+ *  deltas and the season breakdown tiles stay in lockstep (one source of truth). */
+const METRIC: Record<StatKey, Omit<StatMetric, "key">> = {
+  pass_cmp: { label: "Cmp", digits: 0 },
+  pass_att: { label: "Att", digits: 0 },
+  pass_yd: { label: "Pass Yd", digits: 0 },
+  pass_td: { label: "Pass TD", digits: 1 },
+  pass_int: { label: "INT", digits: 1, lowerIsBetter: true },
+  rush_att: { label: "Car", digits: 1 },
+  rush_yd: { label: "Rush Yd", digits: 0 },
+  rush_td: { label: "Rush TD", digits: 1 },
+  rec_tgt: { label: "Tgt", digits: 1 },
+  rec: { label: "Rec", digits: 1 },
+  rec_yd: { label: "Rec Yd", digits: 0 },
+  rec_td: { label: "Rec TD", digits: 1 },
+};
+
+function metric(key: StatKey): StatMetric {
+  return { key, ...METRIC[key] };
+}
+
+/** Whether a differential is a good outcome for a stat: normally at or above
+ *  projection, but at or below for lower-is-better stats (interceptions). Drives
+ *  the green/red coloring everywhere the differential is shown. */
+export function deltaIsGood(delta: number, lowerIsBetter?: boolean): boolean {
+  return lowerIsBetter ? delta <= 0 : delta >= 0;
+}
+
+/**
+ * The display tone for a differential at its shown precision. A value that rounds
+ * to zero reads as "on projection" and is shown neutral (not green or red), so a
+ * displayed "0" is never misleadingly colored (e.g. a -0.5 yard average that
+ * rounds to 0). Otherwise green for a good outcome, red for a bad one.
+ */
+export function deltaTone(
+  delta: number,
+  digits: number,
+  lowerIsBetter?: boolean,
+): "good" | "bad" | "neutral" {
+  if (Number(delta.toFixed(digits)) === 0) return "neutral";
+  return deltaIsGood(delta, lowerIsBetter) ? "good" : "bad";
+}
+
+export type StatCol = {
+  label: string;
+  get: (s: StatLine) => string;
+  /** The stat(s) whose actual-vs-projected differential this column surfaces as a
+   *  sub-line (most columns map to one; QB Cmp/Att maps to two). Absent when the
+   *  column has no meaningful projection comparison. */
+  deltas?: StatMetric[];
+};
 
 function num(v: number | null | undefined): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
@@ -124,40 +205,156 @@ function fmt(v: number): string {
   return Math.round(v).toLocaleString();
 }
 
-/** Position-specific stat columns, matching the prior profile layout. */
+/** Position-specific stat columns, matching the prior profile layout. Each
+ *  column carries the comparable stat(s) behind its projection differential. */
 export function statColumns(position: string): StatCol[] {
   const p = (position || "").toUpperCase();
   if (p === "QB")
     return [
-      { label: "Cmp/Att", get: (s) => `${fmt(s.pass_cmp)}/${fmt(s.pass_att)}` },
-      { label: "Pass Yd", get: (s) => fmt(s.pass_yd) },
-      { label: "Pass TD", get: (s) => fmt(s.pass_td) },
-      { label: "INT", get: (s) => fmt(s.pass_int) },
-      { label: "Rush Yd", get: (s) => fmt(s.rush_yd) },
-      { label: "Rush TD", get: (s) => fmt(s.rush_td) },
+      {
+        label: "Cmp/Att",
+        get: (s) => `${fmt(s.pass_cmp)}/${fmt(s.pass_att)}`,
+        deltas: [metric("pass_cmp"), metric("pass_att")],
+      },
+      { label: "Pass Yd", get: (s) => fmt(s.pass_yd), deltas: [metric("pass_yd")] },
+      { label: "Pass TD", get: (s) => fmt(s.pass_td), deltas: [metric("pass_td")] },
+      { label: "INT", get: (s) => fmt(s.pass_int), deltas: [metric("pass_int")] },
+      { label: "Rush Yd", get: (s) => fmt(s.rush_yd), deltas: [metric("rush_yd")] },
+      { label: "Rush TD", get: (s) => fmt(s.rush_td), deltas: [metric("rush_td")] },
     ];
   if (p === "RB")
     return [
-      { label: "Car", get: (s) => fmt(s.rush_att) },
-      { label: "Rush Yd", get: (s) => fmt(s.rush_yd) },
-      { label: "Rush TD", get: (s) => fmt(s.rush_td) },
-      { label: "Rec", get: (s) => fmt(s.rec) },
-      { label: "Rec Yd", get: (s) => fmt(s.rec_yd) },
-      { label: "Rec TD", get: (s) => fmt(s.rec_td) },
+      { label: "Car", get: (s) => fmt(s.rush_att), deltas: [metric("rush_att")] },
+      { label: "Rush Yd", get: (s) => fmt(s.rush_yd), deltas: [metric("rush_yd")] },
+      { label: "Rush TD", get: (s) => fmt(s.rush_td), deltas: [metric("rush_td")] },
+      { label: "Rec", get: (s) => fmt(s.rec), deltas: [metric("rec")] },
+      { label: "Rec Yd", get: (s) => fmt(s.rec_yd), deltas: [metric("rec_yd")] },
+      { label: "Rec TD", get: (s) => fmt(s.rec_td), deltas: [metric("rec_td")] },
     ];
   if (p === "WR" || p === "TE")
     return [
-      { label: "Tgt", get: (s) => fmt(s.rec_tgt) },
-      { label: "Rec", get: (s) => fmt(s.rec) },
-      { label: "Rec Yd", get: (s) => fmt(s.rec_yd) },
-      { label: "Rec TD", get: (s) => fmt(s.rec_td) },
-      { label: "Rush Yd", get: (s) => fmt(s.rush_yd) },
+      { label: "Tgt", get: (s) => fmt(s.rec_tgt), deltas: [metric("rec_tgt")] },
+      { label: "Rec", get: (s) => fmt(s.rec), deltas: [metric("rec")] },
+      { label: "Rec Yd", get: (s) => fmt(s.rec_yd), deltas: [metric("rec_yd")] },
+      { label: "Rec TD", get: (s) => fmt(s.rec_td), deltas: [metric("rec_td")] },
+      { label: "Rush Yd", get: (s) => fmt(s.rush_yd), deltas: [metric("rush_yd")] },
     ];
   return [
-    { label: "Rush Yd", get: (s) => fmt(s.rush_yd) },
-    { label: "Rec", get: (s) => fmt(s.rec) },
-    { label: "Rec Yd", get: (s) => fmt(s.rec_yd) },
+    { label: "Rush Yd", get: (s) => fmt(s.rush_yd), deltas: [metric("rush_yd")] },
+    { label: "Rec", get: (s) => fmt(s.rec), deltas: [metric("rec")] },
+    { label: "Rec Yd", get: (s) => fmt(s.rec_yd), deltas: [metric("rec_yd")] },
   ];
+}
+
+/**
+ * The ordered set of component stats we track actual-vs-projected for a position,
+ * used by the season per-stat accuracy breakdown. Broader than the visible table
+ * columns (e.g. RB receiving targets are summarized here even though the RB table
+ * has no target column), so the breakdown covers every stat the position earns.
+ */
+export function comparisonStats(position: string): StatMetric[] {
+  const p = (position || "").toUpperCase();
+  if (p === "QB")
+    return [
+      metric("pass_cmp"),
+      metric("pass_att"),
+      metric("pass_yd"),
+      metric("pass_td"),
+      metric("pass_int"),
+      metric("rush_yd"),
+      metric("rush_td"),
+    ];
+  if (p === "RB")
+    return [
+      metric("rush_att"),
+      metric("rush_yd"),
+      metric("rush_td"),
+      metric("rec_tgt"),
+      metric("rec"),
+      metric("rec_yd"),
+      metric("rec_td"),
+    ];
+  if (p === "WR" || p === "TE")
+    return [
+      metric("rec_tgt"),
+      metric("rec"),
+      metric("rec_yd"),
+      metric("rec_td"),
+      metric("rush_yd"),
+    ];
+  return [metric("rush_yd"), metric("rec"), metric("rec_yd")];
+}
+
+/**
+ * Format a stat differential (actual minus projected) for display: a leading "+"
+ * for beats, the native "-" for misses, and a clean zero (no "-0.0") when the
+ * player landed exactly on projection. `digits` controls precision per stat.
+ */
+export function fmtStatDelta(delta: number, digits: number): string {
+  const rounded = Number(delta.toFixed(digits));
+  if (rounded === 0) return (0).toFixed(digits);
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(digits)}`;
+}
+
+/** One stat's season-long accuracy: how often the player met or beat its weekly
+ *  projection, and by how much on average. `beatPct` is the share of qualifying
+ *  weeks at or above projection; `avgDiff` is the mean (actual - projected). */
+export type StatAccuracy = StatMetric & {
+  beats: number;
+  total: number;
+  beatPct: number;
+  avgDiff: number;
+  avgActual: number;
+  avgProjected: number;
+};
+
+/** One week's actual line paired with its projected line (null when no projection
+ *  was on file). Only weeks the player actually played should be passed in. */
+export type StatAccuracyWeek = { actual: StatLine; projected: StatLine | null };
+
+/**
+ * Roll a season's played weeks into per-stat accuracy for a position. A stat only
+ * counts a week when a real projection existed for it (projected value > 0), so a
+ * receiver's "pass yards" and unprojected garbage-time surprises never dilute the
+ * picture: the denominator is the weeks the player was genuinely expected to
+ * produce that stat. A week is a beat when the actual met or exceeded the
+ * projection. Stats with no qualifying week are dropped, so the breakdown shows
+ * only the categories that position actually earns. Ordered per comparisonStats.
+ */
+export function computeStatAccuracy(
+  weeks: StatAccuracyWeek[],
+  position: string,
+): StatAccuracy[] {
+  const out: StatAccuracy[] = [];
+  for (const m of comparisonStats(position)) {
+    let beats = 0;
+    let total = 0;
+    let sumDiff = 0;
+    let sumActual = 0;
+    let sumProjected = 0;
+    for (const w of weeks) {
+      if (!w.projected) continue;
+      const projected = w.projected[m.key];
+      if (!(projected > 0)) continue;
+      const actual = w.actual[m.key];
+      total += 1;
+      if (deltaIsGood(actual - projected, m.lowerIsBetter)) beats += 1;
+      sumDiff += actual - projected;
+      sumActual += actual;
+      sumProjected += projected;
+    }
+    if (total === 0) continue;
+    out.push({
+      ...m,
+      beats,
+      total,
+      beatPct: Math.round((beats / total) * 100),
+      avgDiff: sumDiff / total,
+      avgActual: sumActual / total,
+      avgProjected: sumProjected / total,
+    });
+  }
+  return out;
 }
 
 // ---------- projection shaping ----------

@@ -23,6 +23,7 @@ import {
   type SourceRegistryRow,
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
+import { lineFromProjection, type StatLine } from "@/components/player-profile/stat-shaping";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -638,12 +639,15 @@ export function summarizeProjections(
 
 // ---------- projected vs actual ----------
 
-/** Projected points per scoring base for one week, plus projected receptions. */
+/** Projected points per scoring base for one week, plus projected receptions and
+ *  the full projected component stat line (targets, yards, TDs, etc.) used by the
+ *  per-stat beat/miss comparison. */
 export type ProjectedPointsSet = {
   ppr: number | null;
   half_ppr: number | null;
   std: number | null;
   rec: number;
+  line: StatLine;
 };
 
 /**
@@ -667,21 +671,23 @@ export async function loadProjectionsMap(
 
   const map = new Map<string, ProjectedPointsSet>();
   for (const r of data ?? []) {
-    const recRaw = (r.stat_line as { rec?: unknown } | null)?.rec;
-    const rec = typeof recRaw === "number" && Number.isFinite(recRaw) ? recRaw : 0;
+    const line = lineFromProjection((r.stat_line as Record<string, unknown> | null) ?? null);
     map.set(`${Number(r.season)}-${Number(r.week)}`, {
       ppr: numOrNull(r.projected_pts_ppr),
       half_ppr: numOrNull(r.projected_pts_half_ppr),
       std: numOrNull(r.projected_pts_std),
-      rec,
+      rec: line.rec,
+      line,
     });
   }
   return map;
 }
 
-/** Projected points for the active scoring from a set, with any TE premium. */
+/** Projected points for the active scoring from a set, with any TE premium. Only
+ *  the point bases and projected receptions are needed, so the parameter is
+ *  narrowed (the full projected stat line is irrelevant to the points math). */
 export function pointsFromProjectedSet(
-  set: ProjectedPointsSet | undefined | null,
+  set: Pick<ProjectedPointsSet, "ppr" | "half_ppr" | "std" | "rec"> | undefined | null,
   key: ScoringKey,
   tepBonusPerReception = 0,
 ): number | null {

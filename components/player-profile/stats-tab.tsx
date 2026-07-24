@@ -17,10 +17,14 @@ import {
   StatScroll,
   beatRateOverSeason,
   weekHasElapsed,
+  computeStatAccuracy,
+  lineFromGame,
   type WeeklyGameRow,
   type AccuracyPoint,
   type BeatRate,
   type BeatRateWeek,
+  type StatAccuracy,
+  type StatAccuracyWeek,
 } from "@/components/player-profile/stat-shaping";
 import { getNflState, type SleeperNflState } from "@/lib/sleeper";
 import {
@@ -96,6 +100,7 @@ export async function StatsTab({
       scoringKey,
       tePremiumBonus,
     ),
+    proj_line: projMap.get(`${r.season}-${r.week}`)?.line ?? null,
   }));
   const seasonAggs = aggregateSeasons(gameRows);
   const cols = statColumns(player.position);
@@ -167,6 +172,24 @@ export async function StatsTab({
   const projectionBeatRate =
     currentSeason != null ? (beatRateBySeason[currentSeason] ?? null) : null;
 
+  // Per-stat accuracy per season: for each season, roll the weeks the player
+  // actually played (with their projected component line) into how often each
+  // individual stat met/beat projection and the average differential. Only played
+  // weeks feed this (an unplayed week has no actual to compare); the helper drops
+  // stats the position never earns and weeks that carried no real projection for a
+  // stat, so the breakdown reflects genuine expectations. Precomputed here so the
+  // client tables receive plain, serializable rows.
+  const statAccuracyBySeason: Record<number, StatAccuracy[]> = {};
+  for (const [s, rows] of Object.entries(rowsBySeason)) {
+    const weeks: StatAccuracyWeek[] = rows
+      .filter((r) => (r.gp ?? 0) > 0)
+      .map((r) => ({ actual: lineFromGame(r), projected: r.proj_line }));
+    const acc = computeStatAccuracy(weeks, player.position);
+    if (acc.length > 0) statAccuracyBySeason[Number(s)] = acc;
+  }
+  const currentSeasonStatAccuracy =
+    currentSeason != null ? (statAccuracyBySeason[currentSeason] ?? []) : [];
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* grid-cols-1 caps the mobile track at the viewport; min-w-0 on each column
@@ -200,6 +223,7 @@ export async function StatsTab({
               tePremiumBonus={tePremiumBonus}
               accuracyPoints={currentSeasonAccuracy}
               beatRate={projectionBeatRate}
+              statAccuracy={currentSeasonStatAccuracy}
             />
           )}
 
@@ -288,6 +312,7 @@ export async function StatsTab({
                 seasons={weeklySeasons}
                 scoringLabel={scoringLabel}
                 beatRateBySeason={beatRateBySeason}
+                statAccuracyBySeason={statAccuracyBySeason}
               />
             ) : (
               <p className="text-sm text-ink-muted">No weekly stat lines on file yet.</p>

@@ -11,6 +11,14 @@ import {
 import {
   lineFromProjection,
   projectionStatColumns,
+  comparisonStats,
+  computeStatAccuracy,
+  fmtStatDelta,
+  deltaIsGood,
+  deltaTone,
+  emptyLine,
+  type StatLine,
+  type StatAccuracyWeek,
 } from "@/components/player-profile/stat-shaping";
 
 function row(over: Partial<WeeklyProjectionRow>): WeeklyProjectionRow {
@@ -226,5 +234,141 @@ describe("projectionStatColumns", () => {
   it("returns no component columns for K/DEF", () => {
     expect(projectionStatColumns("K")).toEqual([]);
     expect(projectionStatColumns("DEF")).toEqual([]);
+  });
+});
+
+describe("fmtStatDelta", () => {
+  it("signs beats with a plus and keeps the native minus for misses", () => {
+    expect(fmtStatDelta(12.4, 0)).toBe("+12");
+    expect(fmtStatDelta(-0.4, 1)).toBe("-0.4");
+    expect(fmtStatDelta(24, 0)).toBe("+24");
+  });
+
+  it("renders an exact match as a clean zero, never -0.0", () => {
+    expect(fmtStatDelta(0, 1)).toBe("0.0");
+    // A tiny negative that rounds to zero must not display as -0.0.
+    expect(fmtStatDelta(-0.03, 1)).toBe("0.0");
+    expect(fmtStatDelta(0, 0)).toBe("0");
+  });
+});
+
+describe("comparisonStats", () => {
+  it("tracks passing and rushing stats for a QB", () => {
+    const keys = comparisonStats("QB").map((m) => m.key);
+    expect(keys).toContain("pass_yd");
+    expect(keys).toContain("pass_td");
+    expect(keys).toContain("pass_cmp");
+    expect(keys).toContain("pass_att");
+    expect(keys).toContain("rush_yd");
+    expect(keys).not.toContain("rec");
+  });
+
+  it("includes receiving targets for an RB even though the RB table has no Tgt column", () => {
+    const keys = comparisonStats("RB").map((m) => m.key);
+    expect(keys).toContain("rec_tgt");
+    expect(keys).toContain("rush_att");
+  });
+
+  it("yards read whole, low-count stats keep one decimal", () => {
+    const wr = comparisonStats("WR");
+    expect(wr.find((m) => m.key === "rec_yd")!.digits).toBe(0);
+    expect(wr.find((m) => m.key === "rec_td")!.digits).toBe(1);
+    expect(wr.find((m) => m.key === "rec")!.digits).toBe(1);
+  });
+});
+
+describe("computeStatAccuracy", () => {
+  function actual(over: Partial<StatLine>): StatLine {
+    return { ...emptyLine(), ...over };
+  }
+  function week(a: Partial<StatLine>, p: Partial<StatLine> | null): StatAccuracyWeek {
+    return { actual: actual(a), projected: p ? actual(p) : null };
+  }
+
+  it("counts beats and averages the differential per stat", () => {
+    const weeks = [
+      week({ rush_yd: 100 }, { rush_yd: 80 }), // +20, beat
+      week({ rush_yd: 40 }, { rush_yd: 60 }), // -20, miss
+      week({ rush_yd: 70 }, { rush_yd: 70 }), // exact, beat (met)
+    ];
+    const acc = computeStatAccuracy(weeks, "RB");
+    const rush = acc.find((s) => s.key === "rush_yd")!;
+    expect(rush.total).toBe(3);
+    expect(rush.beats).toBe(2);
+    expect(rush.beatPct).toBe(67);
+    expect(rush.avgDiff).toBeCloseTo(0); // (20 - 20 + 0) / 3
+  });
+
+  it("ignores weeks where the stat carried no real projection (projected 0 or null)", () => {
+    const weeks = [
+      week({ rec_yd: 50 }, { rec_yd: 40 }), // counts
+      week({ rec_yd: 30 }, { rec_yd: 0 }), // projected 0 -> excluded
+      week({ rec_yd: 25 }, null), // no projection line -> excluded
+    ];
+    const acc = computeStatAccuracy(weeks, "WR");
+    const recYd = acc.find((s) => s.key === "rec_yd")!;
+    expect(recYd.total).toBe(1);
+    expect(recYd.beats).toBe(1);
+  });
+
+  it("drops stats the player never had a projection for", () => {
+    // A WR with only receiving projections: rushing yards never projected.
+    const weeks = [week({ rec: 6, rec_yd: 80 }, { rec: 5, rec_yd: 70 })];
+    const acc = computeStatAccuracy(weeks, "WR");
+    expect(acc.some((s) => s.key === "rush_yd")).toBe(false);
+    expect(acc.some((s) => s.key === "rec")).toBe(true);
+  });
+
+  it("returns an empty list when no weeks qualify", () => {
+    expect(computeStatAccuracy([], "RB")).toEqual([]);
+    expect(computeStatAccuracy([week({ rush_yd: 10 }, null)], "RB")).toEqual([]);
+  });
+
+  it("inverts the beat direction for interceptions (fewer is better)", () => {
+    const weeks = [
+      week({ pass_int: 0, pass_yd: 250 }, { pass_int: 1, pass_yd: 240 }), // 0 <= 1, good
+      week({ pass_int: 2, pass_yd: 260 }, { pass_int: 1, pass_yd: 240 }), // 2 > 1, bad
+    ];
+    const acc = computeStatAccuracy(weeks, "QB");
+    const int = acc.find((s) => s.key === "pass_int")!;
+    expect(int.lowerIsBetter).toBe(true);
+    // Only the low-INT week counts as a beat under the inverted rule.
+    expect(int.beats).toBe(1);
+    expect(int.total).toBe(2);
+    // Passing yards still use the normal (higher is better) rule: both beat.
+    const passYd = acc.find((s) => s.key === "pass_yd")!;
+    expect(passYd.beats).toBe(2);
+  });
+});
+
+describe("deltaIsGood", () => {
+  it("treats at-or-above projection as good by default", () => {
+    expect(deltaIsGood(5)).toBe(true);
+    expect(deltaIsGood(0)).toBe(true);
+    expect(deltaIsGood(-1)).toBe(false);
+  });
+
+  it("treats at-or-below projection as good when lower is better", () => {
+    expect(deltaIsGood(-1, true)).toBe(true);
+    expect(deltaIsGood(0, true)).toBe(true);
+    expect(deltaIsGood(1, true)).toBe(false);
+  });
+});
+
+describe("deltaTone", () => {
+  it("is neutral when the value rounds to zero at the shown precision", () => {
+    // McCaffrey's -0.49 yard average rounds to 0 at 0 decimals: show it neutral,
+    // not red, so a displayed "0" is never colored as a miss.
+    expect(deltaTone(-0.49, 0)).toBe("neutral");
+    expect(deltaTone(0.4, 0)).toBe("neutral");
+    expect(deltaTone(0, 1)).toBe("neutral");
+  });
+
+  it("is good or bad once the value rounds to something non-zero", () => {
+    expect(deltaTone(8, 0)).toBe("good");
+    expect(deltaTone(-8, 0)).toBe("bad");
+    // Interceptions invert: more than projected is bad even though positive.
+    expect(deltaTone(1, 1, true)).toBe("bad");
+    expect(deltaTone(-1, 1, true)).toBe("good");
   });
 });
