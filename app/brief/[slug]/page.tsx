@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Users, Shield } from "lucide-react";
+import { ArrowLeft, Users, Shield, Sparkles } from "lucide-react";
 import { createCachedReadClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
 import { formatEastern } from "@/lib/datetime";
@@ -318,18 +318,30 @@ export default async function BriefArticlePage({ params }: PageProps) {
             )}
           </header>
 
-          {/* The gist */}
+          {/* The gist: the article summary, deliberately the loudest block on the
+              page after the headline.
+
+              Previously this was `border-line bg-surface/50`, which composites to
+              roughly #0B0B13 on the #07070D page: about four values of separation out
+              of 255, so the card was invisible and the summary read as loose body
+              text. It now sits on an opaque elevated surface inside a beacon-gradient
+              hairline (the shared `bg-beacon` purple to cyan token, drawn as a 1px
+              outer layer), with a faint brand wash inside. The body copy is `text-ink`
+              on `surface-elevated`, about 15:1, comfortably past WCAG AAA. */}
           {article.tlDr && (
             <aside
               aria-label="Summary"
-              className="mt-6 rounded-card border border-line bg-surface/50 p-4 sm:p-5"
+              className="mt-6 rounded-card bg-beacon p-px"
             >
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cyan">
-                The gist
-              </p>
-              <p className="text-sm leading-relaxed text-ink sm:text-base">
-                {article.tlDr}
-              </p>
+              <div className="rounded-[11px] bg-surface-elevated bg-gradient-to-br from-brand-purple/10 via-transparent to-brand-cyan/10 p-4 sm:p-5">
+                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cyan">
+                  <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
+                  The gist
+                </p>
+                <p className="text-sm font-medium leading-relaxed text-ink sm:text-base">
+                  {article.tlDr}
+                </p>
+              </div>
             </aside>
           )}
 

@@ -34,6 +34,10 @@ export const RESERVED_ROUTE_SEGMENTS = [
   "guides",
   "join",
   "leagues",
+  // app/llms.txt/route.ts. A folder rather than a file because the route needs a
+  // dot in its path, so unlike sitemap.ts and robots.ts it counts as a top-level
+  // segment and has to be reserved here.
+  "llms.txt",
   "login",
   "my-beacon",
   "players",
