@@ -41,6 +41,7 @@
     "sync:stats:full": "npm run sync:stats && npm run calculate:finishes",
     "sync:ktc:full": "npm run sync:ktc && npm run seed:rankings && npm run calculate:trends",
     "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run sync:dynastyprocess && npm run seed:rankings && npm run calculate:trends",
+    "backfill:article-seo": "tsx --env-file=.env.local scripts/backfill-article-seo.ts",
     "backfill:sleeper-stats": "tsx --env-file=.env.local scripts/backfill-sleeper-stats.ts",
     "backfill:ktc": "tsx --env-file=.env.local scripts/backfill-ktc-history.ts",
     "backfill:ktc:community": "tsx --env-file=.env.local scripts/backfill-ktc-community-archive.ts",
