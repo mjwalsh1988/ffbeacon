@@ -14,6 +14,12 @@ export interface BeaconBriefSettings {
   enabled: boolean;
   discordEnabled: boolean;
   webSearchEnabled: boolean;
+  /**
+   * Cap on web searches the research call may run. The server-side search loop
+   * re-bills the whole accumulated conversation each round, so token cost grows
+   * with the SQUARE of this number. 0 or less means no cap (ai.ts omits max_uses).
+   */
+  researchMaxSearches: number;
   autopublish: boolean;
   contextThreshold: number;
   followupLookbackDays: number;
@@ -48,6 +54,7 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   enabled: true,
   discordEnabled: true,
   webSearchEnabled: true,
+  researchMaxSearches: 3,
   autopublish: true,
   contextThreshold: 1,
   followupLookbackDays: 3,
@@ -112,6 +119,10 @@ export async function loadBeaconBriefSettings(
     webSearchEnabled: asBool(
       map.get("bb_web_search_enabled"),
       d.webSearchEnabled,
+    ),
+    researchMaxSearches: asNum(
+      map.get("bb_research_max_searches"),
+      d.researchMaxSearches,
     ),
     autopublish: asBool(map.get("bb_autopublish"), d.autopublish),
     contextThreshold: asNum(

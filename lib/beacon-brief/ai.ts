@@ -169,12 +169,24 @@ interface ResearchArgs {
   ingestionId?: string | null;
   sourceId?: string | null;
   maxTokens?: number;
+  /**
+   * Cap on how many web searches the server-side loop may run. 0, negative, or
+   * undefined means no cap (max_uses is omitted). See the note on the tool
+   * declaration below for why an unbounded loop is expensive.
+   */
+  maxSearches?: number;
 }
 
 /**
  * Web-search-grounded research pass. Returns the model's free-text notes (or null
  * on failure). Uses the web_search tool; no output_config (citations would 400
  * with structured outputs). Logged to the article_write stage.
+ *
+ * COST: the web_search loop runs server side, and every round re-bills the whole
+ * accumulated conversation (the post plus every prior search result). Input tokens
+ * therefore grow with the SQUARE of the search count, so an uncapped loop is the
+ * single most expensive thing in the pipeline. maxSearches (bb_research_max_searches)
+ * bounds it. Raise it one step at a time and watch token_usage on the Logs page.
  */
 export async function runWebSearchResearch(
   args: ResearchArgs,
@@ -182,11 +194,17 @@ export async function runWebSearchResearch(
   const { admin, model, system, userContent, ingestionId, sourceId } = args;
   const client = new Anthropic();
   const started = Date.now();
+  // Only a positive integer is a valid max_uses; anything else means "no cap".
+  const searchCap =
+    typeof args.maxSearches === "number" && args.maxSearches > 0
+      ? Math.floor(args.maxSearches)
+      : null;
   const request: Json = {
     model,
     system,
     user: userContent,
     tool: "web_search_20260209",
+    max_uses: searchCap,
   };
 
   try {
@@ -195,13 +213,28 @@ export async function runWebSearchResearch(
       max_tokens: args.maxTokens ?? 2048,
       system,
       messages: [{ role: "user", content: userContent }],
-      tools: [{ type: "web_search_20260209", name: "web_search" }],
+      tools: [
+        {
+          type: "web_search_20260209",
+          name: "web_search",
+          ...(searchCap !== null ? { max_uses: searchCap } : {}),
+        },
+      ],
     });
     const text = textOf(res);
+    // stop_reason is the only signal that the loop was cut short rather than
+    // finishing on its own: "pause_turn" means the server-side search loop hit its
+    // iteration limit and these notes are partial. Surfaced so a cap set too low
+    // shows up on the Logs page instead of silently thinning the research.
+    const truncated = res.stop_reason === "pause_turn";
     await logBeaconBrief(admin, {
       stage: "article_write",
-      level: text ? "info" : "warn",
-      message: text ? "research ok" : "empty research response",
+      level: !text || truncated ? "warn" : "info",
+      message: !text
+        ? "empty research response"
+        : truncated
+          ? "research incomplete: search loop hit its limit (partial notes used)"
+          : "research ok",
       ingestionId,
       sourceId,
       requestPayload: request,

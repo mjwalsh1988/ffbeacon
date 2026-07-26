@@ -749,6 +749,7 @@ async function handleArticleWrite(
       userContent: JSON.stringify(compact),
       ingestionId: ingestion.id,
       maxTokens: 2048,
+      maxSearches: settings.researchMaxSearches,
     });
   }
 

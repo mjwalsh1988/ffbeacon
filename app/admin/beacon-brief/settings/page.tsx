@@ -19,6 +19,7 @@ const ORDER = [
   "bb_enabled",
   "bb_discord_enabled",
   "bb_web_search_enabled",
+  "bb_research_max_searches",
   "bb_autopublish",
   "bb_context_threshold",
   "bb_followup_lookback_days",
