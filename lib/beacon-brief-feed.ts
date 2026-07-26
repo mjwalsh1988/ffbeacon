@@ -10,9 +10,22 @@
  * unaffected by this module.
  */
 
-import type { createClient } from "@/lib/supabase/server";
+import type {
+  createCachedReadClient,
+  createClient,
+} from "@/lib/supabase/server";
 
-type ReaderClient = Awaited<ReturnType<typeof createClient>>;
+/**
+ * Either public read client is acceptable here.
+ *
+ * `createClient` is the request-scoped cookie-backed client. `createCachedReadClient`
+ * is the cookie-free equivalent, which statically rendered routes must use: reading
+ * cookies would opt the route into dynamic rendering. Both carry the publishable key,
+ * so RLS is the security boundary either way and only public-read data is reachable.
+ */
+type ReaderClient =
+  | Awaited<ReturnType<typeof createClient>>
+  | ReturnType<typeof createCachedReadClient>;
 
 /** Sentinel used when an entity filter resolves to zero article ids, so the
  * `.in()` clause returns nothing instead of erroring on an empty array. */
@@ -97,7 +110,8 @@ function firstEmbed<T>(value: T | T[] | null | undefined): T | null {
 }
 
 function mapCategory(
-  embed: { slug: string; name: string } | { slug: string; name: string }[] | null,
+  embed:
+    { slug: string; name: string } | { slug: string; name: string }[] | null,
 ): { slug: string; name: string } | null {
   const c = firstEmbed(embed);
   return c && c.slug ? { slug: c.slug, name: c.name } : null;
@@ -113,9 +127,7 @@ type FeedRow = {
   last_updated: string | null;
   tags: string[] | null;
   news_categories:
-    | { slug: string; name: string }
-    | { slug: string; name: string }[]
-    | null;
+    { slug: string; name: string } | { slug: string; name: string }[] | null;
 };
 
 function mapFeedRow(row: FeedRow): FeedArticle {
@@ -196,7 +208,9 @@ export async function articleIdsForPlayer(
     .from("article_players")
     .select("article_id")
     .eq("player_id", playerId);
-  return Array.from(new Set((data ?? []).map((r) => r.article_id).filter(Boolean)));
+  return Array.from(
+    new Set((data ?? []).map((r) => r.article_id).filter(Boolean)),
+  );
 }
 
 /** Article ids that mention a given team. */
@@ -208,13 +222,20 @@ export async function articleIdsForTeam(
     .from("article_teams")
     .select("article_id")
     .eq("team_id", teamId);
-  return Array.from(new Set((data ?? []).map((r) => r.article_id).filter(Boolean)));
+  return Array.from(
+    new Set((data ?? []).map((r) => r.article_id).filter(Boolean)),
+  );
 }
 
 export async function resolveCategory(
   supabase: ReaderClient,
   slug: string,
-): Promise<{ id: string; slug: string; name: string; description: string | null } | null> {
+): Promise<{
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+} | null> {
   const { data } = await supabase
     .from("news_categories")
     .select("id, slug, name, description")
@@ -226,7 +247,13 @@ export async function resolveCategory(
 export async function resolvePlayer(
   supabase: ReaderClient,
   slug: string,
-): Promise<{ id: string; slug: string; name: string; position: string | null; team: string | null } | null> {
+): Promise<{
+  id: string;
+  slug: string;
+  name: string;
+  position: string | null;
+  team: string | null;
+} | null> {
   const { data } = await supabase
     .from("players")
     .select("id, slug, full_name, first_name, last_name, position, team")
@@ -236,7 +263,9 @@ export async function resolvePlayer(
   return {
     id: data.id,
     slug: data.slug,
-    name: data.full_name ?? `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim(),
+    name:
+      data.full_name ??
+      `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim(),
     position: data.position,
     team: data.team,
   };
@@ -286,15 +315,20 @@ export async function loadSidebar(
   const countByCategoryId = new Map<string, number>();
   for (const a of published) {
     if (a.category_id) {
-      countByCategoryId.set(a.category_id, (countByCategoryId.get(a.category_id) ?? 0) + 1);
+      countByCategoryId.set(
+        a.category_id,
+        (countByCategoryId.get(a.category_id) ?? 0) + 1,
+      );
     }
   }
-  const categories: SidebarCategory[] = ((catsRes.data ?? []) as {
-    id: string;
-    slug: string;
-    name: string;
-    description: string | null;
-  }[])
+  const categories: SidebarCategory[] = (
+    (catsRes.data ?? []) as {
+      id: string;
+      slug: string;
+      name: string;
+      description: string | null;
+    }[]
+  )
     .map((c) => ({
       slug: c.slug,
       name: c.name,
@@ -325,22 +359,39 @@ export async function loadSidebar(
 
   const [apRes, atRes] = await Promise.all([
     recentIds.length
-      ? supabase.from("article_players").select("article_id, player_id").in("article_id", recentIds)
-      : Promise.resolve({ data: [] as { article_id: string; player_id: string }[] }),
+      ? supabase
+          .from("article_players")
+          .select("article_id, player_id")
+          .in("article_id", recentIds)
+      : Promise.resolve({
+          data: [] as { article_id: string; player_id: string }[],
+        }),
     recentIds.length
-      ? supabase.from("article_teams").select("article_id, team_id").in("article_id", recentIds)
-      : Promise.resolve({ data: [] as { article_id: string; team_id: string }[] }),
+      ? supabase
+          .from("article_teams")
+          .select("article_id, team_id")
+          .in("article_id", recentIds)
+      : Promise.resolve({
+          data: [] as { article_id: string; team_id: string }[],
+        }),
   ]);
 
   const bestRankByPlayer = new Map<string, number>();
-  for (const r of (apRes.data ?? []) as { article_id: string; player_id: string }[]) {
+  for (const r of (apRes.data ?? []) as {
+    article_id: string;
+    player_id: string;
+  }[]) {
     const rank = rankById.get(r.article_id);
     if (rank === undefined) continue;
     const prev = bestRankByPlayer.get(r.player_id);
-    if (prev === undefined || rank < prev) bestRankByPlayer.set(r.player_id, rank);
+    if (prev === undefined || rank < prev)
+      bestRankByPlayer.set(r.player_id, rank);
   }
   const bestRankByTeam = new Map<string, number>();
-  for (const r of (atRes.data ?? []) as { article_id: string; team_id: string }[]) {
+  for (const r of (atRes.data ?? []) as {
+    article_id: string;
+    team_id: string;
+  }[]) {
     const rank = rankById.get(r.article_id);
     if (rank === undefined) continue;
     const prev = bestRankByTeam.get(r.team_id);
@@ -365,19 +416,24 @@ export async function loadSidebar(
           .in("id", topPlayerIds)
       : Promise.resolve({ data: [] as never[] }),
     topTeamIds.length
-      ? supabase.from("nfl_teams").select("id, abbreviation, name").in("id", topTeamIds)
+      ? supabase
+          .from("nfl_teams")
+          .select("id, abbreviation, name")
+          .in("id", topTeamIds)
       : Promise.resolve({ data: [] as never[] }),
   ]);
 
-  const players: SidebarPlayer[] = ((playersRes.data ?? []) as {
-    id: string;
-    slug: string;
-    full_name: string | null;
-    first_name: string | null;
-    last_name: string | null;
-    position: string | null;
-    team: string | null;
-  }[])
+  const players: SidebarPlayer[] = (
+    (playersRes.data ?? []) as {
+      id: string;
+      slug: string;
+      full_name: string | null;
+      first_name: string | null;
+      last_name: string | null;
+      position: string | null;
+      team: string | null;
+    }[]
+  )
     .map((p) => ({
       id: p.id,
       slug: p.slug,
@@ -385,21 +441,55 @@ export async function loadSidebar(
       position: p.position,
       team: p.team,
     }))
-    .sort((a, b) => (bestRankByPlayer.get(a.id) ?? 0) - (bestRankByPlayer.get(b.id) ?? 0))
+    .sort(
+      (a, b) =>
+        (bestRankByPlayer.get(a.id) ?? 0) - (bestRankByPlayer.get(b.id) ?? 0),
+    )
     .map(({ slug, name, position, team }) => ({ slug, name, position, team }));
 
-  const teams: SidebarTeam[] = ((teamsRes.data ?? []) as {
-    id: string;
-    abbreviation: string;
-    name: string;
-  }[])
-    .sort((a, b) => (bestRankByTeam.get(a.id) ?? 0) - (bestRankByTeam.get(b.id) ?? 0))
+  const teams: SidebarTeam[] = (
+    (teamsRes.data ?? []) as {
+      id: string;
+      abbreviation: string;
+      name: string;
+    }[]
+  )
+    .sort(
+      (a, b) =>
+        (bestRankByTeam.get(a.id) ?? 0) - (bestRankByTeam.get(b.id) ?? 0),
+    )
     .map(({ abbreviation, name }) => ({ abbreviation, name }));
 
   return { categories, tags, players, teams };
 }
 
 /** Load a single published article by slug with its category, players, teams. */
+/**
+ * Every published article slug, for generateStaticParams on /brief/[slug].
+ *
+ * Paged with range() because select() silently truncates at 1000 rows, and the
+ * article count only grows. Ordered newest first so that if a build ever has to cut
+ * the list short, the most-read articles are the ones that got prerendered.
+ */
+export async function publishedArticleSlugs(
+  supabase: ReaderClient,
+): Promise<string[]> {
+  const pageSize = 1000;
+  const slugs: string[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("articles")
+      .select("slug")
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    slugs.push(...data.map((r) => r.slug));
+    if (data.length < pageSize) break;
+  }
+  return slugs;
+}
+
 export async function loadArticle(
   supabase: ReaderClient,
   slug: string,
@@ -426,18 +516,18 @@ export async function loadArticle(
       .eq("article_id", data.id),
   ]);
 
-  const players: ArticlePlayerLink[] = ((apRes.data ?? []) as {
-    players:
-      | {
-          slug: string;
-          full_name: string | null;
-          first_name: string | null;
-          last_name: string | null;
-          position: string | null;
-          team: string | null;
-        }
-      | null;
-  }[])
+  const players: ArticlePlayerLink[] = (
+    (apRes.data ?? []) as {
+      players: {
+        slug: string;
+        full_name: string | null;
+        first_name: string | null;
+        last_name: string | null;
+        position: string | null;
+        team: string | null;
+      } | null;
+    }[]
+  )
     .map((r) => r.players)
     .filter((p): p is NonNullable<typeof p> => Boolean(p?.slug))
     .map((p) => ({
@@ -448,9 +538,11 @@ export async function loadArticle(
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const teams: ArticleTeamLink[] = ((atRes.data ?? []) as {
-    nfl_teams: { abbreviation: string; name: string } | null;
-  }[])
+  const teams: ArticleTeamLink[] = (
+    (atRes.data ?? []) as {
+      nfl_teams: { abbreviation: string; name: string } | null;
+    }[]
+  )
     .map((r) => r.nfl_teams)
     .filter((t): t is NonNullable<typeof t> => Boolean(t?.abbreviation))
     .map((t) => ({ abbreviation: t.abbreviation, name: t.name }))

@@ -29,7 +29,10 @@ const INLINE_MATCHERS: Array<{ name: InlinePattern; re: RegExp }> = [
   { name: "link", re: /\[([^\]]+)\]\(([^)\s]+)\)/ },
   // Bold before italic so `**x**` is not consumed as italic first.
   { name: "bold", re: /\*\*([^*]+?)\*\*|__([^_]+?)__/ },
-  { name: "italic", re: /\*([^*]+?)\*|(?<![A-Za-z0-9])_([^_]+?)_(?![A-Za-z0-9])/ },
+  {
+    name: "italic",
+    re: /\*([^*]+?)\*|(?<![A-Za-z0-9])_([^_]+?)_(?![A-Za-z0-9])/,
+  },
 ];
 
 /** Parse inline Markdown in `text` into React nodes. Recursive so emphasis and
@@ -73,7 +76,9 @@ function parseInline(text: string, key: string): ReactNode[] {
         <a
           key={nodeKey}
           href={href}
-          {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+          {...(external
+            ? { target: "_blank", rel: "noopener noreferrer" }
+            : {})}
           className="font-medium text-brand-cyan underline underline-offset-2 hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           {inner}
@@ -118,6 +123,32 @@ const HEADING_CLASS: Record<number, string> = {
   6: "mt-4 mb-2 text-sm font-semibold uppercase tracking-wide text-ink-muted",
 };
 
+/**
+ * Stable anchor id for a heading, derived from its visible text.
+ *
+ * Gives every section a linkable target, which lets readers deep-link a section and
+ * lets Google surface "jump to section" links for the page. Markdown inline syntax
+ * is stripped first so `## Why **Brissett** held out` and `## Why Brissett held out`
+ * produce the same id. Ids are deduped per render so a repeated heading text cannot
+ * emit a duplicate id (invalid HTML, and it breaks in-page links).
+ */
+function headingId(text: string, used: Set<string>): string | undefined {
+  const base = text
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*|__|[*_]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  if (!base) return undefined;
+  let id = base;
+  let n = 2;
+  while (used.has(id)) id = `${base}-${n++}`;
+  used.add(id);
+  return id;
+}
+
 function isBlockStart(line: string): boolean {
   return (
     line.trim() === "" ||
@@ -129,7 +160,10 @@ function isBlockStart(line: string): boolean {
   );
 }
 
-function parseBlocks(md: string): ReactNode[] {
+function parseBlocks(
+  md: string,
+  usedIds: Set<string> = new Set(),
+): ReactNode[] {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   const out: ReactNode[] = [];
   let i = 0;
@@ -155,9 +189,14 @@ function parseBlocks(md: string): ReactNode[] {
       // stays the only top-level heading on the page.
       const level = rawLevel === 1 ? 2 : Math.min(rawLevel, 6);
       const Tag = `h${level}` as "h2" | "h3" | "h4" | "h5" | "h6";
+      const text = heading[2].trim();
       out.push(
-        <Tag key={`b-${i}`} className={HEADING_CLASS[level]}>
-          {parseInline(heading[2].trim(), `b-${i}`)}
+        <Tag
+          key={`b-${i}`}
+          id={headingId(text, usedIds)}
+          className={`scroll-mt-24 ${HEADING_CLASS[level]}`}
+        >
+          {parseInline(text, `b-${i}`)}
         </Tag>,
       );
       i++;
@@ -175,7 +214,7 @@ function parseBlocks(md: string): ReactNode[] {
           key={`b-${i}`}
           className="my-5 border-l-2 border-brand-purple/60 bg-surface/40 py-2 pl-4 pr-3 text-ink-muted"
         >
-          {parseBlocks(quoteLines.join("\n"))}
+          {parseBlocks(quoteLines.join("\n"), usedIds)}
         </blockquote>,
       );
       continue;
@@ -206,7 +245,10 @@ function parseBlocks(md: string): ReactNode[] {
         i++;
       }
       out.push(
-        <ol key={`b-${i}`} className="my-4 list-decimal space-y-1.5 pl-6 text-ink">
+        <ol
+          key={`b-${i}`}
+          className="my-4 list-decimal space-y-1.5 pl-6 text-ink"
+        >
           {items.map((item, idx) => (
             <li key={idx} className="leading-relaxed marker:text-ink-subtle">
               {parseInline(item, `b-${i}-${idx}`)}

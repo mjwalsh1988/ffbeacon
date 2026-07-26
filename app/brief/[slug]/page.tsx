@@ -1,24 +1,74 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Users, Shield } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createCachedReadClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
 import { formatEastern } from "@/lib/datetime";
-import { loadArticle, loadRelatedArticles } from "@/lib/beacon-brief-feed";
+import {
+  loadArticle,
+  loadRelatedArticles,
+  publishedArticleSlugs,
+} from "@/lib/beacon-brief-feed";
 import { ArticleMarkdown } from "@/components/beacon-brief/article-markdown";
-import { ArticleCard, articleTypeLabel } from "@/components/beacon-brief/article-card";
+import {
+  ArticleCard,
+  articleTypeLabel,
+} from "@/components/beacon-brief/article-card";
 import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { isDiscordMember } from "@/lib/discord-membership";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+/**
+ * Articles are statically rendered and revalidated on a timer.
+ *
+ * Nothing on this page varies per visitor: the content is public, and the closing
+ * Discord CTA now always renders its invite variant rather than checking the viewer's
+ * membership. That check was the only per-request input, and it forced every article
+ * view to render on demand. Prerendering instead serves articles from the edge cache,
+ * which is the single biggest time-to-first-byte win available here and feeds directly
+ * into Core Web Vitals.
+ *
+ * Five minutes is short enough that a revision published by the Beacon Brief worker
+ * surfaces quickly, and long enough that a burst of traffic on a breaking story is
+ * served almost entirely from cache.
+ */
+export const revalidate = 300;
+
+/**
+ * Prerender every published article at build time. Slugs published after the build
+ * are not listed here, but `dynamicParams` defaults to true, so a new article renders
+ * on first request and is cached from then on.
+ */
+export async function generateStaticParams() {
+  const supabase = createCachedReadClient();
+  const slugs = await publishedArticleSlugs(supabase);
+  return slugs.map((slug) => ({ slug }));
+}
+
+/**
+ * Request-scoped memo of the article load.
+ *
+ * Next.js calls generateMetadata and the page component separately for the same
+ * request, and loadArticle runs three queries (article, players, teams). Without
+ * this the render costs six. React cache() collapses them to one load per request,
+ * which cuts time to first byte on every article view. Keyed on the slug only, so
+ * both call sites share the entry (passing a per-call Supabase client would key
+ * them apart and defeat the memo).
+ */
+const getArticle = cache(async (slug: string) => {
+  const supabase = createCachedReadClient();
+  return loadArticle(supabase, slug);
+});
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const article = await loadArticle(supabase, slug);
+  const article = await getArticle(slug);
   if (!article) return { title: "Article not found" };
 
   const canonical = article.canonicalUrl?.trim() || `${SITE.url}/brief/${slug}`;
@@ -29,14 +79,33 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const ogImage = `${SITE.url}/api/og/brief/${slug}`;
 
   return {
-    title: article.title,
+    // `absolute` opts out of the root layout's "%s | FF Beacon" template. The
+    // article prompt targets a 50-60 character headline, which is already at
+    // Google's display limit; appending a 12-character brand suffix would push
+    // every title into truncation. The brand is carried by openGraph.siteName
+    // and the JSON-LD publisher instead.
+    title: { absolute: article.title },
     description,
     alternates: { canonical },
+    // Google needs max-image-preview:large to show a full-size thumbnail in
+    // Discover and news surfaces, and -1 removes the snippet length cap.
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
+    },
     openGraph: {
       title: article.title,
       description,
       url: canonical,
       siteName: SITE.name,
+      locale: "en_US",
       type: "article",
       publishedTime: article.publishedAt ?? undefined,
       modifiedTime: article.lastUpdated ?? undefined,
@@ -56,46 +125,96 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function BriefArticlePage({ params }: PageProps) {
   const { slug } = await params;
-  const supabase = await createClient();
-  const article = await loadArticle(supabase, slug);
+  const article = await getArticle(slug);
   if (!article) notFound();
 
+  const supabase = createCachedReadClient();
   const related = await loadRelatedArticles(supabase, article);
-  // Confirmed Discord members already have the community; point the closing CTA
-  // at the tools instead of the invite.
-  const isMember = await isDiscordMember();
   const canonical = article.canonicalUrl?.trim() || `${SITE.url}/brief/${slug}`;
-  const categoryLabel = article.category?.name ?? articleTypeLabel(article.articleType);
+  const categoryLabel =
+    article.category?.name ?? articleTypeLabel(article.articleType);
   const description =
     article.metaDescription?.trim() || article.tlDr?.trim() || article.title;
 
   // Show an "Updated" line only when the content genuinely changed after
   // publishing (allow a small clock skew between the two timestamps).
-  const publishedMs = article.publishedAt ? new Date(article.publishedAt).getTime() : 0;
-  const updatedMs = article.lastUpdated ? new Date(article.lastUpdated).getTime() : 0;
-  const showUpdated = Boolean(article.lastUpdated) && updatedMs - publishedMs > 60_000;
+  const publishedMs = article.publishedAt
+    ? new Date(article.publishedAt).getTime()
+    : 0;
+  const updatedMs = article.lastUpdated
+    ? new Date(article.lastUpdated).getTime()
+    : 0;
+  const showUpdated =
+    Boolean(article.lastUpdated) && updatedMs - publishedMs > 60_000;
+
+  // Google truncates headlines past 110 characters in news surfaces, so the
+  // schema headline is bounded even if an article title runs long.
+  const schemaHeadline =
+    article.title.length > 110
+      ? `${article.title.slice(0, 107).trimEnd()}...`
+      : article.title;
+  // Rough word count of the rendered prose: strip markdown markers first so
+  // syntax is not counted as words.
+  const wordCount = (article.contentMd ?? "")
+    .replace(/[#*_`>[\]()!-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean).length;
+  // Entities the story is about. Naming them explicitly helps Google connect the
+  // article to the players and teams rather than inferring from prose alone.
+  const about = [
+    ...article.players.map((p) => ({
+      "@type": "Person",
+      name: p.name,
+      url: `${SITE.url}/brief/player/${p.slug}`,
+    })),
+    ...article.teams.map((t) => ({
+      "@type": "SportsTeam",
+      name: t.name,
+      url: `${SITE.url}/brief/team/${t.abbreviation}`,
+    })),
+  ];
 
   const jsonLd = [
     {
       "@context": "https://schema.org",
       "@type": "NewsArticle",
-      headline: article.title,
+      headline: schemaHeadline,
       description,
+      inLanguage: "en-US",
+      isAccessibleForFree: true,
       ...(article.publishedAt ? { datePublished: article.publishedAt } : {}),
       ...(article.lastUpdated ? { dateModified: article.lastUpdated } : {}),
-      author: { "@type": "Organization", name: SITE.name, url: SITE.url },
+      // A named Person author carries more weight than an Organization for news
+      // eligibility, and it points at the real byline page.
+      author: {
+        "@type": "Person",
+        name: SITE.author.name,
+        url: `${SITE.url}${SITE.author.bylineHref}`,
+      },
       publisher: {
         "@type": "Organization",
         name: SITE.name,
+        url: SITE.url,
         logo: {
           "@type": "ImageObject",
           url: `${SITE.url}/img/ff-beacon-logo.png`,
         },
       },
-      image: [`${SITE.url}/api/og/brief/${slug}`],
+      // ImageObject with explicit dimensions, rather than a bare URL, so Google
+      // does not have to fetch the image to learn it qualifies as large.
+      image: [
+        {
+          "@type": "ImageObject",
+          url: `${SITE.url}/api/og/brief/${slug}`,
+          width: 1200,
+          height: 630,
+        },
+      ],
       mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
       ...(article.category ? { articleSection: article.category.name } : {}),
       ...(article.tags.length ? { keywords: article.tags.join(", ") } : {}),
+      ...(wordCount > 0 ? { wordCount } : {}),
+      ...(about.length ? { about } : {}),
       url: canonical,
     },
     {
@@ -103,8 +222,18 @@ export default async function BriefArticlePage({ params }: PageProps) {
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: SITE.url },
-        { "@type": "ListItem", position: 2, name: "The Beacon Brief", item: `${SITE.url}/brief` },
-        { "@type": "ListItem", position: 3, name: article.title, item: canonical },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "The Beacon Brief",
+          item: `${SITE.url}/brief`,
+        },
+        {
+          "@type": "ListItem",
+          position: 3,
+          name: article.title,
+          item: canonical,
+        },
       ],
     },
   ];
@@ -151,7 +280,10 @@ export default async function BriefArticlePage({ params }: PageProps) {
                 </span>
               )}
               {article.publishedAt && (
-                <time dateTime={article.publishedAt} className="text-xs text-ink-subtle">
+                <time
+                  dateTime={article.publishedAt}
+                  className="text-xs text-ink-subtle"
+                >
                   {formatEastern(article.publishedAt)}
                 </time>
               )}
@@ -161,10 +293,27 @@ export default async function BriefArticlePage({ params }: PageProps) {
               {article.title}
             </h1>
 
+            {/* Visible byline linking to the author page. The NewsArticle schema
+                declares a Person author, and Google's news guidance expects that
+                claim to be visible and attributable on the page itself, not only in
+                structured data. rel="author" ties the link to the byline. */}
+            <p className="mt-3 text-xs text-ink-subtle">
+              By{" "}
+              <Link
+                rel="author"
+                href={SITE.author.bylineHref}
+                className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                {SITE.author.name}
+              </Link>
+            </p>
+
             {showUpdated && article.lastUpdated && (
               <p className="mt-2 text-xs text-ink-subtle">
                 Updated{" "}
-                <time dateTime={article.lastUpdated}>{formatEastern(article.lastUpdated)}</time>
+                <time dateTime={article.lastUpdated}>
+                  {formatEastern(article.lastUpdated)}
+                </time>
               </p>
             )}
           </header>
@@ -178,17 +327,25 @@ export default async function BriefArticlePage({ params }: PageProps) {
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cyan">
                 The gist
               </p>
-              <p className="text-sm leading-relaxed text-ink sm:text-base">{article.tlDr}</p>
+              <p className="text-sm leading-relaxed text-ink sm:text-base">
+                {article.tlDr}
+              </p>
             </aside>
           )}
 
           {/* In this story: players + teams */}
           {(article.players.length > 0 || article.teams.length > 0) && (
-            <section aria-label="Players and teams in this story" className="mt-6 space-y-3">
+            <section
+              aria-label="Players and teams in this story"
+              className="mt-6 space-y-3"
+            >
               {article.players.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                    <Users aria-hidden="true" className="h-3.5 w-3.5 text-brand-cyan" />
+                    <Users
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5 text-brand-cyan"
+                    />
                     Players
                   </span>
                   {article.players.map((p) => (
@@ -205,7 +362,10 @@ export default async function BriefArticlePage({ params }: PageProps) {
               {article.teams.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                    <Shield aria-hidden="true" className="h-3.5 w-3.5 text-brand-cyan" />
+                    <Shield
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5 text-brand-cyan"
+                    />
                     Teams
                   </span>
                   {article.teams.map((t) => (
@@ -255,8 +415,14 @@ export default async function BriefArticlePage({ params }: PageProps) {
 
         {/* Related */}
         {related.length > 0 && (
-          <section aria-labelledby="related-heading" className="mt-12 border-t border-line pt-8">
-            <h2 id="related-heading" className="mb-5 text-xl font-semibold tracking-tight text-ink">
+          <section
+            aria-labelledby="related-heading"
+            className="mt-12 border-t border-line pt-8"
+          >
+            <h2
+              id="related-heading"
+              className="mb-5 text-xl font-semibold tracking-tight text-ink"
+            >
               More from {categoryLabel}
             </h2>
             <ul role="list" className="grid gap-5 sm:grid-cols-2">
@@ -280,14 +446,16 @@ export default async function BriefArticlePage({ params }: PageProps) {
         </div>
       </div>
 
+      {/* No isMember prop on purpose. Checking Discord membership reads the request,
+          which would make this page dynamic and lose the static render. The invite
+          variant is the correct default for a page that is mostly reached from search
+          by people who are not in the community yet. Member-aware CTAs still work on
+          the dynamic pages. */}
       <DiscordCtaSection
         eyebrow="React to this story"
         heading="What does this mean for your team? Ask real people."
         body="Bring this story into our Discord and real fantasy managers will help you work out the fantasy impact for your specific roster, free. Curious what else FF Beacon is building? Read about the project."
         className="mt-4 border-t border-line"
-        isMember={isMember}
-        memberHeading="Read the story. Now act on it."
-        memberBody="You're already in the crew, so we'll skip the invite. Take this news into the free FF Beacon tools and turn it into a real roster decision."
       />
     </main>
   );
