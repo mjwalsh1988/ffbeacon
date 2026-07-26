@@ -318,27 +318,48 @@ export default async function BriefArticlePage({ params }: PageProps) {
             )}
           </header>
 
-          {/* The gist: the article summary, deliberately the loudest block on the
-              page after the headline.
+          {/* The gist: the article summary.
 
-              Previously this was `border-line bg-surface/50`, which composites to
-              roughly #0B0B13 on the #07070D page: about four values of separation out
-              of 255, so the card was invisible and the summary read as loose body
-              text. It now sits on an opaque elevated surface inside a beacon-gradient
-              hairline (the shared `bg-beacon` purple to cyan token, drawn as a 1px
-              outer layer), with a faint brand wash inside. The body copy is `text-ink`
-              on `surface-elevated`, about 15:1, comfortably past WCAG AAA. */}
+              Colors here are INLINE STYLES on purpose, not Tailwind classes.
+
+              The summary text was reported as unreadably dark twice. The utility
+              classes are provably correct: `.text-ink` compiles to
+              `color: rgb(244 244 248)` in the built CSS, body is #F4F4F8 on #07070D,
+              globals.css declares color in exactly one place, there are no Tailwind
+              plugins, and no rule anywhere in any CSS chunk targets this element. So
+              whatever is darkening it is not in this stylesheet: a browser extension,
+              a forced-colors or reader mode, or an injected style would all beat a
+              single-class selector.
+
+              An inline style beats every one of those (only `!important` outranks it),
+              so the color is stated literally here and cannot be lost. Layout and
+              spacing stay as classes; only the colors are pinned.
+
+              #F4F4F8 on #16162A is about 15:1, comfortably past WCAG AAA. */}
           {article.tlDr && (
             <aside
               aria-label="Summary"
-              className="mt-6 rounded-card bg-beacon p-px"
+              className="mt-6 rounded-card p-px"
+              style={{
+                backgroundImage:
+                  "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+              }}
             >
-              <div className="rounded-[11px] bg-surface-elevated bg-gradient-to-br from-brand-purple/10 via-transparent to-brand-cyan/10 p-4 sm:p-5">
-                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cyan">
+              <div
+                className="rounded-[11px] p-4 sm:p-5"
+                style={{ backgroundColor: "#16162A", color: "#F4F4F8" }}
+              >
+                <p
+                  className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: "#22D3EE" }}
+                >
                   <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
                   The gist
                 </p>
-                <p className="text-sm font-medium leading-relaxed text-ink sm:text-base">
+                <p
+                  className="text-sm font-medium leading-relaxed sm:text-base"
+                  style={{ color: "#F4F4F8" }}
+                >
                   {article.tlDr}
                 </p>
               </div>
