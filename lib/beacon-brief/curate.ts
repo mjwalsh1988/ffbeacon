@@ -17,6 +17,7 @@ import { logBeaconBrief, runStructuredCall } from "./ai";
 import { loadBeaconBriefSettings } from "./settings";
 import { matchReferences } from "./match";
 import { matchBlockedKeywords, parseBlocklist } from "./keyword-filter";
+import { findFollowupTarget, loadFollowupCandidates } from "./followup";
 import { sendBeaconBriefMatchDigestEmail } from "./email";
 import type {
   BeaconBriefSourceItem,
@@ -60,13 +61,6 @@ const TRIAGE_SCHEMA = {
   additionalProperties: false,
   required: ["critical"],
   properties: { critical: { type: "boolean" } },
-} as const;
-
-const FOLLOWUP_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["matched_article_id"],
-  properties: { matched_article_id: { type: "string" } },
 } as const;
 
 /** Compact, model-facing view of a post (keeps prompts small + stable). */
@@ -151,46 +145,6 @@ async function enqueue(
     status: "pending",
     run_after: runAfterIso ?? new Date().toISOString(),
   });
-}
-
-/** Recent published articles from this source for follow-up linking. */
-async function recentArticlesForSource(
-  admin: Admin,
-  sourceId: string,
-  lookbackDays: number,
-): Promise<
-  Array<{
-    ingestion_id: string;
-    article_id: string;
-    title: string;
-    summary: string;
-  }>
-> {
-  const cutoff = new Date(
-    Date.now() - lookbackDays * 24 * 60 * 60 * 1000,
-  ).toISOString();
-  const { data } = await admin
-    .from("news_ingestions")
-    .select("id, article_id, articles(title, tl_dr)")
-    .eq("source_id", sourceId)
-    .not("article_id", "is", null)
-    .gte("created_at", cutoff)
-    .order("created_at", { ascending: false })
-    .limit(15);
-  if (!data) return [];
-  return data
-    .filter((r) => r.article_id)
-    .map((r) => {
-      const art = (
-        r as { articles?: { title?: string; tl_dr?: string } | null }
-      ).articles;
-      return {
-        ingestion_id: r.id,
-        article_id: r.article_id as string,
-        title: art?.title ?? "",
-        summary: art?.tl_dr ?? "",
-      };
-    });
 }
 
 interface CurationSummary {
@@ -470,36 +424,26 @@ async function processItem(
     }
   }
 
+  // AI follow-up link. This catches a story that develops across poll runs, where
+  // the earlier post already has a written article to point at. It CANNOT catch two
+  // posts about one event in the same poll window: the first post's article does not
+  // exist yet, so it is not a candidate. The worker re-asks just before writing to
+  // close that gap; see ./followup.ts.
   if (!revisionOfIngestionId) {
-    const candidates = await recentArticlesForSource(
+    const candidates = await loadFollowupCandidates(admin, {
+      sourceId: source.id,
+      lookbackDays: settings.followupLookbackDays,
+    });
+    const hit = await findFollowupTarget({
       admin,
-      source.id,
-      settings.followupLookbackDays,
-    );
-    if (candidates.length > 0 && settings.prompts.followupLink) {
-      const matched = await runStructuredCall<{ matched_article_id: string }>({
-        admin,
-        stage: "revision_link",
-        model: settings.modelTriage,
-        system: settings.prompts.followupLink,
-        userContent: JSON.stringify({
-          post: compactItem(item),
-          candidates: candidates.map((c) => ({
-            id: c.article_id,
-            title: c.title,
-            summary: c.summary,
-          })),
-        }),
-        schema: FOLLOWUP_SCHEMA as unknown as Record<string, unknown>,
-        sourceId: source.id,
-        maxTokens: 256,
-      });
-      const id = matched?.matched_article_id?.trim();
-      const hit = id ? candidates.find((c) => c.article_id === id) : undefined;
-      if (hit) {
-        revisionOfIngestionId = hit.ingestion_id;
-        revisionTargetArticleId = hit.article_id;
-      }
+      settings,
+      post: compactItem(item),
+      candidates,
+      sourceId: source.id,
+    });
+    if (hit) {
+      revisionOfIngestionId = hit.ingestion_id;
+      revisionTargetArticleId = hit.article_id;
     }
   }
 

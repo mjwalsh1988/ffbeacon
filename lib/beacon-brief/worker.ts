@@ -17,6 +17,7 @@ import { randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import {
+  deleteWebhookMessage,
   patchWebhookMessage,
   postWebhookMessage,
   type DiscordAttachment,
@@ -27,6 +28,11 @@ import { logBeaconBrief, runStructuredCall, runWebSearchResearch } from "./ai";
 import { loadBeaconBriefSettings, type BeaconBriefSettings } from "./settings";
 import { sendBeaconBriefFailureEmail } from "./email";
 import { handleDeletionCheck } from "./deletion";
+import {
+  findFollowupTarget,
+  loadFollowupCandidates,
+  type FollowupCandidate,
+} from "./followup";
 import type {
   ArticleResult,
   BeaconBriefMedia,
@@ -686,6 +692,215 @@ async function handleDiscordPatch(
   return { ok: true };
 }
 
+/**
+ * Fold a post into an existing article: rewrite the body to absorb the new
+ * information, snapshot a revision, and mark the ingestion revised.
+ *
+ * Shared by the two paths that reach it. `mode: 'rewrite'` jobs, which curation
+ * enqueues when it recognises a follow-up up front, and the late duplicate guard in
+ * the create path below, which catches the same-poll-window case curation is blind
+ * to. Both want identical behaviour, so the logic lives here once.
+ *
+ * `applied: false` means the target article no longer exists (deleted between
+ * enqueue and execution). That is a success for the queue: there is nothing to
+ * rewrite and retrying will not change it.
+ */
+async function applyRewriteToArticle(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+  ingestion: Ingestion,
+  articleId: string,
+  compact: unknown,
+): Promise<{ ok: boolean; error?: string; applied: boolean }> {
+  const { data: article } = await admin
+    .from("articles")
+    .select("id, title, content_md, tl_dr, tags, category_id")
+    .eq("id", articleId)
+    .maybeSingle();
+  if (!article) return { ok: true, applied: false };
+
+  const result = await runStructuredCall<RevisionRewriteResult>({
+    admin,
+    stage: "article_write",
+    model: settings.modelArticle,
+    system: settings.prompts.revisionRewrite,
+    userContent: JSON.stringify({
+      current_article: article,
+      new_post: compact,
+    }),
+    schema: REWRITE_SCHEMA as unknown as Record<string, unknown>,
+    ingestionId: ingestion.id,
+    maxTokens: 4096,
+  });
+  if (!result) return { ok: false, error: "rewrite call failed", applied: false };
+
+  await admin
+    .from("articles")
+    .update({
+      title: result.title,
+      meta_description: result.meta_description,
+      tl_dr: result.tl_dr,
+      content_md: result.body_md,
+      last_updated: new Date().toISOString(),
+    })
+    .eq("id", article.id);
+  await snapshotRevision(
+    admin,
+    article.id,
+    result.title,
+    result.body_md,
+    (article.tags as string[]) ?? [],
+    article.category_id,
+    ingestion.id,
+    result.change_summary,
+  );
+  await admin
+    .from("news_ingestions")
+    .update({ status: "revised", processed_at: new Date().toISOString() })
+    .eq("id", ingestion.id);
+  return { ok: true, applied: true };
+}
+
+/**
+ * Late duplicate guard for a 'create' job.
+ *
+ * Curation already asked whether this post continues a story we cover, and said no.
+ * It can be wrong about that for one specific reason: when a sibling post about the
+ * same event arrived in the same poll window, the sibling's article had not been
+ * written yet, so it was not on the candidate list. By the time this job runs the
+ * sibling's article exists, because queue jobs execute in sequence.
+ *
+ * So ask once more, restricted to articles created after this ingestion row. That is
+ * exactly the set curation could not see. Runs before the research and article calls
+ * so a duplicate costs one cheap triage call instead of two expensive writes.
+ *
+ * Returns the article to fold into, or null to write a new article as planned.
+ */
+async function findLateDuplicateTarget(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+  ingestion: Ingestion,
+  compact: unknown,
+): Promise<FollowupCandidate | null> {
+  if (!ingestion.source_id) return null;
+  const candidates = await loadFollowupCandidates(admin, {
+    sourceId: ingestion.source_id,
+    lookbackDays: settings.followupLookbackDays,
+    excludeIngestionId: ingestion.id,
+    articleCreatedAfter: ingestion.created_at,
+  });
+  if (candidates.length === 0) return null;
+  return findFollowupTarget({
+    admin,
+    settings,
+    post: compact,
+    candidates,
+    sourceId: ingestion.source_id,
+    ingestionId: ingestion.id,
+  });
+}
+
+/**
+ * Keep Discord to one card per story when the late duplicate guard fires.
+ *
+ * Curation always enqueues a discord_post for a new post, and a worker run executes
+ * Discord jobs ahead of article jobs, so by the time the guard discovers the post is a
+ * duplicate its card is usually already in the channel. Leaving it would put the same
+ * news in Discord twice, which is the thing the merged article prevents on the site.
+ *
+ * Three steps, covering both timings:
+ *   1. Cancel the duplicate's discord_post if it has not run yet. Guarded on
+ *      status = 'pending' so a job another run is actively executing is never stolen.
+ *   2. Delete the card if it already posted. deleteWebhookMessage treats an
+ *      already-gone message as success, so this is safe to attempt either way.
+ *   3. Patch the surviving card with the newer content, which is exactly what the
+ *      normal revision path does.
+ *
+ * Never throws and never changes the job outcome. The rewrite has already been applied
+ * and is not idempotent (a retry would add a second revision snapshot), so a Discord
+ * hiccup must not send the article_write job back for another attempt. Anything that
+ * goes wrong here is logged and leaves a visible duplicate card, which is recoverable
+ * by hand; a retried rewrite would not be.
+ */
+async function collapseDuplicateDiscordCard(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+  duplicateIngestionId: string,
+  targetIngestionId: string,
+): Promise<void> {
+  try {
+    const { data: cancelled } = await admin
+      .from("beacon_brief_queue")
+      .update({
+        status: "done",
+        last_error:
+          "cancelled: post folded into an existing story by the late duplicate guard",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("job_type", "discord_post")
+      .eq("status", "pending")
+      .filter("payload->>ingestion_id", "eq", duplicateIngestionId)
+      .select("id");
+    if (cancelled && cancelled.length > 0) {
+      await logBeaconBrief(admin, {
+        stage: "discord_post",
+        level: "info",
+        ingestionId: duplicateIngestionId,
+        message: `cancelled ${cancelled.length} queued Discord post(s): folded into an existing story`,
+      });
+    }
+
+    // Re-read rather than trusting the row loaded earlier: the discord_post for this
+    // ingestion very likely ran during this same worker pass and recorded its id
+    // after that read.
+    const dup = await loadIngestion(admin, duplicateIngestionId);
+    if (dup?.discord_message_id) {
+      const url = await activeWebhookUrl(admin, settings);
+      if (url) {
+        const res = await deleteWebhookMessage(url, dup.discord_message_id);
+        await logBeaconBrief(admin, {
+          stage: "discord_patch",
+          level: res.ok ? "info" : "error",
+          ingestionId: duplicateIngestionId,
+          message: res.ok
+            ? "deleted duplicate Discord card; the story keeps one card"
+            : `failed to delete duplicate Discord card: ${res.error}`,
+          responsePayload: res as unknown as Json,
+        });
+        if (res.ok) {
+          // Clear the id so nothing downstream tries to patch a deleted card.
+          // discord_webhook_id stays set on purpose: it is the sentinel that stops
+          // handleDiscordPost from ever reposting this one.
+          await admin
+            .from("news_ingestions")
+            .update({ discord_message_id: null })
+            .eq("id", duplicateIngestionId);
+        }
+      }
+    }
+
+    // Bring the surviving card up to date with the newer post's content.
+    await admin.from("beacon_brief_queue").insert({
+      job_type: "discord_patch",
+      payload: {
+        ingestion_id: duplicateIngestionId,
+        target_ingestion_id: targetIngestionId,
+      } as unknown as Json,
+      status: "pending",
+      run_after: new Date().toISOString(),
+    });
+  } catch (err) {
+    await logBeaconBrief(admin, {
+      stage: "discord_patch",
+      level: "error",
+      ingestionId: duplicateIngestionId,
+      message: `Discord collapse failed after a duplicate merge; a duplicate card may remain: ${
+        err instanceof Error ? err.message : "unknown error"
+      }`,
+    });
+  }
+}
+
 async function handleArticleWrite(
   admin: Admin,
   job: QueueRow,
@@ -704,56 +919,77 @@ async function handleArticleWrite(
   };
 
   if (payload.mode === "rewrite" && payload.article_id) {
-    const { data: article } = await admin
-      .from("articles")
-      .select("id, title, content_md, tl_dr, tags, category_id")
-      .eq("id", payload.article_id as string)
-      .maybeSingle();
-    if (!article) return { ok: true };
-
-    const result = await runStructuredCall<RevisionRewriteResult>({
+    const r = await applyRewriteToArticle(
       admin,
-      stage: "article_write",
-      model: settings.modelArticle,
-      system: settings.prompts.revisionRewrite,
-      userContent: JSON.stringify({
-        current_article: article,
-        new_post: compact,
-      }),
-      schema: REWRITE_SCHEMA as unknown as Record<string, unknown>,
-      ingestionId: ingestion.id,
-      maxTokens: 4096,
-    });
-    if (!result) return { ok: false, error: "rewrite call failed" };
-
-    await admin
-      .from("articles")
-      .update({
-        title: result.title,
-        meta_description: result.meta_description,
-        tl_dr: result.tl_dr,
-        content_md: result.body_md,
-        last_updated: new Date().toISOString(),
-      })
-      .eq("id", article.id);
-    await snapshotRevision(
-      admin,
-      article.id,
-      result.title,
-      result.body_md,
-      (article.tags as string[]) ?? [],
-      article.category_id,
-      ingestion.id,
-      result.change_summary,
+      settings,
+      ingestion,
+      payload.article_id as string,
+      compact,
     );
-    await admin
-      .from("news_ingestions")
-      .update({ status: "revised", processed_at: new Date().toISOString() })
-      .eq("id", ingestion.id);
-    return { ok: true };
+    return { ok: r.ok, error: r.error };
   }
 
   // mode 'create'
+  const lateTarget = await findLateDuplicateTarget(
+    admin,
+    settings,
+    ingestion,
+    compact,
+  );
+  if (lateTarget) {
+    const r = await applyRewriteToArticle(
+      admin,
+      settings,
+      ingestion,
+      lateTarget.article_id,
+      compact,
+    );
+    if (!r.ok) return { ok: false, error: r.error };
+    if (r.applied) {
+      // Record the merge on the ingestion row so the audit trail shows what
+      // happened, later follow-ups on this story find the surviving article, and
+      // any reference-match moderation opened at curation time can still resolve
+      // against a real article_id.
+      await admin
+        .from("news_ingestions")
+        .update({
+          article_id: lateTarget.article_id,
+          is_revision: true,
+          revision_of_ingestion_id: lateTarget.ingestion_id,
+        })
+        .eq("id", ingestion.id);
+      await admin
+        .from("beacon_brief_moderation")
+        .update({ article_id: lateTarget.article_id })
+        .eq("ingestion_id", ingestion.id)
+        .is("article_id", null)
+        .in("type", ["player_match", "team_match"]);
+      await logBeaconBrief(admin, {
+        stage: "revision_link",
+        level: "info",
+        ingestionId: ingestion.id,
+        message: `late duplicate guard: folded into article ${lateTarget.article_id} ("${lateTarget.title}") instead of writing a second article`,
+      });
+      // One story, one Discord card, matching the one article.
+      await collapseDuplicateDiscordCard(
+        admin,
+        settings,
+        ingestion.id,
+        lateTarget.ingestion_id,
+      );
+      return { ok: true };
+    }
+    // The target was deleted between the match and the rewrite. Fall through and
+    // write the article we were originally going to write, rather than dropping
+    // the post because the thing we meant to merge into no longer exists.
+    await logBeaconBrief(admin, {
+      stage: "revision_link",
+      level: "warn",
+      ingestionId: ingestion.id,
+      message: `late duplicate guard matched article ${lateTarget.article_id} but it no longer exists; writing a new article instead`,
+    });
+  }
+
   let researchNotes: string | null = null;
   if (settings.webSearchEnabled && settings.prompts.articleResearch) {
     researchNotes = await runWebSearchResearch({
