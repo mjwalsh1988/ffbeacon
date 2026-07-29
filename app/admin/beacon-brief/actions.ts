@@ -11,6 +11,10 @@ import {
   dismissReferenceMatch,
   resolveReferenceMatch,
 } from "@/lib/beacon-brief/match-resolution";
+import {
+  retryFailedTask,
+  skipFailedTask,
+} from "@/lib/beacon-brief/failed-task-resolution";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 const fail = (error: string): ActionResult => ({ ok: false, error });
@@ -505,6 +509,36 @@ export async function dismissMatch(
     await dismissReferenceMatch(admin, moderationId, userId);
   } catch (err) {
     return fail(err instanceof Error ? err.message : "dismiss failed");
+  }
+  revalidatePath(`${BB}/moderation`);
+  return { ok: true };
+}
+
+/** Retry a failed_task: resets its one queue job back to pending. */
+export async function retryModerationTask(
+  moderationId: string,
+): Promise<ActionResult> {
+  const { userId } = await requireAdmin(`${BB}/moderation`);
+  const admin = createAdminClient();
+  try {
+    await retryFailedTask(admin, moderationId, userId);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : "retry failed");
+  }
+  revalidatePath(`${BB}/moderation`);
+  return { ok: true };
+}
+
+/** Skip a failed_task: the job stays failed; the row closes with no retry. */
+export async function skipModerationTask(
+  moderationId: string,
+): Promise<ActionResult> {
+  const { userId } = await requireAdmin(`${BB}/moderation`);
+  const admin = createAdminClient();
+  try {
+    await skipFailedTask(admin, moderationId, userId);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : "skip failed");
   }
   revalidatePath(`${BB}/moderation`);
   return { ok: true };

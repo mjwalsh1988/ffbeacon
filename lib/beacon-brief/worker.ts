@@ -382,8 +382,8 @@ async function failOrRetry(
     // A failed article_write means the article is never written, so its pending
     // reference-match moderation rows can never be resolved (they need the
     // article_id). Close them so they leave the queue instead of stranding.
+    const payload = job.payload as unknown as QueueJobPayload;
     if (job.job_type === "article_write") {
-      const payload = job.payload as unknown as QueueJobPayload;
       if (payload?.ingestion_id) {
         await admin
           .from("beacon_brief_moderation")
@@ -394,6 +394,20 @@ async function failOrRetry(
           .in("type", ["player_match", "team_match"]);
       }
     }
+    // Surface the permanently-failed job in the admin Moderation queue so it can
+    // be retried (resets this one job to pending) or skipped (leaves it failed,
+    // closes this row). Nothing else about the pipeline run is touched.
+    await admin.from("beacon_brief_moderation").insert({
+      queue_job_id: job.id,
+      ingestion_id: payload?.ingestion_id ?? null,
+      type: "failed_task",
+      status: "pending",
+      detail: {
+        job_type: job.job_type,
+        error: errorMsg,
+        attempts,
+      } as unknown as Json,
+    });
     await sendBeaconBriefFailureEmail({
       jobType: job.job_type,
       jobId: job.id,

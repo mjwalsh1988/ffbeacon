@@ -6,7 +6,9 @@ import {
   dismissMatch,
   rejectModeration,
   resolveMatch,
+  retryModerationTask,
   searchPlayers,
+  skipModerationTask,
   type PlayerOption,
 } from "@/app/admin/beacon-brief/actions";
 import { formatEastern } from "@/lib/datetime";
@@ -43,7 +45,19 @@ export interface MatchItem {
   post: IngestedPost | null;
 }
 
-export type ModerationItem = DeletionItem | MatchItem;
+export interface FailedTaskItem {
+  type: "failed_task";
+  id: string;
+  created_at: string;
+  jobType: string;
+  error: string | null;
+  attempts: number | null;
+  articleTitle: string | null;
+  articleSlug: string | null;
+  post: IngestedPost | null;
+}
+
+export type ModerationItem = DeletionItem | MatchItem | FailedTaskItem;
 
 export interface TeamOption {
   id: string;
@@ -388,6 +402,90 @@ function MatchResolver({
   );
 }
 
+const JOB_TYPE_LABELS: Record<string, string> = {
+  discord_post: "Post to Discord",
+  discord_patch: "Update the Discord post",
+  article_write: "Write the article",
+  deletion_check: "Check whether the source post was deleted",
+};
+
+function jobTypeLabel(jobType: string): string {
+  return JOB_TYPE_LABELS[jobType] ?? jobType;
+}
+
+function FailedTaskRow({
+  item,
+  pending,
+  run,
+}: {
+  item: FailedTaskItem;
+  pending: boolean;
+  run: RunFn;
+}) {
+  return (
+    <>
+      <p className="font-medium text-ink">
+        Failed task: {jobTypeLabel(item.jobType)}
+      </p>
+      {item.articleTitle && (
+        <p className="mt-1 text-xs text-ink-subtle">
+          Article: {item.articleTitle}
+          {item.articleSlug ? (
+            <>
+              {" "}
+              <span className="font-mono">{item.articleSlug}</span>
+            </>
+          ) : null}{" "}
+          <a
+            href="/admin/beacon-brief/articles"
+            className="ml-1 font-semibold text-brand-cyan underline"
+          >
+            Open in Articles
+          </a>
+        </p>
+      )}
+      <p className="mt-1 text-sm text-ink-muted">
+        This task failed on every retry attempt
+        {item.attempts !== null ? ` (${item.attempts} attempts)` : ""}. Retry
+        sends only this task back to the queue; it does not repeat any part of
+        the pipeline that already succeeded (for example, a Discord post that
+        already went out will not be posted again). Skip leaves it failed and
+        removes it from this list.
+      </p>
+      {item.error && (
+        <p className="mt-1 whitespace-pre-wrap text-xs text-signal-danger">
+          {item.error}
+        </p>
+      )}
+      <p className="mt-1 text-xs text-ink-subtle">
+        Failed {formatEastern(item.created_at)}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={pending}
+          className={btnClass}
+          onClick={() =>
+            run(() => retryModerationTask(item.id), "Task re-queued.")
+          }
+        >
+          Retry
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          className={`${btnClass} hover:border-signal-danger`}
+          onClick={() =>
+            run(() => skipModerationTask(item.id), "Task skipped.")
+          }
+        >
+          Skip / Ignore
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function ModerationManager({
   items,
   teams,
@@ -442,6 +540,8 @@ export function ModerationManager({
             <PostContext post={m.post} />
             {m.type === "deletion" ? (
               <DeletionRow item={m} pending={pending} run={run} />
+            ) : m.type === "failed_task" ? (
+              <FailedTaskRow item={m} pending={pending} run={run} />
             ) : (
               <MatchResolver
                 item={m}

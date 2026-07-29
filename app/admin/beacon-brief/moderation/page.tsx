@@ -101,6 +101,25 @@ export default async function BeaconBriefModerationPage() {
       };
     }
 
+    if (m.type === "failed_task") {
+      const detail = m.detail as {
+        job_type?: string;
+        error?: string;
+        attempts?: number;
+      } | null;
+      return {
+        type: "failed_task",
+        id: m.id,
+        created_at: m.created_at,
+        jobType: detail?.job_type ?? "unknown",
+        error: detail?.error ?? null,
+        attempts: typeof detail?.attempts === "number" ? detail.attempts : null,
+        articleTitle,
+        articleSlug,
+        post,
+      };
+    }
+
     const detail = m.detail as { source_external_id?: string } | null;
     return {
       type: "deletion",
@@ -120,7 +139,7 @@ export default async function BeaconBriefModerationPage() {
   return (
     <BeaconBriefPageShell
       title="Moderation"
-      description="Two kinds of review land here, and nothing is auto-applied. Deleted source posts wait for you to retract or keep the article. Player and team names the curator could not confidently match wait for you to pick the right one (or dismiss) so news shows on the correct profile."
+      description="Three kinds of review land here, and nothing is auto-applied. Deleted source posts wait for you to retract or keep the article. Player and team names the curator could not confidently match wait for you to pick the right one (or dismiss) so news shows on the correct profile. Tasks that failed after every retry wait for you to retry them or skip them."
     >
       <ModerationManager items={items} teams={teams} />
     </BeaconBriefPageShell>

@@ -31,12 +31,12 @@ export interface BeaconBriefFailure {
 export async function sendBeaconBriefFailureEmail(
   failure: BeaconBriefFailure,
 ): Promise<void> {
-  const logsUrl = `${EMAIL_SITE_URL}/admin/beacon-brief/logs`;
+  const moderationUrl = `${EMAIL_SITE_URL}/admin/beacon-brief/moderation`;
 
   const innerHtml = [
     emailHeading("A Beacon Brief job failed"),
     emailParagraph(
-      "A Beacon Brief queue job hit its maximum retry attempts and was marked failed. Details below. Log in to inspect the full event log and decide what to do next.",
+      "A Beacon Brief queue job hit its maximum retry attempts and was marked failed. Details below. It now waits in the Moderation queue, where you can retry it or skip it.",
     ),
     emailQuoteCard([
       { label: "Job type", value: failure.jobType },
@@ -44,7 +44,7 @@ export async function sendBeaconBriefFailureEmail(
       { label: "Attempts", value: String(failure.attempts) },
       { label: "Error", value: failure.error.slice(0, 400) },
     ]),
-    emailButton("Inspect in admin", logsUrl),
+    emailButton("Retry or skip in Moderation", moderationUrl),
   ].join("");
 
   const textBody = [
@@ -55,7 +55,7 @@ export async function sendBeaconBriefFailureEmail(
     `Attempts: ${failure.attempts}`,
     `Error: ${failure.error}`,
     "",
-    `Inspect: ${logsUrl}`,
+    `Retry or skip: ${moderationUrl}`,
   ].join("\n");
 
   const { html, text } = buildBrandedEmail({
