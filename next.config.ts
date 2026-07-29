@@ -64,6 +64,44 @@ const nextConfig: NextConfig = {
         destination: "/:handle",
         permanent: true,
       },
+      // Four sets of Beacon Brief duplicates were merged into one canonical
+      // article each (migration 0151). Each pair covered the identical news
+      // event and published seconds apart, because the follow-up matcher in
+      // lib/beacon-brief/curate.ts cannot see a sibling article that has not
+      // finished writing yet when both source posts arrive in one poll window.
+      //
+      // The merged article carries every fact from both, so the retired slug is
+      // a permanent move rather than a deletion. These belong in the routing
+      // layer for the same reason as the /u/:handle redirects above: they emit a
+      // real permanent 3xx before any render. Note that `permanent: true` sends
+      // 308, which Google treats the same as a 301.
+      //
+      // The retired rows are status 'archived', so they are already out of the
+      // sitemap and the public feed. The redirect is what preserves any link
+      // equity and any external link that already points at the old URL.
+      {
+        source: "/brief/jacoby-brissett-new-deal-cardinals-2026-starter",
+        destination: "/brief/jacoby-brissett-cardinals-reworked-contract-2026",
+        permanent: true,
+      },
+      {
+        source: "/brief/nfl-suspends-cardinals-ryan-gold-gambling",
+        destination:
+          "/brief/cardinals-ryan-gold-suspended-indefinitely-gambling-policy",
+        permanent: true,
+      },
+      {
+        source:
+          "/brief/kyle-shanahan-car-accident-chris-foerster-49ers-training-camp",
+        destination:
+          "/brief/kyle-shanahan-car-accident-limited-49ers-training-camp-2026",
+        permanent: true,
+      },
+      {
+        source: "/brief/geno-smith-case-inactive-no-charges",
+        destination: "/brief/geno-smith-battery-investigation-closed-no-charges",
+        permanent: true,
+      },
       // Signal Scout's leaderboards moved off their own route and into a
       // sidebar on the game page itself, so the standalone page is gone. Old
       // bookmarks and any indexed links land on the game page, which now
