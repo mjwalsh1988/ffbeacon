@@ -21,6 +21,7 @@ import { HowItWorks } from "./how-it-works";
 import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/games/signal-scout" },
   title: "Signal Scout",
   description:
     "Decode the profile. Find the player. A daily fantasy football guessing game: burn hints to reveal clues about a hidden NFL player before the signal runs out.",

@@ -57,7 +57,18 @@ export async function generateMetadata({
     }
   }
 
-  return { title, description };
+  // Canonical is always the bare tool page, never the ?a=&b= comparison.
+  //
+  // The title and description above stay comparison-specific on purpose: they are
+  // what a shared link previews as. But the comparison space is every ordered pair
+  // of ranked players, which is hundreds of thousands of URLs that are all the same
+  // tool with different inputs. Pointing them at the bare page consolidates that
+  // whole space into one indexable URL instead of inviting Google to crawl it.
+  return {
+    title,
+    description,
+    alternates: { canonical: "/tools/beacon-breakdown" },
+  };
 }
 
 export default async function BeaconBreakdownPage({

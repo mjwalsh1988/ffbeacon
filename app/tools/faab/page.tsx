@@ -16,6 +16,7 @@ import { HeroAmbience } from "@/components/hero-ambience";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/tools/faab" },
   title: "FAAB Calculator",
   description:
     "Recommend a confident waiver wire bid based on market value, league budget, and roster need.",

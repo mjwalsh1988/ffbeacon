@@ -20,6 +20,7 @@ import { isDiscordMember } from "@/lib/discord-membership";
 import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/author/michael" },
   title: "Michael, founder of FF Beacon",
   description:
     "Michael founded FF Beacon to bring accessibility-first fantasy football tools and analytics to everyone, especially players using screen readers.",

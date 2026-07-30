@@ -15,6 +15,7 @@ import { HeroAmbience } from "@/components/hero-ambience";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/tools/signal-check" },
   title: "Signal Check Trade Analyzer",
   description:
     "Build a fantasy football trade and get the Beacon Verdict: who wins, by how much, and why, powered by FF Beacon Values.",

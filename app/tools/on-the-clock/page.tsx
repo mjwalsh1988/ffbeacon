@@ -25,6 +25,7 @@ import { isDiscordMember } from "@/lib/discord-membership";
 import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/tools/on-the-clock" },
   title: "On The Clock",
   description:
     "A Sleeper-connected live draft helper. Strip drafted players from the pool and surface the best remaining FF Beacon value for your league format, by eye or by ear.",

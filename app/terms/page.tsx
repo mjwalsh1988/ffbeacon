@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/terms" },
   title: "Terms of Service",
   description:
     "The rules and expectations for using FF Beacon — what you can do, what we expect, and how the service is provided.",

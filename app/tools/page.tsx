@@ -19,6 +19,7 @@ import { HeroAmbience } from "@/components/hero-ambience";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/tools" },
   title: "Fantasy Football Tools",
   description:
     "Sleeper league sync, live draft help, trade grades, player comparisons, and a FAAB calculator. Accessible fantasy football tools for redraft and dynasty managers.",

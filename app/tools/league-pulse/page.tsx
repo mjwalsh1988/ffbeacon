@@ -14,6 +14,7 @@ import { HeroAmbience } from "@/components/hero-ambience";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/tools/league-pulse" },
   title: "Sleeper League Pulse",
   description: "View every Sleeper league roster you own in one accessible place.",
 };

@@ -4,6 +4,7 @@ import { Radar, Sparkles, ArrowRight, type LucideIcon } from "lucide-react";
 import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/games" },
   title: "Fantasy Football Games",
   description:
     "Free, accessible fantasy football games built on real player data. Play Signal Scout, our hidden-player guessing game, with more games on the way.",

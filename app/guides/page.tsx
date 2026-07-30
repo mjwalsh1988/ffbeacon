@@ -11,6 +11,7 @@ import { isDiscordMember } from "@/lib/discord-membership";
 import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/guides" },
   title: "Fantasy Football Guides",
   description:
     "Plain-English guides to fantasy analytics, dynasty strategy, and accessible play. Long-form explainers built so any reader can keep up.",

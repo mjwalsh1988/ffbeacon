@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/privacy" },
   title: "Privacy Policy",
   description:
     "What FF Beacon collects, why, who we share it with, and how to delete it.",

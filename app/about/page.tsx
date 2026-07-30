@@ -17,6 +17,7 @@ import { isDiscordMember } from "@/lib/discord-membership";
 import { HeroAmbience } from "@/components/hero-ambience";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/about" },
   title: "About FF Beacon",
   description:
     "FF Beacon is fantasy football built accessibility-first, for casual fans and screen reader users alike.",
