@@ -86,7 +86,16 @@ export async function generateMetadata({
     // and the JSON-LD publisher instead.
     title: { absolute: article.title },
     description,
-    alternates: { canonical },
+    alternates: {
+      canonical,
+      // Feed autodiscovery, same as the Brief index. An article page is the most
+      // likely URL someone pastes into a reader.
+      types: {
+        "application/rss+xml": [
+          { url: "/brief/rss.xml", title: "The Beacon Brief" },
+        ],
+      },
+    },
     // Google needs max-image-preview:large to show a full-size thumbnail in
     // Discover and news surfaces, and -1 removes the snippet length cap.
     robots: {
@@ -162,10 +171,13 @@ export default async function BriefArticlePage({ params }: PageProps) {
   // Entities the story is about. Naming them explicitly helps Google connect the
   // article to the players and teams rather than inferring from prose alone.
   const about = [
+    // Person url points at the player profile, the canonical page for that entity on
+    // this site, matching where the visible player pills now link. Teams still point
+    // at the Brief's team archive because there is no team profile page yet.
     ...article.players.map((p) => ({
       "@type": "Person",
       name: p.name,
-      url: `${SITE.url}/brief/player/${p.slug}`,
+      url: `${SITE.url}/players/${p.slug}`,
     })),
     ...article.teams.map((t) => ({
       "@type": "SportsTeam",
@@ -372,6 +384,20 @@ export default async function BriefArticlePage({ params }: PageProps) {
               aria-label="Players and teams in this story"
               className="mt-6 space-y-3"
             >
+              {/* Player pills point at the full player profile, NOT at
+                  /brief/player/{slug}.
+
+                  The Brief's per-player archive sets robots noindex, so every one of
+                  these links used to hand Google a destination it had been told to
+                  ignore, while /players/{slug} (values across every source and
+                  format, trends, stats, projections, and its own Beacon Brief news
+                  tab) received no internal links from the article library at all.
+                  Internal links are how relevance moves around a site, and these
+                  were pouring it into a dead end.
+
+                  Nothing is lost for the reader: the profile carries that player's
+                  news on its Beacon Brief tab, alongside the value data the archive
+                  page never had. */}
               {article.players.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
@@ -384,7 +410,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
                   {article.players.map((p) => (
                     <Link
                       key={p.slug}
-                      href={`/brief/player/${p.slug}`}
+                      href={`/players/${p.slug}`}
                       className="inline-flex items-center rounded-full border border-line bg-base px-2.5 py-1 text-xs text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                     >
                       {p.name}

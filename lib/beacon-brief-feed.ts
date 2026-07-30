@@ -31,8 +31,20 @@ type ReaderClient =
  * `.in()` clause returns nothing instead of erroring on an empty array. */
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
 
-/** Default number of article summaries per feed page. */
-export const BRIEF_PAGE_SIZE = 9;
+/**
+ * Default number of article summaries per feed page.
+ *
+ * Raised from 9 to cut crawl depth. At 9 per page, with prev/next as the only
+ * pagination, the oldest of ~110 published articles sat 13 hops from /brief, and a URL
+ * that deep is effectively sitemap-only as far as Google is concerned. That is the
+ * textbook cause of "Discovered - currently not indexed", which is where most of the
+ * library was sitting.
+ *
+ * 24 puts the whole library inside 5 pages, and with the numbered page links added to
+ * components/beacon-brief/brief-pagination.tsx no article is more than 2 clicks from
+ * /brief. Also a clean multiple of the 2-across and 3-across card grids.
+ */
+export const BRIEF_PAGE_SIZE = 24;
 
 /** How many recent published articles we scan to build the sidebar's popular
  * tags and "recently covered" player/team lists. Covers the full library today

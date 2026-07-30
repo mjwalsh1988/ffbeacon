@@ -123,17 +123,32 @@ const FEATURED_TOOLS: FeaturedTool[] = [
   },
 ];
 
+/**
+ * How many articles the homepage links, and how many of those get a full card.
+ *
+ * The remainder render as a headline list beside the cards (see ArticlesSection). The
+ * count is the lever on crawl depth: every article listed here is one click from the
+ * homepage instead of several pagination hops deep.
+ */
+const HOMEPAGE_ARTICLE_COUNT = 25;
+const HOMEPAGE_FEATURED_COUNT = 4;
+
 export default async function HomePage() {
   const supabase = await createClient();
 
   const [{ data: articles }, { data: formats }, { data: sources }] =
     await Promise.all([
+      // 25, not 4. The homepage is the strongest internal link source on the site,
+      // and it used to pass link equity to only 4 articles while the other ~106 sat
+      // behind pagination. The section below features the newest 4 as cards and lists
+      // the rest as headlines, so ~25 articles are one click from the homepage
+      // without the section turning into a wall.
       supabase
         .from("articles")
         .select("slug, title, tl_dr, article_type, published_at")
         .eq("status", "published")
         .order("published_at", { ascending: false })
-        .limit(4),
+        .limit(HOMEPAGE_ARTICLE_COUNT),
       supabase
         .from("format_configs")
         .select("slug, display_name, league_type, scoring_type, is_superflex, te_premium_bonus")
@@ -744,8 +759,12 @@ function SourcesFormatsSection({
         >
           {formats.map((format) => (
             <li key={format.slug}>
+              {/* Links at the format's own page, not /rankings?format=. The path
+                  is the indexable URL for this format; the query param version
+                  canonicalizes away, so linking it would spend the homepage's link
+                  equity on a URL that consolidates elsewhere. */}
               <Link
-                href={`/rankings?format=${format.slug}`}
+                href={`/rankings/${format.slug}`}
                 className="group flex h-full flex-col rounded-card border border-line bg-surface p-4 transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <span className="flex items-center justify-between gap-2">
@@ -917,7 +936,25 @@ function formatArticleDate(iso: string): string {
   });
 }
 
+/**
+ * Latest from the Beacon Brief: 4 featured cards beside a headline list.
+ *
+ * Two jobs at once. For a reader, the cards give the newest stories room to sell
+ * themselves while the list makes the rest scannable at a glance. For crawlers, the
+ * homepage now links ~25 articles instead of 4, which is the cheapest available fix
+ * for the crawl depth problem: with prev/next-only pagination at 9 per page, the
+ * oldest article sat 13 hops from /brief and Google left most of the library
+ * unindexed as "Discovered - currently not indexed".
+ *
+ * The list is deliberately plain anchors carrying the full article title as their
+ * visible text. Anchor text is a relevance signal, and "Read more" would waste it.
+ * Both columns render at every breakpoint (stacked on mobile, side by side from lg),
+ * so no headline is hidden from a phone.
+ */
 function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
+  const featured = articles.slice(0, HOMEPAGE_FEATURED_COUNT);
+  const headlines = articles.slice(HOMEPAGE_FEATURED_COUNT);
+
   return (
     <section
       aria-labelledby="articles-heading"
@@ -956,13 +993,52 @@ function ArticlesSection({ articles }: { articles: ArticleRow[] }) {
             </p>
           </div>
         ) : (
-          <ul className="mt-10 grid gap-5 md:grid-cols-2" role="list">
-            {articles.map((article) => (
-              <li key={article.slug}>
-                <ArticleCard article={article} />
-              </li>
-            ))}
-          </ul>
+          <div className="mt-10 grid items-start gap-8 lg:grid-cols-2 lg:gap-10">
+            <div>
+              <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                Latest coverage
+              </h3>
+              <ul className="grid gap-5 sm:grid-cols-2" role="list">
+                {featured.map((article) => (
+                  <li key={article.slug}>
+                    <ArticleCard article={article} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {headlines.length > 0 && (
+              <div>
+                <h3
+                  id="more-headlines-heading"
+                  className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+                >
+                  More headlines
+                </h3>
+                <ul
+                  aria-labelledby="more-headlines-heading"
+                  role="list"
+                  className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface"
+                >
+                  {headlines.map((article) => (
+                    <li key={article.slug}>
+                      <Link
+                        href={`/brief/${article.slug}`}
+                        className="flex min-h-11 items-baseline justify-between gap-4 px-4 py-3 text-sm text-ink-muted transition-colors hover:bg-base hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                      >
+                        <span className="font-medium">{article.title}</span>
+                        {article.published_at && (
+                          <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-ink-subtle">
+                            {formatArticleDate(article.published_at)}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </section>
