@@ -22,7 +22,16 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   return {
     title: TITLE,
     description: DESCRIPTION,
-    alternates: { canonical },
+    alternates: {
+      canonical,
+      // Feed autodiscovery: renders <link rel="alternate" type="application/rss+xml">,
+      // which is how a reader finds the feed when someone pastes the page URL into it.
+      types: {
+        "application/rss+xml": [
+          { url: "/brief/rss.xml", title: "The Beacon Brief" },
+        ],
+      },
+    },
     openGraph: {
       title: TITLE,
       description: DESCRIPTION,

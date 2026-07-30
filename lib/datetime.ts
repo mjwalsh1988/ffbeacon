@@ -42,6 +42,50 @@ export function formatEasternDate(iso: string | null | undefined): string {
   }).format(d);
 }
 
+/**
+ * RFC 822 date for RSS `pubDate` and `lastBuildDate`, in America/New_York.
+ *
+ * Example: "Wed, 29 Jul 2026 18:13:23 -0400".
+ *
+ * RSS 2.0 requires RFC 822, so this cannot use the Intl formats above. It still
+ * expresses the site's zone rather than GMT: the numeric offset is valid RFC 822,
+ * every feed reader converts it correctly, and it keeps the site's one display zone
+ * consistent instead of introducing a second one. The offset shifts with daylight
+ * saving on its own, so nothing is hardcoded.
+ *
+ * Returns null for a missing or unparseable input, so callers can omit the element
+ * rather than emit an invalid date that would fail feed validation.
+ */
+export function formatRfc822Eastern(
+  iso: string | null | undefined,
+): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SITE_TIME_ZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "longOffset",
+  }).formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+
+  // longOffset yields "GMT-04:00"; RFC 822 wants "-0400".
+  const offset = get("timeZoneName").replace("GMT", "").replace(":", "");
+  // Hour can come back as "24" at midnight under hour12: false in some runtimes.
+  const hour = get("hour") === "24" ? "00" : get("hour");
+
+  return `${get("weekday")}, ${get("day")} ${get("month")} ${get("year")} ${hour}:${get("minute")}:${get("second")} ${offset || "+0000"}`;
+}
+
 /** "3 hours ago", "in 5 minutes", "yesterday", relative to nowMs. */
 export function formatRelative(
   iso: string | null | undefined,
