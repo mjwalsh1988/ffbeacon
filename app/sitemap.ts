@@ -153,6 +153,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { data: categories },
     { data: articleTeams },
     { data: teams },
+    { data: rankingFormats },
     { data: latestRanking },
   ] = await Promise.all([
     // Only live Signal profiles (published + public + not hidden) are indexable.
@@ -174,6 +175,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     supabase.from("news_categories").select("id, slug").eq("is_active", true),
     supabase.from("article_teams").select("article_id, team_id"),
     supabase.from("nfl_teams").select("id, abbreviation"),
+    supabase
+      .from("format_configs")
+      .select("slug")
+      .eq("is_active", true)
+      .order("display_order"),
     // One timestamp for the whole ranked set. Values are regenerated in batches, so
     // the newest generated_at is when a player profile's numbers last moved.
     supabase
@@ -213,6 +219,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority,
     })),
   ];
+
+  // Per-format rankings pages. Each one has its own h1, title, and meta description
+  // (see lib/rankings-formats.ts), which is what makes them distinct pages rather than
+  // the near-duplicate `?format=` views they replaced. They share the rankings batch
+  // timestamp because they are all rebuilt from the same nightly data.
+  for (const format of rankingFormats ?? []) {
+    entries.push({
+      url: `${SITE.url}/rankings/${format.slug}`,
+      lastModified: rankingsUpdatedAt,
+      priority: 0.8,
+    });
+  }
 
   for (const profile of profiles ?? []) {
     entries.push({
