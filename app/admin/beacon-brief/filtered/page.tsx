@@ -63,6 +63,13 @@ function matchedTermsOf(detail: unknown): string[] {
   return [];
 }
 
+/** Read one field out of the filter_detail jsonb the relevance gate writes. */
+function detailField(detail: unknown, key: string): unknown {
+  return detail && typeof detail === "object"
+    ? (detail as Record<string, unknown>)[key]
+    : undefined;
+}
+
 function suggestedTitleOf(aiResult: unknown): string | null {
   if (
     aiResult &&
@@ -87,19 +94,37 @@ export default async function BeaconBriefFilteredPage() {
     .order("created_at", { ascending: false })
     .limit(500);
 
-  const items: FilteredItem[] = (data ?? []).map((row) => ({
-    id: row.id,
-    created_at: row.created_at,
-    reason: row.filter_reason === "keyword" ? "keyword" : "ai_non_football",
-    matchedTerms: matchedTermsOf(row.filter_detail),
-    suggestedTitle: suggestedTitleOf(row.ai_result),
-    post: toIngestedPost(row),
-  }));
+  const items: FilteredItem[] = (data ?? []).map((row) => {
+    // Rows written before migration 0153 carry only the two original reasons, so
+    // an unrecognized value falls back to the non-football label rather than
+    // rendering an empty one.
+    const reason: FilteredItem["reason"] =
+      row.filter_reason === "keyword"
+        ? "keyword"
+        : row.filter_reason === "ai_low_relevance"
+          ? "ai_low_relevance"
+          : "ai_non_football";
+    const tier = detailField(row.filter_detail, "relevance_tier");
+    const why = detailField(row.filter_detail, "reason");
+    return {
+      id: row.id,
+      created_at: row.created_at,
+      reason,
+      matchedTerms: matchedTermsOf(row.filter_detail),
+      suggestedTitle: suggestedTitleOf(row.ai_result),
+      relevanceTier: typeof tier === "number" ? tier : null,
+      relevanceReason:
+        typeof why === "string" && why.trim() ? why.trim() : null,
+      rejectedAtArticleStage:
+        detailField(row.filter_detail, "stage") === "article",
+      post: toIngestedPost(row),
+    };
+  });
 
   return (
     <BeaconBriefPageShell
       title="Filtered"
-      description="Posts the non-football filter held back, by keyword match or by the AI classifier. Nothing here was posted to Discord or made into an article. Force a post through the pipeline (this bypasses both filters) or delete it from the system."
+      description="Posts held back before they reached Discord or the article writer: a blocked keyword, another sport, or a fantasy relevance score below the threshold. Force a post through the pipeline (this bypasses every filter) or delete it from the system."
     >
       <FilteredManager items={items} />
     </BeaconBriefPageShell>

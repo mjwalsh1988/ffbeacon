@@ -36,6 +36,8 @@ const ORDER = [
   "bb_match_candidate_limit",
   "bb_keyword_filter_enabled",
   "bb_non_football_filter_enabled",
+  "bb_relevance_filter_enabled",
+  "bb_relevance_threshold",
   "bb_keyword_filter",
   "bb_model_article",
   "bb_model_triage",

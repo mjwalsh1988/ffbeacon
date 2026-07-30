@@ -48,13 +48,23 @@ type Ingestion = Database["public"]["Tables"]["news_ingestions"]["Row"];
 const ARTICLE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "slug", "meta_description", "tl_dr", "body_md"],
+  required: [
+    "title",
+    "slug",
+    "meta_description",
+    "tl_dr",
+    "body_md",
+    "fantasy_impact",
+    "no_impact_reason",
+  ],
   properties: {
     title: { type: "string" },
     slug: { type: "string" },
     meta_description: { type: "string" },
     tl_dr: { type: "string" },
     body_md: { type: "string" },
+    fantasy_impact: { type: "boolean" },
+    no_impact_reason: { type: "string" },
   },
 } as const;
 
@@ -732,7 +742,8 @@ async function applyRewriteToArticle(
     ingestionId: ingestion.id,
     maxTokens: 4096,
   });
-  if (!result) return { ok: false, error: "rewrite call failed", applied: false };
+  if (!result)
+    return { ok: false, error: "rewrite call failed", applied: false };
 
   await admin
     .from("articles")
@@ -901,6 +912,87 @@ async function collapseDuplicateDiscordCard(
   }
 }
 
+/**
+ * Pull a Discord card for a post the article stage decided does not belong here.
+ *
+ * The relevance gate in ./curate.ts stops the large majority of off-topic posts
+ * before Discord ever sees them. This covers the residue it cannot catch: a post
+ * whose text gives no clue what it is about, where only the research call reveals
+ * the story is not ours. By then the discord_post job has usually already run.
+ *
+ * Cancel the job if it is still queued, delete the card if it already posted.
+ * Mirrors collapseDuplicateDiscordCard, minus the patch step: there is no
+ * surviving story to bring up to date, the post simply leaves the channel.
+ *
+ * Never throws. The ingestion has already been marked filtered by the caller and
+ * that outcome must stand even if Discord is unreachable; a stranded card is
+ * removable by hand, a job bounced back for a retry would re-run the research and
+ * article calls and spend the money a second time.
+ */
+async function retractDiscordCard(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+  ingestionId: string,
+  why: string,
+): Promise<void> {
+  try {
+    const { data: cancelled } = await admin
+      .from("beacon_brief_queue")
+      .update({
+        status: "done",
+        last_error: `cancelled: ${why}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("job_type", "discord_post")
+      .eq("status", "pending")
+      .filter("payload->>ingestion_id", "eq", ingestionId)
+      .select("id");
+    if (cancelled && cancelled.length > 0) {
+      await logBeaconBrief(admin, {
+        stage: "discord_post",
+        level: "info",
+        ingestionId,
+        message: `cancelled ${cancelled.length} queued Discord post(s): ${why}`,
+      });
+    }
+
+    // Re-read: the discord_post for this ingestion very likely ran earlier in
+    // this same worker pass and recorded its message id after the caller's read.
+    const row = await loadIngestion(admin, ingestionId);
+    if (!row?.discord_message_id) return;
+    const url = await activeWebhookUrl(admin, settings);
+    if (!url) return;
+    const res = await deleteWebhookMessage(url, row.discord_message_id);
+    await logBeaconBrief(admin, {
+      stage: "discord_patch",
+      level: res.ok ? "info" : "error",
+      ingestionId,
+      message: res.ok
+        ? `deleted Discord card: ${why}`
+        : `failed to delete Discord card: ${res.error}`,
+      responsePayload: res as unknown as Json,
+    });
+    if (res.ok) {
+      // Clear the id so nothing downstream patches a card that is gone.
+      // discord_webhook_id stays set: it is the sentinel that stops
+      // handleDiscordPost from ever reposting this one.
+      await admin
+        .from("news_ingestions")
+        .update({ discord_message_id: null })
+        .eq("id", ingestionId);
+    }
+  } catch (err) {
+    await logBeaconBrief(admin, {
+      stage: "discord_patch",
+      level: "error",
+      ingestionId,
+      message: `Discord retract failed; a card may remain in the channel: ${
+        err instanceof Error ? err.message : "unknown error"
+      }`,
+    });
+  }
+}
+
 async function handleArticleWrite(
   admin: Admin,
   job: QueueRow,
@@ -1017,6 +1109,48 @@ async function handleArticleWrite(
     maxTokens: 4096,
   });
   if (!result) return { ok: false, error: "article writing call failed" };
+
+  // Late relevance abort. The curation gate scores a post from its text alone,
+  // which is all it has. Research can surface something that text could not show:
+  // the recruit whose post never names the sport turns out to play basketball.
+  // The writer reports that verdict on fantasy_impact, and it is the last chance
+  // to stop before the article becomes a public URL.
+  //
+  // Deliberately NOT gated on settings.relevanceFilterEnabled. That toggle governs
+  // the tier threshold at curation time, a tuning dial. This is the writer saying
+  // the story does not belong on the site at all, which is never something we want
+  // to publish regardless of how the gate is tuned.
+  if (result.fantasy_impact === false) {
+    const why = result.no_impact_reason?.trim() || "no fantasy impact";
+    await admin
+      .from("news_ingestions")
+      .update({
+        status: "filtered",
+        filter_reason: "ai_low_relevance",
+        filter_detail: {
+          reason: why,
+          stage: "article",
+          rejected_title: result.title,
+        } as unknown as Json,
+        processed_at: new Date().toISOString(),
+      })
+      .eq("id", ingestion.id);
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "warn",
+      ingestionId: ingestion.id,
+      message: `article aborted after research, no fantasy impact: ${why}`,
+    });
+    await retractDiscordCard(
+      admin,
+      settings,
+      ingestion.id,
+      "article stage found no fantasy impact",
+    );
+    // ok: the job did its work and reached a decision. Returning false would
+    // retry it and pay for the research and article calls all over again.
+    return { ok: true };
+  }
 
   const slug = await ensureUniqueSlug(admin, result.slug || result.title);
   const published = settings.autopublish;

@@ -12,12 +12,21 @@ import { PostContext, type IngestedPost } from "./moderation-manager";
 export interface FilteredItem {
   id: string;
   created_at: string;
-  /** "keyword" | "ai_non_football". */
-  reason: "keyword" | "ai_non_football";
+  reason: "keyword" | "ai_non_football" | "ai_low_relevance";
   /** Blocklist terms that matched (keyword reason only). */
   matchedTerms: string[];
   /** The AI's suggested headline, when it was classified (non-football reason). */
   suggestedTitle: string | null;
+  /** Relevance score 0 to 3 (ai_low_relevance reason only). */
+  relevanceTier: number | null;
+  /** The classifier's one-clause justification for the tier. */
+  relevanceReason: string | null;
+  /**
+   * True when the article stage rejected the post after research rather than the
+   * curation gate rejecting it from the post text. Worth distinguishing in the UI:
+   * a post that got this far already reached Discord and had its card pulled.
+   */
+  rejectedAtArticleStage: boolean;
   post: IngestedPost | null;
 }
 
@@ -27,9 +36,17 @@ const btnClass =
   "min-h-[44px] rounded-card border border-line bg-base px-3 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan disabled:opacity-50";
 
 function reasonLabel(reason: FilteredItem["reason"]): string {
-  return reason === "keyword"
-    ? "Blocked keyword"
-    : "AI flagged as non-football";
+  if (reason === "keyword") return "Blocked keyword";
+  if (reason === "ai_low_relevance") return "No fantasy relevance";
+  return "AI flagged as non-football";
+}
+
+/** Plain-language gloss for each relevance tier, shown next to the number. */
+function tierLabel(tier: number): string {
+  if (tier >= 3) return "a current player's football situation";
+  if (tier === 2) return "how a team deploys its players";
+  if (tier === 1) return "football news that changes no fantasy decision";
+  return "not about football";
 }
 
 export function FilteredManager({ items }: { items: FilteredItem[] }) {
@@ -53,8 +70,9 @@ export function FilteredManager({ items }: { items: FilteredItem[] }) {
   if (items.length === 0) {
     return (
       <p className="text-sm text-ink-muted">
-        Nothing has been filtered out. Posts caught by the keyword blocklist or
-        flagged as non-football by the AI will appear here for review.
+        Nothing has been filtered out. Posts caught by the keyword blocklist,
+        flagged as non-football, or scored below the fantasy relevance threshold
+        will appear here for review.
       </p>
     );
   }
@@ -106,10 +124,34 @@ export function FilteredManager({ items }: { items: FilteredItem[] }) {
                   headline was: {item.suggestedTitle}
                 </p>
               ) : null}
+              {item.reason === "ai_low_relevance" ? (
+                <>
+                  {item.relevanceTier !== null ? (
+                    <p className="mt-1 text-sm text-ink-muted">
+                      Relevance score{" "}
+                      <span className="font-semibold text-ink">
+                        {item.relevanceTier} of 3
+                      </span>
+                      : {tierLabel(item.relevanceTier)}.
+                    </p>
+                  ) : null}
+                  {item.relevanceReason ? (
+                    <p className="mt-1 text-sm text-ink-muted">
+                      Classifier said: {item.relevanceReason}
+                    </p>
+                  ) : null}
+                  {item.rejectedAtArticleStage ? (
+                    <p className="mt-1 text-sm text-ink-muted">
+                      Caught at the writing stage, after research. Its Discord
+                      card was removed.
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
               <p className="mt-1 text-sm text-ink-muted">
                 This post was held back from Discord and was not turned into an
                 article. Force it through to publish it anyway (this bypasses
-                both filters), or delete it to remove it from the system.
+                every filter), or delete it to remove it from the system.
               </p>
               <p className="mt-1 text-xs text-ink-subtle">
                 Filtered {formatEastern(item.created_at)}
@@ -125,7 +167,7 @@ export function FilteredManager({ items }: { items: FilteredItem[] }) {
                       "Force-pushed back into the pipeline.",
                     )
                   }
-                  aria-label={`Force "${headline}" through the pipeline, bypassing both filters`}
+                  aria-label={`Force "${headline}" through the pipeline, bypassing every filter`}
                 >
                   Force through pipeline
                 </button>

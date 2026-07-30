@@ -56,6 +56,19 @@ export interface BeaconBriefSourceItem {
 export interface CategorizeResult {
   /** 1 = not about football (filtered to review); 0 = football, continue. */
   non_football: number;
+  /**
+   * How much a fantasy manager would act on this, 0 to 3.
+   *   3 a current player's football situation changed
+   *   2 a team's deployment of its players changed
+   *   1 real football news that changes no fantasy decision
+   *   0 not football at all
+   * Compared against bb_relevance_threshold. Distinct from context_score, which
+   * only asks whether there is enough information to write an article at all: a
+   * well-sourced obituary scores 1 on context and 1 on relevance.
+   */
+  relevance_tier: number;
+  /** One clause explaining the tier. Shown to the admin in the Filtered queue. */
+  relevance_reason: string;
   /** 0 = not enough context for an article (Discord only); 1 = make an article. */
   context_score: number;
   category_slug: string | null;
@@ -75,6 +88,16 @@ export interface ArticleResult {
   meta_description: string;
   tl_dr: string;
   body_md: string;
+  /**
+   * The writer's own verdict after research. False means the research revealed
+   * the story does not belong on the site at all, which the curation-time gate
+   * could not have known from the post text alone (the canonical case: a recruit
+   * commitment whose post never names the sport, and research finds it is
+   * basketball). False aborts the publish; see handleArticleWrite in ./worker.ts.
+   */
+  fantasy_impact: boolean;
+  /** Why fantasy_impact is false. Empty string when it is true. */
+  no_impact_reason: string;
 }
 
 /** Strict JSON returned by the revision rewrite (merge) call. */
@@ -109,10 +132,7 @@ export interface ReferenceMatchResult {
 }
 
 export type QueueJobType =
-  | "discord_post"
-  | "discord_patch"
-  | "article_write"
-  | "deletion_check";
+  "discord_post" | "discord_patch" | "article_write" | "deletion_check";
 
 /** Payload stored on a beacon_brief_queue row. Always references the ingestion. */
 export interface QueueJobPayload {

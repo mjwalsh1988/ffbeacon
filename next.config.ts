@@ -79,15 +79,16 @@ const nextConfig: NextConfig = {
       // The retired rows are status 'archived', so they are already out of the
       // sitemap and the public feed. The redirect is what preserves any link
       // equity and any external link that already points at the old URL.
+      //
+      // The Ryan Gold pair that used to sit here is gone. Both of its articles
+      // were removed on 2026-07-30 as front-office news with no fantasy bearing
+      // (docs/beacon-brief-removals-2026-07-30.md), which left the redirect
+      // pointing at a deleted page. A permanent redirect to a 404 is worse for
+      // both readers and crawlers than the 404 itself, so the pair came out with
+      // the articles. The retired slug now 404s, which is the honest answer.
       {
         source: "/brief/jacoby-brissett-new-deal-cardinals-2026-starter",
         destination: "/brief/jacoby-brissett-cardinals-reworked-contract-2026",
-        permanent: true,
-      },
-      {
-        source: "/brief/nfl-suspends-cardinals-ryan-gold-gambling",
-        destination:
-          "/brief/cardinals-ryan-gold-suspended-indefinitely-gambling-policy",
         permanent: true,
       },
       {
@@ -99,7 +100,8 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/brief/geno-smith-case-inactive-no-charges",
-        destination: "/brief/geno-smith-battery-investigation-closed-no-charges",
+        destination:
+          "/brief/geno-smith-battery-investigation-closed-no-charges",
         permanent: true,
       },
       // Signal Scout's leaderboards moved off their own route and into a

@@ -36,6 +36,8 @@ const CATEGORIZE_SCHEMA = {
   additionalProperties: false,
   required: [
     "non_football",
+    "relevance_tier",
+    "relevance_reason",
     "context_score",
     "category_slug",
     "players",
@@ -46,6 +48,8 @@ const CATEGORIZE_SCHEMA = {
   ],
   properties: {
     non_football: { type: "integer" },
+    relevance_tier: { type: "integer" },
+    relevance_reason: { type: "string" },
     context_score: { type: "integer" },
     category_slug: { type: "string" },
     players: { type: "array", items: { type: "string" } },
@@ -635,6 +639,48 @@ async function processItem(
     return;
   }
 
+  // Gate 3 (fantasy relevance): the post IS about football but does not carry a
+  // fantasy decision. Obituaries, uniform reveals, stadium and ownership news,
+  // ceremonies, league business, front office moves. Gates 1 and 2 cannot catch
+  // these because they are genuinely football content.
+  //
+  // This gate sits ahead of the ingestion insert on purpose, so a filtered post
+  // never reaches the discord_post enqueue below. Every earlier exit is a "no
+  // Discord" exit too; this one has to behave the same way, because the whole
+  // point is that these stories do not reach the channel. Force-push from the
+  // review queue bypasses this gate.
+  const tier = ai.relevance_tier ?? 0;
+  if (settings.relevanceFilterEnabled && tier < settings.relevanceThreshold) {
+    const { data: inserted } = await admin
+      .from("news_ingestions")
+      .insert({
+        ...baseRow,
+        is_revision: false,
+        revision_of_ingestion_id: null,
+        ai_result: ai as unknown as Json,
+        context_score: ai.context_score ?? 0,
+        status: "filtered",
+        filter_reason: "ai_low_relevance",
+        filter_detail: {
+          relevance_tier: tier,
+          threshold: settings.relevanceThreshold,
+          reason: ai.relevance_reason ?? "",
+          stage: "categorize",
+        } as unknown as Json,
+        processed_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    summary.filtered += 1;
+    await logBeaconBrief(admin, {
+      stage: "categorize",
+      sourceId: source.id,
+      ingestionId: inserted?.id ?? null,
+      message: `filtered (relevance tier ${tier} below threshold ${settings.relevanceThreshold}: ${ai.relevance_reason ?? "no reason given"})`,
+    });
+    return;
+  }
+
   // Resolve references with confidence: only exact, unambiguous matches auto-link.
   const refs = await matchReferences(admin, ai, settings);
   const resolved = {
@@ -763,10 +809,12 @@ function hasCategorizeFields(ai: unknown): ai is CategorizeResult {
 
 /**
  * Force a filtered post back through the pipeline (admin action from the Filtered
- * review queue). Bypasses BOTH filter gates so a forced post can never loop back
- * into 'filtered': it does NOT re-run the keyword check and it IGNORES
- * non_football. An AI-filtered post reuses its stored categorize result; a
- * keyword-filtered post (never classified) is classified now. It then enqueues
+ * review queue). Bypasses ALL THREE filter gates so a forced post can never loop
+ * back into 'filtered': it does NOT re-run the keyword check, and it IGNORES both
+ * non_football and relevance_tier. An AI-filtered post reuses its stored
+ * categorize result; a keyword-filtered post (never classified) is classified
+ * now. Reusing the stored result is what makes the relevance bypass work: the
+ * tier is read from that object nowhere in this function. It then enqueues
  * discord_post and, when the post meets the context threshold, article_write,
  * exactly like a normal new post.
  */

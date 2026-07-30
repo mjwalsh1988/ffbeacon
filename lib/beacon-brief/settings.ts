@@ -37,6 +37,9 @@ export interface BeaconBriefSettings {
   keywordFilterEnabled: boolean;
   keywordFilter: string;
   nonFootballFilterEnabled: boolean;
+  relevanceFilterEnabled: boolean;
+  /** Minimum CategorizeResult.relevance_tier a post needs to stay in the pipeline. */
+  relevanceThreshold: number;
   modelArticle: string;
   modelTriage: string;
   webhookId: string;
@@ -73,6 +76,8 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   keywordFilter:
     "nba, basketball, world cup, fifa, soccer, golf, pga, mlb, baseball, nhl, hockey, tennis, ufc, boxing, olympics, cricket, formula 1, f1, nascar, wnba, march madness",
   nonFootballFilterEnabled: true,
+  relevanceFilterEnabled: true,
+  relevanceThreshold: 2,
   modelArticle: "claude-sonnet-4-6",
   modelTriage: "claude-haiku-4-5",
   webhookId: "",
@@ -176,6 +181,14 @@ export async function loadBeaconBriefSettings(
     nonFootballFilterEnabled: asBool(
       map.get("bb_non_football_filter_enabled"),
       d.nonFootballFilterEnabled,
+    ),
+    relevanceFilterEnabled: asBool(
+      map.get("bb_relevance_filter_enabled"),
+      d.relevanceFilterEnabled,
+    ),
+    relevanceThreshold: asNum(
+      map.get("bb_relevance_threshold"),
+      d.relevanceThreshold,
     ),
     modelArticle: asStr(map.get("bb_model_article"), d.modelArticle),
     modelTriage: asStr(map.get("bb_model_triage"), d.modelTriage),

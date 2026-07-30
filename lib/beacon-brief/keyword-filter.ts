@@ -1,7 +1,13 @@
 /**
  * The Beacon Brief keyword pre-filter.
  *
- * The first gate in the non-football filter: before any AI call, a new post is
+ * The first of three gates. This one catches other sports by literal string
+ * match; the AI non_football flag catches them by classification; the relevance
+ * tier catches football news that carries no fantasy decision (see ./curate.ts).
+ * String matching cannot express the third case, so do not grow this blocklist to
+ * chase it: broad terms here produce false positives on real NFL posts.
+ *
+ * Before any AI call, a new post is
  * checked against an admin-editable blocklist (bb_keyword_filter). A hit diverts
  * the post to the Filtered review queue instead of Discord or an article.
  *
