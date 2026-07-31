@@ -12,6 +12,13 @@
  *
  * Calls never throw: any failure logs an error row and returns null so the
  * pipeline degrades gracefully.
+ *
+ * runStructuredCall marks the system prompt for prompt caching when the model
+ * will actually cache a prompt that size. Repeat calls inside the 5-minute
+ * window bill the prompt at roughly a tenth of the input rate. This changes
+ * billing only: the model receives the same bytes and cannot answer
+ * differently. Verify it is working on the admin Logs page, where token_usage
+ * carries cache_read_input_tokens and cache_creation_input_tokens.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -77,6 +84,53 @@ function textOf(res: Anthropic.Message): string {
     .trim();
 }
 
+/**
+ * Smallest prompt each model will cache, in tokens. Below the threshold the API
+ * silently declines to cache: no error, just cache_creation_input_tokens = 0.
+ *
+ * The values are not monotonic across generations (Sonnet 4.6 caches from 1024,
+ * the newer-sounding Haiku 4.5 needs 4096), so this cannot be guessed from the
+ * model name. An unlisted model falls back to 1024, the most common threshold.
+ * Being wrong is cheap in both directions: too low sends a marker the API
+ * ignores, too high misses a caching opportunity. Neither changes the response.
+ */
+const PROMPT_CACHE_MIN_TOKENS: Array<[prefix: string, minTokens: number]> = [
+  ["claude-opus-5", 512],
+  ["claude-fable-5", 512],
+  ["claude-opus-4-8", 1024],
+  ["claude-sonnet-5", 1024],
+  ["claude-sonnet-4-6", 1024],
+  ["claude-sonnet-4-5", 1024],
+  ["claude-opus-4-7", 2048],
+  ["claude-opus-4-6", 4096],
+  ["claude-opus-4-5", 4096],
+  ["claude-haiku-4-5", 4096],
+];
+const DEFAULT_CACHE_MIN_TOKENS = 1024;
+
+/**
+ * Deliberately pessimistic characters-per-token ratio. These prompts measure
+ * about 4.14 chars per token, so dividing by 4.5 UNDER-counts, which is the
+ * safe direction: it keeps the marker off prompts that sit near the threshold
+ * rather than claiming a cache that never forms.
+ */
+const CHARS_PER_TOKEN = 4.5;
+
+/**
+ * Whether a system prompt is worth marking for caching on this model.
+ *
+ * Caching is a prefix match and these calls send no tools, so the system prompt
+ * IS the cacheable prefix and the per-call user content sits after it. That is
+ * the ideal shape: the prompt is byte-identical on every call (it comes from
+ * beacon_settings), and nothing volatile precedes it.
+ */
+export function shouldCacheSystemPrompt(model: string, system: string): boolean {
+  const min =
+    PROMPT_CACHE_MIN_TOKENS.find(([prefix]) => model.startsWith(prefix))?.[1] ??
+    DEFAULT_CACHE_MIN_TOKENS;
+  return system.length / CHARS_PER_TOKEN >= min;
+}
+
 interface StructuredArgs {
   admin: SupabaseClient<Database>;
   stage: BeaconLogStage;
@@ -87,6 +141,14 @@ interface StructuredArgs {
   ingestionId?: string | null;
   sourceId?: string | null;
   maxTokens?: number;
+  /**
+   * Mark the system prompt for prompt caching (default true). A cache read bills
+   * at about a tenth of the input rate; a write costs 1.25x, so this pays off
+   * only when calls cluster inside the 5-minute window. Article writes do: the
+   * median gap between them is 12 seconds. Setting this false is the escape
+   * hatch if that pattern ever changes; it cannot affect the model's output.
+   */
+  cacheSystem?: boolean;
 }
 
 /**
@@ -108,18 +170,31 @@ export async function runStructuredCall<T>(
   } = args;
   const client = new Anthropic();
   const started = Date.now();
+  const cached =
+    args.cacheSystem !== false && shouldCacheSystemPrompt(model, system);
   const request: Json = {
     model,
     system,
     user: userContent,
     schema: schema as Json,
+    cached_system: cached,
   };
 
   try {
     const res = await client.messages.create({
       model,
       max_tokens: args.maxTokens ?? 2048,
-      system,
+      // Same prompt either way. The block form only adds the cache marker, so
+      // the model sees byte-identical input and cannot respond differently.
+      system: cached
+        ? [
+            {
+              type: "text",
+              text: system,
+              cache_control: { type: "ephemeral" },
+            },
+          ]
+        : system,
       messages: [{ role: "user", content: userContent }],
       output_config: { format: { type: "json_schema", schema } },
     });

@@ -49,6 +49,14 @@ export interface BeaconBriefSettings {
   xProbeIntervalMinutes: number;
   /** Minimum gap between alert emails for the same component. */
   alertCooldownMinutes: number;
+  /**
+   * Mark long system prompts for prompt caching. Billing-only: the model
+   * receives identical input either way. Worth it because article writes
+   * cluster (median gap between them is 12 seconds) and a cache read bills at
+   * about a tenth of the input rate. Turn off if that pattern ever changes,
+   * since an isolated call pays a 1.25x write for a cache nothing reads.
+   */
+  promptCacheEnabled: boolean;
   keywordFilterEnabled: boolean;
   keywordFilter: string;
   nonFootballFilterEnabled: boolean;
@@ -100,6 +108,7 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   deletionSweepMaxIds: 300,
   xProbeIntervalMinutes: 15,
   alertCooldownMinutes: 360,
+  promptCacheEnabled: true,
   keywordFilterEnabled: true,
   keywordFilter:
     "nba, basketball, world cup, fifa, soccer, golf, pga, mlb, baseball, nhl, hockey, tennis, ufc, boxing, olympics, cricket, formula 1, f1, nascar, wnba, march madness",
@@ -246,6 +255,10 @@ export async function loadBeaconBriefSettings(
     alertCooldownMinutes: asNum(
       map.get("bb_alert_cooldown_minutes"),
       d.alertCooldownMinutes,
+    ),
+    promptCacheEnabled: asBool(
+      map.get("bb_prompt_cache_enabled"),
+      d.promptCacheEnabled,
     ),
     keywordFilterEnabled: asBool(
       map.get("bb_keyword_filter_enabled"),

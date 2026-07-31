@@ -753,6 +753,7 @@ async function applyRewriteToArticle(
     schema: REWRITE_SCHEMA as unknown as Record<string, unknown>,
     ingestionId: ingestion.id,
     maxTokens: 4096,
+    cacheSystem: settings.promptCacheEnabled,
   });
   if (!result)
     return { ok: false, error: "rewrite call failed", applied: false };
@@ -1119,6 +1120,7 @@ async function handleArticleWrite(
     schema: ARTICLE_SCHEMA as unknown as Record<string, unknown>,
     ingestionId: ingestion.id,
     maxTokens: 4096,
+    cacheSystem: settings.promptCacheEnabled,
   });
   if (!result) return { ok: false, error: "article writing call failed" };
 
