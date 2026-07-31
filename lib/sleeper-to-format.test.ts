@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  mapToFormatSlug,
   pickClosestSupportedFormat,
   describeDerivedFormat,
   type DerivedFormat,
@@ -18,6 +19,52 @@ const CANDIDATES: FormatCandidate[] = [
 function derived(over: Partial<DerivedFormat>): DerivedFormat {
   return { league_type: "redraft", scoring_type: "ppr", is_superflex: false, is_tep: false, ...over };
 }
+
+describe("mapToFormatSlug", () => {
+  it("sends every TE-premium league to its own TE-premium board", () => {
+    expect(mapToFormatSlug(derived({ league_type: "dynasty", is_tep: true }))).toBe("dynasty-ppr-tep");
+    expect(
+      mapToFormatSlug(derived({ league_type: "dynasty", is_superflex: true, is_tep: true })),
+    ).toBe("dynasty-ppr-tep-sflex");
+    expect(mapToFormatSlug(derived({ is_tep: true }))).toBe("redraft-ppr-tep");
+    expect(mapToFormatSlug(derived({ is_superflex: true, is_tep: true }))).toBe(
+      "redraft-ppr-tep-sflex",
+    );
+  });
+
+  it("leaves non-TEP leagues on their existing board", () => {
+    expect(mapToFormatSlug(derived({ league_type: "dynasty" }))).toBe("dynasty-ppr-std");
+    expect(mapToFormatSlug(derived({ league_type: "dynasty", is_superflex: true }))).toBe(
+      "dynasty-ppr-sflex",
+    );
+    expect(mapToFormatSlug(derived({}))).toBe("redraft-ppr-std");
+    expect(mapToFormatSlug(derived({ is_superflex: true }))).toBe("redraft-ppr-sflex");
+    expect(mapToFormatSlug(derived({ scoring_type: "half_ppr" }))).toBe("redraft-half-std");
+    expect(mapToFormatSlug(derived({ scoring_type: "standard" }))).toBe("redraft-std-std");
+  });
+
+  it("keeps a redraft superflex league on a superflex board whatever its scoring", () => {
+    expect(
+      mapToFormatSlug(derived({ scoring_type: "standard", is_superflex: true, is_tep: true })),
+    ).toBe("redraft-ppr-tep-sflex");
+    expect(mapToFormatSlug(derived({ scoring_type: "half_ppr", is_superflex: true }))).toBe(
+      "redraft-ppr-sflex",
+    );
+  });
+
+  it("prefers a 1QB scoring match over a TE-premium match, since only PPR has a TEP board", () => {
+    expect(mapToFormatSlug(derived({ scoring_type: "half_ppr", is_tep: true }))).toBe(
+      "redraft-half-std",
+    );
+    expect(mapToFormatSlug(derived({ scoring_type: "standard", is_tep: true }))).toBe(
+      "redraft-std-std",
+    );
+  });
+
+  it("returns null for a dynasty league we carry no scoring for", () => {
+    expect(mapToFormatSlug(derived({ league_type: "dynasty", scoring_type: "half_ppr" }))).toBeNull();
+  });
+});
 
 describe("pickClosestSupportedFormat", () => {
   it("never crosses league_type: dynasty stays dynasty", () => {

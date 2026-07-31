@@ -47,10 +47,18 @@ export function deriveLeagueFormat(league: SleeperLeague): DerivedFormat {
  * configured format covers this combination (caller can then fall through
  * via lib/format-fallback.ts).
  *
- * Active slugs (see migration 0001):
+ * Active slugs (migration 0001, extended by 0158):
  *   redraft-ppr-std, redraft-half-std, redraft-std-std,
- *   redraft-ppr-sflex, redraft-ppr-tep,
- *   dynasty-ppr-std, dynasty-ppr-sflex, dynasty-ppr-tep-sflex
+ *   redraft-ppr-sflex, redraft-ppr-tep, redraft-ppr-tep-sflex,
+ *   dynasty-ppr-std, dynasty-ppr-sflex, dynasty-ppr-tep, dynasty-ppr-tep-sflex
+ *
+ * All four TE-premium boards are FF Beacon derivations of their non-TEP
+ * counterpart (see lib/calculate-beacon-values.ts INHERITED), and no external
+ * source publishes values for the two redraft ones or for dynasty-ppr-tep. A
+ * league that maps to a TEP board while the reader is on another source is not a
+ * problem: resolveLeagueContext reports coverage 'fallback' and the view
+ * explains the swap. That is a better answer than silently pricing a TE-premium
+ * league off a board where tight ends are not premium.
  */
 export function mapToFormatSlug(derived: DerivedFormat): string | null {
   const { league_type, scoring_type, is_superflex, is_tep } = derived;
@@ -60,15 +68,20 @@ export function mapToFormatSlug(derived: DerivedFormat): string | null {
     if (scoring_type !== "ppr") return null;
     if (is_superflex && is_tep) return "dynasty-ppr-tep-sflex";
     if (is_superflex) return "dynasty-ppr-sflex";
-    if (is_tep) return null; // dynasty-ppr-tep not yet configured
+    if (is_tep) return "dynasty-ppr-tep";
     return "dynasty-ppr-std";
   }
 
-  // redraft
-  if (is_superflex && scoring_type === "ppr" && !is_tep) return "redraft-ppr-sflex";
-  if (is_superflex) return "redraft-ppr-sflex"; // closest available
-  if (is_tep && scoring_type === "ppr") return "redraft-ppr-tep";
+  // Redraft. Superflex is the single biggest value driver, so a superflex league
+  // always lands on a superflex board even when its scoring does not match; PPR
+  // is the only superflex scoring we carry. Within that, the TE premium picks
+  // the board. This ordering (superflex, then scoring, then TE premium) is the
+  // same one pickClosestSupportedFormat scores against below.
+  if (is_superflex) return is_tep ? "redraft-ppr-tep-sflex" : "redraft-ppr-sflex";
 
+  // 1QB. Here a scoring match beats a TE-premium match, because we do carry half
+  // PPR and standard 1QB boards and neither has a TE-premium variant.
+  if (is_tep && scoring_type === "ppr") return "redraft-ppr-tep";
   if (scoring_type === "ppr") return "redraft-ppr-std";
   if (scoring_type === "half_ppr") return "redraft-half-std";
   return "redraft-std-std";

@@ -7,10 +7,12 @@
  *   1. Mint a run (beacon_value_runs) -> run_id (never null, never reused).
  *   2. Load tunables LIVE from beacon_settings / beacon_signal_weights / bands.
  *   3. Gather external source values (self-excluded, staleness-gated) + manuals.
- *   4. Per format: normalize the skill pool, combine signals, build rows.
+ *   4. Per computed format: normalize the skill pool, combine signals, build rows.
  *      All-stale / no-base (player, format) is SKIPPED, never written 0/null.
- *   5. Copy KTC-baselined picks as source='ffbeacon'.
- *   6. Write player_value_history + draft_pick_values; finalize the run with
+ *   5. Derive the boards listed in INHERITED from their baseline's finished rows
+ *      (every TE-premium board, plus the best-ball presets).
+ *   6. Copy KTC-baselined picks as source='ffbeacon'.
+ *   7. Write player_value_history + draft_pick_values; finalize the run with
  *      source_freshness, skipped_no_signal, factor_saturated for observability.
  *
  * is_active on the ffbeacon registry row stays false; this only populates data.
@@ -34,6 +36,38 @@ import type { ValueBand } from "./beacon/types";
 
 const SOURCE_SLUG = "ffbeacon";
 const SKILL_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
+
+/**
+ * Boards we derive from another board instead of computing from scratch.
+ *
+ * Every TE-premium format belongs here. A TEP board means one specific thing:
+ * the same league with tight ends scoring more. So it must differ from its
+ * baseline for tight ends and for nobody else. Computing one independently
+ * cannot promise that, because the normalization pool is whichever sources
+ * declare support for that exact slug, and a TEP board is typically covered by
+ * fewer sources than its baseline. dynasty-ppr-tep-sflex is the proof: KTC is
+ * its only source, so it normalized against a one-source canonical curve while
+ * dynasty-ppr-sflex used three, and every skill position drifted (WR +860 avg,
+ * RB +888, QB +644) with no tight end involved. Deriving makes the guarantee
+ * structural instead of coincidental.
+ *
+ * The redraft TEP pair is FF Beacon only; no external source publishes redraft
+ * TE-premium values. See migration 0158.
+ */
+const INHERITED: Array<{
+  slug: string;
+  baselineSlug: string;
+  transform: "te_premium" | "identity";
+}> = [
+  { slug: "redraft-ppr-tep", baselineSlug: "redraft-ppr-std", transform: "te_premium" },
+  { slug: "redraft-ppr-tep-sflex", baselineSlug: "redraft-ppr-sflex", transform: "te_premium" },
+  { slug: "dynasty-ppr-tep", baselineSlug: "dynasty-ppr-std", transform: "te_premium" },
+  { slug: "dynasty-ppr-tep-sflex", baselineSlug: "dynasty-ppr-sflex", transform: "te_premium" },
+  { slug: "bestball-ppr-std", baselineSlug: "redraft-ppr-std", transform: "identity" },
+  { slug: "bestball-ppr-sflex", baselineSlug: "redraft-ppr-sflex", transform: "identity" },
+  { slug: "bestball-dynasty-ppr-sflex", baselineSlug: "dynasty-ppr-sflex", transform: "identity" },
+];
+const DERIVED_SLUGS = new Set(INHERITED.map((s) => s.slug));
 
 export interface CalculateBeaconResult {
   ok: boolean;
@@ -378,6 +412,10 @@ export async function runCalculateBeaconValues(
     };
 
     for (const fmt of ffbeaconFormats) {
+      // Derived boards are built in 5b from their baseline's finished rows. A
+      // from-scratch pass here would also collide with those rows on
+      // (player_id, format_config_id, source, captured_at) in the upsert below.
+      if (DERIVED_SLUGS.has(fmt.slug)) continue;
       const bySourceAll = gather.byFormat.get(fmt.id);
       if (!bySourceAll || bySourceAll.size === 0) {
         perFormat.push({ slug: fmt.slug, rows: 0, skipped: 0 });
@@ -496,37 +534,40 @@ export async function runCalculateBeaconValues(
       perFormat.push({ slug: fmt.slug, rows, skipped });
     }
 
-    // 5b. Derive the formats no external source covers. dynasty-ppr-tep inherits
-    // the dynasty 1QB base with a per-TE TE-premium boost; the best-ball presets
-    // byte-for-byte inherit their redraft/dynasty counterpart and are flagged
-    // placeholder until manually diverged. Reads the in-memory baseline rows.
-    const INHERITED: Array<{ slug: string; baselineSlug: string; transform: "te_premium" | "identity" }> = [
-      { slug: "dynasty-ppr-tep", baselineSlug: "dynasty-ppr-std", transform: "te_premium" },
-      { slug: "bestball-ppr-std", baselineSlug: "redraft-ppr-std", transform: "identity" },
-      { slug: "bestball-ppr-sflex", baselineSlug: "redraft-ppr-sflex", transform: "identity" },
-      { slug: "bestball-dynasty-ppr-sflex", baselineSlug: "dynasty-ppr-sflex", transform: "identity" },
-    ];
+    // 5b. Build the derived boards (see INHERITED at the top of this file) from
+    // the baseline rows just computed. TE-premium boards copy their baseline and
+    // boost only tight ends; the best-ball presets inherit byte-for-byte and are
+    // flagged placeholder until manually diverged. Reads the in-memory rows, so
+    // every baseline must already have run through the loop above.
     const numSetting = (key: string, fallback: number): number => {
       const v = settings.raw[key];
       return typeof v === "number" && Number.isFinite(v) ? v : fallback;
     };
-    let teBoost = new Map<string, number>();
-    if (INHERITED.some((s) => s.transform === "te_premium")) {
-      const tepFmt = fmtBySlug.get("dynasty-ppr-tep");
-      const tePremium = tepFmt?.tePremium ?? 0.5;
-      teBoost = await gatherTeBoost(
+    // The per-TE boost depends only on the format's te_premium_bonus, so one map
+    // serves every board sharing a premium. Built on first use, then cached.
+    const teBoostByPremium = new Map<number, Map<string, number>>();
+    const teBoostFor = async (tePremium: number): Promise<Map<string, number>> => {
+      const cached = teBoostByPremium.get(tePremium);
+      if (cached) return cached;
+      const fresh = await gatherTeBoost(
         supabase,
         tePremium,
         numSetting("tep_value_sensitivity", 0.5),
         numSetting("tep_value_cap", 0.2),
         numSetting("tep_min_base_pts", 30),
       );
-    }
+      teBoostByPremium.set(tePremium, fresh);
+      return fresh;
+    };
     for (const spec of INHERITED) {
       const derived = fmtBySlug.get(spec.slug);
       const baseline = fmtBySlug.get(spec.baselineSlug);
       if (!derived || !baseline) continue;
       const isPlaceholder = spec.transform === "identity";
+      const teBoost =
+        spec.transform === "te_premium"
+          ? await teBoostFor(derived.tePremium)
+          : new Map<string, number>();
       let drows = 0;
       for (const br of historyRows.filter((r) => r.format_config_id === baseline.id)) {
         const position = gather.positionByPlayer.get(br.player_id) ?? "WR";
