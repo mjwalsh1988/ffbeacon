@@ -8,9 +8,13 @@
  *   - article_write: 2-step (web-search research when enabled, then strict
  *     structuring) to create or rewrite the article, link players/teams, and
  *     snapshot a revision.
- *   - deletion_check: re-verify the source post; if gone, open a moderation row.
+ *   - deletion_sweep: re-verify every published post whose next tapered
+ *     checkpoint has passed, batched 100 ids per request. One sweep in flight at
+ *     a time, scheduled by ensureDeletionSweepScheduled below.
+ *   - deletion_check: legacy per-article job, retired on sight. See ./deletion.ts.
  * On error/429 it backs off (run_after pushed out, attempts++); after the
- * configured max attempts the job is marked failed and an admin email is sent.
+ * configured max attempts the job is marked failed, a moderation row opens, and
+ * an admin email goes out subject to the cooldown in ./health.ts.
  */
 
 import { randomBytes } from "node:crypto";
@@ -27,7 +31,8 @@ import {
 import { logBeaconBrief, runStructuredCall, runWebSearchResearch } from "./ai";
 import { loadBeaconBriefSettings, type BeaconBriefSettings } from "./settings";
 import { sendBeaconBriefFailureEmail } from "./email";
-import { handleDeletionCheck } from "./deletion";
+import { runDeletionSweep } from "./deletion";
+import { shouldEmailQueueFailure } from "./health";
 import {
   findFollowupTarget,
   loadFollowupCandidates,
@@ -424,12 +429,19 @@ async function failOrRetry(
         attempts,
       } as unknown as Json,
     });
-    await sendBeaconBriefFailureEmail({
-      jobType: job.job_type,
-      jobId: job.id,
-      attempts,
-      error: errorMsg,
-    });
+    // The moderation row above always gets written; only the email is throttled.
+    // One root cause can fail many jobs (the 2026-07-31 X outage failed 30), and
+    // one email per job made the inbox the least useful place to learn that.
+    const alert = await shouldEmailQueueFailure(admin, settings);
+    if (alert.send) {
+      await sendBeaconBriefFailureEmail({
+        jobType: job.job_type,
+        jobId: job.id,
+        attempts,
+        error: errorMsg,
+        suppressedSince: alert.suppressedSince,
+      });
+    }
     return "failed";
   }
   const delay =
@@ -1220,13 +1232,9 @@ async function handleArticleWrite(
     .is("article_id", null)
     .in("type", ["player_match", "team_match"]);
 
-  // Schedule a first deletion check ~6h out.
-  await admin.from("beacon_brief_queue").insert({
-    job_type: "deletion_check",
-    payload: { ingestion_id: ingestion.id } as unknown as Json,
-    status: "pending",
-    run_after: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
-  });
+  // No deletion job is queued here on purpose. The batched sweep finds this post
+  // by querying for published rows whose next checkpoint has passed, so the watch
+  // needs no per-article bookkeeping and cannot be broken by a failed run.
   return { ok: true };
 }
 
@@ -1260,6 +1268,54 @@ async function snapshotRevision(
   });
 }
 
+/**
+ * Keep exactly one deletion sweep in flight.
+ *
+ * The worker runs every minute, so this is the cheapest place to own the sweep's
+ * cadence: if one is already queued or running, do nothing; otherwise queue one
+ * when the interval has elapsed since the last completed sweep. A queue with no
+ * sweep at all (a fresh database, or the state the 2026-07-31 outage left behind
+ * when the old per-article chain snapped) self-heals on the very next run,
+ * because "no sweep has ever completed" reads as due.
+ */
+async function ensureDeletionSweepScheduled(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+): Promise<void> {
+  const { data: inFlight } = await admin
+    .from("beacon_brief_queue")
+    .select("id")
+    .eq("job_type", "deletion_sweep")
+    .in("status", ["pending", "processing"])
+    .limit(1);
+  if (inFlight && inFlight.length > 0) return;
+
+  const { data: last } = await admin
+    .from("beacon_brief_queue")
+    .select("updated_at")
+    .eq("job_type", "deletion_sweep")
+    .eq("status", "done")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const intervalMs =
+    (settings.deletionSweepIntervalMinutes > 0
+      ? settings.deletionSweepIntervalMinutes
+      : 60) * 60_000;
+  if (last?.updated_at) {
+    const since = Date.now() - new Date(last.updated_at).getTime();
+    if (since < intervalMs) return;
+  }
+
+  await admin.from("beacon_brief_queue").insert({
+    job_type: "deletion_sweep",
+    payload: {} as unknown as Json,
+    status: "pending",
+    run_after: new Date().toISOString(),
+  });
+}
+
 async function processJob(
   admin: Admin,
   job: QueueRow,
@@ -1274,12 +1330,26 @@ async function processJob(
       outcome = await handleDiscordPatch(admin, job, settings);
     else if (job.job_type === "article_write")
       outcome = await handleArticleWrite(admin, job, settings);
-    else if (job.job_type === "deletion_check")
-      outcome = await handleDeletionCheck(
-        admin,
-        job.payload as unknown as QueueJobPayload,
-      );
-    else outcome = { ok: false, error: `unknown job type ${job.job_type}` };
+    else if (job.job_type === "deletion_sweep") {
+      const sweep = await runDeletionSweep(admin, settings);
+      // A skipped sweep (X unavailable) is ok on purpose. The next sweep re-derives
+      // what is due from table state, so treating an outage as a job failure would
+      // buy nothing but retries and alert emails.
+      outcome = sweep.ok
+        ? { ok: true }
+        : { ok: false, error: sweep.error ?? "deletion sweep failed" };
+    } else if (job.job_type === "deletion_check") {
+      // Legacy per-article job from before the batched sweep. Nothing to do: the
+      // sweep now covers every published post from stored state. Retire it rather
+      // than spending an X read to honour a schedule that no longer exists.
+      await logBeaconBrief(admin, {
+        stage: "deletion_check",
+        level: "info",
+        ingestionId: (job.payload as unknown as QueueJobPayload)?.ingestion_id,
+        message: "legacy deletion_check retired; the batched sweep covers this post",
+      });
+      outcome = { ok: true };
+    } else outcome = { ok: false, error: `unknown job type ${job.job_type}` };
   } catch (err) {
     outcome = {
       ok: false,
@@ -1328,6 +1398,8 @@ export async function runWorker(admin: Admin): Promise<WorkerSummary> {
   // First reclaim anything a previous run left stranded in 'processing'.
   await reapStaleJobs(admin, settings, summary);
 
+  await ensureDeletionSweepScheduled(admin, settings);
+
   // Cap Discord jobs per run (stay under the webhook rate limit); other jobs
   // claimed separately so a flood of Discord work never starves article writing.
   const { data: discordJobs } = await admin.rpc("bb_claim_jobs", {
@@ -1336,7 +1408,13 @@ export async function runWorker(admin: Admin): Promise<WorkerSummary> {
   });
   const { data: otherJobs } = await admin.rpc("bb_claim_jobs", {
     p_limit: settings.articleJobsPerRun,
-    p_job_types: ["article_write", "deletion_check"],
+    // deletion_check is claimed only to retire the legacy rows that predate the
+    // batched sweep; nothing creates new ones.
+    p_job_types: [
+      "article_write",
+      "deletion_sweep",
+      "deletion_check",
+    ],
   });
 
   // Discord jobs lead so the inter-send pacing applies to the contiguous batch.

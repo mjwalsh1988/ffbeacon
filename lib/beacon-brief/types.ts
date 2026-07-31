@@ -131,10 +131,25 @@ export interface ReferenceMatchResult {
   pending: PendingReferenceMatch[];
 }
 
+/**
+ * deletion_check is retained so historical rows still type-check; the worker no
+ * longer creates them. deletion_sweep replaced it: one job re-verifies every post
+ * whose next tapered checkpoint has passed, batched 100 ids per request.
+ */
 export type QueueJobType =
-  "discord_post" | "discord_patch" | "article_write" | "deletion_check";
+  | "discord_post"
+  | "discord_patch"
+  | "article_write"
+  | "deletion_check"
+  | "deletion_sweep";
 
-/** Payload stored on a beacon_brief_queue row. Always references the ingestion. */
+/**
+ * Payload stored on a beacon_brief_queue row.
+ *
+ * Every job type except deletion_sweep references one ingestion. The sweep works
+ * from stored table state rather than a payload, which is exactly what makes it
+ * survive an outage: there is no per-article job to lose.
+ */
 export interface QueueJobPayload {
   ingestion_id: string;
   /** For article_write: 'create' (new) or 'rewrite' (critical revision merge). */

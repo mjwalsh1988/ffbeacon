@@ -406,6 +406,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   discord_post: "Post to Discord",
   discord_patch: "Update the Discord post",
   article_write: "Write the article",
+  deletion_sweep: "Re-check whether source posts were deleted",
   deletion_check: "Check whether the source post was deleted",
 };
 

@@ -263,6 +263,51 @@ export type Database = {
           },
         ];
       };
+      beacon_brief_health: {
+        Row: {
+          component: string;
+          consecutive_failures: number;
+          error_detail: string | null;
+          error_kind: string | null;
+          failing_since: string | null;
+          http_status: number | null;
+          last_alert_at: string | null;
+          last_probe_at: string | null;
+          last_success_at: string | null;
+          status: string;
+          suppressed_alerts: number;
+          updated_at: string;
+        };
+        Insert: {
+          component: string;
+          consecutive_failures?: number;
+          error_detail?: string | null;
+          error_kind?: string | null;
+          failing_since?: string | null;
+          http_status?: number | null;
+          last_alert_at?: string | null;
+          last_probe_at?: string | null;
+          last_success_at?: string | null;
+          status?: string;
+          suppressed_alerts?: number;
+          updated_at?: string;
+        };
+        Update: {
+          component?: string;
+          consecutive_failures?: number;
+          error_detail?: string | null;
+          error_kind?: string | null;
+          failing_since?: string | null;
+          http_status?: number | null;
+          last_alert_at?: string | null;
+          last_probe_at?: string | null;
+          last_success_at?: string | null;
+          status?: string;
+          suppressed_alerts?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       beacon_brief_logs: {
         Row: {
           created_at: string;
@@ -1482,6 +1527,7 @@ export type Database = {
           author_handle: string | null;
           context_score: number | null;
           created_at: string;
+          deletion_checked_at: string | null;
           discord_message_id: string | null;
           discord_webhook_id: string | null;
           external_url: string | null;
@@ -1507,6 +1553,7 @@ export type Database = {
           author_handle?: string | null;
           context_score?: number | null;
           created_at?: string;
+          deletion_checked_at?: string | null;
           discord_message_id?: string | null;
           discord_webhook_id?: string | null;
           external_url?: string | null;
@@ -1532,6 +1579,7 @@ export type Database = {
           author_handle?: string | null;
           context_score?: number | null;
           created_at?: string;
+          deletion_checked_at?: string | null;
           discord_message_id?: string | null;
           discord_webhook_id?: string | null;
           external_url?: string | null;
@@ -4510,12 +4558,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4537,13 +4585,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4562,13 +4609,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4587,13 +4633,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4606,11 +4651,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

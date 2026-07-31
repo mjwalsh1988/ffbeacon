@@ -13,6 +13,7 @@ import {
   getXTweetsByIds,
   getXUserByUsername,
   getXUserTweets,
+  type XError,
   type XMedia,
   type XTimelineResponse,
   type XTweet,
@@ -146,9 +147,14 @@ export function normalizeTimeline(
  * We collect every referenced tweet that is missing, or present but with
  * unhydrated media, look them up by id (where they ARE primary, so tweet, author,
  * and media all hydrate), and merge tweets + users + media back into the response
- * in place before normalization. Best-effort: getXTweetsByIds returns null on
- * failure (it never throws) and is null-guarded here, so a failed repair only
- * means some context is missing, never that the poll fails.
+ * in place before normalization. Best-effort: a failed lookup only means some
+ * context is missing, never that the poll fails, so the error is swallowed here
+ * rather than propagated.
+ *
+ * Capped at one request: the referenced ids for a single page cannot exceed the
+ * 100-id limit in practice, and silently truncating a longer list is safe here
+ * (the unfetched ones simply stay unhydrated) in a way it is not for the
+ * deletion sweep, where a dropped id would read as a deleted post.
  */
 async function hydrateReferences(resp: XTimelineResponse): Promise<void> {
   const haveTweets = new Set((resp.includes?.tweets ?? []).map((t) => t.id));
@@ -174,8 +180,9 @@ async function hydrateReferences(resp: XTimelineResponse): Promise<void> {
   }
   if (needIds.size === 0) return;
 
-  const lookup = await getXTweetsByIds([...needIds]);
-  if (!lookup) return;
+  const res = await getXTweetsByIds([...needIds].slice(0, 100));
+  if (!res.ok) return;
+  const lookup = res.data;
 
   const tweets = resp.includes?.tweets ?? [];
   for (const t of lookup.data ?? []) {
@@ -207,6 +214,13 @@ export interface FetchSourceResult {
   accountId: string | null;
   ok: boolean;
   error?: string;
+  /**
+   * The classified X failure behind ok=false, when there was one. The curator
+   * feeds this to lib/beacon-brief/health.ts so an account-wide problem (no
+   * credits, dead token) trips the circuit breaker and alerts once, instead of
+   * every source logging its own opaque "fetch failed" forever.
+   */
+  xError?: XError;
   /**
    * True when the source had more than the page budget of new posts in one poll,
    * so the very oldest new posts (beyond MAX_TIMELINE_PAGES) were not fetched this
@@ -247,17 +261,27 @@ export async function fetchSourceItems(
 ): Promise<FetchSourceResult> {
   let accountId = source.external_account_id;
   if (!accountId) {
-    const user = await getXUserByUsername(source.handle);
-    if (!user) {
+    const res = await getXUserByUsername(source.handle);
+    if (!res.ok) {
       return {
         items: [],
         newestId: null,
         accountId: null,
         ok: false,
-        error: "could not resolve handle",
+        error: `could not resolve handle: ${res.error.detail}`,
+        xError: res.error,
       };
     }
-    accountId = user.id;
+    if (!res.data) {
+      return {
+        items: [],
+        newestId: null,
+        accountId: null,
+        ok: false,
+        error: `handle @${source.handle} does not exist on X`,
+      };
+    }
+    accountId = res.data.id;
   }
 
   const data: XTweet[] = [];
@@ -270,12 +294,12 @@ export async function fetchSourceItems(
   let truncatedByPageBudget = false;
 
   for (;;) {
-    const resp = await getXUserTweets(accountId, {
+    const res = await getXUserTweets(accountId, {
       sinceId: source.last_cursor,
       maxResults: TIMELINE_PAGE_SIZE,
       paginationToken: pageToken,
     });
-    if (!resp) {
+    if (!res.ok) {
       return {
         items: [],
         newestId: null,
@@ -283,10 +307,12 @@ export async function fetchSourceItems(
         ok: false,
         error:
           pages === 0
-            ? "timeline fetch failed"
-            : "timeline pagination failed mid-stream",
+            ? `timeline fetch failed: ${res.error.detail}`
+            : `timeline pagination failed mid-stream: ${res.error.detail}`,
+        xError: res.error,
       };
     }
+    const resp = res.data;
     // The first page is the newest, so newest_id from it is the high-water mark.
     if (pages === 0) newestId = resp.meta?.newest_id ?? null;
     for (const t of resp.data ?? []) data.push(t);

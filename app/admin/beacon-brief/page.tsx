@@ -41,13 +41,14 @@ export default async function BeaconBriefOverviewPage() {
     activeSources,
     publishedArticles,
     pendingWork,
-    pendingDeletionChecks,
+    postsUnderDeletionWatch,
     failedJobs,
     pendingModeration,
     filteredPosts,
     curateRun,
     workerRun,
     recentLogs,
+    xApiHealth,
   ] = await Promise.all([
     admin
       .from("news_sources")
@@ -62,12 +63,19 @@ export default async function BeaconBriefOverviewPage() {
       .from("beacon_brief_queue")
       .select("*", { count: "exact", head: true })
       .eq("status", "pending")
-      .neq("job_type", "deletion_check"),
+      .not("job_type", "in", "(deletion_check,deletion_sweep)"),
+    // Posts still under deletion watch. The old stat counted queued per-article
+    // check jobs; the batched sweep has at most one job in flight, so the useful
+    // number is how many published posts are still being re-verified.
     admin
-      .from("beacon_brief_queue")
+      .from("news_ingestions")
       .select("*", { count: "exact", head: true })
-      .eq("status", "pending")
-      .eq("job_type", "deletion_check"),
+      .not("article_id", "is", null)
+      .eq("status", "published")
+      .gte(
+        "created_at",
+        new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+      ),
     admin
       .from("beacon_brief_queue")
       .select("*", { count: "exact", head: true })
@@ -99,7 +107,15 @@ export default async function BeaconBriefOverviewPage() {
       .select("id, stage, level, message, created_at")
       .order("created_at", { ascending: false })
       .limit(15),
+    admin
+      .from("beacon_brief_health")
+      .select("status, error_kind, error_detail, failing_since, last_success_at")
+      .eq("component", "x_api")
+      .maybeSingle(),
   ]);
+
+  const xHealth = xApiHealth.data;
+  const xHealthDown = xHealth?.status === "outage";
 
   const lastRun = (r: {
     data: { status: string; started_at: string } | null;
@@ -137,9 +153,9 @@ export default async function BeaconBriefOverviewPage() {
               hint="posts and articles waiting"
             />
             <StatCard
-              label="Deletion checks"
-              value={pendingDeletionChecks.count ?? 0}
-              hint="auto source re-checks, normal"
+              label="Deletion watch"
+              value={postsUnderDeletionWatch.count ?? 0}
+              hint="posts still re-checked at source"
             />
             <StatCard
               label="Failed tasks"
@@ -186,6 +202,45 @@ export default async function BeaconBriefOverviewPage() {
               </dd>
             </div>
           </dl>
+        </section>
+
+        {/* The 2026-07-31 outage was invisible here: the crons kept reporting
+            success while every X call failed. This is the one place that says so
+            out loud, and it stays on screen instead of arriving once by email. */}
+        <section aria-labelledby="bb-integrations">
+          <h2
+            id="bb-integrations"
+            className="text-lg font-semibold tracking-tight text-ink"
+          >
+            Source integration
+          </h2>
+          <div
+            className={`mt-3 rounded-card border p-4 ${
+              xHealthDown
+                ? "border-signal-danger/60 bg-signal-danger/10"
+                : "border-line bg-surface/60"
+            }`}
+          >
+            <p className="text-sm font-medium text-ink">
+              X (Twitter) API:{" "}
+              <span
+                className={xHealthDown ? "text-signal-danger" : "text-ink-muted"}
+              >
+                {xHealthDown ? "down" : "working"}
+              </span>
+            </p>
+            {xHealthDown ? (
+              <p className="mt-1 text-sm text-ink-muted">
+                {xHealth?.error_detail ?? "no detail recorded"}. Failing since{" "}
+                {formatEastern(xHealth?.failing_since)}. Polling is paused and
+                retries automatically; no articles publish until it recovers.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-ink-muted">
+                Last successful call {formatEastern(xHealth?.last_success_at)}.
+              </p>
+            )}
+          </div>
         </section>
 
         <section aria-labelledby="bb-activity">

@@ -6,8 +6,13 @@
  * net, detects revisions (native edit deterministically, or AI-linked follow-up),
  * runs the inline context-score/categorize classification, resolves the named
  * players/teams/category to ids + Discord role ids, and ENQUEUES the slow work
- * (discord_post / discord_patch / article_write / deletion_check). It makes NO
- * inline Discord calls and NO inline article-writing calls.
+ * (discord_post / discord_patch / article_write). It makes NO inline Discord
+ * calls and NO inline article-writing calls.
+ *
+ * Every poll passes through the circuit breaker in ./health.ts first. While the
+ * X integration is down the pass exits without spending a request, apart from
+ * one recovery probe per interval, so an outage costs one log line rather than
+ * one per source per run.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -19,6 +24,7 @@ import { matchReferences } from "./match";
 import { matchBlockedKeywords, parseBlocklist } from "./keyword-filter";
 import { findFollowupTarget, loadFollowupCandidates } from "./followup";
 import { sendBeaconBriefMatchDigestEmail } from "./email";
+import { beginXCall, recordXFailure, recordXSuccess } from "./health";
 import type {
   BeaconBriefSourceItem,
   CategorizeResult,
@@ -159,6 +165,8 @@ interface CurationSummary {
   revisions: number;
   filtered: number;
   errors: number;
+  /** Sources not polled because the X circuit breaker is open. */
+  skippedForOutage?: number;
   skipped?: boolean;
   reason?: string;
 }
@@ -211,9 +219,23 @@ export async function runCuration(admin: Admin): Promise<CurationSummary> {
 
   for (const source of sources as NewsSource[]) {
     if (remaining <= 0) break; // budget exhausted; remaining sources next run
+
+    // Ask the circuit breaker before spending a request. While X is down this
+    // returns false for every source but one probe per interval, which is what
+    // stopped the 2026-07-31 outage from writing 12 identical error rows an hour
+    // for 16 hours straight.
+    const gate = await beginXCall(admin, settings);
+    if (!gate.allowed) {
+      summary.skippedForOutage = (summary.skippedForOutage ?? 0) + 1;
+      break; // every source shares the one integration; none of them can poll
+    }
+
     const fetched = await fetchSourceItems(source);
     if (!fetched.ok) {
       summary.errors += 1;
+      if (fetched.xError) {
+        await recordXFailure(admin, settings, fetched.xError);
+      }
       await admin
         .from("news_sources")
         .update({
@@ -232,6 +254,7 @@ export async function runCuration(admin: Admin): Promise<CurationSummary> {
       });
       continue;
     }
+    await recordXSuccess(admin);
 
     if (fetched.truncatedByPageBudget) {
       await logBeaconBrief(admin, {

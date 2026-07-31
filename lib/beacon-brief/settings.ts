@@ -34,6 +34,21 @@ export interface BeaconBriefSettings {
   discordPaceMs: number;
   matchSimilarityThreshold: number;
   matchCandidateLimit: number;
+  /** Days after ingestion that a post stays under deletion watch. */
+  deletionWatchDays: number;
+  /**
+   * Tapered checkpoints, in hours after ingestion, at which a post is
+   * re-verified. Sorted ascending and de-duplicated on load.
+   */
+  deletionCheckHours: number[];
+  /** How often the batched deletion sweep runs. */
+  deletionSweepIntervalMinutes: number;
+  /** Ceiling on posts re-verified in one sweep, so a backlog drains gradually. */
+  deletionSweepMaxIds: number;
+  /** Gap between recovery probes while the X integration is in outage. */
+  xProbeIntervalMinutes: number;
+  /** Minimum gap between alert emails for the same component. */
+  alertCooldownMinutes: number;
   keywordFilterEnabled: boolean;
   keywordFilter: string;
   nonFootballFilterEnabled: boolean;
@@ -72,6 +87,19 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   discordPaceMs: 1000,
   matchSimilarityThreshold: 0.3,
   matchCandidateLimit: 8,
+  deletionWatchDays: 7,
+  // Two checks per article, and no more. X bills per post read, so every extra
+  // checkpoint is a recurring cost multiplied by article volume, and volume
+  // spikes hard in season. The 1-hour check catches the common case (a reporter
+  // pulling a post they got wrong, which almost always happens fast); the 7-day
+  // check is a final sweep before the article leaves the watch window. The old
+  // fixed every-6-hours schedule spent 28 reads per article to cover the same
+  // ground.
+  deletionCheckHours: [1, 168],
+  deletionSweepIntervalMinutes: 60,
+  deletionSweepMaxIds: 300,
+  xProbeIntervalMinutes: 15,
+  alertCooldownMinutes: 360,
   keywordFilterEnabled: true,
   keywordFilter:
     "nba, basketball, world cup, fifa, soccer, golf, pga, mlb, baseball, nhl, hockey, tennis, ufc, boxing, olympics, cricket, formula 1, f1, nascar, wnba, march madness",
@@ -102,6 +130,28 @@ function asNum(v: unknown, fallback: number): number {
 }
 function asStr(v: unknown, fallback: string): string {
   return typeof v === "string" ? v : fallback;
+}
+
+/**
+ * Parse the tapered deletion schedule from its comma-separated setting value.
+ *
+ * beacon_settings.value_type only allows number | boolean | string, so the list
+ * ships as a string the same way bb_keyword_filter does. Junk entries are
+ * dropped rather than throwing: a typo on the admin Settings page must not stop
+ * the deletion watch, and an empty result falls back to the default schedule.
+ * Sorted ascending and de-duplicated so the caller can walk it in order.
+ */
+export function parseCheckSchedule(v: unknown, fallback: number[]): number[] {
+  if (typeof v !== "string") return fallback;
+  const hours = [
+    ...new Set(
+      v
+        .split(",")
+        .map((part) => Number(part.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  return hours.length > 0 ? hours : fallback;
 }
 
 export async function loadBeaconBriefSettings(
@@ -172,6 +222,30 @@ export async function loadBeaconBriefSettings(
     matchCandidateLimit: asNum(
       map.get("bb_match_candidate_limit"),
       d.matchCandidateLimit,
+    ),
+    deletionWatchDays: asNum(
+      map.get("bb_deletion_watch_days"),
+      d.deletionWatchDays,
+    ),
+    deletionCheckHours: parseCheckSchedule(
+      map.get("bb_deletion_check_hours"),
+      d.deletionCheckHours,
+    ),
+    deletionSweepIntervalMinutes: asNum(
+      map.get("bb_deletion_sweep_interval_minutes"),
+      d.deletionSweepIntervalMinutes,
+    ),
+    deletionSweepMaxIds: asNum(
+      map.get("bb_deletion_sweep_max_ids"),
+      d.deletionSweepMaxIds,
+    ),
+    xProbeIntervalMinutes: asNum(
+      map.get("bb_x_probe_interval_minutes"),
+      d.xProbeIntervalMinutes,
+    ),
+    alertCooldownMinutes: asNum(
+      map.get("bb_alert_cooldown_minutes"),
+      d.alertCooldownMinutes,
     ),
     keywordFilterEnabled: asBool(
       map.get("bb_keyword_filter_enabled"),
