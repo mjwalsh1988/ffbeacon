@@ -9,6 +9,7 @@ import { BriefShell } from "@/components/beacon-brief/brief-shell";
 import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
 import { BriefPagination } from "@/components/beacon-brief/brief-pagination";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { HeroLavaField } from "@/components/hero-lava-field";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export type Breadcrumb = { label: string; href?: string };
@@ -73,24 +74,18 @@ export async function BriefFeed({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
       />
 
-      <header className="relative overflow-hidden border-b border-line">
+      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
+        {/* z-10 keeps the beacon hairline above the lava field's base layer. */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
+          className="absolute inset-x-0 top-0 z-10 h-px"
           style={{
             backgroundImage:
               "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
           }}
         />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-28 left-1/2 h-[360px] w-[760px] -translate-x-1/2"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.09) 45%, transparent 75%)",
-          }}
-        />
-        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+        <HeroLavaField copy="left" />
+        <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
           <BriefBreadcrumb crumbs={breadcrumb} className="mb-4" />
 
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">

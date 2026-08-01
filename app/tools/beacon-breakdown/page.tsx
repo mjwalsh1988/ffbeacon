@@ -17,7 +17,7 @@ import { loadBreakdownStats } from "./load-stats";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroAmbience } from "@/components/hero-ambience";
+import { HeroLavaField } from "@/components/hero-lava-field";
 
 export const dynamic = "force-dynamic";
 
@@ -173,7 +173,7 @@ async function BreakdownResult({
           role="alert"
           className="rounded-card border border-signal-warning/40 bg-signal-warning/5 px-4 py-3 text-sm text-ink"
         >
-          We couldn&rsquo;t find {lookup.missing.length > 1 ? "those players" : "that player"}.
+          We couldn&apos;t find {lookup.missing.length > 1 ? "those players" : "that player"}.
           They may be inactive or the link may be out of date. Pick two players to try again.
         </p>
         <BreakdownSelector
@@ -214,7 +214,7 @@ async function BreakdownResult({
           </h3>
           <p className="text-xs text-ink-subtle">
             {context.formatDisplay}
-            {context.sourceDisplay ? ` · ${context.sourceDisplay}` : ""}
+            {context.sourceDisplay ? `, ${context.sourceDisplay}` : ""}
           </p>
         </div>
         <BreakdownTable a={a} b={b} rows={rows} />
@@ -351,25 +351,17 @@ function ResultSkeleton() {
 
 function Hero({ isMember }: { isMember: boolean }) {
   return (
-    <header className="relative overflow-hidden border-b border-line">
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="absolute inset-x-0 top-0 z-10 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/2 h-[360px] w-[820px] -translate-x-1/2"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
-        }}
-      />
-      <HeroAmbience variant="left" />
-      <div className="relative mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+      <HeroLavaField copy="center" />
+      <div className="relative mt-[4.5rem] mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <h1
           aria-label="Beacon Breakdown. Two players. One verdict."
           className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"

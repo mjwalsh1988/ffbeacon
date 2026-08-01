@@ -14,7 +14,7 @@ import {
 import { AuthorPortrait } from "@/components/author-portrait";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroAmbience } from "@/components/hero-ambience";
+import { HeroLavaField } from "@/components/hero-lava-field";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/about" },
@@ -54,40 +54,22 @@ export default async function AboutPage() {
 
 function Hero() {
   return (
-    <header className="relative overflow-hidden border-b border-line">
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
       {/* Beacon gradient accent bar pinned to the very top. */}
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="absolute inset-x-0 top-0 z-10 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      {/* Soft ambient glow behind the headline. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[820px] -translate-x-1/2"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
-        }}
-      />
-      {/* Second cyan glow anchored bottom-right for depth. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-40 right-0 h-[360px] w-[520px]"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
-        }}
-      />
-      <HeroAmbience variant="right" />
-      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
+      <HeroLavaField copy="left" />
+      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
         {/* aria-label gives the h1 a single accessible name covering the
             entire headline, so heading navigation announces it as one piece
             even though the gradient is achieved via a nested span. We
-            intentionally do NOT aria-hide the inner content — that would
+            intentionally do NOT aria-hide the inner content, that would
             remove the text from the accessibility tree and break
             mouse-hover-to-read features. */}
         <h1
@@ -106,7 +88,7 @@ function Hero() {
           for everyone.
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-          Accessibility-first rankings, calculators, and league insights — built so a
+          Accessibility-first rankings, calculators, and league insights, built so a
           casual fan, a 20-year veteran, and a screen-reader user can all walk away with
           the same information.
         </p>
@@ -174,7 +156,7 @@ function MissionSection() {
           <GapCard
             icon={BookOpen}
             title="The jargon barrier"
-            body="Target share, opportunity score, route participation — terms get tossed around like everyone already knows them. We explain the metric in plain English before we ask you to use it, and we always show our work."
+            body="Target share, opportunity score, route participation. These terms get tossed around like everyone already knows them. We explain the metric in plain English before we ask you to use it, and we always show our work."
             accent="purple"
           />
           <GapCard
@@ -462,13 +444,13 @@ function FounderSection() {
           </Link>
           <div className="relative min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-              Michael — Founder, FF Beacon
+              Michael, Founder of FF Beacon
             </p>
             <p className="mt-3 text-base leading-relaxed text-ink">
               Twenty years in fantasy. Plays the game stats-first across
-              redraft, dynasty, superflex, and TE-premium — partly because
-              that&rsquo;s how winners win, partly because most fantasy UIs
-              aren&rsquo;t built for blind dynasty managers. FF Beacon is what
+              redraft, dynasty, superflex, and TE-premium, partly because
+              that&apos;s how winners win, partly because most fantasy UIs
+              aren&apos;t built for blind dynasty managers. FF Beacon is what
               happens when that lived experience drives the product.
             </p>
             <Link

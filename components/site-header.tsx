@@ -204,19 +204,24 @@ export async function SiteHeader() {
               >
                 <UserIcon />
               </Link>
+              {/* Last control in the desktop row, so it carries
+                  `header-edge-right`: when the header condenses into its pill,
+                  its right side rounds to match the pill's curve. */}
               <form action="/auth/signout" method="post" className="hidden md:block">
                 <button
                   type="submit"
-                  className="inline-flex h-9 items-center rounded-card border border-line bg-surface px-3 text-sm font-medium hover:border-line-accent"
+                  className="header-edge-right inline-flex h-9 items-center rounded-card border border-line bg-surface px-3 text-sm font-medium hover:border-line-accent"
                 >
                   Sign out
                 </button>
               </form>
             </>
           ) : (
+            /* Signed out, this is the last control in the desktop row, so it
+               takes the pill-matching right edge instead. */
             <Link
               href="/login"
-              className="hidden md:inline-flex h-9 items-center rounded-card bg-beacon px-3 text-sm font-semibold text-black"
+              className="header-edge-right hidden md:inline-flex h-9 items-center rounded-card bg-beacon px-3 text-sm font-semibold text-black"
             >
               Sign in
             </Link>

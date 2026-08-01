@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MyBeaconNav } from "@/components/my-beacon-nav";
+import { HeroLavaField } from "@/components/hero-lava-field";
 import {
   SignalStatusCard,
   type SignalStatus,
@@ -103,27 +104,19 @@ function MyBeaconHero({
   signal: SignalStatus;
 }) {
   return (
-    <header className="relative overflow-hidden border-b border-line">
-      {/* Beacon-gradient accent bar pinned to the very top — matches the
-          home/about/author hero treatment so the dashboard reads as part
-          of the same brand surface. */}
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
+      {/* Beacon-gradient accent bar pinned to the very top. z-10 keeps it above
+          the lava field's own base layer. */}
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="absolute inset-x-0 top-0 z-10 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/2 h-[360px] w-[820px] -translate-x-1/2"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
-        }}
-      />
-      <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+      <HeroLavaField copy="left" />
+      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
           <div className="min-w-0 flex-1">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">

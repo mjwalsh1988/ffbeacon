@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
-import { HeroAmbience } from "@/components/hero-ambience";
+import { HeroLavaField } from "@/components/hero-lava-field";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -175,7 +175,7 @@ export default async function LeaguePulsePage({
                   <span className="text-brand-cyan">{user.display_name}</span>
                 </h2>
                 <p className="mt-2 text-sm text-ink-muted">
-                  {season} season · Sourced live from Sleeper.
+                  {season} season. Sourced live from Sleeper.
                 </p>
               </div>
             </div>
@@ -194,7 +194,7 @@ export default async function LeaguePulsePage({
                   </p>
                   <p className="mt-1 text-sm leading-relaxed text-ink-muted">
                     Double-check the season above, or try the previous year if
-                    you&rsquo;re looking at off-season state.
+                    you&apos;re looking at off-season state.
                   </p>
                 </div>
               </div>
@@ -226,26 +226,18 @@ export default async function LeaguePulsePage({
 
 function Hero({ isMember }: { isMember: boolean }) {
   return (
-    <header className="relative overflow-hidden border-b border-line">
-      {/* Beacon-gradient accent bar — matches home/about/author/my-beacon. */}
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
+      {/* Beacon-gradient accent bar, matches home/about/author/my-beacon. */}
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="absolute inset-x-0 top-0 z-10 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/2 h-[360px] w-[820px] -translate-x-1/2"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
-        }}
-      />
-      <HeroAmbience variant="left" />
-      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
+      <HeroLavaField copy="left" />
+      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
         {/* aria-label gives the h1 a clean accessible name covering the
             entire headline even though the gradient is achieved via a
             nested span. */}
@@ -264,8 +256,8 @@ function Hero({ isMember }: { isMember: boolean }) {
           </span>
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          Drop in your Sleeper username and we&rsquo;ll pull every active
-          league — roster shape, season, status — right from the source. No
+          Drop in your Sleeper username and we&apos;ll pull every active
+          league (roster shape, season, status) right from the source. No
           account required for this view.{" "}
           <Link
             href="/my-beacon/sleeper-leagues"
@@ -302,7 +294,7 @@ function Hero({ isMember }: { isMember: boolean }) {
           <HeroBullet
             icon={Sparkles}
             title="Live data"
-            body="Hits Sleeper on every search — no stale cache."
+            body="Hits Sleeper on every search, no stale cache."
           />
           <HeroBullet
             icon={Workflow}

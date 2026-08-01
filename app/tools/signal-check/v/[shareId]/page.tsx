@@ -8,6 +8,7 @@ import { SITE } from "@/lib/site";
 import type { PublicSharePayload, SideKey } from "@/lib/signal-check/types";
 import { TradeMarginGraph } from "../../trade-margin-graph";
 import { AssetAvatar } from "../../asset-avatar";
+import { HeroLavaField } from "@/components/hero-lava-field";
 
 export const dynamic = "force-dynamic";
 
@@ -73,26 +74,20 @@ export default async function SignalCheckSharePage({
 
   return (
     <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
+      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
+        {/* z-10 keeps the beacon hairline above the lava field's base layer. */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
+          className="absolute inset-x-0 top-0 z-10 h-px"
           style={{
             backgroundImage:
               "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
           }}
         />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 left-1/2 h-[340px] w-[760px] -translate-x-1/2"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
-          }}
-        />
-        <div className="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+        <HeroLavaField copy="center" />
+        <div className="relative mt-[4.5rem] mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            {payload.featureLabel} · {payload.resultLabel}
+            {payload.featureLabel}, {payload.resultLabel}
           </p>
 
           <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

@@ -90,6 +90,9 @@ export function MobileMenu({
 
   return (
     <>
+      {/* `header-edge-right`: this is the last control in the header row on
+          small screens, so its right side rounds to match the header pill's
+          curve once the header condenses on scroll (see globals.css). */}
       <button
         ref={triggerRef}
         type="button"
@@ -98,7 +101,7 @@ export function MobileMenu({
         aria-controls="mobile-menu"
         aria-label="Open navigation menu"
         onClick={() => setOpen(true)}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-card border border-line bg-surface text-ink hover:border-line-accent md:hidden"
+        className="header-edge-right inline-flex h-9 w-9 items-center justify-center rounded-card border border-line bg-surface text-ink hover:border-line-accent md:hidden"
       >
         <span aria-hidden="true">☰</span>
       </button>
@@ -244,7 +247,7 @@ export function MobileMenu({
                         Admin
                       </Link>
                     )}
-                    {/* Primary accent action — visually distinct from
+                    {/* Primary accent action, visually distinct from
                         Sign out so users tap "My Beacon" by mistake far
                         less often. */}
                     <Link

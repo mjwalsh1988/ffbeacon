@@ -12,7 +12,7 @@ import { loadFaabSettings } from "@/lib/faab/settings";
 import { FaabForm, type FaabPlayer } from "./faab-form";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
-import { HeroAmbience } from "@/components/hero-ambience";
+import { HeroLavaField } from "@/components/hero-lava-field";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -164,36 +164,18 @@ export default async function FaabPage({
 
   return (
     <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
+      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
         {/* Beacon gradient accent bar pinned to the very top. */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
+          className="absolute inset-x-0 top-0 z-10 h-px"
           style={{
             backgroundImage:
               "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
           }}
         />
-        {/* Soft ambient glow behind the headline. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 left-1/2 h-[360px] w-[820px] -translate-x-1/2"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.16) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
-          }}
-        />
-        {/* Second cyan glow anchored bottom-right for depth. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-40 right-0 h-[320px] w-[480px]"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
-          }}
-        />
-        <HeroAmbience variant="right" />
-        <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        <HeroLavaField copy="left" />
+        <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
           {fallbackBanner && (
             <p
               role="status"

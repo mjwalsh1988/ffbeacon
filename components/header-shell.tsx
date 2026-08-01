@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /**
@@ -9,23 +8,28 @@ import { useEffect, useState } from "react";
  * renders the actual logo, nav, and action controls and passes them in as
  * `children`, so no functionality moves to the client.
  *
- * Two visual states:
- *   - Floating (homepage, scrolled to the very top): fully transparent, no bar,
- *     no border, no background. The homepage hero is pulled up behind the header
- *     (see the Hero's negative top margin), so its animated backdrop shows
- *     through and the nav appears to float directly in the hero, matching the
- *     homepage design.
- *   - Condensed (after any scroll, or on every non-home page): a translucent,
- *     blurred, rounded floating pill with a soft border and drop shadow, so the
- *     controls stay legible over real page content.
+ * Two visual states, and they behave the same on every page:
+ *   - Docked (scrolled to the very top): fully transparent. No bar, no border,
+ *     no background, nothing painted across the viewport. The controls sit
+ *     directly on the page, and on the homepage the hero is pulled up behind
+ *     the header (see the Hero's negative top margin) so its backdrop shows
+ *     through.
+ *   - Condensed (after any scroll): a translucent, blurred, rounded floating
+ *     pill with a soft border and drop shadow, so the controls stay legible
+ *     over real page content.
  *
- * `usePathname()` is available during SSR for client components, so the homepage
- * renders transparent on the first paint with no flash. The scroll listener then
- * takes over on the client.
+ * Nothing paints the full width in either state. An earlier version faded a
+ * solid plate behind the condensed pill, but the fade ended below the header
+ * box and left a hairline running the width of every page.
+ *
+ * The outer padding and the inner height are identical in both states, so
+ * toggling never changes the header's height and the page never shifts under
+ * the reader.
+ *
+ * `data-header-state` is read by the `.header-edge-right` rule in globals.css:
+ * the right-most control rounds its right edge to match the pill.
  */
 export function HeaderShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isHome = pathname === "/";
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -35,24 +39,16 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const floating = isHome && !scrolled;
-
   return (
     <header
-      className={`sticky top-0 z-30 transition-[padding] duration-300 motion-reduce:transition-none ${
-        floating
-          ? "px-4 sm:px-6 lg:px-8"
-          : // Short solid-to-transparent fade masks the sliver of content that
-            // would otherwise show in the gap above the floating pill, while the
-            // lower fade keeps the pill reading as a floating object, not a bar.
-            "px-3 pt-2.5 sm:px-4 sm:pt-3 bg-[linear-gradient(to_bottom,#07070D_0px,#07070D_16px,transparent_70px)]"
-      }`}
+      data-header-state={scrolled ? "condensed" : "docked"}
+      className="sticky top-0 z-30 px-4 py-2 sm:px-6 lg:px-8"
     >
       <div
-        className={`mx-auto flex max-w-7xl items-center gap-3 transition-all duration-300 motion-reduce:transition-none ${
-          floating
-            ? "h-16 border border-transparent bg-transparent shadow-none"
-            : "h-14 rounded-full border border-line-accent bg-surface-elevated/95 pl-4 pr-3 shadow-xl shadow-black/60 ring-1 ring-brand-purple/10 backdrop-blur-xl sm:pl-5 sm:pr-4"
+        className={`mx-auto flex h-14 max-w-7xl items-center gap-3 transition-all duration-300 motion-reduce:transition-none ${
+          scrolled
+            ? "rounded-full border border-line-accent bg-surface-elevated/95 pl-4 pr-3 shadow-xl shadow-black/60 ring-1 ring-brand-purple/10 backdrop-blur-xl sm:pl-5 sm:pr-4"
+            : "border border-transparent bg-transparent px-0 shadow-none"
         }`}
       >
         {children}

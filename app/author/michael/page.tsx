@@ -17,7 +17,7 @@ import { AuthorPortrait } from "@/components/author-portrait";
 import { EmailReveal } from "@/components/email-reveal";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroAmbience } from "@/components/hero-ambience";
+import { HeroLavaField } from "@/components/hero-lava-field";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/author/michael" },
@@ -75,34 +75,17 @@ export default async function AuthorMichaelPage() {
 
 function Hero() {
   return (
-    <header className="relative overflow-hidden border-b border-line">
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="absolute inset-x-0 top-0 z-10 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/2 h-[360px] w-[720px] -translate-x-1/2"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.15) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 75%)",
-        }}
-      />
-      {/* Second cyan glow anchored bottom-right for depth, matching About. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-40 right-0 h-[340px] w-[480px]"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(34, 211, 238, 0.10) 0%, transparent 70%)",
-        }}
-      />
-      <HeroAmbience variant="left" />
-      <div className="relative mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-8 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
+      <HeroLavaField copy="wide" />
+      <div className="relative mt-[4.5rem] mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-8 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
         {/* Beacon gradient ring around the portrait. */}
         <span
           aria-hidden="true"
@@ -121,8 +104,8 @@ function Hero() {
           </h1>
           <p className="mt-3 text-lg leading-relaxed text-ink-muted">
             Founder of FF Beacon. Twenty seasons in fantasy. An active dynasty
-            manager who plays the game stats-first — and finally got tired of
-            fantasy tools that weren&rsquo;t built for him.
+            manager who plays the game stats-first, and finally got tired of
+            fantasy tools that weren&apos;t built for him.
           </p>
           <ul
             className="mt-6 grid grid-cols-3 gap-2 sm:gap-3"
@@ -183,15 +166,15 @@ function StorySection() {
           <div className="relative space-y-5 text-lg leading-relaxed text-ink-muted md:pl-8">
             <ProseRule />
             <p>
-              I&rsquo;ve been playing fantasy football since 2006 — twenty
+              I&apos;ve been playing fantasy football since 2006, twenty
               seasons. For most of those years I ran one or two leagues. In 2023
               I jumped into dynasty, and within a year I was managing more
-              rosters than I could keep in my head. The unlock wasn&rsquo;t free
+              rosters than I could keep in my head. The unlock wasn&apos;t free
               time. It was finally learning how to actually use the data.
             </p>
             <p>
-              I&rsquo;m blind. That cuts both ways in fantasy. Every app I tried
-              had friction sighted users never notice — stats trapped inside an
+              I&apos;m blind. That cuts both ways in fantasy. Every app I tried
+              had friction sighted users never notice, stats trapped inside an
               unlabeled chart, filters you can only reach with a mouse, player
               news that updates silently. So I leaned on what does work for me:
               stat lines, target shares, snap counts, analyst tape breakdowns on
@@ -199,7 +182,7 @@ function StorySection() {
             </p>
             <p>
               That accidentally made me a better fantasy player. I was already
-              evaluating players the way successful managers do — numbers and
+              evaluating players the way successful managers do, numbers and
               tape first, vibes last.
             </p>
           </div>
@@ -232,8 +215,8 @@ function WhySection() {
           <div className="relative space-y-5 text-lg leading-relaxed text-ink-muted md:pl-8">
             <ProseRule />
             <p>
-              Two things were obvious. First, there&rsquo;s a massive gap in
-              fantasy resources for people who don&rsquo;t already speak
+              Two things were obvious. First, there&apos;s a massive gap in
+              fantasy resources for people who don&apos;t already speak
               analytics. Second, almost nothing was built for fantasy players
               who use a screen reader.
             </p>
@@ -244,8 +227,8 @@ function WhySection() {
               analytic before it asks you to use it.
             </p>
             <p>
-              If you&rsquo;ve ever felt locked out of fantasy football by the
-              jargon or the interface — this site is for you. Read it by ear or
+              If you&apos;ve ever felt locked out of fantasy football by the
+              jargon or the interface, this site is for you. Read it by ear or
               by eye. It works both ways.
             </p>
           </div>
@@ -429,7 +412,7 @@ function SpeakingSection() {
           Conversations, articles, appearances.
         </h2>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-          As guest spots, podcasts, and pieces accumulate, they&rsquo;ll live
+          As guest spots, podcasts, and pieces accumulate, they&apos;ll live
           here. Replace this placeholder with a list as it fills out.
         </p>
 

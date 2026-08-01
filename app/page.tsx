@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { getDiscordGuildStats, type DiscordGuildStats } from "@/lib/discord-stats";
-import { HeroSignalBackdrop } from "@/components/hero-signal-backdrop";
+import { HeroLavaField } from "@/components/hero-lava-field";
 import { DiscordGlyph } from "@/components/discord-glyph";
 import {
   Workflow,
@@ -201,11 +201,12 @@ function Hero({
   discordStats: DiscordGuildStats | null;
 }) {
   return (
-    <header className="relative -mt-16 overflow-hidden border-b border-line">
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
       {/* The negative top margin pulls the hero up behind the transparent site
           header so this animated backdrop shows through it and the nav floats
-          in the hero. The content wrapper below adds top padding to clear the
-          nav. */}
+          in the hero. It matches the header's height exactly (py-2 + h-14 =
+          4.5rem), which HeaderShell holds constant in both of its states. The
+          content wrapper below adds top padding to clear the nav. */}
       {/* Beacon-gradient accent bar pinned to the very top of the page. */}
       <div
         aria-hidden="true"
@@ -215,7 +216,7 @@ function Hero({
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      <HeroSignalBackdrop />
+      <HeroLavaField copy="left" />
 
       <div className="relative mx-auto max-w-7xl px-4 pb-14 pt-24 sm:px-6 sm:pb-20 sm:pt-28 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-center lg:gap-12 lg:px-8 lg:pb-28 lg:pt-36 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
         {/* Left column: headline, copy, CTAs, feature pills. */}

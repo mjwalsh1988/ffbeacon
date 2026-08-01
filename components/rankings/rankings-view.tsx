@@ -16,7 +16,7 @@ import { POSITIONS } from "@/lib/site";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { HeroAmbience } from "@/components/hero-ambience";
+import { HeroLavaField } from "@/components/hero-lava-field";
 
 /**
  * The rankings board, shared by /rankings and /rankings/[format].
@@ -255,27 +255,18 @@ export async function RankingsView({
 
   return (
     <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
+      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
         {/* Beacon-gradient accent bar pinned to the very top. */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
+          className="absolute inset-x-0 top-0 z-10 h-px"
           style={{
             backgroundImage:
               "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
           }}
         />
-        {/* Soft ambient glow behind the headline. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[820px] -translate-x-1/2"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
-          }}
-        />
-        <HeroAmbience variant="right" />
-        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
+        <HeroLavaField copy="left" />
+        <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
           {reconciled.fallback && (
             <p
               role="status"
@@ -392,7 +383,7 @@ export async function RankingsView({
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
               {rows.length.toLocaleString()} players in {format.display_name},
               sorted by current market value. Click any column header to re-sort,
-              or open a player&rsquo;s row for the full breakdown.
+              or open a player&apos;s row for the full breakdown.
             </p>
           </div>
 

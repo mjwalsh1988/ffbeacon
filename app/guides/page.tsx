@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroAmbience } from "@/components/hero-ambience";
+import { HeroLavaField } from "@/components/hero-lava-field";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/guides" },
@@ -41,27 +41,18 @@ export default async function GuidesPage() {
 
 function Hero() {
   return (
-    <header className="relative overflow-hidden border-b border-line">
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
       {/* Beacon-gradient accent bar pinned to the very top. */}
       <div
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="absolute inset-x-0 top-0 z-10 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      {/* Soft ambient glow behind the headline. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[820px] -translate-x-1/2"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(168, 85, 247, 0.18) 0%, rgba(34, 211, 238, 0.10) 45%, transparent 75%)",
-        }}
-      />
-      <HeroAmbience variant="center" />
-      <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
+      <HeroLavaField copy="left" />
+      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
         {/* aria-label collapses the gradient-split headline into one
             accessible name for screen-reader navigation. */}
         <h1
@@ -147,11 +138,11 @@ function GuidesSection() {
           id="guides-heading"
           className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
         >
-          What&rsquo;s coming to the guides shelf.
+          What&apos;s coming to the guides shelf.
         </h2>
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
           Guides are being written while we focus on building out the rest of
-          the platform. They&rsquo;ll land here as they&rsquo;re ready, no
+          the platform. They&apos;ll land here as they&apos;re ready, no
           specific timeline yet.
         </p>
 
@@ -206,7 +197,7 @@ function GuideCard({ guide }: { guide: Guide }) {
           {guide.description}
         </p>
         <p className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-          What you&rsquo;ll learn
+          What you&apos;ll learn
         </p>
         <ul role="list" className="space-y-1.5 text-sm leading-relaxed text-ink">
           {guide.bullets.map((bullet) => (

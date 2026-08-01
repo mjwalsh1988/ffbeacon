@@ -11,6 +11,7 @@ import { PlayerPortrait } from "@/components/player-profile/player-portrait";
 import { TeamAnthem } from "@/components/player-profile/team-anthem";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
 import { RoleBadge } from "@/components/player-profile/role-badge";
+import { HeroLavaField } from "@/components/hero-lava-field";
 import type { NflTeamRow, PlayerRow, PositionalFinish } from "@/lib/player-profile";
 
 function positionAccent(position: string): string {
@@ -61,9 +62,12 @@ export function PlayerHero({
   );
 
   return (
-    <header className="relative overflow-hidden border-b border-line">
-      {/* Beacon hairline + a position-tinted corner wash. */}
-      <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-beacon" />
+    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
+      {/* Beacon hairline. z-10 keeps it above the lava field's base layer. */}
+      <div aria-hidden="true" className="absolute inset-x-0 top-0 z-10 h-px bg-beacon" />
+      <HeroLavaField copy="wide" />
+      {/* Position-tinted corner wash, over the field so the team color still
+          reads on a player's page. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -top-24 right-0 h-[380px] w-[680px]"
@@ -72,7 +76,7 @@ export function PlayerHero({
         }}
       />
 
-      <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <nav aria-label="Breadcrumb" className="mb-6 text-sm text-ink-muted">
           <ol className="flex items-center gap-2">
             <li>
