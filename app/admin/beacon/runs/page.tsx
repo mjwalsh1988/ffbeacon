@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
-import { CRON_JOBS } from "@/lib/cron-runs";
+import { CRON_JOBS, describeCronSchedule } from "@/lib/cron-runs";
 import { CronStatusBadge } from "@/components/cron-status-badge";
 import { formatRelative, formatEastern } from "@/lib/datetime";
 import { BeaconPageShell } from "@/components/admin/beacon-page-shell";
@@ -89,7 +89,7 @@ export default async function BeaconRunsPage() {
                 <li key={j.name} className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface/60 p-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-ink">{j.label} <span className="font-mono text-xs text-ink-subtle">{j.name}</span></p>
-                    <p className="text-xs text-ink-subtle">{j.scheduleHuman}{run ? `, last ${formatRelative(run.started_at, nowMs)}` : ", no runs yet"}</p>
+                    <p className="text-xs text-ink-subtle">{describeCronSchedule(j.schedule, nowMs)}{run ? `, last ${formatRelative(run.started_at, nowMs)}` : ", no runs yet"}</p>
                   </div>
                   <CronStatusBadge status={run?.status ?? "none"} />
                 </li>

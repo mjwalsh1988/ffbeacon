@@ -14,6 +14,71 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
+import { SITE_TIME_ZONE } from "./datetime";
+
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * Plain-language, Eastern-time description of a cron expression.
+ *
+ * Vercel schedules in UTC, but every time shown on this site reads in
+ * America/New_York, so the label is DERIVED from the expression rather than
+ * written by hand. That matters twice over: a hardcoded "07:00 UTC" makes the
+ * reader do the conversion, and a hardcoded "3:00 AM ET" would be wrong for half
+ * the year, because the UTC-to-Eastern offset moves with daylight saving while
+ * the cron does not. Resolving it against `nowMs` means the panel says 3:00 AM
+ * EDT in August and 2:00 AM EST in January, which is what actually happens.
+ *
+ * Deriving it also removes the drift risk that came with keeping a separate
+ * human string in lockstep with vercel.json by hand.
+ */
+export function describeCronSchedule(
+  schedule: string,
+  nowMs: number = Date.now(),
+): string {
+  if (!schedule.trim()) return "Not scheduled";
+
+  const [minute, hour, , month] = schedule.trim().split(/\s+/);
+  if (minute === undefined || hour === undefined) return schedule;
+
+  // Sub-hourly jobs have no meaningful time of day, so no conversion applies.
+  if (hour === "*") {
+    if (minute === "*") return "Every minute";
+    const everyN = /^\*\/(\d+)$/.exec(minute);
+    if (everyN) return `Every ${everyN[1]} minutes`;
+    return `Hourly at :${minute.padStart(2, "0")}`;
+  }
+
+  const h = Number(hour);
+  const m = Number(minute);
+  if (!Number.isInteger(h) || !Number.isInteger(m)) return schedule;
+
+  // Anchor to today's date so the EST/EDT label reflects the offset in force
+  // now. A daily job keeps its Eastern time of day even when that lands on the
+  // previous calendar day in UTC, so time-of-day alone is unambiguous here.
+  const now = new Date(nowMs);
+  const at = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m),
+  );
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: SITE_TIME_ZONE,
+    timeZoneName: "short",
+  }).format(at);
+
+  if (month && month !== "*") {
+    const names = month
+      .split(",")
+      .map((part) => MONTH_NAMES[Number(part) - 1])
+      .filter(Boolean);
+    if (names.length > 0) return `Daily, ${time}, ${names.join(", ")} only`;
+  }
+  return `Daily, ${time}`;
+}
 
 export type CronJobName =
   | "sync-ktc"
@@ -37,6 +102,11 @@ export type CronRunStatus = "running" | "success" | "error" | "skipped";
  * missing. Keep `name` in lockstep with the route folder under app/api/cron and
  * `schedule` in lockstep with vercel.json.
  *
+ * The cron expression is the only schedule stored here. Its human, Eastern-time
+ * label comes from describeCronSchedule() above, so there is no second copy to
+ * keep in step and no hand-written zone that goes stale at the daylight-saving
+ * boundary.
+ *
  * An empty `schedule` means the route exists and is callable but is not wired
  * into vercel.json yet. Nothing is in that state right now.
  */
@@ -44,14 +114,12 @@ export const CRON_JOBS: ReadonlyArray<{
   name: CronJobName;
   label: string;
   schedule: string;
-  scheduleHuman: string;
   description: string;
 }> = [
   {
     name: "sync-ktc",
     label: "KTC value sync",
     schedule: "0 7 * * *",
-    scheduleHuman: "Daily, 07:00 UTC",
     description:
       "Scrapes KeepTradeCut and writes player_value_history + draft_pick_values.",
   },
@@ -59,14 +127,12 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "sync-fantasycalc",
     label: "FantasyCalc value sync",
     schedule: "0 8 * * *",
-    scheduleHuman: "Daily, 08:00 UTC",
     description: "Pulls FantasyCalc current values into player_value_history.",
   },
   {
     name: "sync-dynastyprocess",
     label: "DynastyProcess value sync",
     schedule: "0 9 * * *",
-    scheduleHuman: "Daily, 09:00 UTC",
     description:
       "Pulls DynastyProcess FantasyPros-derived dynasty values into player_value_history.",
   },
@@ -74,7 +140,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "recalculate-beacon",
     label: "FF Beacon value recalc",
     schedule: "30 9 * * *",
-    scheduleHuman: "Daily, 09:30 UTC",
     description:
       "Recomputes FF Beacon proprietary values (all signals) into player_value_history + draft_pick_values, after the source syncs and before the derived recalc.",
   },
@@ -82,7 +147,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "recalculate-derived",
     label: "Rankings + trends recalc",
     schedule: "0 10 * * *",
-    scheduleHuman: "Daily, 10:00 UTC",
     description:
       "Rebuilds the global rankings and player_value_trends tables from the latest values.",
   },
@@ -90,7 +154,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "beacon-reference-rebuild",
     label: "Calibration reference rebuild",
     schedule: "0 13 * * *",
-    scheduleHuman: "Daily, 13:00 UTC",
     description:
       "Rebuilds the stored calibration reference for any format whose reference has passed the rebuild cadence, so in practice about once a month per format; every other night it reports skipped. Runs after the whole daily pipeline so a new reference takes effect on the NEXT morning's recompute rather than landing mid-cycle. Refuses to build while a source is missing or stale, or the shared set is thin, leaving the current reference live.",
   },
@@ -98,7 +161,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "beacon-reference-drift",
     label: "Calibration drift check",
     schedule: "0 14 * * *",
-    scheduleHuman: "Daily, 14:00 UTC",
     description:
       "Builds a candidate calibration reference in memory, compares the board it would produce against the stored one, and emails an alert if anything crosses the configured limits. Never persists or activates the candidate. Runs after the rebuild job, so on a rebuild night it confirms the result and on every other night it is the early warning that the stored reference is drifting.",
   },
@@ -106,7 +168,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "sync-sleeper-stats",
     label: "Sleeper stats sync",
     schedule: "0 9 * 1,2,8,9,10,11,12 *",
-    scheduleHuman: "Daily 09:00 UTC, NFL months only",
     description:
       "Refreshes current-season player_stats from Sleeper. Skips in the off-season.",
   },
@@ -114,7 +175,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "sync-sleeper-market",
     label: "Draft-market ADP sync",
     schedule: "0 11 * * *",
-    scheduleHuman: "Daily, 11:00 UTC",
     description:
       "Refreshes Sleeper ADP (every format) + season projections into player_market_snapshots, then rookie ADP (FantasyPros rookie rankings via DynastyProcess) under the 'rookie' key. Historical: one partition per night.",
   },
@@ -122,7 +182,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "sync-weekly-projections",
     label: "Weekly projections sync",
     schedule: "0 12 * * *",
-    scheduleHuman: "Daily, 12:00 UTC",
     description:
       "Refreshes Sleeper per-week projected points for the current season's upcoming weeks into player_weekly_projections (overwrite in place). Skips cleanly when nothing is published yet.",
   },
@@ -130,7 +189,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "beacon-brief-curate",
     label: "Beacon Brief curation",
     schedule: "*/5 * * * *",
-    scheduleHuman: "Every 5 minutes",
     description:
       "Ingests new source posts, scores/categorizes them, and enqueues Discord + article work (fast path only).",
   },
@@ -138,7 +196,6 @@ export const CRON_JOBS: ReadonlyArray<{
     name: "beacon-brief-worker",
     label: "Beacon Brief queue worker",
     schedule: "* * * * *",
-    scheduleHuman: "Every minute",
     description:
       "Drains the Beacon Brief queue: Discord posts/patches, article writing, and deletion checks, with throttle and backoff.",
   },

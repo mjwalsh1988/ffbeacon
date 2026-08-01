@@ -3,7 +3,12 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
-import { CRON_JOBS, summarizeCronResult, type CronJobName } from "@/lib/cron-runs";
+import {
+  CRON_JOBS,
+  describeCronSchedule,
+  summarizeCronResult,
+  type CronJobName,
+} from "@/lib/cron-runs";
 import { CronStatusBadge } from "@/components/cron-status-badge";
 import { AdminHero } from "@/components/admin/admin-hero";
 import { ImageWithFallback } from "@/components/image-with-fallback";
@@ -398,7 +403,7 @@ function CronHealthSection({
               key={job.name}
               name={job.name}
               label={job.label}
-              schedule={job.scheduleHuman}
+              schedule={describeCronSchedule(job.schedule, nowMs)}
               run={run}
               nowMs={nowMs}
             />
