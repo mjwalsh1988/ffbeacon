@@ -14,6 +14,8 @@ import {
   Timer,
   ArrowRight,
   Radar,
+  Vote,
+  Clock,
   Layers,
   BookOpen,
   Unlock,
@@ -176,8 +178,8 @@ export default async function HomePage() {
       <Hero isMember={isMember} discordStats={discordStats} />
       <ToolsSection />
       <GamesSection />
-      <SourcesFormatsSection formats={formats ?? []} sources={sources ?? []} />
       <ArticlesSection articles={articles ?? []} />
+      <SourcesFormatsSection formats={formats ?? []} sources={sources ?? []} />
       <CtaSection isMember={isMember} />
     </main>
   );
@@ -558,10 +560,13 @@ function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
 /* ---------- Games ---------- */
 
 type FeaturedGame = {
-  href: string;
+  /** Absent while the game is still being built. A card with no href renders
+   *  as a non-interactive "coming soon" placeholder rather than a dead link. */
+  href?: string;
   title: string;
   description: string;
-  cta: string;
+  /** Only meaningful on a playable game. */
+  cta?: string;
   icon: LucideIcon;
   status: string;
 };
@@ -576,6 +581,13 @@ const FEATURED_GAMES: FeaturedGame[] = [
     icon: Radar,
     status: "New",
   },
+  {
+    title: "Would You Rather?",
+    description:
+      "Two sides of a real trade, one vote. Call the winner round after round, then see how your read stacks up against everyone else who played.",
+    icon: Vote,
+    status: "Coming soon",
+  },
 ];
 
 function GamesSection() {
@@ -588,7 +600,7 @@ function GamesSection() {
             id="games-heading"
             className="text-3xl font-semibold tracking-tight sm:text-4xl"
           >
-            Decode the profile. Find the player.
+            Guess the player. Pick a side.
           </h2>
           <Link
             href="/games"
@@ -601,7 +613,8 @@ function GamesSection() {
 
         <div className="mt-12 grid gap-5 md:grid-cols-2">
           {FEATURED_GAMES.map((game) => (
-            <GameCard key={game.href} game={game} />
+            // Keyed by title, not href: an unbuilt game has no href yet.
+            <GameCard key={game.title} game={game} />
           ))}
         </div>
       </div>
@@ -611,6 +624,38 @@ function GamesSection() {
 
 function GameCard({ game }: { game: FeaturedGame }) {
   const { href, title, description, cta, icon: Icon, status } = game;
+
+  // A game still being built gets a non-interactive card: dashed border,
+  // recessed surface, muted icon, and no hover lift. Rendering it as a Link
+  // would put a dead destination in the tab order and promise a page that does
+  // not exist. Same treatment the pending cards on /guides use, so "not built
+  // yet" looks the same everywhere on the site.
+  if (!href) {
+    return (
+      <article className="relative flex flex-col rounded-card border border-dashed border-line bg-base/40 p-6">
+        <div className="flex items-center justify-between">
+          <span
+            aria-hidden="true"
+            className="flex h-12 w-12 items-center justify-center rounded-card border border-dashed border-line bg-surface text-ink-muted"
+          >
+            <Icon className="h-6 w-6" />
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line bg-base px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+            <Clock aria-hidden="true" className="h-3 w-3" />
+            {status}
+          </span>
+        </div>
+        <h3 className="mt-5 text-xl font-semibold text-ink-muted">{title}</h3>
+        <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">
+          {description}
+        </p>
+        <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-dashed border-line px-3.5 py-2 text-sm font-semibold text-ink-subtle">
+          In development
+        </span>
+      </article>
+    );
+  }
+
   return (
     <Link
       href={href}

@@ -16,8 +16,10 @@ import { PUBLISHED_GUIDES } from "@/lib/guides/published";
  *    tells Google the whole file is unreliable, and it stops trusting the rest.
  *    The previous version listed /players, which has no route folder at all: it
  *    fell through to app/[handle] and served "Profile not found" with
- *    noindex, nofollow. It also listed /guides, which has no guides yet, and two
- *    categories with zero published articles.
+ *    noindex, nofollow. It also listed /guides back when every card on it read
+ *    "Coming soon", and two categories with zero published articles. /guides is
+ *    listed again now, but only because it links to a guide that actually exists;
+ *    see PUBLISHED_GUIDES below.
  *
  * 2. lastModified must be true or absent. It was previously `new Date()` for every
  *    static path and every category, so 20 URLs claimed to change every hour that
