@@ -46,7 +46,7 @@ create index if not exists idx_cron_runs_started
 
 alter table public.cron_runs enable row level security;
 
--- No anon/authenticated policies — table is service-role-only. The admin panel
+-- No anon/authenticated policies, table is service-role-only. The admin panel
 -- reads it through the service-role client behind an is_admin gate.
 drop policy if exists cron_runs_service_role_all on public.cron_runs;
 create policy cron_runs_service_role_all on public.cron_runs

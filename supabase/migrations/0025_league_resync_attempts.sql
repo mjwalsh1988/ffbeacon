@@ -17,13 +17,13 @@ create table if not exists public.league_resync_attempts (
   -- Auth provenance for audit. user_id is the FF Beacon auth.users.id of
   -- whoever triggered the resync.
   triggered_by_user_id uuid,
-  -- "admin" or "commissioner" — recorded for auditability.
+  -- "admin" or "commissioner", recorded for auditability.
   triggered_via text
 );
 
 alter table public.league_resync_attempts enable row level security;
 
--- No anon/authenticated policies — table is service-role-only.
+-- No anon/authenticated policies, table is service-role-only.
 
 drop policy if exists league_resync_attempts_service_role_all on public.league_resync_attempts;
 create policy league_resync_attempts_service_role_all on public.league_resync_attempts

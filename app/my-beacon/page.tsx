@@ -29,7 +29,7 @@ type StatCard = {
   /** Numeric values use the mono gradient treatment; text values use sans
    * at a smaller size so longer strings like "Dynasty Superflex" fit. */
   kind: "numeric" | "text";
-  /** Optional accessible name for the value — used when the visible value
+  /** Optional accessible name for the value, used when the visible value
    * is abbreviated (e.g. "Dynasty PPR SF") and we want screen readers to
    * hear the full unabbreviated form ("Dynasty PPR Superflex"). */
   valueAriaLabel?: string;
@@ -64,7 +64,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   {
     href: "/tools/league-pulse",
     title: "League Pulse",
-    body: "Pull every league for a Sleeper username — no account required for the preview view.",
+    body: "Pull every league for a Sleeper username, no account required for the preview view.",
     icon: Workflow,
   },
 ];
@@ -77,7 +77,7 @@ type ComingSoon = {
 const COMING_SOON: ComingSoon[] = [
   {
     title: "Custom scoring profiles",
-    body: "Save your league's exact scoring and use it everywhere — rankings, trade values, FAAB.",
+    body: "Save your league's exact scoring and use it everywhere: rankings, trade values, FAAB.",
   },
   {
     title: "Weekly digest",
@@ -107,7 +107,7 @@ export default async function MyBeaconDashboardPage() {
     supabase.auth.getUser(),
     getActiveFormats(supabase),
     getAvailableSources(supabase),
-    // No URL params on this page — resolvers fall through DB → cookie →
+    // No URL params on this page, resolvers fall through DB → cookie →
     // default. For a logged-in user that almost always means DB.
     resolveFormatSlug(supabase, undefined),
     resolveSourceSlug(supabase, undefined),
@@ -135,12 +135,12 @@ export default async function MyBeaconDashboardPage() {
   const formatRow = formats.find((f) => f.slug === formatRes.slug);
   const sourceRow = sources.find((s) => s.slug === sourceRes.slug);
 
-  // Keep the full display name available for accessibility — the card
+  // Keep the full display name available for accessibility, the card
   // value uses the abbreviated form for visual density, but screen
   // readers should still hear "Superflex" via the aria-label below.
-  const formatFullName = formatRow?.display_name ?? "—";
+  const formatFullName = formatRow?.display_name ?? "-";
   const formatDisplay = shortFormatName(formatFullName);
-  const sourceDisplay = sourceRow?.display_name ?? "—";
+  const sourceDisplay = sourceRow?.display_name ?? "-";
 
   // user.created_at is an ISO string in the Supabase auth schema.
   // Format as short month + year (e.g. "Dec 2026") for a friendlier
@@ -152,7 +152,7 @@ export default async function MyBeaconDashboardPage() {
         year: "numeric",
         timeZone: SITE_TIME_ZONE,
       }).format(new Date(user.created_at))
-    : "—";
+    : "-";
 
   const statCards: StatCard[] = [
     {
@@ -182,7 +182,7 @@ export default async function MyBeaconDashboardPage() {
       label: "Member since",
       value: memberSince,
       caption: "Welcome aboard.",
-      // Text variant — the date string mixes letters and digits, which
+      // Text variant, the date string mixes letters and digits, which
       // reads awkwardly in mono and risks overflow on narrow mobile cards.
       kind: "text",
     },
@@ -369,11 +369,11 @@ function ComingSoonSection() {
         id="coming-heading"
         className="mt-2 max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl"
       >
-        What&rsquo;s landing in My Beacon next.
+        What&apos;s landing in My Beacon next.
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
         These are the next surfaces planned for your personal dashboard. None
-        are live yet — but they&rsquo;ll show up here without breaking the
+        are live yet, but they&apos;ll show up here without breaking the
         layout when they ship.
       </p>
 

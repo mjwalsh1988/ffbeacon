@@ -133,7 +133,7 @@ export function MyDraft({
                   // Name, then team and position as subtle inline text, all on one line
                   // (the sidebar is narrow, so the whole left side truncates together);
                   // pick number pinned to the far right.
-                  const meta = [p.team, p.position].filter(Boolean).join(" · ");
+                  const meta = [p.team, p.position].filter(Boolean).join(", ");
                   return (
                     <li
                       key={p.pickNo}

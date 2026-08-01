@@ -166,7 +166,7 @@ export function DraftBoard({
 
                 const stateText = pick ? shortName(pick) : "Open slot";
                 const subInfo = pick
-                  ? [pick.position, pick.team, `#${pickNo}`].filter(Boolean).join(" · ")
+                  ? [pick.position, pick.team, `#${pickNo}`].filter(Boolean).join(", ")
                   : "";
 
                 // Value-vs-ADP indicator for made, non-keeper picks with a known ADP.

@@ -1,5 +1,5 @@
 /**
- * Calculate trends — CLI entrypoint.
+ * Calculate trends, CLI entrypoint.
  * Implementation lives in lib/calculate-trends.ts.
  *
  * Run: npm run calculate:trends

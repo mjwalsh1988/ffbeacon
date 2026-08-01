@@ -354,7 +354,7 @@ export function SiteSearch() {
                   <p className="px-4 py-6 text-sm text-ink-subtle">Searching...</p>
                 ) : !hasResults ? (
                   <p className="px-4 py-6 text-sm text-ink-subtle">
-                    No matches for &ldquo;{trimmed}&rdquo;. Try a player name, an
+                    No matches for &quot;{trimmed}&quot;. Try a player name, an
                     article title, or a tool.
                   </p>
                 ) : (
@@ -573,7 +573,7 @@ function ArticleOption({
     result.publishedAt ? formatEasternDate(result.publishedAt) : null,
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(", ");
   return (
     <OptionRow
       id={id}

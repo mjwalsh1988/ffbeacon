@@ -46,7 +46,7 @@ type Combo = {
 /**
  * Calculate power rankings for a single league across every available
  * (format, source) combo and upsert into league_power_rankings_cache.
- * Idempotent — re-running replaces the rows for that league.
+ * Idempotent, re-running replaces the rows for that league.
  *
  * Why iterate all combos: users toggle format/source on the deep view and
  * the cache row for the displayed combo must exist. Combos with no value

@@ -20,7 +20,7 @@ export default async function AccountSettingsPage() {
     data: { user },
   } = await supabase.auth.getUser();
   // Layout already redirects unauthenticated users, but TS doesn't know
-  // that — the assertion keeps the rest of the function null-free.
+  // that, the assertion keeps the rest of the function null-free.
   if (!user) return null;
 
   // The user object from getUser() includes the identities array directly,
@@ -62,7 +62,7 @@ export default async function AccountSettingsPage() {
     refreshed_at: s.refreshed_at,
     not_after: s.not_after,
     user_agent: s.user_agent,
-    // `ip` comes back as the Postgres `inet` type — supabase-js types
+    // `ip` comes back as the Postgres `inet` type, supabase-js types
     // it as `unknown`. It serializes as a string in practice.
     ip: typeof s.ip === "string" ? s.ip : null,
     is_current: s.id === currentSessionId,
@@ -184,7 +184,7 @@ function AccountOverviewSection({
   const cards = [
     {
       label: "Account email",
-      value: email ?? "—",
+      value: email ?? "-",
       caption: emailConfirmedAt ? "Confirmed" : "Awaiting confirmation",
     },
     {
@@ -318,7 +318,7 @@ function providerDisplayName(provider: string): string {
 }
 
 function formatShortDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Intl.DateTimeFormat("en-US", {
       month: "short",
@@ -327,14 +327,14 @@ function formatShortDate(iso: string | null): string {
       timeZone: SITE_TIME_ZONE,
     }).format(new Date(iso));
   } catch {
-    return "—";
+    return "-";
   }
 }
 
 /**
  * Decode the Supabase auth cookie to extract the access-token session_id
  * for the request that hit this page. Used to mark the matching row in
- * the sessions list as "This device". Returns null on any decode failure —
+ * the sessions list as "This device". Returns null on any decode failure,
  * the UI just won't label a current session, which is acceptable.
  */
 async function getCurrentSessionId(

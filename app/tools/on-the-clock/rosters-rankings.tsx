@@ -165,7 +165,7 @@ function TeamRosterCard({ team }: { team: TeamRollup }) {
             )}
           </h4>
           <p className="mt-0.5 text-xs text-ink-subtle">
-            {team.playerCount} drafted · {team.futurePicks.length} future pick
+            {team.playerCount} drafted, {team.futurePicks.length} future pick
             {team.futurePicks.length === 1 ? "" : "s"}
           </p>
         </div>
@@ -247,7 +247,7 @@ function PositionColumn({
                 {p.name}
               </span>
               <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-subtle">
-                {p.value > 0 ? fmt(p.value) : "—"}
+                {p.value > 0 ? fmt(p.value) : "-"}
               </span>
             </li>
           ))}

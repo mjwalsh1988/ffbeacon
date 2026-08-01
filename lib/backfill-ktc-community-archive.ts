@@ -7,7 +7,7 @@
  * 2020-04-01. This script ingests a configurable date window from that sheet
  * to extend our KTC history back further than the public endpoint supports.
  *
- * One-time bootstrap. NOT for nightly cron — the regular sync-ktc cron
+ * One-time bootstrap. NOT for nightly cron, the regular sync-ktc cron
  * (scripts/sync-ktc.ts via /api/cron/sync-ktc) handles all current-day writes.
  *
  * Coverage scope (intentional limits):

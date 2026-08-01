@@ -323,7 +323,7 @@ export function RulesManager({
                         {!r.enabled && <span className="ml-2 text-xs text-ink-subtle">(disabled)</span>}
                       </span>
                       <span className="block text-xs text-ink-subtle">
-                        {r.scope} · {r.phase} · {(r.action as { type?: string }).type}
+                        {r.scope}, {r.phase}, {(r.action as { type?: string }).type}
                       </span>
                     </span>
                     <span className="flex shrink-0 gap-1">

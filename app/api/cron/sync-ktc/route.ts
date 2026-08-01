@@ -16,7 +16,7 @@ export const maxDuration = 300;
  * (`Authorization: Bearer <CRON_SECRET>`) and refuses anything else, so the
  * endpoint cannot be triggered from the public internet.
  *
- * Calls runKtcSync() — the same code path scripts/sync-ktc.ts runs locally.
+ * Calls runKtcSync(), the same code path scripts/sync-ktc.ts runs locally.
  * Returns a JSON sync report so Vercel's cron log surfaces the row counts.
  */
 export async function GET(req: Request) {

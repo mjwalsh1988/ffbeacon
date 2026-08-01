@@ -19,8 +19,8 @@ import { Info } from "lucide-react";
  * - The trigger is a real <button> with the full tooltip sentence as
  *   its aria-label, so screen readers announce the whole explanation
  *   on focus regardless of whether the visual tooltip is on screen.
- * - The visual tooltip itself is aria-hidden — purely for sighted
- *   users — so SR users don't hear the content twice.
+ * - The visual tooltip itself is aria-hidden, purely for sighted
+ *   users, so SR users don't hear the content twice.
  *
  * Open/close behavior:
  *   - Mouse hover (pointerType=mouse) opens and closes.

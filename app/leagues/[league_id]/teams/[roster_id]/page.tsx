@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
         .maybeSingle()
     : { data: null };
   const teamName = user?.team_name || user?.display_name || `Team ${roster_id}`;
-  const title = `${teamName} — ${league.name}`;
+  const title = `${teamName}, ${league.name}`;
   const description = `Roster, draft picks, and value breakdown for ${teamName} in ${league.name}.`;
   const ogPath = `/api/og/team/${league_id}/${roster_id}`;
   return {
@@ -189,7 +189,7 @@ export default async function TeamDetailPage({
               className="sm:col-start-2 sm:row-start-1"
             />
             <p className="text-xs uppercase tracking-wider text-brand-cyan sm:col-start-1 sm:row-start-2">
-              Team detail • {formatDisplay} • {sourceDisplay}
+              Team detail, {formatDisplay}, {sourceDisplay}
             </p>
           </div>
           {context.coverage === "fallback" && context.fallback && (

@@ -127,7 +127,7 @@ export default async function MyRankingsPage() {
                 Create your first ranking board above.
               </p>
               <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-                Pick &ldquo;Overall&rdquo; to rank everyone, or choose a single
+                Pick &quot;Overall&quot; to rank everyone, or choose a single
                 position to focus on one spot.
               </p>
             </div>

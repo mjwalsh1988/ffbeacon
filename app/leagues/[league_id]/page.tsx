@@ -630,7 +630,7 @@ async function PowerRankingsSection({
       <Panel
         eyebrow="Standings"
         title="Power Rankings"
-        helper={`${formatDisplay} • ${sourceDisplay}`}
+        helper={`${formatDisplay}, ${sourceDisplay}`}
       >
         <p className="text-sm text-ink-muted">
           No cached power rankings yet for {formatDisplay} via {sourceDisplay}. The cache

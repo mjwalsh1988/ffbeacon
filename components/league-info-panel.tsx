@@ -7,7 +7,7 @@
  *
  * Two layouts:
  *   - "sidebar" (Overview): everything stacked in a narrow rail.
- *   - "horizontal" (Teams): a full-width band split 1/3 · 1/3 · 1/3 into
+ *   - "horizontal" (Teams): a full-width band split 1/3, 1/3, 1/3 into
  *     identity, roster, and scoring, so the rosters below can use full width.
  *
  * Presentational server component. Every colored element is paired with text,
@@ -158,7 +158,7 @@ export function LeagueInfoPanel({
       <div className="p-5 sm:p-6">
         {horizontal ? (
           <>
-            {/* 1/3 · 1/3 · 1/3 band: identity, roster, scoring. */}
+            {/* 1/3, 1/3, 1/3 band: identity, roster, scoring. */}
             <div className="grid gap-5 md:grid-cols-3 md:gap-6">
               {identity}
               <div className="md:border-l md:border-line/60 md:pl-6">{rosterBlock}</div>
@@ -213,8 +213,8 @@ export function LeagueMetaLine({
   if (coverage !== "none") {
     parts.push(
       <span key="values">
-        Values via <span className="text-ink-muted">{sourceDisplay}</span>{" "}
-        <span className="text-ink-subtle">•</span>{" "}
+        Values via <span className="text-ink-muted">{sourceDisplay}</span>
+        <span className="text-ink-subtle">,</span>{" "}
         <span className="text-ink-muted">{formatDisplay}</span>
       </span>,
     );
@@ -241,9 +241,12 @@ export function LeagueMetaLine({
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-subtle">
       {parts.map((node, i) => (
         <span key={i} className="flex items-center gap-2">
+          {/* The row is a gapped flex, so the separator needs a negative left
+              margin to sit against the item it follows instead of floating in
+              the gap. */}
           {i > 0 && (
-            <span aria-hidden="true" className="text-line-accent">
-              ·
+            <span aria-hidden="true" className="-ml-2 text-line-accent">
+              ,
             </span>
           )}
           {node}
@@ -333,7 +336,7 @@ function MetaFooter({
       {coverage !== "none" && (
         <p>
           Values via <span className="text-ink">{sourceDisplay}</span>{" "}
-          <span className="text-ink-subtle">•</span>{" "}
+          <span className="text-ink-subtle">,</span>{" "}
           <span className="text-ink">{formatDisplay}</span>
         </p>
       )}

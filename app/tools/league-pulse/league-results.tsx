@@ -57,7 +57,7 @@ function leagueHref(
  *   and navigates straight to the deep view. Mobile shows a compact
  *   3-column table that opens a slide-up modal on tap.
  * - `"dashboard"`: rendered inside /my-beacon/sleeper-leagues. The only
- *   thing that navigates to the deep view is the league name itself —
+ *   thing that navigates to the deep view is the league name itself,
  *   everything else is non-navigational. The last column carries two
  *   profile toggles (Featured + Show on profile) that persist into
  *   user_preferences.sleeper_league_settings.
@@ -83,9 +83,9 @@ export function LeagueResults({
   /** The Sleeper handle the user searched for. Forwarded into the deep
    * view's team-filter chip bar on "Open league". */
   sleeperUsername: string | null;
-  /** Dashboard variant only — currently pinned league id (Sleeper id). */
+  /** Dashboard variant only, currently pinned league id (Sleeper id). */
   featuredLeagueId?: string | null;
-  /** Dashboard variant only — leagues currently visible on the user's
+  /** Dashboard variant only, leagues currently visible on the user's
    * profile. */
   shownLeagueIds?: string[];
 }) {
@@ -100,7 +100,7 @@ export function LeagueResults({
     () => new Set(shownLeagueIds),
   );
   // Dashboard view filter. Defaults to true so first-time users see
-  // every synced league — turning the toggle OFF narrows the table to
+  // every synced league, turning the toggle OFF narrows the table to
   // just the leagues marked Featured or Shown on profile, for users
   // who want their dashboard to mirror exactly what their profile
   // surfaces.
@@ -110,7 +110,7 @@ export function LeagueResults({
   // Filter the leagues array passed down to the dashboard renderers.
   // When `showAll` is true we pass everything through. When false, we
   // keep only the ones that are explicitly Featured or in the Shown
-  // set — leagues the user has signaled they care about for their
+  // set, leagues the user has signaled they care about for their
   // public profile.
   const visibleLeagues = useMemo(() => {
     if (variant !== "dashboard" || showAll) return leagues;
@@ -257,7 +257,7 @@ function LeagueCategorySection({
   );
 }
 
-/* ---------- PUBLIC variant — desktop ---------- */
+/* ---------- PUBLIC variant, desktop ---------- */
 
 function DesktopPublicTable({
   leagues,
@@ -345,7 +345,7 @@ function DesktopPublicTable({
   );
 }
 
-/* ---------- PUBLIC variant — mobile ---------- */
+/* ---------- PUBLIC variant, mobile ---------- */
 
 function MobilePublicTable({
   leagues,
@@ -398,7 +398,7 @@ function MobilePublicTable({
                           aria-hidden="true"
                           className="h-3 w-3 text-brand-cyan"
                         />
-                        {league.total_rosters} teams · {league.season}
+                        {league.total_rosters} teams, {league.season}
                       </span>
                     </span>
                     <span className="flex justify-center">
@@ -421,7 +421,7 @@ function MobilePublicTable({
   );
 }
 
-/* ---------- DASHBOARD variant — desktop ---------- */
+/* ---------- DASHBOARD variant, desktop ---------- */
 
 function DesktopDashboardTable({
   leagues,
@@ -540,7 +540,7 @@ function DesktopDashboardTable({
   );
 }
 
-/* ---------- DASHBOARD variant — mobile ---------- */
+/* ---------- DASHBOARD variant, mobile ---------- */
 
 function MobileDashboardCards({
   leagues,
@@ -596,7 +596,7 @@ function MobileDashboardCards({
                   aria-hidden="true"
                   className="h-3 w-3 text-brand-cyan"
                 />
-                {league.total_rosters} teams · {league.season}
+                {league.total_rosters} teams, {league.season}
               </p>
               {positions.length > 0 && (
                 <div className="mt-3">
@@ -738,7 +738,7 @@ function DashboardFilter({
             {showAll
               ? `Showing all ${totalCount} ${totalCount === 1 ? "league" : "leagues"}.`
               : profileLeagueCount === 0
-                ? "No featured or shown leagues yet — toggle one below."
+                ? "No featured or shown leagues yet. Toggle one below."
                 : `Showing ${visibleCount} of ${totalCount} (featured + shown).`}
           </p>
         </div>
@@ -907,7 +907,7 @@ const POSITION_LABEL: Record<string, string> = {
  * /tools/league-pulse table, the My Sleeper Leagues dashboard, and the
  * league deep view all render the same string for the same status.
  *
- * Tone mapping is intentionally local — it's a visual concern tied to
+ * Tone mapping is intentionally local, it's a visual concern tied to
  * the badge component, not to the status string itself.
  */
 function describeStatus(raw: string): { label: string; tone: string } {

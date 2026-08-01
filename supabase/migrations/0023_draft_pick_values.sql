@@ -1,7 +1,7 @@
 -- Migration 0023: draft_pick_values
 --
 -- Time-series of dynasty/startup draft pick values per format and source.
--- Independent of leagues — used both for the League Sync power-rankings
+-- Independent of leagues, used both for the League Sync power-rankings
 -- calc (assign value to "2026 Mid 1st" assets) and for any future
 -- standalone pick-rankings tool.
 --

@@ -1,5 +1,5 @@
 /**
- * DynastyProcess value sync — CLI entrypoint.
+ * DynastyProcess value sync, CLI entrypoint.
  *
  * Implementation lives in lib/sync-dynastyprocess.ts so the same code path is
  * used by the Vercel cron endpoint (app/api/cron/sync-dynastyprocess/route.ts).

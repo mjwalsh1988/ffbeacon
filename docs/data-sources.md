@@ -1,7 +1,7 @@
 # Data Sources Taxonomy
 
 The `source` column on `rankings`, `player_value_history`, `projections`, and similar
-tables records the **provenance** of each row — where the underlying data came
+tables records the **provenance** of each row: where the underlying data came
 from or which algorithm produced it.
 
 Users **can** see source names in one place only: the header **Source**
@@ -52,7 +52,7 @@ top without renumbering.
 | `fantasycalc`          | ✓               | ✓                | ✓               | ✓                 |                 | ✓               | ✓                 |                       |
 | `ktc`                  |                 |                  | ✓               | ✓                 |                 | ✓               | ✓                 | ✓ (derived)           |
 
-Coverage gaps are *intentional* — they reflect what each provider actually
+Coverage gaps are *intentional*: they reflect what each provider actually
 publishes distinct data for, not what they list on their website. Adding a
 checkmark requires the pairwise audit in
 [Adding a new source](#adding-a-new-source).
@@ -63,7 +63,7 @@ Migration 0010 added `source_registry` with `ktc` as the sole row, and the
 seed scraper wrote KTC values across **all 8 active `format_configs`**.
 Migration 0011 reversed most of that. The scraper had been hitting KTC's
 `fantasy-rankings` page with `?scoring=half`, `?scoring=std`, and `?tep=1`
-as if those were server-side variants. They aren't — they're client-side
+as if those were server-side variants. They aren't. They are client-side
 JavaScript filters that re-style the same PPR `playersArray` embedded in
 the HTML. So four "different" formats were silently storing the same
 numbers under different `format_config_id`s. A pairwise audit confirmed:
@@ -76,7 +76,7 @@ numbers under different `format_config_id`s. A pairwise audit confirmed:
 | `redraft-half-std` ↔ `redraft-std-std`     | 350            | 350 (100%)       |
 | `redraft-half-std` ↔ `redraft-ppr-tep`     | 350            | 350 (100%)       |
 | `redraft-std-std`  ↔ `redraft-ppr-tep`     | 350            | 350 (100%)       |
-| `dynasty-ppr-sflex` ↔ `dynasty-ppr-tep-sflex` | 518          | 474 (91.5% — TEs differ, expected) |
+| `dynasty-ppr-sflex` ↔ `dynasty-ppr-tep-sflex` | 518          | 474 (91.5%, TEs differ as expected) |
 
 What migration 0011 did:
 
@@ -86,7 +86,7 @@ What migration 0011 did:
 - Set `source_registry.ktc.supported_format_slugs` to the 5 truly distinct
   KTC datasets.
 
-All 8 `format_configs` remain active — the change is purely about which
+All 8 `format_configs` remain active. The change is purely about which
 combinations of `(source, format)` are exposed in the UI. New sources can
 fill in the redraft Half/Std/TEP formats later without code changes.
 
@@ -95,7 +95,7 @@ fill in the redraft Half/Std/TEP formats later without code changes.
 `dynasty-ppr-tep-sflex` rows are **algorithmically derived** from the
 freshly-scraped `dynasty-ppr-sflex` batch on every sync. KTC publishes
 TEP rankings as a client-side JavaScript transformation of their base
-superflex values — the `?tep=1` URL returns the same embedded
+superflex values, the `?tep=1` URL returns the same embedded
 `playersArray` as the base superflex URL, just rendered with TEP styling.
 Scraping that toggle would produce duplicate (or near-duplicate) bytes
 and trigger the same class of bug migration 0011 cleaned up.
@@ -131,7 +131,7 @@ TEP+++ is a single row insert plus an entry in
 `source_registry.ktc.supported_format_slugs` still lists
 `dynasty-ppr-tep-sflex` because the source identity is unchanged: we're
 applying KTC's own published math to KTC's own scraped data. We are not
-introducing editorial opinion — that's reserved for
+introducing editorial opinion, that's reserved for
 `source='ffbeacon'`.
 
 Observed boost on the live data (top TEs, TEP+ tier):
@@ -154,11 +154,11 @@ Every row in `source_registry` carries a `supported_format_slugs text[]`.
 This list is the **single source of truth** for which formats a given
 source actually publishes. It drives three behaviors:
 
-1. **Format dropdown filtering** — when source X is selected, the Format
+1. **Format dropdown filtering**, when source X is selected, the Format
    dropdown hides every format that isn't in X's `supported_format_slugs`.
    (`components/format-toggle.tsx` accepts a `supportedFormatSlugs` prop;
    `components/site-header.tsx` and `components/mobile-menu.tsx` pass it.)
-2. **Source dropdown warning (not filtering)** — when format Y is the current
+2. **Source dropdown warning (not filtering)**, when format Y is the current
    selection, the Source dropdown shows **every** active source but visually
    flags any source that doesn't list Y in its `supported_format_slugs`:
    a `(changes format)` note appears next to the name, the `aria-label`
@@ -170,7 +170,7 @@ source actually publishes. It drives three behaviors:
    the format swap and updates URL + cookie + DB. The point of the warning
    is to surface the consequence **before** the click, not just after. See
    `components/source-toggle.tsx`.
-3. **Graceful fall-through** — when a user changes source via the dropdown
+3. **Graceful fall-through**, when a user changes source via the dropdown
    to one that doesn't support the current format, the toggle picks a
    fallback format using `pickFallbackFormat()` and persists the swap to
    cookie/DB. When a user arrives at a page via a URL with
@@ -232,7 +232,7 @@ publishes distinct data for and writes `source='fantasycalc'` snapshots into
 `player_value_history`. Player mapping resolves in three layers:
 
 1. `players.external_ids.sleeper === FantasyCalc.player.sleeperId`
-2. `players.slug` ends in `-<sleeperId>` (recovery path — Sleeper sync embeds
+2. `players.slug` ends in `-<sleeperId>` (recovery path, Sleeper sync embeds
    the ID in the slug, and some rows are missing `external_ids.sleeper` from
    ordering issues during earlier syncs)
 3. Normalized `name|position` match (last resort, mirrors `sync-ktc.ts`)
@@ -247,7 +247,7 @@ FantasyCalc does NOT publish TEP variants. Our `supported_format_slugs`
 intentionally omits `dynasty-ppr-tep-sflex` and `redraft-ppr-tep`. If we
 later want FantasyCalc-derived TEP, we'd apply our own TEP algorithm in the
 sync pipeline (mirroring `lib/ktc-tep.ts` for KTC). That derivation is
-explicitly not implemented in migration 0016 — adding it would be a separate
+explicitly not implemented in migration 0016, adding it would be a separate
 phase that ports a TEP formula or, more likely, builds an FF-Beacon-native
 TEP adjustment, in which case the rows would be tagged `source='ffbeacon'`,
 not `source='fantasycalc'`.
@@ -255,7 +255,7 @@ not `source='fantasycalc'`.
 #### Pairwise verification (FC vs KTC)
 
 For the four formats both sources cover, every FantasyCalc value differs
-from the corresponding KTC value — 0% identical across 1,112 shared
+from the corresponding KTC value, 0% identical across 1,112 shared
 player-format pairs, with average absolute differences ranging 1,240 to
 3,329 value points. FantasyCalc and KTC are genuinely independent signals,
 not skinned versions of the same dataset.
@@ -265,14 +265,14 @@ not skinned versions of the same dataset.
 Per the "supported formats must yield distinct data" rule, all six declared
 FantasyCalc formats were also pairwise compared. Highest pair overlap is
 `redraft-std-std ↔ redraft-half-std` at 16.0% (low-value WRs/TEs where the
-PPR difference is negligible — expected and acceptable). All other pairs:
-0–1% identical. No collapsing variants. `MUST_DIFFER_PAIRS` in
+PPR difference is negligible, expected and acceptable). All other pairs:
+0-1% identical. No collapsing variants. `MUST_DIFFER_PAIRS` in
 `scripts/sync-fantasycalc.ts` enforces this on every run; the sync aborts
 before writing if any declared-distinct pair collapses to 100% identical.
 
 Other reserved slugs that may appear later:
 
-- `ffbeacon` — FF Beacon's own original logic (editorial overlay, model blends,
+- `ffbeacon`, FF Beacon's own original logic (editorial overlay, model blends,
   expert consensus). No rows use it yet.
 
 ### How `rankings.source` gets assigned
@@ -286,7 +286,7 @@ Other reserved slugs that may appear later:
 3. Assigns `overall_rank`, `position_rank`, and a 6-tier bucket.
 4. Upserts into `rankings` tagged with the same source slug.
 
-Each ranking row's `source` matches the upstream value source — `'ktc'`,
+Each ranking row's `source` matches the upstream value source, `'ktc'`,
 `'fantasycalc'`, etc. The order is a deterministic restatement of the
 provider's own value ordering, so the provenance is inherited unchanged.
 When FF Beacon ships a ranking pipeline that does anything *original*
@@ -295,7 +295,7 @@ When FF Beacon ships a ranking pipeline that does anything *original*
 
 The `rankings` table uses `UNIQUE NULLS NOT DISTINCT
 (player_id, format_config_id, source, week, season)` (migration 0015), so
-the upsert is idempotent — re-running the seed updates the snapshot in
+the upsert is idempotent, re-running the seed updates the snapshot in
 place instead of doubling the row count.
 
 ## Selecting a source at read time
@@ -303,11 +303,11 @@ place instead of doubling the row count.
 Pages do **not** hardcode `source='ktc'`. They use the helpers in
 `lib/source.ts`:
 
-- `readSourceSlug(searchParam)` — validates `?source=…` against
+- `readSourceSlug(searchParam)`, validates `?source=...` against
   `^[a-z0-9-]{1,64}$` and returns the slug or `null`.
-- `getAvailableSources(supabase)` — returns active `source_registry` rows
+- `getAvailableSources(supabase)`, returns active `source_registry` rows
   ordered by `priority`.
-- `resolveSourceForFormat(supabase, table, formatConfigId, requestedSlug)` —
+- `resolveSourceForFormat(supabase, table, formatConfigId, requestedSlug)`,
   probes `rankings` or `player_value_history` for which registered sources actually
   have data for that format, then returns:
 
@@ -346,14 +346,14 @@ flash of default content):
 
 | Priority | Layer                                                | Who writes it |
 | -------- | ---------------------------------------------------- | ------------- |
-| 1 (top)  | URL `?source=…` / `?format=…`                        | Shareable links, dropdown selection |
+| 1 (top)  | URL `?source=...` / `?format=...`                        | Shareable links, dropdown selection |
 | 2        | `user_preferences.default_source_slug` / `default_format_config_id` | Logged-in user via dropdown |
 | 3        | Cookie `ffbeacon.source` / `ffbeacon.format`         | Dropdown selection (everyone) |
 | 4        | Registry default (`source_registry` priority 1) / `DEFAULT_FORMAT_SLUG` | Hardcoded |
 
 The dropdowns also write the selected slug to `localStorage` under
 `ffbeacon.source` / `ffbeacon.format`. This is **write-only redundancy**: the
-resolver chain above never reads from `localStorage` (it can't — server
+resolver chain above never reads from `localStorage` (it can't, server
 components don't have access to it, and reading it client-side would
 reintroduce the post-hydration flash this work was meant to eliminate).
 `localStorage` is retained as a passive backup for manual recovery if cookies
@@ -408,9 +408,9 @@ format toggle's visual treatment and ARIA pattern (`listbox` + `option`,
 
 Persistence:
 
-- URL — `?source=<slug>` (validated against the registry).
-- Local — `localStorage['ffbeacon.source']`.
-- Account — `user_preferences.default_source_slug` (logged-in users only),
+- URL, `?source=<slug>` (validated against the registry).
+- Local, `localStorage['ffbeacon.source']`.
+- Account, `user_preferences.default_source_slug` (logged-in users only),
   written via the `saveSourcePreference` server action in
   `app/actions/preferences.ts`. The action validates the slug against
   `source_registry` and `auth.users` and is RLS-protected by the existing
@@ -449,7 +449,7 @@ caret is hidden, so it reads as a static label rather than a one-option menu.
    ```
 
    Any pair that reports `pct_same = 100` is the source telling you it
-   doesn't actually support both formats — drop one of them from
+   doesn't actually support both formats, drop one of them from
    `supported_format_slugs` before inserting the registry row.
 
 3. **Insert a row into `source_registry`** with the verified
@@ -467,7 +467,7 @@ caret is hidden, so it reads as a static label rather than a one-option menu.
             'dynasty-ppr-std','dynasty-ppr-sflex']);
    ```
 
-4. **Update `pickRankingsSource` priority list if needed** — only relevant
+4. **Update `pickRankingsSource` priority list if needed**, only relevant
    if you want the new source to outrank an existing one for a format both
    support. The default fallback is `source_registry.priority` ascending.
 
@@ -505,7 +505,7 @@ the resolution helpers. The pages that do this today:
 - `app/players/[slug]/page.tsx` (cross-format ranking grid + the format-pinned
   trade-value pill)
 - `app/tools/faab/page.tsx`
-- `scripts/seed-rankings.ts` (source-generic — reads `player_value_history`
+- `scripts/seed-rankings.ts` (source-generic, reads `player_value_history`
   for every active `source_registry` row, writes `rankings` tagged with the
   same source slug, e.g. `ktc` rows + `fantasycalc` rows in one pass)
 - `app/actions/preferences.ts` (validates a slug exists in the registry
@@ -519,14 +519,14 @@ through `resolveSourceForFormat`. Do not hardcode a source slug.
 Every external-ingestion table carries a `metadata` jsonb column that
 preserves the original raw object from the source for each row:
 
-- `player_value_history.metadata` — the KTC `playersArray` entry (or future
+- `player_value_history.metadata`, the KTC `playersArray` entry (or future
   source's per-player payload) at the moment we captured this value snapshot.
-- `rankings.metadata` — provenance for derived rankings (e.g.
+- `rankings.metadata`, provenance for derived rankings (e.g.
   `{ derived_from: { table: "player_value_history", source_slug: "ktc" }, input_value: 9999 }`).
-- `projections.metadata` — raw projection payload from the source.
-- `player_stats.metadata` — full Sleeper weekly stat object.
-- `news_items.metadata` — the raw RSS/source object.
-- `players.metadata` — multi-source map keyed by source slug:
+- `projections.metadata`, raw projection payload from the source.
+- `player_stats.metadata`, full Sleeper weekly stat object.
+- `news_items.metadata`, the raw RSS/source object.
+- `players.metadata`, multi-source map keyed by source slug:
   `{"sleeper": {...full Sleeper player object...}, "ktc": {...}}`.
 
 Sync scripts MUST populate `metadata` at insert time. For canonical tables
@@ -537,10 +537,10 @@ so other sources' payloads aren't clobbered by the upsert. See
 
 `players` additionally carries:
 
-- `source_synced_at` — jsonb map keyed by source slug, e.g.
+- `source_synced_at`, jsonb map keyed by source slug, e.g.
   `{"sleeper": "2026-05-17T...", "ktc": "2026-05-16T..."}`. Replaces the
   former `last_sleeper_sync` / `last_ktc_sync` columns.
-- `internal_attributes` — FF Beacon editorial / curated attributes
+- `internal_attributes`, FF Beacon editorial / curated attributes
   (slug overrides, manual tags). Replaces the former `our_metadata`.
 
 Why this matters: we never want to be in a position where a value looks
@@ -551,8 +551,8 @@ decide to extract something we initially ignored. See CLAUDE.md
 
 ## Pre-calculated trends (`player_value_trends`)
 
-`player_value_trends` is a **derived** table — one row per
-`(player_id, format_config_id, source)` — populated by
+`player_value_trends` is a **derived** table, one row per
+`(player_id, format_config_id, source)`, populated by
 `scripts/calculate-trends.ts`. It is NOT an external-ingestion table and
 therefore does NOT carry a `metadata` jsonb column. Its provenance is the
 calculation script.
@@ -590,7 +590,7 @@ KTC-specific bug). `seed:rankings` and `calculate:trends` are source-generic
 already, so the same chain accommodates every source listed in
 `source_registry` without further changes.
 
-Triggers (Postgres triggers, that is) are intentionally NOT used — the
+Triggers (Postgres triggers, that is) are intentionally NOT used, the
 recalc is a deliberate scripted step so we can run it independently for
 debugging and avoid surprise lock contention on the history table.
 
@@ -600,7 +600,7 @@ When `player_value_history` doesn't reach back far enough for a window,
 the corresponding `*_ago`, `change_*`, and `trend_*` fields are NULL.
 UI consumers gate display on `data_points_30d` (default threshold: 7).
 The `<TrendChip>` component and the rankings table's `TrendCell` both
-render `—` when the threshold isn't met, with an `aria-label` of
+render `-` when the threshold isn't met, with an `aria-label` of
 "Insufficient history for 7-day trend".
 
 ## Historical backfill
@@ -608,7 +608,7 @@ render `—` when the threshold isn't met, with an `aria-label` of
 Some sources expose enough public history that we can populate
 `player_value_history` with **real past snapshots** instead of waiting
 weeks or months for the daily sync to accumulate trend data. Backfill is
-a **one-time** operation per source — it is intentionally NOT in the
+a **one-time** operation per source, it is intentionally NOT in the
 nightly cron.
 
 ### KTC dynasty + redraft (`scripts/backfill-ktc-history.ts`)
@@ -618,12 +618,12 @@ nightly cron.
 the same shape: an array of `{ playerID, oneQB, superflex }` objects
 where each format section carries four encoded-string arrays
 (`valueHistory`, `tepHistory`, `teppHistory`, `tepppHistory`). Each
-encoded string is `YYMMDDVVVV+` — 2-digit year, month, day, then the
+encoded string is `YYMMDDVVVV+`, 2-digit year, month, day, then the
 integer value. The DPC project's `lib/ktc-decode.ts` decoder is the
 canonical reference.
 
 The request body is `'"1"'` (a JSON-encoded `"1"`). We probed alternate
-bodies (`"0"`, `"7"`, `"30"`, `"365"`, `null`) — all return identical
+bodies (`"0"`, `"7"`, `"30"`, `"365"`, `null`), all return identical
 bytes, so the body is effectively a placeholder. No auth, no rate
 limiting observed. The endpoint returns the entire dataset in one
 response (~3 MB dynasty, ~1.8 MB redraft).
@@ -702,13 +702,13 @@ On The Clock's historical draft-snapshot lookups treat pre-launch dates via the
 documented fallback chain (nearest snapshot after the date, else current data,
 always flagged in snapshot metadata).
 
-### FantasyCalc historical — not publicly accessible
+### FantasyCalc historical, not publicly accessible
 
 FantasyCalc exposes `GET /values/current` only. We probed every
 plausible historical variant (path-based `/values/<date>`,
 `/values/historical`, `/values/historic`, `/charts`, `/trends/values`,
-`/values/snapshots`, plus query-string `?date=…`, `?asOfDate=…`,
-`?daysAgo=…`, `?dayOffset=…`, `?startDate=…`). All historical-shaped
+`/values/snapshots`, plus query-string `?date=...`, `?asOfDate=...`,
+`?daysAgo=...`, `?dayOffset=...`, `?startDate=...`). All historical-shaped
 paths return 404. Interestingly the `?date=` *query key* is the only
 one that triggers a 404 instead of being ignored, which suggests
 FantasyCalc once had `?date=`-based historical access and disabled it
@@ -717,7 +717,7 @@ behind the same route. Either way: no public access today.
 Consequence: FantasyCalc trend data accumulates from launch date
 (2026-05-17) forward. UI consumers already gate display on
 `player_value_trends.data_points_30d`, so the missing FC trends render
-as `—` until ~30 days of FC syncs have run. KTC trends, by contrast,
+as `-` until ~30 days of FC syncs have run. KTC trends, by contrast,
 render from the first post-backfill rankings page load.
 
 ### Running the backfill
@@ -746,7 +746,7 @@ pattern as `backfill-ktc-history.ts` and wire it into `backfill:all`.
 ingests the community-maintained Google Sheet by u/325xi5mt
 (https://docs.google.com/spreadsheets/d/1n5aqip8iFCpltO8deiS7q9m3u_dFvKTZpwzfZXVTpgs).
 That sheet snapshots the top 500 KTC values daily and has retained values
-since 2020-04-01 — far deeper than KTC's own `/histories` endpoint, which
+since 2020-04-01, far deeper than KTC's own `/histories` endpoint, which
 only returns ~6 months. Companion scraper at github.com/ees4/KeepTradeCut-Scraper.
 
 What we ingest from the sheet:
@@ -756,12 +756,12 @@ What we ingest from the sheet:
   sflex bucket, identical to the live sync pipeline.
 
 What we deliberately skip:
-- Pick columns (`2024 Early 1st`, `2025 Late 2nd`, etc.) — they don't map
+- Pick columns (`2024 Early 1st`, `2025 Late 2nd`, etc.), they don't map
   cleanly to our `(season, round, slot)` schema; live sync handles picks.
-- FantasyCalc columns — they're current-snapshot, not historical (the sheet
+- FantasyCalc columns, they're current-snapshot, not historical (the sheet
   overwrites them daily, no archive).
-- Redraft history — not in the sheet.
-- Players ranked below 500 historically — sheet only tracks top 500.
+- Redraft history, not in the sheet.
+- Players ranked below 500 historically, sheet only tracks top 500.
 
 Player matching mirrors `sync-ktc.ts`:
 1. Read positions from the sheet's current `1QB` snapshot tab (this gives

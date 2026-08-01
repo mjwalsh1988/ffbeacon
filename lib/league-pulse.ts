@@ -62,7 +62,7 @@ async function powerRankingsAreStale(
 }
 
 /**
- * Pulse one Sleeper league end-to-end (fetch + persist). Idempotent —
+ * Pulse one Sleeper league end-to-end (fetch + persist). Idempotent,
  * re-running upserts every table by its natural key. Returns the
  * leagues.id (uuid) on success.
  *
@@ -210,7 +210,7 @@ export async function pulseLeague(
   }
   const leagueRowId = upserted.id;
 
-  // Fetch children in parallel — independent endpoints
+  // Fetch children in parallel, independent endpoints
   const [rosters, users, transactions, tradedPicks, draftSummaries] = await Promise.all([
     getSleeperRosters(sleeperLeagueId),
     getSleeperLeagueUsers(sleeperLeagueId),
@@ -220,7 +220,7 @@ export async function pulseLeague(
   ]);
 
   // Fan out one /draft/{id} fetch per league draft. Sleeper's /league/{id}/drafts
-  // summary does NOT include `slot_to_roster_id` — that lives on the per-draft
+  // summary does NOT include `slot_to_roster_id`, that lives on the per-draft
   // endpoint. We need it to render slot labels like "1.04" on rosters and trades.
   const draftDetails = (
     await Promise.all(
@@ -289,7 +289,7 @@ async function upsertRosters(
   // Build a map of current pick ownership by (season, round, original_roster_id).
   // Sleeper's /traded_picks returns the CURRENT state per traded pick (one row
   // per pick, not one per hop). The `roster_id` field is the IMMUTABLE original
-  // owner. Index baseline by original_roster_id, and update only by that key —
+  // owner. Index baseline by original_roster_id, and update only by that key,
   // using `previous_owner_id` would mis-attribute multi-hop trades (A→B→C would
   // leave the pick on A's roster AND add a phantom entry on B's roster).
   const baselinePicks = buildBaselinePicks(rosters);
@@ -360,7 +360,7 @@ async function upsertLeagueUsers(
     const meta = (u.metadata ?? {}) as Record<string, unknown>;
     // Sleeper's `is_owner` on the /users response means "active league
     // member" (not a placeholder), which can include every co-owner of a
-    // roster. It is NOT a reliable commissioner signal — overloading it as
+    // roster. It is NOT a reliable commissioner signal, overloading it as
     // such would grant force-refresh to every co-owner. Until we have a
     // verified commissioner signal (league.metadata.commissioner_id, or
     // a service-role flip), default is_commissioner to false. Admins (via
@@ -515,7 +515,7 @@ async function upsertLeagueDrafts(
  * For each (season, round, roster) baseline, default current owner = original.
  * We use the current league rosters as the set of roster_ids and assume 4
  * future seasons starting from the league's season+0..+3. Sleeper doesn't
- * publish "all my picks" — we synthesize the baseline and traded_picks
+ * publish "all my picks", we synthesize the baseline and traded_picks
  * mutates ownership.
  */
 function buildBaselinePicks(rosters: SleeperRoster[]): Map<string, PickAsset> {

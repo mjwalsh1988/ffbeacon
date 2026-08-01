@@ -1,5 +1,5 @@
 /**
- * KTC community archive backfill — CLI entrypoint.
+ * KTC community archive backfill, CLI entrypoint.
  * Implementation lives in lib/backfill-ktc-community-archive.ts.
  *
  * Usage:

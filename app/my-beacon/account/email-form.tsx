@@ -10,7 +10,7 @@ type Status =
   | { kind: "sent"; email: string };
 
 /**
- * Email change form. Supabase doesn't perform the swap immediately —
+ * Email change form. Supabase doesn't perform the swap immediately,
  * it sends a confirmation link to BOTH the old and new addresses, and
  * the change only takes effect after the user clicks both links.
  * We reflect that in the success message so users aren't confused when

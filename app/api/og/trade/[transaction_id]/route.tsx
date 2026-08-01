@@ -168,7 +168,7 @@ export async function GET(
             <p style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>FF Beacon</p>
           </div>
           <p style={{ fontSize: 16, color: INK_MUTED, margin: 0 }}>
-            {clip(league.name, 40)} • {league.season}
+            {clip(league.name, 40)}, {league.season}
           </p>
         </div>
 
@@ -313,9 +313,9 @@ export async function GET(
         </div>
 
         <p style={{ fontSize: 14, color: INK_SUBTLE, marginTop: 16 }}>
-          Values via {context.sourceDisplay} • {context.formatDisplay}
+          Values via {context.sourceDisplay}, {context.formatDisplay}
           {context.pickSource && context.pickSource.slug !== context.sourceSlug
-            ? ` • picks via ${context.pickSource.display}`
+            ? `, picks via ${context.pickSource.display}`
             : ""}
         </p>
         <p
@@ -379,7 +379,7 @@ function notFoundImage(reason: string): Response {
 
 function clip(s: string, n: number): string {
   if (s.length <= n) return s;
-  return s.slice(0, n - 1) + "…";
+  return s.slice(0, n - 1) + "...";
 }
 
 function formatNumber(n: number): string {

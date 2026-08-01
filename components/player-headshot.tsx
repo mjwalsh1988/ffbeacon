@@ -8,7 +8,7 @@ type PlayerHeadshotProps = {
    * potential future styling; the missing-photo fallback is the shared
    * user-avatar icon. */
   position?: string;
-  /** Accessible label — usually the player's full name. Pass "" when the photo
+  /** Accessible label, usually the player's full name. Pass "" when the photo
    * is decorative (e.g. the name is shown as text right beside it). */
   name: string;
   /** Pixel size for both dimensions. Defaults to 40. */

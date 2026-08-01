@@ -2,7 +2,7 @@
 --
 -- Background: The KTC scraper assumed that ?scoring=half, ?scoring=std, and
 -- ?tep=1 query parameters on KTC's fantasy-rankings endpoint would yield
--- distinct PPR / Half-PPR / Standard / TEP datasets. They do not — those are
+-- distinct PPR / Half-PPR / Standard / TEP datasets. They do not, those are
 -- client-side JavaScript filters, so the embedded playersArray returned by
 -- the server is identical regardless of those params. The scraper happily
 -- wrote the same rows under four different format_config_ids.
@@ -26,7 +26,7 @@
 --   anon          : SELECT only (existing source_registry_select_public)
 --   authenticated : SELECT only
 --   service_role  : ALL (existing source_registry_service_role_all)
---   client writes : BLOCKED — new column inherits existing RLS policies
+--   client writes : BLOCKED, new column inherits existing RLS policies
 --
 -- The 8 format_configs all remain active. supported_format_slugs is what
 -- gates which (source, format) combinations are exposed to users.

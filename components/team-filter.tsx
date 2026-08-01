@@ -24,7 +24,7 @@ export type TeamFilterProps = {
 /**
  * Orchestrates the chip-bar visibility filter that sits above the list of
  * TeamCards on /leagues/[id] (Teams tab). State lives here so the cards stay
- * pure presentational — toggling a chip mounts/unmounts cards rather than
+ * pure presentational, toggling a chip mounts/unmounts cards rather than
  * scrolling to anchors. Default selection prefers the searched-username's
  * team (DPC parity); if no match, all teams are selected.
  */
@@ -96,7 +96,7 @@ export function TeamFilter({
           return n;
         });
       } else {
-        // Newly visible teams come in collapsed — do NOT auto-add to expanded.
+        // Newly visible teams come in collapsed, do NOT auto-add to expanded.
         next.add(rosterId);
       }
       return next;

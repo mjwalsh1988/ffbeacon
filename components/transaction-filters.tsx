@@ -95,7 +95,7 @@ export function TransactionFilters({
       className="relative overflow-hidden rounded-modal border border-line bg-surface/50 px-4 py-3 sm:px-5"
       aria-busy={pending}
     >
-      {/* Top-edge beacon hairline, decorative — matches the dashboard panels. */}
+      {/* Top-edge beacon hairline, decorative, matches the dashboard panels. */}
       <span
         aria-hidden="true"
         className="absolute inset-x-0 top-0 h-px"

@@ -1,6 +1,6 @@
 -- Migration 0024: league_power_rankings_cache
 --
--- Derived pre-calc table — one row per (league, roster, format_config, source).
+-- Derived pre-calc table, one row per (league, roster, format_config, source).
 -- Populated by scripts/calculate-league-power-rankings.ts after each league
 -- sync. UI reads this directly; never calculated on the fly.
 --

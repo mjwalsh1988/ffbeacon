@@ -120,7 +120,7 @@ export function BriefSidebar({
                   <span className="truncate">{p.name}</span>
                   {(p.position || p.team) && (
                     <span className="shrink-0 text-[11px] text-ink-subtle">
-                      {[p.position, p.team].filter(Boolean).join(" · ")}
+                      {[p.position, p.team].filter(Boolean).join(", ")}
                     </span>
                   )}
                 </Link>

@@ -34,7 +34,7 @@ export function StatsCompare({
   if (allSeasons.length === 0) {
     return (
       <div className="rounded-modal border border-line bg-surface/40 p-6 text-sm text-ink-muted">
-        We don&rsquo;t have any statistical history on file for {a.name} or {b.name} yet.
+        We don&apos;t have any statistical history on file for {a.name} or {b.name} yet.
       </div>
     );
   }

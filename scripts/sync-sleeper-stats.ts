@@ -1,5 +1,5 @@
 /**
- * Sleeper current-season stats sync — CLI entrypoint.
+ * Sleeper current-season stats sync, CLI entrypoint.
  *
  * Implementation lives in lib/sync-sleeper-stats.ts so the same code path is
  * used by the Vercel cron endpoint (app/api/cron/sync-sleeper-stats/route.ts).

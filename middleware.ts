@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
     const forwardUrl = request.nextUrl.clone();
     forwardUrl.pathname = "/auth/callback";
     // Strip the code from the original URL's params to avoid a duplicate
-    // when we copy them over — `code` will be re-added explicitly.
+    // when we copy them over, `code` will be re-added explicitly.
     return NextResponse.redirect(forwardUrl);
   }
   return updateSession(request);

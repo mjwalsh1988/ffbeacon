@@ -406,7 +406,7 @@ function PlayerPicker({
             </li>
           ) : results.length === 0 ? (
             <li role="presentation" className="px-3 py-3 text-sm text-ink-subtle">
-              No players match &ldquo;{trimmed}&rdquo;.
+              No players match &quot;{trimmed}&quot;.
             </li>
           ) : (
             results.map((r, i) => {
@@ -437,7 +437,7 @@ function PlayerPicker({
                     <span className="text-ink">{r.name}</span>
                     <span className="ml-2 text-xs text-ink-subtle">
                       {r.position}
-                      {r.team ? ` · ${r.team}` : ""}
+                      {r.team ? `, ${r.team}` : ""}
                     </span>
                   </span>
                   {isOther && (
@@ -477,7 +477,7 @@ function SelectedChip({
         <p className="truncate text-sm font-semibold text-ink">{player.name}</p>
         <p className="truncate text-xs text-ink-subtle">
           {player.position}
-          {player.team ? ` · ${player.team}` : ""}
+          {player.team ? `, ${player.team}` : ""}
         </p>
       </div>
       <button

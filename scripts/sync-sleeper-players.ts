@@ -8,7 +8,7 @@
  * Inclusion policy (broad, not narrow):
  *   - Must have a name.
  *   - Must have a `position` string (NFL position label).
- *   - Skip rows where active=false AND no team — those are clearly retired
+ *   - Skip rows where active=false AND no team, those are clearly retired
  *     players with no current affiliation; keeping them only inflates the
  *     table without any fantasy-data path that would reach them.
  *   - DO include IDP positions (LB, CB, DB, DL, DE, DT, S), offensive line
@@ -24,7 +24,7 @@
  *
  * External ID merge:
  *   - external_ids is a multi-source jsonb map. Sleeper sync ONLY writes the
- *     "sleeper" key — it must NEVER strip "ktc" / "fantasycalc" / etc that
+ *     "sleeper" key, it must NEVER strip "ktc" / "fantasycalc" / etc that
  *     other syncs landed. The merge below reads existing rows and folds the
  *     sleeper key into whatever was already there.
  *
@@ -192,7 +192,7 @@ async function main() {
     }
 
     // Skip clearly retired with no team affiliation. Keep retired players
-    // who still have a team (rare — usually mid-season retirement filings)
+    // who still have a team (rare, usually mid-season retirement filings)
     // and keep IR/PUP/suspended which Sleeper reports as active=true.
     if (player.active === false && !player.team) {
       skippedRetired++;

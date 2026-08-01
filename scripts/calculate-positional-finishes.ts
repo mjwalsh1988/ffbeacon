@@ -1,5 +1,5 @@
 /**
- * Rebuild positional finishes — CLI entrypoint.
+ * Rebuild positional finishes, CLI entrypoint.
  * Implementation lives in lib/calculate-positional-finishes.ts.
  *
  * Run: npm run calculate:finishes

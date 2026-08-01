@@ -74,13 +74,13 @@ export function PlayerSpotlight({ data, variant }: { data: RecommendationCardDat
       </h3>
       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-muted">
         <span className="font-semibold text-ink">{p.position}</span>
-        {p.team && <span>· {p.team}</span>}
-        <span>· Overall #{p.overallRank}</span>
+        {p.team && <span>, {p.team}</span>}
+        <span>, Overall #{p.overallRank}</span>
         {typeof p.yearsExperience === "number" && (
-          <span>· {p.yearsExperience === 0 ? "Rookie" : `${p.yearsExperience} yr exp`}</span>
+          <span>, {p.yearsExperience === 0 ? "Rookie" : `${p.yearsExperience} yr exp`}</span>
         )}
         {typeof p.age === "number" && (
-          <span>· Age {(p.ageDecimal ?? p.age).toFixed(1)}</span>
+          <span>, Age {(p.ageDecimal ?? p.age).toFixed(1)}</span>
         )}
       </p>
     </>
@@ -230,7 +230,7 @@ export function SecondaryPick({ data, variant }: { data: RecommendationCardData;
             <p className="truncate text-base font-semibold text-ink">{p.name}</p>
             <p className="text-xs text-ink-muted">
               {p.position}
-              {p.positionRank} · {p.team ?? ""} ·{" "}
+              {p.positionRank}, {p.team ?? ""},{" "}
               <span className="font-mono font-bold tabular-nums text-brand-purple">
                 {p.value.toLocaleString()}
               </span>

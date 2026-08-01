@@ -287,7 +287,7 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
       return {
         id: `pl-${p.playerId}`,
         label: `${p.name}, ${p.position}`,
-        detail: p.team ? `${p.team} · value ${value.toLocaleString()}` : `value ${value.toLocaleString()}`,
+        detail: p.team ? `${p.team}, value ${value.toLocaleString()}` : `value ${value.toLocaleString()}`,
         value,
         kind: "player" as const,
         estimated: false,
@@ -314,8 +314,8 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
         label: `${p.round}.${pad2(p.pickInRound)} - ${name}`,
         detail:
           val !== null
-            ? `Made pick${posLabel} · ${owner}`
-            : `Made pick${posLabel} · value unavailable · ${owner}`,
+            ? `Made pick${posLabel}, ${owner}`
+            : `Made pick${posLabel}, value unavailable, ${owner}`,
         value: val !== null ? Math.round(val) : 0,
         kind: pickKind,
         // A made pick valued by a real player value is NOT a projection; only an
@@ -341,8 +341,8 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
         id: `up-${p.overall}`,
         label: `${p.round}.${pad2(p.pickInRound)} - projected`,
         detail: projected
-          ? `Projected: ${projected.name}, ${projected.position} · ${owner}`
-          : `Projected pick · ${owner}`,
+          ? `Projected: ${projected.name}, ${projected.position}, ${owner}`
+          : `Projected pick, ${owner}`,
         value: projected ? Math.round(projected.value) : FALLBACK_PICK_VALUE,
         kind: pickKind,
         estimated: true,

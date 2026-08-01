@@ -196,7 +196,7 @@ export async function runKtcSync(
   for (const target of TARGETS) {
     if (!ALLOWED_KTC_FORMAT_SLUGS.has(target.formatSlug)) {
       throw new Error(
-        `runKtcSync: refusing to scrape "${target.formatSlug}" — not in ALLOWED_KTC_FORMAT_SLUGS.`,
+        `runKtcSync: refusing to scrape "${target.formatSlug}", not in ALLOWED_KTC_FORMAT_SLUGS.`,
       );
     }
     const formatEntry = formatBySlug.get(target.formatSlug);
@@ -496,7 +496,7 @@ export async function runKtcSync(
   // logging a green "ok" with no data behind it.
   if (totalRows === 0) {
     throw new Error(
-      "runKtcSync: wrote 0 player_value_history rows — every KTC target returned empty (source markup may have changed or the scrape was blocked).",
+      "runKtcSync: wrote 0 player_value_history rows, every KTC target returned empty (source markup may have changed or the scrape was blocked).",
     );
   }
 

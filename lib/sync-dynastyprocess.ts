@@ -361,7 +361,7 @@ export async function runDynastyProcessSync(
   // so the outage is visible instead of a green "ok" with no data behind it.
   if (totalRows === 0) {
     throw new Error(
-      "runDynastyProcessSync: wrote 0 rows — every matched batch was empty (fetch, parse, or match failure).",
+      "runDynastyProcessSync: wrote 0 rows, every matched batch was empty (fetch, parse, or match failure).",
     );
   }
 

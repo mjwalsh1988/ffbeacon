@@ -217,7 +217,7 @@ export function AssetAutocomplete({
             <li className="px-3 py-3 text-sm text-ink-subtle">Searching...</li>
           ) : results.length === 0 ? (
             <li className="px-3 py-3 text-sm text-ink-subtle">
-              No matches for &ldquo;{trimmed}&rdquo;.
+              No matches for &quot;{trimmed}&quot;.
             </li>
           ) : (
             results.map((r, i) => {

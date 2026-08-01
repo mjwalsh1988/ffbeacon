@@ -4,7 +4,7 @@
 -- the UI can map (season, original_roster_id) → draft slot number.
 --
 -- Sleeper publishes one /draft/{draft_id} object per league per season. The
--- slot_to_roster_id field maps slot number (1, 2, 3, …) to the roster that
+-- slot_to_roster_id field maps slot number (1, 2, 3, ...) to the roster that
 -- holds that slot. We persist it verbatim and let the read path derive each
 -- pick's label (e.g. "1.04") at query time.
 --
@@ -48,6 +48,6 @@ create policy league_drafts_service_role_all on public.league_drafts
 comment on table public.league_drafts is
   'Synced Sleeper draft metadata for the League Sync feature. One row per (league, season). The slot_to_roster_id column drives pick-slot labels (e.g. "1.04") on the roster and transaction views.';
 comment on column public.league_drafts.slot_to_roster_id is
-  'Map of slot number (string-keyed "1","2",…) to sleeper_roster_id. Drives pick_label rendering.';
+  'Map of slot number (string-keyed "1","2",...) to sleeper_roster_id. Drives pick_label rendering.';
 comment on column public.league_drafts.metadata is
   'Raw Sleeper /draft/{draft_id} object preserved verbatim at sync time. See CLAUDE.md Original Source Object Preservation rule.';

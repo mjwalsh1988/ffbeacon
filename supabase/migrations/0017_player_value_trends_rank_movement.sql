@@ -7,7 +7,7 @@
 --   client writes : BLOCKED
 --
 -- Rationale: the rankings table previously surfaced only value % change.
--- Users also need to see ordinal movement — going from rank 12 to rank 8
+-- Users also need to see ordinal movement, going from rank 12 to rank 8
 -- (a +4 movement) is a stronger market signal than the underlying value
 -- drift it took to get there. We store the rank at each backward window
 -- alongside the existing value_*_ago columns and the derived change.

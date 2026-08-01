@@ -44,7 +44,7 @@ export function LoginForm({
       ? window.location.origin
       : (process.env.NEXT_PUBLIC_SITE_URL ?? "");
 
-  // Sanitize the post-login destination. Must be a same-origin path —
+  // Sanitize the post-login destination. Must be a same-origin path,
   // anything starting with `//` or an absolute URL is rejected as an
   // open-redirect attempt. /my-beacon is the default landing for
   // logged-in users.
@@ -112,7 +112,7 @@ export function LoginForm({
         if (error) {
           setStatus({ kind: "error", message: error.message });
         } else if (data.user && !data.session) {
-          // Email confirmation required — Supabase will send the
+          // Email confirmation required, Supabase will send the
           // confirmation link, no session yet.
           setStatus({ kind: "sent_confirm", email });
         } else {
@@ -154,7 +154,7 @@ export function LoginForm({
           : "Create a free account."}
       </h2>
 
-      {/* OAuth row — horizontal on desktop, stacked on mobile per design. */}
+      {/* OAuth row, horizontal on desktop, stacked on mobile per design. */}
       <div
         role="group"
         aria-label="Sign in with a provider"
@@ -176,7 +176,7 @@ export function LoginForm({
 
       {/* Magic-link form. Same flow for sign-in and sign-up because
           Supabase's signInWithOtp auto-creates the user on first link
-          click — works as both registration and login. */}
+          click, works as both registration and login. */}
       <form onSubmit={sendMagicLink} className="space-y-3" noValidate>
         <label htmlFor={emailId} className="block text-sm font-medium">
           Email address
@@ -300,7 +300,7 @@ export function LoginForm({
       <p className="mt-6 border-t border-line pt-4 text-center text-sm text-ink-muted">
         {mode === "signin" ? (
           <>
-            Don&rsquo;t have an account?{" "}
+            Don&apos;t have an account?{" "}
             <button
               type="button"
               onClick={() => {

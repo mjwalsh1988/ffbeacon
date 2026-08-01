@@ -30,7 +30,7 @@ export function LeagueLoadError() {
             League Pulse
           </p>
           <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            We couldn&rsquo;t load this league
+            We couldn&apos;t load this league
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-ink-muted">
             Something went wrong while syncing from Sleeper. Try again, or head

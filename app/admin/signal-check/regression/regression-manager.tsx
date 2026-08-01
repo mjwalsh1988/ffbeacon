@@ -197,8 +197,8 @@ export function RegressionManager({
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-ink">{c.label}</span>
                   <span className="block text-xs text-ink-subtle">
-                    {c.formatSlug} · expect {c.expectedVerdict || "any"}
-                    {c.expectedTradeShape ? ` · ${c.expectedTradeShape}` : ""}
+                    {c.formatSlug}, expect {c.expectedVerdict || "any"}
+                    {c.expectedTradeShape ? `, ${c.expectedTradeShape}` : ""}
                   </span>
                 </span>
                 <span className="flex shrink-0 gap-1">

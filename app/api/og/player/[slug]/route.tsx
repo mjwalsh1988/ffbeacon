@@ -62,7 +62,7 @@ export async function GET(
   const headshot = sleeperId ? `${PLAYER_IMAGE_BASE}/${sleeperId}.jpg` : null;
   const metaLine = [position, player.team, player.status && player.status !== "active" ? player.status.toUpperCase() : null]
     .filter(Boolean)
-    .join("  •  ");
+    .join(",  ");
 
   return new ImageResponse(
     (
@@ -226,5 +226,5 @@ function notFoundImage(reason: string): Response {
 
 function clip(s: string, n: number): string {
   if (s.length <= n) return s;
-  return s.slice(0, n - 1) + "…";
+  return s.slice(0, n - 1) + "...";
 }

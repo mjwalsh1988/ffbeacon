@@ -1,4 +1,4 @@
-# League Pulse — format resolution
+# League Pulse, format resolution
 
 ## TL;DR
 
@@ -51,7 +51,7 @@ FantasyCalc does not publish draft pick values. KTC is currently the
 only source whose `source_registry.data_type` includes
 `draft_pick_values`. To avoid spurious zero-value picks in trade
 analyses, picks ALWAYS look up against the highest-priority source
-that publishes them — today that's KTC, even when player values come
+that publishes them, today that's KTC, even when player values come
 from FantasyCalc.
 
 When this fallback is active, `LeagueContext.pickSource` is non-null
@@ -70,7 +70,7 @@ This is documented in:
 | --- | --- |
 | User has FantasyCalc selected, league is Dynasty PPR | Player values from FantasyCalc dynasty-ppr-std; pick values from KTC dynasty-ppr-std. Footnote shown. |
 | User has FantasyCalc selected, league is Dynasty Superflex TEP | FantasyCalc doesn't cover TEP, so fall back to dynasty-ppr-sflex on FantasyCalc. Picks from KTC dynasty-ppr-sflex (TEP is a no-op for picks). Banner explains the format swap. |
-| User has KTC selected, league is Dynasty PPR Superflex TEP | Exact match — KTC publishes dynasty-ppr-tep-sflex. No fallback. No footnote. |
+| User has KTC selected, league is Dynasty PPR Superflex TEP | Exact match, KTC publishes dynasty-ppr-tep-sflex. No fallback. No footnote. |
 | User has KTC selected, league is Redraft Half PPR | KTC doesn't publish redraft half PPR, fall back to redraft-ppr-std. Banner explains the swap. |
 | Custom league rules with no canonical mapping | `coverage: 'none'`. UI shows the league's plain-language description and notes that values are unavailable. |
 
@@ -94,7 +94,7 @@ will prefer that custom format over the canonical map.
 1. Open `/leagues/[id]` and confirm the header reads "League format:
    {derived}" where derived describes Sleeper's actual rules.
 2. If you see a banner "Showing values for X because {source} doesn't
-   publish data for Y", that's the fallback path — verify Y matches
+   publish data for Y", that's the fallback path, verify Y matches
    `describeDerived(context.derived)`.
 3. Switch source in the header and re-open the league view. The
    format should auto-resolve again; values should change accordingly.

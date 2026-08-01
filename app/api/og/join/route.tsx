@@ -132,7 +132,7 @@ export async function GET() {
             maxWidth: 980,
           }}
         >
-          Fantasy football tools, rankings talk, and trade reactions — built
+          Fantasy football tools, rankings talk, and trade reactions, built
           for everyone, including screen readers.
         </p>
 

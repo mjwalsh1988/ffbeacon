@@ -5,7 +5,7 @@
  * still being instantly readable to fantasy players (SF is universal in
  * dynasty / superflex parlance).
  *
- * This is a render-time transform only — DB rows keep the full name,
+ * This is a render-time transform only, DB rows keep the full name,
  * and consumers that surface the format to screen readers should pass
  * the original `display_name` via aria-label so SR users still hear
  * "Superflex". Use `shortFormatName(displayName)` for the visible text;
@@ -16,6 +16,6 @@ export function shortFormatName(displayName: string): string {
   // Word-boundary swap so we don't accidentally munge other words. The
   // current format slug set has "Superflex" appearing as a whole word
   // (Redraft PPR Superflex / Dynasty PPR Superflex / Dynasty Superflex
-  // TEP) — the regex keeps that flexible if more formats land later.
+  // TEP), the regex keeps that flexible if more formats land later.
   return displayName.replace(/\bSuperflex\b/gi, "SF");
 }

@@ -40,7 +40,7 @@ export async function chunkUpsert<T>(
  * network errors. Supabase's edge proxies occasionally close the socket
  * mid-stream during long sync runs ("TypeError: fetch failed",
  * "UND_ERR_SOCKET other side closed", etc.) and most of those are safe
- * to retry — upserts with a unique constraint are idempotent, and SELECTs
+ * to retry, upserts with a unique constraint are idempotent, and SELECTs
  * just re-fetch the same rows.
  *
  * The callback should perform the supabase call and throw on .error so the

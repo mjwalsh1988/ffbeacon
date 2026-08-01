@@ -6,8 +6,8 @@ import type { SleeperLeague } from "@/lib/sleeper";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
 
 /**
- * Slide-up modal showing the deep details for a single Sleeper league —
- * teams, season, status, roster shape — and the action button that syncs
+ * Slide-up modal showing the deep details for a single Sleeper league,
+ * teams, season, status, roster shape, and the action button that syncs
  * the league into our DB and opens its deep view.
  */
 export function LeagueDetailSheet({
@@ -50,7 +50,7 @@ export function LeagueDetailSheet({
       label={`${league.name} details`}
     >
       <div className="flex h-full flex-col">
-        {/* Header — name + close. The close button is the first focusable
+        {/* Header, name + close. The close button is the first focusable
             element so screen reader users can dismiss without tab-trawling. */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0 flex-1">
@@ -67,7 +67,7 @@ export function LeagueDetailSheet({
                 {statusDisplay}
               </span>
               <span className="text-xs text-ink-subtle">
-                {league.season} · {league.total_rosters} teams
+                {league.season}, {league.total_rosters} teams
               </span>
             </div>
           </div>
@@ -81,7 +81,7 @@ export function LeagueDetailSheet({
           </button>
         </div>
 
-        {/* Scrollable body — stays inside the sheet so the header and
+        {/* Scrollable body, stays inside the sheet so the header and
             footer remain visible on small viewports. */}
         <div className="beacon-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
           <dl className="grid grid-cols-3 gap-3">
@@ -131,7 +131,7 @@ export function LeagueDetailSheet({
           </section>
         </div>
 
-        {/* Footer action — primary CTA stays visible without scrolling. */}
+        {/* Footer action, primary CTA stays visible without scrolling. */}
         <div className="border-t border-line bg-surface px-5 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-ink-muted">

@@ -7,7 +7,7 @@
 -- table. These names leak through generated TypeScript types and contradict
 -- the FF Beacon-native naming rule.
 --
--- This migration is read-only on data — it only renames constraints.
+-- This migration is read-only on data, it only renames constraints.
 
 do $$
 declare

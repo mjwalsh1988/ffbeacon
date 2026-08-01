@@ -6,7 +6,7 @@
 --   service_role  : ALL (calculate-trends.ts writes via SECRET key)
 --   client writes : BLOCKED
 --
--- This is a DERIVED table — recalculated by scripts/calculate-trends.ts after
+-- This is a DERIVED table, recalculated by scripts/calculate-trends.ts after
 -- every player_value_history sync. It does NOT carry a metadata jsonb column
 -- because its data origin is internal calculation, not external ingestion.
 -- See CLAUDE.md "Data Architecture Principles" for the rule.

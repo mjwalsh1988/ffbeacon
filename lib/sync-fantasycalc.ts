@@ -211,7 +211,7 @@ export async function runFantasyCalcSync(
   for (const target of TARGETS) {
     if (!ALLOWED_FANTASYCALC_FORMAT_SLUGS.has(target.formatSlug)) {
       throw new Error(
-        `runFantasyCalcSync: refusing to fetch "${target.formatSlug}" — not allowed.`,
+        `runFantasyCalcSync: refusing to fetch "${target.formatSlug}", not allowed.`,
       );
     }
     const formatId = formatBySlug.get(target.formatSlug);
@@ -317,7 +317,7 @@ export async function runFantasyCalcSync(
   // rather than logging a green "ok" with no data behind it.
   if (totalRows === 0) {
     throw new Error(
-      "runFantasyCalcSync: wrote 0 rows — every FantasyCalc target returned empty or failed to fetch.",
+      "runFantasyCalcSync: wrote 0 rows, every FantasyCalc target returned empty or failed to fetch.",
     );
   }
 

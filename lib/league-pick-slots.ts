@@ -17,7 +17,7 @@ type AnySupabase =
  * "what slot does this team's pick fall on" in O(1).
  *
  * When the season's draft is not yet scheduled / completed, the mapping is
- * empty and we return null — the UI should fall back to a `2026 R1` label.
+ * empty and we return null, the UI should fall back to a `2026 R1` label.
  */
 export type LeagueDraftSlotIndex = {
   labelFor: (season: number, originalRosterId: number, round: number) => string | null;

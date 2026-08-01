@@ -10,7 +10,7 @@ import {
 /**
  * Pin a specific Sleeper league to the user's profile, or clear the
  * pin entirely (`null`). Featured is mutually exclusive across the
- * user's leagues — calling this overwrites any prior featured pick.
+ * user's leagues, calling this overwrites any prior featured pick.
  *
  * The dashboard UI uses optimistic state and revalidates this path
  * after the write so subsequent renders reflect the new pin even if
@@ -25,7 +25,7 @@ export async function setFeaturedLeague(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in" };
 
-  // Light-touch validation — Sleeper league IDs are numeric strings.
+  // Light-touch validation, Sleeper league IDs are numeric strings.
   if (
     sleeperLeagueId !== null &&
     !/^[a-zA-Z0-9_-]{1,64}$/.test(sleeperLeagueId)
@@ -64,7 +64,7 @@ export async function setFeaturedLeague(
 /**
  * Toggle whether a league appears on the user's public profile. Stored
  * as a deduped set under `shown_league_ids`. Independent across
- * leagues — multiple can be shown at once.
+ * leagues, multiple can be shown at once.
  */
 export async function setLeagueShownOnProfile(
   sleeperLeagueId: string,
@@ -87,7 +87,7 @@ export async function setLeagueShownOnProfile(
     .maybeSingle();
 
   const current = parseSleeperLeagueSettings(existing?.sleeper_league_settings);
-  // Use a Set to dedupe — the UI might double-fire under a fast double
+  // Use a Set to dedupe, the UI might double-fire under a fast double
   // tap, and we don't want phantom duplicates accumulating in the array.
   const set = new Set(current.shown_league_ids ?? []);
   if (shown) set.add(sleeperLeagueId);

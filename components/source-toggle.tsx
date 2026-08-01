@@ -29,7 +29,7 @@ export function SourceToggle({
   // The user's currently-resolved format. Used to (a) annotate sources that
   // don't support this format with a pre-click warning + tooltip, and
   // (b) trigger a fall-through when the user selects a source that doesn't
-  // support it. Sources are NOT filtered out — the user can still pick them
+  // support it. Sources are NOT filtered out, the user can still pick them
   // and accept the format swap deliberately.
   currentFormatSlug: string | null;
   // Full active format list, used by pickFallbackFormat when a source switch
@@ -259,7 +259,7 @@ export function SourceToggle({
               id={menuHeadingId}
               className="px-3 pt-2.5 pb-2 text-xs text-ink-muted"
             >
-              Choose which site’s values to display
+              Choose which site's values to display
             </p>
           </li>
           {visibleOptions.map((option, index) => {
@@ -279,14 +279,14 @@ export function SourceToggle({
               : null;
             // Compose the aria-label so the screen reader hears the
             // consequence of selecting this option BEFORE the user commits.
-            // The label is the only programmatic warning channel — we
+            // The label is the only programmatic warning channel, we
             // intentionally don't ALSO mount an sr-only tooltip because
             // pairing aria-label + aria-describedby would cause a screen
             // reader to read the fallback target twice on focus.
             const ariaLabel = !formatSupported
               ? fallbackPreview
-                ? `${option.display_name}. Warning: selecting this will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name} because ${option.display_name} doesn’t provide values for ${currentFormatLabel}.`
-                : `${option.display_name}. Warning: ${option.display_name} doesn’t provide values for ${currentFormatLabel}.`
+                ? `${option.display_name}. Warning: selecting this will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name} because ${option.display_name} doesn't provide values for ${currentFormatLabel}.`
+                : `${option.display_name}. Warning: ${option.display_name} doesn't provide values for ${currentFormatLabel}.`
               : undefined;
             return (
               <li
@@ -307,7 +307,7 @@ export function SourceToggle({
                     !formatSupported && fallbackPreview && currentFormatLabel
                       ? `Selecting ${option.display_name} will switch your format from ${currentFormatLabel} to ${fallbackPreview.display_name}.`
                       : !formatSupported && currentFormatLabel
-                        ? `${option.display_name} doesn’t provide values for ${currentFormatLabel}.`
+                        ? `${option.display_name} doesn't provide values for ${currentFormatLabel}.`
                         : undefined
                   }
                   className={`flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none ${

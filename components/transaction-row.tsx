@@ -9,7 +9,7 @@ import { SITE_TIME_ZONE } from "@/lib/datetime";
 export type TransactionRowData = {
   /** Sleeper transaction id (used in trade share links). */
   sleeperTransactionId: string;
-  /** "trade" | "waiver" | "free_agent" | "commissioner" — display label is derived. */
+  /** "trade" | "waiver" | "free_agent" | "commissioner", display label is derived. */
   type: string;
   status: string | null;
   week: number | null;
@@ -171,7 +171,7 @@ function TradeAnalyzerBody({ analysis }: { analysis: TradeAnalysis }) {
           {verdictLabel}
         </p>
         <p className="text-xs text-ink-muted">
-          Values via {context.sourceDisplay} • {context.formatDisplay}
+          Values via {context.sourceDisplay}, {context.formatDisplay}
         </p>
       </div>
 
@@ -252,7 +252,7 @@ function TradeSideCard({
               }`}
             >
               <BeaconValue show={valueIsBeacon && !p.noValue}>
-                {p.noValue ? "—" : formatValue(p.value)}
+                {p.noValue ? "-" : formatValue(p.value)}
               </BeaconValue>
             </span>
           </li>
@@ -282,7 +282,7 @@ function TradeSideCard({
                   p.noValue ? "text-ink-muted italic" : "text-ink-muted"
                 }`}
               >
-                {p.noValue ? "—" : formatValue(p.value)}
+                {p.noValue ? "-" : formatValue(p.value)}
               </span>
             </li>
           );
@@ -560,7 +560,7 @@ function MovePlayerLine({
 }
 
 /**
- * Condensed position + NFL team tag (e.g. "QB · KC") in one small rounded
+ * Condensed position + NFL team tag (e.g. "QB, KC") in one small rounded
  * pill. Shared by the trade side cards and the waiver / free-agent move
  * cards so player meta reads identically everywhere. The dot separator is a
  * styled element, not a character, so it stays crisp at any size.
@@ -621,7 +621,7 @@ function buildVerdictLabel(
   // handles are durable. Falls back to team name and a numeric label.
   const name = winner?.ownerHandle
     ? `@${winner.ownerHandle}`
-    : (winner?.teamName ?? "—");
+    : (winner?.teamName ?? "-");
   if (verdict.label === "Slight edge") {
     return `Slight edge to ${name} (+${formatValue(verdict.differential)}, ${verdict.differentialPct.toFixed(1)}%)`;
   }
@@ -640,7 +640,7 @@ function formatTypeLabel(type: string): string {
 
 function formatDateLabel(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -650,7 +650,7 @@ function formatDateLabel(iso: string): string {
 }
 
 function formatValue(n: number): string {
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "-";
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 

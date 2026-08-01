@@ -7,7 +7,7 @@
  *
  * The shape mirrors DPC's dynasty-decoder format tags (`tone: 'format'` for the
  * meta tags, `tone: 'position'` for the per-slot tags), so the renderer can
- * apply two visual tones — cyan for format, purple for position — matching the
+ * apply two visual tones (cyan for format, purple for position) matching the
  * FF Beacon brand.
  */
 

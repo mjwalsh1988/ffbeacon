@@ -27,7 +27,7 @@ import { useEffect, useState } from "react";
  *
  * Accessibility:
  *   - Single labeled `<a>` element for the CTA itself, separate labeled
- *     `<button>` for the dismiss action — both keyboard-reachable with
+ *     `<button>` for the dismiss action, both keyboard-reachable with
  *     visible focus rings.
  *   - The CTA's `aria-label` includes "(opens in new tab)" so screen-reader
  *     users get the same affordance sighted users get from a target='_blank'.
@@ -44,7 +44,7 @@ export function DiscordCta() {
   const [visible, setVisible] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Hide on /join — the page itself is the invite redirect.
+    // Hide on /join, the page itself is the invite redirect.
     if (typeof window !== "undefined" && window.location.pathname === "/join") {
       setVisible(false);
       return;

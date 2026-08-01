@@ -40,7 +40,7 @@ export function LeaguePulseForm({
           "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.10) 0%, transparent 55%)",
       }}
     >
-      {/* Top-edge gradient accent — same treatment as the login card so the
+      {/* Top-edge gradient accent, same treatment as the login card so the
           primary action surface reads consistently across the site. */}
       <span
         aria-hidden="true"

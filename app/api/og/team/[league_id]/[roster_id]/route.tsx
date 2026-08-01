@@ -139,9 +139,9 @@ export async function GET(
         </h1>
         <p style={{ fontSize: 22, color: INK_MUTED, margin: 0 }}>
           {team.ownerSleeperUsername ? `@${team.ownerSleeperUsername}` : ""}
-          {team.ownerSleeperUsername ? " • " : ""}
+          {team.ownerSleeperUsername ? ", " : ""}
           {team.record.wins}-{team.record.losses}
-          {team.record.ties > 0 ? `-${team.record.ties}` : ""} • {context.formatDisplay}
+          {team.record.ties > 0 ? `-${team.record.ties}` : ""}, {context.formatDisplay}
         </p>
 
         {/* Value tiles */}
@@ -311,7 +311,7 @@ function notFoundImage(reason: string): Response {
 
 function clip(s: string, n: number): string {
   if (s.length <= n) return s;
-  return s.slice(0, n - 1) + "…";
+  return s.slice(0, n - 1) + "...";
 }
 
 function formatNumber(n: number): string {

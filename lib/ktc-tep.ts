@@ -3,7 +3,7 @@
 //
 // KTC explicitly publishes TEP rankings as an *algorithmic* derivation of
 // their base Superflex values, not a separate dataset. So we don't scrape
-// the TEP page (and we can't reliably anyway — KTC's TEP toggle is
+// the TEP page (and we can't reliably anyway, KTC's TEP toggle is
 // client-side JS, see scripts/sync-ktc.ts header). Instead we reproduce
 // the formula here, apply it to the base sflex values during sync, and
 // store the result under the same source='ktc'.

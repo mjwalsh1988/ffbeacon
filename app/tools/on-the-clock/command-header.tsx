@@ -108,7 +108,7 @@ export function CommandHeader({
             </h2>
             <p className="mt-0.5 text-xs text-ink-muted">
               <span className="font-semibold text-ink">{statusWord}</span>
-              <span className="mx-1.5 text-ink-subtle">·</span>
+              <span className="mr-1.5 text-ink-subtle">,</span>
               <span>{yourSeatLabel}</span>
             </p>
           </div>

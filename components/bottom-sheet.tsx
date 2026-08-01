@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
  * match the FF Beacon palette: dark surface with a beacon-gradient drag
  * handle on top.
  *
- * Render-time gated to `md:hidden` so it never appears on desktop layouts —
+ * Render-time gated to `md:hidden` so it never appears on desktop layouts,
  * desktop callers should provide a parallel UI (table cell, hover popover,
  * etc.) for the same content.
  *

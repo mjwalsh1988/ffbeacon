@@ -926,7 +926,7 @@ function TierGroup({
       </div>
       {group.items.length === 0 ? (
         <p className="rounded-card border border-dashed border-line/60 bg-base/30 px-3 py-4 text-xs text-ink-subtle">
-          Empty. Use a player&rsquo;s tier menu to move them here.
+          Empty. Use a player&apos;s tier menu to move them here.
         </p>
       ) : (
         <PlayerList
@@ -1248,7 +1248,7 @@ function PlayerRow({
           <p className="truncate text-sm font-semibold text-ink">{player.name}</p>
           <p className="truncate text-xs text-ink-subtle">
             {player.position}
-            {player.team ? ` · ${player.team}` : ""}
+            {player.team ? `, ${player.team}` : ""}
           </p>
         </div>
       </div>
@@ -1482,7 +1482,7 @@ function AddPlayerCombobox({
             <li className="px-3 py-3 text-sm text-ink-subtle">Searching...</li>
           ) : matches.length === 0 ? (
             <li className="px-3 py-3 text-sm text-ink-subtle">
-              No active players match &ldquo;{query.trim()}&rdquo;.
+              No active players match &quot;{query.trim()}&quot;.
             </li>
           ) : (
             matches.map((p, i) => {
@@ -1512,7 +1512,7 @@ function AddPlayerCombobox({
                     <span className="text-ink">{p.name}</span>
                     <span className="ml-2 text-xs text-ink-subtle">
                       {p.position}
-                      {p.team ? ` · ${p.team}` : ""}
+                      {p.team ? `, ${p.team}` : ""}
                     </span>
                   </span>
                   <Plus aria-hidden="true" className="h-4 w-4 text-brand-cyan" />

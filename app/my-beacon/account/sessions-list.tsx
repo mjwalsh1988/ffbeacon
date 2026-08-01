@@ -82,7 +82,7 @@ export function SessionsList({ sessions }: { sessions: SessionRow[] }) {
                     {session.ip ? (
                       <>
                         IP {session.ip}
-                        <span aria-hidden="true"> · </span>
+                        <span aria-hidden="true">, </span>
                       </>
                     ) : null}
                     Last active {formatRelative(lastActive)}
@@ -159,7 +159,7 @@ type ParsedUA = {
 function parseUserAgent(ua: string | null): ParsedUA {
   if (!ua) return { label: "Unknown device", Icon: Globe };
 
-  // Order matters — match the most specific patterns first. Mobile UA
+  // Order matters, match the most specific patterns first. Mobile UA
   // strings often also contain Safari/Chrome, so device detection runs
   // before browser detection.
   const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
@@ -185,7 +185,7 @@ function parseUserAgent(ua: string | null): ParsedUA {
 /* ---------- Date formatting ---------- */
 
 function formatAbsolute(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Intl.DateTimeFormat("en-US", {
       dateStyle: "medium",

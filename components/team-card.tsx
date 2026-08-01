@@ -63,7 +63,7 @@ const POSITION_ACCENT: Record<ValuedPosition, string> = {
  * button. Collapsed state shows only the header (team identity + totals)
  * so multiple teams can be lined up at a glance. Expanded state shows the
  * roster as a horizontal grid of position columns (QB, RB, WR, TE, Picks)
- * — full roster in one screen on lg viewports, stacks down to a 2-col then
+ *, full roster in one screen on lg viewports, stacks down to a 2-col then
  * 1-col grid for smaller screens. No data is hidden at any breakpoint.
  */
 export function TeamCard({
@@ -221,7 +221,7 @@ export function TeamCard({
       id={`team-${sleeperRosterId}`}
       className="rounded-card border border-line bg-surface"
     >
-      {/* Header — becomes an expand/collapse button when the parent supplies onToggleExpand */}
+      {/* Header, becomes an expand/collapse button when the parent supplies onToggleExpand */}
       <header className={collapsible ? "" : "border-b border-line p-4 sm:p-5"}>
         {collapsible ? (
           <button
@@ -241,7 +241,7 @@ export function TeamCard({
         )}
       </header>
 
-      {/* Roster + picks — single horizontal grid of columns. Hidden when collapsed. */}
+      {/* Roster + picks, single horizontal grid of columns. Hidden when collapsed. */}
       {expanded && (
         <div
           id={regionId}
@@ -317,7 +317,7 @@ function PositionColumn({
   teamCount: number;
   valueIsBeacon: boolean;
 }) {
-  const rankLabel = rank != null ? ordinal(rank) : "—";
+  const rankLabel = rank != null ? ordinal(rank) : "-";
   const denominator = teamCount > 0 ? ` of ${teamCount}` : "";
   const headerAria =
     rank != null
@@ -565,7 +565,7 @@ function RankTile({
         style={numberStyle}
         className="font-mono text-sm font-bold tabular-nums leading-none"
       >
-        {rank != null ? ordinal(rank) : "—"}
+        {rank != null ? ordinal(rank) : "-"}
       </span>
     </li>
   );
@@ -614,7 +614,7 @@ function ordinal(n: number): string {
 }
 
 function formatValue(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(Number(v))) return "—";
+  if (v == null || !Number.isFinite(Number(v))) return "-";
   const n = Number(v);
   return n >= 1000 ? Math.round(n).toLocaleString() : n.toFixed(0);
 }

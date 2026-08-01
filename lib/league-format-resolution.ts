@@ -69,7 +69,7 @@ export type LeagueContext = {
     derivedDisplay: string;
   } | null;
   /** The Sleeper-derived structural format. Useful when we want to render
-   * format tags ("Dynasty • Superflex • TEP") that describe the LEAGUE's
+   * format tags ("Dynasty, Superflex, TEP") that describe the LEAGUE's
    * actual rules, not whatever format we ended up resolving to. */
   derived: DerivedFormat;
   /** When the selected source doesn't publish draft pick values, this is

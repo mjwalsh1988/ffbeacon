@@ -11,18 +11,18 @@ const PAGE_URL = "https://ffbeacon.com/join";
  * fetching the URL and reading its <meta> tags. If we returned a 3xx
  * redirect to discord.gg here, the crawler would either (a) refuse to
  * follow cross-origin redirects and produce no preview, or (b) follow and
- * show Discord's generic "Join my Discord Server" card — neither of which
+ * show Discord's generic "Join my Discord Server" card, neither of which
  * reads as an FF Beacon invite when shared.
  *
  * Instead, this page serves a full HTML response with branded OG metadata
  * that crawlers can index, then redirects human visitors via:
- *   1. <meta http-equiv="refresh"> — works without JS, picked up by every
+ *   1. <meta http-equiv="refresh">, works without JS, picked up by every
  *      browser, ignored by most social unfurlers (they read meta tags but
  *      don't navigate).
- *   2. An inline <script> calling location.replace() — fires before paint
+ *   2. An inline <script> calling location.replace(), fires before paint
  *      for JS-enabled clients so users see the Discord invite almost
  *      instantly.
- *   3. A visible "Open Discord invite" link — accessibility fallback for
+ *   3. A visible "Open Discord invite" link, accessibility fallback for
  *      any client where both of the above fail (e.g. scripted readers,
  *      no-script browsing).
  */
@@ -30,12 +30,12 @@ const PAGE_URL = "https://ffbeacon.com/join";
 export const metadata: Metadata = {
   title: "Join the FF Beacon Discord",
   description:
-    "Join the FF Beacon community on Discord — fantasy football tools, rankings, and trade talk built for everyone.",
+    "Join the FF Beacon community on Discord: fantasy football tools, rankings, and trade talk built for everyone.",
   alternates: { canonical: PAGE_URL },
   openGraph: {
     title: "Join the FF Beacon Discord",
     description:
-      "Fantasy football tools, rankings, and trade reactions — built for everyone, including screen readers.",
+      "Fantasy football tools, rankings, and trade reactions, built for everyone, including screen readers.",
     url: PAGE_URL,
     siteName: "FF Beacon",
     type: "website",
@@ -52,12 +52,12 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Join the FF Beacon Discord",
     description:
-      "Fantasy football tools, rankings, and trade reactions — built for everyone, including screen readers.",
+      "Fantasy football tools, rankings, and trade reactions, built for everyone, including screen readers.",
     images: ["/api/og/join"],
     site: "@ffbeacon",
     creator: "@ffbeacon",
   },
-  // Discourage indexing — the canonical entry points are /about and the
+  // Discourage indexing, the canonical entry points are /about and the
   // social profiles. The /join URL is a share-friendly redirect, not a
   // page we want surfacing in organic search.
   robots: { index: false, follow: true },
@@ -71,7 +71,7 @@ export default function JoinDiscordPage() {
       <meta httpEquiv="refresh" content={`0; url=${DISCORD_INVITE_URL}`} />
 
       {/* Pre-paint JS redirect for the common case. dangerouslySetInnerHTML
-          is fine here — no user input, no XSS surface. */}
+          is fine here, no user input, no XSS surface. */}
       <script
         dangerouslySetInnerHTML={{
           __html: `(function(){try{window.location.replace(${JSON.stringify(DISCORD_INVITE_URL)});}catch(e){}})();`,
@@ -91,10 +91,10 @@ export default function JoinDiscordPage() {
             <span className="bg-gradient-to-br from-brand-purple to-brand-cyan bg-clip-text text-transparent">
               FF Beacon Discord
             </span>
-            …
+            ...
           </h1>
           <p className="mt-4 text-base leading-relaxed text-ink-muted">
-            If your browser doesn&rsquo;t redirect automatically, open the
+            If your browser doesn&apos;t redirect automatically, open the
             invite below.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3">

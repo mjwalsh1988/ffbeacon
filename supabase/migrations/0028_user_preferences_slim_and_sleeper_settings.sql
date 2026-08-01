@@ -1,6 +1,6 @@
 -- Migration 0028: user_preferences slim-down + sleeper_league_settings jsonb
 --
--- Access matrix (inherits row-level policies from 0008 — no policy changes):
+-- Access matrix (inherits row-level policies from 0008, no policy changes):
 --   anon          : NONE
 --   authenticated : SELECT/INSERT/UPDATE/DELETE own row only
 --   service_role  : ALL

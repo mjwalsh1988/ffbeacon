@@ -303,7 +303,7 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
 
   const awards: Award[] = [];
 
-  // 1. Most Active Trader — The Signal Flare Award.
+  // 1. Most Active Trader, The Signal Flare Award.
   {
     const r = pickExtreme(base, tradeCount, rosterIds, "max");
     const pending = !anyTrades || r.allTied || r.extreme == null || r.extreme <= 0;
@@ -319,7 +319,7 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     });
   }
 
-  // 2. Most Successful Trader — The Value Beacon Award.
+  // 2. Most Successful Trader, The Value Beacon Award.
   {
     // Judge by AVERAGE value margin per trade, so the sharpest dealmaker wins rather
     // than simply the busiest trader. Qualify on a minimum trade count that relaxes
@@ -360,7 +360,7 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     });
   }
 
-  // 3. First to Fill Starting Roster — The Full Beam Award.
+  // 3. First to Fill Starting Roster, The Full Beam Award.
   {
     const completedIds = [...completionPick.keys()];
     const pending = completedIds.length === 0;
@@ -388,7 +388,7 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     });
   }
 
-  // 4. Most Boring League Mate — The Dead Air Award.
+  // 4. Most Boring League Mate, The Dead Air Award.
   {
     const r = pickExtreme(base, tradeCount, rosterIds, "min");
     const pending = !anyTrades || r.allTied || r.extreme == null;

@@ -25,7 +25,7 @@ export default function PrivacyPage() {
       <article className="mx-auto max-w-3xl space-y-8 px-4 py-10 text-ink-muted sm:px-6 lg:px-8">
         <p>
           This Privacy Policy describes what information {SITE.name}{" "}
-          (&ldquo;we&rdquo;) collects when you visit the site, why we collect
+          (&quot;we&quot;) collects when you visit the site, why we collect
           it, who we share it with, and the choices you have. We aim to collect
           the minimum data needed to make the product work.
         </p>
@@ -88,8 +88,8 @@ export default function PrivacyPage() {
           </h3>
           <p className="mt-2">
             Our hosting provider (Vercel) automatically logs basic request
-            information — IP address, user agent, request path, response
-            status — for security, abuse prevention, and operational
+            information, IP address, user agent, request path, response
+            status, for security, abuse prevention, and operational
             troubleshooting. We use this data only for those purposes.
           </p>
         </section>
@@ -102,8 +102,8 @@ export default function PrivacyPage() {
             <li>To authenticate you and keep you signed in.</li>
             <li>To save the preferences that personalize the product.</li>
             <li>
-              To power features that need league data — League Pulse, the power-
-              rankings table, the trade analyzer, the transaction feed.
+              To power features that need league data (League Pulse, the power-
+              rankings table, the trade analyzer, the transaction feed).
             </li>
             <li>To prevent abuse and rate-limit force-refresh requests.</li>
             <li>
@@ -124,17 +124,17 @@ export default function PrivacyPage() {
           </p>
           <ul className="mt-3 list-disc space-y-1 pl-6">
             <li>
-              <strong className="text-ink">Supabase</strong> — managed
+              <strong className="text-ink">Supabase</strong>, managed
               PostgreSQL + authentication. Stores your account, preferences,
               and synced league data.
             </li>
             <li>
-              <strong className="text-ink">Vercel</strong> — hosting and edge
+              <strong className="text-ink">Vercel</strong>, hosting and edge
               network. Processes requests and serves the site.
             </li>
             <li>
               <strong className="text-ink">Google</strong> and{" "}
-              <strong className="text-ink">Discord</strong> — only when you
+              <strong className="text-ink">Discord</strong>, only when you
               choose to sign in with one of them. They receive the fact that
               you authenticated against the {SITE.name} app; we receive the
               profile fields listed above.
@@ -142,7 +142,7 @@ export default function PrivacyPage() {
             <li>
               <strong className="text-ink">Sleeper</strong>,{" "}
               <strong className="text-ink">KeepTradeCut</strong>,{" "}
-              <strong className="text-ink">FantasyCalc</strong> — we read from
+              <strong className="text-ink">FantasyCalc</strong>, we read from
               their public APIs. We do not send them anything about you
               beyond the standard outbound HTTP request our server makes; they
               do not know who is browsing our site.
@@ -160,7 +160,7 @@ export default function PrivacyPage() {
             4. Google API Services User Data Policy
           </h2>
           <p className="mt-3">
-            {SITE.name}&rsquo;s use and transfer of information received from
+            {SITE.name}&apos;s use and transfer of information received from
             Google APIs to any other app will adhere to the{" "}
             <a
               href="https://developers.google.com/terms/api-services-user-data-policy"
@@ -175,7 +175,7 @@ export default function PrivacyPage() {
             (name, email, avatar). We do not transfer this data to third
             parties for any purpose other than the processors named above, do
             not use it for advertising, and do not allow humans to read the
-            data unless we have your explicit consent or it&rsquo;s necessary
+            data unless we have your explicit consent or it&apos;s necessary
             for security or to comply with applicable law.
           </p>
         </section>
@@ -238,7 +238,7 @@ export default function PrivacyPage() {
           <p className="mt-3">
             {SITE.name} is not directed to children under 13 and we do not
             knowingly collect personal information from them. If you believe a
-            child has provided us with personal data, contact us and we&rsquo;ll
+            child has provided us with personal data, contact us and we&apos;ll
             delete it.
           </p>
         </section>
@@ -249,7 +249,7 @@ export default function PrivacyPage() {
           </h2>
           <p className="mt-3">
             We may update this Privacy Policy from time to time. When we do,
-            we&rsquo;ll update the &ldquo;Effective&rdquo; date at the top of
+            we&apos;ll update the &quot;Effective&quot; date at the top of
             this page. Material changes will be highlighted on the homepage or
             via an in-app notice.
           </p>

@@ -86,7 +86,7 @@ export default async function LeagueTransactionsPage({
       ? sp.username.trim()
       : null;
 
-  // Idempotent first-touch pulse — same as the deep view.
+  // Idempotent first-touch pulse, same as the deep view.
   const adminClient = createAdminClient();
   const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
   if (!pulseResult.ok) notFound();
@@ -121,7 +121,7 @@ export default async function LeagueTransactionsPage({
   // Copy link is the clean, shareable canonical URL (no personal username).
   const copyHref = `/leagues/${sleeperLeagueId}/transactions`;
 
-  // Resolve league context (format + source) — source respects user prefs;
+  // Resolve league context (format + source), source respects user prefs;
   // format is derived from the actual Sleeper league settings.
   const sleeperLeague = league.metadata as unknown as Parameters<
     typeof resolveLeagueContext
@@ -517,7 +517,7 @@ function parseFiltersFromSearchParams(sp: {
   const week = sp.week ? Number.parseInt(sp.week, 10) : null;
   const offset = sp.offset ? Math.max(0, Number.parseInt(sp.offset, 10)) : 0;
   // Sleeper's transactions endpoint only returns the league's current season,
-  // so there's no season filter — the synced rows already share one season.
+  // so there's no season filter, the synced rows already share one season.
   return {
     types,
     rosterIds: rosterIds && rosterIds.length > 0 ? rosterIds : undefined,
@@ -534,7 +534,7 @@ async function loadFacets(
   teams: Array<{ rosterId: number; label: string }>;
   weeks: number[];
 }> {
-  // No season facet — Sleeper's transactions endpoint only returns the
+  // No season facet, Sleeper's transactions endpoint only returns the
   // league's current season, so the synced rows already share one season.
   const { data: allRows } = await supabase
     .from("league_transactions")

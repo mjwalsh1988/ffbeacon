@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 /**
  * Shape of the minimum identity fields this component needs. We only pass
- * the safe subset from the server (no provider_id, no email blob) — the
+ * the safe subset from the server (no provider_id, no email blob), the
  * unlink call uses `identity_id` which is the authoritative key.
  */
 export type IdentityRow = {
@@ -70,7 +70,7 @@ export function IdentityManager({
   const statusId = useId();
 
   const supabase = createClient();
-  // ALWAYS prefer the live browser origin in a client component — the user
+  // ALWAYS prefer the live browser origin in a client component, the user
   // is physically on `window.location.origin`, so that's the only URL the
   // OAuth callback can come back to without cross-environment surprises.
   // `NEXT_PUBLIC_SITE_URL` is canonical / production-only and would route
@@ -97,7 +97,7 @@ export function IdentityManager({
     setStatus({ kind: "linking", provider });
     // linkIdentity uses a different Supabase endpoint than signInWithOAuth
     // and does not reliably preserve the `?next=` we encode into redirectTo
-    // (the login flow does — but link doesn't). As a belt-and-braces backup,
+    // (the login flow does, but link doesn't). As a belt-and-braces backup,
     // stash the return path in a short-lived cookie that the auth callback
     // checks before falling back to the default home redirect.
     document.cookie = `ff_oauth_return=${encodeURIComponent("/my-beacon/account")}; Path=/; Max-Age=600; SameSite=Lax`;
@@ -109,7 +109,7 @@ export function IdentityManager({
       if (error) {
         setStatus({ kind: "error", message: error.message });
       }
-      // On success Supabase redirects the browser — no further state to set.
+      // On success Supabase redirects the browser, no further state to set.
     });
   };
 
@@ -164,7 +164,7 @@ export function IdentityManager({
   return (
     <div className="space-y-3">
       <ul role="list" className="space-y-3">
-        {/* Email / password row — always visible. Read-only here because
+        {/* Email / password row, always visible. Read-only here because
             disconnecting the email identity would orphan password resets
             and magic links; users manage the email address itself and
             password separately in the sections below. */}
@@ -188,7 +188,7 @@ export function IdentityManager({
                   </span>
                   {(emailIdentity?.email ?? accountEmail) && (
                     <>
-                      <span aria-hidden="true"> · </span>
+                      <span aria-hidden="true">, </span>
                       <span className="break-all">
                         {emailIdentity?.email ?? accountEmail}
                       </span>
@@ -237,7 +237,7 @@ export function IdentityManager({
                       </span>
                       {existing?.email && (
                         <>
-                          <span aria-hidden="true"> · </span>
+                          <span aria-hidden="true">, </span>
                           <span className="break-all">{existing.email}</span>
                         </>
                       )}

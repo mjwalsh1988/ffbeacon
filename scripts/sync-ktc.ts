@@ -1,5 +1,5 @@
 /**
- * KeepTradeCut value sync — CLI entrypoint.
+ * KeepTradeCut value sync, CLI entrypoint.
  *
  * Implementation lives in lib/sync-ktc.ts so the same code path is used by
  * the Vercel cron endpoint (app/api/cron/sync-ktc/route.ts). See the lib

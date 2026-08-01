@@ -23,7 +23,7 @@ export default function LoginPage({
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      {/* Soft ambient glow behind the form card — same shape as the hero
+      {/* Soft ambient glow behind the form card, same shape as the hero
           versions on other pages, just centered behind the smaller layout
           so the page reads as "ambient FF Beacon" without the full hero. */}
       <div

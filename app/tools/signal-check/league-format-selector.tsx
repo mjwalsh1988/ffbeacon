@@ -84,7 +84,7 @@ export function LeagueFormatSelector({
               </span>
               <span className="mt-1 text-xs text-ink-subtle">
                 {f.leagueType === "dynasty" ? "Dynasty" : "Redraft"}
-                {" · "}
+                {", "}
                 {f.allowsPicks ? "players and picks" : "players only"}
               </span>
             </label>

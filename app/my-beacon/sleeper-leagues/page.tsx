@@ -58,7 +58,7 @@ export default async function SleeperLeaguesPage() {
               Link your Sleeper username.
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              We save your handle so every visit auto-loads your leagues — no
+              We save your handle so every visit auto-loads your leagues, no
               re-typing, no re-pasting. Change it anytime.
             </p>
           </div>
@@ -77,7 +77,7 @@ export default async function SleeperLeaguesPage() {
             role="alert"
             className="mt-4 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
           >
-            We could not load Sleeper user &ldquo;{sleeperUsername}&rdquo;.
+            We could not load Sleeper user &quot;{sleeperUsername}&quot;.
             Double-check the spelling above.
           </p>
         )}

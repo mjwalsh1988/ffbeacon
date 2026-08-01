@@ -17,7 +17,7 @@ export type TransactionFilter = {
   rosterIds?: number[];
   /** Filter by week. null = all. */
   week?: number | null;
-  // No season filter — Sleeper's transactions endpoint only returns the
+  // No season filter, Sleeper's transactions endpoint only returns the
   // league's current season, so the synced rows already share one season.
   /** Pagination. */
   limit?: number;
@@ -34,7 +34,7 @@ export type LoadedTransactions = {
  * into a TradeAnalysis using the supplied LeagueContext, and build the
  * TransactionRowData payload the UI component consumes.
  *
- * `context` may be null when the league has no resolved format (rare —
+ * `context` may be null when the league has no resolved format (rare,
  * Sleeper league with no canonical format mapping and a source that
  * supports nothing else). When null, trades render without analysis
  * (verdict / values are hidden).

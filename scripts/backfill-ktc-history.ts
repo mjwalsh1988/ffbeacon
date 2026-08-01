@@ -9,7 +9,7 @@
  *   POST https://keeptradecut.com/fantasy-rankings/histories
  *
  * Body is `'"1"'` (a JSON-encoded "1"). The body is effectively a
- * placeholder — we probed 0/2/7/30/365/null and got identical bytes back,
+ * placeholder, we probed 0/2/7/30/365/null and got identical bytes back,
  * so we send "1" to mirror the public DPC implementation. The endpoints
  * require no auth; KTC just wants a browser-y Referer and User-Agent.
  *
@@ -109,7 +109,7 @@ const PRODUCTS: ProductSource[] = [
 
 // Format slugs whose history is derived from a base slug via applyKtcTep().
 // Only dynasty publishes TEP arrays in KTC's response, and our redraft-ppr-tep
-// format_config is fed by FantasyCalc, not KTC — so we don't derive redraft
+// format_config is fed by FantasyCalc, not KTC, so we don't derive redraft
 // TEP from redraft sflex here.
 const TEP_DERIVE: Array<{ targetSlug: string; baseSlug: string }> = [
   { targetSlug: "dynasty-ppr-tep-sflex", baseSlug: "dynasty-ppr-sflex" },
@@ -292,7 +292,7 @@ async function main() {
   console.log(`Loaded ${players.length} players, ${formats.length} format_configs`);
 
   // KTC players don't carry sleeperId, so name|position is the only matching
-  // surface — same as sync-ktc.ts. Build the lookup once.
+  // surface, same as sync-ktc.ts. Build the lookup once.
   const playerByName = new Map<string, string>();
   const positionByPlayerId = new Map<string, string>();
   for (const p of players) {
@@ -303,7 +303,7 @@ async function main() {
 
   // To resolve a KTC playerID to one of our player_ids we need each KTC
   // player's name + position. The histories endpoint only returns the
-  // encoded value history — no name. We pull names from the public
+  // encoded value history, no name. We pull names from the public
   // dynasty-rankings + fantasy-rankings HTML pages (same `playersArray`
   // embedded script the daily sync uses).
   const ktcMetaByID = new Map<number, { name: string; position: string }>();
@@ -314,7 +314,7 @@ async function main() {
     const meta = await fetchKtcPlayerMeta(rankingsUrl);
     for (const [id, info] of meta) {
       // Dynasty page wins ties (loaded first). Either source's name+position
-      // is fine — KTC keys players consistently across products.
+      // is fine, KTC keys players consistently across products.
       if (!ktcMetaByID.has(id)) ktcMetaByID.set(id, info);
     }
   }
@@ -450,7 +450,7 @@ async function main() {
 
     // Bucket base sflex rows by date so applyKtcTep operates on the full
     // per-date dataset (TE re-ranking depends on all values that day).
-    // Dynasty product only — TEP_DERIVE is hard-coded to dynasty base.
+    // Dynasty product only, TEP_DERIVE is hard-coded to dynasty base.
     const dynastyProduct = "dynasty";
     const rowsByDate = new Map<string, Array<{ player_id: string; position: string; value: number }>>();
     for (const [key, value] of sflexByProductPlayerDate) {
@@ -512,7 +512,7 @@ async function main() {
     // Wrap the upsert in retry/backoff. Supabase's edge proxies occasionally
     // close the socket mid-stream on long runs (observed at ~120K rows during
     // the first backfill). The unique constraint + ignoreDuplicates means a
-    // replay of the same chunk is safe — already-inserted rows are no-ops.
+    // replay of the same chunk is safe, already-inserted rows are no-ops.
     await upsertWithRetry(supabase, chunk);
     upserted += chunk.length;
     if (i % (UPSERT_BATCH_SIZE * 10) === 0 && i > 0) {
@@ -545,7 +545,7 @@ async function main() {
 // Upsert a chunk into player_value_history with bounded retry on transient
 // network errors. Supabase's edge proxies sometimes close the socket
 // mid-request on long-running runs ("UND_ERR_SOCKET other side closed"),
-// which is harmless if we retry — the unique constraint guarantees that a
+// which is harmless if we retry, the unique constraint guarantees that a
 // replayed batch produces no duplicate rows. We give up after 5 attempts so
 // a genuinely broken endpoint doesn't loop forever.
 async function upsertWithRetry(

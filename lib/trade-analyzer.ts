@@ -14,7 +14,7 @@ type AnySupabase =
  * verdict.
  *
  * Player values come from player_value_trends for the (format, source).
- * Draft pick values come from draft_pick_values for the (format, KTC) —
+ * Draft pick values come from draft_pick_values for the (format, KTC),
  * picks are ALWAYS valued via KTC because FantasyCalc doesn't publish them.
  * The UI surfaces this via the LeagueContext.pickSource footnote.
  *
@@ -80,7 +80,7 @@ export type TradeAnalysis = {
   /** Verdict label + winning roster (if any). */
   verdict: TradeVerdict;
   /** True when at least one player or pick lacked a value row. Tells the
-   * UI to render a "Some values missing — analysis may be incomplete" note. */
+   * UI to render a "Some values missing, analysis may be incomplete" note. */
   hasMissingValues: boolean;
   /** Snapshot of the inputs used so the OG image route can re-render
    * identical content without re-querying. */
@@ -156,7 +156,7 @@ export async function analyzeTrade(
   const addEntries = parseAdds(adds);
   const pickEntries = parsePicks(draftPicks);
 
-  // No usable content — surface a null analysis so the UI can render a
+  // No usable content, surface a null analysis so the UI can render a
   // simple "no players or picks" placeholder.
   if (addEntries.length === 0 && pickEntries.length === 0) return null;
 

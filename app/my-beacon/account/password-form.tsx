@@ -16,15 +16,15 @@ type Rule = {
   test: (value: string) => boolean;
 };
 
-// Rules are intentionally conservative — they match the common policy that
+// Rules are intentionally conservative, they match the common policy that
 // most users have already internalized from other sites, so the checklist
 // reads as familiar rather than nitpicky. Tweak the set here and the UI
 // updates automatically.
 const RULES: Rule[] = [
   { id: "length", label: "At least 8 characters", test: (v) => v.length >= 8 },
-  { id: "lower", label: "A lowercase letter (a–z)", test: (v) => /[a-z]/.test(v) },
-  { id: "upper", label: "An uppercase letter (A–Z)", test: (v) => /[A-Z]/.test(v) },
-  { id: "number", label: "A number (0–9)", test: (v) => /[0-9]/.test(v) },
+  { id: "lower", label: "A lowercase letter (a-z)", test: (v) => /[a-z]/.test(v) },
+  { id: "upper", label: "An uppercase letter (A-Z)", test: (v) => /[A-Z]/.test(v) },
+  { id: "number", label: "A number (0-9)", test: (v) => /[0-9]/.test(v) },
   {
     id: "symbol",
     label: "A symbol (e.g. !, @, #, $)",
@@ -34,10 +34,10 @@ const RULES: Rule[] = [
 
 /**
  * Two-mode password form:
- *  - `hasPassword=true`  — confirm-then-update flow with a current-password
+ *  - `hasPassword=true` , confirm-then-update flow with a current-password
  *                          check (Supabase doesn't natively require the
  *                          current password, so we re-authenticate first).
- *  - `hasPassword=false` — single new-password field for users who only
+ *  - `hasPassword=false`, single new-password field for users who only
  *                          have OAuth identities and want to add a password
  *                          fallback.
  *

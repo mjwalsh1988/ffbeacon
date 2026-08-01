@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/terms" },
   title: "Terms of Service",
   description:
-    "The rules and expectations for using FF Beacon — what you can do, what we expect, and how the service is provided.",
+    "The rules and expectations for using FF Beacon: what you can do, what we expect, and how the service is provided.",
 };
 
 const EFFECTIVE_DATE = "May 18, 2026";
@@ -24,9 +24,9 @@ export default function TermsPage() {
       </header>
       <article className="mx-auto max-w-3xl space-y-8 px-4 py-10 text-ink-muted sm:px-6 lg:px-8">
         <p>
-          These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of{" "}
-          {SITE.name} (&ldquo;the Service&rdquo;), operated by {SITE.author.name}.
-          By accessing the Service you agree to these Terms. If you don&rsquo;t agree,
+          These Terms of Service (&quot;Terms&quot;) govern your access to and use of{" "}
+          {SITE.name} (&quot;the Service&quot;), operated by {SITE.author.name}.
+          By accessing the Service you agree to these Terms. If you don&apos;t agree,
           please do not use the Service.
         </p>
 
@@ -48,7 +48,7 @@ export default function TermsPage() {
           <p className="mt-3">
             Account creation is optional. When you choose to sign in, you may
             authenticate through third-party providers (currently Google and
-            Discord) or via an email link. We rely on those providers&rsquo; own
+            Discord) or via an email link. We rely on those providers&apos; own
             terms and security; their handling of your credentials is governed
             by their respective terms and privacy policies.
           </p>
@@ -72,7 +72,7 @@ export default function TermsPage() {
               to a typical interactive session.
             </li>
             <li>
-              Attempt to access accounts, leagues, or data that don&rsquo;t belong
+              Attempt to access accounts, leagues, or data that don&apos;t belong
               to you, including through credential stuffing, session hijacking,
               or social engineering.
             </li>
@@ -101,7 +101,7 @@ export default function TermsPage() {
             including the Sleeper API, KeepTradeCut, FantasyCalc, and the
             sleepercdn player image CDN. We do not own that data and make no
             warranty as to its accuracy. League rosters, transactions, and
-            draft data we display are pulled from Sleeper&rsquo;s public
+            draft data we display are pulled from Sleeper&apos;s public
             endpoints; if a league is public on Sleeper, its data is visible
             here as well.
           </p>
@@ -132,7 +132,7 @@ export default function TermsPage() {
             6. Intellectual property
           </h2>
           <p className="mt-3">
-            The Service&rsquo;s name, logo, content, design, and code are owned
+            The Service&apos;s name, logo, content, design, and code are owned
             by {SITE.author.name}. You may not reproduce or redistribute them
             without permission. Player names, team logos, NFL marks, and Sleeper
             avatars remain the property of their respective owners.
@@ -157,7 +157,7 @@ export default function TermsPage() {
             8. No warranty; limitation of liability
           </h2>
           <p className="mt-3">
-            The Service is provided &ldquo;as is&rdquo; without warranties of
+            The Service is provided &quot;as is&quot; without warranties of
             any kind, express or implied. To the maximum extent permitted by
             law, {SITE.author.name} is not liable for any indirect, incidental,
             consequential, or punitive damages arising from your use of the
@@ -172,8 +172,8 @@ export default function TermsPage() {
             9. Changes to these Terms
           </h2>
           <p className="mt-3">
-            We may update these Terms from time to time. When we do, we&rsquo;ll
-            update the &ldquo;Effective&rdquo; date at the top of this page.
+            We may update these Terms from time to time. When we do, we&apos;ll
+            update the &quot;Effective&quot; date at the top of this page.
             Material changes will be highlighted on the homepage or via an
             in-app notice. Continued use after a change constitutes acceptance.
           </p>

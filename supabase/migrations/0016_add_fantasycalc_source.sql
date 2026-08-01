@@ -20,7 +20,7 @@
 -- FantasyCalc does NOT publish TEP variants. dynasty-ppr-tep-sflex and
 -- redraft-ppr-tep stay outside supported_format_slugs. If we later want
 -- FantasyCalc TEP, we'd apply our own TEP derivation algorithm in the
--- sync pipeline (mirroring the KTC TEP pattern in lib/ktc-tep.ts) —
+-- sync pipeline (mirroring the KTC TEP pattern in lib/ktc-tep.ts),
 -- explicitly NOT done in this migration.
 --
 -- Priority is set so FantasyCalc outranks KTC for the formats both

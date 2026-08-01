@@ -54,7 +54,7 @@ export async function GET(
   }
 
   // Use the same league-contextual format resolution the rest of the site
-  // uses. The format isn't user-controlled inside a league view — it's
+  // uses. The format isn't user-controlled inside a league view, it's
   // derived from the actual Sleeper rules. This keeps the OG card aligned
   // with what users see on /leagues/[id].
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
@@ -183,8 +183,8 @@ export async function GET(
           {clip(league.name, 60)}
         </h1>
         <p style={{ fontSize: 28, color: INK_MUTED, margin: 0 }}>
-          {league.season} • {league.total_rosters ?? "?"} teams
-          {sourceDisplay ? ` • ${sourceDisplay}` : ""}
+          {league.season}, {league.total_rosters ?? "?"} teams
+          {sourceDisplay ? `, ${sourceDisplay}` : ""}
         </p>
 
         {/* Top 3 power rankings */}
@@ -309,7 +309,7 @@ function notFoundImage(reason: string): Response {
 
 function clip(s: string, n: number): string {
   if (s.length <= n) return s;
-  return s.slice(0, n - 1) + "…";
+  return s.slice(0, n - 1) + "...";
 }
 
 function formatNumber(n: number): string {

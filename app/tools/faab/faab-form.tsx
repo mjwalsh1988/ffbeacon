@@ -725,7 +725,7 @@ function SelectedPlayerCard({
             <h3 className="truncate text-base font-semibold text-ink">{player.name}</h3>
             <p className="truncate text-xs text-ink-subtle">
               {player.position}
-              {player.team ? ` · ${player.team}` : ""} · {formatName}
+              {player.team ? `, ${player.team}` : ""}, {formatName}
             </p>
           </div>
         </div>
@@ -980,7 +980,7 @@ function PlayerCombobox({
         >
           {matches.length === 0 ? (
             <li role="presentation" className="px-3 py-3 text-sm text-ink-subtle">
-              No players match &ldquo;{query}&rdquo;.
+              No players match &quot;{query}&quot;.
             </li>
           ) : (
             matches.map((p, i) => {
@@ -1007,7 +1007,7 @@ function PlayerCombobox({
                     <span className="text-ink">{p.name}</span>
                     <span className="ml-2 text-xs text-ink-subtle">
                       {p.position}
-                      {p.team ? ` · ${p.team}` : ""}
+                      {p.team ? `, ${p.team}` : ""}
                     </span>
                   </span>
                   <span className="flex-shrink-0 font-mono text-xs tabular-nums text-ink-subtle">

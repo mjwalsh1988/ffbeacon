@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   // Resolution order for the post-auth landing path:
-  //   1. `?next=` URL param (login flow — signInWithOAuth threads this
+  //   1. `?next=` URL param (login flow, signInWithOAuth threads this
   //      through reliably)
-  //   2. `ff_oauth_return` cookie (link flow — set by identity-manager
+  //   2. `ff_oauth_return` cookie (link flow, set by identity-manager
   //      before linkIdentity, because that endpoint doesn't always
   //      preserve redirectTo query strings)
   //   3. "/" (default landing for password / magic-link confirmations)
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
 /**
  * Defensive decode for the return-path cookie. A malformed value (e.g.
  * a stale entry from a previous deploy) should never throw and crash the
- * auth callback — it just falls through to the default landing.
+ * auth callback, it just falls through to the default landing.
  */
 function safeDecode(value: string): string | null {
   try {

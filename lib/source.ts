@@ -160,7 +160,7 @@ export function describeSource(
 // the caller to render a one-line banner.
 //
 // This is a *pure* declarative check against the registry. It does not touch
-// cookies or the DB — pages that call this should NOT persist the fallback,
+// cookies or the DB, pages that call this should NOT persist the fallback,
 // because that's the URL-arrival / stale-cookie case where we just want to
 // give the user something coherent to look at on this request.
 

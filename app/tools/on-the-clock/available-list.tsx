@@ -198,8 +198,8 @@ export function AvailableList({
                       <span className="font-semibold text-ink">{p.name}</span>
                       <span className="ml-2 text-xs text-ink-muted">
                         {p.position}
-                        {p.team ? ` · ${p.team}` : ""}
-                        {p.isRookie ? " · Rookie" : ""}
+                        {p.team ? `, ${p.team}` : ""}
+                        {p.isRookie ? ", Rookie" : ""}
                       </span>
                     </th>
                     <td className="px-3 py-2 text-ink-muted">

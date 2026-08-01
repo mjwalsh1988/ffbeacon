@@ -139,7 +139,7 @@ export function PickList({
                   <span className="font-semibold text-ink">{fullName(p)}</span>
                   <span className="ml-2 text-xs text-ink-muted">
                     {p.position ?? ""}
-                    {p.team ? ` · ${p.team}` : ""}
+                    {p.team ? `, ${p.team}` : ""}
                   </span>
                   {!p.playerId && (
                     <span className="ml-2 text-[10px] text-ink-subtle">(not in our database)</span>

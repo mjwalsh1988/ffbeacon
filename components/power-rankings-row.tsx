@@ -86,7 +86,7 @@ export function PowerRankingsRow({
     <>
       <tr className="hover:bg-surface">
         <td className="w-px whitespace-nowrap px-2 py-2 text-center font-mono tabular-nums text-ink-muted">
-          {data.overallRank ?? "—"}
+          {data.overallRank ?? "-"}
         </td>
         <td className="px-3 py-2">
           {/* Mobile: tap-to-open-sheet. Desktop: direct link. */}
@@ -191,7 +191,7 @@ function PulseCell({
   if (powerPulse == null) {
     return (
       <td className="px-2 py-2 text-center font-mono text-sm tabular-nums text-ink-subtle">
-        <span aria-label="Power Pulse not calculated yet">—</span>
+        <span aria-label="Power Pulse not calculated yet">-</span>
       </td>
     );
   }
@@ -232,7 +232,7 @@ function PositionRankCell({
         : { color: "#F4F4F8" };
   const ariaTier =
     tier === "top" ? " (top three)" : tier === "bottom" ? " (bottom three)" : "";
-  const label = rank != null ? rankOrdinal(rank) : "—";
+  const label = rank != null ? rankOrdinal(rank) : "-";
   return (
     <td
       className="hidden px-3 py-2 text-center font-mono font-semibold tabular-nums md:table-cell"
@@ -365,7 +365,7 @@ function TeamRankSheet({
               Record {record}
               {data.overallRank != null && (
                 <>
-                  {" · "}
+                  {", "}
                   <span className="text-ink">
                     {rankOrdinal(data.overallRank)} overall
                   </span>
@@ -397,7 +397,7 @@ function TeamRankSheet({
               Power Pulse
             </span>
             <span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums text-brand-cyan">
-              {data.powerPulse ?? "—"}
+              {data.powerPulse ?? "-"}
             </span>
             {data.pulseRank != null && (
               <span aria-hidden="true" className="text-[10px] text-ink-subtle">
@@ -491,7 +491,7 @@ function RankTile({
       : tier === "bottom"
         ? { color: "#A855F7", border: "rgba(168, 85, 247, 0.55)", glow: "rgba(168, 85, 247, 0.10)" }
         : { color: "#F4F4F8", border: "#1F1F33", glow: "transparent" };
-  const labelText = rank != null ? rankOrdinal(rank) : "—";
+  const labelText = rank != null ? rankOrdinal(rank) : "-";
   const ariaTier =
     tier === "top"
       ? " (top three in league)"
@@ -552,7 +552,7 @@ function rankTier(
 }
 
 function formatValue(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(Number(v))) return "—";
+  if (v == null || !Number.isFinite(Number(v))) return "-";
   const n = Number(v);
   return n >= 1000 ? Math.round(n).toLocaleString() : n.toFixed(0);
 }

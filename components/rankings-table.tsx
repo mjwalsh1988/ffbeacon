@@ -60,7 +60,7 @@ type MobileSortOption = {
 
 // Desktop columns. Mobile renders a different layout (Rank, Player, dynamic
 // metric column driven by the active sort chip) so it does not consume this
-// list — see buildMobileSortOptions below.
+// list, see buildMobileSortOptions below.
 //
 // On the overall board the primary "Rank" column is the overall rank. On a
 // positional board (a position filter is active) the primary "Rank" column
@@ -99,7 +99,7 @@ function buildColumns(positional: boolean): Column[] {
 // Mobile sort chip row. Each chip both selects the sort key AND determines
 // which metric the dynamic third column on mobile renders. Tap the active
 // chip again to flip the sort direction; tap an inactive chip to switch
-// metrics (resets direction to the chip's natural default — Rank low→high,
+// metrics (resets direction to the chip's natural default, Rank low→high,
 // values/trends high→low). On a positional board the "Rank" chip sorts by the
 // positional rank; the "Pos rank" chip is dropped because Rank already is it.
 function buildMobileSortOptions(positional: boolean): MobileSortOption[] {
@@ -180,7 +180,7 @@ export function RankingsTable({
   // Mobile chip-row sort handler. Tapping the active chip flips direction;
   // tapping an inactive chip switches the active metric and resets to that
   // chip's natural default direction (Rank ascending, values/trends
-  // descending — the "best first" intent for each metric).
+  // descending, the "best first" intent for each metric).
   const handleMobileSort = (key: SortKey, defaultDir: SortDir) => {
     if (key === sortKey) {
       setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
@@ -389,7 +389,7 @@ export function RankingsTable({
                   </div>
                 </td>
 
-                {/* Mobile dynamic metric cell — renders only at <md. */}
+                {/* Mobile dynamic metric cell, renders only at <md. */}
                 <td className="py-3 pl-2 pr-4 text-center font-mono tabular-nums md:hidden">
                   <MobileMetricCell
                     row={row}
@@ -401,7 +401,7 @@ export function RankingsTable({
 
                 {/* Desktop-only cells. */}
                 <td className="hidden px-3 py-3 text-center text-ink-muted md:table-cell">
-                  {row.team ?? "—"}
+                  {row.team ?? "-"}
                 </td>
                 <td className="hidden px-3 py-3 text-center md:table-cell">
                   <span className="font-mono text-xs text-brand-cyan">{row.position}</span>
@@ -418,7 +418,7 @@ export function RankingsTable({
                       T{row.tier}
                     </span>
                   ) : (
-                    <span className="text-ink-subtle">—</span>
+                    <span className="text-ink-subtle">-</span>
                   )}
                 </td>
                 <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
@@ -427,7 +427,7 @@ export function RankingsTable({
                       {row.value.toLocaleString()}
                     </BeaconValue>
                   ) : (
-                    "—"
+                    "-"
                   )}
                 </td>
                 <td className="hidden px-3 py-3 text-center font-mono tabular-nums md:table-cell">
@@ -484,7 +484,7 @@ function MobileMetricCell({
         T{row.tier}
       </span>
     ) : (
-      <span className="text-ink-subtle">—</span>
+      <span className="text-ink-subtle">-</span>
     );
   }
   // On a positional board the "Pos rank" chip is dropped and the "Rank" chip
@@ -508,7 +508,7 @@ function MobileMetricCell({
   return row.value !== null ? (
     <BeaconValue show={valueIsBeacon}>{row.value.toLocaleString()}</BeaconValue>
   ) : (
-    <span>—</span>
+    <span>-</span>
   );
 }
 
@@ -549,8 +549,8 @@ function PlayerDetailSheet({
               </h2>
               <p className="truncate text-xs text-ink-subtle">
                 {row.position}
-                {row.team ? ` · ${row.team}` : ""}
-                {row.position_rank ? ` · ${row.position}#${row.position_rank}` : ""}
+                {row.team ? `, ${row.team}` : ""}
+                {row.position_rank ? `, ${row.position}#${row.position_rank}` : ""}
               </p>
               {row.status !== "active" && (
                 <span
@@ -582,7 +582,7 @@ function PlayerDetailSheet({
             />
             <MetricTile
               label="Tier"
-              value={row.tier !== null ? `T${row.tier}` : "—"}
+              value={row.tier !== null ? `T${row.tier}` : "-"}
             />
             <MetricTile
               label="Value"
@@ -592,7 +592,7 @@ function PlayerDetailSheet({
                     {row.value.toLocaleString()}
                   </BeaconValue>
                 ) : (
-                  "—"
+                  "-"
                 )
               }
             />
@@ -666,7 +666,7 @@ function RankTrendCell({ row }: { row: RankingsRow }) {
   if (!row.show_trend_7d || row.rank_change_7d === null) {
     return (
       <span className="text-ink-subtle" aria-label="Insufficient history for 7-day rank movement">
-        —
+        -
       </span>
     );
   }
@@ -676,7 +676,7 @@ function RankTrendCell({ row }: { row: RankingsRow }) {
   if (change === 0) {
     return (
       <span className="text-ink-muted" aria-label={`No rank change in the last 7 days${weekly}`} title={title}>
-        –
+        -
       </span>
     );
   }
@@ -699,7 +699,7 @@ function ValueTrendCell({ row }: { row: RankingsRow }) {
   if (!row.show_trend_7d || row.change_7d_pct === null || row.trend_7d === null) {
     return (
       <span className="text-ink-subtle" aria-label="Insufficient history for 7-day value trend">
-        —
+        -
       </span>
     );
   }
