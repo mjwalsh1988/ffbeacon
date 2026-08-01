@@ -202,6 +202,45 @@ export async function getSleeperTradedPicks(leagueId: string): Promise<SleeperTr
   return (await safeFetch<SleeperTradedPick[]>(`${BASE}/league/${leagueId}/traded_picks`)) ?? [];
 }
 
+/**
+ * One roster's entry in a week's head-to-head slate. `matchup_id` pairs the two
+ * rosters facing each other; both sides carry the same value. `points` is 0 for
+ * any week that has not been played.
+ *
+ * `starters` is the lineup Sleeper has set for that week. For future weeks this
+ * is the manager's current lineup, which is what makes lineup efficiency
+ * measurable before kickoff.
+ */
+export type SleeperMatchup = {
+  roster_id: number;
+  matchup_id: number | null;
+  points: number | null;
+  custom_points?: number | null;
+  starters: string[] | null;
+  starters_points?: number[] | null;
+  players: string[] | null;
+  players_points?: Record<string, number> | null;
+};
+
+/**
+ * The head-to-head slate for one week. Sleeper generates the full season
+ * schedule when a league is created, so weeks far in the future already return
+ * populated `matchup_id` pairings during the preseason. Returns [] on failure or
+ * for a week the league has not scheduled.
+ */
+export async function getSleeperMatchups(
+  leagueId: string,
+  week: number,
+): Promise<SleeperMatchup[]> {
+  // The league id can originate in a route param, so it is encoded rather than
+  // interpolated raw: a crafted id containing path separators would otherwise
+  // reach a different Sleeper endpoint than the one intended. The week is
+  // always ours, but coercing it keeps the path free of anything unexpected.
+  const id = encodeURIComponent(leagueId);
+  const w = Number.isFinite(week) ? Math.trunc(week) : 0;
+  return (await safeFetch<SleeperMatchup[]>(`${BASE}/league/${id}/matchups/${w}`)) ?? [];
+}
+
 export async function getSleeperLeagueDrafts(leagueId: string): Promise<SleeperDraft[]> {
   return (await safeFetch<SleeperDraft[]>(`${BASE}/league/${leagueId}/drafts`)) ?? [];
 }

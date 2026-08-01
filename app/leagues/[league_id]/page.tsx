@@ -8,6 +8,7 @@ import {
   describeDerived,
 } from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
+import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
 import { type SleeperLeague } from "@/lib/sleeper";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { TeamFilter } from "@/components/team-filter";
@@ -17,6 +18,7 @@ import { LeagueHeaderActions } from "@/components/league-header-actions";
 import { LeagueTabs } from "@/components/league-tabs";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import { PicksToggle } from "@/components/picks-toggle";
+import { RankModeToggle, type RankMode } from "@/components/power-pulse/rank-mode-toggle";
 import { Panel, StatReadout } from "@/components/dashboard-panel";
 import { LeagueInfoPanel, LeagueMetaLine } from "@/components/league-info-panel";
 import {
@@ -99,6 +101,7 @@ export default async function LeagueDeepViewPage({
     username?: string;
     roster?: string;
     picks?: string;
+    rank?: string;
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
@@ -108,6 +111,7 @@ export default async function LeagueDeepViewPage({
     username: usernameParam,
     roster: rosterParam,
     picks: picksParam,
+    rank: rankParam,
   } = await searchParams;
   const searchedUsername =
     typeof usernameParam === "string" && usernameParam.trim() ? usernameParam.trim() : null;
@@ -217,6 +221,10 @@ export default async function LeagueDeepViewPage({
   const includePicks = isDynasty ? picksParam !== "off" : false;
   const showPicksToggle = isDynasty && coverageOk;
 
+  // Power Pulse is the default ordering for the rankings table. `?rank=value`
+  // restores the pure trade-value order for readers who want the asset view.
+  const rankMode: RankMode = rankParam === "value" ? "value" : "pulse";
+
   // In-view links (username forwarded so the Teams chips default correctly).
   const teamsHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}`
@@ -224,6 +232,9 @@ export default async function LeagueDeepViewPage({
   const transactionsHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/transactions?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/transactions`;
+  const powerPulseHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}/power-pulse?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}/power-pulse`;
 
   // Shared props for the league info card, rendered as a left rail on Overview
   // and as a full-width horizontal band on Teams (so the rosters get full width).
@@ -360,6 +371,8 @@ export default async function LeagueDeepViewPage({
                 searchedUsername={searchedUsername}
                 includePicks={includePicks}
                 showPicksToggle={showPicksToggle}
+                rankMode={rankMode}
+                powerPulseHref={powerPulseHref}
               />
             </div>
           </div>
@@ -527,6 +540,8 @@ async function PowerRankingsSection({
   searchedUsername,
   includePicks,
   showPicksToggle,
+  rankMode,
+  powerPulseHref,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -539,6 +554,10 @@ async function PowerRankingsSection({
   searchedUsername: string | null;
   includePicks: boolean;
   showPicksToggle: boolean;
+  /** Requested row order. Falls back to value when Power Pulse has no rows. */
+  rankMode: RankMode;
+  /** Link to the full Power Pulse tab, with the searched handle forwarded. */
+  powerPulseHref: string;
 }) {
   const supabase = await createClient();
 
@@ -567,22 +586,44 @@ async function PowerRankingsSection({
   // Reuse the same loader the Teams tab uses. It already computes per-position
   // ranks across the league, so the table can render them directly without
   // re-fetching or re-deriving.
-  const teams = await loadLeagueTeamCards(
-    supabase,
-    leagueRowId,
-    formatRow.id,
-    sourceSlug,
-    leagueSeason,
-    leagueStatus,
-    includePicks,
+  const [teams, pulseView] = await Promise.all([
+    loadLeagueTeamCards(
+      supabase,
+      leagueRowId,
+      formatRow.id,
+      sourceSlug,
+      leagueSeason,
+      leagueStatus,
+      includePicks,
+    ),
+    leagueSeason
+      ? loadPowerPulseView(supabase, leagueRowId, Number(leagueSeason), formatRow.id, sourceSlug)
+      : Promise.resolve(null),
+  ]);
+
+  // Power Pulse, keyed by roster row id so it can decorate the value rows.
+  const pulseByRoster = new Map(
+    (pulseView?.teams ?? []).map((t) => [t.rosterRowId, t]),
   );
+  const pulseAvailable = pulseByRoster.size > 0;
+  // Power Pulse is the default ordering: a "power ranking" should rank by who
+  // wins games. `?rank=value` restores the pure trade-value ordering, which is
+  // still a question people legitimately want answered.
+  const effectiveMode: RankMode = rankMode === "value" || !pulseAvailable ? "value" : "pulse";
+
   const ranked = teams
     .filter((t) => t.displayOverallRank != null)
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      if (effectiveMode === "pulse") {
+        const ap = pulseByRoster.get(a.rosterRowId)?.pulseRank ?? Number.MAX_SAFE_INTEGER;
+        const bp = pulseByRoster.get(b.rosterRowId)?.pulseRank ?? Number.MAX_SAFE_INTEGER;
+        if (ap !== bp) return ap - bp;
+      }
+      return (
         (a.displayOverallRank ?? Number.MAX_SAFE_INTEGER) -
-        (b.displayOverallRank ?? Number.MAX_SAFE_INTEGER),
-    );
+        (b.displayOverallRank ?? Number.MAX_SAFE_INTEGER)
+      );
+    });
 
   if (ranked.length === 0) {
     return (
@@ -604,30 +645,55 @@ async function PowerRankingsSection({
   }
 
   const teamCount = teams.length;
+  const valueRankByRoster = new Map(
+    ranked
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.displayOverallRank ?? Number.MAX_SAFE_INTEGER) -
+          (b.displayOverallRank ?? Number.MAX_SAFE_INTEGER),
+      )
+      .map((t, i) => [t.rosterRowId, i + 1]),
+  );
+
+  const helper =
+    effectiveMode === "pulse"
+      ? `Ranked by Power Pulse: expected performance from here, in this league's own scoring. Team value (${includePicks ? "including" : "excluding"} draft picks) shown alongside via ${sourceDisplay}.`
+      : `Ranked by ${includePicks ? "total team value" : "player value, draft picks excluded"}. ${formatDisplay} and ${sourceDisplay}.`;
 
   return (
     <Panel
       id="pr"
       eyebrow="Standings"
       title="Power Rankings"
-      helper={`Ranked by ${
-        includePicks ? "total team value" : "player value (draft picks excluded)"
-      }. ${formatDisplay} • ${sourceDisplay}.`}
+      helper={helper}
       bodyClassName="p-0"
+      action={
+        pulseAvailable ? (
+          <Link
+            href={powerPulseHref}
+            className="inline-flex min-h-11 items-center gap-1 rounded-card border border-brand-cyan/45 bg-brand-cyan/10 px-3 py-1.5 text-xs font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0"
+          >
+            Full Power Pulse
+            <span aria-hidden="true">→</span>
+          </Link>
+        ) : undefined
+      }
     >
-      {showPicksToggle && (
-        <div className="border-b border-line px-4 py-3 sm:px-5">
-          <PicksToggle includePicks={includePicks} />
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
+        <RankModeToggle mode={effectiveMode} pulseAvailable={pulseAvailable} />
+        {showPicksToggle && <PicksToggle includePicks={includePicks} />}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">
-            League power rankings. Columns: overall rank, team, positional rank
-            (QB, RB, WR, TE{includePicks ? ", Picks" : ""}), then total team
-            value{includePicks ? "" : " counting players only"}. Top three for
-            each position column are highlighted cyan; bottom three are
-            highlighted purple.
+            League power rankings, ordered by{" "}
+            {effectiveMode === "pulse" ? "Power Pulse" : "team value"}. Columns:
+            rank, team, Power Pulse score, positional rank (QB, RB, WR, TE
+            {includePicks ? ", Picks" : ""}), then total team value
+            {includePicks ? "" : " counting players only"} with its league rank.
+            Top three for each position column are highlighted cyan; bottom three
+            are highlighted purple.
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
@@ -636,6 +702,9 @@ async function PowerRankingsSection({
               </th>
               <th scope="col" className="px-3 py-3">
                 Team
+              </th>
+              <th scope="col" className="px-2 py-3 text-center">
+                Pulse
               </th>
               <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
                 QB
@@ -660,7 +729,7 @@ async function PowerRankingsSection({
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {ranked.map((t) => (
+            {ranked.map((t, i) => (
               <PowerRankingsRow
                 key={t.rosterRowId}
                 sleeperLeagueId={sleeperLeagueId}
@@ -674,7 +743,14 @@ async function PowerRankingsSection({
                   teamName: t.teamName,
                   ownerHandle: t.ownerSleeperUsername,
                   ownerAvatarId: t.ownerAvatarId,
-                  overallRank: t.displayOverallRank,
+                  // The leading rank column follows whichever mode is active.
+                  overallRank:
+                    effectiveMode === "pulse"
+                      ? pulseByRoster.get(t.rosterRowId)?.pulseRank ?? i + 1
+                      : t.displayOverallRank,
+                  powerPulse: pulseByRoster.get(t.rosterRowId)?.powerPulse ?? null,
+                  pulseRank: pulseByRoster.get(t.rosterRowId)?.pulseRank ?? null,
+                  valueRank: valueRankByRoster.get(t.rosterRowId) ?? null,
                   positionRanks: {
                     QB: t.positionRanks.QB,
                     RB: t.positionRanks.RB,

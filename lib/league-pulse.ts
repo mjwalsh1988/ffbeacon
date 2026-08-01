@@ -16,6 +16,7 @@ import {
 } from "@/lib/sleeper";
 import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
+import { refreshPowerPulse } from "@/lib/league-power-pulse";
 import type { Database } from "@/lib/database.types";
 
 export const LEAGUE_PULSE_TTL_MS = 60 * 60 * 1000; // 60 minutes
@@ -117,6 +118,10 @@ export async function pulseLeague(
         );
       }
     }
+
+    // Power Pulse has its own, shorter TTL: it tracks the live NFL week and the
+    // manager's set lineup, both of which move faster than trade values.
+    await refreshPowerPulse(supabase, existing.id);
 
     const [{ count: rosterCount }, { count: userCount }, { count: txCount }] = await Promise.all([
       supabase.from("rosters").select("id", { count: "exact", head: true }).eq("league_id", existing.id),
@@ -253,6 +258,11 @@ export async function pulseLeague(
       );
     }
   }
+
+  // Power Pulse: expected competitive performance, computed from the league's
+  // own scoring settings. Independent of the value source, so it does not need
+  // the format/source loop the value rankings run. Never fatal.
+  await refreshPowerPulse(supabase, leagueRowId, { force });
 
   return {
     ok: true,

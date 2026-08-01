@@ -42,6 +42,12 @@ export type PowerRankingsRowData = {
   /** Total value of all assets on the team (starters + bench + picks) from
    * league_power_rankings_cache.total_value. Null when no cache row exists. */
   totalValue: number | null;
+  /** Power Pulse score, 1 to 99. Null until the Power Pulse cache is built. */
+  powerPulse: number | null;
+  /** League rank by Power Pulse, 1 = best. */
+  pulseRank: number | null;
+  /** League rank by total team value, 1 = most valuable. */
+  valueRank: number | null;
 };
 
 export function PowerRankingsRow({
@@ -103,6 +109,11 @@ export function PowerRankingsRow({
             <TeamIdentity data={data} />
           </Link>
         </td>
+        <PulseCell
+          powerPulse={data.powerPulse}
+          pulseRank={data.pulseRank}
+          teamCount={teamCount}
+        />
         <PositionRankCell rank={data.positionRanks.QB} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.RB} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.WR} teamCount={teamCount} />
@@ -112,11 +123,18 @@ export function PowerRankingsRow({
         )}
         <td
           className="hidden px-4 py-2 text-right font-mono font-semibold tabular-nums text-ink md:table-cell"
-          aria-label={`Total value ${formatValue(data.totalValue)}`}
+          aria-label={`Total value ${formatValue(data.totalValue)}${
+            data.valueRank != null ? `, ${rankOrdinal(data.valueRank)} in the league` : ""
+          }`}
         >
           <BeaconValue show={valueIsBeacon && data.totalValue != null}>
             {formatValue(data.totalValue)}
           </BeaconValue>
+          {data.valueRank != null && (
+            <span aria-hidden="true" className="block text-[10px] font-normal text-ink-subtle">
+              {rankOrdinal(data.valueRank)}
+            </span>
+          )}
         </td>
       </tr>
       {sheetOpen && (
@@ -153,6 +171,48 @@ function TeamIdentity({ data }: { data: PowerRankingsRowData }) {
         )}
       </span>
     </>
+  );
+}
+
+/**
+ * The Power Pulse score. Visible at every breakpoint, unlike the positional
+ * rank columns, because it is the primary ranking signal: hiding it on mobile
+ * would leave the row ordered by a number the reader cannot see.
+ */
+function PulseCell({
+  powerPulse,
+  pulseRank,
+  teamCount,
+}: {
+  powerPulse: number | null;
+  pulseRank: number | null;
+  teamCount: number;
+}) {
+  if (powerPulse == null) {
+    return (
+      <td className="px-2 py-2 text-center font-mono text-sm tabular-nums text-ink-subtle">
+        <span aria-label="Power Pulse not calculated yet">—</span>
+      </td>
+    );
+  }
+  const tone =
+    powerPulse >= 70
+      ? { color: "#22D3EE", border: "rgba(34, 211, 238, 0.5)" }
+      : powerPulse >= 45
+        ? { color: "#F4F4F8", border: "#1F1F33" }
+        : { color: "#A855F7", border: "rgba(168, 85, 247, 0.5)" };
+  return (
+    <td className="px-2 py-2 text-center">
+      <span
+        className="inline-flex h-9 w-9 items-center justify-center rounded-card border font-mono text-sm font-extrabold tabular-nums"
+        style={{ color: tone.color, borderColor: tone.border }}
+        aria-label={`Power Pulse ${powerPulse}${
+          pulseRank != null ? `, ${rankOrdinal(pulseRank)} of ${teamCount}` : ""
+        }`}
+      >
+        {powerPulse}
+      </span>
+    </td>
   );
 }
 
@@ -324,18 +384,47 @@ function TeamRankSheet({
           </button>
         </header>
 
-        <div
-          className="mx-5 mt-4 flex items-center justify-between rounded-card border border-line bg-base px-4 py-3"
-          aria-label={`Total team value ${formatValue(data.totalValue)}`}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
-            Total value
-          </span>
-          <span className="font-mono text-xl font-extrabold tabular-nums text-brand-cyan">
-            <BeaconValue show={valueIsBeacon && data.totalValue != null}>
-              {formatValue(data.totalValue)}
-            </BeaconValue>
-          </span>
+        {/* Power Pulse and total value side by side. The desktop table shows
+            both, so the sheet must too. */}
+        <div className="mx-5 mt-4 grid grid-cols-2 gap-2">
+          <div
+            className="rounded-card border border-brand-cyan/40 bg-brand-cyan/5 px-4 py-3"
+            aria-label={`Power Pulse ${data.powerPulse ?? "not calculated yet"}${
+              data.pulseRank != null ? `, ${rankOrdinal(data.pulseRank)} of ${teamCount}` : ""
+            }`}
+          >
+            <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
+              Power Pulse
+            </span>
+            <span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums text-brand-cyan">
+              {data.powerPulse ?? "—"}
+            </span>
+            {data.pulseRank != null && (
+              <span aria-hidden="true" className="text-[10px] text-ink-subtle">
+                {rankOrdinal(data.pulseRank)} of {teamCount}
+              </span>
+            )}
+          </div>
+          <div
+            className="rounded-card border border-line bg-base px-4 py-3"
+            aria-label={`Total team value ${formatValue(data.totalValue)}${
+              data.valueRank != null ? `, ${rankOrdinal(data.valueRank)} of ${teamCount}` : ""
+            }`}
+          >
+            <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
+              Total value
+            </span>
+            <span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums text-ink">
+              <BeaconValue show={valueIsBeacon && data.totalValue != null}>
+                {formatValue(data.totalValue)}
+              </BeaconValue>
+            </span>
+            {data.valueRank != null && (
+              <span aria-hidden="true" className="text-[10px] text-ink-subtle">
+                {rankOrdinal(data.valueRank)} of {teamCount}
+              </span>
+            )}
+          </div>
         </div>
 
         <section

@@ -374,11 +374,11 @@ League Pulse is ONE continuous user journey, not multiple features. The journey:
 1. `/tools/league-pulse` — entry point. User enters Sleeper username and season, sees their leagues. No DB writes happen here; data comes straight from Sleeper.
 2. `/dashboard` — logged-in users persist their Sleeper username on user_preferences and see the same league list cached for fast return visits.
 3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 is a plain `<Link>` navigation to the deep view, so the branded loading boundary shows immediately on click. The deep-view page calls `lib/league-pulse.ts pulseLeague` on every render (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role); the 60-minute cache inside `pulseLeague` short-circuits redundant Sleeper hits (power rankings recompute at most once per 24h on the cached path). A sync failure renders a branded retry state (`components/league-load-error.tsx`), not a redirect or 404.
-4. `/leagues/[sleeper_league_id]?tab=teams|transactions|power-rankings` — tabbed deep view. Each tab renders from the synced rows; never re-derives from Sleeper.
+4. `/leagues/[sleeper_league_id]?tab=teams` plus the full routes `/leagues/[sleeper_league_id]/power-pulse` and `/leagues/[sleeper_league_id]/transactions` — the tabbed deep view. Overview and Teams render inline on the deep view; Power Pulse and Transactions are their own routes. Every tab renders from the synced rows; never re-derives from Sleeper.
 
 Naming rules:
 - Feature name in copy/docs: "League Pulse".
-- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
 - Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
 - Tabs within `/leagues/[sleeper_league_id]` use plain functional labels.
 
@@ -406,6 +406,32 @@ Admin:
 - Admin-only actions (force-refresh) live behind both an auth gate AND a 60-second per-league rate limit. The endpoint at `app/api/leagues/[league_id]/refresh/route.ts` re-validates auth independently of the client — never trust the `RefreshButton` `isAuthorized` prop as a security boundary.
 - Authorization is "admin OR commissioner of this league". Commissioner detection matches `user_preferences.sleeper_username` against `league_users.display_name` where `is_commissioner=true`. See `lib/league-auth.ts → getLeagueAdminContext()`.
 - Rate limit ledger lives in `league_refresh_attempts` (migration 0025), service-role-only. The endpoint writes the timestamp BEFORE running the sync so concurrent requests fail with 429 instead of all hitting Sleeper.
+
+## Power Pulse (League Pulse expected-performance score)
+
+Power Pulse is the primary power ranking inside League Pulse. It estimates how many games a team should win from here, as a 1-99 score ranked WITHIN its own league. The trade-value ranking (`league_power_rankings_cache`) still exists and answers a different question: who owns the most.
+
+ABSOLUTE RULE: Power Pulse NEVER counts draft picks. It is a competitive score, and a future pick cannot start in a lineup. Picks remain in the trade-value rankings only.
+
+ABSOLUTE RULE: Power Pulse does NOT vary by value source or by `format_config_id`. It is computed from Sleeper's weekly projections rescored under the league's own literal `scoring_settings`, so there is exactly one row per (league, roster, season) in `league_power_pulse_cache`. Never add a format/source loop to it. The source toggle on a league page must not invalidate it.
+
+ABSOLUTE RULE: The rankings table on `/leagues/[id]` defaults to Power Pulse ordering. `?rank=value` restores the trade-value ordering. Whichever mode is active, BOTH numbers stay visible (the Pulse column and the Value column with its rank), so switching never hides data.
+
+ABSOLUTE RULE: Power Pulse is recomputed ONLY on demand through `pulseLeague` (gated by `POWER_PULSE_TTL_MS`, 12 hours, plus a recompute whenever the live NFL week passes the stored `through_week` or the stored `model_version` changes), or manually via `npm run calculate:power-pulse`. NEVER wire per-league Power Pulse into a nightly cron, for the same scaling reason as league power rankings.
+
+Recency is a product requirement, not an implementation detail: in `player_projection_accuracy`, the CURRENT season's beat-rate and reliability data MUST outweigh prior seasons, because roles and offenses change year to year. The season weights live in `league_power_pulse_settings.settings.recency` and are admin-editable. Prior seasons still contribute at a reduced weight; they are never dropped.
+
+Module map:
+- `lib/league-scoring.ts` — scores any Sleeper stat/projection map under a league's own `scoring_settings` (a dot product; Sleeper emits `bonus_rec_te` / `bonus_rec_wr` / `bonus_rec_rb` and the kicker + defense buckets as stats, so TE premium and DEF scoring need no special cases). Reusable for the future custom-scoring feature.
+- `lib/power-pulse/lineup.ts` — exact optimal lineup fill. Greedy by descending points with augmenting paths (a transversal matroid, so greedy is provably optimal). Plain greedy is WRONG for leagues with overlapping non-nested slots (WR_TE alongside WRRB_FLEX); do not "simplify" it back.
+- `lib/power-pulse/simulate.ts` — seeded Monte Carlo season plus bracket. The seed is fixed on purpose so odds do not drift between recomputes.
+- `lib/power-pulse/engine.ts` — the calculation. Pure; takes plain data.
+- `lib/league-power-pulse.ts` — orchestrator + `refreshPowerPulse()` (never throws; a league page must render without it).
+- `lib/league-matchups.ts` — Sleeper schedule sync. Sleeper publishes the FULL season schedule at league creation, so weeks 1-18 are available in the preseason. Fetch policy: full slate once, then only the current week plus two ahead (lineups move; the schedule does not).
+
+Opponent strength is OURS, not Sleeper's. ABSOLUTE RULE: do not derive strength of schedule from Sleeper's weekly projections. They are effectively a season average repeated 18 times (measured spread across a 2026 player-season is only 2.6% to 5.4%), so any SOS built on them ranks every team identically. `nfl_defense_vs_position` is computed from `player_stats` (which carries `opponent` on every row back to 2020) and produces a real 0.80-1.25 spread.
+
+Model config lives in `league_power_pulse_settings` (single `id='global'` row, service-role only) with code fallbacks in `lib/power-pulse/default-settings.ts`, admin-edited at `/admin/power-pulse`, validated server-side by `lib/power-pulse/validate.ts`. Saving does NOT fan out recomputes; bump `modelVersion` to force every league to rescore on next view.
 
 ## League Pulse Format Resolution
 

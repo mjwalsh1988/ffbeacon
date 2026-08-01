@@ -14,6 +14,7 @@ import {
   Coins,
   Timer,
   Radar,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -60,6 +61,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: Coins,
     description:
       "Waiver bid calculator settings: bid curve, league depth, need multipliers, dump mechanic, value normalization, and copy.",
+  },
+  {
+    href: "/admin/power-pulse",
+    label: "Power Pulse Model",
+    icon: Activity,
+    description:
+      "League Pulse expected-performance model: component weights, recency weighting, reliability caps, injury and opponent adjustments, variance, and the season simulation.",
   },
   {
     href: "/admin/on-the-clock",

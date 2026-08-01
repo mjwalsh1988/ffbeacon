@@ -1560,3 +1560,124 @@ before commit/review. game_enabled NOT flipped (remains false, re-confirmed).
      audit disposition. READINESS: safe to commit/review YES; safe to enable
      publicly NO until the three owner actions (Vercel salt, XFF test, NVDA
      walkthrough) are green.
+
+---
+
+## Power Pulse (League Pulse expected-performance ranking)
+
+Goal: a primary power ranking driven by expected competitive performance rather
+than trade value, with the value ranking preserved alongside it.
+
+T400 | completed | Migration 0162: league_matchups (Sleeper H2H schedule + results)
+     | files: supabase/migrations/0162_league_matchups.sql
+     | verified: yes (RLS confirmed via pg_policy: select_public + service_role_all)
+
+T401 | completed | Migration 0163: nfl_defense_vs_position (our own opponent model)
+     | files: supabase/migrations/0163_nfl_defense_vs_position.sql
+     | verified: yes (RLS confirmed)
+
+T402 | completed | Migration 0164: player_projection_accuracy (recency-weighted reliability)
+     | files: supabase/migrations/0164_player_projection_accuracy.sql
+     | verified: yes (RLS confirmed; partial unique index guards the blended row)
+
+T403 | completed | Migration 0165: league_power_pulse_cache
+     | files: supabase/migrations/0165_league_power_pulse_cache.sql
+     | verified: yes (RLS confirmed)
+
+T404 | completed | Migration 0166: league_power_pulse_settings (admin-tunable model)
+     | files: supabase/migrations/0166_league_power_pulse_settings.sql
+     | verified: yes (service-role only, matching on_the_clock_settings)
+
+T405 | completed | League-native scoring engine
+     | files: lib/league-scoring.ts, lib/league-scoring.test.ts
+     | verified: yes (15 tests; reproduces Sleeper's own PPR number to within 0.03)
+
+T406 | completed | Sleeper matchups endpoint
+     | files: lib/sleeper.ts (getSleeperMatchups)
+     | verified: yes (live check: full 1-18 slate available in the preseason)
+
+T407 | completed | Power Pulse model types, defaults, settings loader, math
+     | files: lib/power-pulse/types.ts, default-settings.ts, settings.ts, math.ts, math.test.ts
+     | verified: yes (18 tests)
+
+T408 | completed | Exact optimal lineup fill
+     | files: lib/power-pulse/lineup.ts, lineup.test.ts
+     | verified: yes (14 tests, including the non-nested slot case plain greedy fails)
+
+T409 | completed | Monte Carlo season + bracket simulation
+     | files: lib/power-pulse/simulate.ts, simulate.test.ts
+     | verified: yes (8 tests; playoff odds sum to exactly the field size, title odds to 1)
+
+T410 | completed | Data loading + engine
+     | files: lib/power-pulse/load.ts, lib/power-pulse/engine.ts
+     | verified: yes (run against 5 structurally different leagues)
+
+T411 | completed | Opponent strength calculator
+     | files: lib/calculate-defense-splits.ts, scripts/calculate-defense-splits.ts
+     | verified: yes (1,728 rows across 2023-2025; real 0.80-1.25 spread vs Sleeper's flat 3-5%)
+
+T412 | completed | Recency-weighted reliability calculator
+     | files: lib/calculate-projection-accuracy.ts, scripts/calculate-projection-accuracy.ts
+     | verified: yes (5,634 rows, 796 players; blended values verifiably lean to the current season)
+
+T413 | completed | Schedule sync + orchestrator, wired into pulseLeague
+     | files: lib/league-matchups.ts, lib/league-power-pulse.ts, lib/league-pulse.ts
+     | depends on: T400, T406, T410
+     | verified: yes (12-hour TTL, week-advance and model-version staleness, never throws)
+
+T414 | completed | CLI: npm run calculate:power-pulse
+     | files: scripts/calculate-league-power-pulse.ts, package.json
+     | verified: yes (all/one-league/force modes)
+
+T415 | completed | Read layer + league leaders
+     | files: lib/league-power-pulse-data.ts
+     | verified: yes (tie detection surfaces "Tied with N other teams" honestly)
+
+T416 | completed | Power Pulse tab (new route + NEW badge)
+     | files: app/leagues/[league_id]/power-pulse/page.tsx, components/league-tabs.tsx
+     | verified: yes (a11y audited below)
+
+T417 | completed | Power Pulse UI components
+     | files: components/power-pulse/{pulse-detail,pulse-rankings-table,pulse-leaders,
+     |        projected-standings,title-race,how-power-pulse-works,rank-mode-toggle}.tsx
+     | verified: yes (headings H1>H2>H3, no skips; all mobile-hidden columns present in the sheet)
+
+T418 | completed | Overview rankings default to Power Pulse, value shown alongside
+     | files: app/leagues/[league_id]/page.tsx, components/power-rankings-row.tsx
+     | verified: yes (?rank=value restores value ordering; both numbers always visible)
+
+T419 | completed | Admin model tuning page
+     | files: app/admin/power-pulse/{page,actions,power-pulse-settings-manager}.tsx,
+     |        lib/power-pulse/validate.ts, components/admin-nav.tsx
+     | verified: yes (requireAdmin + zod validation + service-role write; save round trip confirmed)
+
+T420 | completed | Docs
+     | files: CLAUDE.md (Power Pulse section + route list), progress.md
+     | verified: yes
+
+### Verification summary
+- npm run typecheck: clean
+- npx vitest run: 1000 tests across 77 files, all pass
+- npm run build: passes end to end; /leagues/[league_id]/power-pulse in the manifest
+- RLS: all 5 new tables confirmed via pg_policy query (4 public-read + service-role,
+  1 service-role-only for the settings row)
+- Browser: no console errors or React warnings on the new route
+- Accessibility (self-audited, no sub-agent dispatched per session instruction):
+  heading outline H1 > H2 > H3 with no skips; table caption describes every column;
+  score cells carry aria-labels naming rank and value; rank-mode control uses real
+  radiogroup/radio semantics; bottom sheet traps focus, restores it, and locks body
+  scroll; the driver list is an <ol> with an sr-only tone word so colour is never
+  the only signal; details/summary used for the methodology disclosure.
+- Mobile-first: 4 columns hide below md (Value rank, Proj., Playoffs, Lineup) and all
+  4 are rendered in the bottom sheet, verified by DOM inspection.
+- Security (self-audited): no new public API endpoints; admin action gated by
+  requireAdmin + zod + service-role; sleeper ids filtered to /^[A-Za-z0-9]{1,32}$/
+  before PostgREST .or() interpolation; league id encoded in the new Sleeper URL.
+
+### Known gaps / follow-ups
+- Player news is NOT an input. news_items has 0 rows and nothing writes to it.
+  Injury status and depth-chart order (already synced on players.metadata.sleeper)
+  cover the practical case. A real news signal needs an ingestion source first.
+- Weekly outcomes are modelled as independent; no QB-to-receiver stack correlation.
+- The playoff bracket reseeds each round rather than using Sleeper's fixed bracket.
+- Backtest against completed seasons not yet run (2 completed 2025 leagues available).

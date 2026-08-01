@@ -1287,6 +1287,224 @@ export type Database = {
           },
         ];
       };
+      league_matchups: {
+        Row: {
+          id: string;
+          is_final: boolean;
+          league_id: string;
+          matchup_id: number | null;
+          metadata: Json | null;
+          player_ids: Json;
+          player_points: Json;
+          points: number;
+          season: number;
+          sleeper_roster_id: number;
+          starter_ids: Json;
+          starter_points: Json;
+          synced_at: string;
+          week: number;
+        };
+        Insert: {
+          id?: string;
+          is_final?: boolean;
+          league_id: string;
+          matchup_id?: number | null;
+          metadata?: Json | null;
+          player_ids?: Json;
+          player_points?: Json;
+          points?: number;
+          season: number;
+          sleeper_roster_id: number;
+          starter_ids?: Json;
+          starter_points?: Json;
+          synced_at?: string;
+          week: number;
+        };
+        Update: {
+          id?: string;
+          is_final?: boolean;
+          league_id?: string;
+          matchup_id?: number | null;
+          metadata?: Json | null;
+          player_ids?: Json;
+          player_points?: Json;
+          points?: number;
+          season?: number;
+          sleeper_roster_id?: number;
+          starter_ids?: Json;
+          starter_points?: Json;
+          synced_at?: string;
+          week?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_matchups_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      league_power_pulse_cache: {
+        Row: {
+          bye_odds: number | null;
+          components: Json;
+          drivers: Json;
+          expected_points_per_week: number | null;
+          expected_points_stdev: number | null;
+          expected_wins: number | null;
+          generated_at: string;
+          id: string;
+          last_place_odds: number | null;
+          league_id: string;
+          lineup_efficiency: number | null;
+          lineup_efficiency_rank: number | null;
+          lineup_points_lost: number | null;
+          model_version: string;
+          playoff_odds: number | null;
+          power_pulse: number;
+          projected_losses: number | null;
+          projected_ties: number | null;
+          projected_wins: number | null;
+          pulse_rank: number | null;
+          reliability_rank: number | null;
+          reliability_score: number | null;
+          roster_id: string;
+          score_depth: number | null;
+          score_depth_rank: number | null;
+          score_form: number | null;
+          score_form_rank: number | null;
+          score_points: number | null;
+          score_points_rank: number | null;
+          score_schedule: number | null;
+          score_schedule_rank: number | null;
+          season: number;
+          sos_points: number | null;
+          sos_rank: number | null;
+          through_week: number;
+          title_odds: number | null;
+          weekly: Json;
+        };
+        Insert: {
+          bye_odds?: number | null;
+          components?: Json;
+          drivers?: Json;
+          expected_points_per_week?: number | null;
+          expected_points_stdev?: number | null;
+          expected_wins?: number | null;
+          generated_at?: string;
+          id?: string;
+          last_place_odds?: number | null;
+          league_id: string;
+          lineup_efficiency?: number | null;
+          lineup_efficiency_rank?: number | null;
+          lineup_points_lost?: number | null;
+          model_version?: string;
+          playoff_odds?: number | null;
+          power_pulse: number;
+          projected_losses?: number | null;
+          projected_ties?: number | null;
+          projected_wins?: number | null;
+          pulse_rank?: number | null;
+          reliability_rank?: number | null;
+          reliability_score?: number | null;
+          roster_id: string;
+          score_depth?: number | null;
+          score_depth_rank?: number | null;
+          score_form?: number | null;
+          score_form_rank?: number | null;
+          score_points?: number | null;
+          score_points_rank?: number | null;
+          score_schedule?: number | null;
+          score_schedule_rank?: number | null;
+          season: number;
+          sos_points?: number | null;
+          sos_rank?: number | null;
+          through_week?: number;
+          title_odds?: number | null;
+          weekly?: Json;
+        };
+        Update: {
+          bye_odds?: number | null;
+          components?: Json;
+          drivers?: Json;
+          expected_points_per_week?: number | null;
+          expected_points_stdev?: number | null;
+          expected_wins?: number | null;
+          generated_at?: string;
+          id?: string;
+          last_place_odds?: number | null;
+          league_id?: string;
+          lineup_efficiency?: number | null;
+          lineup_efficiency_rank?: number | null;
+          lineup_points_lost?: number | null;
+          model_version?: string;
+          playoff_odds?: number | null;
+          power_pulse?: number;
+          projected_losses?: number | null;
+          projected_ties?: number | null;
+          projected_wins?: number | null;
+          pulse_rank?: number | null;
+          reliability_rank?: number | null;
+          reliability_score?: number | null;
+          roster_id?: string;
+          score_depth?: number | null;
+          score_depth_rank?: number | null;
+          score_form?: number | null;
+          score_form_rank?: number | null;
+          score_points?: number | null;
+          score_points_rank?: number | null;
+          score_schedule?: number | null;
+          score_schedule_rank?: number | null;
+          season?: number;
+          sos_points?: number | null;
+          sos_rank?: number | null;
+          through_week?: number;
+          title_odds?: number | null;
+          weekly?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_power_pulse_cache_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "league_power_pulse_cache_roster_id_fkey";
+            columns: ["roster_id"];
+            isOneToOne: false;
+            referencedRelation: "rosters";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      league_power_pulse_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       league_power_rankings_cache: {
         Row: {
           bench_value: number;
@@ -1814,6 +2032,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      nfl_defense_vs_position: {
+        Row: {
+          computed_at: string;
+          games_sampled: number;
+          generosity_rank: number | null;
+          league_average: number;
+          multiplier: number;
+          points_allowed_per_game: number;
+          position: string;
+          scoring: string;
+          season: number;
+          team: string;
+        };
+        Insert: {
+          computed_at?: string;
+          games_sampled: number;
+          generosity_rank?: number | null;
+          league_average: number;
+          multiplier: number;
+          points_allowed_per_game: number;
+          position: string;
+          scoring: string;
+          season: number;
+          team: string;
+        };
+        Update: {
+          computed_at?: string;
+          games_sampled?: number;
+          generosity_rank?: number | null;
+          league_average?: number;
+          multiplier?: number;
+          points_allowed_per_game?: number;
+          position?: string;
+          scoring?: string;
+          season?: number;
+          team?: string;
+        };
+        Relationships: [];
+      };
       nfl_teams: {
         Row: {
           abbreviation: string;
@@ -2298,6 +2555,71 @@ export type Database = {
           },
         ];
       };
+      player_projection_accuracy: {
+        Row: {
+          availability_rate: number | null;
+          beat_rate: number | null;
+          computed_at: string;
+          id: string;
+          mean_diff: number | null;
+          mean_ratio: number | null;
+          player_id: string;
+          position: string | null;
+          ratio_stdev: number | null;
+          sample_weight: number | null;
+          scoring: string;
+          season: number | null;
+          shrunk_multiplier: number | null;
+          weeks_beat: number;
+          weeks_played: number;
+          weeks_projected: number;
+        };
+        Insert: {
+          availability_rate?: number | null;
+          beat_rate?: number | null;
+          computed_at?: string;
+          id?: string;
+          mean_diff?: number | null;
+          mean_ratio?: number | null;
+          player_id: string;
+          position?: string | null;
+          ratio_stdev?: number | null;
+          sample_weight?: number | null;
+          scoring: string;
+          season?: number | null;
+          shrunk_multiplier?: number | null;
+          weeks_beat?: number;
+          weeks_played?: number;
+          weeks_projected?: number;
+        };
+        Update: {
+          availability_rate?: number | null;
+          beat_rate?: number | null;
+          computed_at?: string;
+          id?: string;
+          mean_diff?: number | null;
+          mean_ratio?: number | null;
+          player_id?: string;
+          position?: string | null;
+          ratio_stdev?: number | null;
+          sample_weight?: number | null;
+          scoring?: string;
+          season?: number | null;
+          shrunk_multiplier?: number | null;
+          weeks_beat?: number;
+          weeks_played?: number;
+          weeks_projected?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_projection_accuracy_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       player_stats: {
         Row: {
           blk_kick: number;
@@ -2668,6 +2990,39 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      player_value_history_ffbeacon_pre_calibration: {
+        Row: {
+          captured_at: string | null;
+          format_config_id: string | null;
+          formula_offset: number | null;
+          id: string | null;
+          metadata: Json | null;
+          player_id: string | null;
+          source: string | null;
+          value: number | null;
+        };
+        Insert: {
+          captured_at?: string | null;
+          format_config_id?: string | null;
+          formula_offset?: number | null;
+          id?: string | null;
+          metadata?: Json | null;
+          player_id?: string | null;
+          source?: string | null;
+          value?: number | null;
+        };
+        Update: {
+          captured_at?: string | null;
+          format_config_id?: string | null;
+          formula_offset?: number | null;
+          id?: string | null;
+          metadata?: Json | null;
+          player_id?: string | null;
+          source?: string | null;
+          value?: number | null;
+        };
+        Relationships: [];
       };
       player_value_trends: {
         Row: {
@@ -4648,12 +5003,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4675,13 +5030,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4700,13 +5054,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4725,13 +5078,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4744,11 +5096,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

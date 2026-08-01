@@ -1,11 +1,18 @@
 import Link from "next/link";
-import { LayoutDashboard, Users, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  ArrowLeftRight,
+  Activity,
+  type LucideIcon,
+} from "lucide-react";
 
-export type LeagueTabId = "overview" | "teams" | "transactions";
+export type LeagueTabId = "overview" | "teams" | "power-pulse" | "transactions";
 
-const TABS: { id: LeagueTabId; label: string; icon: LucideIcon }[] = [
+const TABS: { id: LeagueTabId; label: string; icon: LucideIcon; isNew?: boolean }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "teams", label: "Teams", icon: Users },
+  { id: "power-pulse", label: "Power Pulse", icon: Activity, isNew: true },
   { id: "transactions", label: "Transactions", icon: ArrowLeftRight },
 ];
 
@@ -33,9 +40,11 @@ export function LeagueTabs({
   const hrefFor = (tabId: LeagueTabId): string => {
     const qs = new URLSearchParams();
     if (searchedUsername) qs.set("username", searchedUsername);
-    if (tabId === "transactions") {
+    // Transactions and Power Pulse are full routes of their own; Overview and
+    // Teams are inline views on the deep view.
+    if (tabId === "transactions" || tabId === "power-pulse") {
       const s = qs.toString();
-      return `/leagues/${sleeperLeagueId}/transactions${s ? `?${s}` : ""}`;
+      return `/leagues/${sleeperLeagueId}/${tabId}${s ? `?${s}` : ""}`;
     }
     qs.set("tab", tabId);
     return `/leagues/${sleeperLeagueId}?${qs.toString()}`;
@@ -77,6 +86,13 @@ export function LeagueTabs({
                   >
                     <Icon aria-hidden="true" className="h-4 w-4" />
                     {t.label}
+                    {/* "New" is part of the link's accessible name, so a screen
+                        reader hears it as one label rather than a stray word. */}
+                    {t.isNew && (
+                      <span className="ml-0.5 rounded-full bg-beacon px-1.5 py-px text-[9px] font-extrabold uppercase tracking-[0.1em] text-black">
+                        New
+                      </span>
+                    )}
                   </Link>
                 </li>
               );

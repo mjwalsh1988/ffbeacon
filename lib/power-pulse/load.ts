@@ -1,0 +1,422 @@
+/**
+ * Data loading for the Power Pulse engine.
+ *
+ * Everything the engine needs for one league, fetched in as few round trips as
+ * the shape allows. Kept separate from the math so the engine stays testable
+ * against plain objects.
+ *
+ * Pagination note: Supabase silently truncates a select at 1000 rows. A twelve
+ * team league can roster 350 players across 18 weeks of projections, which is
+ * well past that, so every multi-row read here pages explicitly.
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/lib/database.types";
+import type { ScoringSettings } from "@/lib/league-scoring";
+import type { PulsePosition, ScheduleWeek } from "./types";
+import { PULSE_POSITIONS } from "./types";
+
+type ServiceClient = SupabaseClient<Database>;
+
+const PAGE = 1000;
+
+export type LeagueRow = {
+  id: string;
+  sleeperLeagueId: string;
+  name: string;
+  season: number;
+  status: string | null;
+  rosterPositions: string[];
+  scoringSettings: ScoringSettings;
+  playoffTeams: number;
+  playoffWeekStart: number;
+};
+
+export type RosterRow = {
+  id: string;
+  sleeperRosterId: number;
+  playerSleeperIds: string[];
+  starterSleeperIds: string[];
+  reserveSleeperIds: string[];
+  taxiSleeperIds: string[];
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
+  teamName: string;
+};
+
+export type PlayerRow = {
+  playerId: string;
+  sleeperId: string;
+  name: string;
+  position: PulsePosition;
+  team: string | null;
+  injuryStatus: string | null;
+  depthOrder: number | null;
+};
+
+export type ProjectionRow = {
+  playerId: string;
+  week: number;
+  opponent: string | null;
+  statLine: Record<string, unknown> | null;
+  ppr: number | null;
+  halfPpr: number | null;
+  std: number | null;
+};
+
+export type AccuracyRow = {
+  playerId: string;
+  shrunkMultiplier: number | null;
+  beatRate: number | null;
+  availabilityRate: number | null;
+  ratioStdev: number | null;
+  weeksPlayed: number;
+};
+
+export type DefenseRow = {
+  team: string;
+  season: number;
+  position: PulsePosition;
+  multiplier: number;
+  gamesSampled: number;
+};
+
+function asStringArray(value: Json | null | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === "string" && v.length > 0 && v !== "0");
+}
+
+function intOrNull(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v === "string") {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Load the league, including the playoff shape the simulation needs. */
+export async function loadLeague(
+  supabase: ServiceClient,
+  leagueRowId: string,
+): Promise<LeagueRow | null> {
+  const { data, error } = await supabase
+    .from("leagues")
+    .select("id, sleeper_league_id, name, season, status, roster_positions, scoring_settings, metadata")
+    .eq("id", leagueRowId)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const meta = (data.metadata ?? {}) as { settings?: Record<string, unknown> };
+  const settings = meta.settings ?? {};
+
+  return {
+    id: data.id,
+    sleeperLeagueId: data.sleeper_league_id,
+    name: data.name,
+    season: Number(data.season),
+    status: data.status,
+    rosterPositions: asStringArray(data.roster_positions),
+    scoringSettings: (data.scoring_settings ?? {}) as ScoringSettings,
+    // Sleeper defaults: a six-team field starting in week 15.
+    playoffTeams: intOrNull(settings.playoff_teams) ?? 6,
+    playoffWeekStart: intOrNull(settings.playoff_week_start) ?? 15,
+  };
+}
+
+export async function loadRosters(
+  supabase: ServiceClient,
+  leagueRowId: string,
+): Promise<RosterRow[]> {
+  const [rostersRes, usersRes] = await Promise.all([
+    supabase
+      .from("rosters")
+      .select(
+        "id, sleeper_roster_id, owner_user_id, player_ids, starter_ids, reserve_ids, taxi_ids, wins, losses, ties, points_for",
+      )
+      .eq("league_id", leagueRowId)
+      .order("sleeper_roster_id", { ascending: true }),
+    supabase
+      .from("league_users")
+      .select("sleeper_user_id, display_name, team_name")
+      .eq("league_id", leagueRowId),
+  ]);
+
+  const usersById = new Map((usersRes.data ?? []).map((u) => [u.sleeper_user_id, u]));
+
+  return (rostersRes.data ?? []).map((r) => {
+    const user = r.owner_user_id ? usersById.get(r.owner_user_id) : null;
+    return {
+      id: r.id,
+      sleeperRosterId: r.sleeper_roster_id,
+      playerSleeperIds: asStringArray(r.player_ids),
+      starterSleeperIds: asStringArray(r.starter_ids),
+      reserveSleeperIds: asStringArray(r.reserve_ids),
+      taxiSleeperIds: asStringArray(r.taxi_ids),
+      wins: Number(r.wins ?? 0),
+      losses: Number(r.losses ?? 0),
+      ties: Number(r.ties ?? 0),
+      pointsFor: Number(r.points_for ?? 0),
+      teamName: user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`,
+    };
+  });
+}
+
+/**
+ * Resolve Sleeper ids to FF Beacon players, carrying the injury and depth chart
+ * signals that live in players.metadata.sleeper.
+ *
+ * Matching mirrors lib/league-view-data.ts: external_ids.sleeper first, with a
+ * slug-tail fallback for rows whose external id was stripped.
+ */
+export async function loadPlayers(
+  supabase: ServiceClient,
+  sleeperIds: string[],
+): Promise<Map<string, PlayerRow>> {
+  const out = new Map<string, PlayerRow>();
+  if (sleeperIds.length === 0) return out;
+
+  const valid = new Set<string>(PULSE_POSITIONS);
+
+  // PostgREST `.or()` takes a comma-separated filter string, so an id carrying a
+  // comma or a parenthesis would rewrite the filter rather than be matched by
+  // it. Real Sleeper ids are numeric strings for players and team codes like
+  // "BUF" for defenses, so anything outside that alphabet is dropped before it
+  // reaches the query.
+  const safeIds = sleeperIds.filter((id) => /^[A-Za-z0-9]{1,32}$/.test(id));
+  if (safeIds.length === 0) return out;
+
+  const CHUNK = 200;
+  for (let i = 0; i < safeIds.length; i += CHUNK) {
+    const chunk = safeIds.slice(i, i + CHUNK);
+    const ors = chunk
+      .flatMap((id) => [`external_ids->>sleeper.eq.${id}`, `slug.like.*-${id}`])
+      .join(",");
+    const { data, error } = await supabase
+      .from("players")
+      .select("id, slug, first_name, last_name, full_name, position, team, external_ids, metadata")
+      .or(ors);
+    if (error) throw new Error(`power pulse player resolve failed: ${error.message}`);
+
+    for (const p of data ?? []) {
+      const ext = (p.external_ids as Record<string, unknown>) ?? {};
+      const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
+      const tail = (p.slug as string).match(/-(\d+)$/)?.[1] ?? null;
+      const sid = fromExternal ?? tail;
+      if (!sid || !chunk.includes(sid) || out.has(sid)) continue;
+
+      const position = (p.position ?? "").toUpperCase();
+      if (!valid.has(position)) continue;
+
+      const meta = (p.metadata as { sleeper?: Record<string, unknown> } | null)?.sleeper ?? {};
+      out.set(sid, {
+        playerId: p.id,
+        sleeperId: sid,
+        name:
+          p.full_name ?? (`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.slug),
+        position: position as PulsePosition,
+        team: p.team,
+        injuryStatus:
+          typeof meta.injury_status === "string" && meta.injury_status.length > 0
+            ? meta.injury_status
+            : null,
+        depthOrder: intOrNull(meta.depth_chart_order),
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Weekly projections for a player set from `fromWeek` forward. Paged, because a
+ * full league easily exceeds the 1000-row default cap.
+ */
+export async function loadProjections(
+  supabase: ServiceClient,
+  playerIds: string[],
+  season: number,
+  fromWeek: number,
+): Promise<ProjectionRow[]> {
+  const out: ProjectionRow[] = [];
+  if (playerIds.length === 0) return out;
+
+  const CHUNK = 150;
+  for (let i = 0; i < playerIds.length; i += CHUNK) {
+    const chunk = playerIds.slice(i, i + CHUNK);
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("player_weekly_projections")
+        .select(
+          "player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
+        )
+        .eq("season", season)
+        .eq("season_type", "regular")
+        .gte("week", fromWeek)
+        .in("player_id", chunk)
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`power pulse projection load failed: ${error.message}`);
+      if (!data || data.length === 0) break;
+      for (const row of data) {
+        if (!row.player_id) continue;
+        out.push({
+          playerId: row.player_id,
+          week: Number(row.week),
+          opponent: row.opponent,
+          statLine: (row.stat_line as Record<string, unknown> | null) ?? null,
+          ppr: numOrNull(row.projected_pts_ppr),
+          halfPpr: numOrNull(row.projected_pts_half_ppr),
+          std: numOrNull(row.projected_pts_std),
+        });
+      }
+      if (data.length < PAGE) break;
+    }
+  }
+  return out;
+}
+
+/** Blended, recency-weighted reliability rows for one scoring base. */
+export async function loadAccuracy(
+  supabase: ServiceClient,
+  playerIds: string[],
+  scoring: string,
+): Promise<Map<string, AccuracyRow>> {
+  const out = new Map<string, AccuracyRow>();
+  if (playerIds.length === 0) return out;
+
+  const CHUNK = 300;
+  for (let i = 0; i < playerIds.length; i += CHUNK) {
+    const chunk = playerIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("player_projection_accuracy")
+      .select("player_id, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, weeks_played")
+      .eq("scoring", scoring)
+      .is("season", null)
+      .in("player_id", chunk);
+    if (error) throw new Error(`power pulse accuracy load failed: ${error.message}`);
+    for (const row of data ?? []) {
+      out.set(row.player_id, {
+        playerId: row.player_id,
+        shrunkMultiplier: numOrNull(row.shrunk_multiplier),
+        beatRate: numOrNull(row.beat_rate),
+        availabilityRate: numOrNull(row.availability_rate),
+        ratioStdev: numOrNull(row.ratio_stdev),
+        weeksPlayed: Number(row.weeks_played ?? 0),
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Opponent-strength splits for the two most recent seasons that have data. The
+ * engine blends them, weighting the more recent one more heavily.
+ */
+export async function loadDefenseSplits(
+  supabase: ServiceClient,
+  scoring: string,
+  seasons: number[],
+): Promise<Map<string, DefenseRow>> {
+  const out = new Map<string, DefenseRow>();
+  if (seasons.length === 0) return out;
+
+  const { data, error } = await supabase
+    .from("nfl_defense_vs_position")
+    .select("team, season, position, multiplier, games_sampled")
+    .eq("scoring", scoring)
+    .in("season", seasons);
+  if (error) throw new Error(`power pulse defense split load failed: ${error.message}`);
+
+  for (const row of data ?? []) {
+    out.set(`${row.team}|${row.season}|${row.position}`, {
+      team: row.team,
+      season: Number(row.season),
+      position: row.position as PulsePosition,
+      multiplier: Number(row.multiplier),
+      gamesSampled: Number(row.games_sampled ?? 0),
+    });
+  }
+  return out;
+}
+
+/** The head-to-head slate, plus the set lineup Sleeper has on file per week. */
+export async function loadSchedule(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  season: number,
+): Promise<{
+  weeks: ScheduleWeek[];
+  setLineups: Map<string, string[]>;
+}> {
+  const { data, error } = await supabase
+    .from("league_matchups")
+    .select("week, sleeper_roster_id, matchup_id, is_final, starter_ids")
+    .eq("league_id", leagueRowId)
+    .eq("season", season)
+    .order("week", { ascending: true });
+  if (error) throw new Error(`power pulse schedule load failed: ${error.message}`);
+
+  const byWeek = new Map<number, { matchups: Map<number, number[]>; isFinal: boolean }>();
+  const setLineups = new Map<string, string[]>();
+
+  for (const row of data ?? []) {
+    const week = Number(row.week);
+    const rosterId = Number(row.sleeper_roster_id);
+    setLineups.set(`${week}|${rosterId}`, asStringArray(row.starter_ids));
+
+    if (row.matchup_id === null || row.matchup_id === undefined) continue;
+    const entry = byWeek.get(week) ?? { matchups: new Map<number, number[]>(), isFinal: false };
+    const list = entry.matchups.get(Number(row.matchup_id)) ?? [];
+    list.push(rosterId);
+    entry.matchups.set(Number(row.matchup_id), list);
+    entry.isFinal = entry.isFinal || Boolean(row.is_final);
+    byWeek.set(week, entry);
+  }
+
+  const weeks: ScheduleWeek[] = [];
+  for (const [week, entry] of [...byWeek.entries()].sort((a, b) => a[0] - b[0])) {
+    const opponents = new Map<number, number>();
+    for (const pair of entry.matchups.values()) {
+      if (pair.length !== 2) continue;
+      opponents.set(pair[0], pair[1]);
+      opponents.set(pair[1], pair[0]);
+    }
+    weeks.push({ week, opponents, isFinal: entry.isFinal });
+  }
+  return { weeks, setLineups };
+}
+
+/**
+ * Actual weekly results for the current season, used by the form component.
+ * Reads points straight off league_matchups so it reflects the league's own
+ * scoring exactly, with no re-derivation.
+ */
+export async function loadCompletedResults(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  season: number,
+): Promise<Map<number, { week: number; points: number }[]>> {
+  const out = new Map<number, { week: number; points: number }[]>();
+  const { data, error } = await supabase
+    .from("league_matchups")
+    .select("week, sleeper_roster_id, points, is_final")
+    .eq("league_id", leagueRowId)
+    .eq("season", season)
+    .eq("is_final", true)
+    .order("week", { ascending: true });
+  if (error) return out;
+  for (const row of data ?? []) {
+    const rosterId = Number(row.sleeper_roster_id);
+    const list = out.get(rosterId) ?? [];
+    list.push({ week: Number(row.week), points: Number(row.points ?? 0) });
+    out.set(rosterId, list);
+  }
+  return out;
+}
