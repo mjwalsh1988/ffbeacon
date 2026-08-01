@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
+import { PUBLISHED_GUIDES } from "@/lib/guides/published";
 
 /**
  * sitemap.xml for ffbeacon.com.
@@ -59,7 +60,6 @@ const PLAYER_RELEVANCE_WINDOW_DAYS = 90;
  *   /players            No route folder exists (only /players/[slug]). The path
  *                       falls through to app/[handle] and returns a noindex
  *                       "Profile not found" page.
- *   /guides             Placeholder. Every card on it reads "Coming soon".
  *   /join               Sets robots index:false (it is a Discord hand-off page).
  *   /login /my-beacon   Disallowed in robots.ts; account surfaces.
  *   /admin /api /auth   Disallowed in robots.ts.
@@ -219,6 +219,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority,
     })),
   ];
+
+  // Guides. The index was excluded for as long as every card on it read "Coming
+  // soon"; it earns a place now that it links to a real page. Both the index and
+  // each guide carry a genuine lastModified, taken from the hand-maintained dates
+  // in lib/guides/published.ts rather than the build clock.
+  const newestGuideAt = newest(PUBLISHED_GUIDES.map((g) => g.updatedAt));
+  if (PUBLISHED_GUIDES.length > 0) {
+    entries.push({
+      url: `${SITE.url}/guides`,
+      lastModified: newestGuideAt,
+      priority: 0.7,
+    });
+    for (const guide of PUBLISHED_GUIDES) {
+      entries.push({
+        url: `${SITE.url}/guides/${guide.slug}`,
+        lastModified: newest([guide.updatedAt]),
+        priority: guide.priority,
+      });
+    }
+  }
 
   // Per-format rankings pages. Each one has its own h1, title, and meta description
   // (see lib/rankings-formats.ts), which is what makes them distinct pages rather than

@@ -174,6 +174,24 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     description: "Plain-English fantasy football explainers",
     keywords: ["guides", "learn", "help", "how to", "strategy"],
   },
+  {
+    label: "Fantasy Football Terms",
+    href: "/guides/fantasy-football-terms",
+    description: "Glossary of every fantasy term, in plain English",
+    keywords: [
+      "terms",
+      "glossary",
+      "definitions",
+      "jargon",
+      "abbreviations",
+      "ppr",
+      "superflex",
+      "faab",
+      "adp",
+      "what does",
+      "meaning",
+    ],
+  },
 ];
 
 /** Footer-link shape. `disabled` links render as a non-interactive
@@ -209,7 +227,12 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
     links: [
       { label: "The Beacon Brief", href: "/brief" },
       { label: "Guides", href: "/guides" },
-      { label: "Fantasy Analytics 101", href: "/guides/fantasy-analytics-101", disabled: true },
+      { label: "Fantasy Football Terms", href: "/guides/fantasy-football-terms" },
+      {
+        label: "2026 Draft Guide",
+        href: "/guides/2026-fantasy-football-draft-guide",
+        disabled: true,
+      },
       { label: "Accessible Fantasy Football", href: "/guides/accessible-fantasy-football", disabled: true },
     ],
   },

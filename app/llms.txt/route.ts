@@ -1,5 +1,6 @@
 import { createCachedReadClient } from "@/lib/supabase/server";
 import { SITE, TOOLS_NAV, GAMES_NAV } from "@/lib/site";
+import { PUBLISHED_GUIDES } from "@/lib/guides/published";
 
 /**
  * /llms.txt, following the llmstxt.org convention.
@@ -12,7 +13,8 @@ import { SITE, TOOLS_NAV, GAMES_NAV } from "@/lib/site";
  *
  * Kept in sync automatically: tool and game entries come from the same TOOLS_NAV and
  * GAMES_NAV constants the header renders from, so a new tool cannot appear in the nav
- * and be missing here. Articles are read live.
+ * and be missing here. Guides come from PUBLISHED_GUIDES, the same register the
+ * sitemap reads, so an unwritten guide can never be advertised. Articles are read live.
  *
  * Served as text/plain because that is what the convention specifies and what
  * crawlers expect, even though the body is markdown.
@@ -81,6 +83,20 @@ export async function GET() {
     for (const game of GAMES_NAV) {
       lines.push(
         `- [${game.label}](${SITE.url}${game.href}): ${game.description}`,
+      );
+    }
+    lines.push("");
+  }
+
+  if (PUBLISHED_GUIDES.length > 0) {
+    lines.push("## Guides");
+    lines.push("");
+    lines.push(
+      `- [All guides](${SITE.url}/guides): Long-form fantasy football explainers written in plain English`,
+    );
+    for (const guide of PUBLISHED_GUIDES) {
+      lines.push(
+        `- [${guide.title}](${SITE.url}/guides/${guide.slug}): ${oneLine(guide.summary)}`,
       );
     }
     lines.push("");
