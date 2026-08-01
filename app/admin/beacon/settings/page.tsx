@@ -13,6 +13,7 @@ const GROUPS: Array<{ category: string; title: string; description: string }> = 
   { category: "factor", title: "How far signals can move a value", description: "After sources are blended, the performance and AI signals nudge each value up or down. These two numbers are the guardrail on how far that nudge can go, applied just before each position's value band is enforced." },
   { category: "staleness", title: "When to stop trusting a source", description: "If a source has not refreshed in this many days, we drop it from the blend until it updates again, so old data never quietly drags values around." },
   { category: "normalization", title: "Putting sources on one scale", description: "Every source uses its own numbering. These settings control how we rescale them all onto one common 0 to 10000 curve so they can be averaged fairly before blending." },
+  { category: "calibration", title: "Calibrated normalization", description: "Only used by formats running the calibrated method above. Calibrated fits every source onto one stored consensus scale instead of rebuilding the scale from whoever showed up that night, so a source lengthening its list or going down for a day no longer moves the board. These settings control how that stored scale is built, how often it is replaced, and when a rebuild would move things far enough to be worth a look. The Calibration page shows what is live." },
   { category: "derivation", title: "Tight-end-premium boost", description: "Every TE-premium board (Redraft 1QB PPR TEP, Redraft PPR SF TEP, Dynasty PPR 1QB TEP, Dynasty PPR SF TEP) is a copy of its non-TEP counterpart with tight ends raised. Nothing else on the board moves. These settings control how big that per-TE boost can be and which tight ends qualify for it." },
   { category: "picks", title: "Draft pick values", description: "FF Beacon draft pick values start as a copy of KTC. This multiplier scales every FF Beacon pick value up or down at recompute time, leaving KTC and all other sources untouched. 1 means no change, 0.8 lowers every pick by 20 percent, 1.2 raises them by 20 percent. The change applies on the next recompute, not live." },
   { category: "ai", title: "AI signal", description: "An optional, tightly bounded per-player nudge from an Anthropic model, layered on top of the blended value. It is Off by default. To turn it on you need this master switch (AI signal enabled) set to On AND the ai_adjust weight enabled on the Signal weights page. The system prompt below is the exact text sent to the model on every call." },
@@ -55,11 +56,17 @@ export default async function BeaconSettingsPage() {
                     <SettingField
                       key={s.key}
                       setting={s}
-                      // Only the method the engine actually implements. p99
+                      // The two methods the engine actually implements. p99
                       // scaling is the automatic per-source fallback for a thin
                       // slice (lib/beacon/normalize.ts), never a selectable mode,
-                      // so offering it here promised a switch that did nothing.
-                      options={s.key === "normalization_method" ? ["quantile_median"] : undefined}
+                      // so it is not offered: a switch that did nothing.
+                      // Switching this to calibrated moves EVERY format at once;
+                      // to move one, use the canary list below instead.
+                      options={
+                        s.key === "normalization_method"
+                          ? ["quantile_median", "calibrated"]
+                          : undefined
+                      }
                     />
                   ),
                 )}

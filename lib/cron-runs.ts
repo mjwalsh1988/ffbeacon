@@ -21,6 +21,8 @@ export type CronJobName =
   | "sync-dynastyprocess"
   | "recalculate-beacon"
   | "recalculate-derived"
+  | "beacon-reference-drift"
+  | "beacon-reference-rebuild"
   | "sync-sleeper-stats"
   | "sync-sleeper-market"
   | "sync-weekly-projections"
@@ -34,6 +36,11 @@ export type CronRunStatus = "running" | "success" | "error" | "skipped";
  * that has never run still shows up (as "no runs yet") rather than silently
  * missing. Keep `name` in lockstep with the route folder under app/api/cron and
  * `schedule` in lockstep with vercel.json.
+ *
+ * An empty `schedule` means the route exists and is callable, but is not wired
+ * into vercel.json yet. The two calibration-reference jobs are deliberately in
+ * that state: they only have work to do once a format is switched to calibrated
+ * normalization, which has not happened.
  */
 export const CRON_JOBS: ReadonlyArray<{
   name: CronJobName;
@@ -80,6 +87,22 @@ export const CRON_JOBS: ReadonlyArray<{
     scheduleHuman: "Daily, 10:00 UTC",
     description:
       "Rebuilds the global rankings and player_value_trends tables from the latest values.",
+  },
+  {
+    name: "beacon-reference-rebuild",
+    label: "Calibration reference rebuild",
+    schedule: "",
+    scheduleHuman: "Not scheduled yet, manual only",
+    description:
+      "Rebuilds the stored calibration reference for any format whose reference has passed the rebuild cadence. Refuses to build while a source is missing or the shared set is thin. Add the vercel.json schedule when a format is switched to calibrated normalization.",
+  },
+  {
+    name: "beacon-reference-drift",
+    label: "Calibration drift check",
+    schedule: "",
+    scheduleHuman: "Not scheduled yet, manual only",
+    description:
+      "Builds a candidate calibration reference in memory, compares it against the stored one, and emails an alert if the board would move past the configured limits. Never activates anything. Add the vercel.json schedule alongside the rebuild job.",
   },
   {
     name: "sync-sleeper-stats",

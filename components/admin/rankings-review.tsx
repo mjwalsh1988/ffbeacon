@@ -158,6 +158,13 @@ function Breakdown({ metadata }: { metadata: Record<string, unknown> | null }) {
         {metadata.factor != null && <Pair k="Factor" v={Number(metadata.factor).toFixed(3)} />}
         {metadata.scaled != null && <Pair k="Scaled" v={Number(metadata.scaled).toFixed(3)} />}
         {metadata.confidence_degraded === true && <Pair k="Confidence" v="degraded" />}
+        {metadata.normalization_method != null && <Pair k="Normalization" v={String(metadata.normalization_method)} />}
+        {metadata.source_coverage != null && (
+          <Pair
+            k="Sources"
+            v={`${metadata.source_coverage} of ${metadata.sources_available ?? "?"}${metadata.low_confidence === true ? ", low confidence" : ""}`}
+          />
+        )}
         {metadata.stat_score != null && <Pair k="Stat score" v={String(Math.round(Number(metadata.stat_score)))} />}
         {metadata.te_boost_pct != null && <Pair k="TE boost" v={`${(Number(metadata.te_boost_pct) * 100).toFixed(1)}%`} />}
         {perf?.adjustment_pct != null && <Pair k="Form adj" v={`${(perf.adjustment_pct * 100).toFixed(1)}% (conf ${Number(perf.confidence ?? 0).toFixed(2)})`} />}
@@ -173,7 +180,9 @@ function Breakdown({ metadata }: { metadata: Record<string, unknown> | null }) {
           <ul className="mt-1 space-y-0.5 text-xs text-ink-muted">
             {contributions.map((c, i) => (
               <li key={i} className="font-mono">
-                {String(c.source)}: raw {Math.round(Number(c.rawValue ?? 0))}, q {Number(c.quantile ?? 0).toFixed(2)}, mapped {Math.round(Number(c.mappedScaled ?? 0))}{c.thin ? " (thin)" : ""}
+                {/* mappedScaled is a 0..1 position, so it needs decimals: rounding it
+                    to a whole number only ever printed 0 or 1. */}
+                {String(c.source)}: raw {Math.round(Number(c.rawValue ?? 0))}, q {Number(c.quantile ?? 0).toFixed(2)}, mapped {Number(c.mappedScaled ?? 0).toFixed(3)}{c.inFittedRange === false ? " (outside fitted range)" : ""}{c.thin ? " (thin)" : ""}
               </li>
             ))}
           </ul>

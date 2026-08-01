@@ -102,9 +102,18 @@ export async function runSeedRankings(
         latestByPlayer.set(row.player_id, { value: row.value, position });
       }
 
+      // Value descending, then player_id as a deterministic tie-break.
+      //
+      // Without the second key, players sharing a value fall back to whatever
+      // order Postgres happened to return, which is not stable between runs. Any
+      // run of equal values would then re-shuffle nightly, and every player in it
+      // would show invented rank movement in player_value_trends. Ties are common
+      // at the bottom of a board where many players are worth almost nothing, and
+      // calibrated normalization makes them longer still, so the tie-break is what
+      // keeps a flat run flat instead of churning.
       const sorted = Array.from(latestByPlayer.entries())
         .map(([player_id, payload]) => ({ player_id, ...payload }))
-        .sort((a, b) => b.value - a.value);
+        .sort((a, b) => b.value - a.value || a.player_id.localeCompare(b.player_id));
 
       const positionalCounts: Record<string, number> = {};
       const rankings = sorted.map((row, index) => {

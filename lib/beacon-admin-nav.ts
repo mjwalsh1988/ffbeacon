@@ -32,6 +32,12 @@ export const BEACON_SUBPAGES = [
     description: "Factor clamp, staleness thresholds, normalization, TEP derivation, and the AI slot.",
   },
   {
+    href: "/admin/beacon/calibration",
+    label: "Calibration",
+    description:
+      "The stored consensus scale behind calibrated normalization: which version is live per format, how old it is, the last drift check, rebuild and rollback.",
+  },
+  {
     href: "/admin/beacon/manual",
     label: "Manual signals",
     description: "Create owner nudges and manage active manual signals.",

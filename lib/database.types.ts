@@ -636,6 +636,59 @@ export type Database = {
           },
         ];
       };
+      beacon_reference_versions: {
+        Row: {
+          activated_at: string | null;
+          created_by: string | null;
+          diagnostics: Json;
+          expected_sources: string[];
+          format_config_id: string;
+          generated_at: string;
+          id: string;
+          notes: string | null;
+          shared_player_count: number;
+          status: string;
+          superseded_at: string | null;
+          version: number;
+        };
+        Insert: {
+          activated_at?: string | null;
+          created_by?: string | null;
+          diagnostics?: Json;
+          expected_sources?: string[];
+          format_config_id: string;
+          generated_at?: string;
+          id?: string;
+          notes?: string | null;
+          shared_player_count: number;
+          status?: string;
+          superseded_at?: string | null;
+          version: number;
+        };
+        Update: {
+          activated_at?: string | null;
+          created_by?: string | null;
+          diagnostics?: Json;
+          expected_sources?: string[];
+          format_config_id?: string;
+          generated_at?: string;
+          id?: string;
+          notes?: string | null;
+          shared_player_count?: number;
+          status?: string;
+          superseded_at?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "beacon_reference_versions_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       beacon_settings: {
         Row: {
           category: string;
@@ -771,6 +824,39 @@ export type Database = {
             columns: ["format_config_id"];
             isOneToOne: false;
             referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      beacon_value_references: {
+        Row: {
+          player_id: string;
+          reference_scaled: number;
+          version_id: string;
+        };
+        Insert: {
+          player_id: string;
+          reference_scaled: number;
+          version_id: string;
+        };
+        Update: {
+          player_id?: string;
+          reference_scaled?: number;
+          version_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "beacon_value_references_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "beacon_value_references_version_id_fkey";
+            columns: ["version_id"];
+            isOneToOne: false;
+            referencedRelation: "beacon_reference_versions";
             referencedColumns: ["id"];
           },
         ];
@@ -4362,6 +4448,10 @@ export type Database = {
     };
     Functions: {
       account_has_password: { Args: never; Returns: boolean };
+      activate_beacon_reference: {
+        Args: { p_min_shared?: number; p_version_id: string };
+        Returns: undefined;
+      };
       bb_claim_jobs: {
         Args: { p_job_types?: string[]; p_limit: number };
         Returns: {
@@ -4558,12 +4648,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4585,12 +4675,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4609,12 +4700,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4633,12 +4725,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4651,11 +4744,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

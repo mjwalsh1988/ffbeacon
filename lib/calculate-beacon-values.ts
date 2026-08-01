@@ -7,6 +7,10 @@
  *   1. Mint a run (beacon_value_runs) -> run_id (never null, never reused).
  *   2. Load tunables LIVE from beacon_settings / beacon_signal_weights / bands.
  *   3. Gather external source values (self-excluded, staleness-gated) + manuals.
+ *   3b. Resolve each format's normalization method and, for calibrated formats,
+ *      load every active reference in ONE snapshot before any format is
+ *      processed. A reference that cannot be loaded or validated aborts the run
+ *      here, before step 6 writes anything, and is never silently rebuilt.
  *   4. Per computed format: normalize the skill pool, combine signals, build rows.
  *      All-stale / no-base (player, format) is SKIPPED, never written 0/null.
  *   5. Derive the boards listed in INHERITED from their baseline's finished rows
@@ -21,7 +25,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
 import { withRetry, chunkUpsert } from "./supabase/retry";
-import { loadBeaconSettings, loadSignalWeights, findWeight } from "./beacon/settings";
+import {
+  loadBeaconSettings,
+  loadSignalWeights,
+  findWeight,
+  resolveNormalizationMethod,
+  type NormalizationMethod,
+} from "./beacon/settings";
+import { calibrateSlice } from "./beacon/calibrate";
+import { INHERITED_FORMATS, DERIVED_FORMAT_SLUGS } from "./beacon/derived-formats";
+import { loadActiveReferences, referenceAgeDays, type ActiveReference } from "./beacon/reference";
 import { gatherSourceValues, type ExternalSource } from "./beacon/signals/source-value";
 import { gatherStatValues } from "./beacon/signals/stat-value";
 import { mergeScoringConfig } from "./beacon/scoring";
@@ -37,37 +50,12 @@ import type { ValueBand } from "./beacon/types";
 const SOURCE_SLUG = "ffbeacon";
 const SKILL_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
 
-/**
- * Boards we derive from another board instead of computing from scratch.
- *
- * Every TE-premium format belongs here. A TEP board means one specific thing:
- * the same league with tight ends scoring more. So it must differ from its
- * baseline for tight ends and for nobody else. Computing one independently
- * cannot promise that, because the normalization pool is whichever sources
- * declare support for that exact slug, and a TEP board is typically covered by
- * fewer sources than its baseline. dynasty-ppr-tep-sflex is the proof: KTC is
- * its only source, so it normalized against a one-source canonical curve while
- * dynasty-ppr-sflex used three, and every skill position drifted (WR +860 avg,
- * RB +888, QB +644) with no tight end involved. Deriving makes the guarantee
- * structural instead of coincidental.
- *
- * The redraft TEP pair is FF Beacon only; no external source publishes redraft
- * TE-premium values. See migration 0158.
- */
-const INHERITED: Array<{
-  slug: string;
-  baselineSlug: string;
-  transform: "te_premium" | "identity";
-}> = [
-  { slug: "redraft-ppr-tep", baselineSlug: "redraft-ppr-std", transform: "te_premium" },
-  { slug: "redraft-ppr-tep-sflex", baselineSlug: "redraft-ppr-sflex", transform: "te_premium" },
-  { slug: "dynasty-ppr-tep", baselineSlug: "dynasty-ppr-std", transform: "te_premium" },
-  { slug: "dynasty-ppr-tep-sflex", baselineSlug: "dynasty-ppr-sflex", transform: "te_premium" },
-  { slug: "bestball-ppr-std", baselineSlug: "redraft-ppr-std", transform: "identity" },
-  { slug: "bestball-ppr-sflex", baselineSlug: "redraft-ppr-sflex", transform: "identity" },
-  { slug: "bestball-dynasty-ppr-sflex", baselineSlug: "dynasty-ppr-sflex", transform: "identity" },
-];
-const DERIVED_SLUGS = new Set(INHERITED.map((s) => s.slug));
+// Boards derived from another board instead of computed from scratch. The list
+// and the reasoning behind it live in ./beacon/derived-formats.ts, because the
+// calibration reference builder needs the same answer and neither subsystem
+// should own it.
+const INHERITED = INHERITED_FORMATS;
+const DERIVED_SLUGS = DERIVED_FORMAT_SLUGS;
 
 export interface CalculateBeaconResult {
   ok: boolean;
@@ -82,6 +70,8 @@ export interface CalculateBeaconResult {
   aiCalls: number;
   aiAdjusted: number;
   perFormat: Array<{ slug: string; rows: number; skipped: number }>;
+  /** One entry per format that ran on calibrated normalization. Empty otherwise. */
+  calibration: Array<Record<string, unknown>>;
   freshness: unknown[];
   startedAt: string;
   finishedAt: string;
@@ -195,6 +185,39 @@ export async function runCalculateBeaconValues(
     });
     const manuals = await loadManualSignals(supabase, started);
 
+    // 4b. Normalization method per format, plus the calibration references.
+    //
+    // Every reference is loaded ONCE, here, before any format is processed. A
+    // rebuild that activates a new version halfway through the run therefore
+    // cannot leave one run reading two different scales for two different
+    // formats: this snapshot is what the whole run uses.
+    //
+    // loadActiveReferences THROWS on any read or validation failure. That kills
+    // the run before step 6, which is where the first row is written, so a
+    // reference problem can never leave a partially recalculated board behind.
+    // It never rebuilds and never substitutes a different scale: a missing
+    // reference is a hard stop pointing at the explicit bootstrap workflow.
+    const methodByFormat = new Map<string, NormalizationMethod>();
+    for (const fmt of ffbeaconFormats) {
+      if (DERIVED_SLUGS.has(fmt.slug)) continue; // derived boards never normalize
+      methodByFormat.set(fmt.id, resolveNormalizationMethod(fmt.slug, settings));
+    }
+    const calibratedFormatIds = [...methodByFormat.entries()]
+      .filter(([, m]) => m === "calibrated")
+      .map(([id]) => id);
+    const referenceByFormat =
+      calibratedFormatIds.length > 0
+        ? await loadActiveReferences(supabase, calibratedFormatIds)
+        : new Map<string, ActiveReference | null>();
+    for (const formatId of calibratedFormatIds) {
+      if (!referenceByFormat.get(formatId)) {
+        const slug = formatById.get(formatId)?.slug ?? formatId;
+        throw new Error(
+          `Format ${slug} is set to calibrated normalization but has no active calibration reference. Build one from the Calibration admin page or npm run beacon:reference -- --rebuild --format ${slug}, or take the slug out of the calibrated formats list. Refusing to fall back to another scale.`,
+        );
+      }
+    }
+
     // 5. Per format: normalize the skill pool, combine, build rows.
     type HistoryRow = {
       player_id: string;
@@ -210,6 +233,8 @@ export async function runCalculateBeaconValues(
     let factorSaturated = 0;
     const perFormat: CalculateBeaconResult["perFormat"] = [];
     const processedPlayers = new Set<string>();
+    /** Which reference each calibrated format used, for the run's audit trail. */
+    const calibrationAudit: Array<Record<string, Json>> = [];
 
     // Nightly materialization of the scoring-invariant stat profiles. Runs first
     // so stat_performance (and future custom-format compute) read fresh profiles.
@@ -275,6 +300,16 @@ export async function runCalculateBeaconValues(
         }
         if (bySource.size > 0) {
           const poolBand = bandResolve("QB", flagship.id);
+          // Deliberately NOT branched onto the calibrated path, even when the
+          // flagship format is calibrated. This slice exists only to rank
+          // candidates by cross-source disagreement, and the ai_min_spread gate
+          // below was tuned against the spreads THIS method produces. Calibrated
+          // spreads are materially smaller (much of the apparent disagreement
+          // was the list-length artifact), so swapping the method without
+          // retuning the threshold would quietly starve the candidate list.
+          // Retuning ai_min_spread from measured production spread is a
+          // post-rollout task; until it happens the gate keeps its original
+          // meaning. AI is off by default, so nothing here runs today.
           const norm = normalizeSlice({
             bySource,
             weights: blendWeights,
@@ -442,12 +477,52 @@ export async function runCalculateBeaconValues(
       }
 
       const poolBand = bandResolve("QB", fmt.id); // skill pool shares the skill band
-      const norm = normalizeSlice({
-        bySource,
-        weights: blendWeights,
-        band: poolBand,
-        minPlayers: settings.minPlayersForQuantile,
-      });
+      // The one branch. quantile_median is untouched and stays the rollback
+      // path; calibrated fits each source onto the stored reference loaded in
+      // 4b. Everything downstream (combine, factors, overrides, bands,
+      // rounding) is identical either way.
+      //
+      // TRENDS AT CUTOVER. Switching a format to calibrated reprices it once, so
+      // that day's 1-day movement is an artifact of the method change rather
+      // than the market. There is no honest way to hide it inside the trend
+      // math: formula_offset splits published from market for a SILENT change,
+      // but the offset would have to persist forever to keep the two series
+      // continuous, which means running both engines forever. So the step is
+      // real and stays visible, and every calibrated row instead carries
+      // metadata.normalization_method plus the reference version, which makes
+      // the cutover date unambiguous in player_value_history. The operational
+      // step at rollout is to annotate that date, not to suppress it, and to
+      // read 7d/30d/90d movement for the affected board with the step in mind
+      // until it ages out of each window. Legitimate trends are never disabled.
+      const method = methodByFormat.get(fmt.id) ?? "quantile_median";
+      const activeRef = referenceByFormat.get(fmt.id) ?? null;
+      const norm =
+        method === "calibrated" && activeRef
+          ? calibrateSlice({
+              bySource,
+              weights: blendWeights,
+              band: poolBand,
+              minPlayers: settings.minPlayersForQuantile,
+              reference: activeRef.values,
+              gridPoints: settings.calibrationGridPoints,
+            })
+          : normalizeSlice({
+              bySource,
+              weights: blendWeights,
+              band: poolBand,
+              minPlayers: settings.minPlayersForQuantile,
+            });
+      if (method === "calibrated" && activeRef) {
+        calibrationAudit.push({
+          format: fmt.slug,
+          reference_version: activeRef.version,
+          reference_version_id: activeRef.versionId,
+          reference_generated_at: activeRef.generatedAt,
+          reference_age_days: Number(referenceAgeDays(activeRef.generatedAt, started).toFixed(2)),
+          reference_players: activeRef.sharedPlayerCount,
+          sources: norm.audits as unknown as Json,
+        });
+      }
 
       let rows = 0;
       let skipped = 0;
@@ -457,6 +532,25 @@ export async function runCalculateBeaconValues(
         const ai = aiEnabled ? aiResultByPlayer.get(np.playerId) : undefined;
         const adjustInputs: Array<{ adjustmentPct: number; weight: number; confidence: number }> = [];
         const extraMeta: Record<string, Json> = {};
+        if (method === "calibrated" && activeRef) {
+          // Calibrated-path audit trail. source_coverage and low_confidence are
+          // metadata ONLY: a player priced by one source keeps the value that
+          // source's calibrated opinion produced. We do not discount him for
+          // another source publishing a shorter catalog, because that would put
+          // list length back into the value.
+          extraMeta.normalization_method = "calibrated";
+          extraMeta.source_coverage = np.coverage ?? np.contributions.length;
+          // How many sources priced anything on this board today, so the UI can
+          // say "1 of 3 sources" rather than a bare count.
+          extraMeta.sources_available = bySource.size;
+          extraMeta.low_confidence = np.lowConfidence ?? np.contributions.length <= 1;
+          extraMeta.calibration_reference = {
+            version: activeRef.version,
+            version_id: activeRef.versionId,
+            generated_at: activeRef.generatedAt,
+            players: activeRef.sharedPlayerCount,
+          } as unknown as Json;
+        }
         if (perf) {
           adjustInputs.push({ adjustmentPct: perf.adjustmentPct, weight: perfWeight, confidence: perf.confidence });
           extraMeta.stat_performance = {
@@ -496,6 +590,13 @@ export async function runCalculateBeaconValues(
       // K/DEF stat_value pools. Only added to formats that already have a skill
       // board, so we never create an orphan K/DEF-only format. Each position is
       // normalized within itself into its (format-aware) band.
+      //
+      // These stay on normalizeSlice whatever the format's method is. Their pool
+      // has exactly one synthetic source (our own stat score), so there is
+      // nothing to put on a common scale and no reference to calibrate against;
+      // fitting a single source onto a reference built from skill players would
+      // be meaningless. The calibrated method is a cross-source alignment fix and
+      // K/DEF have no cross-source problem.
       if (rows > 0 && statValueEnabled) {
         for (const pos of ["K", "DEF"] as const) {
           const pts = pos === "K" ? kPoints : defPoints;
@@ -714,7 +815,11 @@ export async function runCalculateBeaconValues(
     const aiNote = aiEnabled
       ? ` AI: ${aiResultByPlayer.size} adjusted, ${aiCalls} live calls.`
       : " AI: off.";
-    const notes = `${freshnessNote} Stat profiles: ${profileResult.profiles}. Perf-adjusted skill players: ${perfByPlayer.size}.${aiNote}`;
+    const calibrationNote =
+      calibrationAudit.length > 0
+        ? ` Calibrated: ${calibrationAudit.map((c) => `${c.format} v${c.reference_version}`).join(", ")}.`
+        : "";
+    const notes = `${freshnessNote} Stat profiles: ${profileResult.profiles}. Perf-adjusted skill players: ${perfByPlayer.size}.${aiNote}${calibrationNote}`;
 
     await withRetry(
       async () => {
@@ -729,6 +834,13 @@ export async function runCalculateBeaconValues(
             factor_saturated: factorSaturated,
             ai_calls: aiCalls,
             source_freshness: gather.freshness as unknown as Json,
+            // Re-stamp the snapshot with the references the run actually used, so
+            // a value can always be traced back to the exact scale that produced
+            // it. Empty when every format ran on quantile_median.
+            weights_snapshot: {
+              ...(weightsSnapshot as Record<string, Json>),
+              calibration: calibrationAudit as unknown as Json,
+            } as Json,
             notes,
           })
           .eq("id", runId);
@@ -750,6 +862,7 @@ export async function runCalculateBeaconValues(
       aiCalls,
       aiAdjusted: aiResultByPlayer.size,
       perFormat,
+      calibration: calibrationAudit,
       freshness: gather.freshness,
       startedAt,
       finishedAt,

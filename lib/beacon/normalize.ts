@@ -39,6 +39,16 @@ export interface Contribution {
   quantile: number;
   mappedScaled: number;
   thin: boolean;
+  /**
+   * Calibrated-path only (lib/beacon/calibrate.ts). Left undefined by
+   * normalizeSlice so the quantile_median rollback path emits byte-identical
+   * metadata to what it emitted before calibration existed.
+   */
+  calibratedScaled?: number;
+  /** Calibrated-path only: was the raw value inside the fitted quantile range? */
+  inFittedRange?: boolean;
+  /** Calibrated-path only: how many players this source shares with the reference. */
+  pairedWithReference?: number;
 }
 
 export interface NormalizedPlayer {
@@ -47,6 +57,10 @@ export interface NormalizedPlayer {
   scaled: number; // [0,1] blended
   degraded: boolean;
   contributions: Contribution[];
+  /** Calibrated-path only: how many sources priced this player. */
+  coverage?: number;
+  /** Calibrated-path only: coverage <= 1. Metadata for the UI, never a discount. */
+  lowConfidence?: boolean;
 }
 
 export interface SourceAudit {
@@ -127,7 +141,7 @@ function cdf(sortedAsc: number[], v: number): number {
   return lo / sortedAsc.length;
 }
 
-interface SourcePrep {
+export interface SourcePrep {
   source: string;
   n: number;
   p99: number;
@@ -137,7 +151,12 @@ interface SourcePrep {
   quantileByPlayer: Map<string, number>;
 }
 
-function prepSource(
+/**
+ * Winsorize one source at its P99 and scale to [0,1], recording each player's
+ * within-source quantile. Exported so the calibrated path (./calibrate.ts) reuses
+ * the exact same outlier handling; its behaviour here is unchanged.
+ */
+export function prepSource(
   source: string,
   values: SourcePlayerValue[],
   minPlayers: number,

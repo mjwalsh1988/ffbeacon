@@ -30,8 +30,56 @@ export interface BeaconSettings {
   aiMinMover: number;
   /** Global multiplier applied ONLY to ffbeacon draft pick values at recompute. 1 = no change. */
   pickValueMultiplier: number;
+  /**
+   * Format slugs pinned to calibrated normalization regardless of
+   * normalizationMethod. The canary control: one slug here switches one board
+   * over, clearing the list rolls every board back. See resolveNormalizationMethod.
+   */
+  calibrationFormatSlugs: string[];
+  /** Minimum players every expected source must share before a reference is built. */
+  calibrationMinSharedPlayers: number;
+  /** Knots used when fitting a source onto the reference. */
+  calibrationGridPoints: number;
+  /** How old the active reference may get before the rebuild job replaces it. */
+  calibrationRebuildDays: number;
+  /** Reference age that raises an alert (it never stops the engine). */
+  calibrationMaxAgeDays: number;
+  calibrationDriftMeanAbs: number;
+  calibrationDriftPlayerMax: number;
+  calibrationDriftPct250: number;
+  calibrationDriftMinSpearman: number;
   /** The raw rows, for the run's weights_snapshot. */
   raw: Record<string, unknown>;
+}
+
+export type NormalizationMethod = "quantile_median" | "calibrated";
+
+/**
+ * Which normalization one format uses.
+ *
+ * The canary allowlist wins over the global method, so the staged rollout is a
+ * single text box: put one slug in it and that board alone switches, with the
+ * global setting still reading quantile_median for everything else. Emptying the
+ * box is the rollback, and it needs no deploy and no data change.
+ *
+ * Derived boards (every TE-premium format, the best-ball presets) inherit their
+ * baseline's finished rows and never normalize, so listing one has no effect.
+ */
+export function resolveNormalizationMethod(
+  formatSlug: string,
+  settings: Pick<BeaconSettings, "normalizationMethod" | "calibrationFormatSlugs">,
+): NormalizationMethod {
+  if (settings.calibrationFormatSlugs.includes(formatSlug)) return "calibrated";
+  return settings.normalizationMethod === "calibrated" ? "calibrated" : "quantile_median";
+}
+
+/** Parse the comma-separated canary allowlist. Blank entries are dropped. */
+export function parseFormatSlugList(raw: unknown): string[] {
+  if (typeof raw !== "string") return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 export interface SignalWeight {
@@ -55,6 +103,14 @@ const DEFAULTS = {
   aiMinSpread: 0.15,
   aiMinMover: 0.05,
   pickValueMultiplier: 1,
+  calibrationMinSharedPlayers: 100,
+  calibrationGridPoints: 41,
+  calibrationRebuildDays: 30,
+  calibrationMaxAgeDays: 45,
+  calibrationDriftMeanAbs: 100,
+  calibrationDriftPlayerMax: 500,
+  calibrationDriftPct250: 0.02,
+  calibrationDriftMinSpearman: 0.995,
 };
 
 function num(v: unknown, fallback: number): number {
@@ -103,6 +159,33 @@ export async function loadBeaconSettings(
     aiMinSpread: num(map.get("ai_min_spread"), DEFAULTS.aiMinSpread),
     aiMinMover: num(map.get("ai_min_mover"), DEFAULTS.aiMinMover),
     pickValueMultiplier: num(map.get("pick_value_multiplier"), DEFAULTS.pickValueMultiplier),
+    calibrationFormatSlugs: parseFormatSlugList(map.get("calibration_format_slugs")),
+    calibrationMinSharedPlayers: num(
+      map.get("calibration_min_shared_players"),
+      DEFAULTS.calibrationMinSharedPlayers,
+    ),
+    calibrationGridPoints: num(map.get("calibration_grid_points"), DEFAULTS.calibrationGridPoints),
+    calibrationRebuildDays: num(
+      map.get("calibration_rebuild_days"),
+      DEFAULTS.calibrationRebuildDays,
+    ),
+    calibrationMaxAgeDays: num(map.get("calibration_max_age_days"), DEFAULTS.calibrationMaxAgeDays),
+    calibrationDriftMeanAbs: num(
+      map.get("calibration_drift_mean_abs"),
+      DEFAULTS.calibrationDriftMeanAbs,
+    ),
+    calibrationDriftPlayerMax: num(
+      map.get("calibration_drift_player_max"),
+      DEFAULTS.calibrationDriftPlayerMax,
+    ),
+    calibrationDriftPct250: num(
+      map.get("calibration_drift_pct_250"),
+      DEFAULTS.calibrationDriftPct250,
+    ),
+    calibrationDriftMinSpearman: num(
+      map.get("calibration_drift_min_spearman"),
+      DEFAULTS.calibrationDriftMinSpearman,
+    ),
     raw,
   };
 }
