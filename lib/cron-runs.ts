@@ -37,10 +37,8 @@ export type CronRunStatus = "running" | "success" | "error" | "skipped";
  * missing. Keep `name` in lockstep with the route folder under app/api/cron and
  * `schedule` in lockstep with vercel.json.
  *
- * An empty `schedule` means the route exists and is callable, but is not wired
- * into vercel.json yet. The two calibration-reference jobs are deliberately in
- * that state: they only have work to do once a format is switched to calibrated
- * normalization, which has not happened.
+ * An empty `schedule` means the route exists and is callable but is not wired
+ * into vercel.json yet. Nothing is in that state right now.
  */
 export const CRON_JOBS: ReadonlyArray<{
   name: CronJobName;
@@ -91,18 +89,18 @@ export const CRON_JOBS: ReadonlyArray<{
   {
     name: "beacon-reference-rebuild",
     label: "Calibration reference rebuild",
-    schedule: "",
-    scheduleHuman: "Not scheduled yet, manual only",
+    schedule: "0 13 * * *",
+    scheduleHuman: "Daily, 13:00 UTC",
     description:
-      "Rebuilds the stored calibration reference for any format whose reference has passed the rebuild cadence. Refuses to build while a source is missing or the shared set is thin. Add the vercel.json schedule when a format is switched to calibrated normalization.",
+      "Rebuilds the stored calibration reference for any format whose reference has passed the rebuild cadence, so in practice about once a month per format; every other night it reports skipped. Runs after the whole daily pipeline so a new reference takes effect on the NEXT morning's recompute rather than landing mid-cycle. Refuses to build while a source is missing or stale, or the shared set is thin, leaving the current reference live.",
   },
   {
     name: "beacon-reference-drift",
     label: "Calibration drift check",
-    schedule: "",
-    scheduleHuman: "Not scheduled yet, manual only",
+    schedule: "0 14 * * *",
+    scheduleHuman: "Daily, 14:00 UTC",
     description:
-      "Builds a candidate calibration reference in memory, compares it against the stored one, and emails an alert if the board would move past the configured limits. Never activates anything. Add the vercel.json schedule alongside the rebuild job.",
+      "Builds a candidate calibration reference in memory, compares the board it would produce against the stored one, and emails an alert if anything crosses the configured limits. Never persists or activates the candidate. Runs after the rebuild job, so on a rebuild night it confirms the result and on every other night it is the early warning that the stored reference is drifting.",
   },
   {
     name: "sync-sleeper-stats",

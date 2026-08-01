@@ -34,6 +34,14 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/cron/beacon-reference-rebuild",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/beacon-reference-drift",
+      "schedule": "0 14 * * *"
+    },
+    {
       "path": "/api/cron/beacon-brief",
       "schedule": "*/5 * * * *"
     },
