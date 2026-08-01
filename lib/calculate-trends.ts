@@ -4,7 +4,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { chunkUpsert } from "./supabase/retry";
+import { chunkUpsert, withRetry } from "./supabase/retry";
 import type { Database } from "./database.types";
 
 type HistoryRow = {
@@ -126,7 +126,11 @@ export async function loadAllHistory(
   const rows: HistoryRow[] = [];
   const PAGE = 1000;
   let cursor: { ts: string; id: string } | null = null;
-  for (;;) {
+  // Built fresh per attempt rather than reused: a PostgREST builder carries the
+  // state of the request it already issued, so retrying one is not reliably the
+  // same call. Constructing it here keeps a retry byte-identical to the attempt
+  // it replaces.
+  const buildPage = (cursor: { ts: string; id: string } | null) => {
     let query = supabase
       .from("player_value_history")
       .select("id, player_id, format_config_id, source, value, captured_at, formula_offset")
@@ -148,8 +152,24 @@ export async function loadAllHistory(
     } else if (sinceIso) {
       query = query.gte("captured_at", sinceIso);
     }
-    const { data, error } = await query;
-    if (error) throw error;
+    return query;
+  };
+
+  for (;;) {
+    // Retried, because this loop makes ~1000 sequential requests over several
+    // minutes and Supabase's edge proxy drops a socket mid-stream often enough
+    // that an unretried page failure took the whole job down twice in a row.
+    // Paging is idempotent: the cursor only advances after a successful page, so
+    // a retry re-requests exactly the same range.
+    const at = cursor;
+    const data = await withRetry(
+      async () => {
+        const { data: pageRows, error } = await buildPage(at);
+        if (error) throw error;
+        return pageRows;
+      },
+      { label: `player_value_history page${at ? ` after ${at.ts}` : ""}` },
+    );
     if (!data || data.length === 0) break;
     rows.push(...(data as HistoryRow[]));
     if (data.length < PAGE) break;

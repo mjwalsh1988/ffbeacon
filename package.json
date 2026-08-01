@@ -23,6 +23,7 @@
     "calculate:beacon": "tsx --env-file=.env.local scripts/calculate-beacon-values.ts",
     "beacon:reference": "tsx --env-file=.env.local scripts/beacon-reference.ts",
     "beacon:preview": "tsx --env-file=.env.local scripts/beacon-calibration-preview.ts",
+    "backfill:beacon-calibrated": "tsx --env-file=.env.local scripts/backfill-beacon-calibrated-history.ts",
     "beacon:tests": "tsx --env-file=.env.local scripts/beacon-reliability-tests.ts",
     "beacon:audit": "tsx --env-file=.env.local scripts/beacon-normalization-audit.ts",
     "beacon:offset-test": "tsx scripts/beacon-offset-trends-test.ts",
