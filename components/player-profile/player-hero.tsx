@@ -6,7 +6,7 @@
  * band closes the hero with the team's colors and crowd chant. Server component.
  */
 
-import Link from "next/link";
+import { SiteBreadcrumb } from "@/components/site-breadcrumb";
 import { PlayerPortrait } from "@/components/player-profile/player-portrait";
 import { TeamAnthem } from "@/components/player-profile/team-anthem";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
@@ -77,25 +77,15 @@ export function PlayerHero({
       />
 
       <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-ink-muted">
-          <ol className="flex items-center gap-2">
-            <li>
-              <Link href="/" className="hover:text-ink">
-                Home
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link href={`/rankings?position=${player.position}`} className="hover:text-ink">
-                {player.position}
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li aria-current="page" className="text-ink">
-              {fullName}
-            </li>
-          </ol>
-        </nav>
+        <SiteBreadcrumb
+          homeHref="/"
+          homeLabel="FF Beacon"
+          crumbs={[
+            { label: player.position, href: `/rankings?position=${player.position}` },
+            { label: fullName },
+          ]}
+          className="mb-6"
+        />
 
         {/* Player photo beside the identity; the full-width Team Anthem banner
             sits below with breathing room. The headshot is a rounded photo shown
