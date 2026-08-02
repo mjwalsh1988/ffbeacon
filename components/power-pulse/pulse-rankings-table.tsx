@@ -20,6 +20,7 @@ import { Fragment, useState } from "react";
 import Link from "next/link";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
+import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
 import { PulseDetail, ordinal, pct } from "./pulse-detail";
 
@@ -97,9 +98,10 @@ export function PulseRankingsTable({
         <table className="w-full text-sm">
           <caption className="sr-only">
             Power Pulse rankings, ordered by Power Pulse score. Columns: rank,
-            team, Power Pulse score, trade value rank with the difference between
-            the two rankings, projected record, playoff odds, and lineup
-            efficiency. Activate a team to open its full breakdown.
+            team, Power Pulse score, outlook (competing, mid-table, or
+            rebuilding), trade value rank with the difference between the two
+            rankings, projected record, playoff odds, and lineup efficiency.
+            Activate a team to open its full breakdown.
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
@@ -111,6 +113,9 @@ export function PulseRankingsTable({
               </th>
               <th scope="col" className="px-3 py-3 text-center">
                 Pulse
+              </th>
+              <th scope="col" className="hidden px-3 py-3 text-left md:table-cell">
+                Outlook
               </th>
               <th
                 scope="col"
@@ -173,6 +178,14 @@ export function PulseRankingsTable({
                       </span>
                     </td>
 
+                    <td className="hidden px-3 py-2.5 md:table-cell">
+                      {team.status ? (
+                        <TeamStatusBadge status={team.status} size="sm" compact />
+                      ) : (
+                        <span className="text-xs text-ink-subtle">--</span>
+                      )}
+                    </td>
+
                     <td className="hidden px-3 py-2.5 text-right md:table-cell">
                       <DivergenceChip team={team} />
                     </td>
@@ -207,7 +220,7 @@ export function PulseRankingsTable({
 
                   {isOpen && (
                     <tr className="hidden md:table-row">
-                      <td colSpan={8} id={detailId} className="bg-base/40 px-5 py-5">
+                      <td colSpan={9} id={detailId} className="bg-base/40 px-5 py-5">
                         <PulseDetail
                           team={team}
                           teamCount={teamCount}
@@ -260,6 +273,19 @@ export function PulseRankingsTable({
                 {sheetTeam.powerPulse}
               </span>
             </header>
+            {sheetTeam.status && (
+              <div className="mt-4 rounded-card border border-line bg-base px-4 py-3">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
+                  Outlook
+                </span>
+                <span className="mt-1.5 block">
+                  <TeamStatusBadge status={sheetTeam.status} />
+                </span>
+                <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+                  {sheetTeam.status.reason}
+                </p>
+              </div>
+            )}
             <div className="pt-4">
               <PulseDetail
                 team={sheetTeam}

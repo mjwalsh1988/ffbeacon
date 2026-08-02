@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { X, Users, CalendarDays, Trophy, ArrowRight } from "lucide-react";
 import type { SleeperLeague } from "@/lib/sleeper";
+import type { TeamStatus } from "@/lib/league-team-status";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
+import { TeamStatusBadge, TeamStatusPending } from "@/components/team-status-badge";
 
 /**
  * Slide-up modal showing the deep details for a single Sleeper league,
- * teams, season, status, roster shape, and the action button that syncs
- * the league into our DB and opens its deep view.
+ * teams, season, status, where this user's own team stands, and the action
+ * button that syncs the league into our DB and opens its deep view.
  */
 export function LeagueDetailSheet({
   league,
@@ -17,6 +19,7 @@ export function LeagueDetailSheet({
   sleeperUsername,
   statusDisplay,
   statusTone,
+  teamStatus,
 }: {
   league: SleeperLeague;
   open: boolean;
@@ -28,20 +31,25 @@ export function LeagueDetailSheet({
   statusDisplay: string;
   /** Tailwind classes for the status badge background + text. */
   statusTone: string;
+  /** Competitor / Middle of the pack / Rebuilder for this user's own team.
+   * Null when the league has never been pulsed. */
+  teamStatus: TeamStatus | null;
 }) {
-  const positions = aggregatePositions(league.roster_positions ?? []);
   // Plain link to the deep view so the branded loading boundary shows
   // instantly on click; the deep-view page runs the sync under the loader.
   // ?name= gives the deep view a correct <title> on first open, before the
   // league row is synced (the DB name takes precedence once it exists).
-  // First load lands on Overview; forward ?username= (not ?tab=teams) so the
-  // Teams tab can still default its chips to this user's roster later.
+  // A league with no Power Pulse yet opens on the Power Pulse tab instead of
+  // Overview, because that is the number the sheet just had to leave blank.
   const hrefParams = new URLSearchParams();
   if (sleeperUsername) {
     hrefParams.set("username", sleeperUsername);
   }
   hrefParams.set("name", league.name);
-  const href = `/leagues/${league.league_id}?${hrefParams.toString()}`;
+  const basePath = teamStatus
+    ? `/leagues/${league.league_id}`
+    : `/leagues/${league.league_id}/power-pulse`;
+  const href = `${basePath}?${hrefParams.toString()}`;
 
   return (
     <SlideUpDialog
@@ -102,31 +110,24 @@ export function LeagueDetailSheet({
             />
           </dl>
 
-          <section aria-labelledby="roster-heading" className="mt-6">
+          <section aria-labelledby="standing-heading" className="mt-6">
             <h3
-              id="roster-heading"
+              id="standing-heading"
               className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
             >
-              Roster composition
+              Your team
             </h3>
-            {positions.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-muted">
-                No roster positions reported by Sleeper for this league.
-              </p>
-            ) : (
-              <ul
-                role="list"
-                aria-label="Starting roster positions and counts"
-                className="mt-3 flex flex-wrap gap-2"
-              >
-                {positions.map((entry) => (
-                  <PositionPill key={entry.position} entry={entry} />
-                ))}
-              </ul>
-            )}
-            <p className="mt-3 text-xs text-ink-subtle">
-              Bench slots are excluded. Counts include FLEX, SUPER_FLEX, and
-              IDP positions exactly as Sleeper publishes them.
+            <div className="mt-3">
+              {teamStatus ? (
+                <TeamStatusBadge status={teamStatus} />
+              ) : (
+                <TeamStatusPending />
+              )}
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+              {teamStatus
+                ? teamStatus.reason
+                : "We have never loaded this league, so there is nothing to compare your roster against yet. Opening it runs Power Pulse and fills this in."}
             </p>
           </section>
         </div>
@@ -135,12 +136,17 @@ export function LeagueDetailSheet({
         <div className="border-t border-line bg-surface px-5 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-ink-muted">
-              Opens the deep view, including rosters, transactions, and power
-              rankings.
+              {teamStatus
+                ? "Opens the deep view, including rosters, transactions, and power rankings."
+                : "Opens Power Pulse, which calculates expected performance for every team."}
             </p>
             <Link
               href={href}
-              aria-label={`Open ${league.name} deep view`}
+              aria-label={
+                teamStatus
+                  ? `Open ${league.name} deep view`
+                  : `Open ${league.name} Power Pulse, which calculates this league for the first time`
+              }
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               Open league
@@ -150,73 +156,6 @@ export function LeagueDetailSheet({
         </div>
       </div>
     </SlideUpDialog>
-  );
-}
-
-/* ---------- Roster aggregation ---------- */
-
-type PositionEntry = { position: string; count: number };
-
-/**
- * Collapses Sleeper's raw `roster_positions` array (e.g.
- * ["QB","RB","RB","WR","WR","WR","TE","FLEX","FLEX","K","DEF","BN","BN"])
- * into an aggregated count per slot type, skipping bench, and sorted by
- * a stable starting-lineup order with anything unknown trailing.
- */
-function aggregatePositions(raw: string[]): PositionEntry[] {
-  const counts = new Map<string, number>();
-  for (const slot of raw) {
-    if (slot === "BN") continue;
-    counts.set(slot, (counts.get(slot) ?? 0) + 1);
-  }
-  const order = ["QB", "RB", "WR", "TE", "FLEX", "REC_FLEX", "SUPER_FLEX", "K", "DEF", "IDP_FLEX", "DL", "LB", "DB"];
-  return Array.from(counts.entries())
-    .sort((a, b) => {
-      const ai = order.indexOf(a[0]);
-      const bi = order.indexOf(b[0]);
-      if (ai === -1 && bi === -1) return a[0].localeCompare(b[0]);
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi;
-    })
-    .map(([position, count]) => ({ position, count }));
-}
-
-/**
- * Friendlier label per slot type. Falls back to the raw token so an
- * unrecognized future Sleeper format still renders something useful.
- */
-const POSITION_LABEL: Record<string, string> = {
-  QB: "QB",
-  RB: "RB",
-  WR: "WR",
-  TE: "TE",
-  FLEX: "FLEX",
-  REC_FLEX: "WR/TE",
-  SUPER_FLEX: "SF",
-  K: "K",
-  DEF: "DEF",
-  IDP_FLEX: "IDP FLEX",
-  DL: "DL",
-  LB: "LB",
-  DB: "DB",
-};
-
-function PositionPill({ entry }: { entry: PositionEntry }) {
-  const label = POSITION_LABEL[entry.position] ?? entry.position;
-  return (
-    <li>
-      <span
-        aria-label={`${entry.count} ${label} slot${entry.count === 1 ? "" : "s"}`}
-        className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-xs"
-      >
-        <span className="font-mono font-semibold text-brand-cyan">{label}</span>
-        <span aria-hidden="true" className="text-ink-subtle">×</span>
-        <span className="font-semibold tabular-nums text-ink">
-          {entry.count}
-        </span>
-      </span>
-    </li>
   );
 }
 

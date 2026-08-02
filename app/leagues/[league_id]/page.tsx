@@ -9,6 +9,9 @@ import {
 } from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
+import { loadLeagueReadiness, type LeagueReadiness } from "@/lib/league-readiness";
+import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
+import { PreDraftNotice } from "@/components/power-pulse/pre-draft-notice";
 import { type SleeperLeague } from "@/lib/sleeper";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { TeamFilter } from "@/components/team-filter";
@@ -196,6 +199,16 @@ export default async function LeagueDeepViewPage({
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
   const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";
 
+  // A league at or before its draft, with nothing drafted or no schedule
+  // posted, cannot be ranked honestly. Both tabs below say so plainly rather
+  // than sorting a table of ties. See lib/league-readiness.ts.
+  const readiness = await loadLeagueReadiness(
+    supabase,
+    league.id,
+    Number(league.season ?? 0),
+    league.status ?? null,
+  );
+
   // Value coverage + format/source, resolved once and shared by the info panel,
   // power rankings, and teams list. "none" means no source covers the league's
   // format, so the value-dependent surfaces get nulls and render name-only.
@@ -373,6 +386,7 @@ export default async function LeagueDeepViewPage({
                 showPicksToggle={showPicksToggle}
                 rankMode={rankMode}
                 powerPulseHref={powerPulseHref}
+                readiness={readiness}
               />
             </div>
           </div>
@@ -411,6 +425,7 @@ export default async function LeagueDeepViewPage({
               leagueStatus={league.status ?? null}
               includePicks={includePicks}
               showPicksToggle={showPicksToggle}
+              readiness={readiness}
             />
           </div>
         )}
@@ -464,6 +479,7 @@ async function TeamsPanel({
   leagueStatus,
   includePicks,
   showPicksToggle,
+  readiness,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -475,6 +491,7 @@ async function TeamsPanel({
   leagueStatus: string | null;
   includePicks: boolean;
   showPicksToggle: boolean;
+  readiness: LeagueReadiness;
 }) {
   const supabase = await createClient();
 
@@ -482,21 +499,39 @@ async function TeamsPanel({
     ? (await supabase.from("format_configs").select("id").eq("slug", formatSlug).maybeSingle()).data?.id ?? null
     : null;
 
-  const teams = await loadLeagueTeamCards(
-    supabase,
-    leagueRowId,
-    formatConfigId,
-    sourceSlug,
-    leagueSeason,
-    leagueStatus,
-    includePicks,
-  );
+  const [teams, pulseView] = await Promise.all([
+    loadLeagueTeamCards(
+      supabase,
+      leagueRowId,
+      formatConfigId,
+      sourceSlug,
+      leagueSeason,
+      leagueStatus,
+      includePicks,
+    ),
+    readiness.preDraft || !leagueSeason
+      ? Promise.resolve(null)
+      : loadPowerPulseView(
+          supabase,
+          leagueRowId,
+          Number(leagueSeason),
+          formatConfigId,
+          sourceSlug,
+        ),
+  ]);
   if (teams.length === 0) {
     return (
       <p className="text-sm text-ink-muted">
         No rosters synced yet. Try refreshing in a moment.
       </p>
     );
+  }
+
+  // Competitor / Middle of the pack / Rebuilder per roster, so a team card
+  // carries the same tag the rankings table and the league list show.
+  const statusByRoster: Record<string, TeamStatus> = {};
+  for (const t of pulseView?.teams ?? []) {
+    if (t.status) statusByRoster[t.rosterRowId] = t.status;
   }
 
   return (
@@ -512,6 +547,14 @@ async function TeamsPanel({
           </p>
         )}
       </div>
+      {readiness.preDraft && (
+        <PreDraftNotice
+          readiness={readiness}
+          teams={[]}
+          season={leagueSeason}
+          variant="inline"
+        />
+      )}
       {showPicksToggle && (
         <div className="flex justify-start">
           <PicksToggle includePicks={includePicks} />
@@ -523,6 +566,7 @@ async function TeamsPanel({
         searchedUsername={searchedUsername}
         focusedRosterId={focusedRosterId}
         valueIsBeacon={sourceSlug === "ffbeacon"}
+        statusByRoster={statusByRoster}
       />
     </section>
   );
@@ -542,6 +586,7 @@ async function PowerRankingsSection({
   showPicksToggle,
   rankMode,
   powerPulseHref,
+  readiness,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -558,8 +603,21 @@ async function PowerRankingsSection({
   rankMode: RankMode;
   /** Link to the full Power Pulse tab, with the searched handle forwarded. */
   powerPulseHref: string;
+  /** Pre-draft leagues get a listing with a warning, not a ranking. */
+  readiness: LeagueReadiness;
 }) {
   const supabase = await createClient();
+
+  if (readiness.preDraft) {
+    return (
+      <PreDraftRoster
+        leagueRowId={leagueRowId}
+        leagueSeason={leagueSeason}
+        leagueStatus={leagueStatus}
+        readiness={readiness}
+      />
+    );
+  }
 
   if (!sourceSlug || !formatSlug) {
     return (
@@ -689,7 +747,8 @@ async function PowerRankingsSection({
           <caption className="sr-only">
             League power rankings, ordered by{" "}
             {effectiveMode === "pulse" ? "Power Pulse" : "team value"}. Columns:
-            rank, team, Power Pulse score, positional rank (QB, RB, WR, TE
+            rank, team, Power Pulse score, whether the team is competing,
+            mid-table, or rebuilding, positional rank (QB, RB, WR, TE
             {includePicks ? ", Picks" : ""}), then total team value
             {includePicks ? "" : " counting players only"} with its league rank.
             Top three for each position column are highlighted cyan; bottom three
@@ -705,6 +764,9 @@ async function PowerRankingsSection({
               </th>
               <th scope="col" className="px-2 py-3 text-center">
                 Pulse
+              </th>
+              <th scope="col" className="hidden px-3 py-3 text-left md:table-cell">
+                Outlook
               </th>
               <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
                 QB
@@ -751,6 +813,7 @@ async function PowerRankingsSection({
                   powerPulse: pulseByRoster.get(t.rosterRowId)?.powerPulse ?? null,
                   pulseRank: pulseByRoster.get(t.rosterRowId)?.pulseRank ?? null,
                   valueRank: valueRankByRoster.get(t.rosterRowId) ?? null,
+                  status: pulseByRoster.get(t.rosterRowId)?.status ?? null,
                   positionRanks: {
                     QB: t.positionRanks.QB,
                     RB: t.positionRanks.RB,
@@ -774,6 +837,87 @@ async function PowerRankingsSection({
   );
 }
 
+
+/**
+ * The overview's stand-in for the rankings table before a league has drafted.
+ *
+ * The teams are still listed, which is what the reader came for, but nothing
+ * is ranked and the notice above says so in as many words. Sorting by name
+ * rather than by any cached number is deliberate: an alphabetical list cannot
+ * be mistaken for a standings table the way a numbered one can.
+ */
+async function PreDraftRoster({
+  leagueRowId,
+  leagueSeason,
+  leagueStatus,
+  readiness,
+}: {
+  leagueRowId: string;
+  leagueSeason: string | null;
+  leagueStatus: string | null;
+  readiness: LeagueReadiness;
+}) {
+  const supabase = await createClient();
+  const teams = await loadLeagueTeamCards(
+    supabase,
+    leagueRowId,
+    null,
+    null,
+    leagueSeason,
+    leagueStatus,
+    false,
+  );
+
+  return (
+    <div className="space-y-6">
+      <PreDraftNotice
+        readiness={readiness}
+        teams={[]}
+        season={leagueSeason}
+        variant="inline"
+      />
+      <Panel
+        id="pr"
+        eyebrow="Standings"
+        title="Power Rankings"
+        helper="Listed alphabetically. There is no ranking to show until the draft finishes and the schedule posts."
+        bodyClassName="p-0"
+      >
+        {teams.length === 0 ? (
+          <p className="px-4 py-4 text-sm text-ink-muted sm:px-5">
+            No rosters synced yet. Try refreshing in a moment.
+          </p>
+        ) : (
+          <ul role="list" className="divide-y divide-line">
+            {[...teams]
+              .sort((a, b) => a.teamName.localeCompare(b.teamName))
+              .map((t) => (
+                <li
+                  key={t.rosterRowId}
+                  className="flex items-center gap-3 px-4 py-3 sm:px-5"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-ink">
+                      {t.teamName}
+                    </span>
+                    {t.ownerSleeperUsername && (
+                      <span className="block truncate text-[11px] text-ink-subtle">
+                        @{t.ownerSleeperUsername}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
+                    {t.record.wins}-{t.record.losses}
+                    {t.record.ties ? `-${t.record.ties}` : ""}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        )}
+      </Panel>
+    </div>
+  );
+}
 
 function formatRelative(date: Date): string {
   const diffMs = Date.now() - date.getTime();

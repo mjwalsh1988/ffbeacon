@@ -16,6 +16,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { closestScoringBase } from "@/lib/league-scoring";
+import { isDraftPending } from "@/lib/league-readiness";
 import { getNflState } from "@/lib/sleeper";
 import { resolveCurrentWeek, syncLeagueMatchups } from "@/lib/league-matchups";
 import { computePowerPulse, type PowerPulseTeamResult } from "@/lib/power-pulse/engine";
@@ -142,6 +143,20 @@ export async function calculateLeaguePowerPulse(
     return { ok: true, teams: 0, season: league.season, currentWeek, skipped: "no rosters" };
   }
 
+  // Nothing drafted yet. Every team would score zero, the ranks would be a
+  // shuffle of ties, and we would cache that as though it meant something. Bail
+  // before the expensive loads; the UI renders the pre-draft state instead.
+  const rostersFilled = rosters.some((r) => r.playerSleeperIds.length > 0);
+  if (isDraftPending(league.status) && !rostersFilled) {
+    return {
+      ok: true,
+      teams: 0,
+      season: league.season,
+      currentWeek,
+      skipped: "draft pending with empty rosters",
+    };
+  }
+
   const sleeperIds = Array.from(
     new Set(rosters.flatMap((r) => r.playerSleeperIds)),
   );
@@ -168,6 +183,19 @@ export async function calculateLeaguePowerPulse(
       season: league.season,
       currentWeek,
       skipped: `no weekly projections stored for ${league.season} from week ${currentWeek}`,
+    };
+  }
+
+  // No head-to-head slate while the draft is still pending. Wins, playoff odds,
+  // and strength of schedule would all be answers about a schedule that does
+  // not exist yet, so store nothing rather than something wrong.
+  if (isDraftPending(league.status) && schedule.weeks.length === 0) {
+    return {
+      ok: true,
+      teams: 0,
+      season: league.season,
+      currentWeek,
+      skipped: "draft pending with no published schedule",
     };
   }
 

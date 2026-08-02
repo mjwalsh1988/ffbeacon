@@ -5,6 +5,8 @@ import { useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { BeaconValue } from "@/components/beacon-value-icon";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { TeamStatusBadge } from "@/components/team-status-badge";
+import type { TeamStatus } from "@/lib/league-team-status";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import type {
   DraftPickAsset,
@@ -30,6 +32,10 @@ type TeamCardProps = {
   /** True when the league's selected value source is FF Beacon, so each
    * position subtotal renders with the FF Beacon mark. */
   valueIsBeacon?: boolean;
+  /** Competitor / Middle of the pack / Rebuilder for this roster. Null before
+   * Power Pulse has run for the league, and on pre-draft leagues where there
+   * is nothing to judge yet. */
+  teamStatus?: TeamStatus | null;
 };
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE"] as const;
@@ -75,6 +81,7 @@ export function TeamCard({
   onToggleExpand,
   searchedUsername = null,
   valueIsBeacon = false,
+  teamStatus = null,
 }: TeamCardProps) {
   const HeadingTag = headingLevel;
   const collapsible = typeof onToggleExpand === "function";
@@ -164,6 +171,11 @@ export function TeamCard({
               <p className="mt-0.5 truncate text-xs text-ink-subtle">
                 Owner: {ownerDisplayName || `@${ownerSleeperUsername}`}
               </p>
+            )}
+            {teamStatus && (
+              <span className="mt-1.5 block">
+                <TeamStatusBadge status={teamStatus} size="sm" />
+              </span>
             )}
           </div>
         </div>

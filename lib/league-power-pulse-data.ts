@@ -13,6 +13,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -87,6 +88,11 @@ export type PulseTeam = {
    * assets suggest; negative means it is holding value it cannot start.
    */
   rankDivergence: number | null;
+  /**
+   * Competitor / Middle of the pack / Rebuilder, derived from the two ranks
+   * above. Null when there is no Power Pulse rank to read.
+   */
+  status: TeamStatus | null;
 };
 
 export type PowerPulseView = {
@@ -229,6 +235,11 @@ export async function loadPowerPulseView(
       totalValue: valueByRoster.get(row.roster_id) ?? null,
       valueRank,
       rankDivergence: valueRank !== null && pulseRank !== null ? valueRank - pulseRank : null,
+      status: classifyTeamStatus({
+        pulseRank,
+        valueRank,
+        teamCount: pulseRows.length,
+      }),
     };
   });
 

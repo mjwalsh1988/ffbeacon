@@ -8,6 +8,11 @@ import { StepRail } from "./step-rail";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { resolveSourceSlug } from "@/lib/preferences";
+import {
+  loadSearchedTeamStatuses,
+  type LeagueTeamStatusSummary,
+} from "@/lib/league-team-status-data";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { HeroLavaField } from "@/components/hero-lava-field";
@@ -57,12 +62,28 @@ export default async function LeaguePulsePage({
   let leagues: Awaited<ReturnType<typeof getSleeperLeagues>> = [];
   let error: string | null = null;
 
+  // Where this user's own team stands in each league, for the leagues we have
+  // already pulsed. Read-only: the entry point never syncs, so leagues nobody
+  // has opened stay unsynced and say so rather than costing a calculation each.
+  let teamStatuses: Record<string, LeagueTeamStatusSummary> = {};
+
   if (usernameInput) {
     user = await getSleeperUser(usernameInput);
     if (!user) {
       error = `No Sleeper user found for "${usernameInput}".`;
     } else {
       leagues = await getSleeperLeagues(user.user_id, season);
+      if (leagues.length > 0) {
+        const resolvedSource = await resolveSourceSlug(supabase, undefined);
+        const statusMap = await loadSearchedTeamStatuses(
+          supabase,
+          leagues.map((l) => l.league_id),
+          user.user_id,
+          Number(season),
+          resolvedSource.slug,
+        );
+        teamStatuses = Object.fromEntries(statusMap);
+      }
     }
   }
 
@@ -203,6 +224,7 @@ export default async function LeaguePulsePage({
                 leagues={leagues}
                 season={season}
                 sleeperUsername={user.display_name ?? usernameInput ?? null}
+                teamStatuses={teamStatuses}
               />
             )}
           </div>

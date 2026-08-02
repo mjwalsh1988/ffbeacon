@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { TeamCard } from "@/components/team-card";
 import { TeamChipBar, type TeamChipBarTeam } from "@/components/team-chip-bar";
 import type { TeamCardData } from "@/lib/league-view-data";
+import type { TeamStatus } from "@/lib/league-team-status";
 
 export type TeamFilterProps = {
   teams: TeamCardData[];
@@ -19,6 +20,9 @@ export type TeamFilterProps = {
   /** True when the league's selected value source is FF Beacon, forwarded to
    * each TeamCard so position subtotals render with the FF Beacon mark. */
   valueIsBeacon?: boolean;
+  /** Competitor / Middle of the pack / Rebuilder, keyed by roster row id.
+   * Empty before Power Pulse has run for the league. */
+  statusByRoster?: Record<string, TeamStatus>;
 };
 
 /**
@@ -34,6 +38,7 @@ export function TeamFilter({
   searchedUsername,
   focusedRosterId,
   valueIsBeacon = false,
+  statusByRoster = {},
 }: TeamFilterProps) {
   const ownerRosterId = useMemo(
     () => resolveOwnerRosterId(teams, searchedUsername, focusedRosterId),
@@ -170,6 +175,7 @@ export function TeamFilter({
                 onToggleExpand={() => handleToggleExpand(t.sleeperRosterId)}
                 searchedUsername={searchedUsername}
                 valueIsBeacon={valueIsBeacon}
+                teamStatus={statusByRoster[t.rosterRowId] ?? null}
               />
             </li>
           ))}

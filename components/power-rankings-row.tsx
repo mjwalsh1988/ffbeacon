@@ -5,6 +5,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { BeaconValue } from "@/components/beacon-value-icon";
+import { TeamStatusBadge } from "@/components/team-status-badge";
+import type { TeamStatus } from "@/lib/league-team-status";
 
 /**
  * One row of the Power Rankings table on the league overview.
@@ -48,6 +50,9 @@ export type PowerRankingsRowData = {
   pulseRank: number | null;
   /** League rank by total team value, 1 = most valuable. */
   valueRank: number | null;
+  /** Competitor / Middle of the pack / Rebuilder. Null before the first
+   * Power Pulse calculation, which is also when powerPulse is null. */
+  status: TeamStatus | null;
 };
 
 export function PowerRankingsRow({
@@ -114,6 +119,17 @@ export function PowerRankingsRow({
           pulseRank={data.pulseRank}
           teamCount={teamCount}
         />
+        {/* Outlook. Short label here so the column stays narrow; the badge's
+            aria-label still carries the full wording and the reasoning. Hidden
+            below md alongside the other analysis columns, where the sheet
+            picks it up. */}
+        <td className="hidden px-3 py-2 md:table-cell">
+          {data.status ? (
+            <TeamStatusBadge status={data.status} size="sm" compact />
+          ) : (
+            <span className="text-xs text-ink-subtle">-</span>
+          )}
+        </td>
         <PositionRankCell rank={data.positionRanks.QB} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.RB} teamCount={teamCount} />
         <PositionRankCell rank={data.positionRanks.WR} teamCount={teamCount} />
@@ -383,6 +399,22 @@ function TeamRankSheet({
             <span aria-hidden="true">✕</span>
           </button>
         </header>
+
+        {/* Outlook, which the desktop table shows in its own column. Full
+            label and the reasoning, since there is room here. */}
+        {data.status && (
+          <div className="mx-5 mt-4 rounded-card border border-line bg-base px-4 py-3">
+            <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
+              Outlook
+            </span>
+            <span className="mt-1.5 block">
+              <TeamStatusBadge status={data.status} />
+            </span>
+            <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+              {data.status.reason}
+            </p>
+          </div>
+        )}
 
         {/* Power Pulse and total value side by side. The desktop table shows
             both, so the sheet must too. */}

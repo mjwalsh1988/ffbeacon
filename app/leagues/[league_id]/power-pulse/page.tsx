@@ -24,6 +24,9 @@ import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
 import { ProjectedStandings } from "@/components/power-pulse/projected-standings";
 import { TitleRace } from "@/components/power-pulse/title-race";
 import { HowPowerPulseWorks } from "@/components/power-pulse/how-power-pulse-works";
+import { PreDraftNotice } from "@/components/power-pulse/pre-draft-notice";
+import { loadLeagueReadiness } from "@/lib/league-readiness";
+import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { formatEastern } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
@@ -110,13 +113,47 @@ export default async function LeaguePowerPulsePage({
   const context = await resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug);
   const coverageOk = context.coverage !== "none";
 
-  const view = await loadPowerPulseView(
+  // Readiness first: a league that has not drafted, or that Sleeper has not
+  // paired up yet, has no honest numbers to show and gets the waiting state
+  // instead of a table of zeroes. See lib/league-readiness.ts.
+  const readiness = await loadLeagueReadiness(
     supabase,
     league.id,
     Number(league.season),
-    coverageOk ? context.formatConfigId : null,
-    coverageOk ? context.sourceSlug : null,
+    league.status ?? null,
   );
+
+  const view = readiness.preDraft
+    ? null
+    : await loadPowerPulseView(
+        supabase,
+        league.id,
+        Number(league.season),
+        coverageOk ? context.formatConfigId : null,
+        coverageOk ? context.sourceSlug : null,
+      );
+
+  // The roster list is only needed for the waiting state, where it is the
+  // whole point: the reader still gets to see who is in the league.
+  const preDraftTeams = readiness.preDraft
+    ? (
+        await loadLeagueTeamCards(
+          supabase,
+          league.id,
+          null,
+          null,
+          league.season != null ? String(league.season) : null,
+          league.status ?? null,
+          false,
+        )
+      ).map((t) => ({
+        rosterRowId: t.rosterRowId,
+        sleeperRosterId: t.sleeperRosterId,
+        teamName: t.teamName,
+        ownerHandle: t.ownerSleeperUsername,
+        ownerAvatarId: t.ownerAvatarId,
+      }))
+    : [];
 
   const settings = (league.metadata as { settings?: Record<string, number> } | null)?.settings ?? {};
   const playoffTeams = Number(settings.playoff_teams ?? 6);
@@ -241,7 +278,16 @@ export default async function LeaguePowerPulsePage({
           )}
         </section>
 
-        {!view ? (
+        {readiness.preDraft ? (
+          <div className="mt-6 space-y-6">
+            <PreDraftNotice
+              readiness={readiness}
+              teams={preDraftTeams}
+              season={league.season}
+            />
+            <LeagueInfoPanel layout="horizontal" {...infoPanelProps} />
+          </div>
+        ) : !view ? (
           <div className="mt-6">
             <Panel
               eyebrow="Building"
@@ -251,8 +297,7 @@ export default async function LeaguePowerPulsePage({
               <p className="text-sm text-ink-muted">
                 We need Sleeper's weekly projections and this league's head-to-head
                 schedule before we can project anything. Both arrive on the next
-                sync, so refreshing in a moment usually does it. If this league is
-                mid-draft, Power Pulse waits until rosters are filled.
+                sync, so refreshing in a moment usually does it.
               </p>
             </Panel>
           </div>

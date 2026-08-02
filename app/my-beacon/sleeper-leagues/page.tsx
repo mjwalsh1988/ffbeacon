@@ -8,6 +8,11 @@ import {
   currentNflSeason,
 } from "@/lib/sleeper";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { resolveSourceSlug } from "@/lib/preferences";
+import {
+  loadSearchedTeamStatuses,
+  type LeagueTeamStatusSummary,
+} from "@/lib/league-team-status-data";
 import { LeagueResults } from "@/app/tools/league-pulse/league-results";
 import { SaveUsernameForm } from "./save-username-form";
 
@@ -38,10 +43,24 @@ export default async function SleeperLeaguesPage() {
 
   let leagues: Awaited<ReturnType<typeof getSleeperLeagues>> = [];
   let sleeperUser = null;
+  // Standing per league, read from cache only. Same contract as the public
+  // tool: this page never triggers a sync, so unopened leagues report pending.
+  let teamStatuses: Record<string, LeagueTeamStatusSummary> = {};
   if (sleeperUsername) {
     sleeperUser = await getSleeperUser(sleeperUsername);
     if (sleeperUser) {
       leagues = await getSleeperLeagues(sleeperUser.user_id, season);
+      if (leagues.length > 0) {
+        const resolvedSource = await resolveSourceSlug(supabase, undefined);
+        const statusMap = await loadSearchedTeamStatuses(
+          supabase,
+          leagues.map((l) => l.league_id),
+          sleeperUser.user_id,
+          Number(season),
+          resolvedSource.slug,
+        );
+        teamStatuses = Object.fromEntries(statusMap);
+      }
     }
   }
 
@@ -140,6 +159,7 @@ export default async function SleeperLeaguesPage() {
               sleeperUsername={sleeperUser?.display_name ?? sleeperUsername ?? null}
               featuredLeagueId={featuredLeagueId}
               shownLeagueIds={shownLeagueIds}
+              teamStatuses={teamStatuses}
             />
           </div>
         )}

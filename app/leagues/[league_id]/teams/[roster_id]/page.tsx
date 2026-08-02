@@ -8,6 +8,8 @@ import {
   describeDerived,
 } from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
+import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
+import { loadLeagueReadiness } from "@/lib/league-readiness";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamCard } from "@/components/team-card";
@@ -132,6 +134,28 @@ export default async function TeamDetailPage({
   const team = allTeams.find((t) => t.sleeperRosterId === sleeperRosterId);
   if (!team) notFound();
 
+  // Competitor / Middle of the pack / Rebuilder, the same tag this team wears
+  // on the league list, the rankings table, and the Power Pulse tab. Skipped
+  // entirely for a league that has not drafted, where there is nothing to call.
+  const readiness = await loadLeagueReadiness(
+    supabase,
+    league.id,
+    Number(league.season ?? 0),
+    league.status ?? null,
+  );
+  const pulseView =
+    readiness.preDraft || league.season == null
+      ? null
+      : await loadPowerPulseView(
+          supabase,
+          league.id,
+          Number(league.season),
+          formatConfigId,
+          effectiveSourceSlug,
+        );
+  const teamStatus =
+    pulseView?.teams.find((t) => t.rosterRowId === team.rosterRowId)?.status ?? null;
+
   const sourceDisplay =
     context.coverage === "none" ? "N/A" : context.sourceDisplay;
   const formatDisplay =
@@ -233,6 +257,7 @@ export default async function TeamDetailPage({
           showViewTeamPageLink={false}
           headingLevel="h1"
           valueIsBeacon={effectiveSourceSlug === "ffbeacon"}
+          teamStatus={teamStatus}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
