@@ -14,6 +14,11 @@ import { RefreshButton } from "@/components/refresh-button";
  * the inner wrapper dissolves via `display:contents` so every control sits
  * inline, right aligned. Pass `className` to position the cluster inside a
  * parent grid (e.g. the overview header's `sm:col-start-2 sm:row-start-1`).
+ *
+ * `w-full` on mobile is load-bearing. Most deep-view headers put this cluster
+ * in a `flex flex-wrap` row beside the breadcrumb, where a flex item sizes to
+ * its content: without it the whole cluster shrank to a narrow column against
+ * the right edge instead of spanning the container.
  */
 export function LeagueHeaderActions({
   sleeperLeagueId,
@@ -32,7 +37,7 @@ export function LeagueHeaderActions({
 }) {
   return (
     <div
-      className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end ${className ?? ""}`}
+      className={`flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end ${className ?? ""}`}
     >
       <div
         className={`grid gap-2 sm:contents ${
