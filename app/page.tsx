@@ -255,7 +255,7 @@ function Hero({
             />
             <Link
               href="/tools/on-the-clock"
-              className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface/70 px-5 py-3 text-sm font-medium text-ink backdrop-blur-sm transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface/70 px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               <Timer aria-hidden="true" className="h-4 w-4" />
               Live draft help
@@ -270,7 +270,7 @@ function Hero({
             {HERO_FEATURES.map(({ icon: Icon, label }) => (
               <li
                 key={label}
-                className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3.5 py-2 text-sm font-medium text-ink-muted backdrop-blur-sm"
+                className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3.5 py-2 text-sm font-medium text-ink-muted"
               >
                 <Icon
                   aria-hidden="true"
@@ -325,7 +325,7 @@ function DiscordCommunityCard({
   return (
     <section
       aria-labelledby="discord-card-heading"
-      className="relative overflow-hidden rounded-modal border border-brand-purple/40 bg-surface-elevated/80 p-6 shadow-xl shadow-black/40 backdrop-blur-md sm:p-7"
+      className="relative overflow-hidden rounded-modal border border-brand-purple/40 bg-surface-elevated/80 p-6 shadow-xl shadow-black/40 sm:p-7"
     >
       {/* Beacon wash in the corner. Decorative. */}
       <div

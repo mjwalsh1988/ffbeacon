@@ -504,6 +504,12 @@
  * mass across the base that clumps sink into and separate from, which gives the
  * merge something to happen against near the bottom of the frame.
  *
+ * The filter has to run again on every frame anything inside it moves, and this
+ * hero is on every page, so section 4 at the bottom of this block is where the
+ * cost is actually managed: containment, a tighter filter region on wide
+ * screens, a hard pause when the hero is off screen, and a cheaper single-pass
+ * fallback for machines that measured too slow to run the merge.
+ *
  * Under prefers-reduced-motion the whole field freezes into a still molten
  * frame, which is a perfectly good static background.
  */
@@ -819,20 +825,7 @@
   animation-name: lava-morph-d;
 }
 
-/* --- 2b. Shockwave disturbance layer. ---
- *
- * A bare transform layer sitting between travel and shape, so the pulse can
- * push and squash a clump without fighting either. It has no CSS animation of
- * its own: components/hero-lava-lamp.tsx drives it through the Web Animations
- * API when a pulse sweeps past, with a per-clump delay derived from how far
- * along the wave's path that clump sits. That is what makes the disturbance
- * travel with the wave instead of hitting the whole field at once. */
-.lava-pulse-layer {
-  height: 100%;
-  width: 100%;
-}
-
-/* --- 2c. Color drift. ---
+/* --- 2b. Color drift. ---
  *
  * A tint plate over a clump's own fill, cross-faded in and out on a long cycle.
  * Animating opacity is the only way to move between two gradients smoothly:
@@ -941,11 +934,14 @@
   }
 }
 
+/* No `will-change: transform` here on purpose. A running transform animation
+   already gets its own compositor layer, so the hint changed nothing while the
+   field was moving and cost six large layers of GPU memory per hero the rest of
+   the time, on every page, whether the hero was on screen or not. */
 .lava-wash {
   position: absolute;
   animation-iteration-count: infinite;
   animation-timing-function: cubic-bezier(0.42, 0, 0.58, 1);
-  will-change: transform;
 }
 
 .lava-wash-a {
@@ -958,6 +954,56 @@
   animation-name: lava-wash-c;
 }
 
+/* --- 4. The layer everything above lives on, and what it costs. --- */
+
+/* Containment tells the browser that nothing inside this backdrop can change
+   the size, position, or painting of anything outside it. The field repaints
+   constantly, so keeping that invalidation from being walked back up through
+   the page on every frame is worth having. */
+.lava-field {
+  contain: layout paint;
+}
+
+/* The wax layer carries the goo filter and the opacity that keeps the clumps
+   reading as part of the field rather than as objects on top of it.
+
+   The filter region is a percentage of this element, which is why there are two
+   of them. At 375px wide, 20% is 75px, about what the 26px blur reaches. At
+   1920px the same 20% is 384px a side, all of it blurred at full resolution and
+   then thrown away by the hero's `overflow: hidden`. Past 1280px the tighter
+   region still gives the blur 77px or more and cuts the filtered area by a
+   fifth. */
+.lava-wax-layer {
+  filter: url(#hero-lava-goo);
+  opacity: 0.88;
+}
+
+@media (min-width: 1280px) {
+  .lava-wax-layer {
+    filter: url(#hero-lava-goo-wide);
+  }
+}
+
+/* Off screen, or in a background tab. Pausing rather than hiding holds every
+   clump exactly where it was, so scrolling back finds the field where it was
+   left instead of snapped to a new arrangement. A paused field is a static
+   picture: the filter result stays cached and the whole backdrop drops to zero
+   per-frame cost. */
+.lava-idle .lava-wax,
+.lava-idle .lava-morph,
+.lava-idle .lava-tint,
+.lava-idle .lava-wash {
+  animation-play-state: paused;
+}
+
+/* The downgrade for machines that measured too slow to run the merge. One blur
+   pass instead of four, so clumps keep their color, motion, and soft edges but
+   stop bridging into each other. See the probe in
+   components/hero-lava-lamp.tsx for when this engages. */
+.lava-field.lava-lite .lava-wax-layer {
+  filter: blur(9px);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lava-wax,
   .lava-morph,
@@ -967,8 +1013,7 @@
   }
 
   /* The tint plate holds at its resting opacity of 0, so a frozen field shows
-     each clump in its own base color. The pulse loop bails out on the same
-     media query, so the disturbance layer never moves either. */
+     each clump in its own base color. */
 }
 
 /* Live "online now" indicator dot, used on the Discord stats card. */

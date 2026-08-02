@@ -14,9 +14,13 @@ import { useEffect, useState } from "react";
  *     directly on the page, and on the homepage the hero is pulled up behind
  *     the header (see the Hero's negative top margin) so its backdrop shows
  *     through.
- *   - Condensed (after any scroll): a translucent, blurred, rounded floating
- *     pill with a soft border and drop shadow, so the controls stay legible
- *     over real page content.
+ *   - Condensed (after any scroll): a rounded floating pill with a soft border
+ *     and drop shadow, so the controls stay legible over real page content.
+ *
+ * The condensed pill used to carry `backdrop-blur-xl`. Its background is 95%
+ * opaque, so the blur was contributing about 5% of a frosted look while asking
+ * the browser to re-sample and blur whatever sits behind it on every scroll
+ * frame, on every page, including the animating hero backdrop. It is gone.
  *
  * Nothing paints the full width in either state. An earlier version faded a
  * solid plate behind the condensed pill, but the fade ended below the header
@@ -47,7 +51,7 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
       <div
         className={`mx-auto flex h-14 max-w-7xl items-center gap-3 transition-all duration-300 motion-reduce:transition-none ${
           scrolled
-            ? "rounded-full border border-line-accent bg-surface-elevated/95 pl-4 pr-3 shadow-xl shadow-black/60 ring-1 ring-brand-purple/10 backdrop-blur-xl sm:pl-5 sm:pr-4"
+            ? "rounded-full border border-line-accent bg-surface-elevated/95 pl-4 pr-3 shadow-xl shadow-black/60 ring-1 ring-brand-purple/10 sm:pl-5 sm:pr-4"
             : "border border-transparent bg-transparent px-0 shadow-none"
         }`}
       >

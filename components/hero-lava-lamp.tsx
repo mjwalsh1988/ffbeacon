@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * Lava lamp backdrop for the homepage hero.
+ * Lava lamp backdrop for the site's heroes.
  *
  * THE MERGE IS REAL. Every wax element sits inside one container carrying
  * `filter: url(#hero-lava-goo)`, defined below: blur the whole group, then run
@@ -17,17 +17,16 @@ import { useEffect, useMemo, useRef } from "react";
  * gradient and reads molten rather than flat, and a final 3px blur melts the
  * join.
  *
- * FOUR MOTIONS, ALL DECOUPLED. Each clump is three nested elements so the
+ * THREE MOTIONS, ALL DECOUPLED. Each clump is two nested elements so the
  * transforms never fight:
  *
  *   1. Travel (outer). A wandering closed loop that reverses direction several
  *      times per cycle, 26s to 56s, running forward or reversed.
- *   2. Shockwave push (middle). Idle until a pulse sweeps past; see below.
- *   3. Shape (inner). `border-radius`, non-uniform scale, and rotation on a much
+ *   2. Shape (inner). `border-radius`, non-uniform scale, and rotation on a much
  *      faster 6.5s to 12.5s clock, swinging roughly 0.78 to 1.28 per axis, so a
  *      clump squashes wide, stretches tall, and rolls over several times per
  *      trip.
- *   4. Color drift (tint plate). Some clumps carry a plate that cross-fades
+ *   3. Color drift (tint plate). Some clumps carry a plate that cross-fades
  *      toward brand cyan #22D3EE, brand purple #A855F7, or a blend of the two,
  *      then back to the clump's own color, on its own long cycle.
  *
@@ -36,18 +35,7 @@ import { useEffect, useMemo, useRef } from "react";
  * deformation pattern, color, and tint are derived from it through a mulberry32
  * PRNG. Deriving rather than calling `Math.random()` during render is what keeps
  * the server HTML and the client's first render byte-identical, so there is no
- * hydration mismatch and no re-shuffle flash after mount. The only `Math.random`
- * calls happen inside the pulse loop, which runs after mount and so cannot
- * desync anything.
- *
- * THE PULSE. Every 5s to 15s a wide, soft wave enters from one corner and
- * travels diagonally across the field. As it arrives, each clump gets a push
- * along the wave's direction plus a squash and rebound, delayed by how far along
- * the wave's path that clump sits, so the disturbance travels with the wave
- * rather than hitting everything at once. Direction (all four corner pairs,
- * jittered), strength, sweep time, and per-clump push are randomized per pulse.
- * Afterwards each clump settles back into its own wander with nothing latched,
- * because the disturbance animations use `fill: "none"`.
+ * hydration mismatch and no re-shuffle flash after mount.
  *
  * COLOR. Clumps are drawn from the same family as the field rather than sitting
  * above it as bright objects: a dense body color that could pass for background
@@ -72,8 +60,24 @@ import { useEffect, useMemo, useRef } from "react";
  * does the same for the nav, which sits transparent over this at the top of
  * every page.
  *
- * Under prefers-reduced-motion every CSS animation stops and the pulse loop
- * never starts, leaving a still, fully branded molten frame.
+ * COST. The goo filter is the expensive part: four full-region passes that have
+ * to run again on every frame the wax moves. Three things keep that in bounds.
+ *
+ *   - The field stops when nobody is looking at it. An IntersectionObserver
+ *     pauses every animation once the hero scrolls out of range, and the tab's
+ *     visibility does the same. A paused field paints once and then costs
+ *     nothing, which matters because this hero sits at the top of every page and
+ *     readers spend most of their time below it.
+ *   - Wide viewports use a tighter filter region. The region is a percentage of
+ *     the element, so a 20% margin that is right at phone widths becomes 380
+ *     unused pixels a side at 1920, all of it blurred and then thrown away by
+ *     the hero's own `overflow: hidden`. Past 1280px the region drops to 12%,
+ *     which still clears the 78px the 26px blur actually reaches.
+ *   - Machines that cannot keep up drop to a single blur pass. See the probe
+ *     below.
+ *
+ * Under prefers-reduced-motion every CSS animation stops, leaving a still,
+ * fully branded molten frame.
  */
 
 /* ---------- seeded randomness ---------- */
@@ -185,9 +189,6 @@ type Clump = {
   /** Vertical anchor as a percentage from `anchor`. */
   offset: number;
   anchor: "top" | "bottom";
-  /** Normalized center, for projecting onto a pulse's direction. */
-  cx: number;
-  cy: number;
   height: number;
   width: number;
   background: string;
@@ -238,8 +239,6 @@ function buildClumps(seed: number, zone: HeroCopyZone): Clump[] {
       left,
       offset,
       anchor,
-      cx,
-      cy: anchor === "top" ? offset / 100 : 1 - offset / 100,
       height,
       width: height * between(rand, 0.86, 1.06),
       background: pick(rand, nearCopy ? MUTED_BODIES : OPEN_BODIES),
@@ -258,25 +257,49 @@ function buildClumps(seed: number, zone: HeroCopyZone): Clump[] {
   });
 }
 
-/* ---------- the pulse ---------- */
-
-/** Rotations for the four corner-to-corner diagonals, in screen space. */
-const PULSE_ANGLES = [35, 145, 215, 325] as const;
-
-const PULSE_MIN_GAP_MS = 5000;
-const PULSE_MAX_GAP_MS = 15000;
+/* ---------- adaptive quality ---------- */
 
 /**
- * Where a clump sits along a wave's direction, as 0 (first touched) to 1 (last).
- * The projection is normalized against the range the unit square spans for that
- * direction, so the delays always cover the whole sweep whichever way it runs.
+ * Some machines cannot run a four-pass filter over a full-width layer at
+ * anything like a usable frame rate, and when that happens the cost does not
+ * stay in the hero: the main thread is busy enough that menus and typing lag
+ * behind the reader. So the field measures itself and steps down if it has to.
+ *
+ * The probe waits until hydration and the first data paint are well past, then
+ * samples the gap between real frames and takes the median. Median rather than
+ * mean because one 400ms stall from somewhere else on the page should not
+ * condemn a machine that is otherwise fine. Past 32ms the browser is holding
+ * under about 31fps with the field on screen, at which point the merge is
+ * already stuttering and is buying nothing for what it costs.
+ *
+ * A downgraded field trades the metaball merge for one blur pass: the clumps
+ * keep their colors, motion, and soft edges but stop bridging into each other.
+ * The verdict is cached for the session so the next page starts light instead
+ * of measuring its way through the same jank again.
  */
-function projection(cx: number, cy: number, dx: number, dy: number): number {
-  const min = Math.min(0, dx) + Math.min(0, dy);
-  const max = Math.max(0, dx) + Math.max(0, dy);
-  const span = max - min;
-  if (span === 0) return 0.5;
-  return (cx * dx + cy * dy - min) / span;
+const LITE_STORAGE_KEY = "ffb-hero-lite";
+const PROBE_DELAY_MS = 2000;
+const PROBE_SAMPLES = 90;
+const PROBE_MEDIAN_LIMIT_MS = 32;
+
+function readLiteVerdict(): boolean | null {
+  try {
+    const stored = window.sessionStorage.getItem(LITE_STORAGE_KEY);
+    if (stored === "1") return true;
+    if (stored === "0") return false;
+  } catch {
+    // Private modes and locked-down profiles throw on sessionStorage. Measure
+    // again rather than giving up on the downgrade entirely.
+  }
+  return null;
+}
+
+function writeLiteVerdict(lite: boolean): void {
+  try {
+    window.sessionStorage.setItem(LITE_STORAGE_KEY, lite ? "1" : "0");
+  } catch {
+    // Same as above. The verdict still applies to this page.
+  }
 }
 
 export function HeroLavaLamp({
@@ -287,103 +310,104 @@ export function HeroLavaLamp({
   copy?: HeroCopyZone;
 }) {
   const clumps = useMemo(() => buildClumps(seed, copy), [seed, copy]);
-  const pulseRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const waveRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Both default to the running state so the server HTML and the client's first
+  // render agree. Anything else would either mismatch on hydration or blink.
+  const [onScreen, setOnScreen] = useState(true);
+  const [tabVisible, setTabVisible] = useState(true);
+  const [lite, setLite] = useState(false);
+  const idle = !onScreen || !tabVisible;
+
+  /* Stop the field when nobody can see it. This is the single biggest saving
+     here: the hero sits at the top of every page, so on any page with content
+     the reader spends most of their time with it scrolled away, and a paused
+     field paints once and then costs nothing at all. The margin resumes it just
+     before it scrolls back in, so it is never caught frozen. */
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[entries.length - 1];
+        if (entry) setOnScreen(entry.isIntersecting);
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      typeof Element.prototype.animate !== "function" ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    const onVisibility = () => setTabVisible(!document.hidden);
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  /* Frame-pacing probe. Only runs while the field is actually on screen and
+     animating, otherwise it would measure a page with the hero paused, decide
+     the machine is fine, and cache that for the whole session. */
+  useEffect(() => {
+    if (idle || lite) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const cached = readLiteVerdict();
+    if (cached !== null) {
+      if (cached) setLite(true);
       return;
     }
 
-    let timer: number | undefined;
+    let frame = 0;
+    let previous = 0;
+    const gaps: number[] = [];
 
-    const fire = () => {
-      const wave = waveRef.current;
-      if (!wave) return;
+    const sample = (now: number) => {
+      if (previous !== 0) gaps.push(now - previous);
+      previous = now;
 
-      // Direction, strength, and sweep time are all fresh each pulse.
-      const angle =
-        PULSE_ANGLES[Math.floor(Math.random() * PULSE_ANGLES.length)] +
-        (Math.random() * 24 - 12);
-      const radians = (angle * Math.PI) / 180;
-      const dx = Math.cos(radians);
-      const dy = Math.sin(radians);
-      const strength = 0.55 + Math.random() * 0.75;
-      const sweep = 2600 + Math.random() * 1600;
+      if (gaps.length < PROBE_SAMPLES) {
+        frame = requestAnimationFrame(sample);
+        return;
+      }
 
-      const at = (distance: string) =>
-        `translate(-50%, -50%) rotate(${angle}deg) translateX(${distance})`;
-
-      wave.animate(
-        [
-          { transform: at("-340%"), opacity: 0 },
-          { transform: at("-130%"), opacity: 0.5 * strength, offset: 0.24 },
-          { transform: at("130%"), opacity: 0.5 * strength, offset: 0.76 },
-          { transform: at("340%"), opacity: 0 },
-        ],
-        { duration: sweep, easing: "linear", fill: "none" },
-      );
-
-      clumps.forEach((clump, i) => {
-        const el = pulseRefs.current[i];
-        if (!el) return;
-
-        const push = (12 + Math.random() * 16) * strength;
-        const squash = (0.1 + Math.random() * 0.1) * strength;
-
-        el.animate(
-          [
-            { transform: "translate(0px, 0px) scale(1, 1)" },
-            {
-              transform: `translate(${dx * push}px, ${dy * push}px) scale(${(1 + squash).toFixed(3)}, ${(1 - squash * 0.8).toFixed(3)})`,
-              offset: 0.34,
-            },
-            {
-              transform: `translate(${(-dx * push * 0.32).toFixed(2)}px, ${(-dy * push * 0.32).toFixed(2)}px) scale(${(1 - squash * 0.55).toFixed(3)}, ${(1 + squash * 0.65).toFixed(3)})`,
-              offset: 0.68,
-            },
-            { transform: "translate(0px, 0px) scale(1, 1)" },
-          ],
-          {
-            duration: 1500,
-            // The wave reaches each clump at its own moment, so the ripple
-            // crosses the field instead of firing everywhere together.
-            delay: projection(clump.cx, clump.cy, dx, dy) * sweep,
-            easing: "cubic-bezier(0.33, 0, 0.2, 1)",
-            fill: "none",
-          },
-        );
-      });
+      const sorted = [...gaps].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      const slow = median > PROBE_MEDIAN_LIMIT_MS;
+      writeLiteVerdict(slow);
+      if (slow) setLite(true);
     };
 
-    const schedule = () => {
-      const gap =
-        PULSE_MIN_GAP_MS + Math.random() * (PULSE_MAX_GAP_MS - PULSE_MIN_GAP_MS);
-      timer = window.setTimeout(() => {
-        if (document.visibilityState === "visible") fire();
-        schedule();
-      }, gap);
-    };
+    const start = window.setTimeout(() => {
+      frame = requestAnimationFrame(sample);
+    }, PROBE_DELAY_MS);
 
-    schedule();
     return () => {
-      if (timer !== undefined) window.clearTimeout(timer);
+      window.clearTimeout(start);
+      if (frame) cancelAnimationFrame(frame);
     };
-  }, [clumps]);
+  }, [idle, lite]);
 
   return (
     <div
+      ref={rootRef}
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 overflow-hidden"
+      className={`lava-field pointer-events-none absolute inset-0 overflow-hidden${
+        idle ? " lava-idle" : ""
+      }${lite ? " lava-lite" : ""}`}
     >
       {/* The goo filter. `colorInterpolationFilters="sRGB"` is not optional: the
           default linearRGB washes the brand colors out badly. The zero-size
           absolutely positioned host is the pattern Safari needs to keep the
-          filter live. */}
+          filter live.
+
+          Two copies of the same graph, differing only in region. The region is
+          expressed as a percentage of the element, so one setting cannot suit
+          both a 375px phone and a 1920px desktop: 20% is 75px on the phone,
+          which the 26px blur needs, and 384px on the desktop, almost all of it
+          blurred and then discarded by the hero's `overflow: hidden`. The CSS
+          picks the tighter one past 1280px, where 12% still clears 78px. */}
       <svg
         width="0"
         height="0"
@@ -418,6 +442,28 @@ export function HeroLavaLamp({
             <feComposite in="SourceGraphic" in2="goo" operator="atop" result="molten" />
             <feGaussianBlur in="molten" stdDeviation="3" />
           </filter>
+
+          <filter
+            id="hero-lava-goo-wide"
+            x="-6%"
+            y="-20%"
+            width="112%"
+            height="140%"
+            colorInterpolationFilters="sRGB"
+          >
+            <feGaussianBlur in="SourceGraphic" stdDeviation="26" result="blurred" />
+            <feColorMatrix
+              in="blurred"
+              type="matrix"
+              values="1 0 0 0 0
+                      0 1 0 0 0
+                      0 0 1 0 0
+                      0 0 0 24 -11"
+              result="goo"
+            />
+            <feComposite in="SourceGraphic" in2="goo" operator="atop" result="molten" />
+            <feGaussianBlur in="molten" stdDeviation="3" />
+          </filter>
         </defs>
       </svg>
 
@@ -445,10 +491,7 @@ export function HeroLavaLamp({
       ))}
 
       {/* The wax. Everything in here merges. */}
-      <div
-        className="absolute inset-0"
-        style={{ filter: "url(#hero-lava-goo)", opacity: 0.88 }}
-      >
+      <div className="lava-wax-layer absolute inset-0">
         {/* Shallow pool across the base, so clumps have a mass to sink into and
             separate from near the bottom of the frame. */}
         <div
@@ -478,53 +521,29 @@ export function HeroLavaLamp({
             }}
           >
             <div
-              className="lava-pulse-layer"
-              ref={(node) => {
-                pulseRefs.current[i] = node;
+              className={`lava-morph lava-morph-${clump.morph}`}
+              style={{
+                background: clump.background,
+                animationDuration: `${clump.morphDuration.toFixed(2)}s`,
+                animationDelay: `${clump.morphDelay.toFixed(2)}s`,
+                animationDirection: clump.morphDirection,
               }}
             >
-              <div
-                className={`lava-morph lava-morph-${clump.morph}`}
-                style={{
-                  background: clump.background,
-                  animationDuration: `${clump.morphDuration.toFixed(2)}s`,
-                  animationDelay: `${clump.morphDelay.toFixed(2)}s`,
-                  animationDirection: clump.morphDirection,
-                }}
-              >
-                {clump.tint && (
-                  <div
-                    className="lava-tint"
-                    style={{
-                      background: clump.tint.background,
-                      animationDuration: `${clump.tint.duration.toFixed(2)}s`,
-                      animationDelay: `${clump.tint.delay.toFixed(2)}s`,
-                      ["--lava-tint-peak" as string]: clump.tint.peak.toFixed(3),
-                    }}
-                  />
-                )}
-              </div>
+              {clump.tint && (
+                <div
+                  className="lava-tint"
+                  style={{
+                    background: clump.tint.background,
+                    animationDuration: `${clump.tint.duration.toFixed(2)}s`,
+                    animationDelay: `${clump.tint.delay.toFixed(2)}s`,
+                    ["--lava-tint-peak" as string]: clump.tint.peak.toFixed(3),
+                  }}
+                />
+              )}
             </div>
           </div>
         ))}
       </div>
-
-      {/* The shockwave. A wide, soft swell rather than a line: 46% of the field
-          across, heavily blurred, screen-blended, and invisible at rest. The
-          Web Animations API drives it, so each sweep gets its own angle,
-          strength, and speed. */}
-      <div
-        ref={waveRef}
-        className="absolute left-1/2 top-1/2 h-[320%] w-[46%]"
-        style={{
-          opacity: 0,
-          transform: "translate(-50%, -50%)",
-          background:
-            "linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.07) 26%, rgba(34, 211, 238, 0.15) 42%, rgba(168, 85, 247, 0.19) 50%, rgba(34, 211, 238, 0.15) 58%, rgba(34, 211, 238, 0.07) 74%, transparent 100%)",
-          filter: "blur(26px)",
-          mixBlendMode: "screen",
-        }}
-      />
 
       {/* Nav scrim. The header sits transparent over the top of this at the top
           of the page, so its links need a settled surface underneath. */}

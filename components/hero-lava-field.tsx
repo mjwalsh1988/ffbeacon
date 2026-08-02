@@ -13,8 +13,8 @@ import { HeroLavaLamp, type HeroCopyZone } from "@/components/hero-lava-lamp";
  *
  * On a dynamic page this re-rolls per request and every visit looks different.
  * On a statically rendered page the seed is fixed at build time, so that hero
- * keeps one arrangement until the next deploy. Both are fine; the motion,
- * color drift, and pulses run either way.
+ * keeps one arrangement until the next deploy. Both are fine; the motion and
+ * color drift run either way.
  *
  * `copy` tells the field where this page's hero text sits so it can keep its
  * bright cores away from it. See HeroCopyZone in hero-lava-lamp.tsx. Getting it
