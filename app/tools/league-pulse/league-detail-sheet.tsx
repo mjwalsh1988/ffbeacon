@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { X, Users, CalendarDays, Trophy, ArrowRight } from "lucide-react";
+import { LeagueOpenLink } from "@/components/league-open-link";
 import type { SleeperLeague } from "@/lib/sleeper";
 import type { TeamStatus } from "@/lib/league-team-status";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
@@ -39,17 +39,14 @@ export function LeagueDetailSheet({
   // instantly on click; the deep-view page runs the sync under the loader.
   // ?name= gives the deep view a correct <title> on first open, before the
   // league row is synced (the DB name takes precedence once it exists).
-  // A league with no Power Pulse yet opens on the Power Pulse tab instead of
-  // Overview, because that is the number the sheet just had to leave blank.
+  // Always the Overview, whether or not the league has been pulsed before:
+  // the front door, not a sub-page of a league nobody has opened yet.
   const hrefParams = new URLSearchParams();
   if (sleeperUsername) {
     hrefParams.set("username", sleeperUsername);
   }
   hrefParams.set("name", league.name);
-  const basePath = teamStatus
-    ? `/leagues/${league.league_id}`
-    : `/leagues/${league.league_id}/power-pulse`;
-  const href = `${basePath}?${hrefParams.toString()}`;
+  const href = `/leagues/${league.league_id}?${hrefParams.toString()}`;
 
   return (
     <SlideUpDialog
@@ -127,7 +124,7 @@ export function LeagueDetailSheet({
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">
               {teamStatus
                 ? teamStatus.reason
-                : "We have never loaded this league, so there is nothing to compare your roster against yet. Opening it runs Power Pulse and fills this in."}
+                : "We have never loaded this league, so there is nothing to compare your roster against yet. Opening it fills this in."}
             </p>
           </section>
         </div>
@@ -138,20 +135,21 @@ export function LeagueDetailSheet({
             <p className="text-xs text-ink-muted">
               {teamStatus
                 ? "Opens the deep view, including rosters, transactions, and power rankings."
-                : "Opens Power Pulse, which calculates expected performance for every team."}
+                : "Opens the deep view and calculates this league for the first time."}
             </p>
-            <Link
+            <LeagueOpenLink
+              sleeperLeagueId={league.league_id}
               href={href}
-              aria-label={
+              ariaLabel={
                 teamStatus
                   ? `Open ${league.name} deep view`
-                  : `Open ${league.name} Power Pulse, which calculates this league for the first time`
+                  : `Open ${league.name} deep view, which calculates this league for the first time`
               }
               className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               Open league
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
+            </LeagueOpenLink>
           </div>
         </div>
       </div>

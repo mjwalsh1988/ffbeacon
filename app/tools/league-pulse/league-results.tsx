@@ -11,7 +11,7 @@ import {
   SlidersHorizontal,
   Trophy,
 } from "lucide-react";
-import Link from "next/link";
+import { LeagueOpenLink } from "@/components/league-open-link";
 import type { SleeperLeague } from "@/lib/sleeper";
 import {
   groupLeaguesByCategory,
@@ -31,23 +31,22 @@ import { LeagueDetailSheet } from "./league-detail-sheet";
 export type TeamStatusMap = Record<string, LeagueTeamStatusSummary>;
 
 /**
- * Where a row should land.
+ * Where a row should land: always the league's Overview.
  *
- * A league we already know about opens on its Overview, which is what a reader
- * wants when they can already see how their team is doing. A league with no
- * Power Pulse row opens straight on the Power Pulse tab instead, because the
- * only reason that row says "Not yet synced" is that nobody has ever opened it,
- * and Power Pulse is the number they just tried to read.
+ * Rows for leagues we had never pulsed used to open on the Power Pulse tab
+ * instead, on the theory that the missing Pulse number was what the reader had
+ * just tried to read. In practice it dropped people into a sub-page of a league
+ * they had not seen yet. Overview is the front door for every row, synced or
+ * not, and the Power Pulse tab is one click from there.
  *
- * Also forwards ?username= so the deep view knows whose roster to default the
- * Teams chips to, and ?name= so the <title> is right on a league's first open,
- * before the row exists for generateMetadata to read.
+ * Forwards ?username= so the deep view knows whose roster to default the Teams
+ * chips to, and ?name= so the <title> is right on a league's first open, before
+ * the row exists for generateMetadata to read.
  */
 function leagueHref(
   leagueId: string,
   sleeperUsername: string | null,
   leagueName: string | null,
-  destination: "overview" | "power-pulse" = "overview",
 ): string {
   const params = new URLSearchParams();
   if (sleeperUsername) {
@@ -55,10 +54,7 @@ function leagueHref(
   }
   if (leagueName) params.set("name", leagueName);
   const qs = params.toString();
-  const base =
-    destination === "power-pulse"
-      ? `/leagues/${leagueId}/power-pulse`
-      : `/leagues/${leagueId}`;
+  const base = `/leagues/${leagueId}`;
   return qs ? `${base}?${qs}` : base;
 }
 
@@ -344,17 +340,13 @@ function DesktopPublicList({
               key={league.league_id}
               className="transition-colors hover:bg-surface/60 focus-within:bg-surface/60"
             >
-              <Link
-                href={leagueHref(
-                  league.league_id,
-                  sleeperUsername,
-                  league.name,
-                  teamStatus ? "overview" : "power-pulse",
-                )}
-                aria-label={
+              <LeagueOpenLink
+                sleeperLeagueId={league.league_id}
+                href={leagueHref(league.league_id, sleeperUsername, league.name)}
+                ariaLabel={
                   teamStatus
                     ? `Open ${league.name}, ${label}, ${league.total_rosters} teams. Your team: ${teamStatus.label}. ${teamStatus.reason}`
-                    : `Open ${league.name}, ${label}, ${league.total_rosters} teams. Your team has no Power Pulse yet; this opens the Power Pulse tab, which calculates it.`
+                    : `Open ${league.name}, ${label}, ${league.total_rosters} teams. Your team has no standing yet; opening the league calculates it.`
                 }
                 className={`group grid w-full items-center gap-3 px-4 py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan ${PUBLIC_GRID}`}
               >
@@ -386,7 +378,7 @@ function DesktopPublicList({
                     className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
                   />
                 </span>
-              </Link>
+              </LeagueOpenLink>
             </li>
           );
         })}
@@ -543,14 +535,10 @@ function DesktopDashboardTable({
                   {/* The league-name link is the ONLY navigational action on
                       the row. Status / teams / standing cells beside it are
                       non-interactive. */}
-                  <Link
-                    href={leagueHref(
-                      league.league_id,
-                      sleeperUsername,
-                      league.name,
-                      teamStatus ? "overview" : "power-pulse",
-                    )}
-                    aria-label={`Open ${league.name} deep view`}
+                  <LeagueOpenLink
+                    sleeperLeagueId={league.league_id}
+                    href={leagueHref(league.league_id, sleeperUsername, league.name)}
+                    ariaLabel={`Open ${league.name} deep view`}
                     className="group inline-flex max-w-full flex-col items-start gap-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                   >
                     <span className="inline-flex max-w-full items-center gap-2 text-base font-semibold text-ink group-hover:text-brand-purple">
@@ -563,7 +551,7 @@ function DesktopDashboardTable({
                     <span className="text-xs text-ink-subtle">
                       {league.season} season
                     </span>
-                  </Link>
+                  </LeagueOpenLink>
                 </td>
                 <td className="px-3 py-4 text-center">
                   <StatusBadge label={label} tone={tone} />
@@ -647,14 +635,10 @@ function MobileDashboardCards({
             {/* League-name link is the only navigational action.
                 Toggle row sits beneath it, separated by a visible
                 divider so the tap zones don't compete. */}
-            <Link
-              href={leagueHref(
-                league.league_id,
-                sleeperUsername,
-                league.name,
-                teamStatus ? "overview" : "power-pulse",
-              )}
-              aria-label={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams. Your team: ${
+            <LeagueOpenLink
+              sleeperLeagueId={league.league_id}
+              href={leagueHref(league.league_id, sleeperUsername, league.name)}
+              ariaLabel={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams. Your team: ${
                 teamStatus ? teamStatus.label : "not synced yet"
               }`}
               className="group block w-full p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
@@ -683,7 +667,7 @@ function MobileDashboardCards({
                   <TeamStatusPending />
                 )}
               </div>
-            </Link>
+            </LeagueOpenLink>
             <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
               <FeaturedToggle
                 leagueName={league.name}
