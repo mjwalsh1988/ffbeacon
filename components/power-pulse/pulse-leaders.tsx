@@ -127,8 +127,18 @@ export function PulseLeaders({ leaders }: { leaders: PulseLeader[] }) {
                 title={leader.team.teamName}
                 size={32}
               />
-              <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                {leader.team.teamName}
+              {/* Handle under the name, matching every other place a team is
+                  identified on this tab. The award means nothing if the reader
+                  cannot tell whose team won it. */}
+              <p className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-ink">
+                  {leader.team.teamName}
+                </span>
+                {leader.team.ownerHandle && (
+                  <span className="block truncate text-[11px] text-ink-subtle">
+                    @{leader.team.ownerHandle}
+                  </span>
+                )}
               </p>
               <p className={`shrink-0 font-mono text-base font-extrabold tabular-nums ${theme.text}`}>
                 {leader.value}

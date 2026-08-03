@@ -85,8 +85,18 @@ export function ProjectedStandings({
                       title={team.teamName}
                       size={24}
                     />
-                    <span className="min-w-0 truncate text-xs font-medium text-ink">
-                      {team.teamName}
+                    {/* Team name over Sleeper handle, matching the rankings
+                        table. Team names get renamed and reused; the handle is
+                        how a reader knows which manager this actually is. */}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-ink">
+                        {team.teamName}
+                      </span>
+                      {team.ownerHandle && (
+                        <span className="block truncate text-[11px] text-ink-subtle">
+                          @{team.ownerHandle}
+                        </span>
+                      )}
                     </span>
                   </span>
                 </td>

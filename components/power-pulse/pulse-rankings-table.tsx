@@ -83,6 +83,13 @@ export function PulseRankingsTable({
   const [sheetTeam, setSheetTeam] = useState<PulseTeam | null>(null);
   const teamCount = teams.length;
 
+  // This table is the only component on the tab holding every team, so it is
+  // where the roster-id to handle lookup belongs. The expanded detail uses it
+  // to name upcoming opponents the same way the rows themselves are named.
+  const handleByRoster = new Map<number, string | null>(
+    teams.map((t) => [t.sleeperRosterId, t.ownerHandle]),
+  );
+
   const hrefFor = (team: PulseTeam) => {
     const qs = new URLSearchParams({
       tab: "teams",
@@ -225,6 +232,7 @@ export function PulseRankingsTable({
                           team={team}
                           teamCount={teamCount}
                           teamHref={hrefFor(team)}
+                          handleByRoster={handleByRoster}
                         />
                       </td>
                     </tr>
@@ -292,6 +300,7 @@ export function PulseRankingsTable({
                 teamCount={teamCount}
                 teamHref={hrefFor(sheetTeam)}
                 onNavigate={() => setSheetTeam(null)}
+                handleByRoster={handleByRoster}
               />
             </div>
           </div>

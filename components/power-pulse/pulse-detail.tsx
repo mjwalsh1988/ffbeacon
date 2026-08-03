@@ -83,12 +83,19 @@ export function PulseDetail({
   teamCount,
   teamHref,
   onNavigate,
+  handleByRoster,
 }: {
   team: PulseTeam;
   teamCount: number;
   teamHref: string;
   /** Called when the "View team" link is activated, so a sheet can close. */
   onNavigate?: () => void;
+  /**
+   * Sleeper handle per roster id, so an upcoming opponent can be named the same
+   * way every other team on this tab is. Built by the table, which is the only
+   * component here that holds the whole league.
+   */
+  handleByRoster?: Map<number, string | null>;
 }) {
   const nextThree = team.weekly.slice(0, 3);
 
@@ -260,7 +267,12 @@ export function PulseDetail({
             Next three weeks
           </h3>
           <ul className="mt-2 space-y-1.5">
-            {nextThree.map((w) => (
+            {nextThree.map((w) => {
+              const opponentHandle =
+                w.opponentRosterId === null
+                  ? null
+                  : handleByRoster?.get(w.opponentRosterId) ?? null;
+              return (
               <li
                 key={w.week}
                 className="flex items-center justify-between gap-3 rounded-card border border-line bg-base/50 px-3 py-2"
@@ -269,13 +281,17 @@ export function PulseDetail({
                   <span className="font-mono font-semibold text-ink-subtle">
                     Wk {w.week}
                   </span>{" "}
-                  <span className="truncate">vs {w.opponentName ?? "no opponent"}</span>
+                  <span className="truncate">
+                    vs {w.opponentName ?? "no opponent"}
+                    {opponentHandle ? ` (@${opponentHandle})` : ""}
+                  </span>
                 </span>
                 <span className="shrink-0 font-mono text-xs font-bold tabular-nums text-brand-cyan">
                   {w.winProb === null ? "--" : `${Math.round(w.winProb * 100)}% win`}
                 </span>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       )}
