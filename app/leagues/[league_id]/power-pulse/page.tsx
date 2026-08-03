@@ -22,9 +22,10 @@ import { Panel, StatReadout } from "@/components/dashboard-panel";
 import { PulseRankingsTable } from "@/components/power-pulse/pulse-rankings-table";
 import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
 import { ProjectedStandings } from "@/components/power-pulse/projected-standings";
-import { TitleRace } from "@/components/power-pulse/title-race";
+import { ProjectedChampion } from "@/components/power-pulse/projected-champion";
 import { HowPowerPulseWorks } from "@/components/power-pulse/how-power-pulse-works";
 import { PreDraftNotice } from "@/components/power-pulse/pre-draft-notice";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { loadLeagueReadiness } from "@/lib/league-readiness";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { formatEastern } from "@/lib/datetime";
@@ -122,6 +123,11 @@ export default async function LeaguePowerPulsePage({
     Number(league.season),
     league.status ?? null,
   );
+
+  // The champion section states how many seasons were simulated, so it reads
+  // the same admin-editable setting the simulation itself runs on rather than
+  // repeating a number that could drift out of date.
+  const pulseSettings = await loadPowerPulseSettings(adminClient);
 
   const view = readiness.preDraft
     ? null
@@ -285,7 +291,7 @@ export default async function LeaguePowerPulsePage({
               teams={preDraftTeams}
               season={league.season}
             />
-            <LeagueInfoPanel layout="horizontal" {...infoPanelProps} />
+            <LeagueInfoPanel layout="horizontal" headingLevel={2} {...infoPanelProps} />
           </div>
         ) : !view ? (
           <div className="mt-6">
@@ -302,79 +308,92 @@ export default async function LeaguePowerPulsePage({
             </Panel>
           </div>
         ) : (
-          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-            {/* Main column: the rankings, then the standings, then the awards. */}
-            <div className="min-w-0 space-y-6">
-              <Panel
-                eyebrow="The ranking"
-                title="Power Pulse rankings"
-                helper="Ranked by expected performance. The value column shows each team's trade-value rank and how far it sits from where it competes."
-                bodyClassName="p-0"
-                glow
+          // Rail on the LEFT, matching the overview tab. Below xl the grid
+          // collapses to one column in DOM order, so a left rail puts "This
+          // league" above the rankings instead of far below them: on a phone
+          // the page used to open on a table of team names with nothing saying
+          // which league they belonged to.
+          <div className="mt-6 grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+              {/* Left rail: which league this is, then context and methodology. */}
+              <aside
+                aria-label="League information and methodology"
+                className="space-y-6 xl:sticky xl:top-8 xl:self-start"
               >
-                <PulseRankingsTable
-                  teams={view.teams}
-                  sleeperLeagueId={sleeperLeagueId}
-                  searchedUsername={searchedUsername}
-                  valueLabel={valueLabel}
+                {/* headingLevel 2: this page's h1 is "Power Pulse" in the intro
+                    strip above, so the league name here steps down a level
+                    rather than giving the page a second h1. */}
+                <LeagueInfoPanel layout="sidebar" headingLevel={2} {...infoPanelProps} />
+
+                <Panel eyebrow="At a glance" title="League snapshot">
+                  <dl className="grid grid-cols-3 gap-2">
+                    <StatReadout
+                      label="Teams"
+                      value={String(view.teams.length)}
+                      accent="cyan"
+                    />
+                    <StatReadout
+                      label="Playoff spots"
+                      value={String(playoffTeams)}
+                      accent="purple"
+                    />
+                    <StatReadout
+                      label="Weeks left"
+                      value={String(view.teams[0]?.weekly.length ?? 0)}
+                      accent="ink"
+                    />
+                  </dl>
+                </Panel>
+
+                <HowPowerPulseWorks
+                  scoringDescription={scoringDescription}
+                  preseason={view.preseason}
                 />
-              </Panel>
+              </aside>
 
-              <Panel
-                eyebrow="Where this ends up"
-                title="Projected final standings"
-                helper={`Ordered by expected wins across every simulated season, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
-                bodyClassName="p-0"
-              >
-                <ProjectedStandings teams={view.teams} playoffTeams={playoffTeams} />
-              </Panel>
+              {/* Main column: the rankings, then who those rankings say wins,
+                  then the standings and the awards. The champion sits between
+                  the ranking and the projected finish because it is the bridge
+                  between them: the table shows the order, the card argues what
+                  that order means. */}
+              <div className="min-w-0 space-y-6">
+                <Panel
+                  eyebrow="The ranking"
+                  title="Power Pulse rankings"
+                  helper="Ranked by expected performance. The value column shows each team's trade-value rank and how far it sits from where it competes."
+                  bodyClassName="p-0"
+                  glow
+                >
+                  <PulseRankingsTable
+                    teams={view.teams}
+                    sleeperLeagueId={sleeperLeagueId}
+                    searchedUsername={searchedUsername}
+                    valueLabel={valueLabel}
+                  />
+                </Panel>
 
-              <Panel
-                eyebrow="Superlatives"
-                title="League leaders"
-                helper="The things a rankings table cannot tell you."
-              >
-                <PulseLeaders leaders={buildPulseLeaders(view.teams)} />
-              </Panel>
+                <ProjectedChampion
+                  teams={view.teams}
+                  simulationRuns={pulseSettings.simulation.runs}
+                />
+
+                <Panel
+                  eyebrow="Where this ends up"
+                  title="Projected final standings"
+                  helper={`Ordered by expected wins across every simulated season, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
+                  bodyClassName="p-0"
+                >
+                  <ProjectedStandings teams={view.teams} playoffTeams={playoffTeams} />
+                </Panel>
+
+                <Panel
+                  eyebrow="Superlatives"
+                  title="League leaders"
+                  helper="The things a rankings table cannot tell you."
+                >
+                  <PulseLeaders leaders={buildPulseLeaders(view.teams)} />
+                </Panel>
+              </div>
             </div>
-
-            {/* Right rail: the headline answer, then context, then methodology. */}
-            <aside
-              aria-label="Title race and methodology"
-              className="space-y-6 xl:sticky xl:top-8 xl:self-start"
-            >
-              <Panel eyebrow="Simulated season" title="Title race" glow>
-                <TitleRace teams={view.teams} />
-              </Panel>
-
-              <Panel eyebrow="At a glance" title="League snapshot">
-                <dl className="grid grid-cols-3 gap-2">
-                  <StatReadout
-                    label="Teams"
-                    value={String(view.teams.length)}
-                    accent="cyan"
-                  />
-                  <StatReadout
-                    label="Playoff spots"
-                    value={String(playoffTeams)}
-                    accent="purple"
-                  />
-                  <StatReadout
-                    label="Weeks left"
-                    value={String(view.teams[0]?.weekly.length ?? 0)}
-                    accent="ink"
-                  />
-                </dl>
-              </Panel>
-
-              <LeagueInfoPanel layout="sidebar" {...infoPanelProps} />
-
-              <HowPowerPulseWorks
-                scoringDescription={scoringDescription}
-                preseason={view.preseason}
-              />
-            </aside>
-          </div>
         )}
       </div>
     </main>

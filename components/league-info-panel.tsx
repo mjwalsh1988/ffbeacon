@@ -28,6 +28,7 @@ import type { FormatTag } from "@/lib/league-format-tags";
 export function LeagueInfoPanel({
   layout = "sidebar",
   showFooter = true,
+  headingLevel = 1,
   leagueName,
   season,
   teamCount,
@@ -47,6 +48,13 @@ export function LeagueInfoPanel({
   /** When false, the last-updated / values meta is NOT rendered inside the card
    *  (the Teams page renders it separately as a discreet line). Defaults true. */
   showFooter?: boolean;
+  /**
+   * Heading level for the league name. Defaults to 1 because on most deep-view
+   * surfaces this card carries the page's only h1. Pass 2 on a page that already
+   * has an h1 of its own (Power Pulse titles itself), so the page keeps exactly
+   * one h1 and no level is skipped. Size is unchanged either way.
+   */
+  headingLevel?: 1 | 2;
   leagueName: string;
   season: string | number | null;
   teamCount: number | null;
@@ -68,6 +76,7 @@ export function LeagueInfoPanel({
   pickSourceDisplay: string | null;
 }) {
   const horizontal = layout === "horizontal";
+  const NameHeading = (`h${headingLevel}` as const) as "h1" | "h2";
 
   // Roster makeup: Start N + per-position slots. The SF (superflex) flag is
   // intentionally dropped here because it's already conveyed by the "SF" slot
@@ -81,12 +90,12 @@ export function LeagueInfoPanel({
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
         This league
       </p>
-      <h1
+      <NameHeading
         id="league-info-title"
         className="mt-1 text-2xl font-bold leading-tight tracking-tight text-ink sm:text-3xl"
       >
         {leagueName}
-      </h1>
+      </NameHeading>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <StatusPill status={status} />
         {season != null && <MetaChip icon={CalendarDays}>{season} season</MetaChip>}
