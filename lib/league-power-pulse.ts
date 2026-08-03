@@ -121,9 +121,7 @@ export async function calculateLeaguePowerPulse(
   const nflState = await getNflState();
   const currentWeek = resolveCurrentWeek(nflState, league.season, league.playoffWeekStart);
 
-  // Refresh the head-to-head slate before reading it. A failure here is not
-  // fatal: without a schedule we still produce scoring-based components, just
-  // with no win probabilities.
+  // Refresh the head-to-head slate before reading it.
   const matchupSync = await syncLeagueMatchups(
     supabase,
     league.id,
@@ -138,6 +136,37 @@ export async function calculateLeaguePowerPulse(
     );
   }
 
+  // A schedule we could not fully fetch is not a schedule we may reason about.
+  // Sleeper timing out or throttling looks exactly like "this league has no
+  // games" once the failure is flattened into an empty list, and scoring a
+  // league against an empty slate produces a table of 0.0 win projections and
+  // 0%/100% playoff odds that then sits in the cache for the full TTL. Bail
+  // before the expensive loads and leave whatever is already cached alone; the
+  // absence of a fresh row makes the next page view retry.
+  if (matchupSync.failedWeeks.length > 0) {
+    return {
+      ok: true,
+      teams: 0,
+      season: league.season,
+      currentWeek,
+      skipped: `incomplete schedule fetch (weeks ${matchupSync.failedWeeks.join(", ")} did not answer)`,
+    };
+  }
+
+  // Sleeper answered the probe with no games, so this league has no slate at
+  // all. Stop before the roster, player, and projection loads rather than
+  // paying for them on every view of an undrafted league.
+  if (matchupSync.noScheduleYet) {
+    await clearCache(supabase, leagueRowId, league.season);
+    return {
+      ok: true,
+      teams: 0,
+      season: league.season,
+      currentWeek,
+      skipped: "no published schedule",
+    };
+  }
+
   const rosters = await loadRosters(supabase, leagueRowId);
   if (rosters.length === 0) {
     return { ok: true, teams: 0, season: league.season, currentWeek, skipped: "no rosters" };
@@ -148,6 +177,7 @@ export async function calculateLeaguePowerPulse(
   // before the expensive loads; the UI renders the pre-draft state instead.
   const rostersFilled = rosters.some((r) => r.playerSleeperIds.length > 0);
   if (isDraftPending(league.status) && !rostersFilled) {
+    await clearCache(supabase, leagueRowId, league.season);
     return {
       ok: true,
       teams: 0,
@@ -186,16 +216,26 @@ export async function calculateLeaguePowerPulse(
     };
   }
 
-  // No head-to-head slate while the draft is still pending. Wins, playoff odds,
-  // and strength of schedule would all be answers about a schedule that does
-  // not exist yet, so store nothing rather than something wrong.
-  if (isDraftPending(league.status) && schedule.weeks.length === 0) {
+  // No games left to play means there is nothing to project. This covers the
+  // league waiting on its draft, the league whose schedule Sleeper has not
+  // published, and the season that is already over. All three used to fall
+  // through and cache "0.0 expected wins out of 1 game" for every team, which
+  // reads as a real answer and is not one. Store nothing instead; the UI has
+  // honest empty states, and no row means the next view recomputes.
+  const remainingSlate = schedule.weeks.filter(
+    (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
+  );
+  if (remainingSlate.length === 0) {
+    await clearCache(supabase, leagueRowId, league.season);
     return {
       ok: true,
       teams: 0,
       season: league.season,
       currentWeek,
-      skipped: "draft pending with no published schedule",
+      skipped:
+        schedule.weeks.length === 0
+          ? "no published schedule"
+          : `no regular season games remaining from week ${currentWeek}`,
     };
   }
 
@@ -227,6 +267,35 @@ export async function calculateLeaguePowerPulse(
   if (error) return { ok: false, error: `power pulse upsert failed: ${error.message}` };
 
   return { ok: true, teams: teams.length, season: league.season, currentWeek };
+}
+
+/**
+ * Drop any cached rows for a league season we have just decided cannot be
+ * scored.
+ *
+ * Declining to write a new row is not enough on its own: a league that was
+ * scored under a previous run keeps showing those numbers forever, and the
+ * numbers most likely to be sitting there are the degenerate ones this guard
+ * exists to prevent. Only called from the branches that are a settled statement
+ * about the league (no schedule, nothing drafted, no games left), never from a
+ * transient fetch failure, where the previous answer is still the best one we
+ * have.
+ */
+async function clearCache(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  season: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("league_power_pulse_cache")
+    .delete()
+    .eq("league_id", leagueRowId)
+    .eq("season", season);
+  if (error) {
+    console.warn(
+      `[power-pulse] could not clear stale cache for league ${leagueRowId}: ${error.message}`,
+    );
+  }
 }
 
 function toCacheRow(

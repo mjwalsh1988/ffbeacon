@@ -8,18 +8,27 @@
  *
  * Fetch policy matters here, because a naive implementation costs 18 HTTP calls
  * per league load. The schedule itself never changes once created, so:
- *   - A league with no stored weeks gets the full slate fetched once.
+ *   - A league with no stored weeks gets the full slate fetched once, in
+ *     parallel batches rather than one blocking request at a time.
+ *   - Before that full slate, one probe week decides whether there is anything
+ *     to fetch at all. Sleeper publishes the whole schedule at once, so a probe
+ *     that answers "no games" means the league has no slate yet and the other
+ *     17 requests would all come back empty.
  *   - After that we refresh only the weeks that can still move: the current
  *     week and the next two (lineups change), plus any week that is missing.
  *   - `force` refetches everything.
  *
  * A week whose games are done is marked `is_final` so the engine can treat it as
  * a settled result rather than something to project.
+ *
+ * Failures are reported, never swallowed. `failedWeeks` lists weeks whose
+ * request did not come back, which means the stored slate is incomplete and a
+ * caller must not conclude anything from its shape.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
-import { getSleeperMatchups, type SleeperMatchup } from "@/lib/sleeper";
+import { getSleeperMatchups, mapLimit, SLEEPER_BATCH_SIZE, type SleeperMatchup } from "@/lib/sleeper";
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -33,6 +42,14 @@ export type MatchupSyncResult = {
   ok: boolean;
   weeksFetched: number[];
   rowsWritten: number;
+  /**
+   * Weeks whose Sleeper request failed outright. Non-empty means the stored
+   * schedule may be missing games that do exist, so "this league has no
+   * schedule" is not a conclusion anyone may draw from it.
+   */
+  failedWeeks: number[];
+  /** True when Sleeper answered for the probe week and published no games. */
+  noScheduleYet: boolean;
   error?: string;
 };
 
@@ -78,22 +95,63 @@ export async function syncLeagueMatchups(
     .eq("league_id", leagueRowId)
     .eq("season", season);
   if (existingErr) {
-    return { ok: false, weeksFetched: [], rowsWritten: 0, error: existingErr.message };
+    return {
+      ok: false,
+      weeksFetched: [],
+      rowsWritten: 0,
+      failedWeeks: [],
+      noScheduleYet: false,
+      error: existingErr.message,
+    };
   }
 
   const storedWeeks = new Set((existing ?? []).map((r) => Number(r.week)));
-  const targets = weeksToFetch(storedWeeks, currentWeek, force);
-  if (targets.length === 0) return { ok: true, weeksFetched: [], rowsWritten: 0 };
+  let targets = weeksToFetch(storedWeeks, currentWeek, force);
+  if (targets.length === 0) {
+    return { ok: true, weeksFetched: [], rowsWritten: 0, failedWeeks: [], noScheduleYet: false };
+  }
 
   const nowIso = new Date().toISOString();
   const rows: Database["public"]["Tables"]["league_matchups"]["Insert"][] = [];
   const fetched: number[] = [];
+  const failed: number[] = [];
+  const collected = new Map<number, SleeperMatchup[]>();
 
-  for (const week of targets) {
-    const matchups: SleeperMatchup[] = await getSleeperMatchups(sleeperLeagueId, week);
-    if (matchups.length === 0) continue;
+  // Probe before committing to the full slate. Only worth it when we are about
+  // to ask for every week; a targeted refresh is already cheap.
+  let noScheduleYet = false;
+  if (targets.length > SLEEPER_BATCH_SIZE) {
+    const probeWeek = targets[0];
+    const probe = await getSleeperMatchups(sleeperLeagueId, probeWeek);
+    if (probe === null) {
+      failed.push(probeWeek);
+    } else if (probe.length === 0) {
+      // Sleeper answered and has nothing. The rest of the season is the same
+      // answer, so stop here instead of spending 17 more requests on it.
+      noScheduleYet = true;
+      targets = [];
+    } else {
+      collected.set(probeWeek, probe);
+      fetched.push(probeWeek);
+    }
+    targets = targets.filter((w) => w !== probeWeek);
+  }
+
+  const results = await mapLimit(targets, SLEEPER_BATCH_SIZE, (week) =>
+    getSleeperMatchups(sleeperLeagueId, week),
+  );
+  targets.forEach((week, i) => {
+    const matchups = results[i];
+    if (matchups === null) {
+      failed.push(week);
+      return;
+    }
+    if (matchups.length === 0) return;
+    collected.set(week, matchups);
     fetched.push(week);
+  });
 
+  for (const [week, matchups] of [...collected.entries()].sort((a, b) => a[0] - b[0])) {
     for (const m of matchups) {
       const rosterId = Number(m.roster_id);
       if (!Number.isFinite(rosterId)) continue;
@@ -119,7 +177,19 @@ export async function syncLeagueMatchups(
     }
   }
 
-  if (rows.length === 0) return { ok: true, weeksFetched: fetched, rowsWritten: 0 };
+  fetched.sort((a, b) => a - b);
+  failed.sort((a, b) => a - b);
+
+  if (rows.length === 0) {
+    return {
+      ok: failed.length === 0,
+      weeksFetched: fetched,
+      rowsWritten: 0,
+      failedWeeks: failed,
+      noScheduleYet,
+      error: failed.length > 0 ? `Sleeper did not answer for weeks ${failed.join(", ")}` : undefined,
+    };
+  }
 
   const CHUNK = 500;
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -127,11 +197,25 @@ export async function syncLeagueMatchups(
       .from("league_matchups")
       .upsert(rows.slice(i, i + CHUNK), { onConflict: "league_id,week,sleeper_roster_id" });
     if (error) {
-      return { ok: false, weeksFetched: fetched, rowsWritten: i, error: error.message };
+      return {
+        ok: false,
+        weeksFetched: fetched,
+        rowsWritten: i,
+        failedWeeks: failed,
+        noScheduleYet,
+        error: error.message,
+      };
     }
   }
 
-  return { ok: true, weeksFetched: fetched, rowsWritten: rows.length };
+  return {
+    ok: failed.length === 0,
+    weeksFetched: fetched,
+    rowsWritten: rows.length,
+    failedWeeks: failed,
+    noScheduleYet,
+    error: failed.length > 0 ? `Sleeper did not answer for weeks ${failed.join(", ")}` : undefined,
+  };
 }
 
 /**

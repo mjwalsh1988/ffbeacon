@@ -178,22 +178,84 @@ export async function getSleeperWeekTransactions(
   );
 }
 
+/**
+ * How many Sleeper requests we allow in flight at once when walking a range of
+ * weeks. Sleeper's published ceiling is 1000 calls per minute, so this is not
+ * about their limit: it is about not opening 26 sockets from one page render.
+ */
+export const SLEEPER_BATCH_SIZE = 6;
+
+/**
+ * Run `task` over `items` with at most `limit` running concurrently, returning
+ * results in input order. Used to turn the week-by-week walks below from a
+ * queue of sequential round trips into a handful of batches.
+ */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (;;) {
+      const i = next;
+      next += 1;
+      if (i >= items.length) return;
+      results[i] = await task(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * Every transaction in a league from `fromWeek` forward.
+ *
+ * Sleeper exposes transactions one week at a time with no "give me everything"
+ * endpoint, and no way to ask how many weeks exist, so we walk until we see
+ * `emptyStop` consecutive empty weeks. The walk runs in batches rather than one
+ * request at a time; the stop condition is still evaluated in week order, so a
+ * batch may fetch a few weeks past the stopping point. That costs a couple of
+ * cheap requests and saves the wall-clock of ~20 sequential ones.
+ *
+ * `fromWeek` exists because past weeks are settled history. A caller that has
+ * already stored weeks 0 through 9 only needs to ask about 9 onward.
+ */
 export async function getAllSleeperTransactions(
   leagueId: string,
   maxWeek = 25,
   emptyStop = 3,
+  fromWeek = 0,
 ): Promise<SleeperTransaction[]> {
   const all: SleeperTransaction[] = [];
+  const start = Math.max(0, Math.trunc(fromWeek));
   let emptyStreak = 0;
-  for (let week = 0; week <= maxWeek; week++) {
-    const batch = await getSleeperWeekTransactions(leagueId, week);
-    if (batch.length === 0) {
-      emptyStreak++;
-      if (emptyStreak >= emptyStop && week > 0) break;
-      continue;
+
+  for (let batchStart = start; batchStart <= maxWeek; batchStart += SLEEPER_BATCH_SIZE) {
+    const weeks: number[] = [];
+    for (let w = batchStart; w <= Math.min(maxWeek, batchStart + SLEEPER_BATCH_SIZE - 1); w += 1) {
+      weeks.push(w);
     }
-    emptyStreak = 0;
-    all.push(...batch);
+    const batches = await mapLimit(weeks, SLEEPER_BATCH_SIZE, (week) =>
+      getSleeperWeekTransactions(leagueId, week),
+    );
+
+    let stop = false;
+    for (let i = 0; i < weeks.length; i += 1) {
+      const batch = batches[i];
+      if (batch.length === 0) {
+        emptyStreak += 1;
+        if (emptyStreak >= emptyStop && weeks[i] > 0) {
+          stop = true;
+          break;
+        }
+        continue;
+      }
+      emptyStreak = 0;
+      all.push(...batch);
+    }
+    if (stop) break;
   }
   return all;
 }
@@ -225,20 +287,25 @@ export type SleeperMatchup = {
 /**
  * The head-to-head slate for one week. Sleeper generates the full season
  * schedule when a league is created, so weeks far in the future already return
- * populated `matchup_id` pairings during the preseason. Returns [] on failure or
- * for a week the league has not scheduled.
+ * populated `matchup_id` pairings during the preseason.
+ *
+ * Returns `null` when the request itself failed (timeout, 429, 5xx) and `[]`
+ * when Sleeper answered and the league genuinely has no games that week. The
+ * distinction is load-bearing: Power Pulse reads "no games all season" as "this
+ * league has no schedule", and collapsing a throttled request into an empty
+ * week made a transient failure look like a permanent fact about the league.
  */
 export async function getSleeperMatchups(
   leagueId: string,
   week: number,
-): Promise<SleeperMatchup[]> {
+): Promise<SleeperMatchup[] | null> {
   // The league id can originate in a route param, so it is encoded rather than
   // interpolated raw: a crafted id containing path separators would otherwise
   // reach a different Sleeper endpoint than the one intended. The week is
   // always ours, but coercing it keeps the path free of anything unexpected.
   const id = encodeURIComponent(leagueId);
   const w = Number.isFinite(week) ? Math.trunc(week) : 0;
-  return (await safeFetch<SleeperMatchup[]>(`${BASE}/league/${id}/matchups/${w}`)) ?? [];
+  return safeFetch<SleeperMatchup[]>(`${BASE}/league/${id}/matchups/${w}`);
 }
 
 export async function getSleeperLeagueDrafts(leagueId: string): Promise<SleeperDraft[]> {
