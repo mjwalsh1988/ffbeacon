@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Search, X, ArrowRight } from "lucide-react";
 import { SEARCHABLE_TOOLS, type SearchableTool } from "@/lib/site";
@@ -73,6 +73,7 @@ function matchTools(query: string): ToolResult[] {
 
 export function SiteSearch() {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -163,6 +164,20 @@ export function SiteSearch() {
     setArticles([]);
     setActiveIdx(0);
   }, []);
+
+  // Backstop: close on any completed route change. go() already closes on a
+  // result selection, so this only catches the paths that bypass it (browser
+  // back/forward while the palette is open, a navigation started elsewhere).
+  // Without it the palette can outlive the page it was opened on, and because
+  // the open state also holds body scroll locked, that reads as a frozen page
+  // that only a refresh clears. The mobile menu and the Beacon Brief drawer
+  // already do this; the palette was the one overlay that did not.
+  const lastPathname = useRef(pathname);
+  useEffect(() => {
+    if (lastPathname.current === pathname) return;
+    lastPathname.current = pathname;
+    close();
+  }, [pathname, close]);
 
   // Keyboard-open shortcut (Cmd/Ctrl+K), a widely-expected convention.
   useEffect(() => {

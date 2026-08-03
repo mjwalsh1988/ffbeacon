@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { DiscordCta } from "@/components/discord-cta";
 import { SignalGuideMount } from "@/components/signal-guide/signal-guide-mount";
+import { RouteScrollReset } from "@/components/route-scroll-reset";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -47,6 +48,10 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
+        {/* Route changes must land the reader at the top of the new page. See
+            components/route-scroll-reset.tsx for why the App Router does not
+            reliably do this on its own. */}
+        <RouteScrollReset />
         <div className="flex min-h-screen flex-col">
           <SiteHeader />
           <div className="flex-1">{children}</div>
