@@ -51,6 +51,12 @@ type Combo = {
  * Why iterate all combos: users toggle format/source on the deep view and
  * the cache row for the displayed combo must exist. Combos with no value
  * data (e.g. FantasyCalc + Redraft TEP) are silently skipped.
+ *
+ * The values and pick prices for every combo are loaded in one pass up front
+ * rather than per combo. There are two dozen active combos and the loop used to
+ * spend three database round trips on each of them, roughly seventy sequential
+ * queries in front of a page render, to produce data that all comes from two
+ * tables. The math per combo is unchanged.
  */
 export async function calculateLeaguePowerRankings(
   supabase: ServiceClient,
@@ -88,12 +94,29 @@ export async function calculateLeaguePowerRankings(
 
   const startingSlots = parseStartingSlots(asStringArray(league.roster_positions));
 
+  // Values and pick prices for every combo, in two passes instead of two per
+  // combo. Values are scoped to the players actually on these rosters, which is
+  // both smaller and the only part any of this reads.
+  const [valuesByCombo, picksByCombo] = await Promise.all([
+    loadPlayerValueMaps(
+      supabase,
+      Array.from(new Set([...players.values()].map((p) => p.player_id))),
+    ),
+    loadPickLookups(supabase, combos),
+  ]);
+
+  const upsertRows: Database["public"]["Tables"]["league_power_rankings_cache"]["Insert"][] = [];
+  const generatedAt = new Date().toISOString();
+
   let combosWritten = 0;
   for (const combo of combos) {
-    const valueMap = await loadPlayerValueMap(supabase, combo);
-    if (valueMap.size === 0) continue;
+    const key = comboKey(combo);
+    // No values for anyone on these rosters. Writing the combo anyway would
+    // cache a table of zeroes that reads like a real ranking.
+    const valueMap = valuesByCombo.get(key);
+    if (!valueMap || valueMap.size === 0) continue;
 
-    const pickLookup = await loadPickLookup(supabase, combo);
+    const pickLookup = picksByCombo.get(key) ?? { values: new Map<string, number>() };
 
     type RosterCalc = {
       rosterRowId: string;
@@ -152,29 +175,35 @@ export async function calculateLeaguePowerRankings(
     const starterRankByRoster = new Map<string, number>();
     byStarter.forEach((c, i) => starterRankByRoster.set(c.rosterRowId, i + 1));
 
-    const generatedAt = new Date().toISOString();
-    const upsertRows = calcs.map((c) => ({
-      league_id: leagueRowId,
-      roster_id: c.rosterRowId,
-      format_config_id: combo.format_config_id,
-      source: combo.source,
-      starter_value: c.starter_value,
-      bench_value: c.bench_value,
-      picks_value: c.picks_value,
-      total_value: c.total_value,
-      overall_rank: overallRankByRoster.get(c.rosterRowId) ?? null,
-      starter_rank: starterRankByRoster.get(c.rosterRowId) ?? null,
-      positional_breakdowns: c.positional_breakdowns,
-      generated_at: generatedAt,
-    }));
+    for (const c of calcs) {
+      upsertRows.push({
+        league_id: leagueRowId,
+        roster_id: c.rosterRowId,
+        format_config_id: combo.format_config_id,
+        source: combo.source,
+        starter_value: c.starter_value,
+        bench_value: c.bench_value,
+        picks_value: c.picks_value,
+        total_value: c.total_value,
+        overall_rank: overallRankByRoster.get(c.rosterRowId) ?? null,
+        starter_rank: starterRankByRoster.get(c.rosterRowId) ?? null,
+        positional_breakdowns: c.positional_breakdowns,
+        generated_at: generatedAt,
+      });
+    }
+    combosWritten++;
+  }
 
+  const CHUNK = 500;
+  for (let i = 0; i < upsertRows.length; i += CHUNK) {
     const { error: upsertErr } = await supabase
       .from("league_power_rankings_cache")
-      .upsert(upsertRows, { onConflict: "league_id,roster_id,format_config_id,source" });
+      .upsert(upsertRows.slice(i, i + CHUNK), {
+        onConflict: "league_id,roster_id,format_config_id,source",
+      });
     if (upsertErr) {
       return { ok: false, error: `power rankings upsert failed: ${upsertErr.message}` };
     }
-    combosWritten++;
   }
 
   return { ok: true, combosWritten, rostersConsidered: rosters.length };
@@ -253,44 +282,90 @@ async function loadActiveCombos(supabase: ServiceClient): Promise<Combo[]> {
   return combos;
 }
 
-async function loadPlayerValueMap(
+function comboKey(combo: Combo): string {
+  return `${combo.format_config_id}|${combo.source}`;
+}
+
+/**
+ * Current value for every (format, source) at once, restricted to the players
+ * on this league's rosters. Returns one map per combo.
+ *
+ * Scoping to the league's own players is what makes a single pass affordable:
+ * the whole trends table across every combo is far larger than the few hundred
+ * players any one league can roster.
+ */
+async function loadPlayerValueMaps(
   supabase: ServiceClient,
-  combo: Combo,
-): Promise<ValueMap> {
-  const map: ValueMap = new Map();
+  playerIds: string[],
+): Promise<Map<string, ValueMap>> {
+  const out = new Map<string, ValueMap>();
+  if (playerIds.length === 0) return out;
+
+  const PAGE = 1000;
+  const CHUNK = 200;
+  for (let i = 0; i < playerIds.length; i += CHUNK) {
+    const chunk = playerIds.slice(i, i + CHUNK);
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("player_value_trends")
+        .select("player_id, current_value, format_config_id, source")
+        .in("player_id", chunk)
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`load player_value_trends failed: ${error.message}`);
+      if (!data || data.length === 0) break;
+      for (const row of data) {
+        if (!row.format_config_id || !row.source) continue;
+        const key = `${row.format_config_id}|${row.source}`;
+        const map = out.get(key) ?? new Map<string, number>();
+        map.set(row.player_id, Number(row.current_value));
+        out.set(key, map);
+      }
+      if (data.length < PAGE) break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Pick prices for every combo in one pass. Newest capture wins per
+ * (season, round, slot), same as the per-combo loader it replaces; the explicit
+ * secondary ordering keeps that deterministic across pages.
+ */
+async function loadPickLookups(
+  supabase: ServiceClient,
+  combos: Combo[],
+): Promise<Map<string, PickValueLookup>> {
+  const out = new Map<string, PickValueLookup>();
+  if (combos.length === 0) return out;
+
+  const formatIds = Array.from(new Set(combos.map((c) => c.format_config_id)));
+  const sources = Array.from(new Set(combos.map((c) => c.source)));
+
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
-      .from("player_value_trends")
-      .select("player_id, current_value")
-      .eq("format_config_id", combo.format_config_id)
-      .eq("source", combo.source)
+      .from("draft_pick_values")
+      .select("season, round, pick_position, value, captured_at, format_config_id, source")
+      .in("format_config_id", formatIds)
+      .in("source", sources)
+      .order("captured_at", { ascending: false })
+      .order("season", { ascending: true })
+      .order("round", { ascending: true })
+      .order("pick_position", { ascending: true })
       .range(from, from + PAGE - 1);
-    if (error) throw new Error(`load player_value_trends failed: ${error.message}`);
+    if (error) throw new Error(`load draft_pick_values failed: ${error.message}`);
     if (!data || data.length === 0) break;
-    for (const row of data) map.set(row.player_id, Number(row.current_value));
+    for (const row of data) {
+      if (!row.format_config_id || !row.source) continue;
+      const comboK = `${row.format_config_id}|${row.source}`;
+      const lookup = out.get(comboK) ?? { values: new Map<string, number>() };
+      const key = `${row.season}|${row.round}|${row.pick_position}`;
+      if (!lookup.values.has(key)) lookup.values.set(key, Number(row.value));
+      out.set(comboK, lookup);
+    }
     if (data.length < PAGE) break;
   }
-  return map;
-}
-
-async function loadPickLookup(
-  supabase: ServiceClient,
-  combo: Combo,
-): Promise<PickValueLookup> {
-  const { data, error } = await supabase
-    .from("draft_pick_values")
-    .select("season, round, pick_position, value, captured_at")
-    .eq("format_config_id", combo.format_config_id)
-    .eq("source", combo.source)
-    .order("captured_at", { ascending: false });
-  if (error) throw new Error(`load draft_pick_values failed: ${error.message}`);
-  const values = new Map<string, number>();
-  for (const row of data ?? []) {
-    const key = `${row.season}|${row.round}|${row.pick_position}`;
-    if (!values.has(key)) values.set(key, Number(row.value));
-  }
-  return { values };
+  return out;
 }
 
 type StartingSlotPlan = {
