@@ -38,7 +38,47 @@ export type LeaguePulseResult =
     }
   | { ok: false; error: string; sleeperLeagueId: string };
 
+/**
+ * What the deep view needs before it can draw anything: the league itself, its
+ * rosters, and its members. Everything else (transaction history, rankings,
+ * Power Pulse) hangs off this and can arrive afterwards.
+ */
+export type LeaguePulseCoreResult =
+  | {
+      ok: true;
+      leagueRowId: string;
+      sleeperLeagueId: string;
+      season: number;
+      /** True when the 60-minute cache answered and Sleeper was not contacted. */
+      cached: boolean;
+      counts: { rosters: number; users: number };
+    }
+  | { ok: false; error: string; sleeperLeagueId: string };
+
 type ServiceClient = SupabaseClient<Database>;
+
+/**
+ * In-flight sync deduplication.
+ *
+ * A single page render fans out into several server components, and a user
+ * hitting reload on a slow cold load starts a second render before the first
+ * finishes. Without this, each of those repeats the whole Sleeper sync against
+ * the same league. Keyed work shares one promise; the entry is dropped as soon
+ * as it settles, so this is a request coalescer and not a cache.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
+function coalesce<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const existing = inFlight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+  const started = run();
+  inFlight.set(key, started);
+  void started.then(
+    () => inFlight.delete(key),
+    () => inFlight.delete(key),
+  );
+  return started;
+}
 
 /**
  * Decide whether this league's power rankings need recomputing. Returns true
@@ -73,6 +113,10 @@ async function powerRankingsAreStale(
  * (24 hours) per league, on whichever load first crosses that window, on both
  * the cached and full-sync paths. force=true always recomputes them.
  *
+ * This is the whole-league entry point, kept for scripts, the refresh endpoint,
+ * and any page that wants one await. The deep view instead calls the two halves
+ * below directly so it can paint the league before the derived work finishes.
+ *
  * Caller supplies the service-role supabase client (scripts use
  * scripts/_supabase.ts getServiceClient(); the server action uses
  * lib/supabase/server.ts createAdminClient()).
@@ -82,199 +126,347 @@ export async function pulseLeague(
   sleeperLeagueId: string,
   options: { force?: boolean } = {},
 ): Promise<LeaguePulseResult> {
-  const { force = false } = options;
+  const core = await pulseLeagueCore(supabase, sleeperLeagueId, options);
+  if (!core.ok) return core;
 
-  // Cache check
-  const { data: existing } = await supabase
-    .from("leagues")
-    .select("id, last_pulsed_at, pulse_status")
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
-
-  if (
-    !force &&
-    existing &&
-    existing.last_pulsed_at &&
-    existing.pulse_status === "complete" &&
-    Date.now() - new Date(existing.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS
-  ) {
-    // Cache hit: the league/roster/user/transaction rows are fresh enough that
-    // we do NOT re-hit Sleeper. We still recompute power rankings, but only once
-    // per 24h (they track the nightly player-value sync, not the league TTL), so
-    // reloads inside that window serve the existing cache untouched. A calc
-    // failure is non-fatal, same as the full sync path below.
-    if (await powerRankingsAreStale(supabase, existing.id)) {
-      try {
-        const calcResult = await calculateLeaguePowerRankings(supabase, existing.id);
-        if (!calcResult.ok) {
-          console.warn(
-            `[pulseLeague] cached power-rankings calc failed for league ${existing.id}: ${calcResult.error}`,
-          );
-        }
-      } catch (err) {
-        console.warn(
-          `[pulseLeague] cached power-rankings calc threw for league ${existing.id}:`,
-          (err as Error).message,
-        );
-      }
-    }
-
-    // Power Pulse has its own, shorter TTL: it tracks the live NFL week and the
-    // manager's set lineup, both of which move faster than trade values.
-    await refreshPowerPulse(supabase, existing.id);
-
-    const [{ count: rosterCount }, { count: userCount }, { count: txCount }] = await Promise.all([
-      supabase.from("rosters").select("id", { count: "exact", head: true }).eq("league_id", existing.id),
-      supabase.from("league_users").select("id", { count: "exact", head: true }).eq("league_id", existing.id),
-      supabase
-        .from("league_transactions")
-        .select("id", { count: "exact", head: true })
-        .eq("league_id", existing.id),
-    ]);
-    return {
-      ok: true,
-      leagueRowId: existing.id,
-      sleeperLeagueId,
-      cached: true,
-      counts: {
-        rosters: rosterCount ?? 0,
-        users: userCount ?? 0,
-        transactions: txCount ?? 0,
-      },
-    };
-  }
-
-  // Mark pulsing
-  if (existing) {
-    await supabase
-      .from("leagues")
-      .update({ pulse_status: "pulsing", pulse_error: null, updated_at: new Date().toISOString() })
-      .eq("id", existing.id);
-  }
-
-  const league = await getSleeperLeague(sleeperLeagueId);
-  if (!league) {
-    if (existing) {
-      await supabase
-        .from("leagues")
-        .update({
-          pulse_status: "error",
-          pulse_error: "Sleeper league fetch returned null",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-    }
-    return { ok: false, error: "Sleeper league not found", sleeperLeagueId };
-  }
-
-  const formatSlug = deriveFormatSlug(league);
-  let formatConfigId: string | null = null;
-  if (formatSlug) {
-    const { data: fc } = await supabase
-      .from("format_configs")
-      .select("id")
-      .eq("slug", formatSlug)
-      .maybeSingle();
-    formatConfigId = fc?.id ?? null;
-  }
-
-  const leagueRow = {
-    sleeper_league_id: league.league_id,
-    name: league.name,
-    season: Number(league.season),
-    sport: league.sport ?? "nfl",
-    status: league.status ?? null,
-    total_rosters: league.total_rosters ?? null,
-    scoring_settings: (league.scoring_settings ?? {}) as Database["public"]["Tables"]["leagues"]["Insert"]["scoring_settings"],
-    roster_positions: (league.roster_positions ?? []) as Database["public"]["Tables"]["leagues"]["Insert"]["roster_positions"],
-    format_config_id: formatConfigId,
-    metadata: league as unknown as Database["public"]["Tables"]["leagues"]["Insert"]["metadata"],
-    last_pulsed_at: new Date().toISOString(),
-    pulse_status: "complete" as const,
-    pulse_error: null,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data: upserted, error: upsertErr } = await supabase
-    .from("leagues")
-    .upsert(leagueRow, { onConflict: "sleeper_league_id" })
-    .select("id")
-    .single();
-
-  if (upsertErr || !upserted) {
-    return {
-      ok: false,
-      error: `Failed to upsert league: ${upsertErr?.message ?? "unknown"}`,
-      sleeperLeagueId,
-    };
-  }
-  const leagueRowId = upserted.id;
-
-  // Fetch children in parallel, independent endpoints
-  const [rosters, users, transactions, tradedPicks, draftSummaries] = await Promise.all([
-    getSleeperRosters(sleeperLeagueId),
-    getSleeperLeagueUsers(sleeperLeagueId),
-    getAllSleeperTransactions(sleeperLeagueId),
-    getSleeperTradedPicks(sleeperLeagueId),
-    getSleeperLeagueDrafts(sleeperLeagueId),
-  ]);
-
-  // Fan out one /draft/{id} fetch per league draft. Sleeper's /league/{id}/drafts
-  // summary does NOT include `slot_to_roster_id`, that lives on the per-draft
-  // endpoint. We need it to render slot labels like "1.04" on rosters and trades.
-  const draftDetails = (
-    await Promise.all(
-      (draftSummaries ?? [])
-        .filter((d): d is SleeperDraft => !!d?.draft_id)
-        .map(async (d) => {
-          const detail = await getSleeperDraft(d.draft_id);
-          return detail ?? d;
-        }),
-    )
-  ).filter((d): d is SleeperDraft => !!d?.draft_id);
-
-  await Promise.all([
-    upsertRosters(supabase, leagueRowId, rosters, tradedPicks, draftDetails),
-    upsertLeagueUsers(supabase, leagueRowId, users),
-    upsertTransactions(supabase, leagueRowId, transactions, Number(league.season)),
-    upsertLeagueDrafts(supabase, leagueRowId, draftDetails),
-  ]);
-
-  // Recalculate power rankings for this league, but only once per 24h unless
-  // this is a force refresh. A failure here does not fail the sync; the cache
-  // row is non-critical and can be backfilled by npm run calculate:power-rankings.
-  if (force || (await powerRankingsAreStale(supabase, leagueRowId))) {
-    try {
-      const calcResult = await calculateLeaguePowerRankings(supabase, leagueRowId);
-      if (!calcResult.ok) {
-        console.warn(
-          `[pulseLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
-        );
-      }
-    } catch (err) {
-      console.warn(
-        `[pulseLeague] power-rankings calc threw for league ${leagueRowId}:`,
-        (err as Error).message,
-      );
-    }
-  }
-
-  // Power Pulse: expected competitive performance, computed from the league's
-  // own scoring settings. Independent of the value source, so it does not need
-  // the format/source loop the value rankings run. Never fatal.
-  await refreshPowerPulse(supabase, leagueRowId, { force });
+  const derived = await pulseLeagueDerived(supabase, core.leagueRowId, {
+    force: options.force,
+    resynced: !core.cached,
+  });
 
   return {
     ok: true,
-    leagueRowId,
+    leagueRowId: core.leagueRowId,
     sleeperLeagueId,
-    cached: false,
-    counts: {
-      rosters: rosters.length,
-      users: users.length,
-      transactions: transactions.length,
-    },
+    cached: core.cached,
+    counts: { ...core.counts, transactions: derived.transactions },
   };
+}
+
+/**
+ * The half a league page cannot render without: the league row, its rosters,
+ * and its members. Four Sleeper endpoints, all fetched together.
+ *
+ * Freshness is stamped at the END, once the child rows are actually persisted.
+ * Marking the league complete before that meant any interruption in the slow
+ * tail (a timed-out function, a thrown calculation) left a row that looked
+ * fresh with data underneath it that was not, and the 60-minute cache then
+ * served that state back on the next load instead of retrying.
+ */
+export async function pulseLeagueCore(
+  supabase: ServiceClient,
+  sleeperLeagueId: string,
+  options: { force?: boolean } = {},
+): Promise<LeaguePulseCoreResult> {
+  const { force = false } = options;
+  return coalesce(`core:${sleeperLeagueId}:${force}`, async () => {
+    const startedAt = Date.now();
+
+    const { data: existing } = await supabase
+      .from("leagues")
+      .select("id, season, last_pulsed_at, pulse_status")
+      .eq("sleeper_league_id", sleeperLeagueId)
+      .maybeSingle();
+
+    if (
+      !force &&
+      existing &&
+      existing.last_pulsed_at &&
+      existing.pulse_status === "complete" &&
+      Date.now() - new Date(existing.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS
+    ) {
+      // Cache hit: league, roster, and member rows are fresh enough that we do
+      // not re-hit Sleeper at all.
+      const [{ count: rosterCount }, { count: userCount }] = await Promise.all([
+        supabase
+          .from("rosters")
+          .select("id", { count: "exact", head: true })
+          .eq("league_id", existing.id),
+        supabase
+          .from("league_users")
+          .select("id", { count: "exact", head: true })
+          .eq("league_id", existing.id),
+      ]);
+      return {
+        ok: true as const,
+        leagueRowId: existing.id,
+        sleeperLeagueId,
+        season: Number(existing.season ?? 0),
+        cached: true,
+        counts: { rosters: rosterCount ?? 0, users: userCount ?? 0 },
+      };
+    }
+
+    if (existing) {
+      const { error: markErr } = await supabase
+        .from("leagues")
+        .update({ pulse_status: "syncing", pulse_error: null, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      // This marker is how an interrupted sync gets retried instead of being
+      // served from cache, so a failure to write it is worth hearing about.
+      if (markErr) {
+        console.warn(
+          `[pulseLeague] could not mark league ${existing.id} syncing: ${markErr.message}`,
+        );
+      }
+    }
+
+    const league = await getSleeperLeague(sleeperLeagueId);
+    if (!league) {
+      if (existing) {
+        await supabase
+          .from("leagues")
+          .update({
+            pulse_status: "error",
+            pulse_error: "Sleeper league fetch returned null",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+      }
+      return { ok: false as const, error: "Sleeper league not found", sleeperLeagueId };
+    }
+
+    const formatSlug = deriveFormatSlug(league);
+    let formatConfigId: string | null = null;
+    if (formatSlug) {
+      const { data: fc } = await supabase
+        .from("format_configs")
+        .select("id")
+        .eq("slug", formatSlug)
+        .maybeSingle();
+      formatConfigId = fc?.id ?? null;
+    }
+
+    const season = Number(league.season);
+    const leagueRow = {
+      sleeper_league_id: league.league_id,
+      name: league.name,
+      season,
+      sport: league.sport ?? "nfl",
+      status: league.status ?? null,
+      total_rosters: league.total_rosters ?? null,
+      scoring_settings: (league.scoring_settings ?? {}) as Database["public"]["Tables"]["leagues"]["Insert"]["scoring_settings"],
+      roster_positions: (league.roster_positions ?? []) as Database["public"]["Tables"]["leagues"]["Insert"]["roster_positions"],
+      format_config_id: formatConfigId,
+      metadata: league as unknown as Database["public"]["Tables"]["leagues"]["Insert"]["metadata"],
+      // Deliberately NOT marked complete here. See the doc comment above.
+      // "syncing" is one of the four values leagues_sync_status_check allows;
+      // the string "pulsing" this code used to write was rejected by that
+      // constraint every time, and the failure went unread.
+      pulse_status: "syncing" as const,
+      pulse_error: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: upserted, error: upsertErr } = await supabase
+      .from("leagues")
+      .upsert(leagueRow, { onConflict: "sleeper_league_id" })
+      .select("id")
+      .single();
+
+    if (upsertErr || !upserted) {
+      return {
+        ok: false as const,
+        error: `Failed to upsert league: ${upsertErr?.message ?? "unknown"}`,
+        sleeperLeagueId,
+      };
+    }
+    const leagueRowId = upserted.id;
+
+    const [rosters, users, tradedPicks, draftSummaries] = await Promise.all([
+      getSleeperRosters(sleeperLeagueId),
+      getSleeperLeagueUsers(sleeperLeagueId),
+      getSleeperTradedPicks(sleeperLeagueId),
+      getSleeperLeagueDrafts(sleeperLeagueId),
+    ]);
+
+    // Fan out one /draft/{id} fetch per league draft. Sleeper's /league/{id}/drafts
+    // summary does NOT include `slot_to_roster_id`, that lives on the per-draft
+    // endpoint. We need it to render slot labels like "1.04" on rosters and trades.
+    const draftDetails = (
+      await Promise.all(
+        (draftSummaries ?? [])
+          .filter((d): d is SleeperDraft => !!d?.draft_id)
+          .map(async (d) => {
+            const detail = await getSleeperDraft(d.draft_id);
+            return detail ?? d;
+          }),
+      )
+    ).filter((d): d is SleeperDraft => !!d?.draft_id);
+
+    await Promise.all([
+      upsertRosters(supabase, leagueRowId, rosters, tradedPicks, draftDetails),
+      upsertLeagueUsers(supabase, leagueRowId, users),
+      upsertLeagueDrafts(supabase, leagueRowId, draftDetails),
+    ]);
+
+    // Everything the page needs is on disk. Now the league counts as pulsed.
+    const { error: stampErr } = await supabase
+      .from("leagues")
+      .update({
+        last_pulsed_at: new Date().toISOString(),
+        pulse_status: "complete",
+        pulse_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", leagueRowId);
+    if (stampErr) {
+      return {
+        ok: false as const,
+        error: `Failed to mark league pulsed: ${stampErr.message}`,
+        sleeperLeagueId,
+      };
+    }
+
+    console.log(
+      `[pulseLeague] core ${sleeperLeagueId} in ${Date.now() - startedAt}ms (rosters=${rosters.length}, users=${users.length})`,
+    );
+
+    return {
+      ok: true as const,
+      leagueRowId,
+      sleeperLeagueId,
+      season,
+      cached: false,
+      counts: { rosters: rosters.length, users: users.length },
+    };
+  });
+}
+
+/**
+ * Everything downstream of the league itself: transaction history, trade-value
+ * power rankings, and Power Pulse. None of it blocks the page header, and none
+ * of it is allowed to fail the load.
+ *
+ * `resynced` says the core actually contacted Sleeper, which is the signal to
+ * pull transactions again. Within the cache window we leave the stored history
+ * alone, matching what the single-pass version did.
+ */
+export async function pulseLeagueDerived(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  options: { force?: boolean; resynced?: boolean } = {},
+): Promise<{ transactions: number }> {
+  const { force = false, resynced = false } = options;
+  return coalesce(`derived:${leagueRowId}:${force}`, async () => {
+    const startedAt = Date.now();
+
+    const { data: league } = await supabase
+      .from("leagues")
+      .select("id, sleeper_league_id, season")
+      .eq("id", leagueRowId)
+      .maybeSingle();
+    if (!league) return { transactions: 0 };
+
+    const season = Number(league.season ?? 0);
+    // Per-stage timings. Cheap, and the only way to aim the next round of
+    // tuning at what is actually slow rather than at what looks slow.
+    const timings: string[] = [];
+    const timed = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
+      const at = Date.now();
+      try {
+        return await run();
+      } finally {
+        timings.push(`${label}=${Date.now() - at}ms`);
+      }
+    };
+
+    // The three stages touch three different tables and none reads another's
+    // output, so they run together rather than in a queue. Each one owns its
+    // own failure: a thrown calculation must not take the other two down, and
+    // none of them may fail the page.
+    await Promise.all([
+      (async () => {
+        if (!force && !resynced) return;
+        try {
+          await timed("transactions", () =>
+            syncTransactions(supabase, leagueRowId, league.sleeper_league_id, season, force),
+          );
+        } catch (err) {
+          console.warn(
+            `[pulseLeague] transaction sync failed for league ${leagueRowId}:`,
+            (err as Error).message,
+          );
+        }
+      })(),
+
+      // Power rankings track the nightly player-value sync, not the league TTL,
+      // so they recompute at most once per 24h. A failure is non-fatal; the
+      // cache row can be backfilled by npm run calculate:power-rankings.
+      (async () => {
+        if (!force && !(await powerRankingsAreStale(supabase, leagueRowId))) return;
+        try {
+          const calcResult = await timed("rankings", () =>
+            calculateLeaguePowerRankings(supabase, leagueRowId),
+          );
+          if (!calcResult.ok) {
+            console.warn(
+              `[pulseLeague] power-rankings calc failed for league ${leagueRowId}: ${calcResult.error}`,
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[pulseLeague] power-rankings calc threw for league ${leagueRowId}:`,
+            (err as Error).message,
+          );
+        }
+      })(),
+
+      // Power Pulse: expected competitive performance under the league's own
+      // scoring. Independent of the value source, so no format/source loop.
+      timed("power-pulse", () => refreshPowerPulse(supabase, leagueRowId, { force })),
+    ]);
+
+    const { count } = await supabase
+      .from("league_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("league_id", leagueRowId);
+
+    console.log(
+      `[pulseLeague] derived ${league.sleeper_league_id} in ${Date.now() - startedAt}ms (${
+        timings.join(", ") || "nothing to do"
+      })`,
+    );
+
+    return { transactions: count ?? 0 };
+  });
+}
+
+/**
+ * Pull transaction history and persist it.
+ *
+ * Past weeks are settled: a week 3 waiver claim from last season is not going to
+ * change. So a league that already has history only asks Sleeper about the last
+ * stored week onward, instead of walking from week 0 every single sync. A force
+ * refresh still walks the whole thing, because that is what a user pressing
+ * refresh is asking for.
+ */
+async function syncTransactions(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  sleeperLeagueId: string,
+  season: number,
+  force: boolean,
+): Promise<void> {
+  let fromWeek = 0;
+  if (!force) {
+    const { data: latest } = await supabase
+      .from("league_transactions")
+      .select("week")
+      .eq("league_id", leagueRowId)
+      .eq("season", season)
+      .not("week", "is", null)
+      .order("week", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const storedMax = latest?.week == null ? null : Number(latest.week);
+    // Step back one week so a partially-played week gets completed rather than
+    // frozen at whatever we happened to catch mid-week.
+    if (storedMax !== null && Number.isFinite(storedMax)) fromWeek = Math.max(0, storedMax - 1);
+  }
+
+  const transactions = await getAllSleeperTransactions(sleeperLeagueId, 25, 3, fromWeek);
+  await upsertTransactions(supabase, leagueRowId, transactions, season);
 }
 
 async function upsertRosters(

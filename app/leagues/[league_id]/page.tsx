@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { pulseLeague } from "@/lib/league-pulse";
+import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -137,9 +138,13 @@ export default async function LeagueDeepViewPage({
     return Number.isFinite(n) ? n : null;
   })();
 
-  // First-touch pulse: idempotent, internally cached for 10 minutes.
+  // First-touch pulse, split in two. The core is the league, its rosters, and
+  // its members: everything the header and the tabs need, and nothing else. The
+  // derived work (transaction history, trade values, Power Pulse) runs inside
+  // the Suspense boundaries below, so a cold league paints its name and shape
+  // immediately instead of holding a blank loader for the whole sync.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
+  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
 
   if (!pulseResult.ok) {
     // Sync failed (missing league or a transient Sleeper outage; the API
@@ -198,16 +203,6 @@ export default async function LeagueDeepViewPage({
 
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
   const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";
-
-  // A league at or before its draft, with nothing drafted or no schedule
-  // posted, cannot be ranked honestly. Both tabs below say so plainly rather
-  // than sorting a table of ties. See lib/league-readiness.ts.
-  const readiness = await loadLeagueReadiness(
-    supabase,
-    league.id,
-    Number(league.season ?? 0),
-    league.status ?? null,
-  );
 
   // Value coverage + format/source, resolved once and shared by the info panel,
   // power rankings, and teams list. "none" means no source covers the league's
@@ -341,11 +336,14 @@ export default async function LeagueDeepViewPage({
                     value={String(pulseResult.counts.users)}
                     accent="purple"
                   />
-                  <StatReadout
-                    label="Transactions"
-                    value={String(pulseResult.counts.transactions)}
-                    accent="ink"
-                  />
+                  <Suspense
+                    fallback={<StatReadout label="Transactions" value="Loading" accent="ink" />}
+                  >
+                    <TransactionCount
+                      leagueRowId={league.id}
+                      resynced={!pulseResult.cached}
+                    />
+                  </Suspense>
                 </dl>
               </Panel>
 
@@ -372,22 +370,24 @@ export default async function LeagueDeepViewPage({
             </aside>
 
             <div className="min-w-0 space-y-6">
-              <PowerRankingsSection
-                leagueRowId={league.id}
-                sleeperLeagueId={sleeperLeagueId}
-                formatSlug={formatSlug}
-                sourceSlug={sourceSlug}
-                formatDisplay={formatDisplay}
-                sourceDisplay={sourceDisplay}
-                leagueSeason={league.season != null ? String(league.season) : null}
-                leagueStatus={league.status ?? null}
-                searchedUsername={searchedUsername}
-                includePicks={includePicks}
-                showPicksToggle={showPicksToggle}
-                rankMode={rankMode}
-                powerPulseHref={powerPulseHref}
-                readiness={readiness}
-              />
+              <Suspense fallback={<RankingsSkeleton />}>
+                <PowerRankingsSection
+                  leagueRowId={league.id}
+                  sleeperLeagueId={sleeperLeagueId}
+                  formatSlug={formatSlug}
+                  sourceSlug={sourceSlug}
+                  formatDisplay={formatDisplay}
+                  sourceDisplay={sourceDisplay}
+                  leagueSeason={league.season != null ? String(league.season) : null}
+                  leagueStatus={league.status ?? null}
+                  searchedUsername={searchedUsername}
+                  includePicks={includePicks}
+                  showPicksToggle={showPicksToggle}
+                  rankMode={rankMode}
+                  powerPulseHref={powerPulseHref}
+                  resynced={!pulseResult.cached}
+                />
+              </Suspense>
             </div>
           </div>
         ) : (
@@ -414,24 +414,68 @@ export default async function LeagueDeepViewPage({
                 />
               </div>
             </div>
-            <TeamsPanel
-              leagueRowId={league.id}
-              sleeperLeagueId={sleeperLeagueId}
-              formatSlug={formatSlug}
-              sourceSlug={sourceSlug}
-              searchedUsername={searchedUsername}
-              focusedRosterId={focusedRosterId}
-              leagueSeason={league.season != null ? String(league.season) : null}
-              leagueStatus={league.status ?? null}
-              includePicks={includePicks}
-              showPicksToggle={showPicksToggle}
-              readiness={readiness}
-            />
+            <Suspense fallback={<RankingsSkeleton />}>
+              <TeamsPanel
+                leagueRowId={league.id}
+                sleeperLeagueId={sleeperLeagueId}
+                formatSlug={formatSlug}
+                sourceSlug={sourceSlug}
+                searchedUsername={searchedUsername}
+                focusedRosterId={focusedRosterId}
+                leagueSeason={league.season != null ? String(league.season) : null}
+                leagueStatus={league.status ?? null}
+                includePicks={includePicks}
+                showPicksToggle={showPicksToggle}
+                resynced={!pulseResult.cached}
+              />
+            </Suspense>
           </div>
         )}
       </div>
     </main>
   );
+}
+
+/**
+ * Placeholder for a panel that is still loading. Announced politely so a screen
+ * reader hears that work is in progress rather than sitting on silence, and
+ * replaced in place the moment the real panel streams in.
+ */
+function RankingsSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-card border border-line bg-surface p-6"
+    >
+      <p className="text-sm text-ink-muted">Loading rankings</p>
+      <div aria-hidden="true" className="mt-4 space-y-2">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-9 animate-pulse rounded-card bg-base/60" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Snapshot panel's transaction tally. Its own component because the count
+ * is only known once the history sync has run, and that must not hold up the
+ * two counts beside it.
+ */
+async function TransactionCount({
+  leagueRowId,
+  resynced,
+}: {
+  leagueRowId: string;
+  resynced: boolean;
+}) {
+  // Same call the rankings section makes. pulseLeagueDerived coalesces on the
+  // league, so the two boundaries share one sync rather than racing for it.
+  const { transactions } = await pulseLeagueDerived(createAdminClient(), leagueRowId, {
+    resynced,
+  });
+  return <StatReadout label="Transactions" value={String(transactions)} accent="ink" />;
 }
 
 function ExploreLink({
@@ -479,7 +523,7 @@ async function TeamsPanel({
   leagueStatus,
   includePicks,
   showPicksToggle,
-  readiness,
+  resynced,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -491,9 +535,23 @@ async function TeamsPanel({
   leagueStatus: string | null;
   includePicks: boolean;
   showPicksToggle: boolean;
-  readiness: LeagueReadiness;
+  /** True when the core sync just contacted Sleeper, so history needs a pull. */
+  resynced: boolean;
 }) {
+  // Values, rankings, and the schedule land here, not in the page shell. The
+  // header is already on screen while this runs.
+  await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+
   const supabase = await createClient();
+
+  // Readiness reads the synced schedule, so it has to be resolved after the
+  // derived pass rather than alongside the page shell.
+  const readiness = await loadLeagueReadiness(
+    supabase,
+    leagueRowId,
+    Number(leagueSeason ?? 0),
+    leagueStatus,
+  );
 
   const formatConfigId = formatSlug
     ? (await supabase.from("format_configs").select("id").eq("slug", formatSlug).maybeSingle()).data?.id ?? null
@@ -586,7 +644,7 @@ async function PowerRankingsSection({
   showPicksToggle,
   rankMode,
   powerPulseHref,
-  readiness,
+  resynced,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -603,10 +661,24 @@ async function PowerRankingsSection({
   rankMode: RankMode;
   /** Link to the full Power Pulse tab, with the searched handle forwarded. */
   powerPulseHref: string;
-  /** Pre-draft leagues get a listing with a warning, not a ranking. */
-  readiness: LeagueReadiness;
+  /** True when the core sync just contacted Sleeper, so history needs a pull. */
+  resynced: boolean;
 }) {
+  // Values, rankings, and the schedule land here, not in the page shell. The
+  // header is already on screen while this runs.
+  await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+
   const supabase = await createClient();
+
+  // Readiness reads the synced schedule, so it has to be resolved after the
+  // derived pass rather than alongside the page shell. Pre-draft leagues get a
+  // listing with a warning, not a ranking.
+  const readiness = await loadLeagueReadiness(
+    supabase,
+    leagueRowId,
+    Number(leagueSeason ?? 0),
+    leagueStatus,
+  );
 
   if (readiness.preDraft) {
     return (
