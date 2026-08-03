@@ -7,13 +7,11 @@
  * Async server component.
  */
 
-import { createClient } from "@/lib/supabase/server";
-import { QuickNews, type QuickNewsArticle } from "@/components/player-profile/quick-news";
+import { QuickNews } from "@/components/player-profile/quick-news";
 import { InjuryStatus } from "@/components/player-profile/injury-status";
 import { PlayerBioOverview } from "@/components/player-profile/player-bio-overview";
 import { DepthChartCard } from "@/components/player-profile/depth-chart-card";
 import { OverviewSidebar } from "@/components/player-profile/overview-sidebar";
-import { findPlayerTrades } from "@/lib/player-trades";
 import {
   summarizeProjections,
   SCORING_KEYS,
@@ -27,28 +25,9 @@ import {
   loadLatestValueCached,
   loadDepthChartCached,
   loadWeeklyProjectionsCached,
+  loadLatestArticleCached,
+  findPlayerTradesCached,
 } from "@/lib/player-profile-cache";
-
-async function loadLatestArticle(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  playerId: string,
-): Promise<QuickNewsArticle | null> {
-  const { data: links } = await supabase
-    .from("article_players")
-    .select("article_id")
-    .eq("player_id", playerId);
-  const ids = (links ?? []).map((l) => l.article_id);
-  if (ids.length === 0) return null;
-  const { data } = await supabase
-    .from("articles")
-    .select("title, tl_dr, published_at")
-    .in("id", ids)
-    .eq("status", "published")
-    .order("published_at", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  return (data as QuickNewsArticle | null) ?? null;
-}
 
 export async function OverviewTab({
   player,
@@ -61,18 +40,19 @@ export async function OverviewTab({
   context: PlayerContext;
   finishesLast3: PositionalFinish[];
 }) {
-  const supabase = await createClient();
   const playerName =
     player.full_name ?? `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
   const nowMs = Date.now();
 
+  // Every read here is cached (lib/player-profile-cache.ts), so a reader clicking
+  // through profiles is not re-running the whole waterfall per click.
   const [valueSeries, trends, latestValue, trades, article, depthChart, projections] =
     await Promise.all([
       loadValueSeriesCached(player.id, context.formatConfigId, context.valueSourceSlug, 30),
       loadTrendsCached(player.id, context.formatConfigId, context.valueSourceSlug),
       loadLatestValueCached(player.id, context.formatConfigId, context.valueSourceSlug),
-      sleeperId ? findPlayerTrades(supabase, sleeperId, { limit: 3 }) : Promise.resolve([]),
-      loadLatestArticle(supabase, player.id),
+      sleeperId ? findPlayerTradesCached(sleeperId, 3) : Promise.resolve([]),
+      loadLatestArticleCached(player.id),
       loadDepthChartCached(player),
       loadWeeklyProjectionsCached(player.id),
     ]);

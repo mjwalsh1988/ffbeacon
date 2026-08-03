@@ -14,11 +14,12 @@
  */
 
 import { ArrowLeftRight, AlertTriangle } from "lucide-react";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { Panel } from "@/components/dashboard-panel";
 import { SignalCheckTradeCard } from "@/components/signal-check-trade-card";
 import { MiniTrade } from "@/components/player-profile/mini-trade";
-import { findPlayerTrades, type PlayerTrade } from "@/lib/player-trades";
+import { type PlayerTrade } from "@/lib/player-trades";
+import { findPlayerTradesCached } from "@/lib/player-profile-cache";
 import { analyzeLeagueTrades, type LeagueTradeSignalCheck } from "@/lib/league-signal-check";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { formatEastern } from "@/lib/datetime";
@@ -51,10 +52,11 @@ export async function TradesTab({
   }
 
   try {
-    const supabase = await createClient();
     const admin = createAdminClient();
 
-    const trades = await findPlayerTrades(supabase, sleeperId, { limit: 30 });
+    // Cached lookup (public tables only). The Signal Check grading below reads
+    // service-role config per request and stays uncached.
+    const trades = await findPlayerTradesCached(sleeperId, 30);
     if (trades.length === 0) {
       return (
         <Shell>

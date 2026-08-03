@@ -7,12 +7,10 @@
 
 import { Newspaper } from "lucide-react";
 import { formatEastern } from "@/lib/datetime";
+import type { LatestArticle } from "@/lib/player-profile";
 
-export type QuickNewsArticle = {
-  title: string;
-  tl_dr: string | null;
-  published_at: string | null;
-};
+/** Alias of the loader's row shape so the two cannot drift apart. */
+export type QuickNewsArticle = LatestArticle;
 
 export function QuickNews({
   article,

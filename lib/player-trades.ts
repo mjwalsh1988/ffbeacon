@@ -264,40 +264,83 @@ export async function findPlayerTrades(
   return out;
 }
 
+type ResolvedPlayer = {
+  name: string;
+  position: string | null;
+  team: string | null;
+  slug: string;
+};
+
+const PLAYER_COLUMNS = "slug, full_name, first_name, last_name, position, team, external_ids";
+const RESOLVE_CHUNK = 200;
+
+function displayName(row: {
+  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+}, fallback: string): string {
+  return row.full_name ?? (`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() || fallback);
+}
+
 /** Resolve Sleeper player ids to name/position/team/slug. Mirrors the resolver
- *  in lib/league-transactions-data.ts, with slug added for profile links. */
+ *  in lib/league-transactions-data.ts, with slug added for profile links.
+ *
+ *  Two passes, and the split is the point. `external_ids->>'sleeper'` is indexed
+ *  (idx_players_external_ids_sleeper, migration 0002), while the `slug.like.*-id`
+ *  suffix match is a leading-wildcard pattern that no index can serve. Running
+ *  both as branches of one `or()` made the whole filter unindexable, so every
+ *  call seq-scanned the players table, once per profile view. The suffix match
+ *  is a fallback for rows whose external id was never written, so it now runs
+ *  only against the ids the indexed pass could not resolve, which is normally
+ *  none and skips the second query entirely. */
 async function resolvePlayers(
   supabase: AnySupabase,
   sleeperIds: string[],
-): Promise<Record<string, { name: string; position: string | null; team: string | null; slug: string }>> {
-  const out: Record<string, { name: string; position: string | null; team: string | null; slug: string }> = {};
+): Promise<Record<string, ResolvedPlayer>> {
+  const out: Record<string, ResolvedPlayer> = {};
   if (sleeperIds.length === 0) return out;
+  const db = supabase as SupabaseClient<Database>;
   const safeIds = sleeperIds.filter((id) => /^\d+$/.test(id));
-  const CHUNK = 200;
-  for (let i = 0; i < safeIds.length; i += CHUNK) {
-    const chunk = safeIds.slice(i, i + CHUNK);
-    const ors = chunk
-      .flatMap((id) => [`external_ids->>sleeper.eq.${id}`, `slug.like.*-${id}`])
-      .join(",");
-    const { data } = await (supabase as SupabaseClient<Database>)
+
+  // Pass 1: indexed lookup by external Sleeper id.
+  for (let i = 0; i < safeIds.length; i += RESOLVE_CHUNK) {
+    const chunk = safeIds.slice(i, i + RESOLVE_CHUNK);
+    const { data } = await db
       .from("players")
-      .select("slug, full_name, first_name, last_name, position, team, external_ids")
-      .or(ors);
+      .select(PLAYER_COLUMNS)
+      .or(chunk.map((id) => `external_ids->>sleeper.eq.${id}`).join(","));
     for (const row of data ?? []) {
       const ext = (row.external_ids as Record<string, unknown>) ?? {};
-      const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      const tail = (row.slug as string).match(/-(\d+)$/)?.[1] ?? null;
-      const sid = fromExternal ?? tail;
-      if (!sid || !chunk.includes(sid)) continue;
-      if (!out[sid]) {
-        out[sid] = {
-          name: row.full_name ?? (`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() || sid),
-          position: row.position ?? null,
-          team: row.team ?? null,
-          slug: row.slug as string,
-        };
-      }
+      const sid = typeof ext.sleeper === "string" ? ext.sleeper : null;
+      if (!sid || out[sid]) continue;
+      out[sid] = {
+        name: displayName(row, sid),
+        position: row.position ?? null,
+        team: row.team ?? null,
+        slug: row.slug as string,
+      };
     }
   }
+
+  // Pass 2: slug-suffix fallback, only for whatever pass 1 missed.
+  const unresolved = safeIds.filter((id) => !out[id]);
+  for (let i = 0; i < unresolved.length; i += RESOLVE_CHUNK) {
+    const chunk = unresolved.slice(i, i + RESOLVE_CHUNK);
+    const { data } = await db
+      .from("players")
+      .select(PLAYER_COLUMNS)
+      .or(chunk.map((id) => `slug.like.*-${id}`).join(","));
+    for (const row of data ?? []) {
+      const sid = (row.slug as string).match(/-(\d+)$/)?.[1] ?? null;
+      if (!sid || !chunk.includes(sid) || out[sid]) continue;
+      out[sid] = {
+        name: displayName(row, sid),
+        position: row.position ?? null,
+        team: row.team ?? null,
+        slug: row.slug as string,
+      };
+    }
+  }
+
   return out;
 }

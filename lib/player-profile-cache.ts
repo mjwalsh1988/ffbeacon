@@ -25,8 +25,10 @@ import {
   loadValueSeries,
   loadTrends,
   loadLatestValue,
+  loadLatestArticle,
   type PlayerRow,
 } from "@/lib/player-profile";
+import { findPlayerTrades, type PlayerTrade } from "@/lib/player-trades";
 
 export function loadPositionalFinishesCached(playerId: string) {
   return unstable_cache(
@@ -107,5 +109,39 @@ export function loadLatestValueCached(
     () => loadLatestValue(createCachedReadClient(), playerId, formatConfigId, source),
     ["player-latest-value", playerId, formatConfigId ?? "none", source ?? "none"],
     { revalidate: CACHE_TTL.hourly, tags: [CACHE_TAGS.playerValues] },
+  )();
+}
+
+export function loadLatestArticleCached(playerId: string) {
+  return unstable_cache(
+    () => loadLatestArticle(createCachedReadClient(), playerId),
+    ["player-latest-article", playerId],
+    { revalidate: CACHE_TTL.fiveMinutes, tags: [CACHE_TAGS.playerArticles] },
+  )();
+}
+
+/**
+ * Cross-league trades for a player.
+ *
+ * This is the most expensive read on the profile and it was the only one not
+ * cached: a jsonb key-match across league_transactions, then roster and user
+ * identities for every league that came back, then a name lookup for every
+ * player on both sides of every trade. It ran on every Overview render and again
+ * on every Trades tab render.
+ *
+ * Cached per (sleeperId, limit) so the Overview's short list and the Trades tab's
+ * long list are separate entries rather than one evicting the other. Reads only
+ * public, RLS-public tables, so the cookie-less anon client is enough; the Signal
+ * Check grading layered on top in the Trades tab still runs per request against
+ * service-role config and is deliberately NOT cached here.
+ *
+ * TTL only, no tag revalidation: trades arrive through lib/league-pulse.ts, which
+ * runs inside a page render, and revalidateTag() cannot be called from there.
+ */
+export function findPlayerTradesCached(sleeperId: string, limit: number): Promise<PlayerTrade[]> {
+  return unstable_cache(
+    () => findPlayerTrades(createCachedReadClient(), sleeperId, { limit }),
+    ["player-trades", sleeperId, String(limit)],
+    { revalidate: CACHE_TTL.hourly, tags: [CACHE_TAGS.playerTrades] },
   )();
 }

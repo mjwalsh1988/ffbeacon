@@ -24,6 +24,10 @@ export const CACHE_TAGS = {
   playerValues: "player-values",
   /** players-table reads used by the depth chart. */
   playerDepth: "player-depth",
+  /** Cross-league trade lookups (league_transactions + roster identities). */
+  playerTrades: "player-trades",
+  /** articles / article_players reads used by the profile news teaser. */
+  playerArticles: "player-articles",
 } as const;
 
 export const CACHE_TTL = {
@@ -32,4 +36,11 @@ export const CACHE_TTL = {
   /** Values/trends: refreshed nightly too, but shorter so a manual value sync
    *  surfaces sooner even without an explicit tag revalidation. */
   hourly: 3_600,
+  /** Beacon Brief articles. The Brief curation cron runs every five minutes and
+   *  its worker every minute, so this matches the fastest cadence anything on
+   *  the site publishes at. Long enough to collapse a burst of profile views
+   *  into one query, short enough that a fresh headline is never far behind.
+   *  Time-based only: the worker publishes on most runs but not all, and busting
+   *  the tag every minute regardless would make the cache pointless. */
+  fiveMinutes: 300,
 } as const;

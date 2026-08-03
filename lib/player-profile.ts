@@ -831,3 +831,41 @@ export async function loadDepthChart(
   }));
   return { room: roomOut, viewedRole: roomOut.find((e) => e.isViewed)?.role ?? null };
 }
+
+/* ---------------------------------------------------------------- news ---- */
+
+export type LatestArticle = {
+  title: string;
+  tl_dr: string | null;
+  published_at: string | null;
+};
+
+/**
+ * The single most recent published article that mentions this player, for the
+ * overview's news teaser. Two hops because article_players is a join table:
+ * collect the article ids, then read the newest published one.
+ *
+ * Lives here rather than beside the component so lib/player-profile-cache.ts can
+ * wrap it, which is what keeps it off the hot path of every profile view.
+ */
+export async function loadLatestArticle(
+  supabase: AnySupabase,
+  playerId: string,
+): Promise<LatestArticle | null> {
+  const db = supabase as SupabaseClient<Database>;
+  const { data: links } = await db
+    .from("article_players")
+    .select("article_id")
+    .eq("player_id", playerId);
+  const ids = (links ?? []).map((l) => l.article_id);
+  if (ids.length === 0) return null;
+  const { data } = await db
+    .from("articles")
+    .select("title, tl_dr, published_at")
+    .in("id", ids)
+    .eq("status", "published")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as LatestArticle | null) ?? null;
+}
