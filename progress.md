@@ -1681,3 +1681,73 @@ T420 | completed | Docs
 - Weekly outcomes are modelled as independent; no QB-to-receiver stack correlation.
 - The playoff bracket reseeds each round rather than using Sleeper's fixed bracket.
 - Backtest against completed seasons not yet run (2 completed 2025 leagues available).
+
+## Profile navigation bug + profile load time (2026-08-02)
+
+Reported: clicking through profiles from search or the rankings list eventually
+"stops loading", and a manual refresh fixes it. Root cause was navigation, not
+data. See the per-task notes for what each piece contributed.
+
+T421 | completed | Reset scroll to the top on every route change
+     | files: components/route-scroll-reset.tsx, app/layout.tsx
+     | verified: yes (rankings at 4000px -> profile lands at 0; back restores 4000)
+
+T422 | completed | Site-wide error boundaries
+     | files: app/error.tsx, app/global-error.tsx
+     | depends on: none
+     | verified: yes (throwing route renders the boundary at HTTP 500, app still
+     |           navigates client-side afterward; /foo, /brief/bogus, /players/bogus
+     |           all still answer 404, so no soft-404 regression)
+
+T423 | completed | Split the trade player resolver so one unindexable branch stops
+     |             forcing a seq scan on players
+     | files: lib/player-trades.ts
+     | verified: yes (indexed external-id pass first, slug-suffix wildcard pass runs
+     |           only for ids the first pass missed, normally none)
+
+T424 | completed | Cache the profile's cross-league trade lookup and news teaser
+     | files: lib/cache-tags.ts, lib/player-profile.ts, lib/player-profile-cache.ts,
+     |        components/player-profile/{overview-tab,trades-tab,quick-news}.tsx
+     | depends on: T423
+     | verified: yes (Overview 560ms -> ~180ms warm; Trades tab 1.27s -> ~0.70s warm,
+     |           the remainder being the deliberately uncached Signal Check grading)
+
+T425 | completed | Search palette closes on a completed route change
+     | files: components/site-search.tsx
+     | depends on: none
+     | verified: yes (palette closed and body scroll released after selecting a result)
+
+### Verification summary
+- npm run typecheck: clean
+- npm test: 1009 tests across 78 files, all pass
+- npm run build: passes end to end; /error and /global-error both in the app build
+  manifest
+- HTTP status regression check on a production build, the concern documented in
+  app/leagues/loading.tsx: /foo-does-not-exist 404, /brief/bogus-slug 404,
+  /players/not-a-real-player 404, /rankings 200. Adding error.tsx does not
+  reintroduce the soft-404 problem a root loading.tsx caused, because Next
+  re-throws the notFound() sentinel past error boundaries.
+- Browser: rankings -> profile, search -> profile, and profile -> profile all land
+  at scroll 0; back restores the prior position; no console errors or warnings.
+- Accessibility (self-audited, no sub-agent dispatched per session instruction):
+  both error pages use role="alert" with a single H1, real button/link controls at
+  min-h-11, visible focus rings, and aria-hidden on the decorative icon.
+  RouteScrollReset renders nothing and adds no ARIA surface.
+- Mobile-first: no responsive utility hides data; the error pages use sm: only for
+  type scale and padding.
+- Security (self-audited): no new endpoints, writes, or secrets. The cached trade
+  and article reads move to the cookie-less anon client, which is a strict subset
+  of what the request client could see because every table involved is public-read
+  and find_player_trade_transactions is SECURITY INVOKER granted to anon. Cache keys
+  are built from database-derived ids, not request input. error.digest is Next's
+  hashed reference, not a stack trace.
+
+### Known gaps / follow-ups
+- Profile routes still have no loading indicator, so a slow first paint shows the
+  previous page unchanged. A root loading.tsx is the wrong fix (soft 404s); a
+  per-route one under /players would work if the TTFB ever justifies it.
+- Link prefetching is left on everywhere. It costs server work per row on the
+  rankings list, but turning it off would make the click itself slower, which is
+  the opposite of the goal here.
+- The header runs supabase.auth.getUser() on every render on top of the same call
+  in middleware, so each full page load pays for two auth round trips.
