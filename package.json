@@ -32,6 +32,7 @@
     "beacon:ai-smoke": "tsx --env-file=.env.local scripts/beacon-ai-smoke.ts",
     "beacon-brief": "tsx --env-file=.env.local scripts/beacon-brief.ts",
     "beacon-brief:tests": "tsx scripts/beacon-brief-ingest-tests.ts",
+    "audit:brief-merges": "tsx --env-file=.env.local scripts/audit-brief-merges.ts",
     "sync:stats": "tsx --env-file=.env.local scripts/sync-sleeper-stats.ts",
     "sync:market": "tsx --env-file=.env.local scripts/sync-sleeper-market.ts",
     "sync:weekly-projections": "tsx --env-file=.env.local scripts/sync-weekly-projections.ts",

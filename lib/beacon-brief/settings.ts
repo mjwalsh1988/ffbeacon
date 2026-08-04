@@ -22,7 +22,27 @@ export interface BeaconBriefSettings {
   researchMaxSearches: number;
   autopublish: boolean;
   contextThreshold: number;
-  followupLookbackDays: number;
+  /**
+   * How far back the follow-up matcher looks for a story a new post might
+   * continue. Was 3 days, which let it reach across unrelated news cycles: 143 of
+   * 215 merges landed in an article more than 12 hours old, and the mis-merges
+   * clustered at the very top of the window.
+   */
+  followupLookbackHours: number;
+  /**
+   * A post whose relevance_tier is at or above this never merges into an existing
+   * article, it always gets its own. 0 disables the floor. Default 3, the tier the
+   * classifier reserves for "a current player's football situation changed", which
+   * is the size of story that must never lose its own headline and Discord card.
+   */
+  mergeBlockRelevanceTier: number;
+  /**
+   * Age past which a Discord card is too old to update in place. A Discord edit
+   * fires no notification and does not move the message, so patching a day-old
+   * card is indistinguishable from posting nothing. Past this age the follow-up
+   * gets its own card instead. 0 disables the check (always patch).
+   */
+  patchMaxAgeMinutes: number;
   queueMaxAttempts: number;
   discordJobsPerRun: number;
   articleJobsPerRun: number;
@@ -83,7 +103,9 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   researchMaxSearches: 3,
   autopublish: true,
   contextThreshold: 1,
-  followupLookbackDays: 3,
+  followupLookbackHours: 12,
+  mergeBlockRelevanceTier: 3,
+  patchMaxAgeMinutes: 120,
   queueMaxAttempts: 5,
   discordJobsPerRun: 25,
   articleJobsPerRun: 5,
@@ -193,9 +215,17 @@ export async function loadBeaconBriefSettings(
       map.get("bb_context_threshold"),
       d.contextThreshold,
     ),
-    followupLookbackDays: asNum(
-      map.get("bb_followup_lookback_days"),
-      d.followupLookbackDays,
+    followupLookbackHours: asNum(
+      map.get("bb_followup_lookback_hours"),
+      d.followupLookbackHours,
+    ),
+    mergeBlockRelevanceTier: asNum(
+      map.get("bb_merge_block_relevance_tier"),
+      d.mergeBlockRelevanceTier,
+    ),
+    patchMaxAgeMinutes: asNum(
+      map.get("bb_patch_max_age_minutes"),
+      d.patchMaxAgeMinutes,
     ),
     queueMaxAttempts: asNum(
       map.get("bb_queue_max_attempts"),

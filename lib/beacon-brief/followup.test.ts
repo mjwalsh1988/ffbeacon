@@ -19,9 +19,25 @@ vi.mock("./ai", () => ({
   logBeaconBrief: vi.fn(async () => {}),
 }));
 
-const { loadFollowupCandidates, findFollowupTarget } = await import(
-  "./followup"
-);
+const {
+  loadFollowupCandidates,
+  findFollowupTarget,
+  eligibleMergeCandidates,
+  mergeBlockedByTier,
+  sharesSubject,
+} = await import("./followup");
+
+/** A candidate with just the fields the gates read. */
+function cand(player_ids: string[], team_ids: string[]) {
+  return {
+    ingestion_id: "ing",
+    article_id: "art",
+    title: "t",
+    summary: "s",
+    player_ids,
+    team_ids,
+  };
+}
 
 type Filter = { op: string; column: string; value: unknown };
 
@@ -99,7 +115,7 @@ describe("loadFollowupCandidates", () => {
 
     const out = await loadFollowupCandidates(admin, {
       sourceId: "src-1",
-      lookbackDays: 3,
+      lookbackHours: 12,
     });
 
     // art-a appears once, carrying its NEWEST ingestion (ing-2, not ing-1).
@@ -109,14 +125,37 @@ describe("loadFollowupCandidates", () => {
         article_id: "art-b",
         title: "Gold suspended",
         summary: "indefinite",
+        player_ids: [],
+        team_ids: [],
       },
       {
         ingestion_id: "ing-2",
         article_id: "art-a",
         title: "Brissett deal",
         summary: "terms agreed",
+        player_ids: [],
+        team_ids: [],
       },
     ]);
+  });
+
+  it("carries each candidate's linked players and teams", async () => {
+    // The subject gate is only as good as these ids: without them every candidate
+    // looks eligible and the model is back to judging on wording alone.
+    const { admin } = stubAdmin({
+      news_ingestions: [{ id: "ing-1", article_id: "art-a" }],
+      articles: [{ id: "art-a", title: "Olave deal", tl_dr: "terms" }],
+      article_players: [{ article_id: "art-a", player_id: "olave" }],
+      article_teams: [{ article_id: "art-a", team_id: "no" }],
+    });
+
+    const out = await loadFollowupCandidates(admin, {
+      sourceId: "src-1",
+      lookbackHours: 12,
+    });
+
+    expect(out[0].player_ids).toEqual(["olave"]);
+    expect(out[0].team_ids).toEqual(["no"]);
   });
 
   it("never offers an archived article as a merge target", async () => {
@@ -127,7 +166,7 @@ describe("loadFollowupCandidates", () => {
 
     const out = await loadFollowupCandidates(admin, {
       sourceId: "src-1",
-      lookbackDays: 3,
+      lookbackHours: 12,
     });
 
     expect(out).toEqual([]);
@@ -147,7 +186,7 @@ describe("loadFollowupCandidates", () => {
 
     await loadFollowupCandidates(admin, {
       sourceId: "src-1",
-      lookbackDays: 3,
+      lookbackHours: 12,
       excludeIngestionId: "self",
       articleCreatedAfter: "2026-07-26T18:44:00.000Z",
     });
@@ -181,7 +220,10 @@ describe("loadFollowupCandidates", () => {
       articles: [{ id: "art-a", title: "t", tl_dr: "s" }],
     });
 
-    await loadFollowupCandidates(admin, { sourceId: "src-1", lookbackDays: 3 });
+    await loadFollowupCandidates(admin, {
+      sourceId: "src-1",
+      lookbackHours: 12,
+    });
 
     const articlesQuery = log.find((l) => l.table === "articles");
     expect(
@@ -191,18 +233,22 @@ describe("loadFollowupCandidates", () => {
     ).toBe(false);
   });
 
-  it("applies the lookback window to the ingestion query", async () => {
+  it("applies the lookback window in hours, not days", async () => {
     const { admin, log } = stubAdmin({ news_ingestions: [] });
 
-    await loadFollowupCandidates(admin, { sourceId: "src-1", lookbackDays: 3 });
+    await loadFollowupCandidates(admin, {
+      sourceId: "src-1",
+      lookbackHours: 12,
+    });
 
+    // 12 hours back from the frozen clock, not 12 days.
     const ingestionsQuery = log.find((l) => l.table === "news_ingestions");
     expect(ingestionsQuery?.filters).toEqual(
       expect.arrayContaining([
         {
           op: "gte",
           column: "created_at",
-          value: "2026-07-23T19:00:00.000Z",
+          value: "2026-07-26T07:00:00.000Z",
         },
       ]),
     );
@@ -213,7 +259,7 @@ describe("loadFollowupCandidates", () => {
 
     const out = await loadFollowupCandidates(admin, {
       sourceId: "src-1",
-      lookbackDays: 3,
+      lookbackHours: 12,
     });
 
     expect(out).toEqual([]);
@@ -221,10 +267,88 @@ describe("loadFollowupCandidates", () => {
   });
 });
 
+describe("sharesSubject", () => {
+  const post = (playerIds: string[], teamIds: string[]) => ({
+    playerIds,
+    teamIds,
+    relevanceTier: 2,
+  });
+
+  it("blocks two posts about different players on the same team", () => {
+    // The real case: "Saints placed WR Ja'Lynn Polk on the reserve/retired list"
+    // was merged into "Chris Olave signs $132M extension with Saints".
+    expect(
+      sharesSubject(post(["polk"], ["no"]), cand(["olave"], ["no"])),
+    ).toBe(false);
+  });
+
+  it("allows a genuine follow-up about the same player", () => {
+    expect(
+      sharesSubject(post(["bijan"], ["atl"]), cand(["bijan"], ["atl"])),
+    ).toBe(true);
+  });
+
+  it("falls back to teams when either side has no linked player", () => {
+    expect(sharesSubject(post([], ["sea"]), cand([], ["sea"]))).toBe(true);
+    expect(sharesSubject(post([], ["mia"]), cand([], ["sf"]))).toBe(false);
+    // Players on one side only: teams decide rather than auto-failing.
+    expect(sharesSubject(post(["x"], ["sea"]), cand([], ["sea"]))).toBe(true);
+  });
+
+  it("lets the model decide when one side has no references at all", () => {
+    // We know nothing, so blocking here would break follow-ups whose names simply
+    // failed to resolve.
+    expect(sharesSubject(post([], []), cand(["olave"], ["no"]))).toBe(true);
+    expect(sharesSubject(post(["olave"], ["no"]), cand([], []))).toBe(true);
+  });
+
+  it("filters the candidate list down to shared-subject articles", () => {
+    const list = [cand(["olave"], ["no"]), cand(["polk"], ["no"])];
+    const out = eligibleMergeCandidates(post(["polk"], ["no"]), list);
+    expect(out).toEqual([list[1]]);
+  });
+});
+
+describe("mergeBlockedByTier", () => {
+  it("blocks a merge at or above the block tier", () => {
+    const major = { playerIds: [], teamIds: [], relevanceTier: 3 };
+    expect(mergeBlockedByTier(major, 3)).toBe(true);
+  });
+
+  it("allows a merge below the block tier", () => {
+    const minor = { playerIds: [], teamIds: [], relevanceTier: 2 };
+    expect(mergeBlockedByTier(minor, 3)).toBe(false);
+  });
+
+  it("treats an unclassified post as mergeable", () => {
+    const unknown = { playerIds: [], teamIds: [], relevanceTier: null };
+    expect(mergeBlockedByTier(unknown, 3)).toBe(false);
+  });
+
+  it("is disabled at 0", () => {
+    const major = { playerIds: [], teamIds: [], relevanceTier: 3 };
+    expect(mergeBlockedByTier(major, 0)).toBe(false);
+  });
+});
+
 describe("findFollowupTarget", () => {
   const candidates = [
-    { ingestion_id: "ing-1", article_id: "art-a", title: "A", summary: "a" },
-    { ingestion_id: "ing-2", article_id: "art-b", title: "B", summary: "b" },
+    {
+      ingestion_id: "ing-1",
+      article_id: "art-a",
+      title: "A",
+      summary: "a",
+      player_ids: [],
+      team_ids: [],
+    },
+    {
+      ingestion_id: "ing-2",
+      article_id: "art-b",
+      title: "B",
+      summary: "b",
+      player_ids: [],
+      team_ids: [],
+    },
   ];
 
   it("returns the matched candidate", async () => {

@@ -29,6 +29,22 @@
  * about them here would add nothing but a second chance to make a mistake. The bound
  * needs no tuning and no magic time window: "did this article exist when I was
  * curated?" is the exact question.
+ *
+ * WHY THE MODEL IS NOT TRUSTED ALONE
+ *
+ * The prompt tells the matcher to answer null when a post is a different event that
+ * merely involves the same team, and at production scale it ignored that constantly:
+ * 75% of everything that reached the article stage was absorbed into an existing
+ * article, including a retired-player note folded into a contract extension and a
+ * 49ers signing folded into a Texans workout. The worst case put Bijan Robinson's
+ * record contract inside an article titled for an offensive lineman, where it
+ * reached no reader.
+ *
+ * So the model now proposes and code disposes. Two mechanical gates run BEFORE the
+ * call, in eligibleMergeCandidates() and mergeBlockedByTier() below, and a candidate
+ * the gates reject is never shown to the model. Both are deliberately about facts
+ * the model is bad at holding onto (who is this actually about, how big is it) and
+ * cheap for us to check exactly.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -60,11 +76,89 @@ export interface FollowupCandidate {
   article_id: string;
   title: string;
   summary: string;
+  /** Who the article is actually about, from article_players / article_teams. */
+  player_ids: string[];
+  team_ids: string[];
+}
+
+/** Who an incoming post is about, plus how big the classifier judged it. */
+export interface PostSubject {
+  playerIds: string[];
+  teamIds: string[];
+  /** CategorizeResult.relevance_tier, or null when the post was never classified. */
+  relevanceTier: number | null;
+}
+
+function intersects(a: string[], b: string[]): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  const set = new Set(a);
+  return b.some((id) => set.has(id));
+}
+
+/**
+ * Does the post share a subject with the article, so that "same event" is even
+ * possible?
+ *
+ * Players decide it whenever both sides have them: two posts naming disjoint sets
+ * of players are not one event, whatever the wording suggests. This is what stops
+ * "Saints placed WR Ja'Lynn Polk on the reserve/retired list" from merging into
+ * "Chris Olave signs $132M extension with Saints".
+ *
+ * When either side has no linked player we fall back to teams, which is the honest
+ * weaker signal for team-level news (a coaching change, a depth chart note). When
+ * neither side has any linked reference at all we allow the model to decide,
+ * because we then know nothing and blocking would silently break follow-ups on
+ * posts whose names failed to resolve.
+ */
+export function sharesSubject(
+  post: PostSubject,
+  candidate: FollowupCandidate,
+): boolean {
+  if (post.playerIds.length > 0 && candidate.player_ids.length > 0)
+    return intersects(post.playerIds, candidate.player_ids);
+  if (post.teamIds.length > 0 && candidate.team_ids.length > 0)
+    return intersects(post.teamIds, candidate.team_ids);
+  const postHasRefs = post.playerIds.length + post.teamIds.length > 0;
+  const candHasRefs =
+    candidate.player_ids.length + candidate.team_ids.length > 0;
+  return !postHasRefs || !candHasRefs;
+}
+
+/** Drop every candidate that cannot be the same event as this post. */
+export function eligibleMergeCandidates(
+  post: PostSubject,
+  candidates: FollowupCandidate[],
+): FollowupCandidate[] {
+  return candidates.filter((c) => sharesSubject(post, c));
+}
+
+/**
+ * Is this post too big to be folded into someone else's article?
+ *
+ * A merge costs the post its own headline, its own URL, and its own Discord card.
+ * That is a reasonable trade for an incremental update and a terrible one for a
+ * major story, which is exactly what happened to the Bijan Robinson contract. Any
+ * post the classifier rates at or above the block tier keeps its own article, and
+ * a later post about the same event can still merge into THAT one.
+ *
+ * blockTier <= 0 disables the floor.
+ */
+export function mergeBlockedByTier(
+  post: PostSubject,
+  blockTier: number,
+): boolean {
+  if (blockTier <= 0) return false;
+  return (post.relevanceTier ?? 0) >= blockTier;
 }
 
 export interface LoadCandidatesOptions {
   sourceId: string;
-  lookbackDays: number;
+  /**
+   * How far back to look for a story this post might continue. Hours, not days:
+   * at three days the matcher was reaching across unrelated news cycles and the
+   * mis-merges clustered at the very top of the window.
+   */
+  lookbackHours: number;
   /** Never offer a post its own ingestion (and therefore its own article) back. */
   excludeIngestionId?: string | null;
   /**
@@ -88,9 +182,9 @@ export async function loadFollowupCandidates(
   opts: LoadCandidatesOptions,
 ): Promise<FollowupCandidate[]> {
   const limit = opts.limit ?? DEFAULT_CANDIDATE_LIMIT;
-  const lookbackDays = opts.lookbackDays > 0 ? opts.lookbackDays : 1;
+  const lookbackHours = opts.lookbackHours > 0 ? opts.lookbackHours : 1;
   const cutoff = new Date(
-    Date.now() - lookbackDays * 24 * 60 * 60 * 1000,
+    Date.now() - lookbackHours * 60 * 60 * 1000,
   ).toISOString();
 
   // Over-fetch: the status and created_at filters below drop rows, and applying the
@@ -133,6 +227,29 @@ export async function loadFollowupCandidates(
   if (!articles || articles.length === 0) return [];
 
   const byId = new Map(articles.map((a) => [a.id, a]));
+
+  // Who each candidate is about. The title and summary alone are what let the
+  // matcher confuse two stories: the article about a guard's extension mentioned
+  // Bijan Robinson in its summary, so the model saw the same names twice. The
+  // linked ids are the unambiguous version of the same question.
+  const liveIds = articles.map((a) => a.id);
+  const [{ data: playerRows }, { data: teamRows }] = await Promise.all([
+    admin.from("article_players").select("article_id, player_id").in("article_id", liveIds),
+    admin.from("article_teams").select("article_id, team_id").in("article_id", liveIds),
+  ]);
+  const playersByArticle = new Map<string, string[]>();
+  for (const r of playerRows ?? []) {
+    const list = playersByArticle.get(r.article_id);
+    if (list) list.push(r.player_id);
+    else playersByArticle.set(r.article_id, [r.player_id]);
+  }
+  const teamsByArticle = new Map<string, string[]>();
+  for (const r of teamRows ?? []) {
+    const list = teamsByArticle.get(r.article_id);
+    if (list) list.push(r.team_id);
+    else teamsByArticle.set(r.article_id, [r.team_id]);
+  }
+
   const out: FollowupCandidate[] = [];
   for (const articleId of orderedArticleIds) {
     const art = byId.get(articleId);
@@ -142,6 +259,8 @@ export async function loadFollowupCandidates(
       article_id: articleId,
       title: art.title ?? "",
       summary: art.tl_dr ?? "",
+      player_ids: playersByArticle.get(articleId) ?? [],
+      team_ids: teamsByArticle.get(articleId) ?? [],
     });
     if (out.length >= limit) break;
   }

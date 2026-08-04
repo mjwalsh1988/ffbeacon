@@ -34,9 +34,12 @@ import { sendBeaconBriefFailureEmail } from "./email";
 import { runDeletionSweep } from "./deletion";
 import { shouldEmailQueueFailure } from "./health";
 import {
+  eligibleMergeCandidates,
   findFollowupTarget,
   loadFollowupCandidates,
+  mergeBlockedByTier,
   type FollowupCandidate,
+  type PostSubject,
 } from "./followup";
 import type {
   ArticleResult,
@@ -536,7 +539,24 @@ async function handleDiscordPost(
   const payload = job.payload as unknown as QueueJobPayload;
   const ingestion = await loadIngestion(admin, payload.ingestion_id);
   if (!ingestion) return { ok: true }; // nothing to post; treat as done
+  const roleIds = Array.isArray(payload.role_ids)
+    ? (payload.role_ids as string[])
+    : resolvedFrom(ingestion).roleIds;
+  return postDiscordCard(admin, ingestion, roleIds, settings);
+}
 
+/**
+ * Send one post to Discord as a new card, with every idempotency guard.
+ *
+ * Split out of handleDiscordPost so the patch handler can fall back to it when the
+ * card it was asked to update is too old to be worth editing.
+ */
+async function postDiscordCard(
+  admin: Admin,
+  ingestion: Ingestion,
+  roleIds: string[],
+  settings: BeaconBriefSettings,
+): Promise<{ ok: boolean; retryAfterMs?: number | null; error?: string }> {
   if (!settings.discordEnabled) {
     await logBeaconBrief(admin, {
       stage: "discord_post",
@@ -587,9 +607,6 @@ async function handleDiscordPost(
       error: `failed to set pre-post sentinel: ${sentinelErr.message}`,
     };
 
-  const roleIds = Array.isArray(payload.role_ids)
-    ? (payload.role_ids as string[])
-    : resolvedFrom(ingestion).roleIds;
   const attachments = await buildMediaAttachments(ingestion);
   const res = await postWebhookMessage(
     url,
@@ -679,6 +696,30 @@ async function handleDiscordPatch(
     });
     return { ok: true };
   }
+
+  // A Discord edit is silent: it fires no notification, pings no role, and leaves
+  // the message where it already sits in the channel. That is fine for an update
+  // to a card people are still looking at, and useless for one from days ago. When
+  // Bijan Robinson's contract was folded into a three-day-old card, eight straight
+  // patches landed and no reader saw any of them. Past the age limit the follow-up
+  // gets a card of its own instead of a silent edit nobody will read.
+  const cardAgeMs = Date.now() - new Date(target.created_at).getTime();
+  const maxCardAgeMs = settings.patchMaxAgeMinutes * 60_000;
+  if (maxCardAgeMs > 0 && cardAgeMs > maxCardAgeMs) {
+    await logBeaconBrief(admin, {
+      stage: "discord_patch",
+      level: "info",
+      ingestionId: newIngestion.id,
+      message: `target card is ${Math.round(cardAgeMs / 60_000)} minutes old (limit ${settings.patchMaxAgeMinutes}); posting a new card instead of a silent edit`,
+    });
+    return postDiscordCard(
+      admin,
+      newIngestion,
+      resolvedFrom(newIngestion).roleIds,
+      settings,
+    );
+  }
+
   const url = await activeWebhookUrl(admin, settings);
   if (!url) return { ok: false, error: "no active Discord webhook configured" };
 
@@ -798,6 +839,10 @@ async function applyRewriteToArticle(
  * exactly the set curation could not see. Runs before the research and article calls
  * so a duplicate costs one cheap triage call instead of two expensive writes.
  *
+ * It applies the SAME two mechanical gates curation does (size floor, shared
+ * subject), because this is the other door into a merge and a gate only one path
+ * honours is not a gate. See ./followup.ts for why the model is not trusted alone.
+ *
  * Returns the article to fold into, or null to write a new article as planned.
  */
 async function findLateDuplicateTarget(
@@ -807,18 +852,36 @@ async function findLateDuplicateTarget(
   compact: unknown,
 ): Promise<FollowupCandidate | null> {
   if (!ingestion.source_id) return null;
+  const refs = resolvedFrom(ingestion);
+  const ai = (ingestion.ai_result ?? {}) as Record<string, unknown>;
+  const subject: PostSubject = {
+    playerIds: refs.playerIds,
+    teamIds: refs.teamIds,
+    relevanceTier:
+      typeof ai.relevance_tier === "number" ? ai.relevance_tier : null,
+  };
+  if (mergeBlockedByTier(subject, settings.mergeBlockRelevanceTier)) {
+    await logBeaconBrief(admin, {
+      stage: "revision_link",
+      ingestionId: ingestion.id,
+      message: `major news (relevance tier ${subject.relevanceTier}); keeping its own article rather than folding into a sibling`,
+    });
+    return null;
+  }
+
   const candidates = await loadFollowupCandidates(admin, {
     sourceId: ingestion.source_id,
-    lookbackDays: settings.followupLookbackDays,
+    lookbackHours: settings.followupLookbackHours,
     excludeIngestionId: ingestion.id,
     articleCreatedAfter: ingestion.created_at,
   });
-  if (candidates.length === 0) return null;
+  const eligible = eligibleMergeCandidates(subject, candidates);
+  if (eligible.length === 0) return null;
   return findFollowupTarget({
     admin,
     settings,
     post: compact,
-    candidates,
+    candidates: eligible,
     sourceId: ingestion.source_id,
     ingestionId: ingestion.id,
   });
@@ -1006,6 +1069,59 @@ async function retractDiscordCard(
   }
 }
 
+/**
+ * Close the reference-match rows an abandoned article leaves behind.
+ *
+ * Curation opens a moderation row for every name it could not confidently match,
+ * with article_id null, expecting the writer to backfill it once the article
+ * exists. When the writer aborts instead, that never happens, and the row sits in
+ * the queue forever: it cannot be resolved (there is no article to link a team to)
+ * and nothing else was ever going to close it. In the admin panel it reads as an
+ * article stuck mid-write, which is how one sat pending for six hours after the
+ * post it belonged to had already been correctly rejected.
+ *
+ * Best-effort by design: the article decision is already recorded and must stand
+ * even if this cleanup fails.
+ */
+async function closeOrphanedMatchModeration(
+  admin: Admin,
+  ingestionId: string,
+  why: string,
+): Promise<void> {
+  const { data: closed, error } = await admin
+    .from("beacon_brief_moderation")
+    .update({
+      status: "rejected",
+      resolved_at: new Date().toISOString(),
+      detail: {
+        auto_closed: true,
+        reason: `no article was written: ${why}`,
+      } as unknown as Json,
+    })
+    .eq("ingestion_id", ingestionId)
+    .eq("status", "pending")
+    .is("article_id", null)
+    .in("type", ["player_match", "team_match"])
+    .select("id");
+  if (error) {
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "warn",
+      ingestionId,
+      message: `failed to close orphaned match moderation rows: ${error.message}`,
+    });
+    return;
+  }
+  if (closed && closed.length > 0) {
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "info",
+      ingestionId,
+      message: `closed ${closed.length} reference-match review(s): no article was written for this post`,
+    });
+  }
+}
+
 async function handleArticleWrite(
   admin: Admin,
   job: QueueRow,
@@ -1161,6 +1277,7 @@ async function handleArticleWrite(
       ingestion.id,
       "article stage found no fantasy impact",
     );
+    await closeOrphanedMatchModeration(admin, ingestion.id, why);
     // ok: the job did its work and reached a decision. Returning false would
     // retry it and pay for the research and article calls all over again.
     return { ok: true };

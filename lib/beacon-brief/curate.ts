@@ -22,7 +22,14 @@ import { logBeaconBrief, runStructuredCall } from "./ai";
 import { loadBeaconBriefSettings } from "./settings";
 import { matchReferences } from "./match";
 import { matchBlockedKeywords, parseBlocklist } from "./keyword-filter";
-import { findFollowupTarget, loadFollowupCandidates } from "./followup";
+import {
+  eligibleMergeCandidates,
+  findFollowupTarget,
+  loadFollowupCandidates,
+  mergeBlockedByTier,
+  type FollowupCandidate,
+  type PostSubject,
+} from "./followup";
 import { sendBeaconBriefMatchDigestEmail } from "./email";
 import { beginXCall, recordXFailure, recordXSuccess } from "./health";
 import type {
@@ -375,6 +382,164 @@ async function activeCategorySlugs(admin: Admin): Promise<string> {
   return (data ?? []).map((c) => c.slug).join(", ");
 }
 
+/**
+ * Ask the follow-up matcher, but only about candidates that could really be the
+ * same event, and only when this post is small enough to be folded into one.
+ *
+ * The gates run before the AI call, not after, for two reasons: a rejected merge
+ * costs nothing, and a candidate the model never sees is a candidate it cannot
+ * talk itself into. Returns the article to merge into, or null to write our own.
+ */
+async function findGatedFollowup(
+  admin: Admin,
+  source: NewsSource,
+  item: BeaconBriefSourceItem,
+  settings: Awaited<ReturnType<typeof loadBeaconBriefSettings>>,
+  opts: { subject: PostSubject; lookbackHours: number },
+): Promise<FollowupCandidate | null> {
+  if (mergeBlockedByTier(opts.subject, settings.mergeBlockRelevanceTier)) {
+    await logBeaconBrief(admin, {
+      stage: "revision_link",
+      sourceId: source.id,
+      message: `major news (relevance tier ${opts.subject.relevanceTier}); writing its own article rather than merging`,
+    });
+    return null;
+  }
+
+  const candidates = await loadFollowupCandidates(admin, {
+    sourceId: source.id,
+    lookbackHours: opts.lookbackHours,
+  });
+  const eligible = eligibleMergeCandidates(opts.subject, candidates);
+  if (eligible.length < candidates.length) {
+    await logBeaconBrief(admin, {
+      stage: "revision_link",
+      sourceId: source.id,
+      message: `${candidates.length - eligible.length} of ${candidates.length} follow-up candidate(s) rejected: no shared player or team with this post`,
+    });
+  }
+  return findFollowupTarget({
+    admin,
+    settings,
+    post: compactItem(item),
+    candidates: eligible,
+    sourceId: source.id,
+  });
+}
+
+/**
+ * Insert a post as a revision of an earlier one: patch the existing Discord card
+ * and, when the change is critical, queue a rewrite of the existing article.
+ *
+ * Shared by both revision paths (a native source edit, and an AI-linked follow-up)
+ * so they behave identically. aiStored is null only for native edits, which reach
+ * here without a classification; every other caller now has one, which is why a
+ * merged post finally carries its own ai_result and context_score instead of the
+ * nulls that used to make merged rows unreadable after the fact.
+ */
+async function processRevision(
+  admin: Admin,
+  source: NewsSource,
+  item: BeaconBriefSourceItem,
+  settings: Awaited<ReturnType<typeof loadBeaconBriefSettings>>,
+  summary: CurationSummary,
+  opts: {
+    revisionOfIngestionId: string;
+    revisionTargetArticleId: string | null;
+    aiStored: Json | null;
+    contextScore: number | null;
+  },
+): Promise<void> {
+  // Revisions insert immediately: the patch job needs the row id, and there is
+  // no inline AI gate that could fail before the row is needed.
+  const { data: inserted, error: insErr } = await admin
+    .from("news_ingestions")
+    .insert({
+      source_id: source.id,
+      source_type: item.source_type,
+      source_external_id: item.source_external_id,
+      external_url: item.external_url,
+      author_handle: item.author_handle,
+      text: item.text,
+      media: item.media as unknown as Json,
+      quoted: (item.quoted as unknown as Json) ?? null,
+      retweeted: (item.retweeted as unknown as Json) ?? null,
+      metadata: (item.raw as Json) ?? {},
+      is_revision: true,
+      revision_of_ingestion_id: opts.revisionOfIngestionId,
+      ai_result: opts.aiStored,
+      context_score: opts.contextScore,
+      status: "processing",
+    })
+    .select("id")
+    .single();
+  if (insErr || !inserted) {
+    await logBeaconBrief(admin, {
+      stage: "ingest",
+      level: "warn",
+      sourceId: source.id,
+      message: `insert skipped (${insErr?.message ?? "no row"})`,
+    });
+    return;
+  }
+  const ingestionId = inserted.id;
+  summary.ingested += 1;
+  summary.revisions += 1;
+  await logBeaconBrief(admin, {
+    stage: "ingest",
+    sourceId: source.id,
+    ingestionId,
+    message: `ingested ${item.source_external_id} (revision)`,
+  });
+
+  // Bring the story's existing Discord card up to date. The worker decides
+  // whether that card is still fresh enough to edit in place or whether this
+  // follow-up needs its own; see handleDiscordPatch in ./worker.ts.
+  await enqueue(admin, "discord_patch", {
+    ingestion_id: ingestionId,
+    target_ingestion_id: opts.revisionOfIngestionId,
+  });
+  summary.discordQueued += 1;
+
+  // Triage: only rewrite the article when the change is critical.
+  let critical = false;
+  if (opts.revisionTargetArticleId && settings.prompts.revisionTriage) {
+    const { data: art } = await admin
+      .from("articles")
+      .select("title, content_md, tl_dr")
+      .eq("id", opts.revisionTargetArticleId)
+      .maybeSingle();
+    const triage = await runStructuredCall<{ critical: boolean }>({
+      admin,
+      stage: "revision_triage",
+      model: settings.modelTriage,
+      system: settings.prompts.revisionTriage,
+      userContent: JSON.stringify({
+        original_article: art ?? {},
+        new_post: compactItem(item),
+      }),
+      schema: TRIAGE_SCHEMA as unknown as Record<string, unknown>,
+      ingestionId,
+      sourceId: source.id,
+      maxTokens: 256,
+    });
+    critical = triage?.critical === true;
+  }
+
+  if (critical && opts.revisionTargetArticleId) {
+    await enqueue(admin, "article_write", {
+      ingestion_id: ingestionId,
+      mode: "rewrite",
+      article_id: opts.revisionTargetArticleId,
+    });
+    summary.articlesQueued += 1;
+  }
+  await admin
+    .from("news_ingestions")
+    .update({ status: "revised", processed_at: new Date().toISOString() })
+    .eq("id", ingestionId);
+}
+
 async function processItem(
   admin: Admin,
   source: NewsSource,
@@ -429,10 +594,9 @@ async function processItem(
     return;
   }
 
-  // Revision detection.
-  let revisionOfIngestionId: string | null = null;
-  let revisionTargetArticleId: string | null = null;
-
+  // Revision detection, part 1: a native source edit. Deterministic, costs no AI
+  // call, and is a revision by definition (the source rewrote its own post), so it
+  // short-circuits ahead of every gate below exactly as it always has.
   if (item.is_native_edit && item.edit_of_external_id) {
     const { data: prior } = await admin
       .from("news_ingestions")
@@ -441,40 +605,20 @@ async function processItem(
       .eq("source_external_id", item.edit_of_external_id)
       .maybeSingle();
     if (prior) {
-      revisionOfIngestionId = prior.id;
-      revisionTargetArticleId = prior.article_id;
       await logBeaconBrief(admin, {
         stage: "revision_link",
         sourceId: source.id,
         message: `native edit of ${item.edit_of_external_id}`,
       });
+      await processRevision(admin, source, item, settings, summary, {
+        revisionOfIngestionId: prior.id,
+        revisionTargetArticleId: prior.article_id,
+        aiStored: null,
+        contextScore: null,
+      });
+      return;
     }
   }
-
-  // AI follow-up link. This catches a story that develops across poll runs, where
-  // the earlier post already has a written article to point at. It CANNOT catch two
-  // posts about one event in the same poll window: the first post's article does not
-  // exist yet, so it is not a candidate. The worker re-asks just before writing to
-  // close that gap; see ./followup.ts.
-  if (!revisionOfIngestionId) {
-    const candidates = await loadFollowupCandidates(admin, {
-      sourceId: source.id,
-      lookbackDays: settings.followupLookbackDays,
-    });
-    const hit = await findFollowupTarget({
-      admin,
-      settings,
-      post: compactItem(item),
-      candidates,
-      sourceId: source.id,
-    });
-    if (hit) {
-      revisionOfIngestionId = hit.ingestion_id;
-      revisionTargetArticleId = hit.article_id;
-    }
-  }
-
-  const isRevision = revisionOfIngestionId !== null;
 
   // The common ingestion row payload (our UUID identity). Built once and reused by
   // both insert paths below.
@@ -491,90 +635,13 @@ async function processItem(
     metadata: (item.raw as Json) ?? {},
   };
 
-  if (isRevision && revisionOfIngestionId) {
-    // Revisions insert immediately: the patch job needs the row id, and there is
-    // no inline AI gate that could fail before the row is needed.
-    const { data: inserted, error: insErr } = await admin
-      .from("news_ingestions")
-      .insert({
-        ...baseRow,
-        is_revision: true,
-        revision_of_ingestion_id: revisionOfIngestionId,
-        status: "processing",
-      })
-      .select("id")
-      .single();
-    if (insErr || !inserted) {
-      await logBeaconBrief(admin, {
-        stage: "ingest",
-        level: "warn",
-        sourceId: source.id,
-        message: `insert skipped (${insErr?.message ?? "no row"})`,
-      });
-      return;
-    }
-    const ingestionId = inserted.id;
-    summary.ingested += 1;
-    summary.revisions += 1;
-    await logBeaconBrief(admin, {
-      stage: "ingest",
-      sourceId: source.id,
-      ingestionId,
-      message: `ingested ${item.source_external_id} (revision)`,
-    });
-
-    // Always patch the existing Discord message with the new content.
-    await enqueue(admin, "discord_patch", {
-      ingestion_id: ingestionId,
-      target_ingestion_id: revisionOfIngestionId,
-    });
-    summary.discordQueued += 1;
-
-    // Triage: only rewrite the article when the change is critical.
-    let critical = false;
-    if (revisionTargetArticleId && settings.prompts.revisionTriage) {
-      const { data: art } = await admin
-        .from("articles")
-        .select("title, content_md, tl_dr")
-        .eq("id", revisionTargetArticleId)
-        .maybeSingle();
-      const triage = await runStructuredCall<{ critical: boolean }>({
-        admin,
-        stage: "revision_triage",
-        model: settings.modelTriage,
-        system: settings.prompts.revisionTriage,
-        userContent: JSON.stringify({
-          original_article: art ?? {},
-          new_post: compactItem(item),
-        }),
-        schema: TRIAGE_SCHEMA as unknown as Record<string, unknown>,
-        ingestionId,
-        sourceId: source.id,
-        maxTokens: 256,
-      });
-      critical = triage?.critical === true;
-    }
-
-    if (critical && revisionTargetArticleId) {
-      await enqueue(admin, "article_write", {
-        ingestion_id: ingestionId,
-        mode: "rewrite",
-        article_id: revisionTargetArticleId,
-      });
-      summary.articlesQueued += 1;
-    }
-    await admin
-      .from("news_ingestions")
-      .update({ status: "revised", processed_at: new Date().toISOString() })
-      .eq("id", ingestionId);
-    return;
-  }
-
-  // Gate 1 (keyword pre-filter): a new post containing any blocked keyword is
+  // Gate 1 (keyword pre-filter): a post containing any blocked keyword is
   // diverted to the Filtered review queue BEFORE the AI call, so non-football
-  // noise never reaches Discord or an article and we skip the AI cost. New posts
-  // only (revisions returned above). Force-push from the review queue bypasses
-  // this gate, so a forced post can never loop back into filtered.
+  // noise never reaches Discord or an article and we skip the AI cost. Native
+  // edits returned above and skip this; a possible AI follow-up does NOT, because
+  // the follow-up decision now happens after classification and an off-sport post
+  // should never merge into a football story either. Force-push from the review
+  // queue bypasses this gate, so a forced post can never loop back into filtered.
   if (settings.keywordFilterEnabled) {
     const blocklist = parseBlocklist(settings.keywordFilter);
     const haystack = [item.text, item.quoted?.text, item.retweeted?.text]
@@ -717,6 +784,37 @@ async function processItem(
     resolved,
     pending: refs.pending,
   } as unknown as Json;
+
+  // Revision detection, part 2: the AI follow-up link. This catches a story that
+  // develops across poll runs, where the earlier post already has a written article
+  // to point at. It CANNOT catch two posts about one event in the same poll window:
+  // the first post's article does not exist yet, so it is not a candidate. The
+  // worker re-asks just before writing to close that gap; see ./followup.ts.
+  //
+  // It runs HERE, after classification, rather than before it as it used to. The
+  // two gates that keep it honest both need the classifier's output: the size floor
+  // reads relevance_tier, and the subject check needs this post's resolved player
+  // and team ids. Asking first and classifying later is what let a tier-3 contract
+  // story disappear into an unrelated article, and it also left every merged post
+  // with no ai_result at all.
+  const subject: PostSubject = {
+    playerIds: refs.playerIds,
+    teamIds: refs.teamIds,
+    relevanceTier: ai.relevance_tier ?? null,
+  };
+  const followup = await findGatedFollowup(admin, source, item, settings, {
+    subject,
+    lookbackHours: settings.followupLookbackHours,
+  });
+  if (followup) {
+    await processRevision(admin, source, item, settings, summary, {
+      revisionOfIngestionId: followup.ingestion_id,
+      revisionTargetArticleId: followup.article_id,
+      aiStored,
+      contextScore: ai.context_score ?? 0,
+    });
+    return;
+  }
 
   // A retweet whose original could not be resolved carries only the truncated
   // "RT @user:" stub as its text, so it never becomes an article (F2): we still

@@ -24,17 +24,36 @@ export async function resolveReferenceMatch(
 
   const { data: mod } = await admin
     .from("beacon_brief_moderation")
-    .select("id, type, status, article_id")
+    .select("id, type, status, article_id, ingestion_id")
     .eq("id", moderationId)
     .maybeSingle();
   if (!mod || mod.status !== "pending")
     throw new Error("This item is no longer pending.");
   if (mod.type !== "player_match" && mod.type !== "team_match")
     throw new Error("This item is not a reference match.");
-  if (!mod.article_id)
+  if (!mod.article_id) {
+    // "Still being written" is only true while the article_write job is queued or
+    // running. When that job decided NOT to write (the research stage found no
+    // fantasy impact), article_id stays null forever, and telling the admin to try
+    // again in a moment sends them back to a row that will never resolve. Read the
+    // ingestion's actual state and say which case this is.
+    const { data: ing } = mod.ingestion_id
+      ? await admin
+          .from("news_ingestions")
+          .select("status")
+          .eq("id", mod.ingestion_id)
+          .maybeSingle()
+      : { data: null };
+    const abandoned =
+      ing?.status === "filtered" ||
+      ing?.status === "dropped_no_context" ||
+      ing?.status === "deleted";
     throw new Error(
-      "The article is still being written. Try again in a moment.",
+      abandoned
+        ? "No article was written for this post, so there is nothing to link. Dismiss this item instead."
+        : "The article is still being written. Try again in a moment.",
     );
+  }
 
   if (mod.type === "player_match") {
     const { data: player } = await admin
