@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { RefreshCw } from "lucide-react";
+import { Clock, RefreshCw } from "lucide-react";
 import { useLeagueSync, useStartLeagueSync } from "@/lib/league-sync-queue";
 
 /**
@@ -134,6 +134,60 @@ export function LeagueSyncButton({
         }
       >
         {status}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * What a row shows once Sync all has queued it (components/league-sync-all.tsx).
+ *
+ * Not a button. The reader has already asked for this league and the work is on
+ * the server, so there is nothing here to press: the row is reporting, not
+ * offering. It replaces the Sync button for exactly as long as the job is
+ * queued or running, and the button comes back if the job fails, because that is
+ * the point where there is something to do again.
+ *
+ * Sized to match the button it stands in for, so a list part way through a batch
+ * does not jump around as rows change state. The label is real text in a plain
+ * span, so a screen reader following the pointer finds it.
+ */
+export function LeagueQueuedBadge({
+  leagueName,
+  phase,
+  size = "md",
+  className = "",
+}: {
+  leagueName: string;
+  phase: "pending" | "processing";
+  size?: keyof typeof SIZE;
+  className?: string;
+}) {
+  const dims = SIZE[size];
+  const syncing = phase === "processing";
+  const Icon = syncing ? RefreshCw : Clock;
+
+  return (
+    <span
+      className={`inline-flex h-11 items-center md:h-auto ${className}`}
+      title={
+        syncing
+          ? `${leagueName} is syncing now.`
+          : `${leagueName} is waiting its turn in the sync queue.`
+      }
+    >
+      <span
+        className={`inline-flex items-center whitespace-nowrap rounded-full border font-bold tracking-tight ${dims.pill} ${
+          syncing
+            ? "border-transparent bg-beacon text-black opacity-70"
+            : "border-line-accent bg-base/70 text-ink-muted"
+        }`}
+      >
+        <Icon
+          aria-hidden="true"
+          className={`${dims.icon} shrink-0 ${syncing ? "animate-spin" : ""}`}
+        />
+        {syncing ? "Syncing" : "Queued"}
       </span>
     </span>
   );

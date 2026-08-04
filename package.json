@@ -17,6 +17,7 @@
     "check:routes": "tsx scripts/check-reserved-routes.ts",
     "sync:players": "tsx --env-file=.env.local scripts/sync-sleeper-players.ts",
     "pulse:league": "tsx --env-file=.env.local scripts/pulse-league.ts",
+    "worker:league-sync": "tsx --env-file=.env.local scripts/run-league-sync-worker.ts",
     "sync:ktc": "tsx --env-file=.env.local scripts/sync-ktc.ts",
     "sync:fantasycalc": "tsx --env-file=.env.local scripts/sync-fantasycalc.ts",
     "sync:dynastyprocess": "tsx --env-file=.env.local scripts/sync-dynastyprocess.ts",

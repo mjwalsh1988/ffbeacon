@@ -13,6 +13,7 @@ import {
   loadSearchedTeamStatuses,
   type LeagueTeamStatusSummary,
 } from "@/lib/league-team-status-data";
+import { loadBulkSyncState } from "@/lib/league-bulk-sync";
 import { LeagueResults } from "@/app/tools/league-pulse/league-results";
 import { SaveUsernameForm } from "./save-username-form";
 
@@ -47,6 +48,12 @@ export default async function SleeperLeaguesPage() {
   // tool: this page never triggers a sync, so unopened leagues report pending.
   let teamStatuses: Record<string, LeagueTeamStatusSummary> = {};
   const resolvedSource = await resolveSourceSlug(supabase, undefined);
+
+  // The reader's newest Sync all batch, read through their own session client
+  // (the owner-select policies on both queue tables are what scope it). Passing
+  // this is also what turns Sync all on: LeagueResults renders the button only
+  // when it is present, so the public tool, which never passes it, never shows it.
+  const bulkSync = await loadBulkSyncState(supabase, user!.id);
   if (sleeperUsername) {
     sleeperUser = await getSleeperUser(sleeperUsername);
     if (sleeperUser) {
@@ -161,6 +168,7 @@ export default async function SleeperLeaguesPage() {
               shownLeagueIds={shownLeagueIds}
               teamStatuses={teamStatuses}
               sourceSlug={resolvedSource.slug}
+              bulkSync={bulkSync}
             />
           </div>
         )}

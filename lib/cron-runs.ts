@@ -92,7 +92,8 @@ export type CronJobName =
   | "sync-sleeper-market"
   | "sync-weekly-projections"
   | "beacon-brief-curate"
-  | "beacon-brief-worker";
+  | "beacon-brief-worker"
+  | "league-sync-worker";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
 
@@ -198,6 +199,13 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "* * * * *",
     description:
       "Drains the Beacon Brief queue: Discord posts/patches, article writing, and deletion checks, with throttle and backoff.",
+  },
+  {
+    name: "league-sync-worker",
+    label: "League Pulse Sync all worker",
+    schedule: "* * * * *",
+    description:
+      "Drains the Sync all queue from My Sleeper Leagues: up to four league pulses per run, paced, with backoff and a reaper for stalled jobs. Idle runs cost one indexed read.",
   },
 ];
 

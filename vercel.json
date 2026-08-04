@@ -48,6 +48,10 @@
     {
       "path": "/api/cron/beacon-brief-worker",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/league-sync-worker",
+      "schedule": "* * * * *"
     }
   ]
 }

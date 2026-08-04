@@ -1,6 +1,13 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import {
   ChevronRight,
   ArrowRight,
@@ -27,9 +34,25 @@ import type { TeamStatusKey } from "@/lib/league-team-status";
 import { TeamStatusBadge, TeamStatusPending } from "@/components/team-status-badge";
 import { TeamStandingFigure } from "@/components/team-standing-figure";
 import { describeStandingFigure } from "@/lib/team-standing-figure";
-import { LeagueSyncButton } from "@/components/league-sync-button";
+import {
+  LeagueQueuedBadge,
+  LeagueSyncButton,
+} from "@/components/league-sync-button";
+import { LeagueSyncAll } from "@/components/league-sync-all";
 import { LeagueSyncProvider, useLeagueSync } from "@/lib/league-sync-queue";
+import {
+  IDLE_BULK_SYNC_STATE,
+  mergeBulkSyncState,
+  type BulkSyncState,
+  type LeagueSyncJobStatus,
+} from "@/lib/league-bulk-sync-types";
 import { LeagueDetailSheet } from "./league-detail-sheet";
+
+/**
+ * Per-league status inside the newest Sync all batch, keyed by Sleeper league id.
+ * Empty on the public variant, which has no Sync all.
+ */
+type BulkStatusMap = Record<string, LeagueSyncJobStatus>;
 
 /** Keyed by Sleeper league id. Absent means we have never pulsed that league. */
 export type TeamStatusMap = Record<string, LeagueTeamStatusSummary>;
@@ -113,6 +136,7 @@ export function LeagueResults({
   shownLeagueIds = [],
   teamStatuses = {},
   sourceSlug = null,
+  bulkSync,
 }: {
   variant?: LeagueResultsVariant;
   leagues: SleeperLeague[];
@@ -133,6 +157,16 @@ export function LeagueResults({
   /** Active value source, so the FF Beacon mark on a rebuilder's roster value
    * appears only when the value really is FF Beacon's. */
   sourceSlug?: string | null;
+  /**
+   * The signed-in reader's newest Sync all batch, read on the server.
+   *
+   * DASHBOARD ONLY, and the absence of it is what keeps Sync all off the public
+   * tool. /tools/league-pulse never passes this, so the button never renders
+   * there and the rows keep the one-at-a-time Sync they already had. Anyone can
+   * reach the public tool, and a button that queues every league a visitor owns
+   * is not a thing to hand out anonymously.
+   */
+  bulkSync?: BulkSyncState;
 }) {
   const [openLeagueId, setOpenLeagueId] = useState<string | null>(null);
   const openLeague = leagues.find((l) => l.league_id === openLeagueId) ?? null;
@@ -151,6 +185,31 @@ export function LeagueResults({
   // surfaces.
   const [showAll, setShowAll] = useState(true);
   const [, startTransition] = useTransition();
+
+  // Sync all progress, held here rather than inside the button, because the rows
+  // need it too: a queued league shows "Queued" where its Sync button was, from
+  // the moment the press returns rather than whenever the next server render
+  // lands.
+  const [bulkState, setBulkState] = useState<BulkSyncState>(
+    bulkSync ?? IDLE_BULK_SYNC_STATE,
+  );
+  const bulkSyncRef = useRef(bulkSync);
+  bulkSyncRef.current = bulkSync;
+  const serverRequestId = bulkSync?.requestId ?? null;
+  const serverProgress = bulkSync ? bulkSync.done + bulkSync.failed : -1;
+  const serverActive = bulkSync?.active ?? false;
+
+  // Two sources describe the same batch: this render's server copy and the
+  // button's own polling. mergeBulkSyncState decides which one wins; see there
+  // for why a server copy that is behind is dropped rather than applied.
+  useEffect(() => {
+    const incoming = bulkSyncRef.current;
+    if (!incoming) return;
+    setBulkState((prev) => mergeBulkSyncState(prev, incoming));
+  }, [serverRequestId, serverProgress, serverActive]);
+
+  const bulkStatuses: BulkStatusMap =
+    variant === "dashboard" ? bulkState.jobStatuses : {};
 
   // Filter the leagues array passed down to the dashboard renderers.
   // When `showAll` is true we pass everything through. When false, we
@@ -212,6 +271,13 @@ export function LeagueResults({
 
         {variant === "dashboard" ? (
           <>
+            {bulkSync && (
+              <LeagueSyncAll
+                initialState={bulkSync}
+                leagueCount={leagues.length}
+                onStateChange={setBulkState}
+              />
+            )}
             <DashboardFilter
               showAll={showAll}
               onChange={setShowAll}
@@ -229,6 +295,7 @@ export function LeagueResults({
                       leagues={group.leagues}
                       sleeperUsername={sleeperUsername}
                       teamStatuses={teamStatuses}
+                      bulkStatuses={bulkStatuses}
                       sourceSlug={sourceSlug}
                       featuredId={featuredId}
                       shownIds={shownIds}
@@ -239,6 +306,7 @@ export function LeagueResults({
                       leagues={group.leagues}
                       sleeperUsername={sleeperUsername}
                       teamStatuses={teamStatuses}
+                      bulkStatuses={bulkStatuses}
                       sourceSlug={sourceSlug}
                       featuredId={featuredId}
                       shownIds={shownIds}
@@ -343,6 +411,7 @@ function TeamStandingCell({
   sleeperLeagueId,
   leagueTeamCount,
   sourceSlug,
+  bulkStatus = null,
   size = "md",
 }: {
   summary: LeagueTeamStatusSummary | null;
@@ -352,15 +421,27 @@ function TeamStandingCell({
    *  covers every roster, not only the ones Power Pulse scored. */
   leagueTeamCount: number;
   sourceSlug: string | null;
+  /** Where this league sits in the reader's Sync all batch, if it is in one. */
+  bulkStatus?: LeagueSyncJobStatus | null;
   size?: "sm" | "md";
 }) {
   const sync = useLeagueSync(sleeperLeagueId);
+  const queued = bulkStatus === "pending" || bulkStatus === "processing";
 
   if (!summary?.status) {
     return (
       <span className="flex flex-wrap items-center gap-1.5">
         <TeamStatusPending size={size} />
-        {sync.didSucceed ? (
+        {queued ? (
+          // Sync all already asked for this one. Offering the button as well
+          // would let the reader spend their single-league slot on work that is
+          // already queued.
+          <LeagueQueuedBadge
+            leagueName={leagueName}
+            phase={bulkStatus === "processing" ? "processing" : "pending"}
+            size={size}
+          />
+        ) : sync.didSucceed ? (
           // The sync worked and the league still has no Pulse row. That is a
           // real answer, not a failure: Power Pulse refuses to score a season
           // with no unplayed games left, and offering the button again would
@@ -394,6 +475,17 @@ function TeamStandingCell({
         sourceSlug={sourceSlug}
         size={size}
       />
+      {/* An already-tagged league is in the batch too, and a reader who pressed
+          Sync all should be able to see that this row is one of the ones being
+          worked on. The tag and figure stay put; the badge joins them until the
+          job finishes, at which point the numbers beside it are the fresh ones. */}
+      {queued && (
+        <LeagueQueuedBadge
+          leagueName={leagueName}
+          phase={bulkStatus === "processing" ? "processing" : "pending"}
+          size={size}
+        />
+      )}
     </span>
   );
 }
@@ -408,9 +500,21 @@ function TeamStandingCell({
 function describeTeamStanding(
   summary: LeagueTeamStatusSummary | null,
   leagueTeamCount: number,
+  bulkStatus: LeagueSyncJobStatus | null = null,
 ): string {
+  // The batch state leads, because it answers the question a reader who just
+  // pressed Sync all is actually asking about this row.
+  const queueNote =
+    bulkStatus === "processing"
+      ? "Syncing now."
+      : bulkStatus === "pending"
+        ? "Queued for syncing."
+        : null;
+
   if (!summary?.status) {
-    return "Your team has no standing yet. Use the Sync button on this row, or open the league, to calculate it.";
+    return queueNote
+      ? `${queueNote} Your team has no standing yet; it will appear once this league finishes.`
+      : "Your team has no standing yet. Use the Sync button on this row, or open the league, to calculate it.";
   }
   const figure = describeStandingFigure({
     statusKey: summary.status.key,
@@ -421,7 +525,7 @@ function describeTeamStanding(
     valueIsExact: summary.valueIsExact,
     leagueTeamCount,
   });
-  return `Your team: ${summary.status.label}. ${figure} ${summary.status.reason}`.trim();
+  return `${queueNote ? `${queueNote} ` : ""}Your team: ${summary.status.label}. ${figure} ${summary.status.reason}`.trim();
 }
 
 /* ---------- PUBLIC variant, desktop ---------- */
@@ -643,6 +747,7 @@ function DesktopDashboardTable({
   leagues,
   sleeperUsername,
   teamStatuses,
+  bulkStatuses,
   sourceSlug,
   featuredId,
   shownIds,
@@ -652,6 +757,7 @@ function DesktopDashboardTable({
   leagues: SleeperLeague[];
   sleeperUsername: string | null;
   teamStatuses: TeamStatusMap;
+  bulkStatuses: BulkStatusMap;
   sourceSlug: string | null;
   featuredId: string | null;
   shownIds: Set<string>;
@@ -694,6 +800,7 @@ function DesktopDashboardTable({
           {leagues.map((league) => {
             const { label, tone } = describeStatus(league.status);
             const summary = teamStatuses[league.league_id] ?? null;
+            const bulkStatus = bulkStatuses[league.league_id] ?? null;
             const isFeatured = featuredId === league.league_id;
             const isShown = shownIds.has(league.league_id);
             return (
@@ -744,6 +851,7 @@ function DesktopDashboardTable({
                     sleeperLeagueId={league.league_id}
                     leagueTeamCount={league.total_rosters}
                     sourceSlug={sourceSlug}
+                    bulkStatus={bulkStatus}
                   />
                 </td>
                 <td className="px-3 py-4 text-center">
@@ -777,6 +885,7 @@ function MobileDashboardCards({
   leagues,
   sleeperUsername,
   teamStatuses,
+  bulkStatuses,
   sourceSlug,
   featuredId,
   shownIds,
@@ -786,6 +895,7 @@ function MobileDashboardCards({
   leagues: SleeperLeague[];
   sleeperUsername: string | null;
   teamStatuses: TeamStatusMap;
+  bulkStatuses: BulkStatusMap;
   sourceSlug: string | null;
   featuredId: string | null;
   shownIds: Set<string>;
@@ -801,6 +911,7 @@ function MobileDashboardCards({
       {leagues.map((league) => {
         const { label, tone } = describeStatus(league.status);
         const summary = teamStatuses[league.league_id] ?? null;
+        const bulkStatus = bulkStatuses[league.league_id] ?? null;
         const isFeatured = featuredId === league.league_id;
         const isShown = shownIds.has(league.league_id);
         return (
@@ -816,7 +927,7 @@ function MobileDashboardCards({
             <LeagueOpenLink
               sleeperLeagueId={league.league_id}
               href={leagueHref(league.league_id, sleeperUsername, league.name)}
-              ariaLabel={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
+              ariaLabel={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters, bulkStatus)}`}
               className="group block w-full px-4 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
             >
               <span className="flex flex-wrap items-start justify-between gap-2">
@@ -841,6 +952,7 @@ function MobileDashboardCards({
                 sleeperLeagueId={league.league_id}
                 leagueTeamCount={league.total_rosters}
                 sourceSlug={sourceSlug}
+                bulkStatus={bulkStatus}
               />
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">

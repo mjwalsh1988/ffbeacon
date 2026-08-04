@@ -1231,6 +1231,30 @@ export type Database = {
           },
         ];
       };
+      league_bulk_sync_requests: {
+        Row: {
+          completed_at: string | null;
+          id: string;
+          league_count: number;
+          requested_at: string;
+          user_id: string;
+        };
+        Insert: {
+          completed_at?: string | null;
+          id?: string;
+          league_count?: number;
+          requested_at?: string;
+          user_id: string;
+        };
+        Update: {
+          completed_at?: string | null;
+          id?: string;
+          league_count?: number;
+          requested_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       league_drafts: {
         Row: {
           created_at: string;
@@ -1631,6 +1655,59 @@ export type Database = {
           sleeper_league_id?: string | null;
         };
         Relationships: [];
+      };
+      league_sync_jobs: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          finished_at: string | null;
+          id: string;
+          last_error: string | null;
+          league_name: string | null;
+          request_id: string;
+          run_after: string;
+          sleeper_league_id: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          finished_at?: string | null;
+          id?: string;
+          last_error?: string | null;
+          league_name?: string | null;
+          request_id: string;
+          run_after?: string;
+          sleeper_league_id: string;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          finished_at?: string | null;
+          id?: string;
+          last_error?: string | null;
+          league_name?: string | null;
+          request_id?: string;
+          run_after?: string;
+          sleeper_league_id?: string;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_sync_jobs_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "league_bulk_sync_requests";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       league_transactions: {
         Row: {
@@ -4859,6 +4936,29 @@ export type Database = {
           team: string;
         }[];
       };
+      claim_league_sync_jobs: {
+        Args: { p_limit: number };
+        Returns: {
+          attempts: number;
+          created_at: string;
+          finished_at: string | null;
+          id: string;
+          last_error: string | null;
+          league_name: string | null;
+          request_id: string;
+          run_after: string;
+          sleeper_league_id: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "league_sync_jobs";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       claim_on_the_clock_sync: {
         Args: {
           p_cooldown_seconds?: number;
@@ -4892,6 +4992,14 @@ export type Database = {
       complete_on_the_clock_sync: {
         Args: { p_draft_id: string; p_pick_count: number; p_status?: string };
         Returns: undefined;
+      };
+      enqueue_bulk_league_sync: {
+        Args: {
+          p_cooldown_seconds?: number;
+          p_leagues: Json;
+          p_user_id: string;
+        };
+        Returns: Json;
       };
       find_player_trade_transactions: {
         Args: { p_limit?: number; p_sleeper_id: string };

@@ -2048,3 +2048,160 @@ T443 | completed | Mobile row shows the team standing instead of the league stat
 - npm run build: compiles clean, no warnings
 - All dev servers stopped by process (not by task, see the note above); ports 3000
   through 3005 confirmed free.
+
+## Sync all (My Sleeper Leagues, signed-in only)
+
+T444 | completed | Queue tables + enqueue/claim RPCs for Sync all
+     | files: supabase/migrations/0172_league_bulk_sync_queue.sql
+     | depends on: T439
+     | verified: yes (league_bulk_sync_requests + league_sync_jobs, both RLS-on with
+     |   service_role ALL and an owner-only SELECT, plus explicit table grants so the
+     |   policy has something to permit. Confirmed against prod: anon has nothing on
+     |   either table, authenticated has SELECT and nothing else, service_role has all
+     |   four. enqueue_bulk_league_sync and claim_league_sync_jobs are EXECUTE
+     |   service_role only for public, anon, and authenticated alike (all three named,
+     |   because revoking from public leaves Supabase's named grants in place).
+     |
+     |   The 12-hour limit lives inside the enqueue RPC behind pg_advisory_xact_lock,
+     |   not in the route, so two clicks landing together take turns instead of both
+     |   reading "no request in the window". A partial unique index on
+     |   (user_id, sleeper_league_id) where status in (pending, processing) is what
+     |   stops a league being queued twice; the RPC leans on it with ON CONFLICT DO
+     |   NOTHING rather than pre-checking.
+     |
+     |   Exercised end to end on prod inside begin/rollback: first press queued 3 of 4
+     |   (blank league id dropped, empty name stored as null), second press inside the
+     |   window returned cooldown with 43200s, claim_league_sync_jobs(2) flipped two to
+     |   processing and left the third pending, a further claim took the last one, and
+     |   a press with the cooldown at 0 while all three were in flight returned
+     |   already_queued and left exactly 1 request row, proving the no-op press does
+     |   not spend the window. Post-rollback both tables were back to 0 rows)
+
+T445 | completed | Queue library: enqueue, progress read, and the worker
+     | files: lib/league-bulk-sync.ts, lib/league-bulk-sync-types.ts
+     | depends on: T444
+     | verified: yes (worker claims up to 5 jobs a run, paces 2.5s between leagues,
+     |   stops at a 50s soft budget and releases whatever it did not reach so the next
+     |   minute picks it up rather than waiting out the stale window. Failures back off
+     |   30s, 60s, 120s and fail after 3 attempts. A reaper reclaims anything left
+     |   processing past 10 minutes through the same backoff, so a job that kills its
+     |   worker cannot loop forever. Every transition is guarded on the status the job
+     |   was in, so overlapping runs cannot both decide the same job's fate.
+     |
+     |   Jobs run pulseLeagueCore then pulseLeagueDerived with NO force, so an
+     |   already-fresh league costs one indexed read and no Sleeper traffic. Worst case
+     |   is about 200 Sleeper calls a minute against guidance of a thousand.
+     |
+     |   Types and constants live in league-bulk-sync-types.ts, split out so the client
+     |   components can import them without pulling this module's Sleeper and
+     |   service-role chain into the browser bundle)
+
+T446 | completed | POST/GET /api/leagues/bulk-sync, auth-gated
+     | files: app/api/leagues/bulk-sync/route.ts
+     | depends on: T445
+     | verified: yes (401 without a session, which is what makes this different from
+     |   /warm, /refresh, and /[id]/sync beside it: those can only cause the work one
+     |   page load would cause, this multiplies by the caller's league count. Requires
+     |   the x-requested-with header like every other write here.
+     |
+     |   The league list is resolved server-side from the Sleeper handle saved on the
+     |   account. The request body is never read, so a caller cannot name the leagues
+     |   to queue, cannot spend another user's window, and cannot aim our sync at
+     |   leagues picked for how expensive they are.
+     |
+     |   A cheap cooldown pre-check runs before the two Sleeper lookups so a caller in
+     |   cooldown does not make us do the work anyway; the RPC re-checks under the lock
+     |   and remains the real gate. On success, after() runs one worker pass as a head
+     |   start, which is also what makes the queue observable in local dev where no
+     |   cron fires)
+
+T447 | completed | Every-minute cron worker + registry entry
+     | files: app/api/cron/league-sync-worker/route.ts, vercel.json, lib/cron-runs.ts
+     | depends on: T445
+     | verified: yes (CRON_SECRET bearer via verifyCronRequest, wrapped in
+     |   recordCronRun so the admin cron health panel picks it up from the CRON_JOBS
+     |   registry with no separate wiring. Idle runs cost one indexed read against the
+     |   partial pending index. Sits alongside beacon-brief-worker on * * * * *)
+
+T448 | completed | Sync all button, notice container, and progress polling
+     | files: components/league-sync-all.tsx
+     | depends on: T446
+     | verified: yes (button carries the beacon gradient like the per-row Sync, uses
+     |   aria-disabled rather than disabled so a reader can reach it and hear why it
+     |   is unavailable, and keeps a 44px box at mobile widths.
+     |
+     |   The notice is a plain role="region" with an accessible name, NOT a live
+     |   region. A separate sr-only role="status" carries exactly three announcements:
+     |   started, finished, failed to start. Progress counts update visually on an 8s
+     |   poll and are never announced, because routing a poll through a live region
+     |   would interrupt the reader every few seconds to say a number moved by one.
+     |
+     |   Polling runs only while a batch is active, so an idle page makes no requests.
+     |   Page refreshes during a batch are floored at 30s: the standings come from the
+     |   server render and that render re-resolves the league list from Sleeper, so
+     |   refreshing per completed job would spend two Sleeper calls a league to watch a
+     |   list update.
+     |
+     |   Copy states the queue fact plainly ("you can leave this page") because it is
+     |   true: nothing about the work depends on the browser staying open. Time
+     |   estimate is "a minute or two" up to 8 leagues and "a few minutes" past that,
+     |   rather than a fake precision the worker cannot promise)
+
+T449 | completed | Rows report their place in the batch
+     | files: components/league-sync-button.tsx, app/tools/league-pulse/league-results.tsx
+     | depends on: T448
+     | verified: yes (LeagueQueuedBadge replaces the per-row Sync button for exactly
+     |   as long as a league is pending or processing, so the reader cannot spend their
+     |   single-league slot on work already queued; the button returns if the job
+     |   fails, which is the point where there is something to do again. A league that
+     |   already has a tag keeps it and gains the badge alongside, so "all leagues turn
+     |   to syncing" holds for every row, not only the unsynced ones.
+     |
+     |   The badge is a plain span with real text, matching the Sync button's sizing so
+     |   a part-drained list does not jump. Row accessible names lead with "Queued for
+     |   syncing." / "Syncing now." via describeTeamStanding. No data is hidden at any
+     |   breakpoint: both dashboard renderers get the same bulkStatuses map)
+
+T450 | completed | Wire the dashboard page, keep the public tool out of it
+     | files: app/my-beacon/sleeper-leagues/page.tsx, app/tools/league-pulse/league-results.tsx
+     | depends on: T448
+     | verified: yes (the page reads the newest batch through the reader's OWN session
+     |   client, so the owner-select policies scope it rather than a filter we
+     |   remembered to write. Passing bulkSync is what turns the feature on:
+     |   LeagueResults renders LeagueSyncAll only when the prop is present, and
+     |   app/tools/league-pulse/page.tsx never passes it, so the public tool keeps its
+     |   one-league-at-a-time button and cannot reach Sync all. Confirmed by grep: the
+     |   only caller passing bulkSync is the my-beacon page.
+     |
+     |   Server render and client poll both describe the same batch and can resolve out
+     |   of order, so mergeBulkSyncState decides: a server copy wins only for a
+     |   different batch or equal-or-further progress, never when behind. Equal
+     |   progress is taken on purpose so the closing read lands and the page stops
+     |   saying "syncing")
+
+T451 | completed | Local worker CLI
+     | files: scripts/run-league-sync-worker.ts, package.json
+     | depends on: T445
+     | verified: yes (npm run worker:league-sync for one pass, -- --watch to drain
+     |   until empty. Vercel cron does not fire against a local dev server, so this is
+     |   how a queued batch is observed end to end in development)
+
+T452 | completed | mergeBulkSyncState unit tests
+     | files: lib/league-bulk-sync-types.test.ts
+     | depends on: T450
+     | verified: yes (6 cases covering the orderings that actually happen: new batch,
+     |   first batch seen, further progress, a stale server copy that must be dropped,
+     |   a failure counting as progress, and the equal-progress close)
+
+### Verification summary (Sync all)
+- npm run typecheck: clean
+- npm test: 1048 tests across 82 files, all pass (6 new)
+- npm run build: compiles clean, no warnings; /api/leagues/bulk-sync and
+  /api/cron/league-sync-worker both registered as dynamic routes
+- Supabase security advisors: no new findings. claim_league_sync_jobs initially
+  tripped function_search_path_mutable and was pinned to
+  "search_path = public, pg_temp", matching the hardened bb_claim_jobs. The four
+  remaining warnings (pg_trgm in public, and three pre-existing SECURITY DEFINER
+  functions) all predate this work.
+- RLS + grants + RPC behaviour verified against prod inside begin/rollback; both
+  tables confirmed back to 0 rows afterwards.
