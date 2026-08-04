@@ -16,11 +16,22 @@ import { X } from "lucide-react";
  * desktop (sm+) resets translateY and animates translateX instead, so one
  * component covers both breakpoints. Animation is skipped under reduced motion.
  */
+/**
+ * Desktop width. Mobile is full width either way, so this only changes the
+ * drawer. `lg` exists for panels holding a table, where 28rem forces a name and
+ * a number onto separate lines for no reason.
+ */
+const DESKTOP_WIDTH = {
+  md: "sm:max-w-md",
+  lg: "sm:max-w-2xl",
+} as const;
+
 export function SidePanel({
   open,
   onClose,
   title,
   subtitle,
+  size = "md",
   children,
 }: {
   open: boolean;
@@ -28,6 +39,7 @@ export function SidePanel({
   /** Visible header title, also the dialog's accessible name. */
   title: string;
   subtitle?: string;
+  size?: keyof typeof DESKTOP_WIDTH;
   children: ReactNode;
 }) {
   const labelId = useId();
@@ -108,7 +120,7 @@ export function SidePanel({
       />
       <div
         ref={panelRef}
-        className={`relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-h-none sm:max-w-md sm:rounded-none sm:rounded-l-modal sm:border-x-0 sm:border-t-0 sm:border-l ${
+        className={`relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-h-none sm:rounded-none sm:rounded-l-modal sm:border-x-0 sm:border-t-0 sm:border-l ${DESKTOP_WIDTH[size]} ${
           entered
             ? "translate-x-0 translate-y-0"
             : "translate-y-full sm:translate-y-0 sm:translate-x-full"
@@ -117,15 +129,23 @@ export function SidePanel({
       >
         {/* Mobile drag handle. */}
         <div className="flex shrink-0 justify-center pt-2 sm:hidden">
-          <span aria-hidden="true" className="h-1.5 w-12 rounded-full bg-beacon opacity-60" />
+          <span
+            aria-hidden="true"
+            className="h-1.5 w-12 rounded-full bg-beacon opacity-60"
+          />
         </div>
 
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line/70 px-5 py-4">
           <div className="min-w-0">
-            <h2 id={labelId} className="truncate text-lg font-bold tracking-tight text-ink">
+            <h2
+              id={labelId}
+              className="truncate text-lg font-bold tracking-tight text-ink"
+            >
               {title}
             </h2>
-            {subtitle && <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p>}
+            {subtitle && (
+              <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p>
+            )}
           </div>
           <button
             type="button"

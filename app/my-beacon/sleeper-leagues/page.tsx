@@ -14,12 +14,20 @@ import {
   type LeagueTeamStatusSummary,
 } from "@/lib/league-team-status-data";
 import { loadBulkSyncState } from "@/lib/league-bulk-sync";
+import {
+  loadPlayerExposure,
+  EMPTY_PLAYER_EXPOSURE,
+  type PlayerExposure,
+} from "@/lib/player-exposure";
+import type { ProjectionInput } from "@/lib/league-projections";
 import { LeagueResults } from "@/app/tools/league-pulse/league-results";
-import { SaveUsernameForm } from "./save-username-form";
+import { LeagueQuickLinks } from "@/components/league-quick-links";
+import { SleeperConnection } from "./sleeper-connection";
 
 export const metadata: Metadata = {
   title: "My Sleeper Leagues",
-  description: "Save your Sleeper username and view every active league in one accessible table.",
+  description:
+    "Save your Sleeper username and view every active league in one accessible table.",
 };
 
 export default async function SleeperLeaguesPage() {
@@ -47,6 +55,9 @@ export default async function SleeperLeaguesPage() {
   // Standing per league, read from cache only. Same contract as the public
   // tool: this page never triggers a sync, so unopened leagues report pending.
   let teamStatuses: Record<string, LeagueTeamStatusSummary> = {};
+  // Cross-league views. Both read only what is already stored, so opening either
+  // one costs nothing and a league synced later joins them on the next load.
+  let exposure: PlayerExposure = EMPTY_PLAYER_EXPOSURE;
   const resolvedSource = await resolveSourceSlug(supabase, undefined);
 
   // The reader's newest Sync all batch, read through their own session client
@@ -59,44 +70,49 @@ export default async function SleeperLeaguesPage() {
     if (sleeperUser) {
       leagues = await getSleeperLeagues(sleeperUser.user_id, season);
       if (leagues.length > 0) {
-        const statusMap = await loadSearchedTeamStatuses(
-          supabase,
-          leagues.map((l) => l.league_id),
-          sleeperUser.user_id,
-          Number(season),
-          resolvedSource.slug,
-        );
+        const leagueIds = leagues.map((l) => l.league_id);
+        // Independent reads against the same synced rows, so they go together.
+        const [statusMap, exposureResult] = await Promise.all([
+          loadSearchedTeamStatuses(
+            supabase,
+            leagueIds,
+            sleeperUser.user_id,
+            Number(season),
+            resolvedSource.slug,
+          ),
+          loadPlayerExposure(supabase, leagueIds, sleeperUser.user_id),
+        ]);
         teamStatuses = Object.fromEntries(statusMap);
+        exposure = exposureResult;
       }
     }
   }
 
+  // Every league Sleeper reports, paired with whatever standing we already hold
+  // for it. Leagues with no Power Pulse row arrive with a null seed and are
+  // counted as unranked rather than dropped, so the panel can say how many are
+  // still waiting to be synced.
+  const projections: ProjectionInput[] = leagues.map((league) => {
+    const summary = teamStatuses[league.league_id] ?? null;
+    return {
+      sleeperLeagueId: league.league_id,
+      leagueName: league.name,
+      projectedSeed: summary?.projectedSeed ?? null,
+      rankedTeamCount: summary?.rankedTeamCount ?? null,
+      statusLabel: summary?.status?.label ?? null,
+    };
+  });
+
   return (
     <div className="space-y-12">
       <section aria-labelledby="connect-heading">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <SectionEyebrow>Sleeper connection</SectionEyebrow>
-            <h2
-              id="connect-heading"
-              className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
-            >
-              Link your Sleeper username.
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              We save your handle so every visit auto-loads your leagues, no
-              re-typing, no re-pasting. Change it anytime.
-            </p>
-          </div>
-          {sleeperUsername && (
-            <p className="text-sm text-ink-muted">
-              Currently connected as{" "}
-              <span className="font-medium text-ink">{sleeperUsername}</span>
-            </p>
-          )}
-        </div>
-
-        <SaveUsernameForm defaultUsername={sleeperUsername} />
+        {/* Collapses to one row once a handle is saved. Everything the expanded
+            form does is still here, one press away; it just stops being the
+            first three inches of the page on every return visit. */}
+        <SleeperConnection
+          savedUsername={sleeperUsername}
+          lookupFailed={Boolean(sleeperUsername) && !sleeperUser}
+        />
 
         {sleeperUsername && !sleeperUser && (
           <p
@@ -120,9 +136,10 @@ export default async function SleeperLeaguesPage() {
               Your {season} season
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              Click a league name to open its deep view. Use the toggles to
-              feature one league on your profile and choose which others appear
-              there.
+              Every league in one place. Click a name to open its deep view, use
+              the star and eye on each row to control what your public profile
+              shows, and use the quick links below to look across all of them at
+              once.
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -159,11 +176,23 @@ export default async function SleeperLeaguesPage() {
 
         {leagues.length > 0 && (
           <div className="mt-6">
+            {/* Cross-league views sit above the per-league table, because they
+                are the summary and the table is the detail. Dashboard only:
+                the public tool has no account to gather leagues against. */}
+            <LeagueQuickLinks
+              exposure={exposure}
+              projections={projections}
+              sleeperUsername={
+                sleeperUser?.display_name ?? sleeperUsername ?? null
+              }
+            />
             <LeagueResults
               variant="dashboard"
               leagues={leagues}
               season={season}
-              sleeperUsername={sleeperUser?.display_name ?? sleeperUsername ?? null}
+              sleeperUsername={
+                sleeperUser?.display_name ?? sleeperUsername ?? null
+              }
               featuredLeagueId={featuredLeagueId}
               shownLeagueIds={shownLeagueIds}
               teamStatuses={teamStatuses}

@@ -8,10 +8,24 @@ import {
   parseSleeperLeagueSettings,
 } from "@/lib/sleeper-league-settings";
 
-export function SaveUsernameForm({ defaultUsername }: { defaultUsername: string }) {
+export function SaveUsernameForm({
+  defaultUsername,
+  autoFocus = false,
+  onSaved,
+}: {
+  defaultUsername: string;
+  /** Set when the form was just revealed by a disclosure, so the caret lands in
+   *  the field the reader asked for instead of at the top of the page. */
+  autoFocus?: boolean;
+  /** Fired after a successful save, so a collapsible wrapper can close itself. */
+  onSaved?: () => void;
+}) {
   const router = useRouter();
   const [username, setUsername] = useState(defaultUsername);
-  const [status, setStatus] = useState<{ kind: "idle" | "saved" | "error"; message?: string }>({
+  const [status, setStatus] = useState<{
+    kind: "idle" | "saved" | "error";
+    message?: string;
+  }>({
     kind: "idle",
   });
   const [pending, startTransition] = useTransition();
@@ -36,25 +50,26 @@ export function SaveUsernameForm({ defaultUsername }: { defaultUsername: string 
         .select("sleeper_league_settings")
         .eq("user_id", user.id)
         .maybeSingle();
-      const current = parseSleeperLeagueSettings(existing?.sleeper_league_settings);
+      const current = parseSleeperLeagueSettings(
+        existing?.sleeper_league_settings,
+      );
       const next = mergeSleeperLeagueSettings(current, {
         username: cleaned.length > 0 ? cleaned : null,
       });
-      const { error } = await supabase
-        .from("user_preferences")
-        .upsert(
-          {
-            user_id: user.id,
-            sleeper_league_settings: next,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        );
+      const { error } = await supabase.from("user_preferences").upsert(
+        {
+          user_id: user.id,
+          sleeper_league_settings: next,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
       if (error) {
         setStatus({ kind: "error", message: error.message });
       } else {
         setStatus({ kind: "saved" });
         router.refresh();
+        onSaved?.();
       }
     });
   };
@@ -65,12 +80,18 @@ export function SaveUsernameForm({ defaultUsername }: { defaultUsername: string 
       className="mt-6 grid gap-3 rounded-card border border-line bg-surface p-5 md:grid-cols-[1fr_auto]"
     >
       <div>
-        <label htmlFor="my-beacon-sleeper" className="block text-sm font-medium">
+        <label
+          htmlFor="my-beacon-sleeper"
+          className="block text-sm font-medium"
+        >
           Sleeper username
         </label>
         <input
           id="my-beacon-sleeper"
           autoComplete="off"
+          // eslint-disable-next-line jsx-a11y/no-autofocus -- only ever true when
+          // the reader just pressed the control that revealed this field.
+          autoFocus={autoFocus}
           value={username}
           onChange={(event) => setUsername(event.target.value)}
           placeholder="your-handle"
