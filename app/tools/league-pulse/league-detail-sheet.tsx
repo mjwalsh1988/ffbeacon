@@ -5,9 +5,26 @@ import { LeagueOpenLink } from "@/components/league-open-link";
 import type { SleeperLeague } from "@/lib/sleeper";
 import type { LeagueTeamStatusSummary } from "@/lib/league-team-status-data";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
-import { TeamStatusBadge, TeamStatusPending } from "@/components/team-status-badge";
+import {
+  TeamStatusBadge,
+  TeamStatusPending,
+} from "@/components/team-status-badge";
 import { TeamStandingFigure } from "@/components/team-standing-figure";
 import { LeagueSyncButton } from "@/components/league-sync-button";
+import { LeagueProfileToggles } from "@/components/league-profile-toggles";
+
+/**
+ * The Featured / Shown pair, when the surface that opened this sheet has them.
+ *
+ * Dashboard only. The public tool has no profile to put a league on, so it
+ * passes nothing and the section does not render.
+ */
+export type LeagueProfileControls = {
+  isFeatured: boolean;
+  isShown: boolean;
+  onSetFeatured: (next: boolean) => void;
+  onToggleShown: (next: boolean) => void;
+};
 
 /**
  * Slide-up modal showing the deep details for a single Sleeper league,
@@ -23,6 +40,7 @@ export function LeagueDetailSheet({
   statusTone,
   summary,
   sourceSlug,
+  profile,
 }: {
   league: SleeperLeague;
   open: boolean;
@@ -40,6 +58,8 @@ export function LeagueDetailSheet({
   /** Active value source, so the FF Beacon mark only appears next to FF
    * Beacon's own values. */
   sourceSlug: string | null;
+  /** Dashboard only. Omitted on the public tool, where there is no profile. */
+  profile?: LeagueProfileControls;
 }) {
   const teamStatus = summary?.status ?? null;
   // Plain link to the deep view so the branded loading boundary shows
@@ -96,6 +116,32 @@ export function LeagueDetailSheet({
         {/* Scrollable body, stays inside the sheet so the header and
             footer remain visible on small viewports. */}
         <div className="beacon-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+          {/* First in the body, above the facts, because it is the only thing
+              here you can change. The facts below are read-only. This is also
+              the ONLY place these two controls exist on a phone: the desktop
+              table stacks them in the League cell, and a card small enough to
+              scan one-handed has no room for them. */}
+          {profile && (
+            <section aria-labelledby="profile-heading" className="mb-6">
+              <h3
+                id="profile-heading"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-subtle"
+              >
+                On your profile
+              </h3>
+              <div className="mt-3 rounded-card border border-line bg-base/60 p-3">
+                <LeagueProfileToggles
+                  variant="list"
+                  leagueName={league.name}
+                  isFeatured={profile.isFeatured}
+                  isShown={profile.isShown}
+                  onSetFeatured={profile.onSetFeatured}
+                  onToggleShown={profile.onToggleShown}
+                />
+              </div>
+            </section>
+          )}
+
           <dl className="grid grid-cols-3 gap-3">
             <FactCard
               icon={Users}
@@ -107,11 +153,7 @@ export function LeagueDetailSheet({
               label="Season"
               value={league.season}
             />
-            <FactCard
-              icon={Trophy}
-              label="Status"
-              value={statusDisplay}
-            />
+            <FactCard icon={Trophy} label="Status" value={statusDisplay} />
           </dl>
 
           <section aria-labelledby="standing-heading" className="mt-6">

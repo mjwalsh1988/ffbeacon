@@ -12,7 +12,6 @@ import {
   ChevronRight,
   ArrowRight,
   Users,
-  Star,
   Eye,
   EyeOff,
   SlidersHorizontal,
@@ -30,8 +29,11 @@ import {
 } from "@/app/my-beacon/actions";
 import { humanizeLeagueStatus } from "@/lib/league-status";
 import type { LeagueTeamStatusSummary } from "@/lib/league-team-status-data";
-import type { TeamStatusKey } from "@/lib/league-team-status";
-import { TeamStatusBadge, TeamStatusPending } from "@/components/team-status-badge";
+import {
+  TeamStatusBadge,
+  TeamStatusPending,
+} from "@/components/team-status-badge";
+import { LeagueKey } from "@/components/league-key";
 import { TeamStandingFigure } from "@/components/team-standing-figure";
 import { describeStandingFigure } from "@/lib/team-standing-figure";
 import {
@@ -39,6 +41,8 @@ import {
   LeagueSyncButton,
 } from "@/components/league-sync-button";
 import { LeagueSyncAll } from "@/components/league-sync-all";
+import { LeagueCategoryTabs } from "@/components/league-category-tabs";
+import { LeagueProfileToggles } from "@/components/league-profile-toggles";
 import { LeagueSyncProvider, useLeagueSync } from "@/lib/league-sync-queue";
 import {
   IDLE_BULK_SYNC_STATE,
@@ -227,7 +231,10 @@ export function LeagueResults({
   // Best Ball Redraft), alphabetized within each, so a long list is scannable
   // by format. Public groups the full list; dashboard groups whatever the
   // Show-all filter left visible.
-  const publicGroups = useMemo(() => groupLeaguesByCategory(leagues), [leagues]);
+  const publicGroups = useMemo(
+    () => groupLeaguesByCategory(leagues),
+    [leagues],
+  );
   const dashboardGroups = useMemo(
     () => groupLeaguesByCategory(visibleLeagues),
     [visibleLeagues],
@@ -259,6 +266,34 @@ export function LeagueResults({
     });
   };
 
+  // One category's worth of rows, at both breakpoints. Shared by the tabbed
+  // layout and the single-category fallback so the two cannot drift: whichever
+  // one a reader gets, the rows and the props behind them are the same.
+  const renderDashboardGroup = (group: LeagueCategoryGroup): ReactNode => (
+    <>
+      <DesktopDashboardTable
+        leagues={group.leagues}
+        sleeperUsername={sleeperUsername}
+        teamStatuses={teamStatuses}
+        bulkStatuses={bulkStatuses}
+        sourceSlug={sourceSlug}
+        featuredId={featuredId}
+        shownIds={shownIds}
+        onSetFeatured={handleSetFeatured}
+        onToggleShown={handleToggleShown}
+      />
+      <MobileDashboardCards
+        leagues={group.leagues}
+        teamStatuses={teamStatuses}
+        bulkStatuses={bulkStatuses}
+        sourceSlug={sourceSlug}
+        featuredId={featuredId}
+        shownIds={shownIds}
+        onOpen={(id) => setOpenLeagueId(id)}
+      />
+    </>
+  );
+
   return (
     // The provider spans every group and both breakpoint renderers, because the
     // "one at a time" rule is about the reader, not about one table. Two rows in
@@ -288,34 +323,41 @@ export function LeagueResults({
             {visibleLeagues.length === 0 ? (
               <FilterEmptyState onReset={() => setShowAll(true)} />
             ) : (
-              <div className="space-y-8">
-                {dashboardGroups.map((group) => (
-                  <LeagueCategorySection key={group.key} group={group}>
-                    <DesktopDashboardTable
-                      leagues={group.leagues}
-                      sleeperUsername={sleeperUsername}
-                      teamStatuses={teamStatuses}
-                      bulkStatuses={bulkStatuses}
-                      sourceSlug={sourceSlug}
-                      featuredId={featuredId}
-                      shownIds={shownIds}
-                      onSetFeatured={handleSetFeatured}
-                      onToggleShown={handleToggleShown}
+              // Two columns from xl up, one below it. Not lg: at 1024px the
+              // sidebar would leave the six-column table under 700px, and the
+              // table is the thing people came for. Source order is list then
+              // key, which is both the reading order and, with the key as the
+              // second grid track, the visual order.
+              <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start xl:gap-8">
+                <div className="min-w-0">
+                  {/* One category is not a choice, so it does not get a
+                      tablist. It keeps the plain headed section, which is the
+                      only thing that still names the category once the tabs
+                      are gone. */}
+                  {dashboardGroups.length > 1 ? (
+                    <LeagueCategoryTabs
+                      groups={dashboardGroups}
+                      label="League types"
+                      renderGroup={renderDashboardGroup}
                     />
-                    <MobileDashboardCards
-                      leagues={group.leagues}
-                      sleeperUsername={sleeperUsername}
-                      teamStatuses={teamStatuses}
-                      bulkStatuses={bulkStatuses}
-                      sourceSlug={sourceSlug}
-                      featuredId={featuredId}
-                      shownIds={shownIds}
-                      onSetFeatured={handleSetFeatured}
-                      onToggleShown={handleToggleShown}
-                    />
-                  </LeagueCategorySection>
-                ))}
-                <StatusLegend />
+                  ) : (
+                    dashboardGroups.map((group) => (
+                      <LeagueCategorySection key={group.key} group={group}>
+                        {renderDashboardGroup(group)}
+                      </LeagueCategorySection>
+                    ))
+                  )}
+                </div>
+                {/* Sticky so the key is still there thirty rows down, which is
+                    the point of moving it out of the flow. It only sticks where
+                    it has a column of its own; stacked below the list it is
+                    just the last thing on the page. */}
+                <aside
+                  aria-labelledby="league-key-heading"
+                  className="mt-8 xl:sticky xl:top-6 xl:mt-0"
+                >
+                  <LeagueKey layout="panel" />
+                </aside>
               </div>
             )}
           </>
@@ -339,20 +381,40 @@ export function LeagueResults({
                 </LeagueCategorySection>
               ))}
             </div>
-            <StatusLegend />
-            {openLeague && (
-              <LeagueDetailSheet
-                league={openLeague}
-                open={!!openLeague}
-                onClose={() => setOpenLeagueId(null)}
-                sleeperUsername={sleeperUsername}
-                statusDisplay={describeStatus(openLeague.status).label}
-                statusTone={describeStatus(openLeague.status).tone}
-                summary={teamStatuses[openLeague.league_id] ?? null}
-                sourceSlug={sourceSlug}
-              />
-            )}
+            {/* Public tool keeps the key in the flow under the table: there is
+                no second column here to put it in. Same component, same
+                entries, spread onto a grid instead of stacked. */}
+            <LeagueKey layout="inline" className="mt-6" />
           </>
+        )}
+
+        {/* One sheet for both variants. It is the mobile disclosure on the
+            public tool and, now, on the dashboard too. The profile switches are
+            passed ONLY on the dashboard: the public tool has no profile to put
+            a league on, so the section does not render there. */}
+        {openLeague && (
+          <LeagueDetailSheet
+            league={openLeague}
+            open={!!openLeague}
+            onClose={() => setOpenLeagueId(null)}
+            sleeperUsername={sleeperUsername}
+            statusDisplay={describeStatus(openLeague.status).label}
+            statusTone={describeStatus(openLeague.status).tone}
+            summary={teamStatuses[openLeague.league_id] ?? null}
+            sourceSlug={sourceSlug}
+            profile={
+              variant === "dashboard"
+                ? {
+                    isFeatured: featuredId === openLeague.league_id,
+                    isShown: shownIds.has(openLeague.league_id),
+                    onSetFeatured: (next) =>
+                      handleSetFeatured(next ? openLeague.league_id : null),
+                    onToggleShown: (next) =>
+                      handleToggleShown(openLeague.league_id, next),
+                  }
+                : undefined
+            }
+          />
         )}
       </section>
     </LeagueSyncProvider>
@@ -379,7 +441,8 @@ function LeagueCategorySection({
       <h3 className="mb-3 flex items-baseline gap-2 text-base font-semibold tracking-tight text-ink">
         {group.label}
         <span className="text-xs font-normal text-ink-subtle">
-          {group.leagues.length} {group.leagues.length === 1 ? "league" : "leagues"}
+          {group.leagues.length}{" "}
+          {group.leagues.length === 1 ? "league" : "leagues"}
         </span>
       </h3>
       {children}
@@ -598,7 +661,11 @@ function DesktopPublicList({
                   out of step with the parent's. */}
               <LeagueOpenLink
                 sleeperLeagueId={league.league_id}
-                href={leagueHref(league.league_id, sleeperUsername, league.name)}
+                href={leagueHref(
+                  league.league_id,
+                  sleeperUsername,
+                  league.name,
+                )}
                 ariaLabel={`Open ${league.name}, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
                 className="col-span-3 grid grid-cols-subgrid items-center py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan"
               >
@@ -618,7 +685,10 @@ function DesktopPublicList({
                   <StatusBadge label={label} tone={tone} />
                 </span>
                 <span className="flex items-center justify-center gap-1.5 font-mono tabular-nums text-ink-muted">
-                  <Users aria-hidden="true" className="h-3.5 w-3.5 text-brand-cyan" />
+                  <Users
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 text-brand-cyan"
+                  />
                   {league.total_rosters}
                 </span>
               </LeagueOpenLink>
@@ -710,7 +780,10 @@ function MobilePublicList({
                     {league.name}
                   </span>
                   <span className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted">
-                    <Users aria-hidden="true" className="h-3 w-3 text-brand-cyan" />
+                    <Users
+                      aria-hidden="true"
+                      className="h-3 w-3 text-brand-cyan"
+                    />
                     {league.total_rosters} teams, {league.season}
                   </span>
                 </span>
@@ -768,12 +841,15 @@ function DesktopDashboardTable({
     <div className="hidden overflow-x-auto rounded-card border border-line md:block">
       <table className="w-full text-sm">
         <caption className="sr-only">
-          Your saved Sleeper leagues. Click a league name to open its deep
-          view. Use the Featured and Show on profile toggles in the last
-          columns to control what appears on your public profile.
+          Your saved Sleeper leagues. Click a league name to open its deep view.
+          Each row starts with two switches, Featured and Shown on profile,
+          which control what appears on your public profile.
         </caption>
         {/* Real table cells throughout, so this one keeps normal table layout
-            (columns line up by construction) and its full table semantics. */}
+            (columns line up by construction) and its full table semantics.
+            Featured and Shown used to be columns five and six. They are switches
+            now, stacked inside the League cell, which gave the league names back
+            the width two labelled pill buttons were spending. */}
         <thead className="bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle">
           <tr>
             <th scope="col" className="px-4 py-3 text-left">
@@ -787,12 +863,6 @@ function DesktopDashboardTable({
             </th>
             <th scope="col" className="px-3 py-3 text-left">
               Your team
-            </th>
-            <th scope="col" className="px-3 py-3 text-center">
-              Featured
-            </th>
-            <th scope="col" className="px-3 py-3 text-center">
-              Show on profile
             </th>
           </tr>
         </thead>
@@ -809,28 +879,45 @@ function DesktopDashboardTable({
                 className="transition-colors hover:bg-surface/40"
               >
                 <td className="px-4 py-4">
-                  {/* The league-name link is the ONLY navigational action on
-                      the row. Status / teams cells beside it are
-                      non-interactive; the standing cell may hold a Sync
-                      button, which is an action on this row, not a
-                      destination. */}
-                  <LeagueOpenLink
-                    sleeperLeagueId={league.league_id}
-                    href={leagueHref(league.league_id, sleeperUsername, league.name)}
-                    ariaLabel={`Open ${league.name} deep view`}
-                    className="group inline-flex max-w-full flex-col items-start gap-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                  >
-                    <span className="inline-flex max-w-full items-center gap-2 text-base font-semibold text-ink group-hover:text-brand-purple">
-                      <span className="truncate">{league.name}</span>
-                      <ArrowRight
-                        aria-hidden="true"
-                        className="h-3.5 w-3.5 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
-                      />
-                    </span>
-                    <span className="text-xs text-ink-subtle">
-                      {league.season} season
-                    </span>
-                  </LeagueOpenLink>
+                  {/* The switches sit OUTSIDE the link, not merely beside it: a
+                      button inside a link is invalid markup and a browser will
+                      not let you press it reliably. The link is still the only
+                      navigational action on the row; the switches act on it
+                      without leaving it. */}
+                  <div className="flex items-center gap-3">
+                    <LeagueProfileToggles
+                      leagueName={league.name}
+                      isFeatured={isFeatured}
+                      isShown={isShown}
+                      onSetFeatured={(next) =>
+                        onSetFeatured(next ? league.league_id : null)
+                      }
+                      onToggleShown={(next) =>
+                        onToggleShown(league.league_id, next)
+                      }
+                    />
+                    <LeagueOpenLink
+                      sleeperLeagueId={league.league_id}
+                      href={leagueHref(
+                        league.league_id,
+                        sleeperUsername,
+                        league.name,
+                      )}
+                      ariaLabel={`Open ${league.name} deep view`}
+                      className="group inline-flex min-w-0 max-w-full flex-col items-start gap-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                    >
+                      <span className="inline-flex max-w-full items-center gap-2 text-base font-semibold text-ink group-hover:text-brand-purple">
+                        <span className="truncate">{league.name}</span>
+                        <ArrowRight
+                          aria-hidden="true"
+                          className="h-3.5 w-3.5 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
+                        />
+                      </span>
+                      <span className="text-xs text-ink-subtle">
+                        {league.season} season
+                      </span>
+                    </LeagueOpenLink>
+                  </div>
                 </td>
                 <td className="px-3 py-4 text-center">
                   <StatusBadge label={label} tone={tone} />
@@ -854,22 +941,6 @@ function DesktopDashboardTable({
                     bulkStatus={bulkStatus}
                   />
                 </td>
-                <td className="px-3 py-4 text-center">
-                  <FeaturedToggle
-                    leagueName={league.name}
-                    isFeatured={isFeatured}
-                    onChange={(next) =>
-                      onSetFeatured(next ? league.league_id : null)
-                    }
-                  />
-                </td>
-                <td className="px-3 py-4 text-center">
-                  <ShownToggle
-                    leagueName={league.name}
-                    isShown={isShown}
-                    onChange={(next) => onToggleShown(league.league_id, next)}
-                  />
-                </td>
               </tr>
             );
           })}
@@ -881,31 +952,47 @@ function DesktopDashboardTable({
 
 /* ---------- DASHBOARD variant, mobile ---------- */
 
+/**
+ * Tapping a card opens the detail sheet, the same way the public mobile list
+ * works, rather than navigating straight to the league.
+ *
+ * WHY THE SHEET
+ *   Featured and Shown are two 44px circles. On a card that is already carrying
+ *   a league name, a status badge, a team count, and two standing pills, they
+ *   were a fourth row with a divider above it, which is most of a card spent on
+ *   two settings nobody changes twice. They live in the sheet now, so the card
+ *   is the scan and the sheet is where you act.
+ *
+ *   The cost is one extra tap to reach the league. The sheet's own "Open league"
+ *   button is that tap, and it is the same button the public tool has had all
+ *   along.
+ *
+ * NOTHING IS LOST AT THIS BREAKPOINT. Featured and Shown are not visible on the
+ * card, so they stay in this button's accessible name, and the sheet the button
+ * opens leads with them as operable switches. Same arrangement, and the same
+ * reasoning, as the league status on the public mobile list.
+ */
 function MobileDashboardCards({
   leagues,
-  sleeperUsername,
   teamStatuses,
   bulkStatuses,
   sourceSlug,
   featuredId,
   shownIds,
-  onSetFeatured,
-  onToggleShown,
+  onOpen,
 }: {
   leagues: SleeperLeague[];
-  sleeperUsername: string | null;
   teamStatuses: TeamStatusMap;
   bulkStatuses: BulkStatusMap;
   sourceSlug: string | null;
   featuredId: string | null;
   shownIds: Set<string>;
-  onSetFeatured: (id: string | null) => void;
-  onToggleShown: (id: string, next: boolean) => void;
+  onOpen: (id: string) => void;
 }) {
   return (
     <ul
       role="list"
-      aria-label="Your saved Sleeper leagues"
+      aria-label="Your saved Sleeper leagues. Tap any card for that league's details, and to feature it or show it on your profile."
       className="space-y-3 md:hidden"
     >
       {leagues.map((league) => {
@@ -917,25 +1004,24 @@ function MobileDashboardCards({
         return (
           <li
             key={league.league_id}
-            className="rounded-card border border-line bg-surface"
+            className="group rounded-card border border-line bg-surface transition-colors hover:bg-surface-elevated focus-within:bg-surface-elevated"
           >
-            {/* League-name link is the only navigational action.
-                The standing block sits below it rather than inside it: it can
-                hold a Sync button, and a button inside a link is invalid
-                markup. Toggle row sits beneath both, separated by a visible
-                divider so the tap zones don't compete. */}
-            <LeagueOpenLink
-              sleeperLeagueId={league.league_id}
-              href={leagueHref(league.league_id, sleeperUsername, league.name)}
-              ariaLabel={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters, bulkStatus)}`}
-              className="group block w-full px-4 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
+            {/* The standing block sits below the button rather than inside it:
+                it can hold a Sync button, and a button inside a button is
+                invalid markup. */}
+            <button
+              type="button"
+              onClick={() => onOpen(league.league_id)}
+              aria-haspopup="dialog"
+              aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams. ${isFeatured ? "Featured." : "Not featured."} ${isShown ? "Shown on profile." : "Hidden from profile."} ${describeTeamStanding(summary, league.total_rosters, bulkStatus)}`}
+              className="block w-full px-4 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
             >
               <span className="flex flex-wrap items-start justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-base font-semibold text-ink group-hover:text-brand-purple">
+                <span className="inline-flex items-center gap-1.5 text-base font-semibold text-ink">
                   {league.name}
-                  <ArrowRight
+                  <ChevronRight
                     aria-hidden="true"
-                    className="h-3.5 w-3.5 opacity-60 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
+                    className="h-4 w-4 opacity-60 transition-transform group-hover:translate-x-0.5"
                   />
                 </span>
                 <StatusBadge label={label} tone={tone} />
@@ -944,7 +1030,7 @@ function MobileDashboardCards({
                 <Users aria-hidden="true" className="h-3 w-3 text-brand-cyan" />
                 {league.total_rosters} teams, {league.season}
               </span>
-            </LeagueOpenLink>
+            </button>
             <div className="px-4 pb-4 pt-3">
               <TeamStandingCell
                 summary={summary}
@@ -955,175 +1041,10 @@ function MobileDashboardCards({
                 bulkStatus={bulkStatus}
               />
             </div>
-            <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
-              <FeaturedToggle
-                leagueName={league.name}
-                isFeatured={isFeatured}
-                onChange={(next) =>
-                  onSetFeatured(next ? league.league_id : null)
-                }
-              />
-              <ShownToggle
-                leagueName={league.name}
-                isShown={isShown}
-                onChange={(next) => onToggleShown(league.league_id, next)}
-              />
-            </div>
           </li>
         );
       })}
     </ul>
-  );
-}
-
-/* ---------- Legend ---------- */
-
-/**
- * What the tags mean, once, under the list.
- *
- * Each entry leads with the real badge rather than a coloured word, so the
- * reader learns the icon here and recognizes it everywhere else in League
- * Pulse without having to read the label again.
- */
-function StatusLegend() {
-  return (
-    <div className="mt-6 rounded-card border border-line bg-surface/40 px-4 py-3">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-subtle">
-        Reading the Your team column
-      </h3>
-      <dl className="mt-3 grid gap-x-6 gap-y-2.5 text-xs leading-relaxed text-ink-muted sm:grid-cols-2">
-        {LEGEND_ENTRIES.map((entry) => (
-          <div key={entry.key} className="flex items-start gap-2.5">
-            <dt className="shrink-0">
-              <TeamStatusBadge
-                status={{
-                  key: entry.key,
-                  label: entry.label,
-                  short: entry.label,
-                  // The definition sits in the dd beside it, so the badge does
-                  // not repeat it into the accessibility tree.
-                  reason: "",
-                }}
-                size="sm"
-              />
-            </dt>
-            <dd className="min-w-0">{entry.blurb}</dd>
-          </div>
-        ))}
-        <div className="flex items-start gap-2.5">
-          <dt className="shrink-0">
-            <TeamStatusPending size="sm" />
-          </dt>
-          <dd className="min-w-0">
-            We have never loaded this league. Press Sync on the row, or just open
-            it, and Power Pulse calculates. One league syncs at a time.
-          </dd>
-        </div>
-      </dl>
-      <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-muted">
-        The second pill on each row is the projected finish, ordered by expected
-        wins, with a gold, silver, or bronze trophy on the top three. Rebuilders
-        show what the roster is worth instead, and where that sits in the league,
-        because a rebuild is not measured in wins.
-      </p>
-    </div>
-  );
-}
-
-const LEGEND_ENTRIES: {
-  key: TeamStatusKey;
-  label: string;
-  blurb: string;
-}[] = [
-  {
-    key: "competitor",
-    label: "Competitor",
-    blurb:
-      "Near the top of the league by Power Pulse, which projects how many games a roster should win from here.",
-  },
-  {
-    key: "middle",
-    label: "Mid Tier",
-    blurb: "Mid-table on expected wins and on what the roster is worth.",
-  },
-  {
-    key: "rebuilder",
-    label: "Rebuilder",
-    blurb:
-      "Low on expected wins, usually while holding more trade value than the lineup can convert.",
-  },
-];
-
-/* ---------- Toggles ---------- */
-
-function FeaturedToggle({
-  leagueName,
-  isFeatured,
-  onChange,
-}: {
-  leagueName: string;
-  isFeatured: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={isFeatured}
-      aria-label={
-        isFeatured
-          ? `Featured league. Tap to unfeature ${leagueName}.`
-          : `Feature ${leagueName} on your profile. Only one league can be featured at a time.`
-      }
-      onClick={() => onChange(!isFeatured)}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
-        isFeatured
-          ? "border-brand-purple bg-brand-purple/15 text-brand-purple"
-          : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
-      }`}
-    >
-      <Star
-        aria-hidden="true"
-        className={`h-3.5 w-3.5 ${isFeatured ? "fill-current" : ""}`}
-      />
-      <span>{isFeatured ? "Featured" : "Feature"}</span>
-    </button>
-  );
-}
-
-function ShownToggle({
-  leagueName,
-  isShown,
-  onChange,
-}: {
-  leagueName: string;
-  isShown: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={isShown}
-      aria-label={
-        isShown
-          ? `Visible on profile. Tap to hide ${leagueName}.`
-          : `Hidden from profile. Tap to show ${leagueName}.`
-      }
-      onClick={() => onChange(!isShown)}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
-        isShown
-          ? "border-brand-cyan bg-brand-cyan/15 text-brand-cyan"
-          : "border-line bg-base text-ink-muted hover:border-line-accent hover:text-ink"
-      }`}
-    >
-      {isShown ? (
-        <Eye aria-hidden="true" className="h-3.5 w-3.5" />
-      ) : (
-        <EyeOff aria-hidden="true" className="h-3.5 w-3.5" />
-      )}
-      <span>{isShown ? "Shown" : "Hidden"}</span>
-    </button>
   );
 }
 
@@ -1213,8 +1134,8 @@ function FilterEmptyState({ onReset }: { onReset: () => void }) {
           No leagues match this filter.
         </p>
         <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-          Flip Show all leagues back on, or mark a league Featured or Shown
-          on profile below.
+          Flip Show all leagues back on, or mark a league Featured or Shown on
+          profile below.
         </p>
       </div>
       <button
