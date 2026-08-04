@@ -5,9 +5,14 @@
  * only AUTO-LINKS when the match is confident and unambiguous. The rules:
  *
  *  - Category: exact active slug match (unchanged).
- *  - Teams: exact normalized abbreviation OR exact normalized name. Team names
- *    are unique, so this is the only confident path. Anything else -> moderation
- *    with ranked team suggestions. Never a substring guess.
+ *  - Teams: exact normalized abbreviation, full name, nickname, or city, tried in
+ *    that order, and only when the tier that hits resolves to exactly ONE team.
+ *    Reporters write "Falcons" and "Commanders" far more often than "Atlanta
+ *    Falcons", so full-name-only matching sent almost every team reference to
+ *    manual review. Nicknames (the last word of the name) are unique across all 32
+ *    teams; cities are not ("New York", "Los Angeles"), so an ambiguous city falls
+ *    through to moderation with ranked suggestions rather than guessing. Never a
+ *    substring guess.
  *  - Players: exactly ONE CURRENT (active/ir) player whose normalized full_name
  *    equals the normalized AI name -> auto-link. Multiple current exacts ->
  *    disambiguate by a referenced team; if exactly one plays for a referenced
@@ -111,6 +116,58 @@ type TeamRow = {
   discord_role_ids: string[] | null;
 };
 
+/** The last word of a team name ("Washington Commanders" -> "commanders"). */
+export function teamNickname(name: string): string {
+  const tokens = normalizeName(name).split(" ").filter(Boolean);
+  return tokens.length > 1 ? tokens[tokens.length - 1] : "";
+}
+
+/** Everything before the nickname ("Washington Commanders" -> "washington"). */
+export function teamCity(name: string): string {
+  const tokens = normalizeName(name).split(" ").filter(Boolean);
+  return tokens.length > 1 ? tokens.slice(0, -1).join(" ") : "";
+}
+
+function addTo(map: Map<string, TeamRow[]>, key: string, team: TeamRow): void {
+  if (!key) return;
+  const list = map.get(key);
+  if (list) list.push(team);
+  else map.set(key, [team]);
+}
+
+/**
+ * Resolve one AI-written team reference to a single team, or null.
+ *
+ * Tiers are tried in descending confidence and the FIRST tier that produces any
+ * hit decides the outcome. A tier that hits more than one team returns null
+ * rather than falling through: "New York" is genuinely ambiguous, and quietly
+ * dropping to a lower-confidence tier would turn a real ambiguity into a guess.
+ */
+export function resolveTeamReference(
+  rawName: string,
+  teams: TeamRow[],
+): TeamRow | null {
+  const norm = normalizeName(rawName);
+  if (!norm) return null;
+
+  const byExact = new Map<string, TeamRow[]>();
+  const byNickname = new Map<string, TeamRow[]>();
+  const byCity = new Map<string, TeamRow[]>();
+  for (const t of teams) {
+    addTo(byExact, normalizeName(t.abbreviation), t);
+    addTo(byExact, normalizeName(t.name), t);
+    addTo(byNickname, teamNickname(t.name), t);
+    addTo(byCity, teamCity(t.name), t);
+  }
+
+  for (const tier of [byExact, byNickname, byCity]) {
+    const hits = tier.get(norm);
+    if (!hits) continue;
+    return hits.length === 1 ? hits[0] : null;
+  }
+  return null;
+}
+
 function rankTeams(
   rawName: string,
   teams: TeamRow[],
@@ -185,15 +242,9 @@ export async function matchReferences(
       .select("id, abbreviation, name, discord_role_ids");
     const teams = (allTeams ?? []) as TeamRow[];
     for (const rawTeam of teamNames) {
-      const norm = normalizeName(rawTeam);
-      if (!norm) continue;
-      const exact = teams.filter(
-        (t) =>
-          normalizeName(t.abbreviation) === norm ||
-          normalizeName(t.name) === norm,
-      );
-      if (exact.length === 1) {
-        const t = exact[0];
+      if (!normalizeName(rawTeam)) continue;
+      const t = resolveTeamReference(rawTeam, teams);
+      if (t) {
         pushUnique(teamIds, t.id);
         matchedTeamAbbrevs.add(t.abbreviation.toLowerCase());
         for (const r of t.discord_role_ids ?? []) roleIds.add(r);
