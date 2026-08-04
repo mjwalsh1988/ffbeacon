@@ -3,9 +3,11 @@
 import { X, Users, CalendarDays, Trophy, ArrowRight } from "lucide-react";
 import { LeagueOpenLink } from "@/components/league-open-link";
 import type { SleeperLeague } from "@/lib/sleeper";
-import type { TeamStatus } from "@/lib/league-team-status";
+import type { LeagueTeamStatusSummary } from "@/lib/league-team-status-data";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
 import { TeamStatusBadge, TeamStatusPending } from "@/components/team-status-badge";
+import { TeamStandingFigure } from "@/components/team-standing-figure";
+import { LeagueSyncButton } from "@/components/league-sync-button";
 
 /**
  * Slide-up modal showing the deep details for a single Sleeper league,
@@ -19,7 +21,8 @@ export function LeagueDetailSheet({
   sleeperUsername,
   statusDisplay,
   statusTone,
-  teamStatus,
+  summary,
+  sourceSlug,
 }: {
   league: SleeperLeague;
   open: boolean;
@@ -31,10 +34,14 @@ export function LeagueDetailSheet({
   statusDisplay: string;
   /** Tailwind classes for the status badge background + text. */
   statusTone: string;
-  /** Competitor / Middle of the pack / Rebuilder for this user's own team.
+  /** This user's own standing in the league, tag plus the numbers behind it.
    * Null when the league has never been pulsed. */
-  teamStatus: TeamStatus | null;
+  summary: LeagueTeamStatusSummary | null;
+  /** Active value source, so the FF Beacon mark only appears next to FF
+   * Beacon's own values. */
+  sourceSlug: string | null;
 }) {
+  const teamStatus = summary?.status ?? null;
   // Plain link to the deep view so the branded loading boundary shows
   // instantly on click; the deep-view page runs the sync under the loader.
   // ?name= gives the deep view a correct <title> on first open, before the
@@ -114,43 +121,65 @@ export function LeagueDetailSheet({
             >
               Your team
             </h3>
-            <div className="mt-3">
-              {teamStatus ? (
-                <TeamStatusBadge status={teamStatus} />
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {teamStatus && summary ? (
+                <>
+                  <TeamStatusBadge status={teamStatus} />
+                  <TeamStandingFigure
+                    statusKey={teamStatus.key}
+                    projectedSeed={summary.projectedSeed}
+                    rankedTeamCount={summary.rankedTeamCount}
+                    valueRank={summary.valueRank}
+                    totalValue={summary.totalValue}
+                    valueIsExact={summary.valueIsExact}
+                    leagueTeamCount={league.total_rosters}
+                    sourceSlug={sourceSlug}
+                  />
+                </>
               ) : (
-                <TeamStatusPending />
+                <>
+                  <TeamStatusPending />
+                  {/* Same button and same queue as the row behind this sheet:
+                      syncing from here still holds the reader's one slot. */}
+                  <LeagueSyncButton
+                    sleeperLeagueId={league.league_id}
+                    leagueName={league.name}
+                  />
+                </>
               )}
             </div>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">
               {teamStatus
                 ? teamStatus.reason
-                : "We have never loaded this league, so there is nothing to compare your roster against yet. Opening it fills this in."}
+                : "We have never loaded this league, so there is nothing to compare your roster against yet. Sync it here, or open it, and Power Pulse calculates."}
             </p>
           </section>
         </div>
 
-        {/* Footer action, primary CTA stays visible without scrolling. */}
+        {/* Footer action, primary CTA stays visible without scrolling.
+            Full width and on its own line. This sheet only ever opens on a
+            phone, where a button sharing a row with its own explanation ends up
+            narrow, right-aligned, and awkward to hit one-handed. The helper text
+            sits above it instead. */}
         <div className="border-t border-line bg-surface px-5 py-4 sm:px-6 sm:py-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-ink-muted">
-              {teamStatus
-                ? "Opens the deep view, including rosters, transactions, and power rankings."
-                : "Opens the deep view and calculates this league for the first time."}
-            </p>
-            <LeagueOpenLink
-              sleeperLeagueId={league.league_id}
-              href={href}
-              ariaLabel={
-                teamStatus
-                  ? `Open ${league.name} deep view`
-                  : `Open ${league.name} deep view, which calculates this league for the first time`
-              }
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              Open league
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </LeagueOpenLink>
-          </div>
+          <p className="text-xs text-ink-muted">
+            {teamStatus
+              ? "Opens the deep view, including rosters, transactions, and power rankings."
+              : "Opens the deep view and calculates this league for the first time."}
+          </p>
+          <LeagueOpenLink
+            sleeperLeagueId={league.league_id}
+            href={href}
+            ariaLabel={
+              teamStatus
+                ? `Open ${league.name} deep view`
+                : `Open ${league.name} deep view, which calculates this league for the first time`
+            }
+            className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            Open league
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+          </LeagueOpenLink>
         </div>
       </div>
     </SlideUpDialog>

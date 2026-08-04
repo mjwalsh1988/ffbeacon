@@ -9,7 +9,7 @@
  *   - Competitor: near the top by Power Pulse. It wins now, whatever it owns.
  *   - Rebuilder: not winning now, and either holding more value than it can
  *     start or sitting at the bottom of the league with nothing to lean on.
- *   - Middle of the pack: in the pack on both counts.
+ *   - Mid Tier: in the pack on both counts.
  *
  * Ranks are turned into percentiles first, because a 6th-place finish means
  * something different in an eight-team league than in a sixteen. Percentile 1
@@ -51,7 +51,7 @@ const DIVERGENCE_GAP = 0.15;
 
 const LABELS: Record<TeamStatusKey, { label: string; short: string }> = {
   competitor: { label: "Competitor", short: "Compete" },
-  middle: { label: "Middle of the pack", short: "Middle" },
+  middle: { label: "Mid Tier", short: "Mid" },
   rebuilder: { label: "Rebuilder", short: "Rebuild" },
 };
 

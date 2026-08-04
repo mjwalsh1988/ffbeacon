@@ -89,7 +89,7 @@ export type PulseTeam = {
    */
   rankDivergence: number | null;
   /**
-   * Competitor / Middle of the pack / Rebuilder, derived from the two ranks
+   * Competitor / Mid Tier / Rebuilder, derived from the two ranks
    * above. Null when there is no Power Pulse rank to read.
    */
   status: TeamStatus | null;

@@ -585,7 +585,7 @@ async function TeamsPanel({
     );
   }
 
-  // Competitor / Middle of the pack / Rebuilder per roster, so a team card
+  // Competitor / Mid Tier / Rebuilder per roster, so a team card
   // carries the same tag the rankings table and the league list show.
   const statusByRoster: Record<string, TeamStatus> = {};
   for (const t of pulseView?.teams ?? []) {

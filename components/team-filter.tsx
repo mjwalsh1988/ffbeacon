@@ -20,7 +20,7 @@ export type TeamFilterProps = {
   /** True when the league's selected value source is FF Beacon, forwarded to
    * each TeamCard so position subtotals render with the FF Beacon mark. */
   valueIsBeacon?: boolean;
-  /** Competitor / Middle of the pack / Rebuilder, keyed by roster row id.
+  /** Competitor / Mid Tier / Rebuilder, keyed by roster row id.
    * Empty before Power Pulse has run for the league. */
   statusByRoster?: Record<string, TeamStatus>;
 };

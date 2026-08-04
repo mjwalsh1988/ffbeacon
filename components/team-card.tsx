@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { BeaconValue } from "@/components/beacon-value-icon";
+import { formatValue } from "@/lib/format-value";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { TeamStatus } from "@/lib/league-team-status";
@@ -32,7 +33,7 @@ type TeamCardProps = {
   /** True when the league's selected value source is FF Beacon, so each
    * position subtotal renders with the FF Beacon mark. */
   valueIsBeacon?: boolean;
-  /** Competitor / Middle of the pack / Rebuilder for this roster. Null before
+  /** Competitor / Mid Tier / Rebuilder for this roster. Null before
    * Power Pulse has run for the league, and on pre-draft leagues where there
    * is nothing to judge yet. */
   teamStatus?: TeamStatus | null;
@@ -623,10 +624,4 @@ function ordinal(n: number): string {
   if (mod10 === 2) return `${n}nd`;
   if (mod10 === 3) return `${n}rd`;
   return `${n}th`;
-}
-
-function formatValue(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(Number(v))) return "-";
-  const n = Number(v);
-  return n >= 1000 ? Math.round(n).toLocaleString() : n.toFixed(0);
 }

@@ -25,6 +25,10 @@ import { humanizeLeagueStatus } from "@/lib/league-status";
 import type { LeagueTeamStatusSummary } from "@/lib/league-team-status-data";
 import type { TeamStatusKey } from "@/lib/league-team-status";
 import { TeamStatusBadge, TeamStatusPending } from "@/components/team-status-badge";
+import { TeamStandingFigure } from "@/components/team-standing-figure";
+import { describeStandingFigure } from "@/lib/team-standing-figure";
+import { LeagueSyncButton } from "@/components/league-sync-button";
+import { LeagueSyncProvider, useLeagueSync } from "@/lib/league-sync-queue";
 import { LeagueDetailSheet } from "./league-detail-sheet";
 
 /** Keyed by Sleeper league id. Absent means we have never pulsed that league. */
@@ -66,9 +70,21 @@ function leagueHref(
  * tracks are `minmax(0, Nfr)` rather than a bare `Nfr`: a bare `1fr` carries an
  * implicit `auto` minimum, so one long league name silently widens the first
  * column in the body only.
+ *
+ * The "Your team" track is the widest fixed one, and sized so the longest pair
+ * it has to hold sits on ONE line: a Rebuilder tag next to a six-figure value
+ * with its rank, roughly 232px of pills plus the gap between them. The cell
+ * still wraps, so nothing breaks if a value runs long; 16rem is what keeps it
+ * from having to. The league-name track is `minmax(0,1fr)` and absorbs the
+ * difference, leaving it around 700px at the container's full width.
+ *
+ * Mobile drops the league-status column entirely. On a phone the row is a quick
+ * "how am I doing" scan, and how the LEAGUE is doing is not that; it moves to
+ * the detail sheet, which already leads with it, and stays in the row button's
+ * accessible name so nothing is lost to a screen reader.
  */
-const PUBLIC_GRID = "grid-cols-[minmax(0,1fr)_7rem_4.5rem_11rem_2rem]";
-const MOBILE_GRID = "grid-cols-[minmax(0,1fr)_6.5rem_1.5rem]";
+const PUBLIC_GRID = "grid-cols-[minmax(0,1fr)_7rem_4.5rem_16rem]";
+const MOBILE_GRID = "grid-cols-[minmax(0,1fr)_1.5rem]";
 
 /**
  * League results render in two variants:
@@ -96,6 +112,7 @@ export function LeagueResults({
   featuredLeagueId = null,
   shownLeagueIds = [],
   teamStatuses = {},
+  sourceSlug = null,
 }: {
   variant?: LeagueResultsVariant;
   leagues: SleeperLeague[];
@@ -113,6 +130,9 @@ export function LeagueResults({
   /** Competitor / Rebuilder standing for this user's own team, for the
    * leagues we have already pulsed. Missing entries render as pending. */
   teamStatuses?: TeamStatusMap;
+  /** Active value source, so the FF Beacon mark on a rebuilder's roster value
+   * appears only when the value really is FF Beacon's. */
+  sourceSlug?: string | null;
 }) {
   const [openLeagueId, setOpenLeagueId] = useState<string | null>(null);
   const openLeague = leagues.find((l) => l.league_id === openLeagueId) ?? null;
@@ -181,83 +201,93 @@ export function LeagueResults({
   };
 
   return (
-    <section aria-labelledby="leagues-heading" className="mt-8">
-      <h2 id="leagues-heading" className="sr-only">
-        Your Sleeper leagues
-      </h2>
+    // The provider spans every group and both breakpoint renderers, because the
+    // "one at a time" rule is about the reader, not about one table. Two rows in
+    // two different category sections must still queue behind each other.
+    <LeagueSyncProvider>
+      <section aria-labelledby="leagues-heading" className="mt-8">
+        <h2 id="leagues-heading" className="sr-only">
+          Your Sleeper leagues
+        </h2>
 
-      {variant === "dashboard" ? (
-        <>
-          <DashboardFilter
-            showAll={showAll}
-            onChange={setShowAll}
-            totalCount={leagues.length}
-            visibleCount={visibleLeagues.length}
-            profileLeagueCount={profileLeagueCount}
-          />
-          {visibleLeagues.length === 0 ? (
-            <FilterEmptyState onReset={() => setShowAll(true)} />
-          ) : (
+        {variant === "dashboard" ? (
+          <>
+            <DashboardFilter
+              showAll={showAll}
+              onChange={setShowAll}
+              totalCount={leagues.length}
+              visibleCount={visibleLeagues.length}
+              profileLeagueCount={profileLeagueCount}
+            />
+            {visibleLeagues.length === 0 ? (
+              <FilterEmptyState onReset={() => setShowAll(true)} />
+            ) : (
+              <div className="space-y-8">
+                {dashboardGroups.map((group) => (
+                  <LeagueCategorySection key={group.key} group={group}>
+                    <DesktopDashboardTable
+                      leagues={group.leagues}
+                      sleeperUsername={sleeperUsername}
+                      teamStatuses={teamStatuses}
+                      sourceSlug={sourceSlug}
+                      featuredId={featuredId}
+                      shownIds={shownIds}
+                      onSetFeatured={handleSetFeatured}
+                      onToggleShown={handleToggleShown}
+                    />
+                    <MobileDashboardCards
+                      leagues={group.leagues}
+                      sleeperUsername={sleeperUsername}
+                      teamStatuses={teamStatuses}
+                      sourceSlug={sourceSlug}
+                      featuredId={featuredId}
+                      shownIds={shownIds}
+                      onSetFeatured={handleSetFeatured}
+                      onToggleShown={handleToggleShown}
+                    />
+                  </LeagueCategorySection>
+                ))}
+                <StatusLegend />
+              </div>
+            )}
+          </>
+        ) : (
+          <>
             <div className="space-y-8">
-              {dashboardGroups.map((group) => (
+              {publicGroups.map((group) => (
                 <LeagueCategorySection key={group.key} group={group}>
-                  <DesktopDashboardTable
+                  <DesktopPublicList
                     leagues={group.leagues}
                     sleeperUsername={sleeperUsername}
                     teamStatuses={teamStatuses}
-                    featuredId={featuredId}
-                    shownIds={shownIds}
-                    onSetFeatured={handleSetFeatured}
-                    onToggleShown={handleToggleShown}
+                    sourceSlug={sourceSlug}
                   />
-                  <MobileDashboardCards
+                  <MobilePublicList
                     leagues={group.leagues}
-                    sleeperUsername={sleeperUsername}
                     teamStatuses={teamStatuses}
-                    featuredId={featuredId}
-                    shownIds={shownIds}
-                    onSetFeatured={handleSetFeatured}
-                    onToggleShown={handleToggleShown}
+                    sourceSlug={sourceSlug}
+                    onOpen={(id) => setOpenLeagueId(id)}
                   />
                 </LeagueCategorySection>
               ))}
-              <StatusLegend />
             </div>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="space-y-8">
-            {publicGroups.map((group) => (
-              <LeagueCategorySection key={group.key} group={group}>
-                <DesktopPublicList
-                  leagues={group.leagues}
-                  sleeperUsername={sleeperUsername}
-                  teamStatuses={teamStatuses}
-                />
-                <MobilePublicList
-                  leagues={group.leagues}
-                  teamStatuses={teamStatuses}
-                  onOpen={(id) => setOpenLeagueId(id)}
-                />
-              </LeagueCategorySection>
-            ))}
-          </div>
-          <StatusLegend />
-          {openLeague && (
-            <LeagueDetailSheet
-              league={openLeague}
-              open={!!openLeague}
-              onClose={() => setOpenLeagueId(null)}
-              sleeperUsername={sleeperUsername}
-              statusDisplay={describeStatus(openLeague.status).label}
-              statusTone={describeStatus(openLeague.status).tone}
-              teamStatus={teamStatuses[openLeague.league_id]?.status ?? null}
-            />
-          )}
-        </>
-      )}
-    </section>
+            <StatusLegend />
+            {openLeague && (
+              <LeagueDetailSheet
+                league={openLeague}
+                open={!!openLeague}
+                onClose={() => setOpenLeagueId(null)}
+                sleeperUsername={sleeperUsername}
+                statusDisplay={describeStatus(openLeague.status).label}
+                statusTone={describeStatus(openLeague.status).tone}
+                summary={teamStatuses[openLeague.league_id] ?? null}
+                sourceSlug={sourceSlug}
+              />
+            )}
+          </>
+        )}
+      </section>
+    </LeagueSyncProvider>
   );
 }
 
@@ -289,31 +319,149 @@ function LeagueCategorySection({
   );
 }
 
+/* ---------- Shared "Your team" cell ---------- */
+
+/**
+ * The tag, the figure beside it, and on an unsynced league the Sync button.
+ *
+ * One component for all four renderers. The tag and the number belong together
+ * (the number is what makes the tag actionable), and the four surfaces drifting
+ * apart is the failure mode a shared cell exists to prevent.
+ *
+ * Both pieces are ordinary pills, and both stay in the accessibility tree. An
+ * earlier pass hid them, on the theory that the row's own accessible name
+ * already read them out. That broke reading by hover: a screen reader following
+ * the pointer has to find something under it, and hidden text is nothing. Never
+ * hide row content that a reader might point at.
+ *
+ * Pills wrap rather than stack, so they sit side by side wherever the column is
+ * wide enough and fall onto two lines where it is not.
+ */
+function TeamStandingCell({
+  summary,
+  leagueName,
+  sleeperLeagueId,
+  leagueTeamCount,
+  sourceSlug,
+  size = "md",
+}: {
+  summary: LeagueTeamStatusSummary | null;
+  leagueName: string;
+  sleeperLeagueId: string;
+  /** Teams in the league, per Sleeper. The denominator for a value rank, which
+   *  covers every roster, not only the ones Power Pulse scored. */
+  leagueTeamCount: number;
+  sourceSlug: string | null;
+  size?: "sm" | "md";
+}) {
+  const sync = useLeagueSync(sleeperLeagueId);
+
+  if (!summary?.status) {
+    return (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <TeamStatusPending size={size} />
+        {sync.didSucceed ? (
+          // The sync worked and the league still has no Pulse row. That is a
+          // real answer, not a failure: Power Pulse refuses to score a season
+          // with no unplayed games left, and offering the button again would
+          // just spend another slot reaching the same conclusion.
+          <span className="block max-w-[14rem] text-[10px] leading-snug text-ink-subtle">
+            Synced. Nothing to project here yet, usually because the season is
+            over or the schedule is not out.
+          </span>
+        ) : (
+          <LeagueSyncButton
+            sleeperLeagueId={sleeperLeagueId}
+            leagueName={leagueName}
+            size={size}
+          />
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <TeamStatusBadge status={summary.status} size={size} />
+      <TeamStandingFigure
+        statusKey={summary.status.key}
+        projectedSeed={summary.projectedSeed}
+        rankedTeamCount={summary.rankedTeamCount}
+        valueRank={summary.valueRank}
+        totalValue={summary.totalValue}
+        valueIsExact={summary.valueIsExact}
+        leagueTeamCount={leagueTeamCount}
+        sourceSlug={sourceSlug}
+        size={size}
+      />
+    </span>
+  );
+}
+
+/** The whole "Your team" story as one sentence, for a row whose accessible name
+ *  covers everything at once.
+ *
+ *  The figure leads and the tag's own reasoning follows, and both name the
+ *  measure they are quoting. They are different numbers on purpose: the finish
+ *  is ordered by expected wins, the tag is derived from Power Pulse, and a hard
+ *  schedule separates them. Unlabelled, the pair reads as a contradiction. */
+function describeTeamStanding(
+  summary: LeagueTeamStatusSummary | null,
+  leagueTeamCount: number,
+): string {
+  if (!summary?.status) {
+    return "Your team has no standing yet. Use the Sync button on this row, or open the league, to calculate it.";
+  }
+  const figure = describeStandingFigure({
+    statusKey: summary.status.key,
+    projectedSeed: summary.projectedSeed,
+    rankedTeamCount: summary.rankedTeamCount,
+    valueRank: summary.valueRank,
+    totalValue: summary.totalValue,
+    valueIsExact: summary.valueIsExact,
+    leagueTeamCount,
+  });
+  return `Your team: ${summary.status.label}. ${figure} ${summary.status.reason}`.trim();
+}
+
 /* ---------- PUBLIC variant, desktop ---------- */
 
 /**
- * Deliberately a list of links rather than a table.
+ * Deliberately a list rather than a table.
  *
- * Every row here is one link and nothing else: there is no per-cell content a
- * reader can act on independently, so the table markup it used to carry bought
- * no navigation and cost the alignment. A real table sizes its columns from its
- * cells, and this list has exactly one cell per row (the row-spanning link), so
- * the headings were sized by their own text while the values inside the link
- * were sized by a grid. The two never agreed, which is why the Teams heading
- * sat off its numbers.
+ * A real table sizes its columns from its cells, and this list has one
+ * row-spanning link per row, so the headings were sized by their own text while
+ * the values inside the link were sized by a grid. The two never agreed, which
+ * is why the Teams heading used to sit off its numbers. As a list where the
+ * header strip and every row share one grid template, the browser cannot
+ * disagree with itself.
  *
- * As a list, the header strip and every row share one grid template and the
- * browser cannot disagree with itself. The strip is aria-hidden because each
- * link already announces its league, status, team count, and standing in full.
+ * The link covers the first three columns and holds its own text. It is NOT an
+ * empty overlay stretched across the row, which is what a previous pass tried in
+ * order to keep the whole row clickable while the "Your team" cell gained a Sync
+ * button. That version broke reading by hover: every cell was pointer-events-none
+ * so the pointer always hit-tested to the link, and the link had no text in it,
+ * so a screen reader following the mouse found an empty box and said nothing.
+ *
+ * Whatever is under the pointer has to BE the thing it looks like. So the link
+ * wraps real content, `grid-cols-subgrid` keeps its three columns locked to the
+ * outer template (alignment by construction, which was the point of the shared
+ * grid), and the "Your team" column sits outside the link as its own cell,
+ * because it holds a button and a button inside a link is invalid markup.
+ *
+ * The cost is that clicking the "Your team" column no longer navigates. That
+ * column is the one you press things in now, so that is the right trade.
  */
 function DesktopPublicList({
   leagues,
   sleeperUsername,
   teamStatuses,
+  sourceSlug,
 }: {
   leagues: SleeperLeague[];
   sleeperUsername: string | null;
   teamStatuses: TeamStatusMap;
+  sourceSlug: string | null;
 }) {
   return (
     <div className="hidden overflow-hidden rounded-card border border-line md:block">
@@ -325,7 +473,6 @@ function DesktopPublicList({
         <span className="text-center">Status</span>
         <span className="text-center">Teams</span>
         <span>Your team</span>
-        <span />
       </div>
       <ul
         role="list"
@@ -334,25 +481,30 @@ function DesktopPublicList({
       >
         {leagues.map((league) => {
           const { label, tone } = describeStatus(league.status);
-          const teamStatus = teamStatuses[league.league_id]?.status ?? null;
+          const summary = teamStatuses[league.league_id] ?? null;
           return (
             <li
               key={league.league_id}
-              className="transition-colors hover:bg-surface/60 focus-within:bg-surface/60"
+              className={`group grid items-center gap-3 px-4 transition-colors hover:bg-surface/60 focus-within:bg-surface/60 ${PUBLIC_GRID}`}
             >
+              {/* col-span-3 + subgrid: the link is one grid item that borrows the
+                  parent's first three tracks, so its cells cannot drift off the
+                  headings above them. Horizontal padding lives on the li, not
+                  here, because padding on a subgrid item would shift its tracks
+                  out of step with the parent's. */}
               <LeagueOpenLink
                 sleeperLeagueId={league.league_id}
                 href={leagueHref(league.league_id, sleeperUsername, league.name)}
-                ariaLabel={
-                  teamStatus
-                    ? `Open ${league.name}, ${label}, ${league.total_rosters} teams. Your team: ${teamStatus.label}. ${teamStatus.reason}`
-                    : `Open ${league.name}, ${label}, ${league.total_rosters} teams. Your team has no standing yet; opening the league calculates it.`
-                }
-                className={`group grid w-full items-center gap-3 px-4 py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan ${PUBLIC_GRID}`}
+                ariaLabel={`Open ${league.name}, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
+                className="col-span-3 grid grid-cols-subgrid items-center py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-base font-semibold text-ink">
-                    {league.name}
+                  <span className="flex items-center gap-1.5 text-base font-semibold text-ink">
+                    <span className="truncate">{league.name}</span>
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
+                    />
                   </span>
                   <span className="mt-0.5 block text-xs text-ink-subtle">
                     {league.season} season
@@ -365,20 +517,16 @@ function DesktopPublicList({
                   <Users aria-hidden="true" className="h-3.5 w-3.5 text-brand-cyan" />
                   {league.total_rosters}
                 </span>
-                <span className="flex min-w-0 justify-start">
-                  {teamStatus ? (
-                    <TeamStatusBadge status={teamStatus} />
-                  ) : (
-                    <TeamStatusPending />
-                  )}
-                </span>
-                <span className="flex justify-end text-ink-subtle group-hover:text-brand-cyan">
-                  <ArrowRight
-                    aria-hidden="true"
-                    className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                  />
-                </span>
               </LeagueOpenLink>
+              <span className="flex min-w-0 justify-start py-4">
+                <TeamStandingCell
+                  summary={summary}
+                  leagueName={league.name}
+                  sleeperLeagueId={league.league_id}
+                  leagueTeamCount={league.total_rosters}
+                  sourceSlug={sourceSlug}
+                />
+              </span>
             </li>
           );
         })}
@@ -389,15 +537,37 @@ function DesktopPublicList({
 
 /* ---------- PUBLIC variant, mobile ---------- */
 
-/** Same reasoning as the desktop list, one breakpoint down. Tapping a row
- *  opens the detail sheet instead of navigating, so the row is a button. */
+/**
+ * Same reasoning as the desktop list, one breakpoint down. Tapping a row opens
+ * the detail sheet instead of navigating, so the row control is a button.
+ *
+ * No overlay here either, for the same reason: the button holds its own text, so
+ * whatever is under the pointer is the thing it looks like. The standing sits in
+ * a block below the button rather than inside it, because it holds a Sync button
+ * and a button inside a button is invalid markup.
+ *
+ * WHAT MOBILE SHOWS INSTEAD OF THE LEAGUE STATUS
+ *   Desktop has room for both, so it shows both. A phone does not, and between
+ *   "this league is In Season" and "your team is a Rebuilder holding the 3rd
+ *   most value", only one of those is worth the width on a list you are scanning
+ *   to see how you are doing. So the status column is gone here and the standing
+ *   pills take the row.
+ *
+ *   The league status is not lost. It stays in this button's accessible name, so
+ *   a screen reader still hears it on every row, and the detail sheet this
+ *   button opens leads with it as a badge and repeats it as a fact card. Nothing
+ *   is visible at one breakpoint and unreachable at the other, which is the rule
+ *   this would otherwise break.
+ */
 function MobilePublicList({
   leagues,
   teamStatuses,
+  sourceSlug,
   onOpen,
 }: {
   leagues: SleeperLeague[];
   teamStatuses: TeamStatusMap;
+  sourceSlug: string | null;
   onOpen: (id: string) => void;
 }) {
   return (
@@ -406,31 +576,30 @@ function MobilePublicList({
         aria-hidden="true"
         className={`grid items-center gap-3 border-b border-line bg-surface px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ink-subtle ${MOBILE_GRID}`}
       >
-        <span>League</span>
-        <span className="text-center">Status</span>
+        <span>League and your team</span>
         <span />
       </div>
       <ul
         role="list"
-        aria-label="Your Sleeper leagues. Tap any row for that league's details."
+        aria-label="Your Sleeper leagues. Each row gives the league and how your own roster is doing. Tap any row for that league's status and full details."
         className="divide-y divide-line"
       >
         {leagues.map((league) => {
-          const { label, tone } = describeStatus(league.status);
-          const teamStatus = teamStatuses[league.league_id]?.status ?? null;
+          // Only the label is used here now: the mobile row dropped the status badge,
+          // but the button's accessible name still names the league status.
+          const { label } = describeStatus(league.status);
+          const summary = teamStatuses[league.league_id] ?? null;
           return (
             <li
               key={league.league_id}
-              className="transition-colors hover:bg-surface/60"
+              className="group transition-colors hover:bg-surface/60 focus-within:bg-surface/60"
             >
               <button
                 type="button"
                 onClick={() => onOpen(league.league_id)}
                 aria-haspopup="dialog"
-                aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams. Your team: ${
-                  teamStatus ? teamStatus.label : "not synced yet"
-                }`}
-                className={`group grid w-full items-center gap-3 px-4 py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan ${MOBILE_GRID}`}
+                aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
+                className={`grid w-full items-center gap-3 px-4 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan ${MOBILE_GRID}`}
               >
                 <span className="min-w-0">
                   <span className="block truncate text-base font-semibold text-ink">
@@ -440,19 +609,6 @@ function MobilePublicList({
                     <Users aria-hidden="true" className="h-3 w-3 text-brand-cyan" />
                     {league.total_rosters} teams, {league.season}
                   </span>
-                  {/* Desktop gives this its own column. Mobile keeps it inline
-                      rather than dropping it, so no breakpoint hides a value
-                      the other one shows. */}
-                  <span className="mt-1.5 block">
-                    {teamStatus ? (
-                      <TeamStatusBadge status={teamStatus} size="sm" />
-                    ) : (
-                      <TeamStatusPending size="sm" />
-                    )}
-                  </span>
-                </span>
-                <span className="flex justify-center">
-                  <StatusBadge label={label} tone={tone} />
                 </span>
                 <span className="flex justify-end text-ink-subtle">
                   <ChevronRight
@@ -461,6 +617,18 @@ function MobilePublicList({
                   />
                 </span>
               </button>
+              {/* The row's headline on mobile, not a footnote to it: the width
+                  the league-status badge used to take now belongs to this. */}
+              <div className="px-4 pb-3 pt-2">
+                <TeamStandingCell
+                  summary={summary}
+                  leagueName={league.name}
+                  sleeperLeagueId={league.league_id}
+                  leagueTeamCount={league.total_rosters}
+                  sourceSlug={sourceSlug}
+                  size="sm"
+                />
+              </div>
             </li>
           );
         })}
@@ -475,6 +643,7 @@ function DesktopDashboardTable({
   leagues,
   sleeperUsername,
   teamStatuses,
+  sourceSlug,
   featuredId,
   shownIds,
   onSetFeatured,
@@ -483,6 +652,7 @@ function DesktopDashboardTable({
   leagues: SleeperLeague[];
   sleeperUsername: string | null;
   teamStatuses: TeamStatusMap;
+  sourceSlug: string | null;
   featuredId: string | null;
   shownIds: Set<string>;
   onSetFeatured: (id: string | null) => void;
@@ -523,7 +693,7 @@ function DesktopDashboardTable({
         <tbody className="divide-y divide-line">
           {leagues.map((league) => {
             const { label, tone } = describeStatus(league.status);
-            const teamStatus = teamStatuses[league.league_id]?.status ?? null;
+            const summary = teamStatuses[league.league_id] ?? null;
             const isFeatured = featuredId === league.league_id;
             const isShown = shownIds.has(league.league_id);
             return (
@@ -533,8 +703,10 @@ function DesktopDashboardTable({
               >
                 <td className="px-4 py-4">
                   {/* The league-name link is the ONLY navigational action on
-                      the row. Status / teams / standing cells beside it are
-                      non-interactive. */}
+                      the row. Status / teams cells beside it are
+                      non-interactive; the standing cell may hold a Sync
+                      button, which is an action on this row, not a
+                      destination. */}
                   <LeagueOpenLink
                     sleeperLeagueId={league.league_id}
                     href={leagueHref(league.league_id, sleeperUsername, league.name)}
@@ -566,11 +738,13 @@ function DesktopDashboardTable({
                   </span>
                 </td>
                 <td className="px-3 py-4">
-                  {teamStatus ? (
-                    <TeamStatusBadge status={teamStatus} />
-                  ) : (
-                    <TeamStatusPending />
-                  )}
+                  <TeamStandingCell
+                    summary={summary}
+                    leagueName={league.name}
+                    sleeperLeagueId={league.league_id}
+                    leagueTeamCount={league.total_rosters}
+                    sourceSlug={sourceSlug}
+                  />
                 </td>
                 <td className="px-3 py-4 text-center">
                   <FeaturedToggle
@@ -603,6 +777,7 @@ function MobileDashboardCards({
   leagues,
   sleeperUsername,
   teamStatuses,
+  sourceSlug,
   featuredId,
   shownIds,
   onSetFeatured,
@@ -611,6 +786,7 @@ function MobileDashboardCards({
   leagues: SleeperLeague[];
   sleeperUsername: string | null;
   teamStatuses: TeamStatusMap;
+  sourceSlug: string | null;
   featuredId: string | null;
   shownIds: Set<string>;
   onSetFeatured: (id: string | null) => void;
@@ -624,7 +800,7 @@ function MobileDashboardCards({
     >
       {leagues.map((league) => {
         const { label, tone } = describeStatus(league.status);
-        const teamStatus = teamStatuses[league.league_id]?.status ?? null;
+        const summary = teamStatuses[league.league_id] ?? null;
         const isFeatured = featuredId === league.league_id;
         const isShown = shownIds.has(league.league_id);
         return (
@@ -633,17 +809,17 @@ function MobileDashboardCards({
             className="rounded-card border border-line bg-surface"
           >
             {/* League-name link is the only navigational action.
-                Toggle row sits beneath it, separated by a visible
+                The standing block sits below it rather than inside it: it can
+                hold a Sync button, and a button inside a link is invalid
+                markup. Toggle row sits beneath both, separated by a visible
                 divider so the tap zones don't compete. */}
             <LeagueOpenLink
               sleeperLeagueId={league.league_id}
               href={leagueHref(league.league_id, sleeperUsername, league.name)}
-              ariaLabel={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams. Your team: ${
-                teamStatus ? teamStatus.label : "not synced yet"
-              }`}
-              className="group block w-full p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
+              ariaLabel={`Open ${league.name} deep view, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
+              className="group block w-full px-4 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
             >
-              <div className="flex flex-wrap items-start justify-between gap-2">
+              <span className="flex flex-wrap items-start justify-between gap-2">
                 <span className="inline-flex items-center gap-1.5 text-base font-semibold text-ink group-hover:text-brand-purple">
                   {league.name}
                   <ArrowRight
@@ -652,22 +828,21 @@ function MobileDashboardCards({
                   />
                 </span>
                 <StatusBadge label={label} tone={tone} />
-              </div>
-              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
-                <Users
-                  aria-hidden="true"
-                  className="h-3 w-3 text-brand-cyan"
-                />
+              </span>
+              <span className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                <Users aria-hidden="true" className="h-3 w-3 text-brand-cyan" />
                 {league.total_rosters} teams, {league.season}
-              </p>
-              <div className="mt-3">
-                {teamStatus ? (
-                  <TeamStatusBadge status={teamStatus} />
-                ) : (
-                  <TeamStatusPending />
-                )}
-              </div>
+              </span>
             </LeagueOpenLink>
+            <div className="px-4 pb-4 pt-3">
+              <TeamStandingCell
+                summary={summary}
+                leagueName={league.name}
+                sleeperLeagueId={league.league_id}
+                leagueTeamCount={league.total_rosters}
+                sourceSlug={sourceSlug}
+              />
+            </div>
             <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
               <FeaturedToggle
                 leagueName={league.name}
@@ -728,11 +903,17 @@ function StatusLegend() {
             <TeamStatusPending size="sm" />
           </dt>
           <dd className="min-w-0">
-            We have never loaded this league. Open it and Power Pulse
-            calculates on arrival.
+            We have never loaded this league. Press Sync on the row, or just open
+            it, and Power Pulse calculates. One league syncs at a time.
           </dd>
         </div>
       </dl>
+      <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-muted">
+        The second pill on each row is the projected finish, ordered by expected
+        wins, with a gold, silver, or bronze trophy on the top three. Rebuilders
+        show what the roster is worth instead, and where that sits in the league,
+        because a rebuild is not measured in wins.
+      </p>
     </div>
   );
 }
@@ -750,7 +931,7 @@ const LEGEND_ENTRIES: {
   },
   {
     key: "middle",
-    label: "Middle of the pack",
+    label: "Mid Tier",
     blurb: "Mid-table on expected wins and on what the roster is worth.",
   },
   {

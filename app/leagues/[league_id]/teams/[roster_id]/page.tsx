@@ -134,7 +134,7 @@ export default async function TeamDetailPage({
   const team = allTeams.find((t) => t.sleeperRosterId === sleeperRosterId);
   if (!team) notFound();
 
-  // Competitor / Middle of the pack / Rebuilder, the same tag this team wears
+  // Competitor / Mid Tier / Rebuilder, the same tag this team wears
   // on the league list, the rankings table, and the Power Pulse tab. Skipped
   // entirely for a league that has not drafted, where there is nothing to call.
   const readiness = await loadLeagueReadiness(

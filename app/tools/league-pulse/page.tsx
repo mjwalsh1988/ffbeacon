@@ -58,23 +58,37 @@ export default async function LeaguePulsePage({
   // URL param wins (shareable links); otherwise fall back to the saved handle.
   const defaultUsername = usernameInput ?? savedUsername;
 
+  // What we actually look up. A signed-in reader who has already told us their
+  // handle should not have to press a button to be told what we already know,
+  // so the saved handle searches itself. Typing a different one still wins,
+  // because the URL param is checked first.
+  const lookupUsername = defaultUsername.trim();
+  // True only when the reader asked for this search. Drives the auto-scroll:
+  // yanking someone down past the hero on a plain page visit, and moving their
+  // focus while they are still reading the top of the page, is the opposite of
+  // helpful.
+  const searchWasRequested = Boolean(usernameInput);
+
   let user = null;
   let leagues: Awaited<ReturnType<typeof getSleeperLeagues>> = [];
   let error: string | null = null;
 
   // Where this user's own team stands in each league, for the leagues we have
-  // already pulsed. Read-only: the entry point never syncs, so leagues nobody
-  // has opened stay unsynced and say so rather than costing a calculation each.
+  // already pulsed. Read-only: the entry point never syncs on render, so leagues
+  // nobody has opened stay unsynced and say so, with a Sync button on the row
+  // for a reader who wants the number without leaving the list.
   let teamStatuses: Record<string, LeagueTeamStatusSummary> = {};
+  const resolvedSource = await resolveSourceSlug(supabase, undefined);
 
-  if (usernameInput) {
-    user = await getSleeperUser(usernameInput);
+  if (lookupUsername) {
+    user = await getSleeperUser(lookupUsername);
     if (!user) {
-      error = `No Sleeper user found for "${usernameInput}".`;
+      error = searchWasRequested
+        ? `No Sleeper user found for "${lookupUsername}".`
+        : `We could not load your saved Sleeper handle, "${lookupUsername}". Sleeper may be down, or the account may have been renamed. Search below to try another.`;
     } else {
       leagues = await getSleeperLeagues(user.user_id, season);
       if (leagues.length > 0) {
-        const resolvedSource = await resolveSourceSlug(supabase, undefined);
         const statusMap = await loadSearchedTeamStatuses(
           supabase,
           leagues.map((l) => l.league_id),
@@ -178,11 +192,13 @@ export default async function LeaguePulsePage({
           aria-labelledby="results-heading"
           className="border-b border-line scroll-mt-4"
         >
-          <ScrollToResults
-            key={`${user.user_id}-${season}`}
-            targetId="league-results"
-            headingId="results-heading"
-          />
+          {searchWasRequested && (
+            <ScrollToResults
+              key={`${user.user_id}-${season}`}
+              targetId="league-results"
+              headingId="results-heading"
+            />
+          )}
           <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -223,8 +239,9 @@ export default async function LeaguePulsePage({
               <LeagueResults
                 leagues={leagues}
                 season={season}
-                sleeperUsername={user.display_name ?? usernameInput ?? null}
+                sleeperUsername={user.display_name ?? lookupUsername ?? null}
                 teamStatuses={teamStatuses}
+                sourceSlug={resolvedSource.slug}
               />
             )}
           </div>

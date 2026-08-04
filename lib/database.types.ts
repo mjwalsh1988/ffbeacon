@@ -1611,6 +1611,27 @@ export type Database = {
           },
         ];
       };
+      league_sync_attempts: {
+        Row: {
+          actor_key: string;
+          claimed_at: string;
+          released_at: string | null;
+          sleeper_league_id: string | null;
+        };
+        Insert: {
+          actor_key: string;
+          claimed_at?: string;
+          released_at?: string | null;
+          sleeper_league_id?: string | null;
+        };
+        Update: {
+          actor_key?: string;
+          claimed_at?: string;
+          released_at?: string | null;
+          sleeper_league_id?: string | null;
+        };
+        Relationships: [];
+      };
       league_transactions: {
         Row: {
           adds: Json;
@@ -4921,6 +4942,10 @@ export type Database = {
         }[];
       };
       rebuild_positional_finishes: { Args: never; Returns: number };
+      release_league_sync: {
+        Args: { p_actor_key: string };
+        Returns: undefined;
+      };
       release_on_the_clock_sync: {
         Args: { p_draft_id: string };
         Returns: undefined;
@@ -4942,6 +4967,15 @@ export type Database = {
           p_window_seconds?: number;
         };
         Returns: boolean;
+      };
+      try_claim_league_sync: {
+        Args: {
+          p_actor_key: string;
+          p_cooldown_seconds?: number;
+          p_lease_seconds?: number;
+          p_sleeper_league_id: string;
+        };
+        Returns: Json;
       };
       try_claim_on_the_clock_ip_budget: {
         Args: {

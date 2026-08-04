@@ -10,6 +10,7 @@
 
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
+import { compareProjectedFinish } from "@/lib/power-pulse/projected-order";
 
 export function ProjectedStandings({
   teams,
@@ -18,11 +19,9 @@ export function ProjectedStandings({
   teams: PulseTeam[];
   playoffTeams: number;
 }) {
-  const ordered = [...teams].sort(
-    (a, b) =>
-      (b.projectedWins ?? 0) - (a.projectedWins ?? 0) ||
-      (b.expectedPointsPerWeek ?? 0) - (a.expectedPointsPerWeek ?? 0),
-  );
+  // Shared comparator, because the league list quotes this same finish on every
+  // row and the two must not drift. See lib/power-pulse/projected-order.ts.
+  const ordered = [...teams].sort(compareProjectedFinish);
 
   return (
     <div className="overflow-x-auto">

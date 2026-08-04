@@ -2,7 +2,7 @@ import { CircleDashed, PiggyBank, Split, Swords, type LucideIcon } from "lucide-
 import type { TeamStatus, TeamStatusKey } from "@/lib/league-team-status";
 
 /**
- * The Competitor / Middle of the pack / Rebuilder tag.
+ * The Competitor / Mid Tier / Rebuilder tag.
  *
  * Built to read as a tag at a glance rather than as another line of text: an
  * icon, a filled pill, a bright border, and a soft glow in the tag's own colour.
@@ -15,7 +15,7 @@ import type { TeamStatus, TeamStatusKey } from "@/lib/league-team-status";
  * compact form where the label shortens to one word.
  *
  *   - Competitor: crossed swords. This team is in the fight.
- *   - Middle of the pack: a splitting arrow. The season could still go either
+ *   - Mid Tier: a splitting arrow. The season could still go either
  *     way, which is exactly what a mid-table Power Pulse says.
  *   - Rebuilder: a piggy bank. Assets going in for later rather than points
  *     going out now.

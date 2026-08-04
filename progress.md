@@ -1751,3 +1751,300 @@ T425 | completed | Search palette closes on a completed route change
   the opposite of the goal here.
 - The header runs supabase.auth.getUser() on every render on top of the same call
   in middleware, so each full page load pays for two auth round trips.
+
+## League Pulse entry list: auto-search, standings figure, Sync button (2026-08-03)
+
+T426 | completed | Saved Sleeper handle searches itself on the League Pulse entry page
+     | files: app/tools/league-pulse/page.tsx
+     | depends on: none
+     | verified: yes (no redirect, so the URL stays clean and the back button is not
+     |   trapped; ScrollToResults now fires only when the reader actually submitted
+     |   the form, so a plain visit no longer yanks focus past the hero; a saved
+     |   handle Sleeper cannot resolve gets its own error copy naming the handle as
+     |   saved rather than mistyped)
+
+T427 | completed | Shared value formatter lifted out of the team card
+     | files: lib/format-value.ts, components/team-card.tsx
+     | depends on: none
+     | verified: yes (single definition, team card behaviour unchanged)
+
+T428 | completed | One definition of projected-finish order
+     | files: lib/power-pulse/projected-order.ts, lib/power-pulse/projected-order.test.ts,
+     |   components/power-pulse/projected-standings.tsx
+     | depends on: none
+     | verified: yes (4 tests; the league list and the Projected final standings table
+     |   inside a league now sort through the same comparator, so a row that promises
+     |   3rd and a league that then says 4th is a structural impossibility rather than
+     |   a comment nobody rereads)
+
+T429 | completed | Standing figure data: projected seed, ranked count, exact-match value
+     | files: lib/league-team-status-data.ts
+     | depends on: T428
+     | verified: yes (Power Pulse rows are now read for EVERY roster in the league,
+     |   because a finish is a position among the others, and that read is paged with a
+     |   stable order because one row per (league, roster, season) clears the silent
+     |   1000-row cap for a heavy Sleeper user; the value read stays scoped to the
+     |   searched roster; valueIsExact is true only when a cached row matches BOTH the
+     |   league's derived format and the reader's source)
+
+T430 | completed | Standing figure wording and rendering
+     | files: lib/team-standing-figure.ts, lib/team-standing-figure.test.ts,
+     |   components/team-standing-figure.tsx
+     | depends on: T429
+     | verified: yes (9 tests. Competitor and Middle show the projected finish with a
+     |   gold, silver, or bronze trophy on the top three and a plain ordinal below
+     |   that; Rebuilder shows total roster value and its rank instead. Every sentence
+     |   names its measure, "by expected wins" or "by roster value", because the tag's
+     |   own explanation quotes Power Pulse and a hard schedule pulls the two apart. A
+     |   rebuilder with no exact-match value row falls back to the finish rather than
+     |   printing a number from the wrong format)
+
+T431 | completed | Per-visitor sync throttle ledger
+     | files: supabase/migrations/0168_league_sync_attempts.sql, lib/database.types.ts
+     | depends on: none
+     | verified: yes (RLS on with a single service_role ALL policy; anon and
+     |   authenticated hold no table privilege and no EXECUTE on either function,
+     |   confirmed against prod via pg_policies and has_*_privilege. Claim semantics
+     |   exercised in a begin/rollback probe: first claim wins, a second while in
+     |   flight is refused, a claim inside the cooldown is refused, a claim after the
+     |   cooldown wins, an abandoned claim past its lease is taken over, and an empty
+     |   actor key fails closed)
+
+T432 | completed | Public sync endpoint
+     | files: app/api/leagues/[league_id]/sync/route.ts, lib/rate-limit-actor.ts
+     | depends on: T431
+     | verified: yes (live: 400 on a malformed id, 403 without the same-origin header,
+     |   429 reason "in_flight" for a second league while one is syncing, 429 reason
+     |   "cooldown" immediately after one finishes, 200 again 5.5s later. Slot released
+     |   in a finally so a failure costs a cooldown, not a lockout. Actor key derived
+     |   server-side from the session, else a salted hash of the trusted client IP;
+     |   a missing salt returns a controlled 503 rather than an unlimited slot)
+
+T433 | completed | Sync queue and button
+     | files: lib/league-sync-queue.tsx, components/league-sync-button.tsx
+     | depends on: T432
+     | verified: yes (one sync at a time across every league on the page and across
+     |   both breakpoint renderers; 5s cooldown after each attempt; every unavailable
+     |   state says why in words and keeps aria-disabled rather than disabled so the
+     |   control stays reachable; countdown in the label; a single polite live region
+     |   for the whole list)
+
+T434 | completed | Wire the figure and the button into all four renderers plus the sheet
+     | files: app/tools/league-pulse/league-results.tsx,
+     |   app/tools/league-pulse/league-detail-sheet.tsx,
+     |   app/my-beacon/sleeper-leagues/page.tsx
+     | depends on: T430, T433
+     | verified: yes (both public lists became stretched-overlay rows because a button
+     |   nested inside a link is invalid markup; the tag and figure are aria-hidden
+     |   there since the row's own name already reads them, while the Sync button
+     |   stays exposed; the dashboard table needed no restructure and keeps its cells
+     |   readable; the mobile dashboard card moves the standing out of the link)
+
+### Verification summary
+- npm run typecheck: clean
+- npm test: 1022 tests across 80 files, all pass (13 new)
+- npm run build: compiles clean, no warnings
+- Live render against a real Sleeper account with 68 leagues: the projected finish,
+  the trophy, the rebuilder value figure, and the Sync buttons all render server-side.
+  Three leagues synced through the new endpoint and their rows moved from "Not yet
+  synced" to a real tag plus figure on the next load.
+- The divergence the projected finish exists to show is visible in real data: one
+  roster sits 6th of 12 by Power Pulse and projects to finish 2nd, and another sits
+  8th of 10 by Pulse while holding the 2nd most value in its league.
+- Accessibility (self-audited, no sub-agent dispatched per session instruction):
+  trophy colour is never the only signal, the ordinal is spelled out beside it and
+  the screen-reader sentence names the measure; the FF Beacon mark stays decorative
+  and only appears when the FF Beacon source is selected; Sync keeps a 44px tap
+  target and announces through one polite region rather than one per row.
+- Mobile-first: every figure and every Sync button renders at both breakpoints. No
+  responsive utility hides data.
+- Security (self-audited): the new endpoint is public by design like /warm and
+  /refresh beside it, guarded by the same-origin header, an atomic per-visitor claim
+  behind a row lock, and a league id regex that runs before the value reaches any
+  Sleeper URL. Errors return generic copy; the real message goes to the server log.
+
+### Known gaps / follow-ups
+- A league whose Sleeper scoring matches none of the 8 active formats
+  (format_config_id null, "Unmatched") cannot produce an exact-match value row, so a
+  Rebuilder there shows its projected finish instead of its roster value. Correct
+  behaviour, but the tag's own explanation still quotes a value rank picked by the
+  looser fallback chain in lib/league-team-status.ts, so the sentence can name a rank
+  whose number is not shown. Pre-existing; fixing it means changing the tag on every
+  surface that renders it.
+- The Sync button's one click is consumed on failure only for the length of the
+  cooldown, after which it re-offers as "Try again". Burning the attempt permanently
+  on a network blip would punish the reader for our failure.
+- LEAGUE_SYNC_IP_SALT is not set; the guest limit key falls back to
+  SIGNAL_SCOUT_IP_SALT, which is present. Splitting them is optional, but the sync
+  endpoint returns 503 for guests if BOTH are ever missing in production.
+
+T435 | completed | Fix: hover speech broken on the league list
+     | files: app/tools/league-pulse/league-results.tsx
+     | depends on: T434
+     | verified: yes (regression introduced by T434. The row link had been turned into
+     |   an empty absolutely-positioned overlay and every cell made
+     |   pointer-events-none, so the pointer always hit-tested to the link, and the
+     |   link had no text in it. On top of that the cells carrying the text were
+     |   aria-hidden, so there was nothing in the accessibility tree to find either.
+     |   Reading by hover had nothing to read. Fixed by putting the content back
+     |   inside a real link that covers the first three columns via
+     |   grid-cols-subgrid, which keeps the alignment the shared grid template exists
+     |   for, and moving the "Your team" column outside the link as its own cell
+     |   because it holds a button. Every aria-hidden and every pointer-events-none
+     |   added in T434 is gone. Verified in rendered HTML: 0 overlay links, 0
+     |   pointer-events-none cells, and the league name, season, status, and team
+     |   count all sit inside the link as real text)
+
+T436 | completed | Projected finish and roster value render as pills, not loose text
+     | files: components/team-standing-figure.tsx,
+     |   app/tools/league-pulse/league-results.tsx,
+     |   app/tools/league-pulse/league-detail-sheet.tsx
+     | depends on: T430
+     | verified: yes (built to the same recipe as TeamStatusBadge: icon, fill, border,
+     |   glow. Gold, silver, and bronze with a trophy for the top three; a neutral
+     |   pill with a finish-line flag below that; a purple pill carrying the FF Beacon
+     |   mark, the value, a rule, and the rank for rebuilders. Sits beside the status
+     |   tag on a wrapping row rather than under it, so the two read as one unit.
+     |   Confirmed in the production CSS bundle that Tailwind emitted the arbitrary
+     |   medal colours and grid-cols-subgrid)
+
+T437 | completed | Sync control condensed to a gradient pill
+     | files: components/league-sync-button.tsx
+     | depends on: T433
+     | verified: yes (same dimensions as the tags it sits beside, px-2.5 py-1
+     |   text-[11px] rounded-full, carrying the beacon purple-to-cyan gradient so it
+     |   reads as the one pressable thing on the row. The 44px touch target moved to
+     |   the button BOX, h-11 at mobile widths and md:h-auto above, so a desktop row
+     |   is not padded out by space no mouse needs while a finger still gets its
+     |   target. The permanent status paragraph under every button is gone: the reason
+     |   now reaches a screen reader through aria-describedby on an sr-only element
+     |   and is only rendered visibly when it is an actual error)
+
+### Verification summary (second pass)
+- npm run typecheck: clean
+- npm test: 1022 tests across 80 files, all pass
+- npm run build: compiles clean, no warnings
+- Rendered against the same 68-league account: 68 subgrid rows, 0 overlay links, 0
+  pointer-events-none cells, 128 gradient sync pills, and the silver trophy pill and
+  the rebuilder value pill both present with title and aria-label intact.
+- All local dev servers stopped; ports 3000 through 3003 confirmed free.
+
+### Lesson worth keeping
+Never hide row content a reader might point at. aria-hidden on cells whose text is
+already in the row's accessible name looks like a clean de-duplication and silently
+breaks reading by hover, which depends on finding something real under the pointer.
+Same for pointer-events-none: it changes what the pointer hit-tests to, which is the
+same thing a screen reader following the mouse resolves against.
+
+T438 | completed | Projected finish pill reads "Proj 2nd", not "2nd of 12"
+     | files: components/team-standing-figure.tsx
+     | depends on: T436
+     | verified: yes (the row already states the league's team count, so the pill was
+     |   repeating it. The spoken sentence keeps "of 12" because it is heard on its
+     |   own with none of that surrounding context)
+
+T439 | completed | "Middle of the pack" renamed to "Mid Tier"
+     | files: lib/league-team-status.ts, app/tools/league-pulse/league-results.tsx,
+     |   plus doc comments in app/api/leagues/[league_id]/sync/route.ts,
+     |   app/leagues/[league_id]/page.tsx,
+     |   app/leagues/[league_id]/teams/[roster_id]/page.tsx,
+     |   components/power-rankings-row.tsx, components/team-card.tsx,
+     |   components/team-filter.tsx, components/team-status-badge.tsx,
+     |   lib/league-power-pulse-data.ts, lib/team-standing-figure.ts
+     | depends on: none
+     | verified: yes (one label constant feeds every surface, so the league list, the
+     |   deep view, the team cards, the rankings rows, and the team filter all changed
+     |   together. Short form is now "Mid". The unrelated "Middle of the pack" driver
+     |   label in lib/power-pulse/engine.ts is a Power Pulse driver, not this tag, and
+     |   was deliberately left alone. Confirmed in rendered HTML: 0 occurrences of the
+     |   old string, 9 of the new one)
+
+T440 | completed | Rebuilders always show roster value, never a projected finish
+     | files: lib/league-team-status-data.ts, lib/team-standing-figure.ts,
+     |   components/team-standing-figure.tsx, lib/team-standing-figure.test.ts
+     | depends on: T436
+     | verified: yes (the bug: hasValueFigure demanded a value row matching BOTH the
+     |   league's derived format and the reader's source. 22 of 109 synced leagues
+     |   carry format_config_id null, the "Unmatched" case, and can never match, so
+     |   those Rebuilders silently fell through to a projected finish, which is the one
+     |   number a rebuild is not measured by.
+     |
+     |   Fixed at the source: the tag and the printed figure now read the SAME value
+     |   row, chosen by one fallback chain (exact, then league format, then reader's
+     |   source, then anything, sorted first so the last resort is stable across
+     |   renders). Previously the tag walked that chain while the figure insisted on an
+     |   exact match, so a row could say "3rd by value" and then decline to show the
+     |   value it had just ranked. That closes the known gap logged under T429.
+     |
+     |   valueIsExact survives as wording only: an inexact figure appends "This
+     |   league's scoring does not match a format we carry values for, so this is our
+     |   closest match" to the spoken sentence.
+     |
+     |   Made unmistakably a value rank rather than a finish: the pill now reads
+     |   "3rd by value" instead of a bare "3rd", and its icon is Coins rather than the
+     |   finish-line Flag the projected-finish pill uses. Verified across the rendered
+     |   page: 6 Rebuilder rows, 6 value pills, 0 projected-finish pills)
+
+### Verification summary (third pass)
+- npm run typecheck: clean
+- npm test: 1023 tests across 80 files, all pass
+- npm run build: compiles clean, no warnings
+- Rendered against the 68-league account. Rebuilder to value pill: 6 of 6. Mid Tier
+  to projected-finish pill: 2 of 2. No Rebuilder renders a projected finish.
+  The previously-broken Unmatched league now shows "88,333 6th by value" with the
+  closest-match caveat in its spoken sentence, where it used to show "Proj 8th".
+- All dev servers stopped; ports 3000 through 3005 confirmed free.
+
+### Note on cleaning up dev servers
+TaskStop kills the `npm run dev` wrapper but NOT the Next child process
+(`node .../next/dist/server/lib/start-server.js`), which keeps holding its port.
+That is why orphans accumulated across sessions. Kill by process, not by task:
+  Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+    Where-Object { $_.CommandLine -like '*ffbeacon*start-server.js*' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+then confirm with Get-NetTCPConnection on 3000-3005.
+
+T441 | completed | Rebuilder value pill reads "98,808 (3rd)"
+     | files: components/team-standing-figure.tsx
+     | depends on: T440
+     | verified: yes (dropped the vertical rule and the words "by value", which cost
+     |   most of the pill's width. What the ordinal measures is still carried by the
+     |   coins mark, the purple tone matching the Rebuilder tag beside it, and the
+     |   hover and screen-reader sentence, which is unchanged and still reads "ranked
+     |   3rd of 12 by roster value" in full)
+
+T442 | completed | Desktop "Your team" column widened to fit both pills on one line
+     | files: app/tools/league-pulse/league-results.tsx
+     | depends on: T441
+     | verified: yes (13.5rem to 16rem. The widest pair it has to hold is a Rebuilder
+     |   tag next to a six-figure value with its rank, about 230px including the gap,
+     |   so 16rem clears it with room. The cell still wraps, so a long value degrades
+     |   rather than overflows. The league-name track is minmax(0,1fr) and absorbs the
+     |   difference, leaving it around 700px at full container width. Confirmed 70 rows
+     |   on the new track and no 13.5rem left in the output)
+
+T443 | completed | Mobile row shows the team standing instead of the league status
+     | files: app/tools/league-pulse/league-results.tsx
+     | depends on: T441
+     | verified: yes (mobile grid goes from three tracks to two: league identity and
+     |   the chevron. The league-status badge is gone from the row and the standing
+     |   pills take the width it held, because on a phone the list is scanned to see
+     |   how YOU are doing, and how the league is doing is not that.
+     |
+     |   Mobile-first rule still satisfied. The league status is not hidden, it is
+     |   relocated: it stays in the row button's accessible name, so a screen reader
+     |   hears it on every row, and the detail sheet the button opens leads with it as
+     |   a badge and repeats it as a fact card. Confirmed in the rendered page: 0
+     |   league-status badges inside the md:hidden list, 59 still inside the md:block
+     |   list, team-status pills present in both, and the mobile button's aria-label
+     |   still reads "Open details for X, In Season, 12 teams. Your team: Rebuilder...".
+     |
+     |   The my-beacon dashboard cards were deliberately left alone: they are a card
+     |   layout rather than a table view, and they already show both)
+
+### Verification summary (fourth pass)
+- npm run typecheck: clean
+- npm test: 1023 tests across 80 files, all pass
+- npm run build: compiles clean, no warnings
+- All dev servers stopped by process (not by task, see the note above); ports 3000
+  through 3005 confirmed free.

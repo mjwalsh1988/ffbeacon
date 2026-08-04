@@ -46,12 +46,12 @@ export default async function SleeperLeaguesPage() {
   // Standing per league, read from cache only. Same contract as the public
   // tool: this page never triggers a sync, so unopened leagues report pending.
   let teamStatuses: Record<string, LeagueTeamStatusSummary> = {};
+  const resolvedSource = await resolveSourceSlug(supabase, undefined);
   if (sleeperUsername) {
     sleeperUser = await getSleeperUser(sleeperUsername);
     if (sleeperUser) {
       leagues = await getSleeperLeagues(sleeperUser.user_id, season);
       if (leagues.length > 0) {
-        const resolvedSource = await resolveSourceSlug(supabase, undefined);
         const statusMap = await loadSearchedTeamStatuses(
           supabase,
           leagues.map((l) => l.league_id),
@@ -160,6 +160,7 @@ export default async function SleeperLeaguesPage() {
               featuredLeagueId={featuredLeagueId}
               shownLeagueIds={shownLeagueIds}
               teamStatuses={teamStatuses}
+              sourceSlug={resolvedSource.slug}
             />
           </div>
         )}
