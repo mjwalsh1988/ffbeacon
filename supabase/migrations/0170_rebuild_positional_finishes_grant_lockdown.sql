@@ -1,0 +1,63 @@
+-- Migration 0170: revoke public EXECUTE on rebuild_positional_finishes()
+--
+-- THE HOLE
+--
+-- Every function in `public` is published by PostgREST at /rest/v1/rpc/<name>, and
+-- rebuild_positional_finishes() is SECURITY DEFINER, so it runs with owner rights
+-- regardless of who calls it. It was created in migration 0144 with the default
+-- grants, which means `anon` held EXECUTE: any unauthenticated caller on the
+-- internet could POST to the RPC and make the database scan player_stats joined to
+-- players, cross-joined against three scoring bases, then delete and rewrite all of
+-- player_positional_finishes. That is an unauthorised write, and because one cheap
+-- request buys an expensive full-table aggregate it is also a load amplifier.
+--
+-- This is a regression, not a gap in the original audit. Migration 0136 set the
+-- pattern (pin search_path, revoke EXECUTE from anon/authenticated on anything not
+-- deliberately public). 0144 landed ten days later without the revoke.
+--
+-- WHY THIS BREAKS NOTHING
+--
+-- The function has exactly two callers, both service_role, both of which keep
+-- EXECUTE:
+--   1. scripts/calculate-positional-finishes.ts       -> getServiceClient()
+--      (`npm run calculate:finishes`, also chained by `npm run sync:stats:full`)
+--   2. app/api/cron/sync-sleeper-stats/route.ts       -> createAdminClient(), which
+--      reads SUPABASE_SECRET_KEY, and sits behind verifyCronRequest()
+-- No page, server action, or client component calls it. Verified by grepping the
+-- whole repo for both the RPC name and the wrapper runCalculatePositionalFinishes.
+--
+-- The read path is untouched either way: pages read the player_positional_finishes
+-- TABLE (see lib/player-profile.ts), never this rebuild function.
+--
+-- PUBLIC is included in the revoke because Postgres grants EXECUTE to PUBLIC by
+-- default on function creation, and a role-only revoke would leave that path open.
+--
+-- THREE FUNCTIONS THE ADVISOR ALSO FLAGS AND WE DELIBERATELY LEAVE ALONE
+--
+--   signal_target_publicly_viewable(text, uuid) keeps anon EXECUTE. It is called
+--   inside three RLS policies, and policy expressions evaluate as the querying
+--   role, so anon needs EXECUTE to read them. One of those policies
+--   (signal_reaction_counts_select_public) is granted to {anon, authenticated}:
+--   revoking would stop logged-out visitors from seeing Signal reaction counts.
+--   Same conclusion the 2026-07-13 audit reached (FF_BEACON_SECURITY_FINDINGS.json).
+--
+--   account_has_password() and get_my_active_sessions() keep authenticated EXECUTE.
+--   Both take no arguments and filter on auth.uid(), so a caller can only ever read
+--   their own row: there is no id to tamper with and no IDOR surface. They are the
+--   sanctioned way to expose auth-schema data to its owner without opening
+--   auth.users, and the account page (app/my-beacon/account/page.tsx) calls both
+--   with the user's own session client. Revoking would break that page.
+--
+-- The advisor cannot see argument scoping or RLS usage, so it flags all four. Only
+-- one is a real finding.
+--
+-- Access matrix after this migration:
+--   rebuild_positional_finishes()  service_role only
+--   signal_target_publicly_viewable  anon, authenticated, service_role (RLS helper)
+--   account_has_password()         authenticated, service_role (self-scoped)
+--   get_my_active_sessions()       authenticated, service_role (self-scoped)
+--
+-- No table, policy, column, or RLS rule is touched, so no types to regenerate.
+
+revoke execute on function public.rebuild_positional_finishes()
+  from public, anon, authenticated;
