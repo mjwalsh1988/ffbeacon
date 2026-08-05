@@ -1,10 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Medal, Sparkles, TrendingDown, Trophy } from "lucide-react";
 import { SidePanel } from "@/components/side-panel";
 import {
+  FILTER_THRESHOLD,
+  PanelFilterField,
+} from "@/components/panel-filter-field";
+import {
+  searchProjectedLeagues,
   summarizeProjections,
   type ProjectedLeague,
   type ProjectionInput,
@@ -37,6 +42,16 @@ export function LeagueProjectionsPanel({
   // otherwise re-sort and re-bucket every league on every parent render.
   const summary = useMemo(() => summarizeProjections(inputs), [inputs]);
   const { leagues, unrankedCount } = summary;
+
+  const [query, setQuery] = useState("");
+  // Read through the same condition that renders the box, so a list that drops
+  // below the threshold while something is typed cannot end up filtered by a
+  // control that is no longer on screen.
+  const showFilter = leagues.length > FILTER_THRESHOLD;
+  const visible = useMemo(
+    () => searchProjectedLeagues(leagues, showFilter ? query : ""),
+    [leagues, query, showFilter],
+  );
 
   return (
     <SidePanel
@@ -75,15 +90,43 @@ export function LeagueProjectionsPanel({
             </p>
           )}
 
-          <ul role="list" className="mt-5 space-y-2">
-            {leagues.map((league) => (
-              <LeagueRow
-                key={league.sleeperLeagueId}
-                league={league}
-                sleeperUsername={sleeperUsername}
+          <div className="mt-5">
+            {/* Below the tiles and the line about them on purpose. Those
+                describe every ranked league you own and do not move when this
+                box is typed into; the filter belongs to the list it narrows.
+                It appears only past FILTER_THRESHOLD leagues. */}
+            {showFilter && (
+              <PanelFilterField
+                label="Filter leagues"
+                placeholder="Filter by league or tag..."
+                value={query}
+                onChange={setQuery}
+                hint="Matches a league's name and its Competitor, Mid Tier, or Rebuilder tag."
+                status={
+                  query
+                    ? `${visible.length} of ${leagues.length} leagues match. The counts above still cover all of them.`
+                    : `${leagues.length} ranked leagues, best finish first.`
+                }
               />
-            ))}
-          </ul>
+            )}
+
+            {visible.length === 0 ? (
+              <p className="rounded-card border border-dashed border-line bg-base/40 px-4 py-5 text-sm text-ink-muted">
+                Nothing matches &quot;{query}&quot;. Try part of a league name
+                or one of the status tags.
+              </p>
+            ) : (
+              <ul role="list" className="space-y-2">
+                {visible.map((league) => (
+                  <LeagueRow
+                    key={league.sleeperLeagueId}
+                    league={league}
+                    sleeperUsername={sleeperUsername}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
 
           {unrankedCount > 0 && (
             <p className="mt-4 rounded-card border border-line bg-base/50 px-3 py-2 text-xs leading-relaxed text-ink-muted">

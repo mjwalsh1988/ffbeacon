@@ -81,6 +81,31 @@ export function compareProjectedLeagues(
   });
 }
 
+/**
+ * Narrow the ranked list to a typed query.
+ *
+ * Name and status tag, because both are how a manager describes a league to
+ * themselves: "the Superflex one" and "the ones I am rebuilding" are the same
+ * kind of question. The finish itself is deliberately not searchable; "1st" as
+ * a substring would also hit "21st" and a manager looking for their best team
+ * already has the list sorted that way.
+ *
+ * Pure, and returns the leagues in the order it was given them, so the
+ * best-first sort survives filtering.
+ */
+export function searchProjectedLeagues(
+  leagues: ProjectedLeague[],
+  query: string,
+): ProjectedLeague[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return leagues;
+  return leagues.filter(
+    (league) =>
+      league.leagueName.toLowerCase().includes(q) ||
+      (league.statusLabel?.toLowerCase().includes(q) ?? false),
+  );
+}
+
 export function summarizeProjections(
   inputs: ProjectionInput[],
 ): ProjectionsSummary {

@@ -26,6 +26,12 @@ type AnySupabase =
   | SupabaseClient<Database>
   | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
+/** One league a player is rostered in, carrying enough to link to its deep view. */
+export type ExposureLeague = {
+  sleeperLeagueId: string;
+  name: string;
+};
+
 export type PlayerExposureRow = {
   /** Sleeper's player id. The only id guaranteed to exist for a rostered player. */
   sleeperPlayerId: string;
@@ -37,10 +43,14 @@ export type PlayerExposureRow = {
   team: string | null;
   /** Leagues, of the synced ones, where this manager rosters him. */
   leagueCount: number;
-  /** Those leagues by name, for the row's detail line. */
-  leagueNames: string[];
+  /** Those leagues, alphabetical, for the row's expandable detail. */
+  leagues: ExposureLeague[];
   /** leagueCount / totalLeagues as a percentage, 0 to 100, rounded. */
   sharePct: number;
+  /** 1-based standing on leagueCount. Ties share a number (1, 2, 2, 4). */
+  rank: number;
+  /** True when at least one other player holds the same rank. Shown as "T2". */
+  tied: boolean;
 };
 
 export type PlayerExposure = {
@@ -96,8 +106,14 @@ export async function loadPlayerExposure(
       };
     }
 
-    const leagueNameById = new Map(
-      leagueRows.map((l) => [l.id, l.name ?? "Untitled league"]),
+    const leagueById = new Map<string, ExposureLeague>(
+      leagueRows.map((l) => [
+        l.id,
+        {
+          sleeperLeagueId: l.sleeper_league_id,
+          name: l.name ?? "Untitled league",
+        },
+      ]),
     );
 
     // owner_user_id holds the Sleeper user id verbatim (see lib/league-pulse.ts),
@@ -105,7 +121,7 @@ export async function loadPlayerExposure(
     const { data: rosterRows } = await supabase
       .from("rosters")
       .select("league_id, player_ids")
-      .in("league_id", [...leagueNameById.keys()])
+      .in("league_id", [...leagueById.keys()])
       .eq("owner_user_id", sleeperUserId);
     if (!rosterRows || rosterRows.length === 0) {
       return {
@@ -120,15 +136,15 @@ export async function loadPlayerExposure(
     // deduped before counting. A roster carrying a duplicate id (Sleeper has
     // shipped that) would otherwise push a share above 100%.
     const countBySleeperId = new Map<string, number>();
-    const leaguesBySleeperId = new Map<string, string[]>();
+    const leaguesBySleeperId = new Map<string, ExposureLeague[]>();
     for (const roster of rosterRows) {
-      const leagueName =
-        leagueNameById.get(roster.league_id) ?? "Untitled league";
+      const league = leagueById.get(roster.league_id);
+      if (!league) continue;
       for (const id of new Set(asIdArray(roster.player_ids))) {
         countBySleeperId.set(id, (countBySleeperId.get(id) ?? 0) + 1);
-        const names = leaguesBySleeperId.get(id) ?? [];
-        names.push(leagueName);
-        leaguesBySleeperId.set(id, names);
+        const owned = leaguesBySleeperId.get(id) ?? [];
+        owned.push(league);
+        leaguesBySleeperId.set(id, owned);
       }
     }
     if (countBySleeperId.size === 0) {
@@ -141,7 +157,7 @@ export async function loadPlayerExposure(
 
     const meta = await resolvePlayers(supabase, [...countBySleeperId.keys()]);
 
-    const rows: PlayerExposureRow[] = [...countBySleeperId.entries()].map(
+    const unranked = [...countBySleeperId.entries()].map(
       ([sleeperPlayerId, leagueCount]) => {
         const player = meta.get(sleeperPlayerId);
         return {
@@ -153,20 +169,21 @@ export async function loadPlayerExposure(
           position: player?.position ?? null,
           team: player?.team ?? null,
           leagueCount,
-          leagueNames: (leaguesBySleeperId.get(sleeperPlayerId) ?? []).sort(
-            (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }),
+          leagues: (leaguesBySleeperId.get(sleeperPlayerId) ?? []).sort(
+            (a, b) =>
+              a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
           ),
           sharePct: Math.round((leagueCount / totalLeagues) * 100),
         };
       },
     );
 
-    rows.sort(compareExposure);
+    unranked.sort(compareExposure);
 
     return {
       totalLeagues,
       unsyncedLeagues: Math.max(0, sleeperLeagueIds.length - totalLeagues),
-      rows,
+      rows: assignExposureRanks(unranked),
     };
   } catch (err) {
     console.warn("[player-exposure] lookup failed:", (err as Error).message);
@@ -188,6 +205,88 @@ export function compareExposure(
 ): number {
   if (b.leagueCount !== a.leagueCount) return b.leagueCount - a.leagueCount;
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+}
+
+/**
+ * Number the sorted rows, ties included.
+ *
+ * Competition ranking, the one every scoreboard uses: two players on nine
+ * leagues are both 2nd and the next player is 4th. Sequential numbering would
+ * put one of those two ahead of the other on nothing but alphabetical order,
+ * which is a real claim the data does not support.
+ *
+ * The rank is assigned to the whole list once, on the server, so a search in the
+ * panel narrows what is on screen without renumbering it. A player who is 3rd
+ * stays 3rd when you filter down to him.
+ *
+ * Expects rows already ordered by compareExposure.
+ */
+export function assignExposureRanks<T extends { leagueCount: number }>(
+  rows: T[],
+): (T & { rank: number; tied: boolean })[] {
+  let rank = 0;
+  return rows.map((row, i) => {
+    // Only a new count advances the number, so a run of equal counts keeps the
+    // rank of the row that opened it and the next distinct count skips ahead.
+    if (i === 0 || rows[i - 1].leagueCount !== row.leagueCount) rank = i + 1;
+    const tied =
+      rows[i - 1]?.leagueCount === row.leagueCount ||
+      rows[i + 1]?.leagueCount === row.leagueCount;
+    return { ...row, rank, tied };
+  });
+}
+
+/** What a query hit on one row. Rows that hit nothing are not returned. */
+export type ExposureMatch = {
+  row: PlayerExposureRow;
+  /** The query hit the player's own name, position, or team. */
+  matchedPlayer: boolean;
+  /** Leagues of theirs whose name contains the query. */
+  matchedLeagues: number;
+};
+
+function normalizeQuery(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/**
+ * Narrow the table to a typed query.
+ *
+ * Matches the player and the leagues he is in, because both are things a
+ * manager types into this box: "Nacua" to find one player, "Dynasty" to find
+ * everyone on one roster. A row that matched only on a league name reports that
+ * separately so the panel can say why an unrelated-looking player is on screen.
+ *
+ * Substring, not fuzzy. Someone typing three letters of a surname wants the
+ * players containing those letters, and a fuzzy matcher would hand back a
+ * ranked list they then have to read past.
+ */
+export function searchExposureRows(
+  rows: PlayerExposureRow[],
+  query: string,
+): ExposureMatch[] {
+  const q = normalizeQuery(query);
+  if (!q) {
+    return rows.map((row) => ({
+      row,
+      matchedPlayer: false,
+      matchedLeagues: 0,
+    }));
+  }
+
+  const matches: ExposureMatch[] = [];
+  for (const row of rows) {
+    const matchedPlayer = [row.name, row.position, row.team].some(
+      (field) => field && field.toLowerCase().includes(q),
+    );
+    const matchedLeagues = row.leagues.filter((l) =>
+      l.name.toLowerCase().includes(q),
+    ).length;
+    if (matchedPlayer || matchedLeagues > 0) {
+      matches.push({ row, matchedPlayer, matchedLeagues });
+    }
+  }
+  return matches;
 }
 
 type PlayerMeta = {

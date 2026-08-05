@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, ChevronRight, TrendingUp, Zap } from "lucide-react";
+import { BarChart3, ChevronRight, Radar, TrendingUp, Zap } from "lucide-react";
 import { PlayerExposurePanel } from "@/components/player-exposure-panel";
 import { LeagueProjectionsPanel } from "@/components/league-projections-panel";
+import { FreeAgentFinderPanel } from "@/components/free-agent-finder-panel";
 import type { PlayerExposure } from "@/lib/player-exposure";
 import type { ProjectionInput } from "@/lib/league-projections";
 
@@ -11,10 +12,11 @@ import type { ProjectionInput } from "@/lib/league-projections";
  * The cross-league views, on a page that is otherwise per-league.
  *
  * Everything else on My Sleeper Leagues answers a question about one room. These
- * two answer questions you can only ask with every room in front of you: how
- * much of my season is riding on one player, and where am I actually going to
- * finish. They are not columns on the table because they are not facts about a
- * league; they open over it.
+ * answer questions you can only ask with every room in front of you: how much of
+ * my season is riding on one player, where am I actually going to finish, and
+ * which of these leagues can I still go and get this guy in. They are not
+ * columns on the table because they are not facts about a league; they open over
+ * it.
  *
  * WHY IT LOOKS DIFFERENT FROM EVERY OTHER PANEL HERE
  *   The Sync all bar and the filter bar are both plain surface cards. If this
@@ -24,7 +26,7 @@ import type { ProjectionInput } from "@/lib/league-projections";
  *   language this site already uses for "this is a place you go", not "this is a
  *   toggle you flip".
  *
- * NEITHER PANEL SYNCS ANYTHING. Both read what is already stored. A league
+ * NO PANEL HERE SYNCS ANYTHING. All three read what is already stored. A league
  * synced later joins these numbers on the next page load with nothing to
  * invalidate.
  */
@@ -32,12 +34,20 @@ export function LeagueQuickLinks({
   exposure,
   projections,
   sleeperUsername,
+  sleeperLeagueIds,
+  sleeperUserId,
 }: {
   exposure: PlayerExposure;
   projections: ProjectionInput[];
   sleeperUsername: string | null;
+  /** Every league Sleeper reports for this reader, synced or not. */
+  sleeperLeagueIds: string[];
+  /** The reader's own Sleeper id, so their own roster reads as theirs. */
+  sleeperUserId: string | null;
 }) {
-  const [panel, setPanel] = useState<"exposure" | "projections" | null>(null);
+  const [panel, setPanel] = useState<
+    "exposure" | "projections" | "free-agents" | null
+  >(null);
 
   const rankedCount = projections.filter(
     (p) => p.projectedSeed !== null && p.rankedTeamCount !== null,
@@ -73,10 +83,10 @@ export function LeagueQuickLinks({
         </div>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
           Views across every league you have synced, rather than one at a time.
-          Neither of these starts a sync.
+          None of these starts a sync.
         </p>
 
-        <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+        <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           <QuickLinkButton
             icon={<BarChart3 aria-hidden="true" className="h-4 w-4" />}
             title="Player exposure"
@@ -110,6 +120,21 @@ export function LeagueQuickLinks({
             }`}
             onClick={() => setPanel("projections")}
           />
+          <QuickLinkButton
+            icon={<Radar aria-hidden="true" className="h-4 w-4" />}
+            title="Free Agent Finder"
+            detail={
+              exposure.totalLeagues > 0
+                ? `Check one player against ${exposure.totalLeagues} synced ${exposure.totalLeagues === 1 ? "league" : "leagues"}`
+                : "Nothing synced yet"
+            }
+            ariaLabel={`Free Agent Finder. Open ${
+              exposure.totalLeagues > 0
+                ? `a search for one player, to see which of your ${exposure.totalLeagues} synced leagues he is a free agent in.`
+                : "the free agent search. No leagues are synced yet, so there is nothing to search."
+            }`}
+            onClick={() => setPanel("free-agents")}
+          />
         </div>
       </div>
 
@@ -117,11 +142,23 @@ export function LeagueQuickLinks({
         open={panel === "exposure"}
         onClose={() => setPanel(null)}
         exposure={exposure}
+        sleeperUsername={sleeperUsername}
       />
       <LeagueProjectionsPanel
         open={panel === "projections"}
         onClose={() => setPanel(null)}
         inputs={projections}
+        sleeperUsername={sleeperUsername}
+      />
+      {/* The synced count comes from the exposure read the page already did:
+          a league we found this reader's roster in is, by definition, one we
+          hold rosters for. One fewer query for the same fact. */}
+      <FreeAgentFinderPanel
+        open={panel === "free-agents"}
+        onClose={() => setPanel(null)}
+        sleeperLeagueIds={sleeperLeagueIds}
+        sleeperUserId={sleeperUserId}
+        syncedLeagueCount={exposure.totalLeagues}
         sleeperUsername={sleeperUsername}
       />
     </section>

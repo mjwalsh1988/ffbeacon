@@ -185,6 +185,8 @@ export default async function SleeperLeaguesPage() {
               sleeperUsername={
                 sleeperUser?.display_name ?? sleeperUsername ?? null
               }
+              sleeperLeagueIds={leagues.map((l) => l.league_id)}
+              sleeperUserId={sleeperUser?.user_id ?? null}
             />
             <LeagueResults
               variant="dashboard"

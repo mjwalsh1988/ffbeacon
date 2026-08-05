@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compareProjectedLeagues,
   finishPercentile,
+  searchProjectedLeagues,
   summarizeProjections,
   type ProjectedLeague,
   type ProjectionInput,
@@ -76,6 +77,56 @@ describe("compareProjectedLeagues", () => {
     const zeta = ranked({ leagueName: "Zeta" });
     const alpha = ranked({ leagueName: "Alpha" });
     expect([zeta, alpha].sort(compareProjectedLeagues)[0]).toBe(alpha);
+  });
+});
+
+describe("searchProjectedLeagues", () => {
+  const leagues = [
+    ranked({
+      sleeperLeagueId: "1",
+      leagueName: "Dynasty Warriors",
+      statusLabel: "Competitor",
+    }),
+    ranked({
+      sleeperLeagueId: "2",
+      leagueName: "Sunday Money",
+      statusLabel: "Rebuilder",
+    }),
+    ranked({
+      sleeperLeagueId: "3",
+      leagueName: "The Gauntlet",
+      statusLabel: null,
+    }),
+  ];
+
+  it("returns everything for an empty query", () => {
+    expect(searchProjectedLeagues(leagues, "   ")).toBe(leagues);
+  });
+
+  it("matches a league name, case insensitively", () => {
+    expect(
+      searchProjectedLeagues(leagues, "sunday").map((l) => l.sleeperLeagueId),
+    ).toEqual(["2"]);
+  });
+
+  it("matches the status tag", () => {
+    expect(
+      searchProjectedLeagues(leagues, "rebuild").map((l) => l.sleeperLeagueId),
+    ).toEqual(["2"]);
+  });
+
+  it("keeps the order it was given", () => {
+    expect(
+      searchProjectedLeagues(leagues, "n").map((l) => l.sleeperLeagueId),
+    ).toEqual(["1", "2", "3"]);
+  });
+
+  it("survives a league with no status tag", () => {
+    expect(searchProjectedLeagues(leagues, "gauntlet")).toHaveLength(1);
+  });
+
+  it("returns nothing when nothing matches", () => {
+    expect(searchProjectedLeagues(leagues, "zzzz")).toEqual([]);
   });
 });
 

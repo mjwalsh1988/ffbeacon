@@ -26,6 +26,17 @@ const DESKTOP_WIDTH = {
   lg: "sm:max-w-2xl",
 } as const;
 
+/**
+ * What the focus trap counts as tabbable.
+ *
+ * Form controls are in here because a panel with a filter box at the top and a
+ * close button above it would otherwise trap around the box: shift-Tab off the
+ * close button jumped to the last link in the panel instead of stepping back
+ * through the field, since the field was invisible to the wrap logic.
+ */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function SidePanel({
   open,
   onClose,
@@ -64,9 +75,8 @@ export function SidePanel({
     }
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const focusTimer = window.setTimeout(() => {
-      const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
+      const focusables =
+        panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
       focusables?.[0]?.focus();
     }, 80);
 
@@ -75,9 +85,8 @@ export function SidePanel({
         event.preventDefault();
         onClose();
       } else if (event.key === "Tab" && panelRef.current) {
-        const focusables = panelRef.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
+        const focusables =
+          panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE);
         if (focusables.length === 0) return;
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
