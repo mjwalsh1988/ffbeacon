@@ -1,4 +1,5 @@
 import type { SleeperLeague } from "@/lib/sleeper";
+import type { TeamStatusKey } from "@/lib/league-team-status";
 
 /**
  * The buckets we group a user's Sleeper leagues into on the league-pulse
@@ -11,10 +12,7 @@ import type { SleeperLeague } from "@/lib/sleeper";
  * (type 2) gets the Dynasty bucket.
  */
 export type LeagueCategoryKey =
-  | "dynasty"
-  | "redraft"
-  | "best-ball-dynasty"
-  | "best-ball-redraft";
+  "dynasty" | "redraft" | "best-ball-dynasty" | "best-ball-redraft";
 
 export interface LeagueCategoryGroup {
   key: LeagueCategoryKey;
@@ -54,13 +52,53 @@ export function categorizeLeague(league: SleeperLeague): LeagueCategoryKey {
 }
 
 /**
- * Group leagues into the ordered category buckets, alphabetized (case- and
- * accent-insensitive) by league name within each bucket. Empty buckets are
- * dropped so the UI only renders sections that actually have leagues. Input
- * order is not mutated.
+ * Where each standing sits in the list, inside its category.
+ *
+ * Competing teams first, because they are the ones with something to do this
+ * week. Rebuilders last for the same reason. A league we hold no standing for
+ * lands past the rebuilders: it is not a claim that the team is bad, it is the
+ * absence of a claim, and the bottom is where a row goes when the sort has
+ * nothing to say about it.
+ */
+const STANDING_ORDER: Record<TeamStatusKey, number> = {
+  competitor: 0,
+  middle: 1,
+  rebuilder: 2,
+};
+const UNRANKED_ORDER = 3;
+
+/** A league id to the standing of THIS reader's team in it, where we have one. */
+export type StandingLookup = Readonly<
+  Record<string, TeamStatusKey | null | undefined>
+>;
+
+function standingOrder(
+  league: SleeperLeague,
+  standings: StandingLookup,
+): number {
+  const key = standings[league.league_id];
+  return key ? STANDING_ORDER[key] : UNRANKED_ORDER;
+}
+
+/**
+ * Group leagues into the ordered category buckets. Within a bucket, leagues run
+ * Competitor, Mid Tier, Rebuilder, then whatever has no standing yet, and
+ * alphabetically (case- and accent-insensitive) inside each of those bands.
+ * Empty buckets are dropped so the UI only renders sections that actually have
+ * leagues. Input order is not mutated.
+ *
+ * READS WHAT IS ALREADY LOADED. The standing comes from the caller's existing
+ * team-status map, which is read from cache. Sorting never triggers a sync, so a
+ * league nobody has pulsed sorts to the bottom of its category and stays there
+ * until something else syncs it.
+ *
+ * Name is the tiebreaker rather than the finish or the roster value, so the
+ * order inside a band cannot move when a value sync lands. The bands answer
+ * "who needs my attention"; the names keep a league findable between visits.
  */
 export function groupLeaguesByCategory(
   leagues: SleeperLeague[],
+  standings: StandingLookup = {},
 ): LeagueCategoryGroup[] {
   const buckets = new Map<LeagueCategoryKey, SleeperLeague[]>();
   for (const league of leagues) {
@@ -74,11 +112,14 @@ export function groupLeaguesByCategory(
   for (const { key, label } of CATEGORY_ORDER) {
     const arr = buckets.get(key);
     if (!arr || arr.length === 0) continue;
-    arr.sort((a, b) =>
-      (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+    arr.sort((a, b) => {
+      const byStanding =
+        standingOrder(a, standings) - standingOrder(b, standings);
+      if (byStanding !== 0) return byStanding;
+      return (a.name ?? "").localeCompare(b.name ?? "", undefined, {
         sensitivity: "base",
-      }),
-    );
+      });
+    });
     groups.push({ key, label, leagues: arr });
   }
   return groups;

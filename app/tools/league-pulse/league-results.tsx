@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   ChevronRight,
+  ArrowDownWideNarrow,
   ArrowRight,
   Users,
   Eye,
@@ -22,6 +23,7 @@ import type { SleeperLeague } from "@/lib/sleeper";
 import {
   groupLeaguesByCategory,
   type LeagueCategoryGroup,
+  type StandingLookup,
 } from "@/lib/league-category";
 import {
   setFeaturedLeague,
@@ -29,6 +31,7 @@ import {
 } from "@/app/my-beacon/actions";
 import { humanizeLeagueStatus } from "@/lib/league-status";
 import type { LeagueTeamStatusSummary } from "@/lib/league-team-status-data";
+import type { TeamStatusKey } from "@/lib/league-team-status";
 import {
   TeamStatusBadge,
   TeamStatusPending,
@@ -60,6 +63,32 @@ type BulkStatusMap = Record<string, LeagueSyncJobStatus>;
 
 /** Keyed by Sleeper league id. Absent means we have never pulsed that league. */
 export type TeamStatusMap = Record<string, LeagueTeamStatusSummary>;
+
+/**
+ * The one field the category sort reads.
+ *
+ * A cached row without a status is the same thing as no cached row for ordering
+ * purposes. Both mean we cannot say how this team is doing, and both belong
+ * under the rebuilders rather than mixed in among teams we have measured.
+ */
+function statusKeyOf(
+  summary: LeagueTeamStatusSummary | null | undefined,
+): TeamStatusKey | null {
+  return summary?.status?.key ?? null;
+}
+
+/**
+ * How the rows inside a category are ordered, said once.
+ *
+ * The order is the first thing a reader has to know about a list they are
+ * scanning, and on this list it is not the obvious one (a league list defaults
+ * to alphabetical everywhere else on the site). It renders visibly above the
+ * groups on both variants, so it is in the reading order before any row is,
+ * and it is repeated in the dashboard table's caption because a table can be
+ * jumped to directly.
+ */
+const STANDING_ORDER_NOTE =
+  "Within each type, your Competitors come first, then Mid Tier, then Rebuilders. Leagues we have not synced yet come last.";
 
 /**
  * Where a row should land: always the league's Overview.
@@ -227,17 +256,30 @@ export function LeagueResults({
     );
   }, [variant, showAll, leagues, featuredId, shownIds]);
 
+  // The standing of the reader's own team per league, reduced to the one field
+  // the sort needs. Built from the cached statuses this component was already
+  // handed, so ordering the list costs nothing and starts nothing: a league
+  // with no cached row has no standing and sorts last, exactly as it renders.
+  const standings: StandingLookup = useMemo(() => {
+    const out: Record<string, ReturnType<typeof statusKeyOf>> = {};
+    for (const [leagueId, summary] of Object.entries(teamStatuses)) {
+      out[leagueId] = statusKeyOf(summary);
+    }
+    return out;
+  }, [teamStatuses]);
+
   // Group leagues into type buckets (Dynasty, Redraft, Best Ball Dynasty,
-  // Best Ball Redraft), alphabetized within each, so a long list is scannable
-  // by format. Public groups the full list; dashboard groups whatever the
-  // Show-all filter left visible.
+  // Best Ball Redraft), then order each bucket by how the reader's own team is
+  // doing so the leagues worth acting on are at the top of the section. Public
+  // groups the full list; dashboard groups whatever the Show-all filter left
+  // visible.
   const publicGroups = useMemo(
-    () => groupLeaguesByCategory(leagues),
-    [leagues],
+    () => groupLeaguesByCategory(leagues, standings),
+    [leagues, standings],
   );
   const dashboardGroups = useMemo(
-    () => groupLeaguesByCategory(visibleLeagues),
-    [visibleLeagues],
+    () => groupLeaguesByCategory(visibleLeagues, standings),
+    [visibleLeagues, standings],
   );
 
   // Public variant skips the filter UI and bypasses the count.
@@ -330,6 +372,7 @@ export function LeagueResults({
               // second grid track, the visual order.
               <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start xl:gap-8">
                 <div className="min-w-0">
+                  <StandingOrderNote leagueCount={visibleLeagues.length} />
                   {/* One category is not a choice, so it does not get a
                       tablist. It keeps the plain headed section, which is the
                       only thing that still names the category once the tabs
@@ -363,6 +406,7 @@ export function LeagueResults({
           </>
         ) : (
           <>
+            <StandingOrderNote leagueCount={leagues.length} />
             <div className="space-y-8">
               {publicGroups.map((group) => (
                 <LeagueCategorySection key={group.key} group={group}>
@@ -418,6 +462,30 @@ export function LeagueResults({
         )}
       </section>
     </LeagueSyncProvider>
+  );
+}
+
+/* ---------- Ordering note ---------- */
+
+/**
+ * One line, above the groups, saying how they are ordered.
+ *
+ * Ordinary page text rather than a live region or an aria-description: it never
+ * changes, and it sits ahead of the lists in the reading order, which is where
+ * a reader needs it. The arrow is decorative; the sentence carries the meaning.
+ *
+ * A single league has no order to explain, so the line does not render there.
+ */
+function StandingOrderNote({ leagueCount }: { leagueCount: number }) {
+  if (leagueCount < 2) return null;
+  return (
+    <p className="mb-4 flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
+      <ArrowDownWideNarrow
+        aria-hidden="true"
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-cyan"
+      />
+      <span>{STANDING_ORDER_NOTE}</span>
+    </p>
   );
 }
 
@@ -841,9 +909,9 @@ function DesktopDashboardTable({
     <div className="hidden overflow-x-auto rounded-card border border-line md:block">
       <table className="w-full text-sm">
         <caption className="sr-only">
-          Your saved Sleeper leagues. Click a league name to open its deep view.
-          Each row starts with two switches, Featured and Shown on profile,
-          which control what appears on your public profile.
+          Your saved Sleeper leagues. {STANDING_ORDER_NOTE} Click a league name
+          to open its deep view. Each row starts with two switches, Featured and
+          Shown on profile, which control what appears on your public profile.
         </caption>
         {/* Real table cells throughout, so this one keeps normal table layout
             (columns line up by construction) and its full table semantics.
