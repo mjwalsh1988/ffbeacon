@@ -187,6 +187,7 @@ export default async function SleeperLeaguesPage() {
               }
               sleeperLeagueIds={leagues.map((l) => l.league_id)}
               sleeperUserId={sleeperUser?.user_id ?? null}
+              sourceSlug={resolvedSource.slug}
             />
             <LeagueResults
               variant="dashboard"

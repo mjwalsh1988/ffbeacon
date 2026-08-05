@@ -34,6 +34,7 @@ import {
   Users,
   ArrowLeftRight,
   ArrowRight,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -243,6 +244,9 @@ export default async function LeagueDeepViewPage({
   const powerPulseHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/power-pulse?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/power-pulse`;
+  const tradeFinderHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}/trade-finder?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}/trade-finder`;
 
   // Shared props for the league info card, rendered as a left rail on Overview
   // and as a full-width horizontal band on Teams (so the rosters get full width).
@@ -355,6 +359,14 @@ export default async function LeagueDeepViewPage({
                       icon={Users}
                       label="Teams and rosters"
                       hint="Compare every roster side by side"
+                    />
+                  </li>
+                  <li>
+                    <ExploreLink
+                      href={tradeFinderHref}
+                      icon={Handshake}
+                      label="Trade Finder"
+                      hint="One trade worth offering, at a time"
                     />
                   </li>
                   <li>

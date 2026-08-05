@@ -1,10 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, ChevronRight, Radar, TrendingUp, Zap } from "lucide-react";
+import {
+  BarChart3,
+  ChevronRight,
+  Handshake,
+  Radar,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import { PlayerExposurePanel } from "@/components/player-exposure-panel";
 import { LeagueProjectionsPanel } from "@/components/league-projections-panel";
 import { FreeAgentFinderPanel } from "@/components/free-agent-finder-panel";
+import { TradeFinderPanel } from "@/components/trade-finder-panel";
 import type { PlayerExposure } from "@/lib/player-exposure";
 import type { ProjectionInput } from "@/lib/league-projections";
 
@@ -36,6 +44,7 @@ export function LeagueQuickLinks({
   sleeperUsername,
   sleeperLeagueIds,
   sleeperUserId,
+  sourceSlug,
 }: {
   exposure: PlayerExposure;
   projections: ProjectionInput[];
@@ -44,9 +53,11 @@ export function LeagueQuickLinks({
   sleeperLeagueIds: string[];
   /** The reader's own Sleeper id, so their own roster reads as theirs. */
   sleeperUserId: string | null;
+  /** The reader's value source, so Trade Finder prices deals the same way. */
+  sourceSlug: string | null;
 }) {
   const [panel, setPanel] = useState<
-    "exposure" | "projections" | "free-agents" | null
+    "exposure" | "projections" | "free-agents" | "trades" | null
   >(null);
 
   const rankedCount = projections.filter(
@@ -135,6 +146,21 @@ export function LeagueQuickLinks({
             }`}
             onClick={() => setPanel("free-agents")}
           />
+          <QuickLinkButton
+            icon={<Handshake aria-hidden="true" className="h-4 w-4" />}
+            title="Trade Finder"
+            detail={
+              exposure.totalLeagues > 0
+                ? `One trade at a time across ${exposure.totalLeagues} synced ${exposure.totalLeagues === 1 ? "league" : "leagues"}`
+                : "Nothing synced yet"
+            }
+            ariaLabel={`Trade Finder. Open ${
+              exposure.totalLeagues > 0
+                ? `one suggested trade at a time, drawn from your ${exposure.totalLeagues} synced leagues, with what each one does to your starting lineup.`
+                : "the trade search. No leagues are synced yet, so there is nothing to search."
+            }`}
+            onClick={() => setPanel("trades")}
+          />
         </div>
       </div>
 
@@ -160,6 +186,17 @@ export function LeagueQuickLinks({
         sleeperUserId={sleeperUserId}
         syncedLeagueCount={exposure.totalLeagues}
         sleeperUsername={sleeperUsername}
+      />
+      {/* Same synced count, same reasoning: a league we found this reader's
+          roster in is one we hold rosters for, so no extra query. */}
+      <TradeFinderPanel
+        open={panel === "trades"}
+        onClose={() => setPanel(null)}
+        sleeperLeagueIds={sleeperLeagueIds}
+        sleeperUserId={sleeperUserId}
+        sleeperUsername={sleeperUsername}
+        syncedLeagueCount={exposure.totalLeagues}
+        sourceSlug={sourceSlug}
       />
     </section>
   );

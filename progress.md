@@ -2205,3 +2205,346 @@ T452 | completed | mergeBulkSyncState unit tests
   functions) all predate this work.
 - RLS + grants + RPC behaviour verified against prod inside begin/rollback; both
   tables confirmed back to 0 rows afterwards.
+
+## Trade Finder (League Pulse tab + My Sleeper Leagues panel)
+
+T453 | completed | Pass-list table for Trade Finder suggestions
+     | files: supabase/migrations/0173_trade_suggestion_declines.sql
+     | depends on: T452
+     | verified: yes (trade_suggestion_declines, RLS on with service_role ALL plus the
+     |   four owner-scoped policies. UPDATE carries both USING and WITH CHECK so an
+     |   owner cannot re-point a row at another user_id; that policy exists at all only
+     |   because passing the same deal twice pushes expires_at out through an upsert,
+     |   and without it the second press would fail the unique index and read as a dead
+     |   button. Confirmed against prod: anon has no grants at all, authenticated has
+     |   select/insert/update/delete and nothing else.
+     |
+     |   Owner writes are allowed here, unlike most tables in this schema, because the
+     |   row IS the user's own opinion and carries no privilege: the worst a forged row
+     |   can do is hide a suggestion from the forger. Nothing to gain by lying, so no
+     |   reason to route it through a service-role RPC.
+     |
+     |   expires_at defaults to 14 days out. A pass is a snooze, not a ban: rosters and
+     |   values move, and a deal that was wrong in October can be the obvious deal in
+     |   December)
+
+T454 | completed | Pure trade-suggestion engine
+     | files: lib/trade-finder/types.ts, lib/trade-finder/profile.ts,
+     |   lib/trade-finder/packages.ts, lib/trade-finder/rank.ts,
+     |   lib/trade-finder/explain.ts, lib/trade-finder/engine.ts,
+     |   lib/trade-finder/fingerprint.ts
+     | depends on: T453
+     | verified: yes (no database, no React, no clock, so two runs over the same league
+     |   produce the same suggestions in the same order, which is what makes a stored
+     |   pass still mean something on the next visit.
+     |
+     |   SURPLUS is measured by removal, not by bench membership: how many points a
+     |   week does the optimal lineup lose if this player leaves? A bench player costs
+     |   zero and so does the third back who holds a flex by half a point over the
+     |   receiver behind him. The first version used "not in the optimal lineup" and
+     |   found nothing on real rosters, because real rosters start their good players.
+     |
+     |   NEED is measured by addition, through the same optimal fill: what would one
+     |   league-average starter at this position add? Counting bodies gets superflex
+     |   wrong every time, and there is a test for exactly that.
+     |
+     |   Goals are CONSTRAINTS, not weights. A reader who picks "Add picks" and is
+     |   shown a pickless deal has been ignored, and a weighting that merely prefers
+     |   picks hands them exactly that the moment a big lineup upgrade appears. A named
+     |   target player overrides the goal, being the more specific request)
+
+T455 | completed | League loader feeding the engine
+     | files: lib/trade-finder-data.ts
+     | depends on: T454
+     | verified: yes (reads only, syncs nothing: an unopened league returns null and
+     |   the surface says so. Format comes from resolveLeagueContext like every other
+     |   league-view surface, so the global format toggle is ignored and picks fall back
+     |   to KTC. Projections are averaged over the weeks Sleeper actually published
+     |   inside a six-week window, so a bye does not read as a week the player was
+     |   projected to score nothing, and the row count does not grow with the season)
+
+T456 | completed | Signal Check second opinion on the shown suggestion
+     | files: lib/trade-finder-grade.ts
+     | depends on: T455
+     | verified: yes (only the ONE suggestion on screen is graded, not the ranked field:
+     |   one batch of value lookups instead of forty. Side "a" is the incoming package
+     |   because a Signal Check side holds what that side RECEIVES, matching how
+     |   lib/league-signal-check.ts maps a Sleeper trade off `adds`. Never decides
+     |   anything and never breaks the page: feature off, no format, or an emptied side
+     |   all return null and the card renders without a grade)
+
+T457 | completed | Cross-league walk
+     | files: lib/trade-finder-cross-league.ts
+     | depends on: T455
+     | verified: yes (a request opens at most three leagues, in parallel, and reports
+     |   where it stopped. A league that still has deals holds the cursor so the next
+     |   press reconsiders it with one fewer candidate; a window that produced nothing
+     |   moves past all of it, which is what stops a portfolio of empty leagues looping.
+     |   `remaining` counts from the end of the window, not from the cursor, or a reader
+     |   who had just searched three would be told there were still twenty-seven to go)
+
+T458 | completed | Server actions + pass list reads and writes
+     | files: app/actions/trade-finder.ts, lib/trade-finder-declines.ts
+     | depends on: T456, T457
+     | verified: yes (nothing in the arguments is trusted as an identity: the user comes
+     |   from the session cookie, the rate-limit key is derived server-side, and the
+     |   pass row is written with the session's user id under a policy that would reject
+     |   any other. League ids ARE taken from the caller and grant nothing, because the
+     |   public league page already renders any league's rosters to anyone who asks.
+     |   claimSlot fails CLOSED. Declines read and write through the reader's OWN
+     |   session client, so the owner policies scope them rather than a filter we
+     |   remembered to write)
+
+T459 | completed | Shared UI: one suggestion at a time
+     | files: components/trade-finder.tsx, components/trade-finder-card.tsx,
+     |   components/trade-finder-panel.tsx
+     | depends on: T458
+     | verified: yes (one component, two surfaces. Each result is announced in a live
+     |   region AND focus moves to the new card's heading, which is what makes "Not
+     |   interested" usable without a mouse. No responsive hiding and no truncation
+     |   anywhere in these files: every figure on both sides of the deal is present at
+     |   every breakpoint, wrapping to a second line rather than being dropped)
+
+T460 | completed | League Trade Finder route + tab
+     | files: app/leagues/[league_id]/trade-finder/page.tsx, components/league-tabs.tsx,
+     |   app/leagues/[league_id]/page.tsx
+     | depends on: T459
+     | verified: yes (first suggestion server-rendered so the tab opens on a deal rather
+     |   than a button. A cold link with no ?username= cannot know whose team it is, so
+     |   it asks once through a team chooser and remembers through the URL: every other
+     |   deep-view surface describes the league, but a trade suggestion is advice to one
+     |   manager and guessing would be advice to the wrong one)
+
+T461 | completed | Cross-league panel on My Sleeper Leagues
+     | files: components/league-quick-links.tsx, app/my-beacon/sleeper-leagues/page.tsx
+     | depends on: T459
+     | verified: yes (fourth quick link beside Player exposure, Projected finishes, and
+     |   Free Agent Finder. Reuses the synced count the exposure read already produced,
+     |   so it costs no extra query, and it starts no sync)
+
+T462 | completed | Engine unit tests
+     | files: lib/trade-finder/_test-kit.ts, lib/trade-finder/profile.test.ts,
+     |   lib/trade-finder/packages.test.ts, lib/trade-finder/rank.test.ts,
+     |   lib/trade-finder/engine.test.ts, lib/trade-finder/fingerprint.test.ts
+     | depends on: T454
+     | verified: yes (70 tests. The engine fixture uses FULL fourteen-man rosters
+     |   against seven starting slots, because a seven-man roster has no expendable
+     |   pieces by construction and testing against one proves nothing about a real
+     |   league. That was not a stylistic choice: the first fixture was seven men, the
+     |   engine correctly returned nothing, and chasing it is what produced the
+     |   removal-cost definition of surplus in T454)
+
+### Verification summary (Trade Finder)
+- npm run typecheck: clean
+- npm test: 1167 tests across 90 files, all pass (70 new)
+- npm run build: compiles clean, no warnings; /leagues/[league_id]/trade-finder
+  registered as a dynamic route at 614 B
+- RLS + grants confirmed against prod by querying pg_policies and
+  information_schema.role_table_grants. anon has no grants on the new table.
+- Exercised against three real synced leagues (12, 12, and 16 teams; 274 to 354
+  rostered players) before any UI existed, then end to end in the browser: the
+  first suggestion renders, the pass writes a row with a 14-day expiry, and the
+  next load opens on a different deal with a different counterparty.
+
+### What real data changed about the design
+Three things looked fine in fixtures and were wrong against production leagues.
+
+- The balancing band let the reader's side come in 12% light. Against real
+  rosters that is a thousand points of value, and the top suggestion in two of
+  three test leagues was a three-for-one nobody would answer. Tightened to 5%
+  under and 15% over.
+- A long shot still led the ranking at a 0.3 discount, because the reader's side
+  of an unfair trade always scores well. Now 0.12, so a refusable deal surfaces
+  only once the sensible ones have been passed on.
+- Passing produced a near-copy of the same deal, because the engine builds up to
+  three packages per target and they score almost identically. Passing now
+  demotes every sibling package of that target, so a pass always advances to a
+  different player and the alternative prices sit behind it rather than in front.
+
+### Known gaps / follow-ups
+- Sleeper's public API is read-only, so a suggestion cannot be pushed into their
+  app. The deliverable is a copyable pitch, and the copy says so.
+- The player pickers ("player you want", "player you would move") are league-tab
+  only. The cross-league panel takes a goal and nothing else.
+- Trade values come from the reader's chosen source while the Signal Check grade
+  comes from FF Beacon values. Two honest value sets can disagree, and the card
+  shows both rather than hiding it.
+- News-derived buy-low / sell-high signals and historical trade comps from
+  league_transactions are both designed but not built.
+
+### Review pass (Trade Finder)
+
+Three review sub-agents were dispatched per the sub-agent workflow (security,
+accessibility, performance). All three ran and then went idle without returning
+a report through the message channel, twice each. The findings below are
+therefore a FIRST-PARTY audit, not the independent third-party review that was
+asked for. Worth re-running before this is treated as reviewed.
+
+T463 | completed | Accessibility fixes from the review pass
+     | files: components/trade-finder-card.tsx, components/trade-finder.tsx,
+     |   app/leagues/[league_id]/trade-finder/page.tsx
+     | depends on: T459
+     | verified: yes (four defects, all found by reading rather than by tooling.
+     |
+     |   aria-label on a <dd> does not reliably announce. A dd maps to the
+     |   `definition` role, which does not support naming from author, so several
+     |   screen readers ignore the attribute and read the bare "+4.6/wk" with no
+     |   unit and no subject. Every impact figure on the card was affected. The
+     |   spoken sentence is now a real sr-only span with the visible figure in an
+     |   aria-hidden sibling, so the number is announced once, in full.
+     |
+     |   Two to three seconds of silence after pressing a button is
+     |   indistinguishable from a button that did nothing. The live region now
+     |   says "Searching for a trade" at the START of the search, not only at
+     |   the end.
+     |
+     |   The result announcement used to read the whole headline, and then focus
+     |   moved to the card whose heading IS the headline, so it was said twice.
+     |   The announcement is now short and the card carries the detail.
+     |
+     |   outline-none on the focus target removed the ring with no replacement,
+     |   against the project rule. It carries a focus-visible ring now. The
+     |   result is also a labelled <section> tied to the card heading, and the
+     |   working column has an h2, so the card's h3 no longer skips a level on
+     |   the page. Inside the SidePanel the panel title is already an h2, so the
+     |   same h3 is correct there without changing anything)
+
+T464 | completed | Performance fixes from the review pass
+     | files: app/leagues/[league_id]/trade-finder/page.tsx,
+     |   app/actions/trade-finder.ts, lib/trade-finder-data.ts,
+     |   lib/trade-finder-cross-league.ts
+     | depends on: T460
+     | verified: yes (the league route used to block its entire render on
+     |   loadTradeFinderLeague, measured at 2.1 to 2.5s, so the tabs and the
+     |   league identity card arrived at the same moment as the deal. The load,
+     |   the engine run, and the Signal Check grade now sit in an async child
+     |   behind Suspense, matching how the Overview tab streams its rankings.
+     |   Header and tabs paint immediately; observed first paint went from
+     |   roughly 20 seconds on a cold compile to about 3.
+     |
+     |   Pick prices were being fetched after the rosters even though they need
+     |   only the format, so they moved into the first parallel batch. The
+     |   cross-league window loads its three leagues with Promise.all rather than
+     |   one after another, which is the difference between about 2.5s and about
+     |   7s per press.
+     |
+     |   Rate limits were sized against measured cost rather than picked round.
+     |   One league search is about 2.3s of database work, so 12 a minute is
+     |   about 28s of database time per actor per minute; the portfolio call
+     |   opens up to three leagues, so 6 a minute is about 41s. Down from 20 and
+     |   10, which allowed 46s and 69s respectively on a PUBLIC endpoint.
+     |
+     |   Engine cost is bounded and was left alone: about N+6 lineup fills per
+     |   team for the profiles and two per candidate deal, which measures at 25
+     |   to 35ms for a 16-team league. The remaining 1.2s of the load is
+     |   loadLeagueTeamCards, shared with the Overview and Teams tabs, whose
+     |   resolvePlayers builds a PostgREST .or() filter with two terms per
+     |   player. That is pre-existing and was not touched here)
+
+T465 | completed | Acceptance-band fix for rebuilding teams
+     | files: lib/trade-finder/rank.ts, lib/trade-finder/rank.test.ts
+     | depends on: T454
+     | verified: yes (found by looking at a real league, not by a test. The
+     |   both-axes-loss rule added earlier said that a team losing lineup points
+     |   AND value has nothing to say yes to. True for a contender, wrong for a
+     |   rebuilder: sending a 27-year-old back away for a pick and a 22-year-old
+     |   costs points on Sunday, and that is not a side effect of the deal, it IS
+     |   the deal. The engine was labelling the most standard trade in dynasty
+     |   football a long shot.
+     |
+     |   The lineup penalty now applies only to teams whose timeline is this
+     |   season. The suggestion that exposed it, a 2028 2nd plus a 22-year-old TE
+     |   for Jonathan Taylor at a 1% value gap, went from "Long shot" to
+     |   "Likely", which is what any manager in that league would call it)
+
+### What the first-party review found, by category
+- Security: no findings. Every client-supplied string is pattern-validated
+  before it reaches a query, arrays are capped, the rate limiter fails closed,
+  the actor key is derived server-side, the decline row is written with the
+  session's user id under a policy that would reject any other, and no
+  dangerouslySetInnerHTML exists anywhere in the feature. Player and team names
+  come from Sleeper and render as React children, so they are escaped.
+  Noted but not changed: lib/league-view-data.ts resolvePlayers builds an .or()
+  filter string from ids without validating them. Those ids come from our own
+  rosters rows rather than from a caller, and the file is pre-existing.
+- Accessibility: four findings, all fixed (T463).
+- Performance: four findings, all fixed (T464), plus one pre-existing shared
+  cost documented and left alone.
+
+### Copy, styling, and pitch pass (Trade Finder)
+
+T466 | completed | Condense the instructional copy
+     | files: app/leagues/[league_id]/trade-finder/page.tsx,
+     |   components/trade-finder.tsx, components/trade-finder-panel.tsx
+     | depends on: T460
+     | verified: yes (the tab was text-heavy in the places that explain the tool
+     |   rather than the trade. Cut roughly in half: the intro strip lost two of
+     |   its three sentences, the "Where the numbers come from" rail became three
+     |   term-and-source lines plus one caveat instead of four full sentences,
+     |   the three field hints went to five words each, and every empty state and
+     |   footnote was shortened.
+     |
+     |   What was deliberately NOT touched: whyYou, whyThem, the caveat list, and
+     |   the Signal Check explanation. That copy is the product. The instructions
+     |   around it are what a reader passes on every visit and stops reading by
+     |   the second one)
+
+T467 | completed | Restyle the suggested trade
+     | files: components/trade-finder-card.tsx
+     | depends on: T459
+     | verified: yes (the deal is the point of the page and used to be a flat
+     |   card indistinguishable from the panels around it. It now carries the
+     |   treatment this site reserves for its primary surfaces: an elevated panel
+     |   with a beacon hairline along the top edge and a purple corner glow, the
+     |   same language as the tab bar and the On The Clock cockpit.
+     |
+     |   Each player and pick sits in its own raised container rather than being
+     |   a row in a list, because a trade is a set of discrete things and running
+     |   them together makes a three-for-one read as a paragraph. The two sides
+     |   are tinted apart, cyan for what arrives and purple for what leaves, with
+     |   the heading still saying which is which because a tint is not a label.
+     |
+     |   Player photos are rounded rectangles rather than circles. A Sleeper
+     |   headshot is a head-and-shoulders crop and a circle cuts the shoulders
+     |   off. Done through the existing `rounded={false}` on PlayerHeadshot,
+     |   which is the site's own rounded-card token, rather than a one-off class
+     |   fighting the component's own shape)
+
+T468 | completed | Rewrite the pitch as a message to the other manager
+     | files: lib/trade-finder/explain.ts, lib/trade-finder/types.ts,
+     |   lib/trade-finder/engine.ts, components/trade-finder.tsx,
+     |   components/trade-finder-card.tsx, lib/trade-finder/explain.test.ts
+     | depends on: T454
+     | verified: yes (Copy the pitch used to hand over the whole card: the
+     |   headline, then why it helps the sender, then why it helps them, all in
+     |   the third person. Pasted into a league chat it read as notes about
+     |   somebody rather than a message to them.
+     |
+     |   `buildPitch` writes to the receiving manager. It opens as a question
+     |   ("What do you think of me sending you X, and you sending back Y?")
+     |   because that is an offer to talk, where "I'll give you X for Y" is a
+     |   demand that invites a yes or a no.
+     |
+     |   It carries NOTHING about what the sender gains. That is the whole point:
+     |   the other manager does not care, and telling them hands over the reason
+     |   to refuse. Everything after the opener is about their roster, drawn from
+     |   their own direction, and when there is nothing true to say the message
+     |   is the offer on its own rather than an invented benefit.
+     |
+     |   Value is described as a share rather than in points: 91 points down on a
+     |   6,500-point trade is a rounding error and the first version said nothing
+     |   at all, because 91 is more than 1. When they ARE visibly behind it says
+     |   nothing, since apologising for the shortfall inside the message that
+     |   proposes the trade argues against the trade.
+     |
+     |   The message is also previewable on the card behind a collapsed details
+     |   element, which costs one line and is what makes the feature usable when
+     |   the clipboard is blocked. 11 tests, including one asserting the pitch
+     |   never contains the sender's own benefit and one asserting it never reads
+     |   as a hard sell)
+
+### Verification summary (copy, styling, pitch)
+- npm run typecheck: clean
+- npm test: 1178 tests across 91 files, all pass (11 new)
+- npm run build: compiles clean, no warnings
+- No browser testing this pass, at the owner's request.

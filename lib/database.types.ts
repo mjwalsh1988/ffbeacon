@@ -4617,6 +4617,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      trade_suggestion_declines: {
+        Row: {
+          declined_at: string;
+          expires_at: string;
+          id: string;
+          sleeper_league_id: string;
+          suggestion_key: string;
+          user_id: string;
+        };
+        Insert: {
+          declined_at?: string;
+          expires_at?: string;
+          id?: string;
+          sleeper_league_id: string;
+          suggestion_key: string;
+          user_id: string;
+        };
+        Update: {
+          declined_at?: string;
+          expires_at?: string;
+          id?: string;
+          sleeper_league_id?: string;
+          suggestion_key?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       user_preferences: {
         Row: {
           avatar_path: string | null;

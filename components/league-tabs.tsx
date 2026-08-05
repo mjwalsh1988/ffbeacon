@@ -4,15 +4,22 @@ import {
   Users,
   ArrowLeftRight,
   Activity,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 
-export type LeagueTabId = "overview" | "teams" | "power-pulse" | "transactions";
+export type LeagueTabId =
+  | "overview"
+  | "teams"
+  | "power-pulse"
+  | "trade-finder"
+  | "transactions";
 
 const TABS: { id: LeagueTabId; label: string; icon: LucideIcon; isNew?: boolean }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "teams", label: "Teams", icon: Users },
-  { id: "power-pulse", label: "Power Pulse", icon: Activity, isNew: true },
+  { id: "power-pulse", label: "Power Pulse", icon: Activity },
+  { id: "trade-finder", label: "Trade Finder", icon: Handshake, isNew: true },
   { id: "transactions", label: "Transactions", icon: ArrowLeftRight },
 ];
 
@@ -40,9 +47,13 @@ export function LeagueTabs({
   const hrefFor = (tabId: LeagueTabId): string => {
     const qs = new URLSearchParams();
     if (searchedUsername) qs.set("username", searchedUsername);
-    // Transactions and Power Pulse are full routes of their own; Overview and
-    // Teams are inline views on the deep view.
-    if (tabId === "transactions" || tabId === "power-pulse") {
+    // Transactions, Power Pulse, and Trade Finder are full routes of their own;
+    // Overview and Teams are inline views on the deep view.
+    if (
+      tabId === "transactions" ||
+      tabId === "power-pulse" ||
+      tabId === "trade-finder"
+    ) {
       const s = qs.toString();
       return `/leagues/${sleeperLeagueId}/${tabId}${s ? `?${s}` : ""}`;
     }
