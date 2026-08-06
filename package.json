@@ -50,6 +50,7 @@
     "sync:ktc:full": "npm run sync:ktc && npm run seed:rankings && npm run calculate:trends",
     "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run sync:dynastyprocess && npm run seed:rankings && npm run calculate:trends",
     "backtest:brief-relevance": "tsx --env-file=.env.local scripts/backtest-brief-relevance.ts",
+    "backtest:faab": "tsx --env-file=.env.local scripts/backtest-faab.ts",
     "remove:brief-articles": "tsx --env-file=.env.local scripts/remove-brief-articles.ts",
     "backfill:article-seo": "tsx --env-file=.env.local scripts/backfill-article-seo.ts",
     "backfill:sleeper-stats": "tsx --env-file=.env.local scripts/backfill-sleeper-stats.ts",

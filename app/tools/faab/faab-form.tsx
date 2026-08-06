@@ -1,30 +1,23 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useId, useMemo, useState } from "react";
 import {
   Armchair,
   BarChart3,
   Check,
   Database,
   Flame,
-  Info,
   Layers,
-  Lightbulb,
   Shuffle,
-  Sparkles,
   Trophy,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { BeaconValue } from "@/components/beacon-value-icon";
+import { LeaguePanel } from "./league-panel";
+import { ManualResult } from "./manual-result";
+import { PlayerCombobox, type FaabPlayer } from "./player-combobox";
 import { calculateFaabRecommendation } from "@/lib/faab/calculate-faab";
 import type {
   FaabResult,
@@ -32,20 +25,7 @@ import type {
   NeedLevel as FaabNeedLevel,
 } from "@/lib/faab/types";
 
-export type FaabPlayer = {
-  slug: string;
-  name: string;
-  position: string;
-  team: string | null;
-  /** Sleeper player id pulled from players.external_ids.sleeper. Drives
-   * the headshot CDN URL; null when we don't have a Sleeper mapping yet. */
-  sleeper_id: string | null;
-  overall_rank: number;
-  /** Per-position rank from rankings.position_rank for the resolved
-   * (format, source) pair. Surfaced in the selected-player card. */
-  position_rank: number;
-  value: number | null;
-};
+export type { FaabPlayer };
 
 type NeedLevel = FaabNeedLevel;
 
@@ -61,8 +41,6 @@ const NEED_META: Record<
   high: { title: "Starter you need now", hint: "High need", icon: Flame },
 };
 
-const MAX_SUGGESTIONS = 40;
-
 export function FaabForm({
   players,
   formatName,
@@ -70,9 +48,22 @@ export function FaabForm({
   valueSourceName,
   valueSourceIsBeacon = false,
   settings,
+  seasons,
+  formatSlug,
+  rankingsSourceSlug = null,
+  initialSleeperUsername = null,
 }: {
   players: FaabPlayer[];
   formatName: string;
+  /** Resolved format slug, so the manual read picks the right scoring base. */
+  formatSlug: string;
+  /** Resolved rankings source slug, used to list a league's free agents. */
+  rankingsSourceSlug?: string | null;
+  /** The signed-in reader's linked Sleeper handle, prefilled into the league
+   * box. Null when signed out or not linked. */
+  initialSleeperUsername?: string | null;
+  /** Seasons offered by the league panel. Server-derived. */
+  seasons: string[];
   /** Display name of the source backing the rankings (e.g. "KTC",
    * "FantasyCalc"). Falls back to null when no source covers the format. */
   rankingsSourceName: string | null;
@@ -122,12 +113,33 @@ export function FaabForm({
   }, [selectedPlayer, budgetValid, budget, need, teams, starters, settings, playerPool]);
 
   return (
-    <form
-      onSubmit={(event) => event.preventDefault()}
-      className="relative space-y-6 rounded-modal border border-line bg-surface p-6 sm:p-7"
-      style={{ boxShadow: "0 0 64px -44px rgba(168, 85, 247, 0.6)" }}
-      aria-labelledby="faab-form-heading"
-    >
+    // No space-y-* here on purpose: it emits `margin-top: 0` on every child
+    // after the first at a higher specificity than a utility class, which
+    // silently flattened the separator's own margin. The separator owns its
+    // spacing instead.
+    <div>
+      {/* The better answer leads. Connecting a league measures the bid against a
+          real roster instead of a generic one, so it is offered first rather
+          than tucked under the form where nobody found it. */}
+      <LeaguePanel
+        formatName={formatName}
+        needLevel={need}
+        fallbackBudget={budgetValid ? budget : userDefaults.defaultBudget}
+        leagueModeNotice={settings.copy.leagueModeNotice}
+        seasons={seasons}
+        initialUsername={initialSleeperUsername}
+        formatSlug={formatSlug}
+        sourceSlug={rankingsSourceSlug}
+      />
+
+      <OrDivider />
+
+      <form
+        onSubmit={(event) => event.preventDefault()}
+        className="relative space-y-6 rounded-modal border border-line bg-surface p-6 sm:p-7"
+        style={{ boxShadow: "0 0 64px -44px rgba(168, 85, 247, 0.6)" }}
+        aria-labelledby="faab-form-heading"
+      >
       {/* Beacon hairline inset from the corners so it does not poke past the
           rounded edges. The form intentionally avoids overflow-hidden so the
           player combobox listbox can extend past the card bounds. */}
@@ -139,9 +151,15 @@ export function FaabForm({
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
-      <h2 id="faab-form-heading" className="sr-only">
-        FAAB calculator inputs
-      </h2>
+      <div>
+        <h2 id="faab-form-heading" className="text-lg font-semibold tracking-tight text-ink">
+          No league? Enter your setup instead
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+          We price him against the best player you could already start in a league this
+          size, then adjust for his projections, reliability, usage, and the calendar.
+        </p>
+      </div>
 
       <SourceContextBar
         formatName={formatName}
@@ -238,200 +256,48 @@ export function FaabForm({
         </fieldset>
       </div>
 
-      <ResultPanel
-        result={result}
-        selected={Boolean(selectedPlayer)}
+      <ManualResult
+        player={selectedPlayer}
+        formatSlug={formatSlug}
+        formatName={formatName}
+        teams={teams}
+        starters={starters}
+        budget={budget}
         budgetValid={budgetValid}
-        economyNotice={settings.copy.economyNotice}
+        need={need}
+        settings={settings}
+        fallbackResult={result}
       />
-    </form>
+      </form>
+    </div>
   );
 }
 
 /**
- * The recommendation surface. Mirrors the Signal Check result hero: a tinted
- * card with a corner glow, an eyebrow, a large gradient figure, supporting
- * chips, a "why" card, situational notices, and the always-on league economy
- * note. Renders friendly empty/validation states before a result exists.
+ * The choice between the two paths, made visible.
+ *
+ * Generous margin on both sides so it reads as a fork rather than a caption on
+ * whichever block it happens to sit next to.
  */
-function ResultPanel({
-  result,
-  selected,
-  budgetValid,
-  economyNotice,
-}: {
-  result: FaabResult | null;
-  selected: boolean;
-  budgetValid: boolean;
-  economyNotice: string;
-}) {
-  const isDump = result?.isDumpCandidate ?? false;
-
-  // One concise spoken status instead of making the whole rich card a live
-  // region. This keeps announcements short and avoids re-reading the entire
-  // recommendation on every budget keystroke.
-  const liveSummary = !selected
-    ? ""
-    : !budgetValid
-      ? "Enter your remaining FAAB budget to see a recommended bid."
-      : result
-        ? `Recommended bid ${
-            result.lowBid === result.highBid
-              ? `${result.highBid}`
-              : `${result.lowBid} to ${result.highBid}`
-          } FAAB, ${
-            result.lowPct === result.highPct
-              ? `${result.highPct}`
-              : `${result.lowPct} to ${result.highPct}`
-          } percent of budget. Tier ${result.tierLabel}. ${result.aggressionLabel}.`
-        : "";
-
+function OrDivider() {
   return (
-    <div className="space-y-3">
-      <p className="sr-only" role="status" aria-live="polite">
-        {liveSummary}
-      </p>
-      <div
-        className={`relative overflow-hidden rounded-modal border p-5 ${
-          !result
-            ? "border-line bg-base/40"
-            : isDump
-              ? "border-brand-purple/40 bg-brand-purple/5"
-              : "border-brand-cyan/30 bg-brand-cyan/5"
-        }`}
-      >
-        {result && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full"
-            style={{
-              background: isDump
-                ? "radial-gradient(circle, rgba(168,85,247,0.20) 0%, rgba(34,211,238,0.06) 50%, transparent 75%)"
-                : "radial-gradient(circle, rgba(34,211,238,0.20) 0%, rgba(168,85,247,0.06) 50%, transparent 75%)",
-            }}
-          />
-        )}
-        <div className="relative">
-          {!selected ? (
-            <EmptyResult />
-          ) : !budgetValid ? (
-            <p className="text-sm text-ink-muted">
-              Enter your remaining FAAB budget above to see a recommended bid.
-            </p>
-          ) : result ? (
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    Recommended FAAB bid
-                  </p>
-                  <p
-                    className="mt-1 bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent forced-colors:text-ink sm:text-4xl"
-                    style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-                  >
-                    {result.lowBid === result.highBid
-                      ? `${result.highBid} FAAB`
-                      : `${result.lowBid}-${result.highBid} FAAB`}
-                  </p>
-                  <p className="mt-0.5 text-xs text-ink-subtle">
-                    Budget share {result.lowPct === result.highPct
-                      ? `${result.highPct}%`
-                      : `${result.lowPct}%-${result.highPct}%`}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Chip label="Tier" value={result.tierLabel} />
-                  <AggressionChip label={result.aggressionLabel} />
-                </div>
-              </div>
-
-              <div className="rounded-card border border-line bg-base/50 p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <Lightbulb aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-                  Why this range?
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                  {result.explanation}
-                </p>
-              </div>
-
-              {result.notices.map((note, i) => (
-                <NoticeCard key={i}>{note}</NoticeCard>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* League economy note: always shown so the baseline nature of the
-          numbers is clear. */}
-      <div className="rounded-card border border-line bg-surface/40 p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-          <Info aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-          League economy note
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-ink-muted">{economyNotice}</p>
-      </div>
-    </div>
-  );
-}
-
-function EmptyResult() {
-  return (
-    <div className="flex items-start gap-3">
+    <div
+      role="separator"
+      aria-label="or, without a league"
+      className="my-16 flex items-center gap-4 sm:my-20"
+    >
+      <span aria-hidden="true" className="h-px flex-1 bg-line" />
       <span
         aria-hidden="true"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted"
       >
-        <Sparkles className="h-4 w-4" />
+        or
       </span>
-      <div>
-        <p className="text-sm font-semibold text-ink">Pick a player to get a bid.</p>
-        <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-          Set your league size, starters, budget, and need, then search a player
-          above. We will weigh weekly starter demand, value, and your budget to
-          recommend a FAAB range.
-        </p>
-      </div>
+      <span aria-hidden="true" className="h-px flex-1 bg-line" />
     </div>
   );
 }
 
-function NoticeCard({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-card border border-line/60 bg-base/60 px-3 py-2 text-xs leading-relaxed text-ink-subtle">
-      {children}
-    </p>
-  );
-}
-
-function Chip({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-3 py-1 text-xs">
-      <span className="text-ink-subtle">{label}:</span>
-      <span className="font-medium text-ink">{value}</span>
-    </span>
-  );
-}
-
-function AggressionChip({ label }: { label: FaabResult["aggressionLabel"] }) {
-  const tone =
-    label === "Empty the Clip"
-      ? "border-brand-purple/50 bg-brand-purple/10 text-brand-purple"
-      : label === "Aggressive"
-        ? "border-brand-cyan/50 bg-brand-cyan/10 text-brand-cyan"
-        : label === "Balanced"
-          ? "border-line bg-base text-ink"
-          : "border-line bg-base text-ink-muted";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${tone}`}
-    >
-      {label}
-    </span>
-  );
-}
 
 /**
  * Accessible pill-style radiogroup for the team count and starter count. Native
@@ -778,247 +644,6 @@ function Metric({
         {value}
       </dd>
       <p className="mt-0.5 text-[10px] text-ink-subtle">via {attribution}</p>
-    </div>
-  );
-}
-
-
-/**
- * Accessible combobox/listbox replacement for the old <datalist>. The native
- * datalist was the source of the bugs the user reported:
- *   - On iOS Safari / Chrome Android, datalist suggestions either don't render
- *     or only display the `value` attribute (so no metadata is visible).
- *   - On desktop, the browser-rendered popup can't be styled, and with 300
- *     options it occasionally renders pinned to the viewport edge instead of
- *     anchored below the input.
- *
- * This custom combobox follows the WAI-ARIA combobox-with-listbox pattern:
- *   role="combobox" on the input, aria-controls + aria-expanded wired to the
- *   listbox, aria-activedescendant tracks the highlighted option, and the
- *   listbox is positioned absolutely directly under the input.
- */
-function PlayerCombobox({
-  players,
-  query,
-  onQueryChange,
-  selected,
-  onSelect,
-  formatName,
-}: {
-  players: FaabPlayer[];
-  query: string;
-  onQueryChange: (q: string) => void;
-  selected: FaabPlayer | null;
-  onSelect: (player: FaabPlayer | null) => void;
-  formatName: string;
-}) {
-  const inputId = useId();
-  const listboxId = useId();
-  const helpId = useId();
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const [open, setOpen] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
-
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      // Empty query - show the top-ranked players so users see something
-      // immediately when they tap the field.
-      return players.slice(0, MAX_SUGGESTIONS);
-    }
-    // Rank substring matches by overall_rank ascending so the most relevant
-    // player shows up first. Cap to keep the DOM small.
-    const out: FaabPlayer[] = [];
-    for (const p of players) {
-      if (p.name.toLowerCase().includes(q)) out.push(p);
-      if (out.length >= MAX_SUGGESTIONS) break;
-    }
-    return out;
-  }, [players, query]);
-
-  // Clamp the active index whenever the visible match list changes (e.g. user
-  // types another character and the matching set shrinks).
-  useEffect(() => {
-    if (activeIdx >= matches.length) setActiveIdx(0);
-  }, [matches.length, activeIdx]);
-
-  // Click-outside closes the listbox.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent | TouchEvent) => {
-      const node = wrapperRef.current;
-      if (!node) return;
-      if (node.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("touchstart", onDown);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("touchstart", onDown);
-    };
-  }, [open]);
-
-  const commit = useCallback(
-    (player: FaabPlayer) => {
-      onSelect(player);
-      setOpen(false);
-      // Defocus on touch devices so the on-screen keyboard collapses; users
-      // wanted to see the recommendation after selecting.
-      inputRef.current?.blur();
-    },
-    [onSelect],
-  );
-
-  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.min(matches.length - 1, i + 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIdx((i) => Math.max(0, i - 1));
-    } else if (event.key === "Enter") {
-      if (open && matches[activeIdx]) {
-        event.preventDefault();
-        commit(matches[activeIdx]);
-      }
-    } else if (event.key === "Escape") {
-      if (open) {
-        event.preventDefault();
-        setOpen(false);
-      }
-    } else if (event.key === "Home") {
-      if (open) {
-        event.preventDefault();
-        setActiveIdx(0);
-      }
-    } else if (event.key === "End") {
-      if (open) {
-        event.preventDefault();
-        setActiveIdx(matches.length - 1);
-      }
-    }
-  };
-
-  const showClear = query.length > 0 || selected != null;
-
-  return (
-    <div ref={wrapperRef} className="relative">
-      <label htmlFor={inputId} className="block text-sm font-medium">
-        Player
-      </label>
-      <div className="relative mt-2">
-        <input
-          ref={inputRef}
-          id={inputId}
-          type="text"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={open}
-          aria-controls={listboxId}
-          aria-activedescendant={
-            open && matches[activeIdx] ? `${listboxId}-opt-${activeIdx}` : undefined
-          }
-          aria-describedby={helpId}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="words"
-          spellCheck={false}
-          inputMode="search"
-          value={query}
-          onChange={(event) => {
-            onQueryChange(event.target.value);
-            setOpen(true);
-            // Editing invalidates the current selection - caller re-resolves
-            // on the next commit.
-            if (selected && event.target.value !== selected.name) {
-              onSelect(null);
-            }
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder="Start typing a player name"
-          className="w-full rounded-card border border-line bg-base px-3 py-2 pr-9 text-base text-ink placeholder:text-ink-subtle caret-brand-purple focus:border-brand-purple focus:outline-none sm:text-sm"
-        />
-        {showClear && (
-          <button
-            type="button"
-            onClick={() => {
-              onQueryChange("");
-              onSelect(null);
-              setActiveIdx(0);
-              setOpen(true);
-              inputRef.current?.focus();
-            }}
-            aria-label={
-              selected
-                ? `Clear ${selected.name} and search for a different player`
-                : "Clear search field"
-            }
-            title="Clear"
-            className="absolute inset-y-0 right-0 my-1 mr-1 inline-flex w-8 items-center justify-center rounded-card text-ink-muted transition-colors hover:bg-line/40 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <span aria-hidden="true">✕</span>
-          </button>
-        )}
-      </div>
-
-      <p id={helpId} className="mt-1 text-xs text-ink-subtle">
-        Pull from the top 300 ranked players. {formatName} format.
-      </p>
-
-      {open && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-label="Player suggestions"
-          className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-card border border-line bg-surface-elevated shadow-2xl shadow-black/50"
-        >
-          {matches.length === 0 ? (
-            <li role="presentation" className="px-3 py-3 text-sm text-ink-subtle">
-              No players match &quot;{query}&quot;.
-            </li>
-          ) : (
-            matches.map((p, i) => {
-              const isActive = i === activeIdx;
-              return (
-                <li
-                  key={p.slug}
-                  id={`${listboxId}-opt-${i}`}
-                  role="option"
-                  aria-selected={isActive}
-                  // Mouse-over highlights so cursor + keyboard stay in sync.
-                  onMouseEnter={() => setActiveIdx(i)}
-                  // onMouseDown (not click) so the input doesn't blur before
-                  // we get the chance to handle selection.
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    commit(p);
-                  }}
-                  className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm motion-safe:transition-colors ${
-                    isActive ? "bg-brand-purple/15 text-ink" : "text-ink-muted"
-                  }`}
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    <span className="text-ink">{p.name}</span>
-                    <span className="ml-2 text-xs text-ink-subtle">
-                      {p.position}
-                      {p.team ? `, ${p.team}` : ""}
-                    </span>
-                  </span>
-                  <span className="flex-shrink-0 font-mono text-xs tabular-nums text-ink-subtle">
-                    #{p.overall_rank}
-                  </span>
-                </li>
-              );
-            })
-          )}
-        </ul>
-      )}
     </div>
   );
 }

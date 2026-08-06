@@ -16,8 +16,8 @@
  * first cannot start for you in week 4.
  */
 
-import { scoreWithFallback } from "@/lib/league-scoring";
 import type { PowerPulseSettings } from "./default-settings";
+import { projectPlayerWeek, reliabilityMultiplier } from "./project";
 import { buildOptimalLineup, lineupSigma, scoreSetLineup, startingSlots } from "./lineup";
 import type { LineupCandidate } from "./lineup";
 import { clamp, mean, rankDescending, round, stdev, zScores, zToDisplay } from "./math";
@@ -36,13 +36,6 @@ import {
   type PulsePosition,
   type ScheduleWeek,
 } from "./types";
-
-/**
- * Injury designations that keep a player out for the rest of the season rather
- * than one week. A Questionable tag should not suppress a player's week 12
- * projection in September; an IR stash should.
- */
-const LONG_TERM_INJURY_STATUSES = new Set(["IR", "PUP", "NA", "SUS", "COV", "DNR"]);
 
 export type PowerPulseInput = {
   league: LeagueRow;
@@ -151,96 +144,6 @@ type TeamWork = {
   usedLeagueScoring: boolean;
 };
 
-/**
- * Blend the opponent-strength multiplier across the seasons we have splits for,
- * weighting the more recent season more heavily. Falls back to neutral when the
- * sample is too thin to trust.
- */
-function opponentMultiplier(
-  defense: Map<string, DefenseRow>,
-  seasons: number[],
-  opponentTeam: string | null,
-  position: PulsePosition,
-  settings: PowerPulseSettings,
-): number {
-  if (!settings.opponent.enabled || !opponentTeam) return 1;
-
-  const weights = [settings.opponent.currentSeasonWeight, settings.opponent.priorSeasonWeight];
-  let weighted = 0;
-  let totalWeight = 0;
-  seasons.slice(0, 2).forEach((season, i) => {
-    const row = defense.get(`${opponentTeam}|${season}|${position}`);
-    if (!row || row.gamesSampled < settings.opponent.minGamesSampled) return;
-    const w = weights[i] ?? 0;
-    weighted += row.multiplier * w;
-    totalWeight += w;
-  });
-
-  if (totalWeight <= 0) return 1;
-  return clamp(
-    weighted / totalWeight,
-    settings.opponent.minMultiplier,
-    settings.opponent.maxMultiplier,
-  );
-}
-
-/** Reliability multiplier from the recency-weighted accuracy row. */
-function reliabilityMultiplier(
-  accuracy: AccuracyRow | null,
-  settings: PowerPulseSettings,
-): number {
-  if (!settings.reliability.enabled || !accuracy?.shrunkMultiplier) return 1;
-  return clamp(
-    accuracy.shrunkMultiplier,
-    settings.reliability.minMultiplier,
-    settings.reliability.maxMultiplier,
-  );
-}
-
-/** Availability multiplier, damped so a missed month never zeroes a player. */
-function availabilityMultiplier(
-  accuracy: AccuracyRow | null,
-  settings: PowerPulseSettings,
-): number {
-  if (!settings.availability.enabled || accuracy?.availabilityRate == null) return 1;
-  const damped = 1 - settings.availability.damping * (1 - accuracy.availabilityRate);
-  return clamp(damped, settings.availability.minMultiplier, 1);
-}
-
-/**
- * Injury multiplier for a specific week. Week-to-week designations only affect
- * the upcoming week; season-long designations affect every remaining week.
- */
-function injuryMultiplier(
-  status: string | null,
-  week: number,
-  currentWeek: number,
-  settings: PowerPulseSettings,
-): number {
-  if (!settings.injury.enabled || !status) return 1;
-  const key = status.toUpperCase();
-  const multiplier = settings.injury.multipliers[key];
-  if (multiplier === undefined) return 1;
-  if (LONG_TERM_INJURY_STATUSES.has(key)) return multiplier;
-  return week === currentWeek ? multiplier : 1;
-}
-
-/** Per-week coefficient of variation for one player. */
-function coefficientOfVariation(
-  position: PulsePosition,
-  accuracy: AccuracyRow | null,
-  settings: PowerPulseSettings,
-): number {
-  const fallback = settings.variance.defaultCv[position] ?? 0.6;
-  if (
-    accuracy?.ratioStdev == null ||
-    accuracy.weeksPlayed < settings.variance.minGamesForMeasured
-  ) {
-    return fallback;
-  }
-  return clamp(accuracy.ratioStdev, settings.variance.minCv, settings.variance.maxCv);
-}
-
 export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[] {
   const { league, rosters, players, settings, currentWeek } = input;
   if (rosters.length === 0) return [];
@@ -285,38 +188,29 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
     for (const week of remainingWeeks) {
       const weekMap = new Map<string, PlayerWeek>();
       for (const { player, accuracy, reliability } of enriched) {
-        const projection = projectionsByPlayer.get(player.playerId)?.get(week);
-        // No row means a bye week or a player Sleeper does not project.
-        if (!projection) continue;
-
-        const scored = scoreWithFallback(
-          projection.statLine,
-          { ppr: projection.ppr, half_ppr: projection.halfPpr, std: projection.std },
-          league.scoringSettings,
-          player.position,
-        );
-        if (scored.points === null) continue;
-        if (scored.usedLeagueScoring) usedLeagueScoring = true;
-
-        const oppMult = opponentMultiplier(
-          input.defense,
-          input.defenseSeasons,
-          projection.opponent,
-          player.position,
+        // A null projection means a bye week, a player Sleeper does not publish,
+        // or a stat line we cannot score. All three are "no opinion", never zero.
+        const projected = projectPlayerWeek({
+          projection: projectionsByPlayer.get(player.playerId)?.get(week),
+          subject: player,
+          accuracy,
+          reliability,
+          scoringSettings: league.scoringSettings,
+          defense: input.defense,
+          defenseSeasons: input.defenseSeasons,
+          week,
+          currentWeek,
           settings,
-        );
-        const injMult = injuryMultiplier(player.injuryStatus, week, currentWeek, settings);
-        const availMult = availabilityMultiplier(accuracy, settings);
-
-        const points = Math.max(0, scored.points * oppMult * reliability * availMult * injMult);
-        const cv = coefficientOfVariation(player.position, accuracy, settings);
+        });
+        if (!projected) continue;
+        if (projected.usedLeagueScoring) usedLeagueScoring = true;
 
         weekMap.set(player.playerId, {
           week,
-          points,
-          rawPoints: scored.points,
-          sigma: points * cv,
-          opponentMultiplier: oppMult,
+          points: projected.points,
+          rawPoints: projected.rawPoints,
+          sigma: projected.sigma,
+          opponentMultiplier: projected.opponentMultiplier,
         });
       }
       byWeek.set(week, weekMap);

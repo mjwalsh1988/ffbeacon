@@ -3146,3 +3146,180 @@ Best available, before and after. Deleted after use; nothing added to scripts/.
 - npm test: 1279 tests across 94 files, all pass (14 new)
 - npm run build: compiles clean in 14.0s, no warnings
 - No browser testing this pass; no dev server left running.
+
+---
+
+T490 | completed | FAAB league mode: price a bid against a real roster
+     | files: lib/power-pulse/project.ts, lib/power-pulse/engine.ts,
+     |   lib/faab/types.ts, lib/faab/default-settings.ts, lib/faab/settings.ts,
+     |   lib/faab/marginal.ts, lib/faab/signals.ts, lib/faab/market.ts,
+     |   lib/faab/ladder.ts, lib/faab/league-load.ts, lib/faab/league-faab.ts,
+     |   lib/faab/multi-league.ts, lib/faab/backtest.ts,
+     |   lib/faab/{marginal,signals,market,ladder}.test.ts,
+     |   app/tools/faab/{page,faab-form,league-panel,league-result,actions}.tsx,
+     |   app/admin/faab/faab-settings-manager.tsx,
+     |   scripts/backtest-faab.ts, package.json
+     | depends on: T489
+     | verified: yes (no schema change so no RLS work; a11y + security reviewed below)
+
+The old calculator answered "how good is this player" (overall rank divided by
+teams times starters, read off a curve). A FAAB bid asks something else: how
+many points does he add to YOUR lineup over the weeks YOU have left. League
+mode answers that question instead, and the manual calculator is untouched and
+still the default view.
+
+WHAT IT DOES
+- Projects every roster in the league with the Power Pulse model, adds the free
+  agent, and rebuilds every remaining week's optimal lineup. The difference IS
+  the answer. A player who never cracks the lineup is reported as adding zero
+  rather than as a percentage.
+- Simulates the season twice, before and after, for wins and playoff odds.
+- Names the cheapest drop by what the LINEUP loses, not by raw projection. A
+  backup QB projected for 16 is a cheaper cut than a WR3 projected for 9 in a
+  one-QB league, and sorting by points gets that backwards.
+- Reads six player signals (snap-share role change, beat rate, availability,
+  volatility, remaining matchups, past positional finishes) and three market
+  ones (rival budgets, how many rivals would start him, time of season).
+- Prices against what the league has actually paid, from winning bids already
+  preserved in league_transactions.metadata.settings.waiver_bid. No new sync.
+- Answers the same question across every league at once, capped at 10.
+
+THE ONE STRUCTURAL DECISION
+Value and price are separated and never collapsed. Walk-away is derived from
+value (upgrade x need x player quality) and cannot be raised by market pressure;
+the recommended bid is value seen through rival wallets and league history and
+can only sit at or under it. A rich opponent makes a player cost more, it does
+not make him worth more, and conflating the two is how managers overpay. There
+is a test for exactly this (ladder.test.ts, "market pressure changes the price
+but never the walk-away ceiling").
+
+DUMP MODE, KEPT AND EARNED
+Still present, now triggered by measured impact (playoff-odds swing or points a
+week) instead of by ranking, and explicitly refused for a team already under the
+playoff-odds floor. Telling a 3% team to empty its budget was the worst advice
+the tool could give.
+
+READ ONLY
+Never writes, never syncs matchups, never touches league_power_pulse_cache.
+It is a question about a roster that does not exist, so it must not be able to
+overwrite the real one's cached answer. No cron added.
+
+SHARED MODEL, ONE COPY
+lib/power-pulse/project.ts is new and holds the per-player-week projection that
+was inline in engine.ts. Both the engine and FAAB import it, so a FAAB answer
+and the Power Pulse page next to it cannot disagree about a projection. Power
+Pulse behavior is unchanged (47 existing tests pass untouched).
+
+SECURITY
+Public server actions, no sign-in required (a Sleeper username is enough, same
+as League Pulse). Service role is used because faab_calculator_settings is
+service-role-only; everything else read is public under RLS and already visible
+on /leagues/<id>, so a league id you are not in leaks nothing new. Rate limited
+per actor and fails closed: connect 10/min, single bid 12/min, all-leagues
+4/min. Ids regex-validated; the username check also rejects ".." before it
+reaches a Sleeper URL. Simulation runs capped at 20000 in the schema so an admin
+cannot make a page view run an unbounded loop twice.
+
+ACCESSIBILITY
+Panel is a real disclosure (aria-expanded + aria-controls, content hidden when
+closed) under an h3, so the manual calculator keeps the page's reading order.
+Every input labelled; errors are role="alert"; results announce through one
+short polite live region rather than re-reading the card. The week strip is a
+wrapping list where each entry carries its own sr-only sentence, because
+"Wk 7 +4.2" is not a sentence. Nothing is hidden at any breakpoint: the
+all-leagues view is a stacked list rather than a table with dropped columns, and
+the impact figures go 2-up on mobile and 4-up on desktop. Tap targets 44px.
+
+HONESTY
+Every answer carries a confidence grade from how much data is actually behind
+it, and low confidence says so in the copy. Missing pieces degrade rather than
+guess: no stored schedule means points-only with a notice, no published FAAB
+budget falls back to the reader's typed budget with a notice, and a league we
+hold no rosters for is reported as unchecked instead of as "he is available".
+
+BACKTEST
+npm run backtest:faab grades the price curve against real winning bids per
+league season. It measures calibration, not a replay, and says so in its own
+header: historical rosters are not stored, so a true replay is impossible and
+approximating it would reintroduce the exact assumption this work removed.
+
+- npx tsc --noEmit: clean
+- npm test: 1322 tests across 98 files, all pass (43 new)
+- npm run build: compiles clean, /tools/faab 16.3 kB
+- No browser testing this pass; no dev server left running.
+
+---
+
+T491 | completed | FAAB: lead with the league offer, and give the manual path real math
+     | files: lib/faab/manual.ts, lib/faab/manual.test.ts, lib/faab/outlook.ts,
+     |   lib/faab/types.ts, lib/faab/default-settings.ts, lib/faab/settings.ts,
+     |   lib/faab/{ladder,signals,market}.ts, lib/faab/ladder.test.ts,
+     |   app/tools/faab/{page,faab-form,league-panel,actions}.tsx,
+     |   app/tools/faab/{bid-result,manual-result,player-combobox}.tsx,
+     |   app/admin/faab/faab-settings-manager.tsx
+     |   (deleted: app/tools/faab/league-result.tsx)
+     | depends on: T490
+     | verified: yes (no schema change; a11y + copy reviewed below)
+
+THE LAYOUT WAS BURYING THE BETTER ANSWER
+League mode shipped as a collapsed disclosure under the manual form, which is
+where nobody found it. It now leads: a bordered, glowing block at the top of the
+page asking the question outright, then an "or" separator with generous margin,
+then the manual calculator. Both paths are complete on their own, which is what
+makes the "or" mean something. Each has its own player search (extracted to
+player-combobox.tsx so there is still one implementation).
+
+THE MANUAL PATH IS NO LONGER JUST RANK MATH
+It could not ask "what does he add to YOUR lineup" without a roster, so it asks
+the nearest answerable question: what does he add over the last player you could
+already start at his position? Rank every player at that position by projected
+points a week, walk to where a league this size runs out of starters, and the
+gap is what you are buying. That is measurable from projections alone.
+
+This subsumes the old depth multipliers rather than sitting beside them:
+replacement rank scales with teams AND starter count by construction, so a
+14-team league with 11 starters gets a deeper line without a hand-tuned nudge.
+
+Manual mode now gets: rest-of-season projections, beat rate, availability,
+volatility (widens rather than moves), snap-share role change, remaining
+matchups from our own defense table, past positional finishes, time-of-season
+urgency, and the same walk-away / bid / aggressive ladder. What it cannot have
+is anything requiring a league: rival budgets, who else wants him, league bid
+history, and playoff odds. Those are simply absent rather than faked.
+
+The original rank-and-value calculator survives as the documented fallback for
+the offseason and for players nobody publishes weekly numbers for. Showing the
+older, simpler number beats showing none.
+
+ONE FETCH, INSTANT CONTROLS
+The server returns the whole position projection curve rather than a single
+replacement number, so league size, starters, budget, and need all recompute in
+the browser. Dragging a control does not fire a request.
+
+COPY
+Rewritten throughout for density. The result explanation went from a five-clause
+paragraph to short declarative sentences; every signal detail lost its trailing
+justification clause; the economy notice, dump note, and both help strings were
+cut roughly in half; the hero and meta description now lead with what the tool
+answers ("what to bid, and when to walk away") rather than describing its
+inputs. No information was dropped, only the words around it.
+
+SHARED RESULT SURFACE
+league-result.tsx became bid-result.tsx and renders both modes off one view
+model, so they cannot drift into looking like different products. The figures
+change meaning between modes and the card says which mode produced them: league
+mode shows weeks-he-starts and playoff odds, manual mode shows replacement level
+and where the startable line falls. The week strip shows points added in league
+mode and matchup difficulty in manual mode.
+
+ACCESSIBILITY
+The league block is a labelled section with a real h2 rather than a disclosure
+button, so it sits in the page outline where its prominence suggests. The "or"
+is role="separator" with an accessible name. Both paths announce through their
+own short polite live region. Every figure keeps its sr-only sentence. Nothing
+hidden at any breakpoint; 44px targets throughout.
+
+- npx tsc --noEmit: clean
+- npm test: 1334 tests across 99 files, all pass (12 new in manual.test.ts)
+- npm run build: compiles clean, /tools/faab 20 kB
+- No browser testing this pass; no dev server left running.

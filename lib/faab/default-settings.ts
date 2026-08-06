@@ -76,14 +76,91 @@ export const DEFAULT_FAAB_SETTINGS: FaabSettings = {
 
   copy: {
     economyNotice:
-      "FAAB is league-dependent. These bids are general baseline suggestions based on player value, ranking, league size, starter demand, remaining budget, and need level. Every league economy is different, so aggressive leagues, shallow benches, late-season timing, and manager tendencies can change the right bid.",
+      "Every league spends differently. Connect a league above and we price against your real roster, your rivals' budgets, and what your league actually pays.",
     missingValueNote:
-      "This recommendation is rank-based because current value data was not available for this player or league setup.",
+      "No current value data for this player, so this bid is based on ranking alone.",
     dumpNote:
-      "This is a FAAB dump candidate. In most leagues, a player this valuable should rarely be available, so spending most or all of your remaining budget can be justified.",
-    teamsHelp:
-      "How many teams are in your league. More teams means more starters every week, which makes useful players harder to replace.",
+      "Worth emptying the budget. A player this good rarely reaches waivers.",
+    teamsHelp: "More teams means more starters each week, so useful players get harder to replace.",
     startersHelp:
-      "How many offensive players each team starts every week (QB, RB, WR, TE, and FLEX spots). More starters means deeper demand for talent.",
+      "QB, RB, WR, TE, and FLEX spots. Deeper lineups make marginal players more valuable.",
+    leagueModeNotice:
+      "Priced against your real roster: every remaining week projected with and without him, in your league's scoring. A strong starting point, not a ceiling.",
+    thinDataNote:
+      "Not much history behind this one yet, so the range is deliberately wide.",
+  },
+
+  // ---- League mode ---------------------------------------------------------
+
+  marginal: {
+    // Roughly a starting flex upgrade. Adding four points a week to an optimal
+    // lineup every week is a genuine, season-shifting add in most formats.
+    bigUpgradePointsPerWeek: 4,
+    // Twenty points of playoff odds is the difference between a bubble team and
+    // a favorite. That is what "worth emptying the budget" looks like.
+    bigUpgradeOddsPoints: 20,
+    oddsWeight: 0.5,
+    // Half the Power Pulse run count. This simulates twice, on demand, inside a
+    // request, and 2000 runs already settles playoff odds to well under a point.
+    simulationRuns: 2000,
+    maxPctFromUpgrade: 85,
+    minMeaningfulPointsPerWeek: 0.25,
+  },
+
+  signals: {
+    beatRate: { enabled: true, neutral: 0.5, maxAdjustPct: 12, minWeeks: 4 },
+    availability: { enabled: true, neutral: 0.85, maxAdjustPct: 15 },
+    volatility: { enabled: true, neutral: 0.55, maxSpreadPct: 25 },
+    opportunity: {
+      enabled: true,
+      maxAdjustPct: 20,
+      minTeamSnaps: 20,
+      breakoutDeltaPoints: 15,
+      collapseDeltaPoints: 15,
+      recentGames: 2,
+    },
+    matchup: { enabled: true, maxAdjustPct: 10 },
+    ceiling: { enabled: true, lookbackSeasons: 3 },
+  },
+
+  market: {
+    rivalBudget: { enabled: true, maxAdjustPct: 20 },
+    rivalNeed: { enabled: true, maxAdjustPct: 25, minPointsPerWeek: 1 },
+    history: { enabled: true, minSamples: 6, lookbackSeasons: 3, blendWeight: 0.35 },
+    urgency: {
+      enabled: true,
+      lateSeasonWeek: 12,
+      maxLateBoostPct: 40,
+      earlySeasonWeek: 3,
+      maxEarlyDiscountPct: 15,
+    },
+  },
+
+  ladder: {
+    walkAwayTrimPct: 0,
+    aggressiveAbovePct: 35,
+    minStartableBid: 1,
+  },
+
+  // Sums to 9 at the baseline, which is the standard 1 QB, 2 RB, 3 WR, 1 TE
+  // plus two flex spots absorbed into the running back and receiver counts.
+  manualReplacement: {
+    startersPerTeam: { QB: 1.0, RB: 2.8, WR: 3.9, TE: 1.3, K: 1.0, DEF: 1.0 },
+    baselineStarters: 9,
+    flatPositions: ["K", "DEF"],
+  },
+
+  leagueDump: {
+    enabled: true,
+    oddsPointsThreshold: 12,
+    pointsPerWeekThreshold: 3.5,
+    // A team under a 5% playoff chance is not one waiver claim away, and telling
+    // it to empty the budget is the worst advice the tool could give.
+    loserOddsCeiling: 5,
+    ranges: {
+      low: { minPct: 55, maxPct: 75 },
+      medium: { minPct: 70, maxPct: 90 },
+      high: { minPct: 85, maxPct: 100 },
+    },
   },
 };

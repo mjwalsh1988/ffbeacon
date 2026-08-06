@@ -25,6 +25,14 @@ const needLevel = z.enum(["low", "medium", "high"]);
 
 const pct = z.number().min(0).max(100);
 const nonNegative = z.number().min(0);
+const unitInterval = z.number().min(0).max(1);
+
+/** The shared shape of a league-mode signal: an on/off switch and a ceiling on
+ * how far it can move a bid. Extended per signal with its own extra fields. */
+const signalToggle = z.object({
+  enabled: z.boolean().default(true),
+  maxAdjustPct: pct.default(15),
+});
 
 const pctRange = z
   .object({ minPct: pct, maxPct: pct })
@@ -121,8 +129,125 @@ export const faabSettingsSchema = z.object({
       dumpNote: z.string().default(d.copy.dumpNote),
       teamsHelp: z.string().default(d.copy.teamsHelp),
       startersHelp: z.string().default(d.copy.startersHelp),
+      leagueModeNotice: z.string().default(d.copy.leagueModeNotice),
+      thinDataNote: z.string().default(d.copy.thinDataNote),
     })
     .default(d.copy),
+
+  marginal: z
+    .object({
+      bigUpgradePointsPerWeek: z.number().positive().default(d.marginal.bigUpgradePointsPerWeek),
+      bigUpgradeOddsPoints: z.number().positive().default(d.marginal.bigUpgradeOddsPoints),
+      oddsWeight: unitInterval.default(d.marginal.oddsWeight),
+      // Capped so an admin cannot make an on-demand page view run a
+      // hundred-thousand-iteration simulation twice.
+      simulationRuns: z.number().int().min(200).max(20000).default(d.marginal.simulationRuns),
+      maxPctFromUpgrade: pct.default(d.marginal.maxPctFromUpgrade),
+      minMeaningfulPointsPerWeek: nonNegative.default(d.marginal.minMeaningfulPointsPerWeek),
+    })
+    .default(d.marginal),
+
+  signals: z
+    .object({
+      beatRate: signalToggle
+        .extend({
+          neutral: unitInterval.default(d.signals.beatRate.neutral),
+          minWeeks: z.number().int().min(0).default(d.signals.beatRate.minWeeks),
+        })
+        .default(d.signals.beatRate),
+      availability: signalToggle
+        .extend({ neutral: unitInterval.default(d.signals.availability.neutral) })
+        .default(d.signals.availability),
+      volatility: z
+        .object({
+          enabled: z.boolean().default(d.signals.volatility.enabled),
+          neutral: nonNegative.default(d.signals.volatility.neutral),
+          maxSpreadPct: pct.default(d.signals.volatility.maxSpreadPct),
+        })
+        .default(d.signals.volatility),
+      opportunity: signalToggle
+        .extend({
+          minTeamSnaps: nonNegative.default(d.signals.opportunity.minTeamSnaps),
+          breakoutDeltaPoints: pct.default(d.signals.opportunity.breakoutDeltaPoints),
+          collapseDeltaPoints: pct.default(d.signals.opportunity.collapseDeltaPoints),
+          recentGames: z.number().int().min(1).max(8).default(d.signals.opportunity.recentGames),
+        })
+        .default(d.signals.opportunity),
+      matchup: signalToggle.default(d.signals.matchup),
+      ceiling: z
+        .object({
+          enabled: z.boolean().default(d.signals.ceiling.enabled),
+          lookbackSeasons: z.number().int().min(1).max(10).default(d.signals.ceiling.lookbackSeasons),
+        })
+        .default(d.signals.ceiling),
+    })
+    .default(d.signals),
+
+  market: z
+    .object({
+      rivalBudget: signalToggle.default(d.market.rivalBudget),
+      rivalNeed: signalToggle
+        .extend({ minPointsPerWeek: nonNegative.default(d.market.rivalNeed.minPointsPerWeek) })
+        .default(d.market.rivalNeed),
+      history: z
+        .object({
+          enabled: z.boolean().default(d.market.history.enabled),
+          minSamples: z.number().int().min(1).default(d.market.history.minSamples),
+          lookbackSeasons: z.number().int().min(1).max(10).default(d.market.history.lookbackSeasons),
+          blendWeight: unitInterval.default(d.market.history.blendWeight),
+        })
+        .default(d.market.history),
+      urgency: z
+        .object({
+          enabled: z.boolean().default(d.market.urgency.enabled),
+          lateSeasonWeek: z.number().int().min(1).max(18).default(d.market.urgency.lateSeasonWeek),
+          maxLateBoostPct: z.number().min(0).max(300).default(d.market.urgency.maxLateBoostPct),
+          earlySeasonWeek: z.number().int().min(0).max(18).default(d.market.urgency.earlySeasonWeek),
+          maxEarlyDiscountPct: pct.default(d.market.urgency.maxEarlyDiscountPct),
+        })
+        .default(d.market.urgency)
+        .refine((u) => u.earlySeasonWeek < u.lateSeasonWeek, {
+          message: "earlySeasonWeek must be before lateSeasonWeek",
+        }),
+    })
+    .default(d.market),
+
+  ladder: z
+    .object({
+      walkAwayTrimPct: pct.default(d.ladder.walkAwayTrimPct),
+      aggressiveAbovePct: z.number().min(0).max(300).default(d.ladder.aggressiveAbovePct),
+      minStartableBid: z.number().int().min(0).default(d.ladder.minStartableBid),
+    })
+    .default(d.ladder),
+
+  manualReplacement: z
+    .object({
+      startersPerTeam: z
+        .record(z.string(), z.number().min(0))
+        .default(d.manualReplacement.startersPerTeam),
+      baselineStarters: z
+        .number()
+        .positive()
+        .default(d.manualReplacement.baselineStarters),
+      flatPositions: z.array(z.string()).default(d.manualReplacement.flatPositions),
+    })
+    .default(d.manualReplacement),
+
+  leagueDump: z
+    .object({
+      enabled: z.boolean().default(d.leagueDump.enabled),
+      oddsPointsThreshold: pct.default(d.leagueDump.oddsPointsThreshold),
+      pointsPerWeekThreshold: nonNegative.default(d.leagueDump.pointsPerWeekThreshold),
+      loserOddsCeiling: pct.default(d.leagueDump.loserOddsCeiling),
+      ranges: z
+        .object({
+          low: pctRange.default(d.leagueDump.ranges.low),
+          medium: pctRange.default(d.leagueDump.ranges.medium),
+          high: pctRange.default(d.leagueDump.ranges.high),
+        })
+        .default(d.leagueDump.ranges),
+    })
+    .default(d.leagueDump),
 }).superRefine((s, ctx) => {
   // The bid curve must cover every playerRatio from 0 upward with no gaps, so a
   // valid player can never fall through to the wrong band. Enforce: starts at 0,

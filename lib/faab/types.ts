@@ -96,6 +96,159 @@ export interface ResultCopy {
   dumpNote: string;
   teamsHelp: string;
   startersHelp: string;
+  /** Shown above the league-connected result, which is a different promise from
+   * the general baseline the manual mode makes. */
+  leagueModeNotice: string;
+  /** Shown when league mode runs but the data underneath it is thin. */
+  thinDataNote: string;
+}
+
+// ---------------------------------------------------------------------------
+// League mode settings
+//
+// Everything below drives the connected-league calculator. It is separate from
+// the manual bid curve on purpose: manual mode prices a player against a
+// generic league, league mode prices what he adds to one specific roster, and
+// collapsing the two would force one set of numbers to mean two things.
+// ---------------------------------------------------------------------------
+
+/** Turning a lineup upgrade into a share of budget. */
+export interface MarginalSettings {
+  /**
+   * The points-per-week gain treated as a full-strength upgrade. A player who
+   * adds this much to your starting lineup every week justifies the top of the
+   * scale. Anything less scales down proportionally.
+   */
+  bigUpgradePointsPerWeek: number;
+  /** The playoff-odds gain (in percentage points) treated as full strength. */
+  bigUpgradeOddsPoints: number;
+  /**
+   * How much of the blended upgrade score comes from playoff odds rather than
+   * raw points, 0 to 1. Odds answer "does this change my season", points answer
+   * "does this change my Sunday", and both matter.
+   */
+  oddsWeight: number;
+  /** Monte Carlo runs per simulation. This runs twice, on demand, so it is
+   * deliberately lighter than the Power Pulse page's own run count. */
+  simulationRuns: number;
+  /** The most of your remaining budget a lineup upgrade alone can justify. */
+  maxPctFromUpgrade: number;
+  /** Below this points-per-week the player is reported as not an upgrade. */
+  minMeaningfulPointsPerWeek: number;
+}
+
+/** One tunable player-quality signal. */
+export interface SignalToggle {
+  enabled: boolean;
+  /** The most this signal can move the bid, up or down, as a percent. */
+  maxAdjustPct: number;
+}
+
+export interface SignalSettings {
+  /** How often he meets or beats his own projection. */
+  beatRate: SignalToggle & {
+    /** The beat rate that counts as neutral, 0 to 1. */
+    neutral: number;
+    /** Below this many graded weeks the signal is skipped as too thin. */
+    minWeeks: number;
+  };
+  /** How often he is actually available to play. */
+  availability: SignalToggle & { neutral: number };
+  /**
+   * Boom-or-bust players widen the recommended range instead of moving it. A
+   * wide range is the honest way to say "this could go either way".
+   */
+  volatility: { enabled: boolean; neutral: number; maxSpreadPct: number };
+  /** Snap share and touches: is the role real, or was it one loud afternoon. */
+  opportunity: SignalToggle & {
+    /** Team offensive snaps below this in a game make the read unreliable. */
+    minTeamSnaps: number;
+    /** Snap-share gain (percentage points) that reads as a role change. */
+    breakoutDeltaPoints: number;
+    /** Snap-share drop (percentage points) that reads as a role loss. */
+    collapseDeltaPoints: number;
+    /** Games in the recent window compared against the games before it. */
+    recentGames: number;
+  };
+  /** Who he actually plays over your remaining weeks. */
+  matchup: SignalToggle;
+  /** Past positional finishes, used for framing rather than for math. */
+  ceiling: { enabled: boolean; lookbackSeasons: number };
+}
+
+export interface MarketSettings {
+  /** Your budget against theirs. Cheap when they are broke. */
+  rivalBudget: SignalToggle;
+  /** How many rivals this player would actually start for. */
+  rivalNeed: SignalToggle & {
+    /** Points-per-week gain that counts as a rival genuinely wanting him. */
+    minPointsPerWeek: number;
+  };
+  /** What comparable players have actually sold for in this league. */
+  history: {
+    enabled: boolean;
+    /** Below this many past winning bids the history is not reported. */
+    minSamples: number;
+    lookbackSeasons: number;
+    /**
+     * How far to pull the recommendation toward the league's own going rate,
+     * 0 to 1. The model still leads; history corrects it toward reality.
+     */
+    blendWeight: number;
+  };
+  /** Unspent FAAB is worth nothing in January. */
+  urgency: {
+    enabled: boolean;
+    /** From this week onward the late-season boost is at full strength. */
+    lateSeasonWeek: number;
+    maxLateBoostPct: number;
+    /** Through this week the early-season discount is at full strength. */
+    earlySeasonWeek: number;
+    maxEarlyDiscountPct: number;
+  };
+}
+
+/**
+ * How the answer becomes a walk-away / likely / aggressive ladder.
+ *
+ * Walk-away is derived from VALUE (what he is worth to this roster) and the
+ * other two from PRICE (what it takes to win him), which is why only the trim
+ * is expressed against the ceiling.
+ */
+export interface LadderSettings {
+  /** Safety margin taken off the walk-away ceiling, as a percent. */
+  walkAwayTrimPct: number;
+  /** The aggressive rung sits this percent above the likely bid. */
+  aggressiveAbovePct: number;
+  /** A player who starts for you is never worth less than this many FAAB. */
+  minStartableBid: number;
+}
+
+/**
+ * Finding replacement level without a league connected.
+ *
+ * The shape is editable because leagues genuinely differ, and it scales with
+ * the reader's starter count so a deep league gets a deeper replacement level.
+ */
+export interface ManualReplacementSettings {
+  /** Starters of each position per team, at the baseline starter count. */
+  startersPerTeam: Record<string, number>;
+  /** The starter count `startersPerTeam` is expressed against. */
+  baselineStarters: number;
+  /** Positions that do not scale with starter count. Nobody starts two kickers. */
+  flatPositions: string[];
+}
+
+/** When league mode should shout. */
+export interface LeagueDumpSettings {
+  enabled: boolean;
+  /** Playoff-odds gain (percentage points) that justifies emptying the budget. */
+  oddsPointsThreshold: number;
+  /** Points-per-week gain that justifies it on its own. */
+  pointsPerWeekThreshold: number;
+  /** Teams whose playoff odds are at or below this are told to sit it out. */
+  loserOddsCeiling: number;
+  ranges: Record<NeedLevel, PctRange>;
 }
 
 export interface FaabSettings {
@@ -106,6 +259,12 @@ export interface FaabSettings {
   dump: DumpSettings;
   valueNormalization: ValueNormalization;
   copy: ResultCopy;
+  marginal: MarginalSettings;
+  signals: SignalSettings;
+  market: MarketSettings;
+  ladder: LadderSettings;
+  leagueDump: LeagueDumpSettings;
+  manualReplacement: ManualReplacementSettings;
 }
 
 /** The selected player, reduced to only what the calculator consumes. */
@@ -174,4 +333,157 @@ export interface FaabResult {
   explanation: string;
   notices: string[];
   debugContext: FaabDebugContext;
+}
+
+// ---------------------------------------------------------------------------
+// League mode results
+// ---------------------------------------------------------------------------
+
+/** One remaining week, from your roster's point of view. */
+export interface MarginalWeek {
+  week: number;
+  /** True when adding him changes the optimal lineup that week. */
+  startsForYou: boolean;
+  /** Points the optimal lineup gains that week. Zero when he does not start. */
+  pointsAdded: number;
+  /** NFL opponent, when the projection carries one. */
+  opponent: string | null;
+  /** Opponent-strength multiplier, 1.0 when neutral. */
+  opponentMultiplier: number;
+}
+
+/** The player you would drop to make room, and what it costs you. */
+export interface DropCost {
+  playerId: string;
+  name: string;
+  position: string;
+  /** Points per week the optimal lineup loses by cutting them. Usually 0. */
+  pointsPerWeek: number;
+}
+
+/** What adding this player actually does to your team. */
+export interface MarginalValue {
+  weeksConsidered: number;
+  /** How many of those weeks he cracks your starting lineup. */
+  weeksStarting: number;
+  /** Averaged across every remaining week, including the ones he sits. */
+  pointsPerWeek: number;
+  /** Averaged across only the weeks he starts. The bigger, flattering number. */
+  pointsPerStartedWeek: number;
+  /** After subtracting what the drop costs you. This is the number that counts. */
+  netPointsPerWeek: number;
+  expectedWinsAdded: number | null;
+  playoffOddsBefore: number | null;
+  playoffOddsAfter: number | null;
+  titleOddsBefore: number | null;
+  titleOddsAfter: number | null;
+  weeks: MarginalWeek[];
+  dropCost: DropCost | null;
+  /** True when he never cracks the lineup: insurance, not an upgrade. */
+  isBenchOnly: boolean;
+}
+
+export type SignalTone = "good" | "bad" | "neutral";
+
+/** One reason the bid moved, in a form the UI can list and a reader can hear. */
+export interface FaabSignal {
+  id: string;
+  label: string;
+  detail: string;
+  tone: SignalTone;
+  /** Multiplier applied to the target bid. 1 means no effect. */
+  multiplier: number;
+  /** Extra half-width added to the range, as a fraction of the target. */
+  spread: number;
+}
+
+/** What comparable players have gone for in this league. */
+export interface ComparableBids {
+  sampleSize: number;
+  median: number;
+  p25: number;
+  p75: number;
+  seasonsCovered: number[];
+}
+
+/** The competition. */
+export interface MarketRead {
+  yourBudget: number;
+  /** Rival teams holding more FAAB than you. */
+  rivalsRicher: number;
+  richestRivalBudget: number | null;
+  medianRivalBudget: number | null;
+  /** How many rival teams this player would meaningfully improve. Null when we
+   * could not run the check. */
+  interestedRivals: number | null;
+  rivalsChecked: number | null;
+  comparable: ComparableBids | null;
+  /** Weeks left in the regular season, including the current one. */
+  weeksLeft: number;
+  urgencyMultiplier: number;
+}
+
+/** The recommendation, as a ladder rather than one number. */
+export interface BidLadder {
+  /** Above this, walk away. The most useful number on the page. */
+  walkAway: number;
+  /** What it probably takes to win him. */
+  likely: number;
+  /** What it takes to be confident. */
+  aggressive: number;
+  /** Percent of remaining budget the likely bid represents. */
+  likelyPct: number;
+  /** What you would have left after the likely bid. */
+  budgetAfterLikely: number;
+}
+
+export type FaabConfidence = "high" | "medium" | "low";
+
+/** One connected-league recommendation, start to finish. */
+export interface LeagueFaabReport {
+  league: {
+    sleeperLeagueId: string;
+    name: string;
+    season: number;
+    teams: number;
+    /** Your roster in this league. */
+    rosterId: number;
+    teamName: string;
+    currentWeek: number;
+  };
+  player: {
+    playerId: string;
+    sleeperId: string;
+    name: string;
+    position: string;
+    team: string | null;
+    injuryStatus: string | null;
+  };
+  /** Whether he is actually gettable here. */
+  availability: "free" | "rostered" | "unknown";
+  /** Who holds him, when he is not free. */
+  rosteredBy: string | null;
+  marginal: MarginalValue | null;
+  signals: FaabSignal[];
+  market: MarketRead;
+  ladder: BidLadder;
+  aggressionLabel: AggressionLabel;
+  isDumpCandidate: boolean;
+  /** One-line answer. */
+  headline: string;
+  /** The paragraph under it. */
+  explanation: string;
+  notices: string[];
+  confidence: FaabConfidence;
+}
+
+/** One league's answer inside the all-leagues view. */
+export interface MultiLeagueRow {
+  sleeperLeagueId: string;
+  leagueName: string;
+  status: "ok" | "rostered" | "unsynced" | "error";
+  /** Present only when status is "ok". */
+  report: LeagueFaabReport | null;
+  rosteredBy: string | null;
+  message: string | null;
 }

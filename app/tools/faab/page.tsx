@@ -9,6 +9,9 @@ import {
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { loadFaabSettings } from "@/lib/faab/settings";
+import { SITE_TIME_ZONE } from "@/lib/datetime";
+import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { loadFaabPlayerListCached } from "@/lib/faab/player-list";
 import { FaabForm, type FaabPlayer } from "./faab-form";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
@@ -19,10 +22,48 @@ export const metadata: Metadata = {
   alternates: { canonical: "/tools/faab" },
   title: "FAAB Calculator",
   description:
-    "Recommend a confident waiver wire bid based on market value, league budget, and roster need.",
+    "What to bid on any waiver claim, and when to walk away. Priced against your real roster, your rivals' budgets, and what your league actually pays.",
 };
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The signed-in reader's linked Sleeper handle, for prefilling the league box.
+ * Null for a signed-out visitor, which is the common case, so this stays off
+ * the critical path and runs alongside the other independent reads.
+ */
+async function loadSavedSleeperUsername(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("sleeper_league_settings")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
+}
+
+/**
+ * Seasons the optional league panel offers.
+ *
+ * Derived here rather than in the browser so the list is identical in the
+ * server render and the client one. Read in America/New_York, per the site-wide
+ * time rule, so a January 1st visitor in Hawaii and the UTC server agree on
+ * which season it is.
+ */
+function seasonOptions(): string[] {
+  const year = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: SITE_TIME_ZONE,
+      year: "numeric",
+    }).format(new Date()),
+  );
+  return [String(year), String(year - 1)];
+}
 
 export default async function FaabPage({
   searchParams,
@@ -42,19 +83,31 @@ export default async function FaabPage({
   ]);
   const formatSlug = formatResolution.slug;
   const requestedSourceSlug = sourceResolution.slug;
-  const { data: format } = await supabase
-    .from("format_configs")
-    .select("id, slug, display_name")
-    .eq("slug", formatSlug)
-    .maybeSingle();
+
+  // These four are independent of each other, so they go together rather than
+  // in a waterfall: the format lookup, the source registry, the reader's linked
+  // Sleeper handle, and their Discord membership.
+  const [{ data: format }, registry, savedSleeperUsername, isMember] =
+    await Promise.all([
+      supabase
+        .from("format_configs")
+        .select("id, slug, display_name")
+        .eq("slug", formatSlug)
+        .maybeSingle(),
+      getAvailableSources(supabase),
+      loadSavedSleeperUsername(supabase),
+      isDiscordMember(),
+    ]);
 
   let players: FaabPlayer[] = [];
   let fallbackBanner: { requested: string | null; actual: string } | null = null;
   let rankingsSourceName: string | null = null;
+  // The slug, not the display name: the league panel passes it back to the
+  // server to look up who is actually available in the selected league.
+  let rankingsSourceSlug: string | null = null;
   let valueSourceName: string | null = null;
   let valueSourceIsBeacon = false;
   if (format) {
-    const registry = await getAvailableSources(supabase);
     const rankingsResolution = resolveSourceForFormat(
       registry,
       "rankings",
@@ -69,6 +122,7 @@ export default async function FaabPage({
     );
     if (rankingsResolution.source) {
       rankingsSourceName = describeSource(registry, rankingsResolution.source);
+      rankingsSourceSlug = rankingsResolution.source;
     }
     if (valueHistoryResolution.source) {
       valueSourceName = describeSource(registry, valueHistoryResolution.source);
@@ -82,85 +136,16 @@ export default async function FaabPage({
     }
 
     if (rankingsResolution.source) {
-      const { data } = await supabase
-        .from("rankings")
-        .select(
-          "overall_rank, position_rank, players!inner(slug, first_name, last_name, position, team, external_ids)",
-        )
-        .eq("format_config_id", format.id)
-        .eq("source", rankingsResolution.source)
-        .order("overall_rank")
-        .limit(300);
-      const playerIds: string[] = [];
-      const playerInfo = new Map<string, FaabPlayer>();
-      for (const row of data ?? []) {
-        const player = (row as unknown as {
-          players: {
-            slug: string;
-            first_name: string;
-            last_name: string;
-            position: string;
-            team: string | null;
-            external_ids: Record<string, unknown> | null;
-          };
-        }).players;
-        const slug = player.slug;
-        // Sleeper id lives on players.external_ids.sleeper. May be missing
-        // for older / non-Sleeper-resolved players - headshot falls back to
-        // the position badge in that case.
-        const sleeperExt = player.external_ids?.sleeper;
-        const sleeper_id =
-          typeof sleeperExt === "string" && sleeperExt
-            ? sleeperExt
-            : typeof sleeperExt === "number"
-              ? String(sleeperExt)
-              : null;
-        playerInfo.set(slug, {
-          slug,
-          name: `${player.first_name} ${player.last_name}`,
-          position: player.position,
-          team: player.team ?? null,
-          sleeper_id,
-          overall_rank: row.overall_rank,
-          position_rank: row.position_rank,
-          value: null,
-        });
-        playerIds.push(slug);
-      }
-      const { data: pIds } = await supabase
-        .from("players")
-        .select("id, slug")
-        .in("slug", playerIds.slice(0, 300));
-      const slugById = new Map<string, string>();
-      for (const p of pIds ?? []) slugById.set(p.id, p.slug);
-      if (valueHistoryResolution.source && slugById.size > 0) {
-        const { data: values } = await supabase
-          .from("player_value_history")
-          .select("player_id, value, captured_at")
-          .eq("format_config_id", format.id)
-          .eq("source", valueHistoryResolution.source)
-          .in("player_id", Array.from(slugById.keys()))
-          .order("captured_at", { ascending: false });
-        const latest = new Map<string, number>();
-        for (const v of values ?? []) {
-          if (latest.has(v.player_id)) continue;
-          latest.set(v.player_id, v.value);
-        }
-        for (const [id, slug] of slugById) {
-          const value = latest.get(id);
-          const info = playerInfo.get(slug);
-          if (info && typeof value === "number") info.value = value;
-        }
-      }
-      players = Array.from(playerInfo.values()).sort(
-        (a, b) => a.overall_rank - b.overall_rank,
-      );
+      // One cached read for the whole list. The result is identical for every
+      // visitor on this (format, rankings source, value source) and the data
+      // behind it changes at most nightly.
+      players = await loadFaabPlayerListCached({
+        formatConfigId: format.id,
+        rankingsSource: rankingsResolution.source,
+        valueSource: valueHistoryResolution.source ?? null,
+      });
     }
   }
-
-  // Confirmed Discord members skip the invite: the hero button scrolls to the
-  // calculator and the bottom CTA points them at the rest of the toolkit.
-  const isMember = await isDiscordMember();
 
   return (
     <main id="main">
@@ -201,9 +186,8 @@ export default async function FaabPage({
             </span>
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-            Type in the player you are bidding on, your remaining FAAB budget, and how badly you
-            need the position. We recommend a bid range using market value and need-weighted
-            heuristics.
+            What to bid, and when to walk away. Connect your Sleeper league and we price the
+            claim against your real roster, or enter your setup by hand.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <MemberHeroCta
@@ -235,6 +219,10 @@ export default async function FaabPage({
           valueSourceName={valueSourceName}
           valueSourceIsBeacon={valueSourceIsBeacon}
           settings={settings}
+          seasons={seasonOptions()}
+          formatSlug={format?.slug ?? formatSlug}
+          rankingsSourceSlug={rankingsSourceSlug}
+          initialSleeperUsername={savedSleeperUsername}
         />
       </div>
       <DiscordCtaSection
