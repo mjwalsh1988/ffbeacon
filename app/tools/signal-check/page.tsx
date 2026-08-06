@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Scale, ShieldCheck, ListTree, ArrowRight } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
-import { supportedFormats } from "@/lib/signal-check/format";
+import { FFBEACON_SOURCE_SLUG, supportedFormats } from "@/lib/signal-check/format";
+import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { SignalCheckBuilder, type FormatOption } from "./signal-check-builder";
 import { SleeperImportPanel } from "./sleeper-import-panel";
@@ -21,7 +22,12 @@ export const metadata: Metadata = {
     "Build a fantasy football trade and get the Beacon Verdict: who wins, by how much, and why, powered by FF Beacon Values.",
 };
 
-export default async function SignalCheckPage() {
+export default async function SignalCheckPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ format?: string; source?: string }>;
+}) {
+  const params = await searchParams;
   const admin = createAdminClient();
   const settings = await loadSignalCheckSettings(admin);
   const formatRows = settings.enabled ? await supportedFormats(admin, settings) : [];
@@ -50,6 +56,24 @@ export default async function SignalCheckPage() {
       .maybeSingle();
     savedUsername = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
   }
+
+  // Preselect step 1 from the header when the reader is already on FF Beacon
+  // Values. Signal Check prices every trade with FF Beacon Values and nothing
+  // else, so in that case the header format IS the scale the builder would use
+  // and asking for it again is a question with one right answer. On any other
+  // source the header format is describing a different value scale and may not
+  // be one Signal Check can price at all, so the choice stays with the reader.
+  // A format the tool does not support (inactive, or admin-disabled) falls back
+  // to no selection rather than silently picking something else.
+  const [sourceResolution, formatResolution] = await Promise.all([
+    resolveSourceSlug(cookieClient, params.source),
+    resolveFormatSlug(cookieClient, params.format),
+  ]);
+  const initialFormatSlug =
+    sourceResolution.slug === FFBEACON_SOURCE_SLUG &&
+    formats.some((f) => f.slug === formatResolution.slug)
+      ? formatResolution.slug
+      : "";
 
   const showImport = settings.enabled && settings.sleeperImportsEnabled;
 
@@ -93,6 +117,7 @@ export default async function SignalCheckPage() {
               <SignalCheckBuilder
                 formats={formats}
                 minLength={settings.autocompleteMinLength}
+                initialFormatSlug={initialFormatSlug}
               />
             </div>
           )}

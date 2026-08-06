@@ -44,8 +44,10 @@ export type NavItem = {
 /** Every tool on the site, in display order. Single source of truth shared
  * by the header dropdown, the mobile menu, and (conceptually) the footer
  * Tools column. Keep descriptions short and jargon-free. */
-// Order mirrors the homepage tools grid (minus Rankings, which is its own
-// top-level nav item). Rankings Board is intentionally not listed here.
+// Ordered by how much of a manager's season the tool covers, widest first:
+// a whole league, then a draft, then a single trade, then two players, then one
+// waiver bid. The footer Tools column follows the same order. Rankings Board is
+// intentionally not listed here (it is its own top-level nav item).
 export const TOOLS_NAV: NavChild[] = [
   {
     label: "Sleeper League Pulse",
@@ -58,14 +60,14 @@ export const TOOLS_NAV: NavChild[] = [
     description: "Live Sleeper draft helper",
   },
   {
-    label: "Beacon Breakdown",
-    href: "/tools/beacon-breakdown",
-    description: "Compare two players head-to-head",
-  },
-  {
     label: "Signal Check",
     href: "/tools/signal-check",
     description: "Grade any trade with the Beacon Verdict",
+  },
+  {
+    label: "Beacon Breakdown",
+    href: "/tools/beacon-breakdown",
+    description: "Compare two players head-to-head",
   },
   {
     label: "FAAB Calculator",
@@ -206,11 +208,13 @@ export type FooterLink = {
 export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
   {
     heading: "Tools",
+    // Same order as TOOLS_NAV, with Rankings Board appended (it is not a /tools
+    // page, so it does not appear in the header Tools dropdown).
     links: [
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
       { label: "On The Clock", href: "/tools/on-the-clock" },
-      { label: "Beacon Breakdown", href: "/tools/beacon-breakdown" },
       { label: "Signal Check", href: "/tools/signal-check" },
+      { label: "Beacon Breakdown", href: "/tools/beacon-breakdown" },
       { label: "FAAB Calculator", href: "/tools/faab" },
       { label: "Rankings Board", href: "/rankings" },
     ],

@@ -15,10 +15,15 @@ export function LeagueFormatSelector({
   formats,
   value,
   onChange,
+  preselected = false,
 }: {
   formats: FormatOption[];
   value: string;
   onChange: (slug: string) => void;
+  /** True while the selection is the one carried over from the reader's header
+   * format. A radio that is already checked with no explanation is confusing,
+   * especially read aloud, so we say where it came from until they change it. */
+  preselected?: boolean;
 }) {
   const headingId = useId();
   return (
@@ -44,6 +49,12 @@ export function LeagueFormatSelector({
               before you check the trade.
             </span>
           </p>
+          {preselected && (
+            <p className="mt-2 text-sm text-ink-subtle">
+              We started you on the format you have selected in the site header. Pick a different
+              one below if this trade is for another league.
+            </p>
+          )}
         </div>
       </div>
 

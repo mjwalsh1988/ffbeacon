@@ -81,13 +81,22 @@ function toAssetMeta(sides: Record<SideKey, SelectedAsset[]>): ResultAssetMetaBy
 export function SignalCheckBuilder({
   formats,
   minLength,
+  initialFormatSlug = "",
 }: {
   formats: FormatOption[];
   minLength: number;
+  /** Preselected format, supplied by the page only when the reader's header
+   * source is FF Beacon Values (the scale Signal Check prices with). Empty
+   * string means no preselection, which is the case for every other source. */
+  initialFormatSlug?: string;
 }) {
-  // No default format on purpose: the user must consciously pick the format that
-  // matches their league before a trade can run, since format drives every value.
-  const [formatSlug, setFormatSlug] = useState("");
+  // Format drives every value, so it is never guessed. It starts empty unless
+  // the page passed one down from the reader's own header preference.
+  const [formatSlug, setFormatSlug] = useState(initialFormatSlug);
+  // Tracks whether the current selection is still the preselected one, so the
+  // selector can explain where it came from. Cleared the moment the reader
+  // picks for themselves, since the explanation stops being true.
+  const [preselected, setPreselected] = useState(initialFormatSlug !== "");
   const [sides, setSides] = useState<Record<SideKey, SelectedAsset[]>>({ a: [], b: [] });
   const [result, setResult] = useState<BuilderView | null>(null);
   const [resultMeta, setResultMeta] = useState<ResultAssetMetaBySide | null>(null);
@@ -118,6 +127,7 @@ export function SignalCheckBuilder({
   function changeFormat(next: string) {
     const nextFormat = formats.find((f) => f.slug === next);
     setFormatSlug(next);
+    setPreselected(false);
     resetResult();
     // Picks are dynasty-only: drop any picks when moving to a redraft format.
     if (nextFormat && !nextFormat.allowsPicks) {
@@ -218,7 +228,12 @@ export function SignalCheckBuilder({
       </p>
 
       {/* Step 1: format */}
-      <LeagueFormatSelector formats={formats} value={formatSlug} onChange={changeFormat} />
+      <LeagueFormatSelector
+        formats={formats}
+        value={formatSlug}
+        onChange={changeFormat}
+        preselected={preselected}
+      />
 
       {/* Step 2: build the trade */}
       <section aria-labelledby="build-step-heading">
