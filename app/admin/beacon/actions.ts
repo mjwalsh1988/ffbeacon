@@ -14,10 +14,12 @@ import { runCalculateBeaconValues } from "@/lib/calculate-beacon-values";
 import { runSeedRankings } from "@/lib/seed-rankings";
 import { runCalculateTrends } from "@/lib/calculate-trends";
 import { recordCronRun } from "@/lib/cron-runs";
+import { PICK_SLOTS, isPickSlot } from "@/lib/beacon/pick-slots";
+import type { TablesInsert } from "@/lib/database.types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-function fail(error: string): ActionResult {
+function fail(error: string): { ok: false; error: string } {
   return { ok: false, error };
 }
 
@@ -194,42 +196,98 @@ export async function upsertValueBand(fields: {
   return { ok: true };
 }
 
+export type CreateSignalResult = { ok: true; created: number } | { ok: false; error: string };
+
+/**
+ * Create one manual signal, or, for a draft pick covering a subset of slots, one
+ * signal per slot in a single submission.
+ *
+ * Slot handling for a pick signal:
+ *   all three slots (or none named) -> ONE row with pick_position null, which the
+ *     engine reads as "every slot in this season and round"
+ *   a subset                        -> one row per named slot, so each can be
+ *     deactivated on its own later
+ */
 export async function createManualSignal(fields: {
   target: "player" | "pick";
   playerId: string | null;
   pickSeason: number | null;
   pickRound: number | null;
-  pickPosition: string | null;
+  /** Slots the pick signal covers. Empty or all three means every slot. */
+  pickPositions: string[] | null;
   formatConfigId: string | null;
   adjustmentType: "multiplier" | "delta" | "set_value";
   magnitude: number;
   silent: boolean;
   reason: string;
   decayDays: number | null;
-}): Promise<ActionResult> {
+}): Promise<CreateSignalResult> {
   const { userId } = await requireAdmin("/admin/beacon");
   if (!Number.isFinite(fields.magnitude)) return fail("Magnitude must be a number.");
+  if (fields.adjustmentType === "multiplier" && fields.magnitude < 0)
+    return fail("A multiplier cannot be negative.");
+  if (fields.adjustmentType === "set_value" && fields.magnitude < 0)
+    return fail("A set value cannot be negative.");
+  if (fields.decayDays !== null && (!Number.isInteger(fields.decayDays) || fields.decayDays <= 0))
+    return fail("Decay must be a whole number of days greater than 0.");
   if (fields.target === "player" && !fields.playerId) return fail("Pick a player.");
-  if (fields.target === "pick" && (fields.pickRound === null || !fields.pickPosition))
-    return fail("Pick round and slot are required for a pick signal.");
+
   const admin = createAdminClient();
-  const { error } = await admin.from("beacon_manual_signals").insert({
-    target: fields.target,
-    player_id: fields.target === "player" ? fields.playerId : null,
-    pick_season: fields.target === "pick" ? fields.pickSeason : null,
-    pick_round: fields.target === "pick" ? fields.pickRound : null,
-    pick_position: fields.target === "pick" ? fields.pickPosition : null,
+
+  const shared = {
     format_config_id: fields.formatConfigId,
     adjustment_type: fields.adjustmentType,
     magnitude: fields.magnitude,
-    silent: fields.silent,
-    reason: fields.reason || null,
+    reason: fields.reason.trim() || null,
     decay_days: fields.decayDays,
     created_by: userId,
-  });
+  };
+
+  let rows: TablesInsert<"beacon_manual_signals">[];
+  if (fields.target === "player") {
+    rows = [
+      {
+        ...shared,
+        target: "player",
+        player_id: fields.playerId,
+        pick_season: null,
+        pick_round: null,
+        pick_position: null,
+        silent: fields.silent,
+      },
+    ];
+  } else {
+    const season = fields.pickSeason;
+    const round = fields.pickRound;
+    if (season === null || !Number.isInteger(season)) return fail("Pick a draft season.");
+    if (round === null || !Number.isInteger(round) || round < 1)
+      return fail("Pick a draft round.");
+
+    const named = fields.pickPositions ?? [];
+    const invalid = named.filter((s) => !isPickSlot(s));
+    if (invalid.length > 0) return fail(`Unknown draft slot: ${invalid.join(", ")}.`);
+    const unique = [...new Set(named)];
+    // Every slot collapses to a single null row, so the whole round is one
+    // entry to review and one entry to deactivate.
+    const slots: Array<string | null> =
+      unique.length === 0 || unique.length === PICK_SLOTS.length ? [null] : unique;
+
+    rows = slots.map((slot) => ({
+      ...shared,
+      target: "pick",
+      player_id: null,
+      pick_season: season,
+      pick_round: round,
+      pick_position: slot,
+      // Picks carry no trend chips, so the silent split does not apply to them.
+      silent: false,
+    }));
+  }
+
+  const { error } = await admin.from("beacon_manual_signals").insert(rows);
   if (error) return fail(error.message);
   revalidatePath("/admin/beacon");
-  return { ok: true };
+  return { ok: true, created: rows.length };
 }
 
 export async function setManualSignalActive(id: string, isActive: boolean): Promise<ActionResult> {

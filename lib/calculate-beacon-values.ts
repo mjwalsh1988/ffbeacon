@@ -15,7 +15,9 @@
  *      All-stale / no-base (player, format) is SKIPPED, never written 0/null.
  *   5. Derive the boards listed in INHERITED from their baseline's finished rows
  *      (every TE-premium board, plus the best-ball presets).
- *   6. Copy KTC-baselined picks as source='ffbeacon'.
+ *   6. Copy KTC-baselined picks as source='ffbeacon', scaled by the global
+ *      pick_value_multiplier setting and then by any owner manual pick signals
+ *      that match the pick's season, round, slot, and format.
  *   7. Write player_value_history + draft_pick_values; finalize the run with
  *      source_freshness, skipped_no_signal, factor_saturated for observability.
  *
@@ -42,7 +44,12 @@ import { materializeStatProfiles } from "./beacon/stat-profiles";
 import { gatherStatPerformance, mergePerfConfig, type PerfAdjustment } from "./beacon/signals/stat-performance";
 import { gatherAiAdjustments, type AiCandidate, type AiResult } from "./beacon/signals/ai-adjust";
 import { gatherTeBoost } from "./beacon/derive";
-import { loadManualSignals, overridesFor } from "./beacon/signals/manual";
+import {
+  loadManualSignals,
+  overridesFor,
+  pickOverridesFor,
+  applyPickOverrides,
+} from "./beacon/signals/manual";
 import { normalizeSlice, type SourcePlayerValue } from "./beacon/normalize";
 import { combine } from "./beacon/engine";
 import type { ValueBand } from "./beacon/types";
@@ -65,6 +72,8 @@ export interface CalculateBeaconResult {
   skippedNoSignal: number;
   factorSaturated: number;
   pickRows: number;
+  /** Pick rows a manual pick signal moved this run (0 when none are active). */
+  pickSignalsApplied: number;
   statProfiles: number;
   perfAdjusted: number;
   aiCalls: number;
@@ -727,6 +736,7 @@ export async function runCalculateBeaconValues(
       .filter((f) => formatById.get(f.id)?.leagueType === "dynasty")
       .map((f) => f.id);
     let pickRows = 0;
+    let pickSignalsApplied = 0;
     if (dynastyFormatIds.length > 0) {
       const { data: ktcPicks, error: pErr } = await supabase
         .from("draft_pick_values")
@@ -785,7 +795,37 @@ export async function runCalculateBeaconValues(
         }
       }
 
-      await chunkUpsert(pickInserts, 500, async (chunk) => {
+      // Owner manual pick signals stack ON TOP of the global multiplier, per
+      // (season, round, slot, format). Applied after the inherit copy so a
+      // signal scoped to a derived board hits that board and only that board,
+      // while an all-formats signal still reaches every one of them.
+      const adjustedPicks = pickInserts.map((p) => {
+        const overrides = pickOverridesFor(
+          manuals,
+          {
+            season: p.season,
+            round: p.round,
+            position: p.pick_position,
+            formatConfigId: p.format_config_id,
+          },
+          started,
+        );
+        if (overrides.length === 0) return p;
+        const preManual = p.value;
+        const value = applyPickOverrides(preManual, overrides);
+        pickSignalsApplied += 1;
+        return {
+          ...p,
+          value,
+          metadata: {
+            ...(p.metadata as Record<string, Json>),
+            pre_manual_value: preManual,
+            manual_signals: overrides.map((o) => ({ type: o.type, magnitude: o.magnitude })),
+          } as Json,
+        };
+      });
+
+      await chunkUpsert(adjustedPicks, 500, async (chunk) => {
         await withRetry(
           async () => {
             const { error } = await supabase
@@ -819,7 +859,9 @@ export async function runCalculateBeaconValues(
       calibrationAudit.length > 0
         ? ` Calibrated: ${calibrationAudit.map((c) => `${c.format} v${c.reference_version}`).join(", ")}.`
         : "";
-    const notes = `${freshnessNote} Stat profiles: ${profileResult.profiles}. Perf-adjusted skill players: ${perfByPlayer.size}.${aiNote}${calibrationNote}`;
+    const pickSignalNote =
+      pickSignalsApplied > 0 ? ` Manual pick signals moved ${pickSignalsApplied} pick rows.` : "";
+    const notes = `${freshnessNote} Stat profiles: ${profileResult.profiles}. Perf-adjusted skill players: ${perfByPlayer.size}.${aiNote}${calibrationNote}${pickSignalNote}`;
 
     await withRetry(
       async () => {
@@ -857,6 +899,7 @@ export async function runCalculateBeaconValues(
       skippedNoSignal,
       factorSaturated,
       pickRows,
+      pickSignalsApplied,
       statProfiles: profileResult.profiles,
       perfAdjusted: perfByPlayer.size,
       aiCalls,

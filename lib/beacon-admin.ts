@@ -46,3 +46,48 @@ export async function getRecomputeStatus(
   const stale = !finished || (tunableMax !== null && tunableMax > finished);
   return { stale, lastRunLabel: finished ? formatRelative(finished, nowMs) : "never" };
 }
+
+export interface PickCoordinates {
+  seasons: number[];
+  rounds: number[];
+}
+
+/**
+ * The draft seasons and rounds that currently have published pick values, so the
+ * manual-signal composer can offer real choices instead of a free-text year.
+ *
+ * PostgREST has no DISTINCT and draft_pick_values holds every historical
+ * snapshot for every format, so this reads one narrow slice: the newest
+ * captured_at, one format, one slot. That is a dozen rows, and it covers every
+ * (season, round) pair the engine writes. Falls back to the KTC baseline when
+ * FF Beacon has not published picks yet.
+ */
+export async function loadPickCoordinates(
+  admin: SupabaseClient<Database>,
+): Promise<PickCoordinates> {
+  for (const source of ["ffbeacon", "ktc"]) {
+    const { data: newest } = await admin
+      .from("draft_pick_values")
+      .select("captured_at, format_config_id")
+      .eq("source", source)
+      .order("captured_at", { ascending: false })
+      .limit(1);
+    const anchor = newest?.[0];
+    if (!anchor) continue;
+
+    const { data: rows } = await admin
+      .from("draft_pick_values")
+      .select("season, round")
+      .eq("source", source)
+      .eq("captured_at", anchor.captured_at)
+      .eq("format_config_id", anchor.format_config_id)
+      .eq("pick_position", "early");
+    if (!rows || rows.length === 0) continue;
+
+    return {
+      seasons: [...new Set(rows.map((r) => r.season))].sort((a, b) => a - b),
+      rounds: [...new Set(rows.map((r) => r.round))].sort((a, b) => a - b),
+    };
+  }
+  return { seasons: [], rounds: [] };
+}

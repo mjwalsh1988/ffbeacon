@@ -92,7 +92,11 @@ export function ManualSignalsList({ signals }: { signals: ManualSignalItem[] }) 
                   </span>
                 </p>
                 <p className="mt-0.5 text-xs text-ink-subtle">
-                  {s.silent ? "Silent (hidden from trends)" : "True signal (shows as movement)"}
+                  {s.target === "pick"
+                    ? "Stacks on the global pick value multiplier"
+                    : s.silent
+                      ? "Silent (hidden from trends)"
+                      : "True signal (shows as movement)"}
                   {s.reason ? `, ${s.reason}` : ""}
                 </p>
               </div>
