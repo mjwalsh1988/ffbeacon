@@ -43,6 +43,11 @@ export interface PipelineParams {
   rulesetVersion: number | null;
   /** True only on the Sleeper path when the format was auto-detected cleanly. */
   formatAutoDetected?: boolean;
+  /**
+   * Top value in this format+source pool, for the consolidation curve. Null is
+   * handled: the trade's own best asset stands in, which keeps the shape sane.
+   */
+  poolMax?: number | null;
 }
 
 export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
@@ -68,11 +73,21 @@ export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
   // 2. Calibration (per-asset, post-format).
   const calibrated = applyCalibration(priced.sides, rules, format.slug, settings.compoundingMode);
 
-  // 3. Trade-shape (pile-on + side rules + shape detection).
-  const shaped = applyTradeShape(calibrated.sides, rules, settings, format.slug);
+  // 3. Trade-shape (side rules + consolidation + shape detection).
+  const shaped = applyTradeShape(
+    calibrated.sides,
+    rules,
+    settings,
+    format.slug,
+    params.poolMax ?? null,
+  );
 
-  // 4. Verdict.
-  const verdict = computeVerdict(shaped.sides.a.totalPost, shaped.sides.b.totalPost, settings);
+  // 4. Verdict, on the effective totals so the consolidation credit counts.
+  const verdict = computeVerdict(
+    shaped.sides.a.effectiveTotal,
+    shaped.sides.b.effectiveTotal,
+    settings,
+  );
 
   // 5. Trade-shape result object.
   const tradeShape: TradeShapeResult = {
@@ -92,6 +107,8 @@ export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
       hasAssumedPicks: priced.hasAssumedPicks,
       formatAutoDetected: params.formatAutoDetected ?? false,
       pileOnFired: shaped.pileOnFired.a || shaped.pileOnFired.b,
+      consolidationApplied: shaped.consolidation.applied,
+      consolidationCapped: shaped.consolidation.capped,
       ruleModifiers: shaped.confidenceModifiers,
     },
     settings,
@@ -107,7 +124,7 @@ export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
   });
 
   const trace = [...priced.trace, ...calibrated.trace, ...shaped.trace];
-  const combinedValue = shaped.sides.a.totalPost + shaped.sides.b.totalPost;
+  const combinedValue = shaped.sides.a.effectiveTotal + shaped.sides.b.effectiveTotal;
 
   return {
     format,
@@ -115,6 +132,7 @@ export function runPipeline(params: PipelineParams): SignalCheckAnalysis {
     sides: shaped.sides,
     combinedValue,
     verdict,
+    consolidation: shaped.consolidation,
     tradeShape,
     confidence,
     explanation,

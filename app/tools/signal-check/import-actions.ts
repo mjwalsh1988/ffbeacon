@@ -384,6 +384,7 @@ export async function importAndAnalyze(args: {
       rules: ruleset.rules,
       rulesetVersion: ruleset.version,
       formatAutoDetected: true,
+      poolMax: built.poolMax,
     });
     const view = toBuilderView(analysis, settings, teamLabels);
     const evidence = buildEvidence(sleeperLeague);

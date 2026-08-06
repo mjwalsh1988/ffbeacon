@@ -50,6 +50,8 @@ function buildSidePayload(
   teamLabel: string | null,
 ): PublicSidePayload {
   const s = analysis.sides[side];
+  const c = analysis.consolidation;
+  const credited = c.applied && c.favouredSide === side;
   return {
     side,
     teamLabel,
@@ -60,7 +62,9 @@ function buildSidePayload(
       sleeperId: r.asset.kind === "player" ? r.asset.sleeperId : null,
       round: r.asset.kind === "pick" ? r.asset.round : null,
     })),
-    total: settings.showRawValues ? Math.round(s.totalPost) : null,
+    total: settings.showRawValues ? Math.round(s.effectiveTotal) : null,
+    adjustment: credited && settings.showRawValues ? Math.round(s.consolidationAdjustment) : null,
+    adjustmentPct: credited ? Number(c.adjustmentPct.toFixed(1)) : null,
   };
 }
 
@@ -84,6 +88,7 @@ export function buildPublicPayload(
     tradeShapeLabel: settings.showTradeShape ? analysis.tradeShape.label : null,
     confidenceLabel: settings.showConfidence ? analysis.confidence.label : null,
     explanation: analysis.explanation,
+    adjustmentLabel: analysis.consolidation.applied ? settings.qualityAdjustmentLabel : null,
     sides: [
       buildSidePayload("a", analysis, settings, teamLabels?.a ?? null),
       buildSidePayload("b", analysis, settings, teamLabels?.b ?? null),

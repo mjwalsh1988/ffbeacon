@@ -4644,6 +4644,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      trade_suggestion_saves: {
+        Row: {
+          grade: Json | null;
+          id: string;
+          league_name: string | null;
+          saved_at: string;
+          sleeper_league_id: string;
+          snapshot: Json;
+          suggestion_key: string;
+          user_id: string;
+        };
+        Insert: {
+          grade?: Json | null;
+          id?: string;
+          league_name?: string | null;
+          saved_at?: string;
+          sleeper_league_id: string;
+          snapshot: Json;
+          suggestion_key: string;
+          user_id: string;
+        };
+        Update: {
+          grade?: Json | null;
+          id?: string;
+          league_name?: string | null;
+          saved_at?: string;
+          sleeper_league_id?: string;
+          snapshot?: Json;
+          suggestion_key?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       user_preferences: {
         Row: {
           avatar_path: string | null;

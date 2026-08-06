@@ -29,6 +29,10 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import {
+  DEFAULT_TRADE_QUALITY_CONFIG,
+  type TradeQualityConfig,
+} from "@/lib/trade-quality";
 import { findTrades } from "@/lib/trade-finder/engine";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
 import type { TradeGoal, TradeSuggestion } from "@/lib/trade-finder/types";
@@ -39,6 +43,12 @@ type AnySupabase =
 
 /** Leagues loaded per press. The ceiling on what one request can cost. */
 const LEAGUE_WINDOW = 3;
+
+/** Deals taken from any one league, so a single room cannot fill the window. */
+const PER_LEAGUE_TAKE = 4;
+
+/** Deals returned in total. Matches the action's transport window. */
+const SUGGESTION_TAKE = 12;
 
 /** Hard ceiling on the portfolio one call will walk. */
 export const MAX_CROSS_LEAGUES = 60;
@@ -54,8 +64,14 @@ export type CrossLeagueSuggestion = TradeSuggestion & {
 };
 
 export type CrossLeagueResult = {
-  /** The one deal to show. Null when this window turned nothing up. */
-  suggestion: CrossLeagueSuggestion | null;
+  /**
+   * The deals this window turned up, best first, ready to page through.
+   *
+   * Bounded per league AND overall, because the reader can walk further with the
+   * cursor whenever they exhaust these. A window that returned everything from
+   * three leagues would be a list, and this feature is deliberately not one.
+   */
+  suggestions: CrossLeagueSuggestion[];
   /** Where the next press should start. */
   nextCursor: number;
   /** Leagues this press actually opened. */
@@ -94,13 +110,15 @@ export async function findCrossLeagueTrade(
     cursor: number;
     excludeByLeague: Map<string, string[]>;
     sessionExcluded: string[];
+    /** Consolidation model, so every league is judged on the same curve. */
+    qualityConfig?: TradeQualityConfig;
   },
 ): Promise<CrossLeagueResult> {
   const ids = params.sleeperLeagueIds.slice(0, MAX_CROSS_LEAGUES);
   const start = Math.max(0, Math.min(params.cursor, ids.length));
 
   const empty: CrossLeagueResult = {
-    suggestion: null,
+    suggestions: [],
     // Past the end. A reader who has walked their whole portfolio should be told
     // it is finished rather than sent back to the start of it.
     nextCursor: ids.length,
@@ -130,7 +148,7 @@ export async function findCrossLeagueTrade(
   );
 
   let unreadable = 0;
-  let best: CrossLeagueSuggestion | null = null;
+  const found: CrossLeagueSuggestion[] = [];
   /** The earliest league in this window that still has something to offer. */
   let firstLiveIndex: number | null = null;
 
@@ -153,15 +171,21 @@ export async function findCrossLeagueTrade(
       targetPlayerId: null,
       offerPlayerId: null,
       excludeKeys: [...stored, ...sessionExcluded],
+      quality: {
+        config: params.qualityConfig ?? DEFAULT_TRADE_QUALITY_CONFIG,
+        poolMax: league.poolMax,
+      },
     });
 
-    const top = result.suggestions.find((s) => !sessionExcluded.has(s.key));
-    if (!top) continue;
+    const live = result.suggestions
+      .filter((s) => !sessionExcluded.has(s.key))
+      .slice(0, PER_LEAGUE_TAKE);
+    if (live.length === 0) continue;
 
     if (firstLiveIndex === null) firstLiveIndex = start + offset;
-    if (!best || top.score > best.score) {
-      best = {
-        ...top,
+    for (const s of live) {
+      found.push({
+        ...s,
         league: {
           sleeperLeagueId: league.sleeperLeagueId,
           name: league.leagueName,
@@ -169,9 +193,16 @@ export async function findCrossLeagueTrade(
           sourceDisplay: league.sourceDisplay,
           pickSourceDisplay: league.pickSourceDisplay,
         },
-      };
+      });
     }
   }
+
+  // Merged on score across the window, then spread so consecutive deals are in
+  // different leagues where possible. Without that, one strong room supplies the
+  // first four and the reader pages through a portfolio feature that only ever
+  // talks about one league.
+  found.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+  const suggestions = spreadByLeague(found).slice(0, SUGGESTION_TAKE);
 
   // A league that still has suggestions holds the cursor where it is, so the
   // next press reconsiders it with one fewer candidate. A window that produced
@@ -180,7 +211,7 @@ export async function findCrossLeagueTrade(
   const nextCursor = firstLiveIndex ?? index;
 
   return {
-    suggestion: best,
+    suggestions,
     nextCursor,
     examined: window.length,
     remaining: Math.max(0, ids.length - index),
@@ -188,4 +219,32 @@ export async function findCrossLeagueTrade(
   };
 }
 
-export const CROSS_LEAGUE_LIMITS = { LEAGUE_WINDOW, MAX_CROSS_LEAGUES };
+/**
+ * Reorder so consecutive suggestions come from different leagues.
+ *
+ * Same greedy walk the single-league engine uses to spread by player and by
+ * counterparty, applied to the room. Stable: the input is already sorted by
+ * score and nothing is dropped, so a league with the best four deals still
+ * supplies four, just not four in a row.
+ */
+function spreadByLeague(sorted: CrossLeagueSuggestion[]): CrossLeagueSuggestion[] {
+  const remaining = [...sorted];
+  const out: CrossLeagueSuggestion[] = [];
+  let lastLeague: string | null = null;
+
+  while (remaining.length > 0) {
+    let index = remaining.findIndex((s) => s.league.sleeperLeagueId !== lastLeague);
+    if (index === -1) index = 0;
+    const [next] = remaining.splice(index, 1);
+    out.push(next);
+    lastLeague = next.league.sleeperLeagueId;
+  }
+  return out;
+}
+
+export const CROSS_LEAGUE_LIMITS = {
+  LEAGUE_WINDOW,
+  MAX_CROSS_LEAGUES,
+  PER_LEAGUE_TAKE,
+  SUGGESTION_TAKE,
+};

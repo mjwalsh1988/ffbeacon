@@ -63,6 +63,8 @@ export type TradeFinderLeague = {
   sourceDisplay: string;
   /** Set when picks are valued by a different source than the players. */
   pickSourceDisplay: string | null;
+  /** Top player value in this format and source, for the consolidation curve. */
+  poolMax: number | null;
   /** The Sleeper league object, for the Signal Check grade. */
   sleeperLeague: SleeperLeague;
 };
@@ -171,6 +173,31 @@ async function loadAges(
   return out;
 }
 
+/**
+ * The most valuable player in this format and source.
+ *
+ * The consolidation curve needs a yardstick for "how big is this asset in the
+ * grand scheme". Taken from the pool rather than from the league, because a
+ * league where nobody happens to own an elite player would otherwise grade its
+ * best available body as though it were one.
+ */
+async function loadPoolMax(
+  supabase: AnySupabase,
+  formatConfigId: string,
+  source: string,
+): Promise<number | null> {
+  const { data } = await supabase
+    .from("player_value_trends")
+    .select("current_value")
+    .eq("format_config_id", formatConfigId)
+    .eq("source", source)
+    .order("current_value", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const value = data?.current_value;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
 /** Pick prices for one (format, source), keyed season|round|position. */
 async function loadPickValues(
   supabase: AnySupabase,
@@ -267,7 +294,7 @@ export async function loadTradeFinderLeague(
 
   // Pick prices need only the format, so they are fetched alongside the rosters
   // rather than waiting behind them with the reads that need player ids.
-  const [cards, pulseView, rosterRows, pickValues] = await Promise.all([
+  const [cards, pulseView, rosterRows, pickValues, poolMax] = await Promise.all([
     loadLeagueTeamCards(
       supabase,
       league.id,
@@ -295,6 +322,7 @@ export async function loadTradeFinderLeague(
           context.pickSource?.slug ?? context.sourceSlug,
         )
       : Promise.resolve(new Map<string, number>()),
+    loadPoolMax(supabase, context.formatConfigId, context.sourceSlug),
   ]);
 
   if (cards.length < 2) return null;
@@ -413,6 +441,7 @@ export async function loadTradeFinderLeague(
       context.pickSource && context.pickSource.slug !== context.sourceSlug
         ? context.pickSource.display
         : null,
+    poolMax,
     sleeperLeague,
   };
 }

@@ -10,6 +10,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { ConfidenceLevel, SignalCheckSettings } from "./types";
+import {
+  DEFAULT_TRADE_QUALITY_CONFIG,
+  parsePackageMultipliers,
+} from "@/lib/trade-quality";
 import { dbRuleSchema, type ParsedRule } from "./rules/schema";
 
 type Client = SupabaseClient<Database>;
@@ -35,7 +39,19 @@ export const DEFAULT_SETTINGS: SignalCheckSettings = {
   winTemplate: "Side {side} wins by {margin}% of total trade value.",
   compoundingMode: "sequential",
 
-  pileOnEnabled: true,
+  quality: { ...DEFAULT_TRADE_QUALITY_CONFIG },
+  qualityEnabled: true,
+  qualityAdjustmentLabel: "Value adjustment",
+  // Says only what is true on every trade that fires an adjustment. An earlier
+  // draft opened "Side {side} gives up more total value", which is false
+  // whenever the two sides start level and consolidation alone separates them.
+  qualityTemplate:
+    "Side {side} carries the more concentrated package, so the smaller pieces on the other side, the ones worth under half the best asset in the deal, count for less than their face value.",
+
+  // Superseded by the quality pass above. Left in place so an admin can fall
+  // back to the old depth discount, but off by default: running both would
+  // charge the same package twice.
+  pileOnEnabled: false,
   pileOnTopK: 2,
   pileOnCurveBase: 0.9,
   pileOnMaxPenaltyPct: 25,
@@ -89,6 +105,7 @@ function buildSettings(map: Map<string, RawValue>): SignalCheckSettings {
   };
 
   const d = DEFAULT_SETTINGS;
+  const q = DEFAULT_TRADE_QUALITY_CONFIG;
   const compoundingRaw = str("signal_check_compounding_mode", d.compoundingMode);
   const compoundingMode: SignalCheckSettings["compoundingMode"] =
     compoundingRaw === "against_base" ? "against_base" : "sequential";
@@ -118,6 +135,27 @@ function buildSettings(map: Map<string, RawValue>): SignalCheckSettings {
     blowoutLabel: str("signal_check_blowout_label", d.blowoutLabel),
     winTemplate: str("signal_check_win_template", d.winTemplate),
     compoundingMode,
+
+    quality: {
+      baseWeight: num("signal_check_quality_base_weight", q.baseWeight),
+      scaleWeight: num("signal_check_quality_scale_weight", q.scaleWeight),
+      scaleExponent: num("signal_check_quality_scale_exponent", q.scaleExponent),
+      peakWeight: num("signal_check_quality_peak_weight", q.peakWeight),
+      peakExponent: num("signal_check_quality_peak_exponent", q.peakExponent),
+      peakSlack: num("signal_check_quality_peak_slack", q.peakSlack),
+      poolPadding: num("signal_check_quality_pool_padding", q.poolPadding),
+      packageThresholdPct: num("signal_check_quality_package_threshold", q.packageThresholdPct),
+      packageMultipliers: parsePackageMultipliers(
+        str("signal_check_quality_package_multipliers", q.packageMultipliers.join(", ")),
+        q.packageMultipliers,
+      ),
+      minAssetsForAdjustment: num("signal_check_quality_min_assets", q.minAssetsForAdjustment),
+      displayThresholdPct: num("signal_check_quality_display_threshold", q.displayThresholdPct),
+      maxAdjustmentPct: num("signal_check_quality_max_adjustment", q.maxAdjustmentPct),
+    },
+    qualityEnabled: bool("signal_check_quality_enabled", d.qualityEnabled),
+    qualityAdjustmentLabel: str("signal_check_quality_label", d.qualityAdjustmentLabel),
+    qualityTemplate: str("signal_check_quality_template", d.qualityTemplate),
 
     pileOnEnabled: bool("signal_check_pileon_enabled", d.pileOnEnabled),
     pileOnTopK: num("signal_check_pileon_top_k", d.pileOnTopK),

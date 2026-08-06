@@ -45,6 +45,10 @@ export function buildExplanation(params: ExplanationParams): string {
   const { verdict, tradeShape, sides, trace, hasMissingValues } = params;
   const sentences: string[] = [verdict.label];
 
+  // Kept alongside the consolidation sentence rather than suppressed by it. The
+  // consolidation sentence explains the discount; this one names who holds the
+  // best asset, and it is measured rather than assumed, so the two complement
+  // each other instead of repeating.
   if (!verdict.isNeutral && verdict.winnerSide) {
     const winner = verdict.winnerSide;
     const best = bestAssetSide(sides);

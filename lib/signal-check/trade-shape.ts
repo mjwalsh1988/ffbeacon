@@ -2,20 +2,27 @@
  * Signal Check trade-shape phase (Phase 3 of the pipeline).
  *
  * Order, all operating on the post-calibration side totals:
- *   1. Pile-on (built-in, settings-driven): once per side, diminishing returns
- *      on depth beyond the top K, capped at max penalty. ONE trace entry per
- *      affected side. Never boosts the other side; never combined with an
- *      asset-level pile-on (there is none).
+ *   1. Pile-on (legacy, off by default): once per side, diminishing returns on
+ *      depth beyond the top K, capped at max penalty. Superseded by step 3;
+ *      an admin can re-enable it but running both charges a package twice.
  *   2. Post-aggregation one_side rules (side_penalty_pct / side_boost_pct).
- *   3. Trade-shape label detection (deterministic heuristics + assign_shape
+ *   3. Consolidation: the quality comparison from lib/trade-quality.ts, which
+ *      credits the side holding the better single asset with the value the
+ *      other side would have to add to draw level. Side totals are NOT rewritten
+ *      by it; the credit lands in `consolidationAdjustment` and the sum of the
+ *      two goes in `effectiveTotal`, so a reader can still see the plain
+ *      arithmetic next to the adjustment that changed the answer.
+ *   4. Trade-shape label detection (deterministic heuristics + assign_shape
  *      rule override) and confidence_modifier / trace_note rules.
  *
  * Determinism: thresholds come from settings; the same inputs always produce
  * the same totals, label, and trace.
  */
 
+import { solveTradeBalance } from "@/lib/trade-quality";
 import type {
   AnalyzedSide,
+  ConsolidationResult,
   RuleTraceEntry,
   SideKey,
   SignalCheckSettings,
@@ -34,8 +41,20 @@ export interface TradeShapePhaseResult {
   trace: RuleTraceEntry[];
   shapeKey: string | null;
   pileOnFired: Record<SideKey, boolean>;
+  consolidation: ConsolidationResult;
   confidenceModifiers: number[];
 }
+
+const NO_CONSOLIDATION: ConsolidationResult = {
+  enabled: false,
+  applied: false,
+  favouredSide: null,
+  adjustment: 0,
+  adjustmentPct: 0,
+  qualityTotals: { a: 0, b: 0 },
+  discountedCounts: { a: 0, b: 0 },
+  capped: false,
+};
 
 interface SideStats {
   count: number;
@@ -90,21 +109,77 @@ export function computePileOn(
   return { newTotal: Math.max(0, side.totalPre - capped), penalty: capped };
 }
 
+/**
+ * Price the consolidation gap and hand each side its credit.
+ *
+ * Returns the sides unchanged when quality scoring is off or nothing separated
+ * them, so the phase is a no-op rather than a rounding source in that case.
+ */
+export function applyConsolidation(
+  sides: Record<SideKey, AnalyzedSide>,
+  settings: SignalCheckSettings,
+  poolMax: number | null,
+): { sides: Record<SideKey, AnalyzedSide>; consolidation: ConsolidationResult } {
+  const withZero = (): Record<SideKey, AnalyzedSide> => ({
+    a: { ...sides.a, consolidationAdjustment: 0, effectiveTotal: sides.a.totalPost },
+    b: { ...sides.b, consolidationAdjustment: 0, effectiveTotal: sides.b.totalPost },
+  });
+
+  if (!settings.qualityEnabled) {
+    return { sides: withZero(), consolidation: { ...NO_CONSOLIDATION } };
+  }
+
+  // The comparison runs on the values the reader can see, which are the
+  // post-calibration asset values, NOT the side totals. A side total already
+  // has the depth baked in, and the whole point is to unbake it.
+  const valuesOf = (side: SideKey) => sides[side].assets.map((r) => r.adjustedValue);
+  const solved = solveTradeBalance(valuesOf("a"), valuesOf("b"), poolMax, settings.quality);
+
+  const next = withZero();
+  const combined = solved.effective.a + solved.effective.b;
+  const adjustmentPct = combined > 0 ? (solved.adjustment / combined) * 100 : 0;
+
+  if (solved.applied && solved.favoured) {
+    const side = solved.favoured;
+    next[side] = {
+      ...next[side],
+      consolidationAdjustment: solved.adjustment,
+      effectiveTotal: sides[side].totalPost + solved.adjustment,
+    };
+  }
+
+  return {
+    sides: next,
+    consolidation: {
+      enabled: true,
+      applied: solved.applied,
+      favouredSide: solved.favoured,
+      adjustment: solved.applied ? solved.adjustment : 0,
+      adjustmentPct: solved.applied ? adjustmentPct : 0,
+      qualityTotals: { a: solved.a.qualityTotal, b: solved.b.qualityTotal },
+      discountedCounts: { a: solved.a.discountedCount, b: solved.b.discountedCount },
+      capped: solved.capped,
+    },
+  };
+}
+
 function detectShapeKey(
   sides: Record<SideKey, AnalyzedSide>,
   stats: Record<SideKey, SideStats>,
-  pileOnFired: Record<SideKey, boolean>,
+  clogged: boolean,
   settings: SignalCheckSettings,
 ): string | null {
   if (!settings.shapeEnabled) return null;
 
-  const totalA = sides.a.totalPost;
-  const totalB = sides.b.totalPost;
+  // Measured on the effective totals so the shape and the verdict can never
+  // disagree about whether a trade is close.
+  const totalA = sides.a.effectiveTotal;
+  const totalB = sides.b.effectiveTotal;
   const sum = totalA + totalB;
   const marginPct = sum > 0 ? (Math.abs(totalA - totalB) / sum) * 100 : 0;
 
   if (marginPct < settings.neutralThresholdPct) return "near_even";
-  if (pileOnFired.a || pileOnFired.b) return "roster_clog";
+  if (clogged) return "roster_clog";
 
   // Stud-for-stud: one player per side.
   if (
@@ -146,6 +221,7 @@ export function applyTradeShape(
   rules: ParsedRule[],
   settings: SignalCheckSettings,
   formatSlug: string,
+  poolMax: number | null = null,
 ): TradeShapePhaseResult {
   const trace: RuleTraceEntry[] = [];
   const pileOnFired: Record<SideKey, boolean> = { a: false, b: false };
@@ -234,14 +310,48 @@ export function applyTradeShape(
     sides[side] = { ...s, totalPost: running };
   });
 
-  // 3. Trade-shape detection + whole_trade rules (assign_shape, confidence, note).
+  // 3. Consolidation. Side totals are left alone; the credit lands beside them.
+  const consolidated = applyConsolidation(sides, settings, poolMax);
+  const consolidation = consolidated.consolidation;
+  (["a", "b"] as SideKey[]).forEach((side) => {
+    sides[side] = consolidated.sides[side];
+  });
+
+  if (consolidation.applied && consolidation.favouredSide) {
+    const side = consolidation.favouredSide;
+    trace.push({
+      ruleId: "consolidation",
+      ruleVersion: null,
+      ruleLabel: settings.qualityAdjustmentLabel,
+      phase: "post_aggregation_trade_shape",
+      scope: "one_side",
+      side,
+      assetId: null,
+      valueBefore: sides[side].totalPost,
+      adjustment: consolidation.adjustment,
+      valueAfter: sides[side].effectiveTotal,
+      publicExplanation: renderTemplate(settings.qualityTemplate, {
+        side: side.toUpperCase(),
+      }),
+      adminDebug: `consolidation quality a=${consolidation.qualityTotals.a.toFixed(2)} b=${consolidation.qualityTotals.b.toFixed(2)} adjustment=${consolidation.adjustment.toFixed(2)} discounted=${consolidation.discountedCounts.a}/${consolidation.discountedCounts.b} capped=${consolidation.capped}`,
+    });
+  }
+
+  // 4. Trade-shape detection + whole_trade rules (assign_shape, confidence, note).
   const stats: Record<SideKey, SideStats> = { a: sideStats(sides.a), b: sideStats(sides.b) };
-  let shapeKey = detectShapeKey(sides, stats, pileOnFired, settings);
+  // A roster clog is a side carrying pieces the quality pass had to discount,
+  // whichever mechanism found them.
+  const clogged =
+    pileOnFired.a ||
+    pileOnFired.b ||
+    consolidation.discountedCounts.a >= 2 ||
+    consolidation.discountedCounts.b >= 2;
+  let shapeKey = detectShapeKey(sides, stats, clogged, settings);
 
   const wholeTradeCtx: ConditionContext = {
     formatSlug,
     assetCount: sides.a.assets.length + sides.b.assets.length,
-    sideTotal: sides.a.totalPost + sides.b.totalPost,
+    sideTotal: sides.a.effectiveTotal + sides.b.effectiveTotal,
     tradeShape: shapeKey,
   };
   const wholeRules = rules.filter(
@@ -271,5 +381,5 @@ export function applyTradeShape(
     });
   }
 
-  return { sides, trace, shapeKey, pileOnFired, confidenceModifiers };
+  return { sides, trace, shapeKey, pileOnFired, consolidation, confidenceModifiers };
 }

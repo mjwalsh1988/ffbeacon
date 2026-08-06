@@ -44,6 +44,10 @@ Public feature name: **Signal Check**. Result name: **Beacon Verdict**.
 ## File map
 
 ```
+lib/trade-quality.ts  Consolidation model. Pure, source-agnostic, SHARED with
+                      Trade Finder so a suggestion and its grade read the same
+                      curve. Q(p), package multipliers, and the balance solver.
+
 lib/signal-check/
   types.ts            Domain contracts (AssetInput, PricedAsset, RuleTraceEntry,
                       BeaconVerdict, SignalCheckSettings, PublicSharePayload, ...)
@@ -54,7 +58,8 @@ lib/signal-check/
   format.ts           resolveFormat(), supportedFormats(); FF Beacon source constants
   value-engine.ts     priceSides(): per-asset base value + value-engine trace
   calibration.ts      applyCalibration(): post-format asset rules
-  trade-shape.ts      applyTradeShape(): pile-on + side rules + shape detection
+  trade-shape.ts      applyTradeShape(): pile-on + side rules + consolidation
+                      + shape detection; applyConsolidation() lives here
   verdict.ts          computeVerdict(): margin formula + neutral/blowout
   confidence.ts       computeConfidence(): factor-weighted score -> level
   explanation.ts      buildExplanation(): plain-language from the trace
@@ -97,6 +102,7 @@ supabase/migrations/
   0102_signal_check_regression_cases.sql
   0103_signal_check_audit_log.sql
   0104_signal_check_settings_seed.sql beacon_settings rows (signal_check* categories)
+  0174_signal_check_quality_settings.sql consolidation knobs + pile-on off
 ```
 
 ## Data model + RLS
@@ -138,11 +144,12 @@ priceSides            resolve format_config_id, read FF Beacon current_value
 applyCalibration      post_format_calibration rules per asset (compounding +
    |                  stackability + max-adjustment guardrails)
    |  -> side totals (pre)
-applyTradeShape       1) pile-on (built-in, once per side, capped)
+applyTradeShape       1) pile-on (legacy, OFF by default; see below)
    |                  2) one_side post_aggregation rules (side penalty/boost)
-   |                  3) trade-shape label detection (+ assign_shape overrides)
-   |  -> side totals (post)
-computeVerdict        margin = abs(A-B)/(A+B); neutral threshold; blowout
+   |                  3) consolidation: quality comparison -> value adjustment
+   |                  4) trade-shape label detection (+ assign_shape overrides)
+   |  -> side totals (post) + effective totals (post + adjustment)
+computeVerdict        margin = abs(A-B)/(A+B) on EFFECTIVE totals; neutral; blowout
 computeConfidence     factor-weighted 0..100 score -> low/medium/high
 buildExplanation      plain-language sentences from the trace (no LLM)
 ```
@@ -155,8 +162,12 @@ trace.
 ### Margin (exact)
 
 ```
-margin = abs(final_A - final_B) / (final_A + final_B)   (expressed as a percent)
+margin = abs(effective_A - effective_B) / (effective_A + effective_B)  (percent)
 ```
+
+where `effective_X = totalPost_X + consolidationAdjustment_X`. With no
+consolidation credit (the common case, including every one-for-one) the
+effective total IS the post total and this is the original formula unchanged.
 
 Displayed at `signal_check_margin_precision` (default 1 decimal). The neutral
 threshold is applied to the UNROUNDED margin so display rounding can never flip
@@ -170,7 +181,56 @@ a near-even call. `A + B <= 0` returns neutral without dividing by zero.
 `signal_check_win_template` ("Side {side} wins by {margin}% of total trade
 value.").
 
-### Pile-on (built-in, settings-driven)
+### Consolidation (the depth discount, since 2026-08)
+
+Adding trade values up says three depth pieces worth 2,000 each equal one player
+worth 6,000. Managers know they do not, which is why an "even" package offer
+usually gets refused. The consolidation pass, `lib/trade-quality.ts` (shared with
+Trade Finder), scores each asset a second time on a curve that rises faster than
+its value:
+
+```
+Q(p) = p x [ base + scale x (p / G)^se + peak x (p / (slack x H))^pe ]
+```
+
+`p` is the asset's post-calibration value, `H` is the biggest single asset
+anywhere in the trade, `G` is the top of the format's value pool plus padding
+(`buildValueResolver` returns it as `poolMax`; null falls back to `H`). On top of
+that, any piece worth under `signal_check_quality_package_threshold` percent of
+`H` is a package piece, and the 2nd, 3rd and 4th of those are multiplied by
+`signal_check_quality_package_multipliers` (default 1, 0.85, 0.70, 0.60).
+
+`solveTradeBalance` then bisects for the value of the extra asset the trailing
+side would need to draw level, recomputing the whole comparison at each step
+because a candidate can change which pieces count as package pieces and can move
+`H` itself. `adjustment = rawTrailing + x - rawFavoured`, credited to the
+favoured side.
+
+**Side totals are never rewritten.** The credit lands in
+`AnalyzedSide.consolidationAdjustment` and the sum in
+`AnalyzedSide.effectiveTotal`. `computeVerdict` compares the effective totals;
+the UI shows the plain asset sum with the credit as its own "Value adjustment"
+row, so a displayed total always equals the rows above it.
+
+Two deliberate refusals:
+
+- **One-for-ones get nothing** (`signal_check_quality_min_assets`, default 2).
+  The value gap between two single players is already the whole story, and a
+  premium on top would count it twice.
+- **An adjustment below `signal_check_quality_display_threshold` percent of the
+  combined value is dropped entirely**, not hidden. A total that does not equal
+  the sum of the assets above it is a bug report waiting to happen.
+
+`signal_check_quality_max_adjustment` caps the solver so a near-worthless package
+cannot demand an absurd balancing number; when it binds, `capped` is true and
+confidence takes an extra hit.
+
+### Pile-on (legacy, OFF by default)
+
+Superseded by the consolidation pass. The two mechanisms discount the same
+package, so running both charges it twice; migration 0174 sets
+`signal_check_pileon_enabled` to false. The code and settings remain so an admin
+can fall back to it if consolidation scoring is switched off.
 
 Applied once per side in the trade-shape phase, only when
 `signal_check_pileon_enabled` and the side has at least
@@ -212,7 +272,9 @@ package) -> depth. Each key maps to an admin-editable label
 
 `computeConfidence()` starts at 60 and adjusts: + separation (margin),
 - picks (noisier), - missing values, - assumed pick bucket, + clean Sleeper
-detection, - material pile-on, + admin rule confidence_modifiers. Clamped
+detection, - material pile-on, - a consolidation credit shaping the verdict
+(a modelled number rather than a measured one), - a capped balance solve,
++ admin rule confidence_modifiers. Clamped
 0..100, mapped to low (<= `confidence_low_max`, default 40) / high
 (>= `confidence_high_min`, default 70) / medium otherwise.
 
@@ -246,8 +308,8 @@ still runs using built-in pile-on + shape detection (zero rules is valid).
 ## Settings
 
 All scalar tunables are `beacon_settings` rows under categories `signal_check`,
-`signal_check_verdict`, `signal_check_pileon`, `signal_check_shape`,
-`signal_check_confidence`, `signal_check_format`. `DEFAULT_SETTINGS` in
+`signal_check_verdict`, `signal_check_quality`, `signal_check_pileon`,
+`signal_check_shape`, `signal_check_confidence`, `signal_check_format`. `DEFAULT_SETTINGS` in
 `settings.ts` mirrors the seed so the engine and tests run without a DB and a
 missing row degrades to a sensible default. The admin Settings page renders one
 `SettingField` per row and saves through the audited `updateSignalCheckSetting`.
@@ -354,7 +416,14 @@ totals, the full trace, the three version pins
 `value_captured_at`. Public permalinks render from `public_payload` and never
 recompute. Bump `VALUE_ENGINE_VERSION` when value math changes; bump
 `RULE_INTERPRETER_VERSION` when interpreter semantics change; settings/ruleset
-content changes are captured by the ruleset version instead.
+content changes are captured by the ruleset version instead. Both pins moved to
+1.1.0 for the consolidation pass.
+
+Reading a frozen row: `side_totals_post` holds the plain asset sums, while
+`margin` is computed from the effective totals. Where they seem not to agree, the
+consolidation credit is the difference, and it is recorded in `rule_trace` under
+`ruleId: "consolidation"` with its own before and after. The pass needed no
+schema change, which is why there is no dedicated column.
 
 ## Abuse protection (lightweight, by design)
 

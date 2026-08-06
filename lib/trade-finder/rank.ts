@@ -25,6 +25,11 @@
  * roster-sized candidate lists.
  */
 
+import {
+  DEFAULT_TRADE_QUALITY_CONFIG,
+  qualityBalance,
+  type TradeQualityConfig,
+} from "@/lib/trade-quality";
 import { lineupTotal } from "./profile";
 import type { TeamProfile } from "./profile";
 import { assetValue, type AssetRef } from "./packages";
@@ -123,6 +128,34 @@ export function valueGapOf(incoming: AssetRef[], outgoing: AssetRef[]): number {
 }
 
 /**
+ * What the outgoing package is worth against the incoming one, on the same
+ * consolidation curve Signal Check grades with. 1 is level.
+ *
+ * The raw gap above cannot see the difference between paying with one starter
+ * and paying with three bench pieces that add to the same number. This can, and
+ * it is what the acceptance band reads, because the other manager can see it
+ * too.
+ */
+export function qualityRatioOf(
+  incoming: AssetRef[],
+  outgoing: AssetRef[],
+  quality?: { config: TradeQualityConfig; poolMax: number | null } | null,
+): number {
+  const config = quality?.config ?? DEFAULT_TRADE_QUALITY_CONFIG;
+  const poolMax = quality?.poolMax ?? null;
+  return qualityBalance(incoming.map(assetValue), outgoing.map(assetValue), poolMax, config).ratio;
+}
+
+/**
+ * The quality gap, expressed exactly like valueGapOf (a share of the larger
+ * side) so the acceptance thresholds mean the same thing on either measure.
+ */
+export function qualityGapOf(ratio: number): number {
+  if (!Number.isFinite(ratio) || ratio <= 0) return 1;
+  return ratio < 1 ? 1 - ratio : 1 - 1 / ratio;
+}
+
+/**
  * Would the other manager engage with this?
  *
  * Three things decide it, in order of how loudly a real person would react:
@@ -142,9 +175,27 @@ export function valueGapOf(incoming: AssetRef[], outgoing: AssetRef[]): number {
  * gets turned down has been lied to. "Worth asking" is honest about what this
  * is: an offer with the arithmetic already done.
  */
-export function acceptanceOf(theirs: SideImpact, profile: TeamProfile, gap: number): AcceptanceBand {
-  const losingValue = theirs.valueDelta < 0;
-  const bigLoss = losingValue && gap > LOPSIDED_GAP;
+export function acceptanceOf(
+  theirs: SideImpact,
+  profile: TeamProfile,
+  gap: number,
+  qualityRatio?: number,
+): AcceptanceBand {
+  /**
+   * Read on the consolidation curve when we have it, on raw value when we do
+   * not. The distinction is the point: a three-for-one that balances on paper
+   * hands the other manager three roster spots for one, and reading it as "even"
+   * is how this feature used to send people into their league chat with an offer
+   * that has an obvious answer.
+   *
+   * `qualityRatio` is what the counterparty RECEIVES over what they give, which
+   * is the same number from either seat, so no sign flip is needed here.
+   */
+  const haveQuality = typeof qualityRatio === "number" && Number.isFinite(qualityRatio);
+  const losingValue = haveQuality ? qualityRatio < 1 : theirs.valueDelta < 0;
+  const effectiveGap = haveQuality ? qualityGapOf(qualityRatio) : gap;
+
+  const bigLoss = losingValue && effectiveGap > LOPSIDED_GAP;
   if (bigLoss) return "long-shot";
 
   const helpsLineup = (theirs.lineupDelta ?? 0) > 0.5;
@@ -179,7 +230,7 @@ export function acceptanceOf(theirs: SideImpact, profile: TeamProfile, gap: numb
   else if (profile.direction === "win-now") fits = helpsLineup;
   else fits = helpsLineup || gainsPicks || younger;
 
-  const evenOrBetter = theirs.valueDelta >= 0 || gap <= EVEN_GAP;
+  const evenOrBetter = !losingValue || effectiveGap <= EVEN_GAP;
 
   if (fits && evenOrBetter && !hurtsLineup) return "likely";
   if (fits || evenOrBetter) return "worth-asking";

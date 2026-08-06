@@ -37,6 +37,7 @@ import {
   type TeamProfile,
 } from "./profile";
 import {
+  PACKAGE_LIMITS,
   acquirablePool,
   assetId,
   assetValue,
@@ -44,10 +45,13 @@ import {
   givablePool,
   incomingPairs,
   type AssetRef,
+  type QualityGate,
 } from "./packages";
+import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
 import {
   acceptanceOf,
   measureImpact,
+  qualityRatioOf,
   satisfiesGoal,
   scoreSuggestion,
   valueGapOf,
@@ -155,6 +159,15 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
   if (input.offerPlayerId && !required) return { ...empty, lineupUnavailable };
   if (givable.length === 0) return { ...empty, lineupUnavailable };
 
+  // The consolidation model, on admin settings when the caller loaded them and
+  // on the published defaults when it did not. Either way the finder and Signal
+  // Check are reading from the same curve, which is what stops the suggestion
+  // and the grade printed beneath it from arguing.
+  const quality = {
+    config: input.quality?.config ?? DEFAULT_TRADE_QUALITY_CONFIG,
+    poolMax: input.quality?.poolMax ?? null,
+  };
+
   const suggestions: TradeSuggestion[] = [];
   const seenKeys = new Set<string>();
   /**
@@ -185,7 +198,13 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     // when they have asked to turn a name into depth.
     const incomingSets: AssetRef[][] = acquirable.map((a) => [a]);
     if (input.goal === "add-depth" && required) {
-      incomingSets.push(...incomingPairs(acquirable, assetValue(required)));
+      incomingSets.push(
+        ...incomingPairs(
+          acquirable,
+          assetValue(required),
+          PACKAGE_LIMITS.QUALITY_RAW_OVER_TOLERANCE,
+        ),
+      );
     }
 
     for (const incoming of incomingSets) {
@@ -195,9 +214,15 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
       );
       if (target <= 0) continue;
 
+      const gate: QualityGate = {
+        config: quality.config,
+        poolMax: quality.poolMax,
+        incomingValues: incoming.map(assetValue),
+      };
       const packages = balancePackages(target, givable, {
         required,
         maxAssets: input.goal === "consolidate" ? 3 : undefined,
+        quality: gate,
       });
 
       const groupKey = targetKey(theirs.team.rosterId, incoming);
@@ -233,7 +258,8 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
         }
 
         const gap = valueGapOf(incoming, outgoing);
-        const acceptance = acceptanceOf(theirImpact, theirs, gap);
+        const qualityRatio = qualityRatioOf(incoming, outgoing, quality);
+        const acceptance = acceptanceOf(theirImpact, theirs, gap, qualityRatio);
         const score = scoreSuggestion({
           mine: myImpact,
           myProfile: mine,
@@ -266,6 +292,7 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
           mine: myImpact,
           theirs: theirImpact,
           valueGap: gap,
+          qualityRatio,
           acceptance,
           score,
           headline: buildHeadline(incomingAssets, outgoingAssets, theirs.team.teamName),
@@ -313,7 +340,10 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
   });
 
   return {
-    suggestions: spreadByTarget(suggestions).slice(0, MAX_RESULTS),
+    suggestions: spreadByCounterparty(spreadByPayment(spreadByTarget(suggestions))).slice(
+      0,
+      MAX_RESULTS,
+    ),
     consideredTeams,
     lineupUnavailable,
   };
@@ -374,6 +404,77 @@ function spreadByTarget(sorted: TradeSuggestion[]): TradeSuggestion[] {
     // Nothing left to take. Guards against an infinite loop if the accounting
     // above ever disagrees with the input length.
     if (!added) break;
+  }
+  return out;
+}
+
+/** The single most valuable thing the reader would be sending. */
+function paymentKeyOf(s: TradeSuggestion): string {
+  let best: SuggestionAsset | null = null;
+  for (const asset of s.outgoing) {
+    if (!best || asset.value > best.value) best = asset;
+  }
+  if (!best) return "";
+  return best.kind === "player" ? best.playerId : best.key;
+}
+
+/**
+ * Stop the same name leading suggestion after suggestion.
+ *
+ * spreadByTarget solves half the problem: consecutive deals are for different
+ * players. The other half is the paying end, and it has a structural cause. The
+ * reader's currency is one pool sorted cheapest first, and the balancer prefers
+ * the smallest package that clears the target, so the same two or three assets
+ * clear the band for nearly every target in the league. Against a real roster
+ * that reads as an engine with one idea: trade this guy, trade this guy, trade
+ * this guy.
+ *
+ * So the emitted order avoids repeating the headline outgoing asset back to
+ * back. Greedy and stable: walk the list, and if the next item pays with the
+ * same asset the last one did, take the first later item that does not. Nothing
+ * is dropped or reordered beyond that, so the score ordering survives wherever
+ * there is no clash to fix.
+ */
+function spreadByPayment(sorted: TradeSuggestion[]): TradeSuggestion[] {
+  const remaining = [...sorted];
+  const out: TradeSuggestion[] = [];
+  let lastPayment: string | null = null;
+
+  while (remaining.length > 0) {
+    let index = remaining.findIndex((s) => paymentKeyOf(s) !== lastPayment);
+    // Everything left pays with the same asset. Take them in the order they are.
+    if (index === -1) index = 0;
+    const [next] = remaining.splice(index, 1);
+    out.push(next);
+    lastPayment = paymentKeyOf(next);
+  }
+  return out;
+}
+
+/**
+ * Stop one team owning the shortlist.
+ *
+ * The two spreads above vary the players. Neither varies the team, and a league
+ * usually has one manager whose roster happens to fit the reader's better than
+ * anyone else's, so their deals can hold most of the ranking. That was invisible
+ * while the surface showed one suggestion; with arrows on the card it is eight
+ * consecutive offers to the same person, which reads as an engine with one idea.
+ *
+ * Same greedy walk as spreadByPayment, on the counterparty instead. It runs LAST
+ * so the player spreads settle first and this only breaks ties they left behind.
+ */
+function spreadByCounterparty(sorted: TradeSuggestion[]): TradeSuggestion[] {
+  const remaining = [...sorted];
+  const out: TradeSuggestion[] = [];
+  let lastRoster: number | null = null;
+
+  while (remaining.length > 0) {
+    let index = remaining.findIndex((s) => s.counterparty.rosterId !== lastRoster);
+    // Every deal left is with the same team. Take them in the order they are.
+    if (index === -1) index = 0;
+    const [next] = remaining.splice(index, 1);
+    out.push(next);
+    lastRoster = next.counterparty.rosterId;
   }
   return out;
 }

@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { acceptanceOf, measureImpact, satisfiesGoal, valueGapOf } from "./rank";
+import {
+  acceptanceOf,
+  measureImpact,
+  qualityGapOf,
+  qualityRatioOf,
+  satisfiesGoal,
+  valueGapOf,
+} from "./rank";
+import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
 import { buildTeamProfile } from "./profile";
 import { STANDARD_SLOTS, fullRoster, pick, player, team } from "./_test-kit";
 import type { AssetRef } from "./packages";
@@ -133,5 +141,61 @@ describe("satisfiesGoal", () => {
     expect(satisfiesGoal("consolidate", impact(), { incoming: 1, outgoing: 1 })).toBe(false);
     expect(satisfiesGoal("add-depth", impact(), { incoming: 2, outgoing: 1 })).toBe(true);
     expect(satisfiesGoal("add-depth", impact(), { incoming: 1, outgoing: 1 })).toBe(false);
+  });
+});
+
+describe("qualityRatioOf and qualityGapOf", () => {
+  const QUALITY = { config: DEFAULT_TRADE_QUALITY_CONFIG, poolMax: 9900 };
+
+  it("reads under 1 when the reader pays with depth for a starter", () => {
+    const incoming = [ref(player({ value: 4000 }))];
+    const outgoing = [ref(player({ value: 2200 })), ref(player({ value: 2000 }))];
+    // Raw values are all but level, so the old gap says this is fair.
+    expect(valueGapOf(incoming, outgoing)).toBeLessThan(0.06);
+    expect(qualityRatioOf(incoming, outgoing, QUALITY)).toBeLessThan(0.85);
+  });
+
+  it("reads about 1 for a like-for-like swap", () => {
+    const incoming = [ref(player({ value: 4000 }))];
+    const outgoing = [ref(player({ value: 4050 }))];
+    expect(qualityRatioOf(incoming, outgoing, QUALITY)).toBeGreaterThan(0.95);
+  });
+
+  it("expresses the gap as a share of the larger side, like valueGapOf", () => {
+    expect(qualityGapOf(1)).toBe(0);
+    expect(qualityGapOf(0.8)).toBeCloseTo(0.2, 6);
+    expect(qualityGapOf(1.25)).toBeCloseTo(0.2, 6);
+    expect(qualityGapOf(0)).toBe(1);
+  });
+});
+
+describe("acceptanceOf on the consolidation curve", () => {
+  const QUALITY = { config: DEFAULT_TRADE_QUALITY_CONFIG, poolMax: 9900 };
+
+  it("calls a raw-even package-for-starter deal a long shot", () => {
+    const incoming = [ref(player({ value: 4000 }))];
+    const outgoing = [ref(player({ value: 1400 })), ref(player({ value: 1350 })), ref(player({ value: 1300 }))];
+    const gap = valueGapOf(incoming, outgoing);
+    const ratio = qualityRatioOf(incoming, outgoing, QUALITY);
+
+    // The counterparty is handed three bodies for one player. Raw value says it
+    // is fine; the reason this feature was rebuilt is that it is not.
+    const theirs = impact({ valueDelta: 50, lineupDelta: -0.2 });
+    expect(acceptanceOf(theirs, profileOf("middle"), gap, ratio)).toBe("long-shot");
+  });
+
+  it("still reads a genuine one-for-one as worth asking or better", () => {
+    const incoming = [ref(player({ value: 4000 }))];
+    const outgoing = [ref(player({ value: 4100 }))];
+    const gap = valueGapOf(incoming, outgoing);
+    const ratio = qualityRatioOf(incoming, outgoing, QUALITY);
+
+    const theirs = impact({ valueDelta: 100, lineupDelta: 0.8 });
+    expect(acceptanceOf(theirs, profileOf("competitor"), gap, ratio)).not.toBe("long-shot");
+  });
+
+  it("falls back to raw value when no quality ratio is supplied", () => {
+    const theirs = impact({ valueDelta: 400, lineupDelta: 1.2 });
+    expect(acceptanceOf(theirs, profileOf("competitor"), 0.02)).toBe("likely");
   });
 });

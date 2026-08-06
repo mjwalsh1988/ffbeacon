@@ -52,8 +52,9 @@ export function TradeFinderPanel({
     >
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-ink-muted">
-          Every league you are in, searched a few at a time. Pass on one and the
-          next takes its place.
+          Every league you are in, searched a few at a time. Step through what it
+          finds, save the ones worth coming back to, and search again for the
+          leagues it has not opened yet.
         </p>
 
         {unsynced > 0 && (

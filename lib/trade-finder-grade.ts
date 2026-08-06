@@ -21,8 +21,9 @@
  *   has no pick values. Every one of those returns null and the card renders
  *   without a grade.
  *
- * Only the ONE suggestion on screen is graded, not the whole ranked field. That
- * is the difference between one batch of value lookups and forty.
+ * The whole shortlist is graded, because the reader can page through it and a
+ * deal without a grade would look like a deal we were quiet about. It costs one
+ * batch of value lookups rather than one per suggestion: see gradeSuggestions.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -88,9 +89,38 @@ export async function gradeSuggestion(
   sleeperLeague: SleeperLeague,
   suggestion: TradeSuggestion,
 ): Promise<SuggestionGrade | null> {
+  const [grade] = await gradeSuggestions(admin, sleeperLeague, [suggestion]);
+  return grade ?? null;
+}
+
+/**
+ * Grade a whole shortlist for the cost of grading one.
+ *
+ * The reader can now page through the ranked field, so every deal in it needs a
+ * grade rather than only the one that happened to come first. Doing that the
+ * obvious way, a call to gradeSuggestion per suggestion, would be twelve rounds
+ * of settings, ruleset, format, player, value and pick lookups, and the note at
+ * the top of this file about one batch versus forty would be exactly right.
+ *
+ * So the lookups are shared instead. A league's suggestions are drawn from the
+ * same rosters, so the union of their assets is barely larger than any single
+ * deal's: one resolver built over that union answers every one of them. The
+ * pipeline itself is pure, so the twelve runs after it touch no database at all.
+ *
+ * Returns an array aligned by index with `suggestions`, null wherever a grade
+ * would be a guess. Never throws.
+ */
+export async function gradeSuggestions(
+  admin: Client,
+  sleeperLeague: SleeperLeague,
+  suggestions: TradeSuggestion[],
+): Promise<(SuggestionGrade | null)[]> {
+  const empty = suggestions.map(() => null);
+  if (suggestions.length === 0) return [];
+
   try {
     const settings = await loadSignalCheckSettings(admin);
-    if (!settings.enabled) return null;
+    if (!settings.enabled) return empty;
 
     // Same format resolution the transactions feed uses: the league's exact
     // derived format when FF Beacon publishes values for it, otherwise the
@@ -103,51 +133,77 @@ export async function gradeSuggestion(
       const closest = pickClosestSupportedFormat(derived, candidates);
       format = closest ? await resolveFormat(admin, closest.slug) : null;
     }
-    if (!format) return null;
+    if (!format) return empty;
 
-    const sides = {
-      a: toAssetInputs(suggestion.incoming, format.allowsPicks),
-      b: toAssetInputs(suggestion.outgoing, format.allowsPicks),
+    const allowsPicks = format.allowsPicks;
+    const sidesFor = suggestions.map((s) => ({
+      a: toAssetInputs(s.incoming, allowsPicks),
+      b: toAssetInputs(s.outgoing, allowsPicks),
+    }));
+
+    // One synthetic analysis holding every asset in the shortlist. It is never
+    // run through the pipeline; it exists only so the resolver knows what to
+    // fetch. Duplicates are harmless, buildValueResolver dedupes player ids and
+    // loads pick values for the whole format in one query regardless.
+    const union: AnalysisInput = {
+      formatSlug: format.slug,
+      sides: {
+        a: sidesFor.flatMap((s) => [...s.a, ...s.b]),
+        b: [],
+      },
     };
-    // Dropping picks in a redraft format can empty a side. A one-sided trade is
-    // not a trade, and grading it would produce a confident verdict about half a
-    // deal.
-    if (sides.a.length === 0 || sides.b.length === 0) return null;
-
-    const input: AnalysisInput = { formatSlug: format.slug, sides };
-    const built = await buildValueResolver(admin, format, input);
+    const built = await buildValueResolver(admin, format, union);
     const ruleset = await loadActiveRuleset(admin);
 
-    const analysis = runPipeline({
-      input,
-      resolver: built.resolver,
-      format,
-      source: built.source,
-      settings,
-      rules: ruleset.rules,
-      rulesetVersion: ruleset.version,
-      formatAutoDetected: true,
-    });
-    const view = toBuilderView(analysis, settings, {
-      a: "You",
-      b: suggestion.counterparty.teamName,
-    });
+    return suggestions.map((suggestion, i) => {
+      const sides = sidesFor[i];
+      // Dropping picks in a redraft format can empty a side. A one-sided trade
+      // is not a trade, and grading it would produce a confident verdict about
+      // half a deal.
+      if (sides.a.length === 0 || sides.b.length === 0) return null;
 
-    return {
-      verdictLabel: view.verdictLabel,
-      favours: view.isNeutral ? "neither" : view.winnerSide === "a" ? "you" : "them",
-      confidenceLabel: view.confidenceLabel,
-      tradeShapeLabel: view.tradeShapeLabel,
-      explanation: view.explanation,
-      formatDisplay: view.formatDisplay,
-    };
+      try {
+        const input: AnalysisInput = { formatSlug: format.slug, sides };
+        const analysis = runPipeline({
+          input,
+          resolver: built.resolver,
+          format,
+          source: built.source,
+          settings,
+          rules: ruleset.rules,
+          rulesetVersion: ruleset.version,
+          formatAutoDetected: true,
+          poolMax: built.poolMax,
+        });
+        const view = toBuilderView(analysis, settings, {
+          a: "You",
+          b: suggestion.counterparty.teamName,
+        });
+
+        return {
+          verdictLabel: view.verdictLabel,
+          favours: view.isNeutral ? "neither" : view.winnerSide === "a" ? "you" : "them",
+          confidenceLabel: view.confidenceLabel,
+          tradeShapeLabel: view.tradeShapeLabel,
+          explanation: view.explanation,
+          formatDisplay: view.formatDisplay,
+        } satisfies SuggestionGrade;
+      } catch (err) {
+        // Caught per suggestion, not per batch: one deal carrying an asset with
+        // no value row must not cost the other eleven their grades.
+        if (!(err instanceof SignalCheckError)) {
+          console.error("[trade-finder] signal check grade failed", err);
+        }
+        return null;
+      }
+    });
   } catch (err) {
     // A guardrail (picks in a redraft format, an asset with no value row) is an
     // expected outcome here, not a fault. Anything else is worth a line in the
-    // log, but never worth failing the suggestion over.
+    // log, but never worth failing the suggestions over.
     if (!(err instanceof SignalCheckError)) {
-      console.error("[trade-finder] signal check grade failed", err);
+      console.error("[trade-finder] signal check batch grade failed", err);
     }
-    return null;
+    return empty;
   }
 }

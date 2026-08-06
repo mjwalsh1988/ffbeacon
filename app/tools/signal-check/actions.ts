@@ -56,6 +56,7 @@ export async function runSignalCheck(
       settings,
       rules: ruleset.rules,
       rulesetVersion: ruleset.version,
+      poolMax: built.poolMax,
     });
 
     const view = toBuilderView(analysis, settings);

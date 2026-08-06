@@ -232,6 +232,7 @@ export async function analyzeLeagueTrades(
         rules: ruleset.rules,
         rulesetVersion: ruleset.version,
         formatAutoDetected: true,
+        poolMax: built.poolMax,
       });
       const view = toBuilderView(analysis, settings, p.teamLabels);
       results.set(p.id, { view, assetMeta: p.assetMeta });

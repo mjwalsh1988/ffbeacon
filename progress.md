@@ -2548,3 +2548,453 @@ T468 | completed | Rewrite the pitch as a message to the other manager
 - npm test: 1178 tests across 91 files, all pass (11 new)
 - npm run build: compiles clean, no warnings
 - No browser testing this pass, at the owner's request.
+
+## Consolidation-aware trade quality (Signal Check + Trade Finder)
+
+T469 | completed | Shared consolidation quality module
+     | files: lib/trade-quality.ts, lib/trade-quality.test.ts
+     | depends on: T454, T456
+     | verified: yes (Pure module, no DB, no React. Scores every asset a second
+     |   time on a curve that rises faster than value, so one premium player is
+     |   not interchangeable with three depth pieces that happen to add up.
+     |
+     |   Q(p) = p x [base + scale x (p/G)^1.3 + peak x (p/(1.05 x H))^6] where H
+     |   is the trade's own best asset and G is the pool ceiling. On top of that,
+     |   any piece worth under half of H is a package piece, and the 2nd, 3rd and
+     |   4th of those are multiplied by 0.85, 0.70 and 0.60.
+     |
+     |   solveTradeBalance bisects for the value of the extra asset the trailing
+     |   side would need to draw level, recomputing the WHOLE comparison at each
+     |   step because a candidate can change which pieces count as package pieces
+     |   and can move H itself. That amount becomes the visible Value adjustment.
+     |
+     |   Two deliberate refusals. One-for-ones get no adjustment, because the
+     |   value gap between two single players is the whole story already and a
+     |   premium on top would count it twice (minAssetsForAdjustment). And an
+     |   adjustment below the noise floor is dropped entirely rather than applied
+     |   invisibly, so a displayed total always equals the assets above it.
+     |
+     |   Stored values are never touched: everything is computed inside one trade
+     |   and discarded. 30 tests, including symmetry (the same trade from the
+     |   other seat returns the same numbers), a balance check (adding the solved
+     |   asset really does level the sides), the cap, and input immutability)
+
+T470 | completed | Consolidation replaces pile-on inside Signal Check
+     | files: lib/signal-check/types.ts, lib/signal-check/settings.ts,
+     |   lib/signal-check/trade-shape.ts, lib/signal-check/calibration.ts,
+     |   lib/signal-check/pipeline.ts, lib/signal-check/confidence.ts,
+     |   lib/signal-check/explanation.ts, lib/signal-check/values.ts,
+     |   lib/signal-check/versions.ts, lib/signal-check/trade-shape.test.ts,
+     |   app/tools/signal-check/actions.ts,
+     |   app/tools/signal-check/import-actions.ts,
+     |   app/admin/signal-check/regression-actions.ts,
+     |   lib/league-signal-check.ts, lib/trade-finder-grade.ts
+     | depends on: T469
+     | verified: yes (The quality pass runs as step 3 of the trade-shape phase,
+     |   after the side rules and before shape detection. Pile-on is left in the
+     |   code and switched off by default: both discount the tail of a package,
+     |   so running the pair charges it twice, and a test asserts exactly that.
+     |
+     |   Side totals are NOT rewritten. The credit lands in a new
+     |   consolidationAdjustment on AnalyzedSide and the sum goes in
+     |   effectiveTotal, so a reader can see the plain arithmetic next to the
+     |   number that changed the answer. computeVerdict compares the effective
+     |   totals; shape detection reads them too, so the shape and the verdict can
+     |   never disagree about whether a trade is close.
+     |
+     |   roster_clog was keyed off pileOnFired, which would have gone silent the
+     |   moment pile-on was turned off. It is now keyed off whichever mechanism
+     |   found the depth: pile-on firing, or the quality pass discounting two or
+     |   more pieces on a side.
+     |
+     |   buildValueResolver gained poolMax, one indexed top-of-pool row per
+     |   format, threaded through all five runPipeline callers. Null is handled:
+     |   the curve falls back to the trade's own best asset.
+     |
+     |   Confidence takes a small hit when a verdict leans on a modelled
+     |   adjustment and a larger one when the solver had to cap, because those
+     |   are the two cases where the number is least certain. The explanation
+     |   drops its "receives the strongest individual asset" sentence when the
+     |   consolidation sentence is present, which says the same thing better.
+     |
+     |   Both version pins moved to 1.1.0. Saved analyses replay from
+     |   public_payload and never recompute, so existing permalinks are untouched)
+
+T471 | completed | Quality settings seed + pile-on default flip
+     | files: supabase/migrations/0174_signal_check_quality_settings.sql
+     | depends on: T470
+     | verified: yes (15 rows under a new signal_check_quality category, applied
+     |   to prod via MCP and verified back out of pg. Every coefficient, the 50%
+     |   package threshold, the multiplier list, the noise floor and the solver
+     |   ceiling are admin-editable, so the model can be recalibrated against the
+     |   regression set without a deploy. The Signal Check settings page picks
+     |   them up with no new UI: it already queries category LIKE
+     |   'signal_check%'.
+     |
+     |   The same migration flips signal_check_pileon_enabled to false and
+     |   rewrites its description to say why. No schema change, so no RLS work
+     |   and no types regen: beacon_settings is service-role only and its columns
+     |   did not move)
+
+T472 | completed | Value adjustment as its own line item
+     | files: app/tools/signal-check/value-adjustment-row.tsx,
+     |   app/tools/signal-check/trade-result.tsx,
+     |   app/tools/signal-check/v/[shareId]/page.tsx,
+     |   lib/signal-check/builder-view.ts, lib/signal-check/freeze.ts
+     | depends on: T470
+     | verified: yes (The credit sits inside the side's asset list, in the same
+     |   row shape as a player, so the total above it is the sum of everything
+     |   below including this. A footnote elsewhere on the page would not answer
+     |   the question a reader actually has, which is where the difference came
+     |   from.
+     |
+     |   Points when the admin shows raw values, a share of the trade when they
+     |   do not. The percentage carries the same meaning without exposing the
+     |   value scale, so the line stays honest at either setting rather than
+     |   vanishing at the default one.
+     |
+     |   The row explains itself in visible text ("Credit for holding the best
+     |   asset in the trade") rather than through an aria-label duplicating what
+     |   is already on screen. The plus badge is aria-hidden. Same row shape at
+     |   every breakpoint, so nothing is hidden on mobile.
+     |
+     |   Renders on the share page from public_payload too, and tolerates a
+     |   payload frozen before the field existed: the fields are checked for a
+     |   finite number rather than for null, so an older share link renders
+     |   exactly as it always did)
+
+T473 | completed | Trade Finder balances packages on quality, not addition
+     | files: lib/trade-finder/packages.ts, lib/trade-finder/types.ts,
+     |   lib/trade-finder-data.ts, lib/trade-finder-cross-league.ts,
+     |   app/actions/trade-finder.ts, lib/trade-finder/packages.test.ts
+     | depends on: T469
+     | verified: yes (This is the change that stops the bad offers, because the
+     |   bad offers were built here. balancePackages accepted any combination
+     |   whose raw values summed to between 95% and 115% of the target, and
+     |   nothing in that test could tell three bench pieces from one starter.
+     |
+     |   A candidate package now has to clear the quality band as well: its
+     |   quality must land between 0.92 and 1.18 of what the reader is asking
+     |   for. The raw band widens to a search bound (+60%) at the same time,
+     |   which is not a loosening. Consolidation genuinely costs a raw premium of
+     |   roughly a third on a two-for-one, so keeping the old 15% ceiling
+     |   alongside the quality test would have rejected every package that pays
+     |   one and reduced the feature to suggesting one-for-ones.
+     |
+     |   incomingPairs takes the same widened bound, or the add-depth goal would
+     |   build pairs the outgoing gate then refuses, and that goal would return
+     |   nothing at all.
+     |
+     |   The config comes from the same beacon_settings rows Signal Check reads,
+     |   loaded once per press through the admin client, so the suggestion and
+     |   the grade printed under it can never disagree for a reason no reader
+     |   could discover. A failed read falls back to the published defaults
+     |   rather than taking the feature down. poolMax is one indexed row per
+     |   league, in the reader's own source, added to the existing parallel read
+     |   so it costs no extra round trip)
+
+T474 | completed | Acceptance band reads quality, not raw value
+     | files: lib/trade-finder/rank.ts, lib/trade-finder/engine.ts,
+     |   lib/trade-finder/types.ts, lib/trade-finder/rank.test.ts
+     | depends on: T473
+     | verified: yes (acceptanceOf decided "is the other manager losing value"
+     |   from the raw delta, so a three-for-one that balanced on paper came back
+     |   Likely and scored at full weight. It now reads the quality ratio, which
+     |   is what the counterparty RECEIVES over what they give, and is the same
+     |   number from either seat so no sign flip is needed.
+     |
+     |   The same deal now lands Long shot, which carries a 0.12 multiplier and
+     |   removes it from the top slot without deleting it: sometimes the honest
+     |   answer really is that you would have to overpay.
+     |
+     |   qualityGapOf expresses the gap as a share of the larger side, exactly
+     |   like valueGapOf, so EVEN_GAP and LOPSIDED_GAP keep meaning what they
+     |   meant. The raw path is still there and still tested, for any caller that
+     |   has no quality model to hand.
+     |
+     |   qualityRatio rides along on every suggestion. valueGap stays raw,
+     |   because the pitch quotes it to the other manager and that message should
+     |   describe the values both people can look up)
+
+T475 | completed | Stop the same player headlining every suggestion
+     | files: lib/trade-finder/engine.ts, lib/trade-finder/engine.test.ts
+     | depends on: T454
+     | verified: yes (spreadByTarget already kept consecutive suggestions from
+     |   being for the same incoming player. Nothing did the same for the paying
+     |   end, and that end has a structural cause: the reader's currency is one
+     |   pool sorted cheapest first, and the balancer prefers the smallest
+     |   package that clears the target, so the same two or three assets cleared
+     |   the band for nearly every target in the league.
+     |
+     |   spreadByPayment walks the ranked list and, when the next deal pays with
+     |   the same headline asset the last one did, takes the first later deal
+     |   that does not. Greedy and stable: nothing is dropped and nothing is
+     |   reordered where there is no clash to fix, so the score ordering survives
+     |   and two runs over the same league still return the same order, which is
+     |   what makes a stored pass still mean something on the next visit.
+     |
+     |   The quality gate from T473 helps here on its own: cheap assets now fail
+     |   the band more often, so the pool of viable currency is wider than it was)
+
+T476 | completed | Review pass: copy accuracy, coefficient guards, client reuse
+     | files: lib/signal-check/settings.ts, lib/signal-check/explanation.ts,
+     |   lib/signal-check/pipeline.ts, lib/trade-quality.ts,
+     |   app/tools/signal-check/value-adjustment-row.tsx,
+     |   app/actions/trade-finder.ts, lib/signal-check/freeze.test.ts,
+     |   supabase/migrations/0174_signal_check_quality_settings.sql
+     | depends on: T472, T475
+     | verified: yes (Three findings from the self-review, all fixed.
+     |
+     |   COPY, twice. Both the explanation template and the adjustment row's
+     |   helper line asserted things that are usually true and not always. The
+     |   template opened "Side {side} gives up more total value", which is false
+     |   whenever two sides start level and consolidation alone separates them,
+     |   and the row said "Credit for holding the best asset in the trade", which
+     |   is false in the case where a side wins on quality without holding the
+     |   single biggest piece. Both now describe concentration, which is what the
+     |   model actually measures and is true on every trade that earns a credit.
+     |   The prod row was updated to match the migration file.
+     |
+     |   The explanation's "receives the strongest individual asset" sentence is
+     |   no longer suppressed when a credit applies. It was suppressed because
+     |   the old template said the same thing; the new one does not, and that
+     |   sentence is measured from real values rather than assumed.
+     |
+     |   COEFFICIENT GUARDS. Every weight and exponent is admin-editable and the
+     |   ratios are all in (0,1], where a negative exponent means "get bigger as
+     |   the asset gets smaller" and inverts the model on a typo. Exponents floor
+     |   at zero, weights floor at zero, and a non-finite weight returns zero. A
+     |   bad setting can now make the curve dull; it cannot make it lie.
+     |
+     |   ADMIN CLIENT REUSE. Both finder actions built two service-role clients
+     |   and ran two beacon_settings reads per press, one for the quality config
+     |   and one for the grade. One client, passed to both.
+     |
+     |   Three new freeze tests: the adjustment is withheld in points when raw
+     |   values are hidden while the percentage survives, the header total
+     |   reconciles against the assets plus the credit when they are shown, and a
+     |   trade that earned no credit carries no adjustment fields at all)
+
+### Verification summary (consolidation quality)
+- npx tsc --noEmit: clean
+- npm test: 1233 tests across 92 files, all pass (55 new)
+- npm run build: compiles clean in 14.3s, no warnings
+- Migration 0174 applied to prod via MCP and read back from pg_catalog; 15 rows
+  under signal_check_quality, signal_check_pileon_enabled now false. No schema
+  change, so no RLS work and no database.types.ts regeneration.
+- npm audit --omit=dev: 3 high, all pre-existing transitive dependencies of Next
+  (next DoS, postcss XSS, sharp/libvips). None introduced here, none reachable
+  from this change; package.json is untouched. Fixing them means a Next upgrade
+  and should be its own task.
+- Calibration run against the seven reference shapes (see handoff.md).
+- No browser testing this pass.
+
+## Trade Finder navigation, bookmarks, and a search button that means what it says
+
+T477 | completed | Grade a whole shortlist for the cost of grading one
+     | files: lib/trade-finder-grade.ts
+     | depends on: T456
+     | verified: yes (The reader can now page through the ranked field, so every
+     |   deal in it needs a grade rather than only the one that came first. The
+     |   obvious way, a gradeSuggestion call per suggestion, would be twelve
+     |   rounds of settings, ruleset, format, player, value and pick lookups, and
+     |   the note at the top of that file about one batch versus forty would have
+     |   been exactly right.
+     |
+     |   gradeSuggestions shares the lookups instead. A league's suggestions come
+     |   off the same rosters, so the union of their assets is barely larger than
+     |   any single deal's: one synthetic AnalysisInput holding every asset builds
+     |   one resolver that answers all twelve. The pipeline is pure, so the runs
+     |   after it touch no database at all.
+     |
+     |   Errors are caught per suggestion rather than per batch: one deal carrying
+     |   an asset with no value row must not cost the other eleven their grades.
+     |   gradeSuggestion is now a one-element call through the same path)
+
+T478 | completed | League search returns a window of the ranking
+     | files: app/actions/trade-finder.ts,
+     |   app/leagues/[league_id]/trade-finder/page.tsx
+     | depends on: T477
+     | verified: yes (The engine ranked forty and the action returned
+     |   suggestions[0], reporting the rest as a count. That left the surface with
+     |   no way forward except Not interested. It now returns twelve with their
+     |   grades and the reader's saved keys, and reports anything past the window
+     |   honestly as beyondWindow rather than pretending it away. Twelve is a
+     |   transport decision: the engine still ranks forty.
+     |
+     |   The league page's server-rendered first paint had a real bug, found while
+     |   wiring this: its findTrades call never passed the quality config added in
+     |   T473, so the tab opened on a deal assembled by plain addition while every
+     |   later search used the consolidation gate. The first suggestion was one
+     |   its own Search button could not reproduce. It now loads the same admin
+     |   settings and passes the same poolMax)
+
+T479 | completed | Cross-league walk returns a window too
+     | files: lib/trade-finder-cross-league.ts
+     | depends on: T478
+     | verified: yes (Was returning the single best deal from a three-league
+     |   window. Now takes up to four per league, merges on score, and spreads so
+     |   consecutive deals come from different rooms before returning twelve.
+     |   Without the spread one strong league supplies the first four and a reader
+     |   pages through a portfolio feature that only ever talks about one league.
+     |   The cursor logic is untouched, so pressing Search still walks the
+     |   portfolio exactly as it did)
+
+T480 | completed | Migration 0175: trade_suggestion_saves
+     | files: supabase/migrations/0175_trade_suggestion_saves.sql,
+     |   lib/database.types.ts
+     | depends on: T473
+     | verified: yes (RLS VERIFIED LIVE against prod inside a rolled-back
+     |   transaction, zero persistence. anon: permission denied at the table grant
+     |   level, which is stronger than a policy miss. Authenticated user A with
+     |   two rows present: sees 1, deletes 0 of user B's, updates 0 of user B's,
+     |   and an insert naming user B as owner is refused by WITH CHECK with
+     |   nothing written. Five policies confirmed in pg_policy with the right
+     |   roles and expressions.
+     |
+     |   The table stores the whole suggestion, not just its fingerprint like the
+     |   pass list does. A pass only has to answer "have I seen this"; a bookmark
+     |   has to answer "what was it", and the engine cannot be asked again once
+     |   rosters and values have moved. A bookmark that silently became a
+     |   different trade would be worse than no bookmark, so it renders from the
+     |   snapshot and is never recomputed. Same contract as a frozen Signal Check
+     |   permalink.
+     |
+     |   No expires_at, unlike declines. A pass is a snooze; deleting a bookmark
+     |   after a fortnight would be a bug rather than a policy. Types regenerated
+     |   via MCP and prettier-formatted: 33 added lines, nothing else moved)
+
+T481 | completed | lib/trade-finder-saves.ts, the bookmark boundary
+     | files: lib/trade-finder-saves.ts, lib/trade-finder-saves.test.ts
+     | depends on: T480
+     | verified: yes (The client posts the snapshot and a strict bounded Zod
+     |   schema decides whether it is storable. The alternative, posting a
+     |   fingerprint and re-running the whole search to find the deal it names, is
+     |   about two and a half seconds of database work to record a bookmark. The
+     |   row is only ever read back by the person who wrote it, so the worst a
+     |   forged one can do is show its author a trade they invented: the same
+     |   argument migration 0173 already makes for a forged pass. The schema is
+     |   there to stop the column becoming general storage, not to prove
+     |   provenance, and the comments say so rather than implying more.
+     |
+     |   .strict() throughout, so an unknown key is a rejection rather than
+     |   something ignored. Assets capped at six a side, free text capped, numbers
+     |   required finite, seasons and rounds bounded, the fingerprint checked
+     |   against the engine's own pattern. Rows are parsed on the way OUT as well,
+     |   so a bookmark written by an older shape of the engine drops out of the
+     |   list rather than rendering as half a card.
+     |
+     |   16 tests, every one of them a payload the column must refuse. Zod 4's
+     |   .uuid() turned out to enforce RFC-4122 version bits; player ids are all
+     |   v4 today so it would have passed, but rejecting a bookmark over a version
+     |   nibble is a strange way to fail, so it validates the shape instead,
+     |   matching the pattern the finder's own actions already use)
+
+T482 | completed | Save, remove, and list server actions
+     | files: app/actions/trade-finder.ts
+     | depends on: T481
+     | verified: yes (All three require a session and say so rather than failing
+     |   quietly, because a save button that does nothing is the exact problem
+     |   this change set out to remove from the other buttons. user_id is stamped
+     |   from the session, never from the request, under a policy that would
+     |   reject any other value. The per-user ceiling is checked before insert and
+     |   the failure is named, including the fact that it is a limit)
+
+T483 | completed | Previous, Next, and a position readout
+     | files: components/trade-finder.tsx
+     | depends on: T478
+     | verified: yes (The shortlist lives in component state, so the arrows are
+     |   pure index changes with no round trip, no rate-limit pressure, and no
+     |   two-second wait to see a deal the server already computed and sent.
+     |
+     |   "Trade 3 of 12" is visible text rather than an aria-only string: a
+     |   sighted reader needs to know there are nine more just as much as anyone.
+     |   Every move announces in the existing polite live region AND moves focus
+     |   to the card heading, which is what makes the arrows usable without a
+     |   mouse. Previous and Next disable at the ends at 50% opacity rather than
+     |   disappearing, so the shape of the control does not move under the cursor.
+     |
+     |   Not interested no longer triggers a re-search. It splices the deal out of
+     |   what is already held and keeps the reader's place in the ranking, so a
+     |   pass is instant instead of a 2.3 second wait that sent them back to the
+     |   top. The database write still happens, and still happens whether or not
+     |   the local list agrees, so a failed write cannot strand the reader on a
+     |   deal they just refused)
+
+T484 | completed | Separate searching from navigating
+     | files: components/trade-finder.tsx, components/trade-finder-panel.tsx,
+     |   app/leagues/[league_id]/trade-finder/page.tsx
+     | depends on: T483
+     | verified: yes (The submit button read "Find another trade" and re-ran a
+     |   deterministic search with unchanged filters and an unchanged pass list,
+     |   which returned the identical trade. It looked like navigation and it was
+     |   a no-op, worst of all on the league tab, which server-renders a deal on
+     |   first paint so the page opened with a suggestion visible and a button
+     |   promising another one.
+     |
+     |   It now reads "Search with these settings", sits with the filters that
+     |   shape it, and carries a line saying the arrows below are what move
+     |   between results. Changing the goal resets the portfolio cursor, because a
+     |   new goal is a new question and continuing the walk would leave every
+     |   league already visited unexamined under it. Surrounding copy on both
+     |   surfaces was rewritten to describe stepping through rather than passing)
+
+T485 | completed | Saved tab, with a login gate that shows the feature
+     | files: components/trade-finder.tsx
+     | depends on: T482, T483
+     | verified: yes (A two-button toggle rather than a tablist: a tablist
+     |   promises arrow-key movement between tabs and a matching set of tabpanels,
+     |   and this is two toggles over one region, so aria-pressed says what is
+     |   actually true.
+     |
+     |   Saved deals render through the same card from their snapshot, with the
+     |   save date through formatEastern and a line saying values are as they were
+     |   then. Save does NOT move focus or advance, because saving is not
+     |   navigation and stealing the cursor there would send a keyboard reader
+     |   somewhere they did not ask to go.
+     |
+     |   Signed out, the reader sees "Sign in to bookmark this trade" as a real
+     |   link to /login in the action row, and "Sign in to save trades" where the
+     |   Saved tab would be. Both are links rather than disabled text, so the
+     |   feature is discoverable and the gate is one click rather than a dead end)
+
+T486 | completed | Fix the value ceiling hidden in the currency pool
+     | files: lib/trade-finder/packages.ts, lib/trade-finder/packages.test.ts
+     | depends on: T473
+     | verified: yes (givablePool sorts ascending, because the balancing search
+     |   wants to try the cheapest package that clears the target first, and then
+     |   took the first fourteen. That keeps the fourteen CHEAPEST assets and
+     |   silently discards everything above them, so on a deep dynasty roster the
+     |   engine could not offer a good player because the good players were never
+     |   in the pool. The comment explained the sort correctly and the slice then
+     |   acted as a value ceiling nobody intended.
+     |
+     |   The cut now takes eight from the cheap end and six from the expensive
+     |   one, preserving ascending order because the search depends on it. A test
+     |   builds a roster with a 7,000-point stash behind sixteen bench pieces and
+     |   asserts it survives into the pool)
+
+T487 | completed | Stop one team owning the shortlist
+     | files: lib/trade-finder/engine.ts, lib/trade-finder/engine.test.ts
+     | depends on: T483
+     | verified: yes (spreadByTarget and spreadByPayment vary the players. Nothing
+     |   varied the team, and a league usually has one manager whose roster fits
+     |   the reader's better than anyone else's, so their deals could hold most of
+     |   the ranking. Invisible while the surface showed one suggestion; with
+     |   arrows on the card it is eight consecutive offers to the same person.
+     |
+     |   Same greedy walk as the other two, running last so the player spreads
+     |   settle first and this only breaks ties they left behind. Tested for the
+     |   spread and for dropping nothing, and the determinism test still passes,
+     |   which is what keeps a stored pass meaningful on the next visit)
+
+### Verification summary (navigation, bookmarks, engine fixes)
+- npx tsc --noEmit: clean
+- npm test: 1254 tests across 93 files, all pass (21 new)
+- npm run build: compiles clean in 13.9s, no warnings
+- Migration 0175 applied to prod via MCP. RLS verified live inside a rolled-back
+  transaction: anon denied at the grant level, owner scoping confirmed on select,
+  update, delete, and a cross-user insert. Types regenerated and formatted.
+- npm audit --omit=dev: unchanged from the previous pass. 3 high, all pre-existing
+  transitive dependencies of Next. package.json untouched.
+- No browser testing this pass; no dev server left running.

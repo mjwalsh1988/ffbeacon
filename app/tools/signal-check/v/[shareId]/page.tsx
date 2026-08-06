@@ -8,6 +8,7 @@ import { SITE } from "@/lib/site";
 import type { PublicSharePayload, SideKey } from "@/lib/signal-check/types";
 import { TradeMarginGraph } from "../../trade-margin-graph";
 import { AssetAvatar } from "../../asset-avatar";
+import { ValueAdjustmentRow } from "../../value-adjustment-row";
 import { HeroLavaField } from "@/components/hero-lava-field";
 
 export const dynamic = "force-dynamic";
@@ -196,6 +197,13 @@ export default async function SignalCheckSharePage({
                         </li>
                       );
                     })}
+                    {payload.adjustmentLabel && (
+                      <ValueAdjustmentRow
+                        label={payload.adjustmentLabel}
+                        points={s.adjustment}
+                        pct={s.adjustmentPct}
+                      />
+                    )}
                   </ul>
                 </div>
               );

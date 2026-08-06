@@ -2,11 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   acquirablePool,
   assetId,
+  assetValue,
   balancePackages,
   givablePool,
   PACKAGE_LIMITS,
   type AssetRef,
+  type QualityGate,
 } from "./packages";
+import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
 import { buildTeamProfile } from "./profile";
 import { STANDARD_SLOTS, fullRoster, pick, player, team } from "./_test-kit";
 
@@ -218,5 +221,102 @@ describe("givablePool", () => {
         allowPicks: true,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("balancePackages quality gate", () => {
+  const gateFor = (incomingValues: number[]): QualityGate => ({
+    config: DEFAULT_TRADE_QUALITY_CONFIG,
+    poolMax: 9900,
+    incomingValues,
+  });
+
+  it("rejects a pile of depth pieces that only adds up on paper", () => {
+    // Three pieces summing to 4,100 against a single 4,000 asset. The raw band
+    // is delighted. The other manager would not be.
+    const pool = [asRef(1300, "a"), asRef(1400, "b"), asRef(1400, "c")];
+    const raw = balancePackages(4000, pool);
+    const gated = balancePackages(4000, pool, { quality: gateFor([4000]) });
+
+    expect(raw.length).toBeGreaterThan(0);
+    expect(gated).toHaveLength(0);
+  });
+
+  it("still accepts a like-for-like single asset", () => {
+    const pool = [asRef(1000, "a"), asRef(4050, "b")];
+    const gated = balancePackages(4000, pool, { quality: gateFor([4000]) });
+    expect(gated.length).toBeGreaterThan(0);
+    expect(gated[0]).toHaveLength(1);
+    expect(assetId(gated[0][0])).toBe("b");
+  });
+
+  it("accepts a two-piece package once it pays the consolidation premium", () => {
+    // Raw total 5,400 against a 4,000 target: a 35% overpay, which is roughly
+    // what consolidation actually costs. The old raw ceiling would have thrown
+    // this out at 15% and left nothing behind it.
+    const pool = [asRef(2600, "a"), asRef(2800, "b")];
+    const gated = balancePackages(4000, pool, { quality: gateFor([4000]) });
+    expect(gated.length).toBeGreaterThan(0);
+  });
+
+  it("rejects an overpay that hands over a clearly better asset", () => {
+    const pool = [asRef(6500, "a")];
+    const gated = balancePackages(4000, pool, { quality: gateFor([4000]) });
+    expect(gated).toHaveLength(0);
+  });
+
+  it("behaves exactly as before when no gate is supplied", () => {
+    const pool = [asRef(1300, "a"), asRef(1400, "b"), asRef(1400, "c")];
+    expect(balancePackages(4000, pool).length).toBeGreaterThan(0);
+  });
+});
+
+describe("givablePool value spread", () => {
+  /** A roster with far more tradeable pieces than the pool can hold. */
+  const deepBench = () => {
+    const starters = fullRoster();
+    const bench = Array.from({ length: 16 }, (_, i) =>
+      player({ position: "WR", value: 400 + i * 60, projPoints: 1 }),
+    );
+    // One genuinely valuable piece the lineup does not need, which is exactly
+    // the asset a reader would expect to be able to trade.
+    const stash = player({ position: "WR", value: 7000, projPoints: 1 });
+    return [...starters, ...bench, stash];
+  };
+
+  it("keeps the reader's most valuable expendable asset in the pool", () => {
+    const profile = profileOf(deepBench());
+    const pool = givablePool(profile, {
+      goal: "balanced",
+      offerPlayerId: null,
+      allowPicks: false,
+    });
+
+    expect(pool.length).toBeLessThanOrEqual(PACKAGE_LIMITS.GIVE_LIMIT);
+    // The old slice kept the cheapest fourteen, so a 7,000-point stash could
+    // never be offered however obvious the trade was.
+    expect(Math.max(...pool.map(assetValue))).toBeGreaterThan(6000);
+  });
+
+  it("still leads with cheap currency, which is what the balancer walks first", () => {
+    const profile = profileOf(deepBench());
+    const pool = givablePool(profile, {
+      goal: "balanced",
+      offerPlayerId: null,
+      allowPicks: false,
+    });
+    const values = pool.map(assetValue);
+    // Ascending order is preserved across the cut, which the search depends on.
+    expect([...values].sort((a, b) => a - b)).toEqual(values);
+  });
+
+  it("leaves a pool that already fits completely alone", () => {
+    const profile = profileOf();
+    const pool = givablePool(profile, {
+      goal: "balanced",
+      offerPlayerId: null,
+      allowPicks: false,
+    });
+    expect(pool.length).toBeLessThanOrEqual(PACKAGE_LIMITS.GIVE_LIMIT);
   });
 });

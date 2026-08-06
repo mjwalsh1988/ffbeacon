@@ -77,3 +77,74 @@ describe("freezeAnalysis privacy boundary", () => {
     expect(payload.sides.find((s) => s.side === "a")?.total).toBe(137);
   });
 });
+
+describe("consolidation in the public payload", () => {
+  const consolidationInput: AnalysisInput = {
+    formatSlug: "dynasty-ppr-sflex",
+    sides: {
+      a: [{ kind: "player", playerId: "big" }],
+      b: [
+        { kind: "player", playerId: "mid1" },
+        { kind: "player", playerId: "mid2" },
+        { kind: "player", playerId: "mid3" },
+      ],
+    },
+  };
+  const consolidationPlayers = {
+    big: { name: "Premium", position: "WR", team: "DAL", value: 5498 },
+    mid1: { name: "Mid One", position: "RB", team: "SF", value: 2190 },
+    mid2: { name: "Mid Two", position: "WR", team: "NYJ", value: 2164 },
+    mid3: { name: "Mid Three", position: "TE", team: "KC", value: 1531 },
+  };
+
+  const run = (settings = settingsWith()) =>
+    runPipeline({
+      input: consolidationInput,
+      resolver: fakeResolver(consolidationPlayers),
+      format: DYNASTY_FORMAT,
+      source: SOURCE,
+      settings,
+      rules: [],
+      rulesetVersion: 3,
+      poolMax: 9900,
+    });
+
+  it("withholds the adjustment in points but keeps the share when raw values are hidden", () => {
+    const settings = settingsWith({ showRawValues: false });
+    const analysis = run(settings);
+    const payload = buildPublicPayload(analysis, settings, "2026-06-25T12:00:00.000Z");
+    const a = payload.sides.find((s) => s.side === "a");
+
+    expect(analysis.consolidation.applied).toBe(true);
+    expect(a?.adjustment).toBeNull();
+    // A percentage exposes no value scale, so it is safe at the default setting
+    // and is what keeps the line item meaningful there.
+    expect(a?.adjustmentPct).toBeGreaterThan(0);
+    expect(payload.adjustmentLabel).toBeTruthy();
+  });
+
+  it("shows the adjustment in points when raw values are on, and it reconciles", () => {
+    const settings = settingsWith({ showRawValues: true });
+    const analysis = run(settings);
+    const payload = buildPublicPayload(analysis, settings, "2026-06-25T12:00:00.000Z");
+    const a = payload.sides.find((s) => s.side === "a");
+    const b = payload.sides.find((s) => s.side === "b");
+
+    // The header total is the assets plus the credit shown beneath them, which
+    // is the whole point of putting the credit in the list.
+    expect(a?.total).toBe(5498 + (a?.adjustment ?? 0));
+    // The other side is untouched: a consolidation credit never docks anyone.
+    expect(b?.adjustment).toBeNull();
+    expect(b?.total).toBe(5885);
+    expect(payload.winnerSide).toBe("a");
+  });
+
+  it("carries no adjustment fields at all on a trade that did not earn one", () => {
+    const settings = settingsWith({ showRawValues: true });
+    const analysis = analyze(settings);
+    const payload = buildPublicPayload(analysis, settings, "2026-06-25T12:00:00.000Z");
+    expect(payload.adjustmentLabel).toBeNull();
+    expect(payload.sides.every((s) => s.adjustment === null)).toBe(true);
+    expect(payload.sides.every((s) => s.adjustmentPct === null)).toBe(true);
+  });
+});

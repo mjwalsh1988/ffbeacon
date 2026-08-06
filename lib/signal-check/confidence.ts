@@ -23,6 +23,10 @@ export interface ConfidenceInputs {
   /** True only on the Sleeper path when format detection was clean. */
   formatAutoDetected: boolean;
   pileOnFired: boolean;
+  /** A consolidation credit changed which side wins, or by how much. */
+  consolidationApplied?: boolean;
+  /** The balancing solver hit its ceiling, so the credit understates the gap. */
+  consolidationCapped?: boolean;
   ruleModifiers: number[];
 }
 
@@ -53,6 +57,11 @@ export function computeConfidence(
   if (inputs.hasAssumedPicks) add("assumed_picks", -8, "A pick bucket was assumed");
   if (inputs.formatAutoDetected) add("format_detected", 5, "Format auto-detected cleanly from Sleeper");
   if (inputs.pileOnFired) add("pile_on", -10, "Pile-on materially changed a side total");
+  // A consolidation credit is a modelled number rather than a measured one, so
+  // a verdict that leans on one is a shade less certain than a verdict where
+  // the raw values already agreed.
+  if (inputs.consolidationApplied) add("consolidation", -6, "A consolidation adjustment shaped the verdict");
+  if (inputs.consolidationCapped) add("consolidation_capped", -10, "The two sides are too far apart to balance");
 
   for (const mod of inputs.ruleModifiers) {
     if (mod !== 0) add("rule_modifier", mod, "Admin rule confidence modifier");

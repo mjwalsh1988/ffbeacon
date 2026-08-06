@@ -62,6 +62,33 @@ interface PlayerEntry {
 export interface BuiltResolver {
   resolver: ValueResolver;
   source: ResolvedSource;
+  /**
+   * The most valuable player in this format's FF Beacon pool.
+   *
+   * The consolidation curve needs a yardstick for "how big is this asset in the
+   * grand scheme", and the answer has to come from the pool rather than from the
+   * trade, or a swap of two backups would grade like a swap of two superstars.
+   * Null when the pool is empty, which the curve handles by falling back to the
+   * trade's own best asset.
+   */
+  poolMax: number | null;
+}
+
+/** Top current value in one format's FF Beacon pool. One indexed row. */
+async function loadPoolMax(
+  supabase: Client,
+  formatConfigId: string,
+): Promise<number | null> {
+  const { data } = await supabase
+    .from("player_value_trends")
+    .select("current_value")
+    .eq("format_config_id", formatConfigId)
+    .eq("source", FFBEACON_SOURCE_SLUG)
+    .order("current_value", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const value = data?.current_value;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export async function buildValueResolver(
@@ -78,6 +105,7 @@ export async function buildValueResolver(
   );
 
   const players = new Map<string, PlayerEntry>();
+  const poolMax = await loadPoolMax(supabase, format.configId);
 
   // Player meta.
   for (const ids of chunk(playerIds, 200)) {
@@ -195,5 +223,5 @@ export async function buildValueResolver(
     pickDisplay,
   };
 
-  return { resolver, source };
+  return { resolver, source, poolMax };
 }

@@ -20,7 +20,18 @@ import { TradeFinder, type PlayerOption } from "@/components/trade-finder";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
 import { loadDeclinedKeys } from "@/lib/trade-finder-declines";
 import { findTrades } from "@/lib/trade-finder/engine";
-import { gradeSuggestion } from "@/lib/trade-finder-grade";
+import { gradeSuggestions } from "@/lib/trade-finder-grade";
+import { loadSavedKeys } from "@/lib/trade-finder-saves";
+import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
+import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
+
+/**
+ * Suggestions handed to the client on first paint.
+ *
+ * Matches the search action's window, so the tab opens with the same amount of
+ * ranking behind the arrows that a Search press would hand back.
+ */
+const INITIAL_WINDOW = 12;
 
 export const dynamic = "force-dynamic";
 
@@ -204,7 +215,8 @@ export default async function LeagueTradeFinderPage({
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
             One trade at a time, built from what every roster in this league
-            needs. Pass on any you do not like.
+            needs. Step through them, save the ones worth keeping, and pass on
+            the rest.
           </p>
         </section>
 
@@ -335,6 +347,16 @@ async function TradeFinderSection({
   // the component for the visit.
   const declined = isSignedIn ? await loadDeclinedKeys(supabase, sleeperLeagueId) : [];
 
+  // The consolidation model, read from the same admin settings Signal Check and
+  // the search action use. Without it this first paint would be assembled by
+  // plain addition while every later search used the quality gate, so the tab
+  // would open on a deal its own Search button could not reproduce.
+  const signalCheckSettings = await loadSignalCheckSettings(adminClient).catch(() => null);
+  const qualityConfig =
+    signalCheckSettings && signalCheckSettings.qualityEnabled
+      ? signalCheckSettings.quality
+      : DEFAULT_TRADE_QUALITY_CONFIG;
+
   const initialResult = findTrades({
     myRosterId,
     teams: finderLeague.teams,
@@ -345,11 +367,15 @@ async function TradeFinderSection({
     targetPlayerId: null,
     offerPlayerId: null,
     excludeKeys: declined,
+    quality: { config: qualityConfig, poolMax: finderLeague.poolMax },
   });
-  const initialSuggestion = initialResult.suggestions[0] ?? null;
-  const initialGrade = initialSuggestion
-    ? await gradeSuggestion(adminClient, finderLeague.sleeperLeague, initialSuggestion)
-    : null;
+  const initialSuggestions = initialResult.suggestions.slice(0, INITIAL_WINDOW);
+  const initialGrades = await gradeSuggestions(
+    adminClient,
+    finderLeague.sleeperLeague,
+    initialSuggestions,
+  );
+  const initialSavedKeys = isSignedIn ? await loadSavedKeys(supabase) : [];
 
   // Picker options. Both lists carry position and team so two players with the
   // same surname are told apart in a select a screen reader is reading aloud.
@@ -381,8 +407,9 @@ async function TradeFinderSection({
       myPlayers={myPlayers}
       theirPlayers={theirPlayers}
       initial={{
-        suggestion: initialSuggestion,
-        grade: initialGrade,
+        suggestions: initialSuggestions,
+        grades: initialGrades,
+        savedKeys: initialSavedKeys,
         meta: {
           leagueName: finderLeague.leagueName,
           formatDisplay: finderLeague.formatDisplay,
@@ -390,7 +417,10 @@ async function TradeFinderSection({
           pickSourceDisplay: finderLeague.pickSourceDisplay,
           consideredTeams: initialResult.consideredTeams,
           lineupUnavailable: initialResult.lineupUnavailable,
-          remaining: Math.max(0, initialResult.suggestions.length - 1),
+          beyondWindow: Math.max(
+            0,
+            initialResult.suggestions.length - initialSuggestions.length,
+          ),
         },
       }}
     />

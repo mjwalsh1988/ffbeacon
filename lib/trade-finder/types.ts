@@ -17,6 +17,7 @@
  */
 
 import type { TeamStatusKey } from "@/lib/league-team-status";
+import type { TradeQualityConfig } from "@/lib/trade-quality";
 
 /** What the reader is trying to do. Weights the ranking; never fabricates data. */
 export type TradeGoal =
@@ -129,6 +130,20 @@ export type TradeFinderInput = {
   offerPlayerId: string | null;
   /** Deal fingerprints the reader has already passed on. */
   excludeKeys: string[];
+  /**
+   * Consolidation scoring, the same model Signal Check grades with.
+   *
+   * Without it, packages are balanced by addition alone, which is how a trade
+   * tool ends up offering three bench pieces for somebody's starting back: the
+   * numbers line up and nothing in the arithmetic notices that they should not.
+   * Optional so tests and any caller that has not loaded settings still run, on
+   * the published defaults.
+   */
+  quality?: {
+    config: TradeQualityConfig;
+    /** Top value in this league's format and source. Null falls back sanely. */
+    poolMax: number | null;
+  };
 };
 
 /** One asset as it appears on a rendered suggestion. */
@@ -197,6 +212,13 @@ export type TradeSuggestion = {
   theirs: SideImpact;
   /** |value gap| over the larger side, 0 to 1. Lower is fairer. */
   valueGap: number;
+  /**
+   * What the outgoing package is worth against the incoming one in quality
+   * terms, where 1 is level. Under 1 means the reader is paying with pieces that
+   * do not add up to the player they are asking for, however well the raw
+   * numbers match. This is what the acceptance band reads.
+   */
+  qualityRatio: number;
   acceptance: AcceptanceBand;
   /** Internal rank score. Exposed for tests and debugging, not for display. */
   score: number;

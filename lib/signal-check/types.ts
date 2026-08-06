@@ -19,6 +19,10 @@
  * never carry picks (enforced server-side, see format.allowsPicks).
  */
 
+import type { TradeQualityConfig } from "@/lib/trade-quality";
+
+export type { TradeQualityConfig };
+
 // ---------------------------------------------------------------------------
 // Input model (what the builder submits / what a saved analysis replays)
 // ---------------------------------------------------------------------------
@@ -140,10 +144,17 @@ export interface AssetResult {
 export interface AnalyzedSide {
   side: SideKey;
   assets: AssetResult[];
-  /** Sum of adjusted asset values BEFORE trade-shape rules (incl. pile-on). */
+  /** Sum of adjusted asset values BEFORE trade-shape rules. */
   totalPre: number;
-  /** Side total AFTER trade-shape rules (incl. pile-on). */
+  /** Side total AFTER trade-shape rules. Still the plain sum of the assets. */
   totalPost: number;
+  /**
+   * Consolidation credit for this side, in points. Zero on the side that did
+   * not win the quality comparison, and zero whenever no adjustment applied.
+   */
+  consolidationAdjustment: number;
+  /** totalPost + consolidationAdjustment. What the verdict compares. */
+  effectiveTotal: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +171,29 @@ export interface BeaconVerdict {
   marginRaw: number;
   isNeutral: boolean;
   isBlowout: boolean;
+}
+
+/**
+ * The consolidation pass: what the quality comparison found, and what it cost
+ * the trailing side. `applied` false means the raw totals stand untouched (a
+ * one-for-one, a dead heat, quality scoring switched off, or an adjustment
+ * small enough that showing it would be noise).
+ */
+export interface ConsolidationResult {
+  enabled: boolean;
+  applied: boolean;
+  /** Side the quality comparison favours. Null when nothing separated them. */
+  favouredSide: SideKey | null;
+  /** Points credited to the favoured side. Zero when not applied. */
+  adjustment: number;
+  /** The adjustment as a percent of the combined effective value. */
+  adjustmentPct: number;
+  /** Quality totals per side, for the trace and admin debugging. */
+  qualityTotals: Record<SideKey, number>;
+  /** Package pieces discounted per side. Drives the roster-clog shape. */
+  discountedCounts: Record<SideKey, number>;
+  /** True when the solver hit its ceiling instead of converging. */
+  capped: boolean;
 }
 
 export interface TradeShapeResult {
@@ -219,6 +253,7 @@ export interface SignalCheckAnalysis {
   sides: Record<SideKey, AnalyzedSide>;
   combinedValue: number;
   verdict: BeaconVerdict;
+  consolidation: ConsolidationResult;
   tradeShape: TradeShapeResult;
   confidence: ConfidenceResult;
   explanation: string;
@@ -260,7 +295,15 @@ export interface SignalCheckSettings {
   winTemplate: string;
   compoundingMode: "sequential" | "against_base";
 
-  // Pile-on
+  // Consolidation quality (replaces pile-on as the depth discount)
+  quality: TradeQualityConfig;
+  qualityEnabled: boolean;
+  /** Row label shown next to the adjustment, e.g. "Value adjustment". */
+  qualityAdjustmentLabel: string;
+  /** Sentence added to the explanation when an adjustment applies. */
+  qualityTemplate: string;
+
+  // Pile-on (legacy depth discount; off by default once quality is on)
   pileOnEnabled: boolean;
   pileOnTopK: number;
   pileOnCurveBase: number;
@@ -305,8 +348,21 @@ export interface PublicSidePayload {
     /** Draft round (pick assets only) for the pick badge. */
     round: number | null;
   }[];
-  /** Only present when the admin "show raw values" toggle is on. */
+  /**
+   * Effective side total (assets plus any consolidation credit). Only present
+   * when the admin "show raw values" toggle is on.
+   */
   total: number | null;
+  /**
+   * Consolidation credit for this side, in points. Only present when raw
+   * values are shown AND this side actually received one.
+   */
+  adjustment: number | null;
+  /**
+   * The same credit as a percent of the combined effective value. Safe to show
+   * when raw points are hidden, because it exposes no value scale.
+   */
+  adjustmentPct: number | null;
 }
 
 export interface PublicSharePayload {
@@ -319,6 +375,8 @@ export interface PublicSharePayload {
   tradeShapeLabel: string | null;
   confidenceLabel: string | null;
   explanation: string;
+  /** Row label for the consolidation credit, when one is present. */
+  adjustmentLabel: string | null;
   sides: PublicSidePayload[];
   valueSnapshotLabel: string | null;
   createdAtIso: string;

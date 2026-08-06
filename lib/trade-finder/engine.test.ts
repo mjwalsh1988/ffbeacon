@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { findTrades } from "./engine";
 import { STANDARD_SLOTS, pick, player, team } from "./_test-kit";
+import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
 import type { FinderTeam, TradeFinderInput } from "./types";
 
 /**
@@ -306,5 +307,71 @@ describe("findTrades", () => {
       // The balancing band is what stops a suggestion reading as a lowball.
       expect(s.valueGap).toBeLessThanOrEqual(0.25);
     }
+  });
+});
+
+describe("findTrades consolidation and variety", () => {
+  it("never pays for a starter with a pile of pieces worth under half of him", () => {
+    for (const s of run({ quality: { config: DEFAULT_TRADE_QUALITY_CONFIG, poolMax: 9900 } })
+      .suggestions) {
+      const best = Math.max(
+        ...s.incoming.map((a) => a.value),
+        ...s.outgoing.map((a) => a.value),
+      );
+      const throwIns = s.outgoing.filter((a) => a.value < best * 0.5).length;
+      // Two throw-ins is a package. Three is the shape this engine used to
+      // produce and the reason the feature reads as unfair.
+      expect(throwIns).toBeLessThan(3);
+    }
+  });
+
+  it("reports a quality ratio on every suggestion, near level", () => {
+    for (const s of run().suggestions) {
+      expect(Number.isFinite(s.qualityRatio)).toBe(true);
+      expect(s.qualityRatio).toBeGreaterThan(0.9);
+      expect(s.qualityRatio).toBeLessThan(1.2);
+    }
+  });
+
+  it("does not lead consecutive suggestions with the same outgoing asset", () => {
+    const { suggestions } = run();
+    const headline = (s: (typeof suggestions)[number]) => {
+      let best = s.outgoing[0];
+      for (const a of s.outgoing) if (a.value > best.value) best = a;
+      return best.kind === "player" ? best.playerId : best.key;
+    };
+    for (let i = 1; i < suggestions.length; i += 1) {
+      // The only allowed repeat is when everything left pays the same way.
+      const rest = suggestions.slice(i).map(headline);
+      const allSame = rest.every((k) => k === rest[0]);
+      if (allSame) break;
+      expect(headline(suggestions[i])).not.toBe(headline(suggestions[i - 1]));
+    }
+  });
+
+  it("is still deterministic: two runs return the same order", () => {
+    const a = run().suggestions.map((s) => s.key);
+    const b = run().suggestions.map((s) => s.key);
+    expect(a).toEqual(b);
+  });
+});
+
+describe("findTrades counterparty spread", () => {
+  it("does not put consecutive suggestions with the same team", () => {
+    const { suggestions } = run();
+    for (let i = 1; i < suggestions.length; i += 1) {
+      const rest = suggestions.slice(i).map((s) => s.counterparty.rosterId);
+      // The only allowed repeat is when every deal left is with one team.
+      if (rest.every((id) => id === rest[0])) break;
+      expect(suggestions[i].counterparty.rosterId).not.toBe(
+        suggestions[i - 1].counterparty.rosterId,
+      );
+    }
+  });
+
+  it("drops nothing while spreading", () => {
+    const spread = run().suggestions;
+    const keys = new Set(spread.map((s) => s.key));
+    expect(keys.size).toBe(spread.length);
   });
 });

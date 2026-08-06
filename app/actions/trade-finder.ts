@@ -3,11 +3,19 @@
 /**
  * Trade Finder's server calls.
  *
- * Three of them: find the next deal in one league, find the next deal across a
- * reader's whole portfolio, and record a pass. Server actions rather than route
- * handlers because none of these has a shareable URL or a cacheable answer; the
- * reader presses a button, we answer, and the answer is worth nothing to anyone
- * else.
+ * Find a shortlist of deals in one league, find one across a reader's whole
+ * portfolio, record a pass, and bookmark or un-bookmark a trade. Server actions
+ * rather than route handlers because none of these has a shareable URL or a
+ * cacheable answer; the reader presses a button, we answer, and the answer is
+ * worth nothing to anyone else.
+ *
+ * WHY A SHORTLIST RATHER THAN ONE DEAL
+ *   The engine ranks the whole field to know which trade is best, and this used
+ *   to return only the winner. That left the surface with no way forward except
+ *   "Not interested", so a reader who merely wanted to look past something had
+ *   to declare it refused. Returning a window of the ranking makes Previous and
+ *   Next pure client state: no round trip, no rate-limit pressure, and no
+ *   two-second wait to see the deal that was already computed.
  *
  * WHAT IS TRUSTED AND WHAT IS NOT
  *   Nothing in the arguments is trusted as an identity. The signed-in user comes
@@ -44,7 +52,19 @@ import {
   loadDeclinedKeysForLeagues,
   recordDecline,
 } from "@/lib/trade-finder-declines";
-import { gradeSuggestion, type SuggestionGrade } from "@/lib/trade-finder-grade";
+import { gradeSuggestions, type SuggestionGrade } from "@/lib/trade-finder-grade";
+import {
+  loadSavedKeys,
+  loadSavedTrades,
+  removeSavedTrade,
+  saveTrade,
+  type SavedTrade,
+} from "@/lib/trade-finder-saves";
+import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
+import {
+  DEFAULT_TRADE_QUALITY_CONFIG,
+  type TradeQualityConfig,
+} from "@/lib/trade-quality";
 import { isValidSuggestionKey } from "@/lib/trade-finder/fingerprint";
 import { TRADE_GOALS, type TradeGoal, type TradeSuggestion } from "@/lib/trade-finder/types";
 
@@ -76,6 +96,38 @@ const PORTFOLIO_RATE_MAX = 6;
 
 const GOAL_KEYS = new Set(TRADE_GOALS.map((g) => g.key));
 
+/**
+ * The consolidation model, read from the same admin settings Signal Check uses.
+ *
+ * The finder builds packages on it and Signal Check grades the winner with it,
+ * so if they read different coefficients the card would show a suggestion and a
+ * grade that disagree for no reason a reader could ever discover. One indexed
+ * beacon_settings query, behind the admin client because those rows are
+ * service-role only. A failed read falls back to the published defaults rather
+ * than taking the feature down.
+ */
+async function loadTradeQualityConfig(
+  admin: ReturnType<typeof createAdminClient>,
+): Promise<TradeQualityConfig> {
+  try {
+    const settings = await loadSignalCheckSettings(admin);
+    return settings.qualityEnabled ? settings.quality : DEFAULT_TRADE_QUALITY_CONFIG;
+  } catch {
+    return DEFAULT_TRADE_QUALITY_CONFIG;
+  }
+}
+
+/**
+ * How much of the ranking is sent to the browser.
+ *
+ * Twelve is past what anyone pages through in one sitting and small enough that
+ * the payload stays around twenty kilobytes and the grading batch stays one
+ * round of lookups. The engine still ranks forty; this is a transport decision,
+ * not a ranking one, and anything past it is reported honestly rather than
+ * pretended away.
+ */
+const SUGGESTION_WINDOW = 12;
+
 export type TradeFinderMeta = {
   leagueName: string;
   formatDisplay: string;
@@ -85,15 +137,18 @@ export type TradeFinderMeta = {
   consideredTeams: number;
   /** True when no projections exist, so lineup impact is unavailable. */
   lineupUnavailable: boolean;
-  /** Suggestions behind this one, after passes were removed. */
-  remaining: number;
+  /** Ranked deals past the window we sent. */
+  beyondWindow: number;
 };
 
 export type TradeFinderResponse =
   | {
       ok: true;
-      suggestion: TradeSuggestion | null;
-      grade: SuggestionGrade | null;
+      suggestions: TradeSuggestion[];
+      /** Aligned by index with `suggestions`. Null where a grade would be a guess. */
+      grades: (SuggestionGrade | null)[];
+      /** Keys this reader has already bookmarked, so the button opens correct. */
+      savedKeys: string[];
       meta: TradeFinderMeta;
     }
   | { ok: false; error: string };
@@ -101,13 +156,20 @@ export type TradeFinderResponse =
 export type PortfolioResponse =
   | {
       ok: true;
-      suggestion: CrossLeagueSuggestion | null;
-      grade: SuggestionGrade | null;
+      suggestions: CrossLeagueSuggestion[];
+      grades: (SuggestionGrade | null)[];
+      savedKeys: string[];
       cursor: number;
       examined: number;
       remaining: number;
       unreadable: number;
     }
+  | { ok: false; error: string };
+
+export type SaveTradeResponse = { ok: true } | { ok: false; error: string };
+
+export type SavedTradesResponse =
+  | { ok: true; saved: SavedTrade[] }
   | { ok: false; error: string };
 
 function readGoal(value: unknown): TradeGoal {
@@ -227,6 +289,8 @@ export async function findLeagueTrade(input: {
 
   const stored = user ? await loadDeclinedKeys(supabase, sleeperLeagueId) : [];
   const sessionExcluded = readKeys(input.sessionExcluded);
+  const admin = createAdminClient();
+  const qualityConfig = await loadTradeQualityConfig(admin);
 
   const result = findTrades({
     myRosterId: league.myRosterId,
@@ -238,17 +302,19 @@ export async function findLeagueTrade(input: {
     targetPlayerId: readPlayerId(input.targetPlayerId),
     offerPlayerId: readPlayerId(input.offerPlayerId),
     excludeKeys: [...stored, ...sessionExcluded],
+    quality: { config: qualityConfig, poolMax: league.poolMax },
   });
 
-  const suggestion = result.suggestions[0] ?? null;
-  const grade = suggestion
-    ? await gradeSuggestion(createAdminClient(), league.sleeperLeague, suggestion)
-    : null;
+  const suggestions = result.suggestions.slice(0, SUGGESTION_WINDOW);
+  // One batch of value lookups for the whole window, not one per suggestion.
+  const grades = await gradeSuggestions(admin, league.sleeperLeague, suggestions);
+  const savedKeys = user ? await loadSavedKeys(supabase) : [];
 
   return {
     ok: true,
-    suggestion,
-    grade,
+    suggestions,
+    grades,
+    savedKeys,
     meta: {
       leagueName: league.leagueName,
       formatDisplay: league.formatDisplay,
@@ -256,7 +322,7 @@ export async function findLeagueTrade(input: {
       pickSourceDisplay: league.pickSourceDisplay,
       consideredTeams: result.consideredTeams,
       lineupUnavailable: result.lineupUnavailable,
-      remaining: Math.max(0, result.suggestions.length - 1),
+      beyondWindow: Math.max(0, result.suggestions.length - suggestions.length),
     },
   };
 }
@@ -309,6 +375,9 @@ export async function findPortfolioTrade(input: {
 
   const resolvedSource = await resolveSourceSlug(supabase, input.source ?? undefined);
   const excludeByLeague = await loadDeclinedKeysForLeagues(supabase, sleeperLeagueIds);
+  // One admin client for the walk: the quality config and the grade both need
+  // service-role reads, and building two of them per press buys nothing.
+  const admin = createAdminClient();
 
   const cursor =
     typeof input.cursor === "number" && Number.isFinite(input.cursor)
@@ -323,28 +392,44 @@ export async function findPortfolioTrade(input: {
     cursor,
     excludeByLeague,
     sessionExcluded: readKeys(input.sessionExcluded),
+    qualityConfig: await loadTradeQualityConfig(admin),
   });
 
-  let grade: SuggestionGrade | null = null;
-  if (result.suggestion) {
+  // Grades are batched per league rather than per suggestion. The window spans
+  // at most three rooms, so this is at most three rounds of value lookups for
+  // twelve deals, and each league's own format is respected.
+  const grades: (SuggestionGrade | null)[] = result.suggestions.map(() => null);
+  const byLeague = new Map<string, number[]>();
+  result.suggestions.forEach((s, i) => {
+    const list = byLeague.get(s.league.sleeperLeagueId) ?? [];
+    list.push(i);
+    byLeague.set(s.league.sleeperLeagueId, list);
+  });
+
+  for (const [sleeperLeagueId, indexes] of byLeague) {
     const league = await loadTradeFinderLeague(supabase, {
-      sleeperLeagueId: result.suggestion.league.sleeperLeagueId,
+      sleeperLeagueId,
       sourceSlug: resolvedSource.slug,
       identity: { sleeperUserId },
     });
-    if (league) {
-      grade = await gradeSuggestion(
-        createAdminClient(),
-        league.sleeperLeague,
-        result.suggestion,
-      );
-    }
+    if (!league) continue;
+    const batch = await gradeSuggestions(
+      admin,
+      league.sleeperLeague,
+      indexes.map((i) => result.suggestions[i]),
+    );
+    indexes.forEach((i, n) => {
+      grades[i] = batch[n] ?? null;
+    });
   }
+
+  const savedKeys = await loadSavedKeys(supabase);
 
   return {
     ok: true,
-    suggestion: result.suggestion,
-    grade,
+    suggestions: result.suggestions,
+    grades,
+    savedKeys,
     cursor: result.nextCursor,
     examined: result.examined,
     remaining: result.remaining,
@@ -383,4 +468,81 @@ export async function declineSuggestion(input: {
     suggestionKey: input.suggestionKey,
   });
   return { ok: true, stored };
+}
+
+/**
+ * Bookmark a trade.
+ *
+ * The suggestion arrives from the client, and lib/trade-finder-saves.ts
+ * validates every field of it against a bounded, strict schema before anything
+ * is written. That schema is what stops the column becoming general storage; it
+ * is not there to prove the engine produced the deal, and it does not need to
+ * be. The row is only ever read back by the person who wrote it, so the worst a
+ * forged one can do is show its author a trade they made up, which is the same
+ * reasoning the pass list already runs on.
+ *
+ * Members only, and it says so rather than failing quietly, because a save
+ * button that does nothing is the exact problem this change set out to remove.
+ */
+export async function saveSuggestion(input: {
+  sleeperLeagueId: string;
+  leagueName?: string | null;
+  suggestion: unknown;
+  grade?: unknown;
+}): Promise<SaveTradeResponse> {
+  const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
+  if (!SLEEPER_ID_PATTERN.test(sleeperLeagueId)) {
+    return { ok: false, error: "That trade could not be saved." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in to bookmark a trade." };
+
+  return saveTrade(supabase, {
+    userId: user.id,
+    sleeperLeagueId,
+    leagueName:
+      typeof input.leagueName === "string" ? input.leagueName.slice(0, 120) : null,
+    suggestion: input.suggestion,
+    grade: input.grade ?? null,
+  });
+}
+
+/** Remove a bookmark. Scoped by the owner policies, not by a filter here. */
+export async function removeSavedSuggestion(input: {
+  sleeperLeagueId: string;
+  suggestionKey: string;
+}): Promise<SaveTradeResponse> {
+  const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
+  if (
+    !SLEEPER_ID_PATTERN.test(sleeperLeagueId) ||
+    !isValidSuggestionKey(input.suggestionKey)
+  ) {
+    return { ok: false, error: "That bookmark could not be removed." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in to manage your saved trades." };
+
+  const removed = await removeSavedTrade(supabase, {
+    sleeperLeagueId,
+    suggestionKey: input.suggestionKey,
+  });
+  return removed ? { ok: true } : { ok: false, error: "That bookmark could not be removed." };
+}
+
+/** This reader's bookmarks, newest first. Empty rather than an error when signed out. */
+export async function listSavedSuggestions(): Promise<SavedTradesResponse> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: true, saved: [] };
+  return { ok: true, saved: await loadSavedTrades(supabase) };
 }

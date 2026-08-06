@@ -13,5 +13,12 @@
  * Use plain semver-ish strings. Never reformat history; only move forward.
  */
 
-export const VALUE_ENGINE_VERSION = "1.0.0";
-export const RULE_INTERPRETER_VERSION = "1.0.0";
+/**
+ * 1.1.0 (both pins): the consolidation pass. Side totals gained an effective
+ * value carrying the quality credit, the verdict now compares those rather than
+ * the plain sums, and the built-in pile-on was superseded by it (still present,
+ * off by default). Both the value math and the interpreter semantics moved, so
+ * both pins move.
+ */
+export const VALUE_ENGINE_VERSION = "1.1.0";
+export const RULE_INTERPRETER_VERSION = "1.1.0";

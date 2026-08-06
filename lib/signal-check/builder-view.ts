@@ -21,7 +21,15 @@ export interface BuilderSideView {
   side: SideKey;
   teamLabel: string | null;
   assets: BuilderAssetView[];
+  /** Effective total: the assets plus any consolidation credit. */
   total: number | null;
+  /** Consolidation credit in points, when raw values are shown. */
+  adjustment: number | null;
+  /**
+   * The same credit as a share of the whole trade. Shown when raw points are
+   * hidden, so the line item still means something without exposing the scale.
+   */
+  adjustmentPct: number | null;
 }
 
 export interface BuilderView {
@@ -41,6 +49,8 @@ export interface BuilderView {
   hasMissingValues: boolean;
   hasAssumedPicks: boolean;
   showRawValues: boolean;
+  /** Row label for the consolidation credit. Null when none applied. */
+  adjustmentLabel: string | null;
 }
 
 function assetDetail(
@@ -58,8 +68,11 @@ export function toBuilderView(
   settings: SignalCheckSettings,
   teamLabels?: Partial<Record<SideKey, string | null>>,
 ): BuilderView {
+  const consolidation = analysis.consolidation;
+
   const sides: BuilderSideView[] = (["a", "b"] as SideKey[]).map((side) => {
     const s = analysis.sides[side];
+    const credited = consolidation.applied && consolidation.favouredSide === side;
     return {
       side,
       teamLabel: teamLabels?.[side] ?? null,
@@ -69,7 +82,9 @@ export function toBuilderView(
         value: settings.showRawValues ? Math.round(r.adjustedValue) : null,
         noValue: r.asset.noValue,
       })),
-      total: settings.showRawValues ? Math.round(s.totalPost) : null,
+      total: settings.showRawValues ? Math.round(s.effectiveTotal) : null,
+      adjustment: credited && settings.showRawValues ? Math.round(s.consolidationAdjustment) : null,
+      adjustmentPct: credited ? Number(consolidation.adjustmentPct.toFixed(1)) : null,
     };
   });
 
@@ -90,5 +105,6 @@ export function toBuilderView(
     hasMissingValues: analysis.hasMissingValues,
     hasAssumedPicks: analysis.hasAssumedPicks,
     showRawValues: settings.showRawValues,
+    adjustmentLabel: consolidation.applied ? settings.qualityAdjustmentLabel : null,
   };
 }

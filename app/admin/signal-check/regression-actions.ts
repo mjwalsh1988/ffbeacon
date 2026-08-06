@@ -145,6 +145,7 @@ export async function runRegression(rulesetId?: string): Promise<RunRegressionRe
         settings,
         rules: ruleset.rules,
         rulesetVersion: ruleset.version,
+        poolMax: built.poolMax,
       });
       const verdict = analysis.verdict.winnerSide ?? "neutral";
       const issues: string[] = [];

@@ -6,6 +6,7 @@ import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { SideKey } from "@/lib/signal-check/types";
 import { AssetAvatar } from "./asset-avatar";
 import { TradeMarginGraph } from "./trade-margin-graph";
+import { ValueAdjustmentRow } from "./value-adjustment-row";
 
 /** Per-asset headshot metadata, aligned by index to view.sides[side].assets. */
 export interface ResultAssetMeta {
@@ -153,6 +154,13 @@ export function TradeResult({
                     </li>
                   );
                 })}
+                {view.adjustmentLabel && (
+                  <ValueAdjustmentRow
+                    label={view.adjustmentLabel}
+                    points={s.adjustment}
+                    pct={s.adjustmentPct}
+                  />
+                )}
               </ul>
             </div>
           );

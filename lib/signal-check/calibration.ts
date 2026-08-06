@@ -128,7 +128,16 @@ export function applyCalibration(
     }
 
     const totalPre = results.reduce((sum, r) => sum + r.adjustedValue, 0);
-    sides[side] = { side, assets: results, totalPre, totalPost: totalPre };
+    sides[side] = {
+      side,
+      assets: results,
+      totalPre,
+      totalPost: totalPre,
+      // The consolidation pass runs later, in trade-shape. Until then the
+      // effective total is just the assets.
+      consolidationAdjustment: 0,
+      effectiveTotal: totalPre,
+    };
   });
 
   return { sides, trace };
