@@ -2998,3 +2998,151 @@ T487 | completed | Stop one team owning the shortlist
 - npm audit --omit=dev: unchanged from the previous pass. 3 high, all pre-existing
   transitive dependencies of Next. package.json untouched.
 - No browser testing this pass; no dev server left running.
+
+## Draft pick modifiers in manual signals (FF Beacon values admin)
+
+T488 | completed | Pick signals cover a whole round, and the engine reads them
+     | files: supabase/migrations/0176_beacon_manual_pick_signals.sql,
+     |   lib/beacon/pick-slots.ts, lib/beacon/signals/manual.ts,
+     |   lib/beacon/signals/manual.test.ts, lib/calculate-beacon-values.ts,
+     |   lib/beacon-admin.ts, app/admin/beacon/actions.ts,
+     |   app/admin/beacon/manual/page.tsx, components/admin/manual-composer.tsx,
+     |   components/admin/manual-signals-list.tsx
+     | depends on: T-beacon-manual (migration 0040), T-beacon-pick-multiplier
+     |   (migration 0116)
+     | verified: yes (The composer has offered a Draft pick target since 0040 and
+     |   the table has stored the rows, but nothing on the read side ever looked
+     |   at target='pick'. Three signals sat inactive in the table having never
+     |   moved a value. So this is two jobs: make the signal reach the engine,
+     |   and make one submission cover a round.
+     |
+     |   Migration 0176 lets pick_position be null, meaning every slot in that
+     |   season and round, and requires a season on a pick signal. It also stops
+     |   a player signal from carrying stray pick coordinates and a pick signal
+     |   from carrying a player_id; both were possible before and neither means
+     |   anything.
+     |
+     |   pickOverridesFor matches on season and round exactly, on slot unless the
+     |   signal names none, and on format unless the signal names none. Decay
+     |   works the same as it does for players. silent is dropped on the way
+     |   through: draft_pick_values has no formula_offset column and picks feed no
+     |   trend chips, so there is nothing for a silent pick change to hide from.
+     |
+     |   In the engine the overrides land in step 7, after the global
+     |   pick_value_multiplier and after the derived boards inherit their picks.
+     |   That order matters: applying before the inherit copy would push a signal
+     |   scoped to one derived board onto its baseline instead. Each adjusted row
+     |   records pre_manual_value and the overrides in metadata, and the run notes
+     |   count the rows that moved.
+     |
+     |   Slots are checkboxes, all three checked by default. All three collapses
+     |   to a single null row, so a whole round is one entry to review and one
+     |   Deactivate to undo; a subset writes one row per slot so they can come off
+     |   independently. Season and round are dropdowns built from the pick values
+     |   actually published (loadPickCoordinates reads one narrow slice, since
+     |   PostgREST has no DISTINCT and the table holds every snapshot), and the
+     |   pick target disables itself with an explanation when no picks exist yet.
+     |   Scope for a pick signal lists only dynasty boards, because those are the
+     |   only ones that have picks.
+     |
+     |   Verified against production data read-only: a 0.9 signal on 2027 round 3
+     |   with no slot named resolved to 15 rows, three slots across all five
+     |   dynasty boards, round 2 untouched. The temporary signal was deleted)
+
+### Verification summary (draft pick modifiers)
+- npx tsc --noEmit: clean
+- npm test: 1265 tests across 94 files, all pass (11 new in
+  lib/beacon/signals/manual.test.ts)
+- npm run build: compiles clean in 9.7s, no warnings
+- Migration 0176 applied to prod via MCP. Constraints confirmed in pg_constraint
+  after the change; the service-role-only policy from 0040 is intact and no new
+  grants were added. Generated types diffed byte-for-byte against
+  lib/database.types.ts: identical, since only constraints and comments changed.
+- No browser testing this pass; no dev server left running.
+
+## Trade Finder: variety on the paying side
+
+T489 | completed | The search varies what the reader sends, and covers every asset
+     | files: lib/trade-finder/packages.ts, lib/trade-finder/engine.ts,
+     |   lib/trade-finder/packages.test.ts, lib/trade-finder/engine.test.ts
+     | depends on: T477, T478, T487
+     | verified: yes (Reported by users and reproduced against four production
+     |   leagues before anything was changed: asked for twelve ideas, the finder
+     |   returned twelve different players coming BACK for the same two or three
+     |   going OUT. Foxtrot Squad was the worst, three distinct payments across
+     |   twelve deals with Stefon Diggs in seven of them, and the reader held
+     |   fourteen tradeable assets of which five ever headlined anything.
+     |
+     |   Three causes, two of them structural.
+     |
+     |   The search walked one ascending pool and took the first three packages
+     |   that fit, from the same end, for every target in the league. Whichever
+     |   asset sat at the price point most of the league is priced at became the
+     |   answer to every question. It now gathers up to twenty-four candidates
+     |   and chooses between them on a running tally of what has already been
+     |   offered, and the three it returns lead with different assets wherever
+     |   the roster allows. Fewer pieces and closer to the target still win among
+     |   equally fresh leads, so a clean one-for-one is still preferred.
+     |
+     |   Nothing could offer an asset the currency pool would not spend, and that
+     |   pool is deliberately narrow: it is what a roster can afford to LOSE.
+     |   A manager asking what their best player is worth got silence. Every
+     |   unmentioned asset now anchors its own search (anchorCandidates), with
+     |   the return built around it instead of it being built around somebody
+     |   else, and the other team's comparable players come on the table for that
+     |   search only (acquirablePool comparableTo). That is not the "give me your
+     |   best player" failure mode the pool exists to prevent: that shape is
+     |   spare parts for a star, this is an equal piece for an equal piece.
+     |
+     |   The quality gate had to learn which seat it was sitting in. The coverage
+     |   search fixes the outgoing side and builds the incoming one, so reading
+     |   the band the old way scored a return worth 15% more as the reader
+     |   underpaying by 13%: the same trade described backwards. QualityGate
+     |   grew a `reversed` flag so one orientation holds everywhere and a quality
+     |   ratio means the same thing on every suggestion.
+     |
+     |   Third, three reordering passes ran in sequence and the last undid the
+     |   second: the team spread pulled back deals the player spread had just
+     |   separated, which is why production showed three consecutive Jake
+     |   Ferguson offers in a pipeline containing code whose whole job was
+     |   stopping that. They are now one walk with one key: never a repeat of the
+     |   deal directly before it on either axis, then whichever repeats least of
+     |   everything shown so far, then the better score. Freshness beats a better
+     |   deal on purpose, per the owner's call that variety outranks consistent
+     |   quality because the reader is here for ideas to build on. The opener is
+     |   exempt and is still the best deal in the league.
+     |
+     |   A passed deal counts against the tallies exactly as a shown one does, so
+     |   the search keeps the path it was on and the queue advances instead of
+     |   rebuilding itself around the gap. Measured on production: nine or ten of
+     |   the next eleven carry over per pass.
+     |
+     |   Fairness was NOT loosened to buy any of this. Every emitted suggestion
+     |   still lands inside the same consolidation band, measured at 0.920 to
+     |   1.180 across all six leagues tested)
+
+### Verification summary (Trade Finder variety)
+
+Measured with a throwaway script against six production leagues, roster 1,
+Best available, before and after. Deleted after use; nothing added to scripts/.
+
+| League | Distinct payments in the 12 shown | Distinct partners | Back-to-back repeats |
+|---|---|---|---|
+| Foxtrot Squad (16) | 3 to 12 | 6 to 12 | 2 to 0 |
+| Chicken Bacon Ranch (14) | 5 to 12 | 7 to 12 | 3 to 0 |
+| DynastyLeague (12) | 7 to 12 | 4 to 8 | 1 to 0 |
+| BoomBust 8 (12) | 7 to 12 | 5 to 11 | 2 to 0 |
+
+- Coverage: 22/22, 23/28, 25/28, 25/30, 26/28 and 30/40 tradeable assets now
+  appear in at least one suggestion. The ones that never do are the bottom of a
+  roster by value (Will Levis at 73, Xavier Restrepo at 46); COVERAGE_ANCHORS
+  takes the fourteen most valuable unmentioned assets, which is the right end.
+- Incoming variety held at 12 of 12 in every league, so the side that already
+  worked was not traded away for the side that did not.
+- Cost: 34ms to 101ms per league on a 12 to 32 team league, against a 3-league
+  window on the cross-league walk. Roughly double the old engine and still far
+  inside a server action.
+- npx tsc --noEmit: clean
+- npm test: 1279 tests across 94 files, all pass (14 new)
+- npm run build: compiles clean in 14.0s, no warnings
+- No browser testing this pass; no dev server left running.

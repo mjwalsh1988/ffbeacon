@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   acquirablePool,
+  anchorCandidates,
   assetId,
   assetValue,
   balancePackages,
@@ -72,6 +73,48 @@ describe("balancePackages", () => {
     expect(balancePackages(1100, pool).length).toBeLessThanOrEqual(
       PACKAGE_LIMITS.MAX_PACKAGES,
     );
+  });
+
+  it("reaches for the asset the reader has not been offered yet", () => {
+    // Three assets that all balance a 2,000 target on their own. Walking the
+    // pool from one end returns "a" every time, which is how one player ended
+    // up paying for nearly every deal in a real league.
+    const pool = [asRef(1950, "a"), asRef(2000, "b"), asRef(2050, "c")];
+    const fresh = balancePackages(2000, pool);
+    expect(fresh[0].map(assetId)).toEqual(["b"]);
+
+    const used = balancePackages(2000, pool, {
+      usage: new Map([
+        ["b", 3],
+        ["a", 1],
+      ]),
+    });
+    expect(used[0].map(assetId)).toEqual(["c"]);
+  });
+
+  it("returns alternatives that lead with different assets", () => {
+    const pool = [
+      asRef(600, "cheap"),
+      asRef(1400, "a"),
+      asRef(1450, "b"),
+      asRef(1500, "c"),
+    ];
+    const packages = balancePackages(1500, pool);
+    const leads = packages.map((p) => {
+      const sorted = [...p].sort((x, y) => assetValue(y) - assetValue(x));
+      return assetId(sorted[0]);
+    });
+    // Three ways to pay that lead with the same player are one idea printed
+    // three times, which is what the reader sees when they press the arrow.
+    expect(new Set(leads).size).toBe(leads.length);
+  });
+
+  it("is deterministic under a usage tally too", () => {
+    const pool = [asRef(900, "a"), asRef(950, "b"), asRef(1000, "c")];
+    const usage = new Map([["b", 2]]);
+    const once = balancePackages(950, pool, { usage }).map((p) => p.map(assetId).join());
+    const twice = balancePackages(950, pool, { usage }).map((p) => p.map(assetId).join());
+    expect(once).toEqual(twice);
   });
 });
 
@@ -154,6 +197,70 @@ describe("acquirablePool", () => {
     });
     expect(balanced.some((a) => a.kind === "pick")).toBe(false);
     expect(collecting.some((a) => a.kind === "pick")).toBe(true);
+  });
+
+  it("admits a comparable starter when the reader is putting up an equal piece", () => {
+    const starters = fullRoster();
+    const theirBest = starters[0]; // 3,000, a starting quarterback
+    const theirs = profileOf(starters, { statusKey: "competitor" });
+
+    const spareParts = acquirablePool(theirs, mine, {
+      goal: "balanced",
+      targetPlayerId: null,
+      allowPicks: true,
+    });
+    // Untouched by the ordinary pool: nobody trades their starter for filler.
+    expect(spareParts.map(assetId)).not.toContain(theirBest.playerId);
+
+    const evenSwap = acquirablePool(theirs, mine, {
+      goal: "balanced",
+      targetPlayerId: null,
+      allowPicks: true,
+      comparableTo: theirBest.value,
+    });
+    // On the table once the reader is offering a piece of the same size, which
+    // is a normal trade rather than the lowball this pool exists to prevent.
+    expect(evenSwap.map(assetId)).toContain(theirBest.playerId);
+  });
+
+  it("does not call a much cheaper player comparable", () => {
+    const starters = fullRoster();
+    const theirs = profileOf(starters, { statusKey: "competitor" });
+    const pool = acquirablePool(theirs, mine, {
+      goal: "balanced",
+      targetPlayerId: null,
+      allowPicks: true,
+      comparableTo: 8000,
+    });
+    // Nothing on a roster topping out at 3,000 balances an 8,000 asset alone.
+    expect(pool).toHaveLength(0);
+  });
+});
+
+describe("anchorCandidates", () => {
+  it("puts every valued player on the table, not only the expendable ones", () => {
+    const roster = fullRoster();
+    const profile = profileOf(roster, { statusKey: "competitor" });
+    const anchors = anchorCandidates(profile, { goal: "balanced", allowPicks: true });
+    for (const p of roster) {
+      expect(anchors.map(assetId)).toContain(p.playerId);
+    }
+  });
+
+  it("leads with the most valuable piece, which is the one a manager wonders about", () => {
+    const profile = profileOf(fullRoster());
+    const anchors = anchorCandidates(profile, { goal: "balanced", allowPicks: true });
+    const values = anchors.map(assetValue);
+    expect([...values].sort((a, b) => b - a)).toEqual(values);
+  });
+
+  it("never puts a rebuilding team's own picks on the table", () => {
+    const profile = profileOf(fullRoster(), {
+      statusKey: "rebuilder",
+      picks: [pick({ value: 3000 })],
+    });
+    const anchors = anchorCandidates(profile, { goal: "balanced", allowPicks: true });
+    expect(anchors.some((a) => a.kind === "pick")).toBe(false);
   });
 });
 

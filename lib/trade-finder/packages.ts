@@ -35,6 +35,14 @@
  *   deterministic: the same league produces the same packages every time, so a
  *   passed deal stays passed and does not resurface under a new fingerprint.
  *
+ *   The search gathers alternatives and then chooses between them, rather than
+ *   returning the first three that fit. Returning the first three meant walking
+ *   one ordered pool from the same end for every target in the league, which
+ *   produced the same answer every time: against real leagues a reader could
+ *   hold fourteen tradeable assets and be shown three of them. Given a tally of
+ *   what has already been offered, the choice falls on the piece they have not
+ *   seen yet.
+ *
  * Pure. Every function here takes plain data and returns plain data.
  */
 
@@ -56,13 +64,26 @@ const STASH_AGE = 24;
 /** How many assets from one team the engine will consider acquiring. */
 const ACQUIRE_LIMIT = 10;
 /** How many of the reader's own assets are eligible currency in one run. */
-const GIVE_LIMIT = 14;
+const GIVE_LIMIT = 18;
 /** Of those, how many come from the expensive end rather than the cheap one. */
-const GIVE_TOP_SLICE = 6;
+const GIVE_TOP_SLICE = 4;
+/** And how many from the cheap end, which is where most packages are built. */
+const GIVE_BOTTOM_SLICE = 8;
 /** Packages returned per (counterparty, target) pair. */
 const MAX_PACKAGES = 3;
 /** Assets allowed on the outgoing side. Beyond three it stops being a trade. */
 const MAX_OUTGOING = 3;
+/**
+ * Packages one target may collect before the search stops looking.
+ *
+ * The search used to stop at the first three that fit, which is why the same
+ * one or two assets paid for nearly every deal in a league: walking one ordered
+ * pool from the same end every time returns the same answer every time. It now
+ * gathers alternatives first and chooses between them, so this bounds the cost
+ * of gathering. Twenty-four is far more than the three it will return, and
+ * enough to hold several distinct lead assets on any real roster.
+ */
+const CANDIDATE_SCAN_CAP = 24;
 
 /**
  * How far off the target a package may land, as a share of the target.
@@ -172,7 +193,23 @@ function appetite(player: FinderPlayer, mine: TeamProfile, goal: TradeGoal): num
 export function acquirablePool(
   theirs: TeamProfile,
   mine: TeamProfile,
-  opts: { goal: TradeGoal; targetPlayerId: string | null; allowPicks: boolean },
+  opts: {
+    goal: TradeGoal;
+    targetPlayerId: string | null;
+    allowPicks: boolean;
+    /**
+     * Value of the single asset the reader is offering, when they are offering
+     * one specific piece.
+     *
+     * This admits the other team's comparable players, whatever their situation
+     * says. It is NOT the "give me your best player" failure mode this pool
+     * exists to prevent: that shape is a reader paying with spare parts, and
+     * this is a reader putting up an equal piece of their own. A swap of two
+     * comparable starters is a normal trade and refusing to name it means a
+     * roster's best assets can never be traded at all.
+     */
+    comparableTo?: number | null;
+  },
 ): AssetRef[] {
   if (opts.targetPlayerId) {
     const hit = theirs.team.players.find(
@@ -195,6 +232,18 @@ export function acquirablePool(
     if (!wouldMoveStarter(p, theirs)) continue;
     seen.add(p.playerId);
     players.push(p);
+  }
+
+  // And anyone who simply matches what is being offered.
+  if (opts.comparableTo && opts.comparableTo > 0) {
+    const floor = opts.comparableTo * (1 - QUALITY_UNDER_TOLERANCE);
+    const ceiling = opts.comparableTo * (1 + OVER_TOLERANCE);
+    for (const p of theirs.team.players) {
+      if (seen.has(p.playerId) || !p.hasValue) continue;
+      if (p.value < floor || p.value > ceiling) continue;
+      seen.add(p.playerId);
+      players.push(p);
+    }
   }
 
   const pool: AssetRef[] = players
@@ -245,9 +294,19 @@ export function acquirablePool(
  */
 function spreadByValue(ascending: AssetRef[]): AssetRef[] {
   if (ascending.length <= GIVE_LIMIT) return ascending;
-  const fromTop = Math.min(GIVE_TOP_SLICE, GIVE_LIMIT);
-  const fromBottom = GIVE_LIMIT - fromTop;
-  return [...ascending.slice(0, fromBottom), ...ascending.slice(ascending.length - fromTop)];
+  const bottom = ascending.slice(0, GIVE_BOTTOM_SLICE);
+  const top = ascending.slice(ascending.length - GIVE_TOP_SLICE);
+  const middle = ascending.slice(GIVE_BOTTOM_SLICE, ascending.length - GIVE_TOP_SLICE);
+
+  // Taking only the two ends leaves a hole where a deep roster keeps most of its
+  // tradeable pieces, and an asset that is not in the pool can never be offered
+  // to anybody. So the middle is sampled evenly rather than dropped.
+  const want = GIVE_LIMIT - GIVE_BOTTOM_SLICE - GIVE_TOP_SLICE;
+  const step = middle.length / want;
+  const sampled: AssetRef[] = [];
+  for (let i = 0; i < want; i += 1) sampled.push(middle[Math.floor(i * step)]);
+
+  return [...bottom, ...sampled, ...top];
 }
 
 export function givablePool(
@@ -299,12 +358,62 @@ export function givablePool(
   return sorted;
 }
 
+/**
+ * Every asset the reader could put on the table, best first.
+ *
+ * Different question from givablePool, and the difference is the whole point.
+ * givablePool is CURRENCY: what may be spent to pay for somebody else, which is
+ * deliberately restricted to pieces a roster can afford to lose. This is what
+ * the reader could OFFER as the headline of a deal, which is anything they own.
+ *
+ * A manager wondering what their best player is worth is asking a reasonable
+ * question, and an engine that can only ever answer it about bench pieces has
+ * nothing to say about most of the roster. The pieces here are never used as
+ * filler: each one anchors a deal built around it, and the same fairness bands
+ * apply, so putting a star on the table still has to come back level.
+ *
+ * Picks follow the currency rule: a rebuilding team's own picks are never on
+ * the table, because that is the one move this feature should not suggest.
+ */
+export function anchorCandidates(
+  mine: TeamProfile,
+  opts: { goal: TradeGoal; allowPicks: boolean },
+): AssetRef[] {
+  const out: AssetRef[] = mine.team.players
+    .filter((p) => p.hasValue && p.value > 0)
+    .map((player) => ({ kind: "player" as const, player }));
+
+  const spendsPicks =
+    opts.allowPicks && opts.goal !== "add-picks" && mine.direction !== "rebuild";
+  if (spendsPicks) {
+    for (const pick of mine.team.picks) {
+      if (!pick.hasValue || pick.value <= 0) continue;
+      out.push({ kind: "pick", pick });
+    }
+  }
+
+  return out.sort(
+    (a, b) => assetValue(b) - assetValue(a) || assetId(a).localeCompare(assetId(b)),
+  );
+}
+
 /** How the balancing search is allowed to judge a candidate package. */
 export type QualityGate = {
   config: TradeQualityConfig;
   poolMax: number | null;
-  /** Values of what the reader would receive, which the package must match. */
+  /** Values of the side already fixed, which the package must match. */
   incomingValues: number[];
+  /**
+   * The package being assembled is what the reader RECEIVES, not what they pay.
+   *
+   * Used by the coverage search, which starts from an asset the reader is
+   * offering and builds the return around it. Without this the band would be
+   * read from the wrong seat: a return worth 15% more than the asset would be
+   * scored as the reader underpaying by 13%, which is the same trade described
+   * backwards. Flipping it here keeps one orientation everywhere, so a quality
+   * ratio means the same thing on every suggestion the engine emits.
+   */
+  reversed?: boolean;
 };
 
 function withinBand(total: number, target: number, overTolerance = OVER_TOLERANCE): boolean {
@@ -319,12 +428,12 @@ function withinBand(total: number, target: number, overTolerance = OVER_TOLERANC
  * it is the whole reason the feature stopped suggesting them.
  */
 function withinQualityBand(assets: AssetRef[], gate: QualityGate): boolean {
-  const { ratio } = qualityBalance(
-    gate.incomingValues,
-    assets.map(assetValue),
-    gate.poolMax,
-    gate.config,
-  );
+  const values = assets.map(assetValue);
+  // qualityBalance reports the SECOND argument over the first, so the reversed
+  // gate simply swaps which side is which. The band itself never changes.
+  const { ratio } = gate.reversed
+    ? qualityBalance(values, gate.incomingValues, gate.poolMax, gate.config)
+    : qualityBalance(gate.incomingValues, values, gate.poolMax, gate.config);
   return ratio >= 1 - QUALITY_UNDER_TOLERANCE && ratio <= 1 + QUALITY_OVER_TOLERANCE;
 }
 
@@ -342,7 +451,20 @@ function withinQualityBand(assets: AssetRef[], gate: QualityGate): boolean {
 export function balancePackages(
   target: number,
   pool: AssetRef[],
-  opts: { required?: AssetRef | null; maxAssets?: number; quality?: QualityGate | null } = {},
+  opts: {
+    required?: AssetRef | null;
+    maxAssets?: number;
+    quality?: QualityGate | null;
+    /**
+     * How often each asset has already led a suggestion in this run.
+     *
+     * Variety is decided here rather than by reordering the finished list,
+     * because reordering cannot invent an offer the search never built. Given
+     * the tally, a target that could be paid for three different ways is paid
+     * for with the asset the reader has not been shown yet.
+     */
+    usage?: ReadonlyMap<string, number>;
+  } = {},
 ): AssetRef[][] {
   const required = opts.required ?? null;
   const maxAssets = Math.min(opts.maxAssets ?? MAX_OUTGOING, MAX_OUTGOING);
@@ -356,18 +478,19 @@ export function balancePackages(
 
   const rest = pool.filter((a) => !required || assetId(a) !== assetId(required));
   const requiredValue = required ? assetValue(required) : 0;
-  const found: AssetRef[][] = [];
+  const candidates: AssetRef[][] = [];
   const seenKeys = new Set<string>();
+  const full = () => candidates.length >= CANDIDATE_SCAN_CAP;
 
   const consider = (assets: AssetRef[]) => {
-    if (found.length >= MAX_PACKAGES) return;
+    if (full()) return;
     const total = packageValue(assets);
     if (!withinBand(total, target, overTolerance)) return;
     if (gate && !withinQualityBand(assets, gate)) return;
     const key = assets.map(assetId).sort().join("|");
     if (seenKeys.has(key)) return;
     seenKeys.add(key);
-    found.push(assets);
+    candidates.push(assets);
   };
 
   // The required asset on its own, when it already balances.
@@ -377,7 +500,7 @@ export function balancePackages(
   const gap = target - requiredValue;
   if (gap > 0 || !required) {
     for (const a of rest) {
-      if (found.length >= MAX_PACKAGES) break;
+      if (full()) break;
       consider(required ? [required, a] : [a]);
     }
   }
@@ -385,9 +508,9 @@ export function balancePackages(
   // Two more. Pool is ascending, so the inner scan walks up from the outer
   // asset and stops once the total has clearly overshot the band.
   const roomForTwo = maxAssets >= (required ? 3 : 2);
-  if (found.length < MAX_PACKAGES && roomForTwo) {
-    for (let i = 0; i < rest.length && found.length < MAX_PACKAGES; i += 1) {
-      for (let j = i + 1; j < rest.length && found.length < MAX_PACKAGES; j += 1) {
+  if (roomForTwo) {
+    for (let i = 0; i < rest.length && !full(); i += 1) {
+      for (let j = i + 1; j < rest.length && !full(); j += 1) {
         const combo = required
           ? [required, rest[i], rest[j]]
           : [rest[i], rest[j]];
@@ -399,11 +522,11 @@ export function balancePackages(
   }
 
   // Three, only when nothing smaller worked and the shape allows it.
-  if (found.length === 0 && !required && maxAssets >= 3) {
-    for (let i = 0; i < rest.length && found.length < MAX_PACKAGES; i += 1) {
-      for (let j = i + 1; j < rest.length && found.length < MAX_PACKAGES; j += 1) {
+  if (candidates.length === 0 && !required && maxAssets >= 3) {
+    for (let i = 0; i < rest.length && !full(); i += 1) {
+      for (let j = i + 1; j < rest.length && !full(); j += 1) {
         if (packageValue([rest[i], rest[j]]) > target * (1 + overTolerance)) break;
-        for (let k = j + 1; k < rest.length && found.length < MAX_PACKAGES; k += 1) {
+        for (let k = j + 1; k < rest.length && !full(); k += 1) {
           const combo = [rest[i], rest[j], rest[k]];
           if (packageValue(combo) > target * (1 + overTolerance)) break;
           consider(combo);
@@ -412,7 +535,96 @@ export function balancePackages(
     }
   }
 
-  return found;
+  return chooseVaried(candidates, target, required, opts.usage);
+}
+
+/** The piece a package leads with: the most valuable thing in it. */
+export function anchorOf(assets: AssetRef[]): AssetRef | null {
+  let best: AssetRef | null = null;
+  for (const a of assets) {
+    if (!best) {
+      best = a;
+      continue;
+    }
+    const diff = assetValue(a) - assetValue(best);
+    // Ties resolve by id so the anchor of a package never depends on the order
+    // the search happened to build it in.
+    if (diff > 0 || (diff === 0 && assetId(a) < assetId(best))) best = a;
+  }
+  return best;
+}
+
+/**
+ * Pick which of the balanced packages to return.
+ *
+ * Ordered by how often the reader has already been shown the package's lead
+ * asset, then by the qualities that made the old first-fit search reasonable:
+ * fewer pieces beats more, and closer to the target beats further away. So a
+ * clean one-for-one still wins whenever the lead asset is equally fresh, and
+ * the tie is broken by the asset nobody has seen yet rather than by whichever
+ * one happened to sit lowest in the list.
+ *
+ * The returned packages lead with DIFFERENT assets wherever the roster allows
+ * it, so the alternatives behind a suggestion are real alternatives rather than
+ * the same player at three slightly different prices.
+ *
+ * When the caller has pinned an asset (the "what can I get for him" mode), the
+ * pinned piece is in every package by definition, so variety is measured on
+ * what comes with it instead.
+ */
+function chooseVaried(
+  candidates: AssetRef[][],
+  target: number,
+  required: AssetRef | null,
+  usage?: ReadonlyMap<string, number>,
+): AssetRef[][] {
+  if (candidates.length === 0) return [];
+
+  const requiredId = required ? assetId(required) : null;
+  const leadOf = (assets: AssetRef[]): string => {
+    const varying = requiredId
+      ? assets.filter((a) => assetId(a) !== requiredId)
+      : assets;
+    const anchor = anchorOf(varying.length > 0 ? varying : assets);
+    return anchor ? assetId(anchor) : "";
+  };
+
+  const scored = candidates.map((assets) => {
+    const lead = leadOf(assets);
+    return {
+      assets,
+      lead,
+      uses: usage?.get(lead) ?? 0,
+      size: assets.length,
+      distance: Math.abs(packageValue(assets) - target),
+      key: assets.map(assetId).sort().join("|"),
+    };
+  });
+
+  scored.sort(
+    (a, b) =>
+      a.uses - b.uses ||
+      a.size - b.size ||
+      a.distance - b.distance ||
+      a.key.localeCompare(b.key),
+  );
+
+  const out: AssetRef[][] = [];
+  const takenLeads = new Set<string>();
+  for (const s of scored) {
+    if (out.length >= MAX_PACKAGES) break;
+    if (takenLeads.has(s.lead)) continue;
+    takenLeads.add(s.lead);
+    out.push(s.assets);
+  }
+  // A roster with only one asset in the right range still gets its alternatives,
+  // it just cannot vary the piece they lead with.
+  for (const s of scored) {
+    if (out.length >= MAX_PACKAGES) break;
+    if (out.includes(s.assets)) continue;
+    out.push(s.assets);
+  }
+  return out;
 }
 
 /**
@@ -440,6 +652,8 @@ export const PACKAGE_LIMITS = {
   ACQUIRE_LIMIT,
   GIVE_LIMIT,
   GIVE_TOP_SLICE,
+  GIVE_BOTTOM_SLICE,
+  CANDIDATE_SCAN_CAP,
   MAX_PACKAGES,
   MAX_OUTGOING,
   UNDER_TOLERANCE,

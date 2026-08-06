@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { findTrades } from "./engine";
+import { assetId, givablePool } from "./packages";
+import { buildTeamProfile, leagueStarterBaselines } from "./profile";
 import { STANDARD_SLOTS, pick, player, team } from "./_test-kit";
 import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
-import type { FinderTeam, TradeFinderInput } from "./types";
+import type { FinderTeam, TradeFinderInput, TradeSuggestion } from "./types";
 
 /**
  * One league, built so the right trade is obvious to a human.
@@ -373,5 +375,104 @@ describe("findTrades counterparty spread", () => {
     const spread = run().suggestions;
     const keys = new Set(spread.map((s) => s.key));
     expect(keys.size).toBe(spread.length);
+  });
+});
+
+/**
+ * The failure these describe was found in production, not in a fixture: asked
+ * for twelve ideas, the engine returned twelve different players coming back
+ * for the same two or three going out. In the worst real league the reader held
+ * fourteen tradeable assets and saw three of them across all forty ranked deals,
+ * and their best player was never mentioned once.
+ */
+describe("findTrades variety on the paying side", () => {
+  const headlineOut = (s: TradeSuggestion) => {
+    let best = s.outgoing[0];
+    for (const a of s.outgoing) if (a.value > best.value) best = a;
+    return best.kind === "player" ? best.playerId : best.key;
+  };
+
+  it("varies what the reader sends, not only what comes back", () => {
+    const window = run().suggestions.slice(0, 8);
+    const outgoing = new Set(window.map(headlineOut));
+    const incoming = new Set(
+      window.map((s) =>
+        s.incoming
+          .map((a) => (a.kind === "player" ? a.playerId : a.key))
+          .sort()
+          .join(","),
+      ),
+    );
+    // Both ends, not just the one that was already varied.
+    expect(incoming.size).toBe(window.length);
+    expect(outgoing.size).toBeGreaterThanOrEqual(window.length - 1);
+  });
+
+  it("offers assets the currency pool could never have reached", () => {
+    const teams = league();
+    const mine = teams.find((t) => t.rosterId === 1)!;
+    const baselines = leagueStarterBaselines(teams, STANDARD_SLOTS);
+    const profile = buildTeamProfile(mine, STANDARD_SLOTS, baselines);
+    const currency = new Set(
+      givablePool(profile, {
+        goal: "balanced",
+        offerPlayerId: null,
+        allowPicks: true,
+      }).map(assetId),
+    );
+
+    const offered = new Set(
+      run().suggestions.flatMap((s) =>
+        s.outgoing.map((a) => (a.kind === "player" ? a.playerId : a.key)),
+      ),
+    );
+    // Currency is what a roster can afford to lose, which is deliberately
+    // narrow. A manager asking what their good players are worth is asking a
+    // reasonable question, and before the coverage pass the answer was silence.
+    const beyondCurrency = [...offered].filter((id) => !currency.has(id));
+    expect(beyondCurrency.length).toBeGreaterThan(0);
+  });
+
+  it("finds a deal for a starter the reader would otherwise never be offered for", () => {
+    const offered = new Set(
+      run().suggestions.flatMap((s) =>
+        s.outgoing.map((a) => (a.kind === "player" ? a.playerId : a.key)),
+      ),
+    );
+    // my-rb1 is the second most valuable asset on the roster and holds a
+    // starting slot, so no amount of balancing against somebody else's spare
+    // parts would ever put him on the table.
+    expect(offered.has("my-rb1")).toBe(true);
+  });
+
+  it("still opens on the best deal in the league", () => {
+    const { suggestions } = run();
+    const best = Math.max(...suggestions.map((s) => s.score));
+    expect(suggestions[0].score).toBe(best);
+  });
+
+  it("keeps every suggestion inside the fairness band, coverage included", () => {
+    for (const s of run({
+      quality: { config: DEFAULT_TRADE_QUALITY_CONFIG, poolMax: 9900 },
+    }).suggestions) {
+      // Variety is bought from the ordering and from which questions get asked,
+      // never from loosening what counts as a fair trade.
+      expect(s.qualityRatio).toBeGreaterThan(0.9);
+      expect(s.qualityRatio).toBeLessThan(1.2);
+    }
+  });
+
+  it("advances the queue on a pass rather than rebuilding it", () => {
+    const first = run().suggestions;
+    const after = run({ excludeKeys: [first[0].key] }).suggestions;
+    expect(after.map((s) => s.key)).not.toContain(first[0].key);
+
+    // A pass counts against the tallies exactly as a shown deal does, so the
+    // search takes the same path it took before and the reader keeps moving
+    // through one queue. Measured against production leagues this carries nine
+    // or ten of the next eleven; a wholesale reshuffle would carry far fewer.
+    const before = new Set(first.map((s) => s.key));
+    const carried = after.filter((s) => before.has(s.key)).length;
+    expect(carried).toBeGreaterThanOrEqual(after.length - 2);
   });
 });

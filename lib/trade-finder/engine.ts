@@ -11,20 +11,32 @@
  *   2. For each counterparty, work out what they could part with and what the
  *      reader would want from it.
  *   3. Build offers that balance against each of those pieces.
- *   4. Measure what each offer does to BOTH teams.
- *   5. Rank on what it does for the reader, discounted by whether the other
- *      manager would take it.
+ *   4. Go back for the reader's own assets nobody asked about, and build a deal
+ *      around each of those instead.
+ *   5. Measure what each offer does to BOTH teams.
+ *   6. Rank on what it does for the reader, discounted by whether the other
+ *      manager would take it, then order for variety.
  *
- * Step 4 is the one most trade tools skip, and it is why this one can say
- * something better than "these numbers are close". Step 5 is why the top
+ * Step 5 is the one most trade tools skip, and it is why this one can say
+ * something better than "these numbers are close". Step 6 is why the top
  * suggestion is usually modest: an offer that would be refused is worth less
  * than a smaller one that gets accepted.
  *
+ * VARIETY IS A FEATURE, NOT A FINISHING TOUCH
+ *   Steps 3, 4 and 6 all exist because of the same production failure. Asked for
+ *   twelve ideas, the engine returned twelve different players coming back for
+ *   the same two or three going out, and in the worst real league three distinct
+ *   payments across all twelve. A manager reading that has been handed one idea
+ *   twelve times. The reader is here for somewhere to start, so a slightly worse
+ *   deal they have not thought of beats a slightly better variant of the deal
+ *   above it, and the ordering says so explicitly.
+ *
  * Cost is bounded at every level rather than by a timeout. A twelve-team league
  * evaluates eleven counterparties, at most ten acquirable pieces each, and at
- * most three packages per piece, so the ceiling is a few hundred candidate deals
- * and roughly twice that many lineup fills. That is a fraction of a second, and
- * it does not grow with the size of the site.
+ * most three packages per piece, plus one anchored search per uncovered asset,
+ * so the ceiling is a few hundred candidate deals and roughly twice that many
+ * lineup fills. That is a fraction of a second, and it does not grow with the
+ * size of the site.
  *
  * Pure. No database, no React, no clock: two runs over the same league produce
  * the same suggestions in the same order, which is what makes a stored pass
@@ -39,6 +51,8 @@ import {
 import {
   PACKAGE_LIMITS,
   acquirablePool,
+  anchorCandidates,
+  anchorOf,
   assetId,
   assetValue,
   balancePackages,
@@ -73,6 +87,16 @@ import type {
 
 /** How many ranked suggestions a single run keeps. */
 const MAX_RESULTS = 40;
+
+/**
+ * How many of the reader's own assets get a deal built around them when the
+ * browse loop never mentioned them, and how many ideas each one gets.
+ *
+ * Two per asset rather than one because a single offer for a player reads as
+ * the price, and a manager wants to know whether anyone else is in the market.
+ */
+const COVERAGE_ANCHORS = 14;
+const COVERAGE_PER_ANCHOR = 2;
 
 /** A need this size is worth naming in the explanation. Points per week. */
 const NAMEABLE_NEED = 0.5;
@@ -181,7 +205,145 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
    * the distinct players and the alternative prices are still there behind them.
    */
   const passedTargets = new Set<string>();
-  let consideredTeams = 0;
+  /**
+   * How many offers each asset has already appeared in, on each side.
+   *
+   * Fed back into the balancing search as it works, so the second half of the
+   * league is priced with the pieces the first half did not use. This is where
+   * variety actually comes from: reordering a finished list cannot introduce an
+   * offer the search never built, and against real leagues the search was
+   * building the same two or three payments for every target in the league.
+   */
+  const outgoingUsage = new Map<string, number>();
+  const incomingUsage = new Map<string, number>();
+  const acquirableByRoster = new Map<number, AssetRef[]>();
+  /** Counterparties with something on the table, in either pass. */
+  const considered = new Set<number>();
+
+  const note = (tally: Map<string, number>, assets: AssetRef[]) => {
+    for (const a of assets) {
+      const id = assetId(a);
+      tally.set(id, (tally.get(id) ?? 0) + 1);
+    }
+  };
+
+  /**
+   * Turn one (counterparty, incoming, outgoing) into a ranked suggestion, or
+   * null when it fails a gate.
+   *
+   * `allowNeutral` keeps a deal the arithmetic rates as doing nothing for the
+   * reader. The browse loop rejects those; the coverage pass below keeps them,
+   * on the same reasoning that already applies to a named target. "Here is what
+   * this player brings back" is worth an answer even when the answer is a
+   * sideways move, because the reader is looking for somewhere to start.
+   */
+  const build = (
+    theirs: TeamProfile,
+    incoming: AssetRef[],
+    outgoing: AssetRef[],
+    opts: { allowNeutral: boolean },
+  ): TradeSuggestion | null => {
+    const key = suggestionKey({
+      counterpartyRosterId: theirs.team.rosterId,
+      incoming: incoming.map(toSuggestionAsset),
+      outgoing: outgoing.map(toSuggestionAsset),
+    });
+    if (seenKeys.has(key)) return null;
+    if (excluded.has(key)) {
+      passedTargets.add(targetKey(theirs.team.rosterId, incoming));
+      // A passed deal still counts against the tallies. The reader HAS seen
+      // these players offered, which is why they passed, and counting them
+      // keeps the search on the same path it took before the pass: the packages
+      // built for later targets do not shift under the reader just because they
+      // said no to an earlier one.
+      note(outgoingUsage, outgoing);
+      note(incomingUsage, incoming);
+      return null;
+    }
+
+    const myImpact = measureImpact(mine, slots, incoming, outgoing);
+    // The other team's ledger is this one reversed: what the reader sends is
+    // what they receive.
+    const theirImpact = measureImpact(theirs, slots, outgoing, incoming);
+
+    // The goal is a constraint. A reader who asked for picks and is shown a
+    // deal without one has been ignored, however good it is. A named target
+    // overrides it, because naming a player IS the more specific request.
+    if (
+      !input.targetPlayerId &&
+      !satisfiesGoal(input.goal, myImpact, {
+        incoming: incoming.length,
+        outgoing: outgoing.length,
+      })
+    ) {
+      return null;
+    }
+
+    const gap = valueGapOf(incoming, outgoing);
+    const qualityRatio = qualityRatioOf(incoming, outgoing, quality);
+    const acceptance = acceptanceOf(theirImpact, theirs, gap, qualityRatio);
+    const score = scoreSuggestion({
+      mine: myImpact,
+      myProfile: mine,
+      acceptance,
+      goal: input.goal,
+    });
+
+    // A deal that does nothing for the reader is not a suggestion.
+    if (score <= 0 && !input.targetPlayerId && !opts.allowNeutral) return null;
+
+    seenKeys.add(key);
+
+    const incomingAssets = incoming.map(toSuggestionAsset);
+    const outgoingAssets = outgoing.map(toSuggestionAsset);
+    const helped = positionHelped(incoming, mine);
+
+    return {
+      key,
+      counterparty: {
+        rosterId: theirs.team.rosterId,
+        teamName: theirs.team.teamName,
+        ownerHandle: theirs.team.ownerHandle,
+        statusLabel: theirs.team.statusLabel,
+        direction: theirs.direction,
+      },
+      incoming: incomingAssets,
+      outgoing: outgoingAssets,
+      mine: myImpact,
+      theirs: theirImpact,
+      valueGap: gap,
+      qualityRatio,
+      acceptance,
+      score,
+      headline: buildHeadline(incomingAssets, outgoingAssets, theirs.team.teamName),
+      whyYou: buildWhyYou(myImpact, input.goal, helped),
+      whyThem: buildWhyThem(
+        theirImpact,
+        theirs.direction,
+        theirs.team.teamName,
+        theirs.team.statusLabel,
+      ),
+      pitch: buildPitch({
+        outgoing: outgoingAssets,
+        incoming: incomingAssets,
+        theirs: theirImpact,
+        direction: theirs.direction,
+        valueGap: gap,
+      }),
+      caveats: buildCaveats({
+        rosterSpotDelta:
+          outgoing.filter((a) => a.kind === "player").length -
+          incoming.filter((a) => a.kind === "player").length,
+        lineupAvailable: myImpact.lineupDelta !== null,
+        assumedPickSlots: [...incoming, ...outgoing].some(
+          (a) => a.kind === "pick" && a.pick.pickPosition === "unknown",
+        ),
+        missingProjection: incoming
+          .filter((a) => a.kind === "player" && a.player.projPoints === null)
+          .map((a) => (a.kind === "player" ? a.player.name : "")),
+      }),
+    };
+  };
 
   for (const theirs of profiles) {
     if (theirs.team.rosterId === input.myRosterId) continue;
@@ -191,8 +353,9 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
       targetPlayerId: input.targetPlayerId,
       allowPicks: input.allowPicks,
     });
+    acquirableByRoster.set(theirs.team.rosterId, acquirable);
     if (acquirable.length === 0) continue;
-    consideredTeams += 1;
+    considered.add(theirs.team.rosterId);
 
     // What the reader might receive: one piece at a time, plus genuine pairs
     // when they have asked to turn a name into depth.
@@ -223,106 +386,94 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
         required,
         maxAssets: input.goal === "consolidate" ? 3 : undefined,
         quality: gate,
+        usage: outgoingUsage,
       });
 
-      const groupKey = targetKey(theirs.team.rosterId, incoming);
-
       for (const outgoing of packages) {
-        const key = suggestionKey({
-          counterpartyRosterId: theirs.team.rosterId,
-          incoming: incoming.map(toSuggestionAsset),
-          outgoing: outgoing.map(toSuggestionAsset),
-        });
-        if (seenKeys.has(key)) continue;
-        if (excluded.has(key)) {
-          passedTargets.add(groupKey);
-          continue;
-        }
+        const suggestion = build(theirs, incoming, outgoing, { allowNeutral: false });
+        if (!suggestion) continue;
+        suggestions.push(suggestion);
+        note(outgoingUsage, outgoing);
+        note(incomingUsage, incoming);
+      }
+    }
+  }
 
-        const myImpact = measureImpact(mine, slots, incoming, outgoing);
-        // The other team's ledger is this one reversed: what the reader sends is
-        // what they receive.
-        const theirImpact = measureImpact(theirs, slots, outgoing, incoming);
+  /**
+   * Coverage: every asset the reader owns gets somewhere to start.
+   *
+   * The loop above only ever offers a piece that happens to be the right price
+   * for somebody else's spare parts, which on a real roster leaves most of the
+   * team unmentioned: measured against production leagues, a reader holding
+   * fourteen tradeable assets could be shown three of them, and their best
+   * player was never one. That is not an answer, it is a blind spot, and the
+   * question "what could I get for him" is the most natural one a manager asks.
+   *
+   * So each unmentioned asset anchors its own search, with the deal built
+   * around it instead of it being built around somebody else. The fairness
+   * bands are the same ones every other suggestion passes, so an idea that
+   * cannot come back level is still not shown. What changes is only which
+   * question gets asked.
+   */
+  const specificAsk = Boolean(input.targetPlayerId || input.offerPlayerId);
+  if (!specificAsk) {
+    const mentioned = new Set<string>();
+    for (const s of suggestions) {
+      for (const a of s.outgoing) mentioned.add(a.kind === "player" ? a.playerId : a.key);
+    }
 
-        // The goal is a constraint. A reader who asked for picks and is shown a
-        // deal without one has been ignored, however good it is. A named target
-        // overrides it, because naming a player IS the more specific request.
-        if (
-          !input.targetPlayerId &&
-          !satisfiesGoal(input.goal, myImpact, {
-            incoming: incoming.length,
-            outgoing: outgoing.length,
-          })
-        ) {
-          continue;
-        }
+    const anchors = anchorCandidates(mine, {
+      goal: input.goal,
+      allowPicks: input.allowPicks,
+    })
+      .filter((a) => !mentioned.has(assetId(a)))
+      .slice(0, COVERAGE_ANCHORS);
 
-        const gap = valueGapOf(incoming, outgoing);
-        const qualityRatio = qualityRatioOf(incoming, outgoing, quality);
-        const acceptance = acceptanceOf(theirImpact, theirs, gap, qualityRatio);
-        const score = scoreSuggestion({
-          mine: myImpact,
-          myProfile: mine,
-          acceptance,
+    for (const anchor of anchors) {
+      const anchorValue = assetValue(anchor);
+      if (anchorValue <= 0) continue;
+      const found: TradeSuggestion[] = [];
+
+      for (const theirs of profiles) {
+        if (theirs.team.rosterId === input.myRosterId) continue;
+        // Recomputed rather than reused: a comparable piece on their side is
+        // only on the table because the reader is putting up an equal one, so
+        // it depends on this anchor and cannot be cached across anchors.
+        const pool = acquirablePool(theirs, mine, {
           goal: input.goal,
+          targetPlayerId: null,
+          allowPicks: input.allowPicks,
+          comparableTo: anchorValue,
+        });
+        if (pool.length === 0) continue;
+        // A team with nothing spare can still have somebody the reader can
+        // match, so this pass reaches counterparties the browse loop skipped.
+        considered.add(theirs.team.rosterId);
+
+        // Sides swapped: the fixed side is what the reader SENDS, and the
+        // package being assembled is what comes back.
+        const gate: QualityGate = {
+          config: quality.config,
+          poolMax: quality.poolMax,
+          incomingValues: [anchorValue],
+          reversed: true,
+        };
+        const returns = balancePackages(anchorValue, pool, {
+          quality: gate,
+          usage: incomingUsage,
         });
 
-        // A deal that does nothing for the reader is not a suggestion. The one
-        // exception is a named target: they asked what it would take, and the
-        // answer is worth having even when the arithmetic is against them.
-        if (score <= 0 && !input.targetPlayerId) continue;
+        for (const incoming of returns) {
+          const suggestion = build(theirs, incoming, [anchor], { allowNeutral: true });
+          if (suggestion) found.push(suggestion);
+        }
+      }
 
-        seenKeys.add(key);
-
-        const incomingAssets = incoming.map(toSuggestionAsset);
-        const outgoingAssets = outgoing.map(toSuggestionAsset);
-        const helped = positionHelped(incoming, mine);
-
-        suggestions.push({
-          key,
-          counterparty: {
-            rosterId: theirs.team.rosterId,
-            teamName: theirs.team.teamName,
-            ownerHandle: theirs.team.ownerHandle,
-            statusLabel: theirs.team.statusLabel,
-            direction: theirs.direction,
-          },
-          incoming: incomingAssets,
-          outgoing: outgoingAssets,
-          mine: myImpact,
-          theirs: theirImpact,
-          valueGap: gap,
-          qualityRatio,
-          acceptance,
-          score,
-          headline: buildHeadline(incomingAssets, outgoingAssets, theirs.team.teamName),
-          whyYou: buildWhyYou(myImpact, input.goal, helped),
-          whyThem: buildWhyThem(
-            theirImpact,
-            theirs.direction,
-            theirs.team.teamName,
-            theirs.team.statusLabel,
-          ),
-          pitch: buildPitch({
-            outgoing: outgoingAssets,
-            incoming: incomingAssets,
-            theirs: theirImpact,
-            direction: theirs.direction,
-            valueGap: gap,
-          }),
-          caveats: buildCaveats({
-            rosterSpotDelta:
-              outgoing.filter((a) => a.kind === "player").length -
-              incoming.filter((a) => a.kind === "player").length,
-            lineupAvailable: myImpact.lineupDelta !== null,
-            assumedPickSlots: [...incoming, ...outgoing].some(
-              (a) => a.kind === "pick" && a.pick.pickPosition === "unknown",
-            ),
-            missingProjection: incoming
-              .filter((a) => a.kind === "player" && a.player.projPoints === null)
-              .map((a) => (a.kind === "player" ? a.player.name : "")),
-          }),
-        });
+      found.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+      const kept = found.slice(0, COVERAGE_PER_ANCHOR);
+      for (const s of kept) {
+        suggestions.push(s);
+        note(outgoingUsage, [anchor]);
       }
     }
   }
@@ -340,11 +491,10 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
   });
 
   return {
-    suggestions: spreadByCounterparty(spreadByPayment(spreadByTarget(suggestions))).slice(
-      0,
-      MAX_RESULTS,
-    ),
-    consideredTeams,
+    suggestions: selectVaried(suggestions, (s) =>
+      passedTargets.has(targetKeyOf(s)),
+    ).slice(0, MAX_RESULTS),
+    consideredTeams: considered.size,
     lineupUnavailable,
   };
 }
@@ -364,50 +514,6 @@ function targetKeyOf(s: TradeSuggestion): string {
   return `${s.counterparty.rosterId}|${ids.join(",")}`;
 }
 
-/**
- * Reorder so consecutive suggestions are for different players.
- *
- * The engine builds up to three packages for the same target, and on a real
- * league they come out adjacent because they score almost identically: the same
- * player, from the same team, for a slightly different set of pieces. On a list
- * that is fine. On a surface that shows one deal at a time it is the difference
- * between a pass that moves you along and a pass that appears to do nothing,
- * which is what it looked like against a production league before this existed.
- *
- * So the best offer for each target goes first, in score order, then the second
- * offer for each, and so on. Nothing is dropped: a reader who passes on every
- * distinct player still reaches the alternative ways of paying for the first
- * one. They just do not have to wade through them to see the second player.
- *
- * Stable, because the input is already sorted and the grouping walk preserves
- * that order within and across groups.
- */
-function spreadByTarget(sorted: TradeSuggestion[]): TradeSuggestion[] {
-  const groups = new Map<string, TradeSuggestion[]>();
-  for (const s of sorted) {
-    const key = targetKeyOf(s);
-    const list = groups.get(key) ?? [];
-    list.push(s);
-    groups.set(key, list);
-  }
-
-  const lists = [...groups.values()];
-  const out: TradeSuggestion[] = [];
-  for (let round = 0; out.length < sorted.length; round += 1) {
-    let added = false;
-    for (const list of lists) {
-      if (round < list.length) {
-        out.push(list[round]);
-        added = true;
-      }
-    }
-    // Nothing left to take. Guards against an infinite loop if the accounting
-    // above ever disagrees with the input length.
-    if (!added) break;
-  }
-  return out;
-}
-
 /** The single most valuable thing the reader would be sending. */
 function paymentKeyOf(s: TradeSuggestion): string {
   let best: SuggestionAsset | null = null;
@@ -418,65 +524,131 @@ function paymentKeyOf(s: TradeSuggestion): string {
   return best.kind === "player" ? best.playerId : best.key;
 }
 
-/**
- * Stop the same name leading suggestion after suggestion.
- *
- * spreadByTarget solves half the problem: consecutive deals are for different
- * players. The other half is the paying end, and it has a structural cause. The
- * reader's currency is one pool sorted cheapest first, and the balancer prefers
- * the smallest package that clears the target, so the same two or three assets
- * clear the band for nearly every target in the league. Against a real roster
- * that reads as an engine with one idea: trade this guy, trade this guy, trade
- * this guy.
- *
- * So the emitted order avoids repeating the headline outgoing asset back to
- * back. Greedy and stable: walk the list, and if the next item pays with the
- * same asset the last one did, take the first later item that does not. Nothing
- * is dropped or reordered beyond that, so the score ordering survives wherever
- * there is no clash to fix.
- */
-function spreadByPayment(sorted: TradeSuggestion[]): TradeSuggestion[] {
-  const remaining = [...sorted];
-  const out: TradeSuggestion[] = [];
-  let lastPayment: string | null = null;
-
-  while (remaining.length > 0) {
-    let index = remaining.findIndex((s) => paymentKeyOf(s) !== lastPayment);
-    // Everything left pays with the same asset. Take them in the order they are.
-    if (index === -1) index = 0;
-    const [next] = remaining.splice(index, 1);
-    out.push(next);
-    lastPayment = paymentKeyOf(next);
-  }
-  return out;
+/** The player or players coming back, regardless of who is sending them. */
+function incomingKeyOf(s: TradeSuggestion): string {
+  return s.incoming
+    .map((a) => (a.kind === "player" ? a.playerId : a.key))
+    .sort()
+    .join(",");
 }
 
 /**
- * Stop one team owning the shortlist.
- *
- * The two spreads above vary the players. Neither varies the team, and a league
- * usually has one manager whose roster happens to fit the reader's better than
- * anyone else's, so their deals can hold most of the ranking. That was invisible
- * while the surface showed one suggestion; with arrows on the card it is eight
- * consecutive offers to the same person, which reads as an engine with one idea.
- *
- * Same greedy walk as spreadByPayment, on the counterparty instead. It runs LAST
- * so the player spreads settle first and this only breaks ties they left behind.
+ * Candidates the variety walk considers. Everything past it is already far
+ * enough down the ranking that no surface will reach it, and scanning the whole
+ * field would cost more than the ordering is worth.
  */
-function spreadByCounterparty(sorted: TradeSuggestion[]): TradeSuggestion[] {
-  const remaining = [...sorted];
-  const out: TradeSuggestion[] = [];
-  let lastRoster: number | null = null;
+const DIVERSITY_POOL = 200;
 
-  while (remaining.length > 0) {
-    let index = remaining.findIndex((s) => s.counterparty.rosterId !== lastRoster);
-    // Every deal left is with the same team. Take them in the order they are.
-    if (index === -1) index = 0;
-    const [next] = remaining.splice(index, 1);
-    out.push(next);
-    lastRoster = next.counterparty.rosterId;
-  }
-  return out;
+function bump(tally: Map<string, number>, key: string): void {
+  tally.set(key, (tally.get(key) ?? 0) + 1);
 }
 
-export const ENGINE_LIMITS = { MAX_RESULTS };
+/**
+ * Emit the ranked deals in an order a person can browse.
+ *
+ * This replaced three separate reordering passes (one for the incoming player,
+ * one for the outgoing player, one for the team) that ran in sequence, and the
+ * reason it had to is that each one reshuffled the last one's work: the team
+ * pass would pull back a deal paying with the asset the player pass had just
+ * moved away. Against production leagues the result was three consecutive
+ * offers led by the same player, in a pipeline containing code whose entire job
+ * was preventing exactly that.
+ *
+ * One walk, one set of rules. The next deal shown is never a repeat of the one
+ * directly before it, on either the asset or the partner, while an alternative
+ * exists. Among the rest it is whichever repeats least of everything shown so
+ * far, and only then the better score. Freshness beats a better deal on purpose.
+ * The reader is being handed ideas to build on, and the eighth variant of one
+ * idea is worth less to them than the first version of a new one.
+ *
+ * The opener is exempt: it is the best deal in the league, full stop. Variety
+ * decides everything after it.
+ *
+ * Nothing is dropped or filtered. Deals on a target the reader already passed
+ * on stay behind every deal they have not seen, which is the pass contract.
+ * Deterministic throughout, so a pass advances the queue rather than reshuffling
+ * it.
+ */
+function selectVaried(
+  sorted: TradeSuggestion[],
+  isPassed: (s: TradeSuggestion) => boolean,
+): TradeSuggestion[] {
+  if (sorted.length <= 2) return sorted;
+
+  const remaining = sorted.slice(0, DIVERSITY_POOL);
+  const tail = sorted.slice(DIVERSITY_POOL);
+  const out: TradeSuggestion[] = [];
+
+  const outgoingUses = new Map<string, number>();
+  const incomingUses = new Map<string, number>();
+  const partnerUses = new Map<string, number>();
+
+  let lastOutgoing: string | null = null;
+  let lastPartner: number | null = null;
+
+  const take = (index: number) => {
+    const [next] = remaining.splice(index, 1);
+    out.push(next);
+    bump(outgoingUses, paymentKeyOf(next));
+    bump(incomingUses, incomingKeyOf(next));
+    bump(partnerUses, String(next.counterparty.rosterId));
+    lastOutgoing = paymentKeyOf(next);
+    lastPartner = next.counterparty.rosterId;
+  };
+
+  take(0);
+
+  while (remaining.length > 0) {
+    let bestIndex = 0;
+    let bestKey: number[] | null = null;
+    let bestTiebreak = "";
+
+    for (let i = 0; i < remaining.length; i += 1) {
+      const s = remaining[i];
+      const outKey = paymentKeyOf(s);
+      const inKey = incomingKeyOf(s);
+      const outUses = outgoingUses.get(outKey) ?? 0;
+      const inUses = incomingUses.get(inKey) ?? 0;
+      const key = [
+        isPassed(s) ? 1 : 0,
+        // Never twice in a row, on either axis, while any alternative exists.
+        // These outrank the tallies below because two identical cards back to
+        // back is the failure a reader notices first, and because keeping both
+        // guards inside ONE key is what stops them undoing each other the way
+        // the separate passes did.
+        outKey === lastOutgoing ? 1 : 0,
+        s.counterparty.rosterId === lastPartner ? 1 : 0,
+        // Then how stale the deal is on whichever side has been shown more.
+        // Taking the larger of the two keeps both ends fresh instead of trading
+        // one kind of repetition for another.
+        Math.max(outUses, inUses),
+        outUses + inUses,
+        partnerUses.get(String(s.counterparty.rosterId)) ?? 0,
+        -s.score,
+      ];
+      if (bestKey === null || compareKeys(key, s.key, bestKey, bestTiebreak) < 0) {
+        bestKey = key;
+        bestTiebreak = s.key;
+        bestIndex = i;
+      }
+    }
+    take(bestIndex);
+  }
+
+  return [...out, ...tail];
+}
+
+/** Lexicographic compare of the ranking key, with the fingerprint last. */
+function compareKeys(a: number[], aKey: string, b: number[], bKey: string): number {
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return aKey.localeCompare(bKey);
+}
+
+export const ENGINE_LIMITS = {
+  MAX_RESULTS,
+  COVERAGE_ANCHORS,
+  COVERAGE_PER_ANCHOR,
+  DIVERSITY_POOL,
+};
