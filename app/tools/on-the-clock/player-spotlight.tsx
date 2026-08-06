@@ -218,14 +218,7 @@ export function SecondaryPick({ data, variant }: { data: RecommendationCardData;
         <p className="mt-2 text-sm text-ink-muted">Pending your first pick.</p>
       ) : (
         <div className="mt-2 flex items-center gap-3">
-          {/* Rounded-square headshot (FF Beacon player photos are never circular). */}
-          <PlayerHeadshot
-            sleeperId={p.sleeperId}
-            name={p.name}
-            position={p.position}
-            size={40}
-            rounded={false}
-          />
+          <PlayerHeadshot sleeperId={p.sleeperId} name={p.name} position={p.position} size={40} />
           <div className="min-w-0">
             <p className="truncate text-base font-semibold text-ink">{p.name}</p>
             <p className="text-xs text-ink-muted">

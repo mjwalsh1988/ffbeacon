@@ -154,11 +154,13 @@ function PlayerCard({
             backgroundImage: `linear-gradient(to top, ${teamColor}F2 0%, ${teamColor}80 32%, ${teamColor}26 58%, transparent 82%)`,
           }}
         />
+        {/* The one deliberate exception to the shared player-photo radius: this
+            is a full-bleed cutout standing in the team-colored wash, not a photo
+            sitting in a frame, so it carries no shape, border, or backdrop. */}
         <PlayerHeadshot
           sleeperId={player.sleeperId}
           name=""
           size={168}
-          rounded={false}
           className="relative !rounded-none !border-0 !bg-transparent drop-shadow-[0_12px_24px_rgba(0,0,0,0.5)]"
         />
       </div>

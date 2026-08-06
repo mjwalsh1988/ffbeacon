@@ -282,10 +282,7 @@ export function DraftBoard({
                             {/* Player photo (board view only). Decorative here: the
                                 cell aria-label already names the player, so the headshot
                                 is hidden from the accessibility tree. */}
-                            <span
-                              aria-hidden="true"
-                              className="shrink-0 [&_img]:!rounded-[4px] [&_span]:!rounded-[4px]"
-                            >
+                            <span aria-hidden="true" className="shrink-0">
                               <PlayerHeadshot
                                 sleeperId={pick.sleeperPlayerId}
                                 name=""

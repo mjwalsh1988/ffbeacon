@@ -286,13 +286,7 @@ function AssetGlyph({
   if (kind === "player") {
     return (
       <span aria-hidden="true" className="inline-flex shrink-0">
-        <PlayerHeadshot
-          sleeperId={sleeperId}
-          name=""
-          size={32}
-          rounded={false}
-          className="!rounded-md"
-        />
+        <PlayerHeadshot sleeperId={sleeperId} name="" size={32} />
       </span>
     );
   }

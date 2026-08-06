@@ -45,13 +45,7 @@ export function DepthChartCard({
             >
               {e.order ?? "-"}
             </span>
-            <PlayerHeadshot
-              sleeperId={e.sleeperId}
-              name=""
-              size={32}
-              rounded={false}
-              className="!rounded-md shrink-0"
-            />
+            <PlayerHeadshot sleeperId={e.sleeperId} name="" size={32} className="shrink-0" />
             <div className="min-w-0 flex-1">
               {e.isViewed ? (
                 <span className="text-sm font-semibold text-ink">

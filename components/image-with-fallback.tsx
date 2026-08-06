@@ -20,7 +20,7 @@ export function ImageWithFallback({
   src,
   alt,
   size = 40,
-  rounded = true,
+  radiusClass = "rounded-full",
   className = "",
   fallback,
   loading = "lazy",
@@ -30,8 +30,10 @@ export function ImageWithFallback({
   alt: string;
   /** Square pixel dimension for both the image and the fallback. */
   size?: number;
-  /** Circular by default; set false for a rounded-rectangle (e.g. logos). */
-  rounded?: boolean;
+  /** Border-radius utility for the rendered square. Defaults to a circle, the
+   * shape reserved for people and team avatars. Player photos are never
+   * circular: they pass PLAYER_PHOTO_RADIUS from components/player-headshot. */
+  radiusClass?: string;
   /** Extra classes applied to whichever element renders (image or fallback). */
   className?: string;
   /** Custom placeholder. Defaults to a user-avatar silhouette icon. */
@@ -42,7 +44,7 @@ export function ImageWithFallback({
   // A new src (e.g. the user uploads a fresh avatar) deserves a fresh attempt.
   useEffect(() => setErrored(false), [src]);
 
-  const shape = rounded ? "rounded-full" : "rounded-card";
+  const shape = radiusClass;
   const dims = { width: size, height: size };
   const showImage = !!src && !errored;
 

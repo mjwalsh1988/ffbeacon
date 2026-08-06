@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowDownLeft, ArrowUpRight, Info } from "lucide-react";
-import { PlayerHeadshot } from "@/components/player-headshot";
+import { PLAYER_PHOTO_RADIUS, PlayerHeadshot } from "@/components/player-headshot";
 import {
   ACCEPTANCE_LABEL,
   type SuggestionAsset,
@@ -337,7 +337,7 @@ function AssetRow({ asset }: { asset: SuggestionAsset }) {
       <div className={shell}>
         <span
           aria-hidden="true"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-brand-cyan/10 text-[11px] font-extrabold text-brand-cyan"
+          className={`flex h-10 w-10 shrink-0 items-center justify-center border border-brand-cyan/40 bg-brand-cyan/10 text-[11px] font-extrabold text-brand-cyan ${PLAYER_PHOTO_RADIUS}`}
         >
           {asset.round === 1 ? "1st" : asset.round === 2 ? "2nd" : `${asset.round}th`}
         </span>
@@ -360,19 +360,11 @@ function AssetRow({ asset }: { asset: SuggestionAsset }) {
 
   return (
     <div className={shell}>
-      {/* rounded={false} is the rounded-rectangle shape, which is the site's
-          own rounded-card token: a Sleeper headshot is a head-and-shoulders
-          crop and a circle cuts the shoulders off. The component supplies its
-          own border, so nothing here needs to restate the shape or the edge.
-          Decorative, because the name is the text immediately beside it and an
-          alt repeating it would have a screen reader say it twice. */}
-      <PlayerHeadshot
-        sleeperId={asset.sleeperId}
-        name=""
-        size={40}
-        rounded={false}
-        className="shrink-0"
-      />
+      {/* The component supplies its own shape and border, so nothing here needs
+          to restate either. Decorative, because the name is the text immediately
+          beside it and an alt repeating it would have a screen reader say it
+          twice. */}
+      <PlayerHeadshot sleeperId={asset.sleeperId} name="" size={40} className="shrink-0" />
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-bold text-ink">{asset.name}</span>
         <span className="block text-xs text-ink-muted">

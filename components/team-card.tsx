@@ -366,17 +366,14 @@ function PositionColumn({
                 key={p.id}
                 className="flex items-center gap-2 px-3 py-1.5"
               >
-                {/* Decorative headshot: the name text beside it is the label.
-                    !rounded-md forces a subtle 6px radius over ImageWithFallback's
-                    default 12px, which reads as a circle at this small size. */}
+                {/* Decorative headshot: the name text beside it is the label. */}
                 <span aria-hidden="true" className="shrink-0">
                   <PlayerHeadshot
                     sleeperId={p.sleeper_id}
                     name=""
                     position={p.position}
                     size={26}
-                    rounded={false}
-                    className="!rounded-md ring-1 ring-inset ring-white/10"
+                    className="ring-1 ring-inset ring-white/10"
                   />
                 </span>
                 <span

@@ -1,6 +1,6 @@
 "use client";
 
-import { PlayerHeadshot } from "@/components/player-headshot";
+import { PLAYER_PHOTO_RADIUS, PlayerHeadshot } from "@/components/player-headshot";
 
 const ORDINALS: Record<number, string> = {
   1: "1st",
@@ -12,9 +12,10 @@ const ORDINALS: Record<number, string> = {
 
 /**
  * One avatar for any Signal Check asset. Players render the shared Sleeper-CDN
- * headshot (with the never-broken fallback); draft picks render a branded round
- * badge ("1st", "2nd", ...). Both share the same circular footprint so player
- * and pick rows line up cleanly in the builder and the result.
+ * headshot (with the never-broken fallback); draft picks render a branded badge
+ * ("1st", "2nd", ...). The badge takes the same square and the same corner
+ * radius as the headshot, so player and pick rows line up cleanly in the
+ * builder and the result.
  *
  * Pass `decorative` whenever the player/pick name is already rendered as text
  * next to the avatar (the builder rows and the result rows): the avatar is then
@@ -45,7 +46,7 @@ export function AssetAvatar({
         aria-label={decorative ? undefined : name}
         title={name}
         style={{ width: size, height: size }}
-        className="inline-flex flex-shrink-0 items-center justify-center rounded-full border border-brand-purple/40 bg-brand-purple/10 text-brand-cyan"
+        className={`inline-flex flex-shrink-0 items-center justify-center border border-brand-purple/40 bg-brand-purple/10 text-brand-cyan ${PLAYER_PHOTO_RADIUS}`}
       >
         <span className="text-[11px] font-semibold leading-none tracking-tight">
           {round ? (ORDINALS[round] ?? `R${round}`) : "PICK"}
