@@ -7,126 +7,98 @@
  * so the resolver work happens once here and both players are read against it.
  *
  * Everything the tool renders is backed by real data we already store:
- *   - FF Beacon value          -> player_value_history (loadLatestValue)
+ *   - FF Beacon value           -> player_value_history
  *   - overall / position rank   -> rankings
  *   - tier                      -> rankings.tier
- *   - value trend (7d/30d)      -> player_value_trends (loadTrends)
- *   - recent production         -> get_player_positional_finishes RPC
- *   - opportunity / role        -> Sleeper depth_chart_order (depthRoleForPlayer)
+ *   - value trend + volatility  -> player_value_trends
+ *   - recent production         -> player_positional_finishes
+ *   - opportunity / role        -> Sleeper depth_chart_order
+ *   - injury designation        -> players.metadata.sleeper.injury_status
  *   - age                       -> players.birth_date
+ *   - rest-of-season projection -> player_weekly_projections, through the
+ *                                  Power Pulse projection model
+ *   - beat rate / consistency   -> player_projection_accuracy
+ *   - matchup difficulty        -> nfl_defense_vs_position
+ *   - draft market              -> player_market_latest
  *
- * The softer rows (Dynasty / Redraft Outlook, Risk, Upside) are TRANSPARENT
- * blends of those real signals, never fabricated numbers. When an input is
- * missing the row degrades to "Not enough data" and scores no edge, so we never
- * invent a verdict we can't defend.
+ * THE ONE RULE THAT MATTERS. The headline meter is a weighted average of the
+ * rows in the table below it, not a separate calculation. See lib/breakdown/
+ * metrics.ts for the registry both are built from, and lib/breakdown/edge.ts for
+ * the composite. Rows that are blends of other rows are displayed but never
+ * scored, so nothing is counted twice.
+ *
+ * QUERY SHAPE. Every read here takes both player ids at once. The tool used to
+ * fire three queries per player; with projections, reliability, and market data
+ * added, a per-player shape would have meant twenty-odd round trips on a page
+ * that has to feel instant.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import {
+  getActiveFormats,
   getAvailableSources,
   resolveSourceForFormat,
   describeSource,
 } from "@/lib/source";
 import {
-  loadLatestValue,
-  loadTrends,
-  loadPositionalFinishes,
   recentFinishesForScoring,
-  depthRoleForPlayer,
+  depthRoleLabel,
   readSleeperId,
+  sleeperMeta,
   scoringKeyForType,
+  type ScoringKey,
   type PositionalFinish,
   type PlayerRow,
 } from "@/lib/player-profile";
 import { BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
 import { computeAgeDecimal } from "@/lib/player-age";
+import { computeEdge, visibleRows } from "@/lib/breakdown/edge";
+import { buildTakeaways, buildVerdict, resolveLensEdges } from "@/lib/breakdown/verdict";
+import { DEFAULT_LENS, type LensId } from "@/lib/breakdown/types";
+import type { LeagueImpact, MetricSide } from "@/lib/breakdown/metrics";
+import type {
+  BeaconEdge,
+  BreakdownExtras,
+  BreakdownPlayer,
+  BreakdownRow,
+  Takeaway,
+} from "@/lib/breakdown/types";
 
 type AnySupabase =
   | SupabaseClient<Database>
   | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
-/** Which side of the matchup holds the edge for a given row or takeaway. */
-export type EdgeWinner = "a" | "b" | "even" | "na";
-
-/** The two players slotted into the matchup. */
-export type BreakdownSlot = "a" | "b";
-
-/** Everything one player contributes to the comparison, already resolved for
- * the shared (format, source) pair. */
-export type BreakdownPlayer = {
-  slug: string;
-  id: string;
-  name: string;
-  position: string;
-  team: string | null;
-  /** The team's primary brand color (nfl_teams.primary_color), for the card
-   * gradient. Null when the player is a free agent or the team is unmapped. */
-  teamPrimary: string | null;
-  sleeperId: string | null;
-  /** Whole-years age, used for the youth/age scoring below. */
-  age: number | null;
-  /** Exact age carried to one decimal, for display only (e.g. 23.4). */
-  ageDecimal: number | null;
-  yearsExperience: number | null;
-  value: number | null;
-  overallRank: number | null;
-  positionRank: number | null;
-  tier: number | null;
-  change7d: number | null;
-  change30d: number | null;
-  change30dPct: number | null;
-  trend30d: "up" | "down" | "stable" | null;
-  volatility30d: number | null;
-  latestFinish: PositionalFinish | null;
-  recentFinishes: PositionalFinish[];
-  depthRole: string | null;
-};
-
-/** One comparison row in the breakdown table. */
-export type BreakdownRow = {
-  key: string;
-  /** Plain-language category label. */
-  label: string;
-  /** One-sentence explanation of what the row measures. */
-  help: string;
-  /** Player A's cell value (already formatted for display). */
-  aDisplay: string;
-  /** Player B's cell value. */
-  bDisplay: string;
-  /** Optional short qualitative note under each cell (derived rows). */
-  aNote?: string;
-  bNote?: string;
-  winner: EdgeWinner;
-  /** True when the numbers render with the FF Beacon value mark. */
-  valueIsBeacon?: boolean;
-};
-
-export type EdgeLabel = "Toss-Up" | "Slight Edge" | "Clear Edge" | "Strong Edge";
-
-/** The headline "Beacon Edge" verdict meter. */
-export type BeaconEdge = {
-  /** Player A's share of the combined signal, 0-100 (a + b === 100). */
-  aPct: number;
-  bPct: number;
-  leader: "a" | "b" | "even";
-  label: EdgeLabel;
-  /** What the meter is measured on ("FF Beacon Value" or "Overall Rank"). */
-  basis: string;
-};
-
-/** A plain-English scannable takeaway. */
-export type Takeaway = {
-  key: string;
-  label: string;
-  winner: EdgeWinner;
-  detail: string;
-};
+export type {
+  BeaconEdge,
+  BreakdownExtras,
+  BreakdownMarket,
+  BreakdownPlayer,
+  BreakdownProjection,
+  BreakdownReliability,
+  BreakdownRow,
+  BreakdownSlot,
+  EdgeContribution,
+  EdgeLabel,
+  EdgeWinner,
+  Lens,
+  LensId,
+  ProjectedWeekPoint,
+  ReliabilityWeek,
+  Takeaway,
+} from "@/lib/breakdown/types";
+export { LENSES, DEFAULT_LENS, isLensId } from "@/lib/breakdown/types";
+export type { LeagueImpact } from "@/lib/breakdown/metrics";
 
 export type BreakdownContext = {
   formatSlug: string;
   formatDisplay: string;
+  formatConfigId: string | null;
+  scoringKey: ScoringKey;
+  /** Format shape, so downstream reads can pick the matching ADP flavour. */
+  isDynasty: boolean;
+  isSuperflex: boolean;
   sourceSlug: string | null;
   sourceDisplay: string | null;
   valueIsBeacon: boolean;
@@ -141,10 +113,11 @@ export type BreakdownResult = {
   edge: BeaconEdge;
   takeaways: Takeaway[];
   verdict: string;
+  lens: LensId;
   context: BreakdownContext;
 };
 
-/** A player option returned by resolveBreakdownPlayers when a slug is unknown. */
+/** A player option returned when a slug is unknown. */
 export type BreakdownLookup =
   | { ok: true; result: BreakdownResult }
   | { ok: false; missing: string[] };
@@ -152,8 +125,7 @@ export type BreakdownLookup =
 const PLAYER_SELECT =
   "id, slug, first_name, last_name, full_name, position, team, status, birth_date, external_ids, metadata, years_experience";
 
-/** Age in whole years from an ISO birth date, or null. Mirrors the profile bio
- * helper; kept local so the lib has no component dependency. */
+/** Age in whole years from an ISO birth date, or null. */
 function computeAge(birthDate: string | null): number | null {
   if (!birthDate) return null;
   const parts = birthDate.split("-").map((p) => parseInt(p, 10));
@@ -172,43 +144,183 @@ function normalizeTrend(dir: string | null): "up" | "down" | "stable" | null {
   return null;
 }
 
-/** Depth-chart role -> opportunity weight (higher = more volume). null when
- * the player is not depth-charted. */
-function roleWeight(role: string | null): number | null {
-  if (!role) return null;
-  switch (role) {
-    case "Starter":
-      return 4;
-    case "Handcuff":
-    case "Backup":
-      return 2;
-    case "Depth Piece":
-      return 1;
-    case "Dart Throw":
-      return 0;
-    default:
-      return null;
+function intOrNull(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v === "string") {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : null;
   }
+  return null;
 }
 
+function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Sleeper's injury designation, or null when the player is healthy. */
+function injuryStatusFor(row: PlayerRow): string | null {
+  const meta = sleeperMeta(row);
+  const raw = meta.injury_status;
+  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
+}
+
+/** The empty extras bundle, so a metric side is always well-formed. */
+export const EMPTY_EXTRAS: BreakdownExtras = {
+  projection: null,
+  reliability: null,
+  market: null,
+};
+
+/* ------------------------------------------------------------------ */
+/* Batched loaders. Both players, one query each.                      */
+/* ------------------------------------------------------------------ */
+
+/** Latest published value per player for the resolved format + source. */
+async function loadValues(
+  db: SupabaseClient<Database>,
+  playerIds: string[],
+  formatConfigId: string | null,
+  source: string | null,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!formatConfigId || !source || playerIds.length === 0) return out;
+
+  // Newest first, so the first row seen per player is the current one. Bounded
+  // by a generous cap rather than paged: two players cannot have enough same-day
+  // history to matter, and the order guarantees the newest lands first.
+  const { data } = await db
+    .from("player_value_history")
+    .select("player_id, value, captured_at")
+    .eq("format_config_id", formatConfigId)
+    .eq("source", source)
+    .in("player_id", playerIds)
+    .order("captured_at", { ascending: false })
+    .limit(200);
+
+  for (const row of data ?? []) {
+    if (!row.player_id || out.has(row.player_id)) continue;
+    out.set(row.player_id, Number(row.value));
+  }
+  return out;
+}
+
+type TrendRecord = {
+  currentValue: number | null;
+  change7d: number | null;
+  change30d: number | null;
+  change30dPct: number | null;
+  change90dPct: number | null;
+  trend30d: string | null;
+  high30d: number | null;
+  low30d: number | null;
+  volatility30d: number | null;
+  rankChange30d: number | null;
+};
+
+async function loadTrendsPair(
+  db: SupabaseClient<Database>,
+  playerIds: string[],
+  formatConfigId: string | null,
+  source: string | null,
+): Promise<Map<string, TrendRecord>> {
+  const out = new Map<string, TrendRecord>();
+  if (!formatConfigId || !source || playerIds.length === 0) return out;
+
+  const { data } = await db
+    .from("player_value_trends")
+    .select(
+      "player_id, current_value, change_7d, change_30d, change_30d_pct, change_90d_pct, trend_30d, high_30d, low_30d, volatility_30d, rank_change_30d",
+    )
+    .eq("format_config_id", formatConfigId)
+    .eq("source", source)
+    .in("player_id", playerIds);
+
+  for (const row of data ?? []) {
+    out.set(row.player_id, {
+      currentValue: numOrNull(row.current_value),
+      change7d: numOrNull(row.change_7d),
+      change30d: numOrNull(row.change_30d),
+      change30dPct: numOrNull(row.change_30d_pct),
+      change90dPct: numOrNull(row.change_90d_pct),
+      trend30d: row.trend_30d,
+      high30d: numOrNull(row.high_30d),
+      low30d: numOrNull(row.low_30d),
+      volatility30d: numOrNull(row.volatility_30d),
+      rankChange30d: numOrNull(row.rank_change_30d),
+    });
+  }
+  return out;
+}
+
+async function loadFinishesPair(
+  db: SupabaseClient<Database>,
+  playerIds: string[],
+): Promise<Map<string, PositionalFinish[]>> {
+  const out = new Map<string, PositionalFinish[]>();
+  if (playerIds.length === 0) return out;
+
+  const { data } = await db
+    .from("player_positional_finishes")
+    .select("player_id, season, scoring, finish, total_points, players_ranked")
+    .in("player_id", playerIds);
+
+  for (const row of data ?? []) {
+    const list = out.get(row.player_id) ?? [];
+    list.push({
+      season: Number(row.season),
+      scoring: String(row.scoring) as ScoringKey,
+      finish: Number(row.finish),
+      totalPoints: Number(row.total_points),
+      playersRanked: Number(row.players_ranked),
+    });
+    out.set(row.player_id, list);
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Orchestration                                                       */
+/* ------------------------------------------------------------------ */
+
+export type LoadBreakdownParams = {
+  formatParam?: string;
+  sourceParam?: string;
+  lens?: LensId;
+};
+
 /**
- * Resolve the shared (format, source) context and load both players, then
- * compute the full breakdown. Slugs that match no active player are returned in
- * `missing` so the page can render a friendly "player not found" state.
+ * Resolve the shared (format, source) context, load both players, and compute
+ * the composite for the requested lens. Slugs that match no active player come
+ * back in `missing` so the page can render a friendly "player not found" state.
+ *
+ * Extras (projections, reliability, market) are NOT loaded here. They belong to
+ * tabs behind their own Suspense boundaries, so the meter and the matchup header
+ * can paint without waiting on them. `applyExtras` folds them in afterwards.
  */
 export async function loadBreakdown(
   supabase: AnySupabase,
   slugA: string,
   slugB: string,
-  params: { formatParam?: string; sourceParam?: string },
+  params: LoadBreakdownParams,
 ): Promise<BreakdownLookup> {
   const db = supabase as SupabaseClient<Database>;
+  const lens = params.lens ?? DEFAULT_LENS;
 
-  const [formatResolution, sourceResolution, { data: playerRows }] = await Promise.all([
-    resolveFormatSlug(db, params.formatParam),
-    resolveSourceSlug(db, params.sourceParam),
-    db.from("players").select(PLAYER_SELECT).in("slug", [slugA, slugB]),
-  ]);
+  // One wave. The active-format list is a request-cached fetch shared with
+  // SiteHeader, so folding it in here lets us pick the format row in memory
+  // instead of firing a second, slug-keyed round trip once the resolver has
+  // answered. That collapses a whole serialized query wave off the critical
+  // path, the same way the player profile does it.
+  const [formatResolution, sourceResolution, { data: playerRows }, registry, activeFormats] =
+    await Promise.all([
+      resolveFormatSlug(db, params.formatParam),
+      resolveSourceSlug(db, params.sourceParam),
+      db.from("players").select(PLAYER_SELECT).in("slug", [slugA, slugB]),
+      getAvailableSources(db),
+      getActiveFormats(db),
+    ]);
 
   const bySlug = new Map<string, PlayerRow>();
   for (const row of (playerRows ?? []) as unknown as PlayerRow[]) {
@@ -217,18 +329,16 @@ export async function loadBreakdown(
   const missing = [slugA, slugB].filter((s) => !bySlug.has(s));
   if (missing.length > 0) return { ok: false, missing };
 
-  const [{ data: formatConfig }, registry] = await Promise.all([
-    db
-      .from("format_configs")
-      .select("id, slug, display_name, scoring_type")
-      .eq("slug", formatResolution.slug)
-      .maybeSingle(),
-    getAvailableSources(db),
-  ]);
+  // Active formats only. The format dropdown never offers an inactive one, and
+  // an unknown slug falls through to a null config, which degrades to "no
+  // values for this format" rather than throwing.
+  const formatConfig = activeFormats.find((f) => f.slug === formatResolution.slug) ?? null;
 
   const formatConfigId = formatConfig?.id ?? null;
   const formatDisplay = formatConfig?.display_name ?? formatResolution.slug;
   const scoringKey = scoringKeyForType(formatConfig?.scoring_type);
+  const isDynasty = formatConfig?.league_type === "dynasty";
+  const isSuperflex = Boolean(formatConfig?.is_superflex);
   const requestedSource = sourceResolution.slug;
 
   const valueResolution = formatConfig
@@ -250,576 +360,179 @@ export async function loadBreakdown(
         }
       : null;
 
-  // Team primary colors for the matchup card gradients, one query for both.
+  const rowA = bySlug.get(slugA)!;
+  const rowB = bySlug.get(slugB)!;
+  const playerIds = [rowA.id, rowB.id];
+  const teamAbbrs = [rowA.team, rowB.team].filter((t): t is string => Boolean(t));
+
+  // One wave for everything the core comparison needs.
+  const [teamRowsRes, rankRowsRes, values, trends, finishes] = await Promise.all([
+    teamAbbrs.length > 0
+      ? db.from("nfl_teams").select("abbreviation, primary_color").in("abbreviation", teamAbbrs)
+      : Promise.resolve({ data: [] as { abbreviation: string; primary_color: string | null }[] }),
+    formatConfigId && rankingsSource
+      ? db
+          .from("rankings")
+          .select("player_id, overall_rank, position_rank, tier, generated_at")
+          .eq("format_config_id", formatConfigId)
+          .eq("source", rankingsSource)
+          .is("week", null)
+          .in("player_id", playerIds)
+          .order("generated_at", { ascending: false })
+      : Promise.resolve({ data: [] as never[] }),
+    loadValues(db, playerIds, formatConfigId, valueSource),
+    loadTrendsPair(db, playerIds, formatConfigId, valueSource),
+    loadFinishesPair(db, playerIds),
+  ]);
+
   const teamColors = new Map<string, string>();
-  const teamAbbrs = [bySlug.get(slugA)!.team, bySlug.get(slugB)!.team].filter(
-    (t): t is string => Boolean(t),
-  );
-  if (teamAbbrs.length > 0) {
-    const { data: teamRows } = await db
-      .from("nfl_teams")
-      .select("abbreviation, primary_color")
-      .in("abbreviation", teamAbbrs);
-    for (const t of teamRows ?? []) {
-      if (t.primary_color) teamColors.set(t.abbreviation, t.primary_color);
-    }
+  for (const t of teamRowsRes.data ?? []) {
+    if (t.primary_color) teamColors.set(t.abbreviation, t.primary_color);
   }
 
-  // Latest season-long rankings for both players in one query, newest first so
-  // the first row we see per player is the current one.
   const rankByPlayer = new Map<
     string,
     { overall: number | null; position: number | null; tier: number | null }
   >();
-  if (formatConfigId && rankingsSource) {
-    const ids = [bySlug.get(slugA)!.id, bySlug.get(slugB)!.id];
-    const { data: rankRows } = await db
-      .from("rankings")
-      .select("player_id, overall_rank, position_rank, tier, generated_at")
-      .eq("format_config_id", formatConfigId)
-      .eq("source", rankingsSource)
-      .is("week", null)
-      .in("player_id", ids)
-      .order("generated_at", { ascending: false });
-    for (const r of rankRows ?? []) {
-      if (rankByPlayer.has(r.player_id)) continue;
-      rankByPlayer.set(r.player_id, {
-        overall: r.overall_rank ?? null,
-        position: r.position_rank ?? null,
-        tier: r.tier ?? null,
-      });
-    }
+  for (const r of (rankRowsRes.data ?? []) as Array<{
+    player_id: string;
+    overall_rank: number | null;
+    position_rank: number | null;
+    tier: number | null;
+  }>) {
+    if (rankByPlayer.has(r.player_id)) continue;
+    rankByPlayer.set(r.player_id, {
+      overall: r.overall_rank ?? null,
+      position: r.position_rank ?? null,
+      tier: r.tier ?? null,
+    });
   }
 
-  async function buildPlayer(row: PlayerRow): Promise<BreakdownPlayer> {
-    const [value, trends, finishes] = await Promise.all([
-      loadLatestValue(db, row.id, formatConfigId, valueSource),
-      loadTrends(db, row.id, formatConfigId, valueSource),
-      loadPositionalFinishes(db, row.id),
-    ]);
-    const recent = recentFinishesForScoring(finishes, scoringKey, 3);
+  function buildPlayer(row: PlayerRow): BreakdownPlayer {
+    const trend = trends.get(row.id) ?? null;
     const rank = rankByPlayer.get(row.id);
+    const recent = recentFinishesForScoring(finishes.get(row.id) ?? [], scoringKey, 3);
+    const meta = sleeperMeta(row);
+    const depthOrder = intOrNull(meta.depth_chart_order);
+
     return {
       slug: row.slug,
       id: row.id,
       name: row.full_name ?? `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim(),
       position: row.position,
       team: row.team,
-      teamPrimary: row.team ? teamColors.get(row.team) ?? null : null,
+      teamPrimary: row.team ? (teamColors.get(row.team) ?? null) : null,
       sleeperId: readSleeperId(row),
       age: computeAge(row.birth_date),
       ageDecimal: computeAgeDecimal(row.birth_date),
       yearsExperience: row.years_experience ?? null,
-      value: value ?? trends?.current_value ?? null,
+      injuryStatus: injuryStatusFor(row),
+      value: values.get(row.id) ?? trend?.currentValue ?? null,
       overallRank: rank?.overall ?? null,
       positionRank: rank?.position ?? null,
       tier: rank?.tier ?? null,
-      change7d: trends?.change_7d ?? null,
-      change30d: trends?.change_30d ?? null,
-      change30dPct: trends?.change_30d_pct ?? null,
-      trend30d: normalizeTrend(trends?.trend_30d ?? null),
-      volatility30d: null, // loadTrends does not select volatility; reserved.
+      change7d: trend?.change7d ?? null,
+      change30d: trend?.change30d ?? null,
+      change30dPct: trend?.change30dPct ?? null,
+      change90dPct: trend?.change90dPct ?? null,
+      trend30d: normalizeTrend(trend?.trend30d ?? null),
+      volatility30d: trend?.volatility30d ?? null,
+      high30d: trend?.high30d ?? null,
+      low30d: trend?.low30d ?? null,
+      rankChange30d: trend?.rankChange30d ?? null,
       latestFinish: recent[0] ?? null,
       recentFinishes: recent,
-      depthRole: depthRoleForPlayer(row),
+      depthRole: depthRoleLabel(row.position, depthOrder),
+      depthOrder,
     };
   }
 
-  const rowA = bySlug.get(slugA)!;
-  const rowB = bySlug.get(slugB)!;
-  const [a, b] = await Promise.all([buildPlayer(rowA), buildPlayer(rowB)]);
-
+  const a = buildPlayer(rowA);
+  const b = buildPlayer(rowB);
   const valueIsBeacon = valueSource === BEACON_SOURCE_SLUG;
-  const rows = buildRows(a, b, valueIsBeacon);
-  const edge = computeEdge(a, b);
-  const takeaways = buildTakeaways(a, b);
-  const verdict = buildVerdict(a, b, edge);
+
+  const result = assembleBreakdown({
+    a,
+    b,
+    extrasA: EMPTY_EXTRAS,
+    extrasB: EMPTY_EXTRAS,
+    leagueA: null,
+    leagueB: null,
+    lens,
+    valueIsBeacon,
+    context: {
+      formatSlug: formatResolution.slug,
+      formatDisplay,
+      formatConfigId,
+      scoringKey,
+      isDynasty,
+      isSuperflex,
+      sourceSlug: valueSource,
+      sourceDisplay: valueSource ? describeSource(registry, valueSource) : null,
+      valueIsBeacon,
+      fallbackBanner,
+    },
+  });
+
+  return { ok: true, result };
+}
+
+/**
+ * Build the rows, meter, takeaways, and verdict from two fully-shaped sides.
+ *
+ * Exported because the extras and league-mode paths recompute the same thing
+ * with richer inputs, and it must be the SAME assembly: a league-aware verdict
+ * that used different code from the public one would be a second opinion, not a
+ * better-informed one.
+ */
+export function assembleBreakdown(input: {
+  a: BreakdownPlayer;
+  b: BreakdownPlayer;
+  extrasA: BreakdownExtras;
+  extrasB: BreakdownExtras;
+  leagueA: LeagueImpact | null;
+  leagueB: LeagueImpact | null;
+  lens: LensId;
+  valueIsBeacon: boolean;
+  context: BreakdownContext;
+}): BreakdownResult {
+  const sideA: MetricSide = { player: input.a, extras: input.extrasA, league: input.leagueA };
+  const sideB: MetricSide = { player: input.b, extras: input.extrasB, league: input.leagueB };
+
+  const { edge, rows } = computeEdge(sideA, sideB, input.lens, input.valueIsBeacon);
+
+  // The takeaways and the verdict both need the dynasty and win-now composites.
+  // Resolved once here (and reused when one of them IS the active lens) so the
+  // full metric set is evaluated at most three times per render instead of five.
+  const lenses = resolveLensEdges(sideA, sideB, { lens: input.lens, edge });
 
   return {
-    ok: true,
-    result: {
-      a,
-      b,
-      rows,
-      edge,
-      takeaways,
-      verdict,
-      context: {
-        formatSlug: formatResolution.slug,
-        formatDisplay,
-        sourceSlug: valueSource,
-        sourceDisplay: valueSource ? describeSource(registry, valueSource) : null,
-        valueIsBeacon,
-        fallbackBanner,
-      },
-    },
+    a: input.a,
+    b: input.b,
+    rows: visibleRows(rows),
+    edge,
+    takeaways: buildTakeaways(sideA, sideB, lenses),
+    verdict: buildVerdict(sideA, sideB, edge, input.lens, lenses),
+    lens: input.lens,
+    context: input.context,
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* Scoring helpers (all pairwise, so no source-scale assumptions leak) */
-/* ------------------------------------------------------------------ */
-
-/** Pairwise share for a "higher is better" metric. Returns a's share of the
- * pair in 0..1, or null when either input is missing. */
-function shareHigh(aVal: number | null, bVal: number | null): number | null {
-  if (aVal == null || bVal == null) return null;
-  const total = aVal + bVal;
-  if (total <= 0) return 0.5;
-  return aVal / total;
-}
-
-/** Pairwise share for a "lower is better" metric (ranks, finishes). */
-function shareLow(aVal: number | null, bVal: number | null): number | null {
-  if (aVal == null || bVal == null) return null;
-  const ia = 1 / Math.max(aVal, 0.5);
-  const ib = 1 / Math.max(bVal, 0.5);
-  const total = ia + ib;
-  if (total <= 0) return 0.5;
-  return ia / total;
-}
-
-/** Absolute youth score 0..1: 22-or-younger = 1, 28-or-older = 0. */
-function youthScore(age: number | null): number | null {
-  if (age == null) return null;
-  const s = (28 - age) / (28 - 22);
-  return Math.min(1, Math.max(0, s));
-}
-
-/** Absolute production score 0..1 from a positional finish (1 = best). */
-function productionScore(finish: number | null): number | null {
-  if (finish == null) return null;
-  return Math.min(1, Math.max(0, 1 - (finish - 1) / 24));
-}
-
-/** Turn an a-share (0..1) into an EdgeWinner with a near-even guard. */
-function winnerFromShare(share: number | null, guard = 0.03): EdgeWinner {
-  if (share == null) return "na";
-  if (share > 0.5 + guard) return "a";
-  if (share < 0.5 - guard) return "b";
-  return "even";
-}
-
-/* ------------------------------------------------------------------ */
-/* Rows                                                                */
-/* ------------------------------------------------------------------ */
-
-function fmtValue(v: number | null): string {
-  return v != null && v > 0 ? v.toLocaleString() : "-";
-}
-
-function fmtRank(r: number | null): string {
-  return r != null ? `#${r}` : "-";
-}
-
-function finishText(p: BreakdownPlayer): string {
-  const f = p.latestFinish;
-  if (!f) return "-";
-  return `${p.position.toUpperCase()}${f.finish} (${f.season})`;
-}
-
-function fmtChange(pct: number | null, raw: number | null): string {
-  if (pct == null && raw == null) return "Flat";
-  if (raw != null && raw === 0) return "Flat";
-  const sign = (raw ?? pct ?? 0) > 0 ? "+" : "";
-  if (pct != null) return `${sign}${pct.toFixed(1)}%`;
-  return `${sign}${(raw ?? 0).toLocaleString()}`;
-}
-
-function dynastyPhrase(p: BreakdownPlayer): string {
-  const strong = p.tier != null ? p.tier <= 2 : (p.value ?? 0) > 5000;
-  const mid = p.tier != null ? p.tier <= 4 : (p.value ?? 0) > 2000;
-  const young = p.age != null && p.age <= 24;
-  const old = p.age != null && p.age >= 29;
-  if (strong && young) return "Cornerstone";
-  if (strong && old) return "Win-now asset";
-  if (strong) return "Blue-chip";
-  if (mid && young) return "Ascending";
-  if (mid && old) return "Fading vet";
-  if (young) return "Long-term dart";
-  return "Depth hold";
-}
-
-function redraftPhrase(p: BreakdownPlayer): string {
-  const f = p.latestFinish?.finish ?? null;
-  const rank = p.overallRank ?? null;
-  if (f != null && f <= 6) return "Weekly starter";
-  if (rank != null && rank <= 24) return "Weekly starter";
-  if ((f != null && f <= 18) || (rank != null && rank <= 60)) return "Every-week flex";
-  if ((f != null && f <= 36) || (rank != null && rank <= 120)) return "Matchup play";
-  return "Bench / streamer";
-}
-
-function riskPhrase(p: BreakdownPlayer): string {
-  const swingy = p.change30dPct != null && Math.abs(p.change30dPct) >= 12;
-  const old = p.age != null && p.age >= 29;
-  const proven = p.tier != null && p.tier <= 2;
-  if (proven && !old && !swingy) return "Rock solid";
-  if (old && swingy) return "Volatile";
-  if (old) return "Age risk";
-  if (swingy) return "Swingy";
-  return "Steady";
-}
-
-function upsidePhrase(p: BreakdownPlayer): string {
-  const rising = p.trend30d === "up" || (p.change30dPct != null && p.change30dPct >= 5);
-  const young = p.age != null && p.age <= 24;
-  const highTier = p.tier != null && p.tier <= 2;
-  if (rising && young) return "Breakout arrow";
-  if (highTier && young) return "Ceiling play";
-  if (rising) return "Trending up";
-  if (young) return "Room to grow";
-  if (p.trend30d === "down") return "Cooling off";
-  return "Known quantity";
-}
-
-/** Risk score where HIGHER = safer, so shareHigh flags the safer player. */
-function safetyScore(p: BreakdownPlayer): number | null {
-  const parts: number[] = [];
-  const youth = youthScore(p.age);
-  if (youth != null) parts.push(youth);
-  if (p.change30dPct != null) {
-    // Less movement = safer. 0% swing -> 1, 25%+ swing -> 0.
-    parts.push(Math.min(1, Math.max(0, 1 - Math.abs(p.change30dPct) / 25)));
-  }
-  if (p.tier != null) {
-    // Proven tier is safer. Tier 1 -> 1, tier 6 -> 0.
-    parts.push(Math.min(1, Math.max(0, (6 - p.tier) / 5)));
-  }
-  if (parts.length === 0) return null;
-  return parts.reduce((s, x) => s + x, 0) / parts.length;
-}
-
-/** Upside score, higher = more upside. */
-function upsideScore(p: BreakdownPlayer): number | null {
-  const parts: number[] = [];
-  const youth = youthScore(p.age);
-  if (youth != null) parts.push(youth);
-  if (p.change30dPct != null) {
-    parts.push(Math.min(1, Math.max(0, 0.5 + p.change30dPct / 40)));
-  }
-  if (p.tier != null) {
-    parts.push(Math.min(1, Math.max(0, (6 - p.tier) / 5)));
-  }
-  if (parts.length === 0) return null;
-  return parts.reduce((s, x) => s + x, 0) / parts.length;
-}
-
-function buildRows(
-  a: BreakdownPlayer,
-  b: BreakdownPlayer,
-  valueIsBeacon: boolean,
-): BreakdownRow[] {
-  const rows: BreakdownRow[] = [];
-
-  // 1. FF Beacon Value
-  rows.push({
-    key: "value",
-    label: "FF Beacon Value",
-    help: "Current market value on the trusted FF Beacon scale for this format.",
-    aDisplay: fmtValue(a.value),
-    bDisplay: fmtValue(b.value),
-    winner: winnerFromShare(shareHigh(a.value, b.value), 0.02),
-    valueIsBeacon,
-  });
-
-  // 2. Overall Rank
-  rows.push({
-    key: "overall-rank",
-    label: "Overall Rank",
-    help: "Where each player sits among every player at every position.",
-    aDisplay: fmtRank(a.overallRank),
-    bDisplay: fmtRank(b.overallRank),
-    winner: winnerFromShare(shareLow(a.overallRank, b.overallRank), 0),
-  });
-
-  // 3. Positional Rank
-  rows.push({
-    key: "position-rank",
-    label: "Positional Rank",
-    help: "Rank within their own position group.",
-    aDisplay: a.positionRank != null ? `${a.position.toUpperCase()}${a.positionRank}` : "-",
-    bDisplay: b.positionRank != null ? `${b.position.toUpperCase()}${b.positionRank}` : "-",
-    winner: winnerFromShare(shareLow(a.positionRank, b.positionRank), 0),
-  });
-
-  // 4. Recent Production
-  rows.push({
-    key: "production",
-    label: "Recent Production",
-    help: "Most recent full-season finish within their position by fantasy points.",
-    aDisplay: finishText(a),
-    bDisplay: finishText(b),
-    winner: winnerFromShare(
-      shareLow(a.latestFinish?.finish ?? null, b.latestFinish?.finish ?? null),
-      0,
-    ),
-  });
-
-  // 5. Opportunity / Volume
-  rows.push({
-    key: "opportunity",
-    label: "Opportunity",
-    help: "Role on their team's depth chart, a proxy for expected volume.",
-    aDisplay: a.depthRole ?? "-",
-    bDisplay: b.depthRole ?? "-",
-    winner: winnerFromShare(shareHigh(roleWeight(a.depthRole), roleWeight(b.depthRole)), 0.05),
-  });
-
-  // 6. Value Trend (30-day)
-  rows.push({
-    key: "trend",
-    label: "30-Day Trend",
-    help: "How each player's value has moved over the last month.",
-    aDisplay: fmtChange(a.change30dPct, a.change30d),
-    bDisplay: fmtChange(b.change30dPct, b.change30d),
-    winner: winnerFromShare(
-      shareHigh(
-        a.change30dPct != null ? a.change30dPct + 100 : null,
-        b.change30dPct != null ? b.change30dPct + 100 : null,
-      ),
-      0.01,
-    ),
-  });
-
-  // 7. Dynasty Outlook (value + youth)
-  {
-    const vShare = shareHigh(a.value, b.value);
-    const yShare = shareHigh(youthScore(a.age), youthScore(b.age));
-    let share: number | null = null;
-    if (vShare != null && yShare != null) share = 0.6 * vShare + 0.4 * yShare;
-    else share = vShare ?? yShare;
-    rows.push({
-      key: "dynasty",
-      label: "Dynasty Outlook",
-      help: "Long-term hold value, blending market value with age.",
-      aDisplay: dynastyPhrase(a),
-      bDisplay: dynastyPhrase(b),
-      aNote: a.ageDecimal != null ? `Age ${a.ageDecimal.toFixed(1)}` : undefined,
-      bNote: b.ageDecimal != null ? `Age ${b.ageDecimal.toFixed(1)}` : undefined,
-      winner: winnerFromShare(share, 0.04),
-    });
-  }
-
-  // 8. Redraft Outlook (overall rank + recent production)
-  {
-    const rShare = shareLow(a.overallRank, b.overallRank);
-    const pShare = shareHigh(
-      productionScore(a.latestFinish?.finish ?? null),
-      productionScore(b.latestFinish?.finish ?? null),
-    );
-    let share: number | null = null;
-    if (rShare != null && pShare != null) share = 0.6 * rShare + 0.4 * pShare;
-    else share = rShare ?? pShare;
-    rows.push({
-      key: "redraft",
-      label: "Redraft Outlook",
-      help: "Win-now value for this season, blending rank with recent production.",
-      aDisplay: redraftPhrase(a),
-      bDisplay: redraftPhrase(b),
-      winner: winnerFromShare(share, 0.04),
-    });
-  }
-
-  // 9. Age & Long-Term Appeal
-  rows.push({
-    key: "age",
-    label: "Age & Long-Term Appeal",
-    help: "Younger players hold value longer in dynasty formats.",
-    aDisplay: a.ageDecimal != null ? `${a.ageDecimal.toFixed(1)} yrs` : "-",
-    bDisplay: b.ageDecimal != null ? `${b.ageDecimal.toFixed(1)} yrs` : "-",
-    winner: winnerFromShare(shareHigh(youthScore(a.age), youthScore(b.age)), 0.06),
-  });
-
-  // 10. Risk Level (edge to the safer player)
-  rows.push({
-    key: "risk",
-    label: "Risk Level",
-    help: "Lower-risk profiles combine a proven tier, steady value, and prime age.",
-    aDisplay: riskPhrase(a),
-    bDisplay: riskPhrase(b),
-    winner: winnerFromShare(shareHigh(safetyScore(a), safetyScore(b)), 0.05),
-  });
-
-  // 11. Upside
-  rows.push({
-    key: "upside",
-    label: "Upside",
-    help: "Room to climb, blending recent momentum, youth, and tier.",
-    aDisplay: upsidePhrase(a),
-    bDisplay: upsidePhrase(b),
-    winner: winnerFromShare(shareHigh(upsideScore(a), upsideScore(b)), 0.05),
-  });
-
-  return rows;
-}
-
-/* ------------------------------------------------------------------ */
-/* Beacon Edge meter                                                   */
-/* ------------------------------------------------------------------ */
-
-function labelForShare(higherShare: number): EdgeLabel {
-  // higherShare is the leader's share of the combined signal (0.5..1).
-  if (higherShare < 0.53) return "Toss-Up";
-  if (higherShare < 0.58) return "Slight Edge";
-  if (higherShare < 0.67) return "Clear Edge";
-  return "Strong Edge";
-}
-
-function computeEdge(a: BreakdownPlayer, b: BreakdownPlayer): BeaconEdge {
-  // Prefer FF Beacon value (the single trusted scale). Fall back to overall
-  // rank when either value is missing so the meter still resolves.
-  let aShare = shareHigh(a.value, b.value);
-  let basis = "FF Beacon Value";
-  if (aShare == null) {
-    aShare = shareLow(a.overallRank, b.overallRank);
-    basis = "Overall Rank";
-  }
-  if (aShare == null) {
-    return { aPct: 50, bPct: 50, leader: "even", label: "Toss-Up", basis: "Not enough data" };
-  }
-  const aPct = Math.round(aShare * 100);
-  const bPct = 100 - aPct;
-  const higherShare = Math.max(aShare, 1 - aShare);
-  const label = labelForShare(higherShare);
-  const leader = label === "Toss-Up" ? "even" : aShare > 0.5 ? "a" : "b";
-  return { aPct, bPct, leader, label, basis };
-}
-
-/* ------------------------------------------------------------------ */
-/* Quick takeaways + verdict                                           */
-/* ------------------------------------------------------------------ */
-
-function nameFor(a: BreakdownPlayer, b: BreakdownPlayer, w: EdgeWinner): string {
-  if (w === "a") return a.name;
-  if (w === "b") return b.name;
-  return "Too close to call";
-}
-
-function buildTakeaways(a: BreakdownPlayer, b: BreakdownPlayer): Takeaway[] {
-  const out: Takeaway[] = [];
-
-  // Best long-term value (dynasty blend)
-  {
-    const vShare = shareHigh(a.value, b.value);
-    const yShare = shareHigh(youthScore(a.age), youthScore(b.age));
-    const share = vShare != null && yShare != null ? 0.6 * vShare + 0.4 * yShare : vShare ?? yShare;
-    const w = winnerFromShare(share, 0.04);
-    out.push({
-      key: "long-term",
-      label: "Best long-term value",
-      winner: w,
-      detail:
-        w === "even"
-          ? "Their dynasty profiles grade out even."
-          : `${nameFor(a, b, w)} pairs the stronger value and age profile for the long haul.`,
-    });
-  }
-
-  // Best win-now option (redraft blend)
-  {
-    const rShare = shareLow(a.overallRank, b.overallRank);
-    const pShare = shareHigh(
-      productionScore(a.latestFinish?.finish ?? null),
-      productionScore(b.latestFinish?.finish ?? null),
-    );
-    const share = rShare != null && pShare != null ? 0.6 * rShare + 0.4 * pShare : rShare ?? pShare;
-    const w = winnerFromShare(share, 0.04);
-    out.push({
-      key: "win-now",
-      label: "Best win-now option",
-      winner: w,
-      detail:
-        w === "even"
-          ? "Both offer similar production for this season."
-          : `${nameFor(a, b, w)} is the safer start for winning this week.`,
-    });
-  }
-
-  // Safer floor
-  {
-    const w = winnerFromShare(shareHigh(safetyScore(a), safetyScore(b)), 0.05);
-    out.push({
-      key: "floor",
-      label: "Safer floor",
-      winner: w,
-      detail:
-        w === "even"
-          ? "Neither carries meaningfully more risk than the other."
-          : `${nameFor(a, b, w)} has the steadier, lower-risk profile.`,
-    });
-  }
-
-  // Higher upside
-  {
-    const w = winnerFromShare(shareHigh(upsideScore(a), upsideScore(b)), 0.05);
-    out.push({
-      key: "upside",
-      label: "Higher upside",
-      winner: w,
-      detail:
-        w === "even"
-          ? "Their ceilings look comparable right now."
-          : `${nameFor(a, b, w)} has more room to climb from here.`,
-    });
-  }
-
-  // Better trade target (value + momentum)
-  {
-    const vShare = shareHigh(a.value, b.value);
-    const mShare = shareHigh(
-      a.change30dPct != null ? a.change30dPct + 100 : null,
-      b.change30dPct != null ? b.change30dPct + 100 : null,
-    );
-    const share = vShare != null && mShare != null ? 0.7 * vShare + 0.3 * mShare : vShare ?? mShare;
-    const w = winnerFromShare(share, 0.03);
-    out.push({
-      key: "trade-target",
-      label: "Better trade target",
-      winner: w,
-      detail:
-        w === "even"
-          ? "Value and momentum are a wash between them."
-          : `${nameFor(a, b, w)} carries the stronger, more in-demand signal.`,
-    });
-  }
-
-  return out;
-}
-
-function buildVerdict(a: BreakdownPlayer, b: BreakdownPlayer, edge: BeaconEdge): string {
-  // Dynasty vs redraft leaders drive the nuance.
-  const vShare = shareHigh(a.value, b.value);
-  const yShare = shareHigh(youthScore(a.age), youthScore(b.age));
-  const dynShare = vShare != null && yShare != null ? 0.6 * vShare + 0.4 * yShare : vShare ?? yShare;
-  const dynW = winnerFromShare(dynShare, 0.04);
-
-  const rShare = shareLow(a.overallRank, b.overallRank);
-  const pShare = shareHigh(
-    productionScore(a.latestFinish?.finish ?? null),
-    productionScore(b.latestFinish?.finish ?? null),
-  );
-  const redShare = rShare != null && pShare != null ? 0.6 * rShare + 0.4 * pShare : rShare ?? pShare;
-  const redW = winnerFromShare(redShare, 0.04);
-
-  if (edge.label === "Toss-Up") {
-    return `This one is close. ${a.name} and ${b.name} grade out nearly even on the Beacon Edge, so your league format and roster needs should break the tie.`;
-  }
-
-  const leaderName = edge.leader === "a" ? a.name : b.name;
-  const otherName = edge.leader === "a" ? b.name : a.name;
-
-  // Clean sweep: same player leads dynasty and redraft.
-  if (dynW !== "na" && dynW === redW && nameFor(a, b, dynW) === leaderName) {
-    return `${leaderName} is the clearer pick, holding the ${edge.label.toLowerCase()} on the Beacon Edge with the stronger long-term value and the better win-now production. ${otherName} is the fallback, not the favorite.`;
-  }
-
-  // Split profile: one wins dynasty, the other win-now.
-  if (dynW !== "na" && redW !== "na" && dynW !== redW && dynW !== "even" && redW !== "even") {
-    const dynName = nameFor(a, b, dynW);
-    const redName = nameFor(a, b, redW);
-    return `${dynName} carries the stronger long-term dynasty signal, while ${redName} offers the safer win-now production profile. ${leaderName} holds the overall ${edge.label.toLowerCase()} once value is weighed.`;
-  }
-
-  return `${leaderName} holds the ${edge.label.toLowerCase()} on the Beacon Edge, grading out ahead of ${otherName} across the signals that matter most for this format.`;
+/** Fold the market fields that live on the player into the market bundle. */
+export function mergeMarket(
+  player: BreakdownPlayer,
+  extras: BreakdownExtras,
+): BreakdownExtras {
+  if (!extras.market) return extras;
+  return {
+    ...extras,
+    market: {
+      ...extras.market,
+      high30d: player.high30d,
+      low30d: player.low30d,
+      volatility30d: player.volatility30d,
+      rankChange30d: player.rankChange30d,
+      change90dPct: player.change90dPct,
+    },
+  };
 }

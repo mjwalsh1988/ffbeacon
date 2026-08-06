@@ -1,9 +1,14 @@
 /**
- * The Beacon Edge meter: the branded, at-a-glance verdict that shows which
- * player carries the stronger signal without making the user read the full
- * table first. A split bar (Player A on the left in purple, Player B on the
- * right in cyan) with each side's share, plus a plain-language edge label
- * (Toss-Up / Slight Edge / Clear Edge / Strong Edge). Server component.
+ * The Beacon Edge meter: the branded, at-a-glance verdict.
+ *
+ * The number here is a weighted average of the category rows in the table below,
+ * for the lens the reader has selected. It used to be a single value ratio that
+ * had nothing to do with the table, which meant the meter and the evidence could
+ * point in opposite directions. Now the split, the rows, and the contribution
+ * chart are three renderings of one calculation.
+ *
+ * Server component. The bar is decorative; the percentages live in high-contrast
+ * text beside it, and one spoken summary carries the whole verdict.
  */
 
 import { Gauge } from "lucide-react";
@@ -19,15 +24,19 @@ export function BeaconEdgeMeter({
   edge: BeaconEdge;
 }) {
   const leaderName = edge.leader === "a" ? a.name : edge.leader === "b" ? b.name : null;
-  const headline =
-    edge.leader === "even"
-      ? "Toss-Up"
-      : `${edge.label}: ${leaderName}`;
+  const headline = edge.leader === "even" ? "Toss-Up" : `${edge.label}: ${leaderName}`;
+
+  const scoredOn =
+    edge.metricsUsed > 0
+      ? `${edge.metricsUsed} scored categor${edge.metricsUsed === 1 ? "y" : "ies"}`
+      : "not enough data";
 
   const summary =
-    edge.leader === "even"
-      ? `The Beacon Edge is a toss-up: ${a.name} ${edge.aPct} percent, ${b.name} ${edge.bPct} percent, weighed on ${edge.basis}.`
-      : `${leaderName} holds a ${edge.label} on the Beacon Edge: ${a.name} ${edge.aPct} percent versus ${b.name} ${edge.bPct} percent, weighed on ${edge.basis}.`;
+    edge.metricsUsed === 0
+      ? `We do not have enough data on ${a.name} and ${b.name} to grade this matchup.`
+      : edge.leader === "even"
+        ? `The Beacon Edge is a toss-up: ${a.name} ${edge.aPct} percent, ${b.name} ${edge.bPct} percent, averaged over ${scoredOn} weighted for ${edge.basis}.`
+        : `${leaderName} holds a ${edge.label} on the Beacon Edge: ${a.name} ${edge.aPct} percent versus ${b.name} ${edge.bPct} percent, averaged over ${scoredOn} weighted for ${edge.basis}.`;
 
   return (
     <section
@@ -47,7 +56,7 @@ export function BeaconEdgeMeter({
           <Gauge aria-hidden="true" className="h-3.5 w-3.5" />
           Beacon Edge
         </p>
-        <p className="text-[11px] text-ink-subtle">Weighed on {edge.basis}</p>
+        <p className="text-[11px] text-ink-subtle">Weighted for {edge.basis}</p>
       </div>
 
       <h2
@@ -67,19 +76,15 @@ export function BeaconEdgeMeter({
       <div className="mt-4 flex items-end justify-between gap-3" aria-hidden="true">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-brand-purple">{a.name}</p>
-          <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-ink">
-            {edge.aPct}%
-          </p>
+          <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-ink">{edge.aPct}%</p>
         </div>
         <div className="min-w-0 text-right">
           <p className="truncate text-sm font-semibold text-brand-cyan">{b.name}</p>
-          <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-ink">
-            {edge.bPct}%
-          </p>
+          <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-ink">{edge.bPct}%</p>
         </div>
       </div>
 
-      {/* The split meter. Purely visual now: the numbers live in the labels. */}
+      {/* The split meter. Purely visual: the numbers live in the labels. */}
       <div
         aria-hidden="true"
         className="relative mt-2 flex h-4 overflow-hidden rounded-full border border-line bg-base"
@@ -101,9 +106,11 @@ export function BeaconEdgeMeter({
       </div>
 
       <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-        {edge.leader === "even"
-          ? "These two grade out nearly even. The edge is small enough that your roster needs should decide it."
-          : `${leaderName} carries the stronger overall signal for this format. The full breakdown below shows exactly where the edge comes from.`}
+        {edge.metricsUsed === 0
+          ? "We do not hold enough current data on these two to grade the matchup. Try players with published values and rankings."
+          : edge.leader === "even"
+            ? "These two grade out nearly even across every category we can measure. The edge is small enough that your roster needs should decide it."
+            : `Averaged across ${scoredOn}. The breakdown below shows exactly which ones moved it.`}
       </p>
     </section>
   );

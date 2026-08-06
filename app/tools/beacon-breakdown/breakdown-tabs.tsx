@@ -37,10 +37,20 @@ export function BreakdownTabs({ tabs }: { tabs: BreakdownTab[] }) {
 
   return (
     <div>
+      {/*
+        Scrolls horizontally instead of wrapping or squashing. This started as a
+        two-tab bar and now carries up to six, which does not fit a 360px phone
+        at a readable size. Wrapping to a second row reads as two separate
+        controls; shrinking the labels loses the words. Scrolling keeps every tab
+        at full size and full label, and the roving tabindex below means keyboard
+        users never have to scroll it by hand: focusing a tab brings it into view.
+        `scrollbar-none` is deliberate on touch, where the swipe is the
+        affordance and a persistent bar would sit on top of the labels.
+      */}
       <div
         role="tablist"
         aria-label="Breakdown views"
-        className="flex gap-6 border-b border-line"
+        className="flex gap-6 overflow-x-auto border-b border-line [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {tabs.map((tab, i) => {
           const selected = tab.id === active;
@@ -57,7 +67,7 @@ export function BreakdownTabs({ tabs }: { tabs: BreakdownTab[] }) {
               tabIndex={selected ? 0 : -1}
               onClick={() => setActive(tab.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
-              className={`relative -mb-px flex items-center gap-2 px-1 pb-3 pt-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+              className={`relative -mb-px flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap px-1 pb-3 pt-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
                 selected ? "text-ink" : "text-ink-muted hover:text-ink"
               }`}
             >

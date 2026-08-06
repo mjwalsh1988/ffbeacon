@@ -14,6 +14,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { CopyLinkButton } from "@/components/copy-link-button";
 import type { BreakdownPlayer, EdgeWinner, Takeaway } from "@/lib/beacon-breakdown";
 
 const TAKEAWAY_ICON: Record<string, LucideIcon> = {
@@ -118,7 +119,14 @@ function WinnerPill({
   );
 }
 
-export function VerdictCard({ verdict }: { verdict: string }) {
+export function VerdictCard({
+  verdict,
+  shareHref,
+}: {
+  verdict: string;
+  /** The URL this exact comparison lives at, for the copy-link action. */
+  shareHref?: string;
+}) {
   return (
     <section
       aria-labelledby="verdict-heading"
@@ -146,10 +154,20 @@ export function VerdictCard({ verdict }: { verdict: string }) {
       >
         {verdict}
       </h2>
-      <p className="mt-4 text-sm text-ink-subtle">
-        Values and ranks reflect your selected format and source. Adjust either from the site
-        header to see how the verdict shifts.
-      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ink-subtle">
+          Values and ranks reflect your selected format and source. Adjust either from the site
+          header to see how the verdict shifts.
+        </p>
+        {shareHref && (
+          <CopyLinkButton
+            href={shareHref}
+            ariaLabel="Copy a link to this comparison"
+            label="Copy link"
+            size="sm"
+          />
+        )}
+      </div>
     </section>
   );
 }

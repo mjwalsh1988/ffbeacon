@@ -3,7 +3,20 @@
  * A on the left, the category in the middle, and Player B on the right; the
  * winning side is tinted and carries an "Edge" badge. On mobile the row stacks:
  * the category heads a card and the two players sit in a 2-up grid beneath it,
- * so no data is ever hidden. Server component.
+ * so no data is ever hidden.
+ *
+ * Every row now states how much it counted toward the headline verdict for the
+ * active lens. That is the point of the rebuild: a reader can see that "Rest-of-
+ * Season Points" carried 24% of the win-now verdict while "Age" carried none,
+ * and check the meter against the rows instead of taking it on faith. Rows that
+ * are blends of other rows (Dynasty Outlook, Redraft Outlook) say "context only"
+ * so nobody assumes they were counted twice.
+ *
+ * The one-line explanation renders at every breakpoint. It used to be desktop
+ * only, which left a mobile reader with a bare label and no way to learn what
+ * "Consistency" was measuring.
+ *
+ * Server component.
  */
 
 import { BeaconValue } from "@/components/beacon-value-icon";
@@ -23,7 +36,7 @@ export function BreakdownTable({
       {/* Sticky-feeling header naming the two columns (desktop only; on mobile
           each card repeats the player labels). */}
       <div
-        className="hidden grid-cols-[1fr_11rem_1fr] gap-3 border-b border-line pb-2 sm:grid"
+        className="hidden grid-cols-[1fr_12rem_1fr] gap-3 border-b border-line pb-2 sm:grid"
         aria-hidden="true"
       >
         <p className="text-center text-sm font-semibold text-brand-purple">{a.name}</p>
@@ -42,6 +55,22 @@ export function BreakdownTable({
   );
 }
 
+function WeightNote({ row }: { row: BreakdownRow }) {
+  if (row.weight > 0) {
+    const pct = Math.round(row.weight * 100);
+    return (
+      <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-brand-cyan/80">
+        Counts {pct}%<span className="sr-only"> toward the verdict for this lens</span>
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">
+      Context only<span className="sr-only">, not counted toward the verdict</span>
+    </p>
+  );
+}
+
 function RowView({
   row,
   a,
@@ -55,16 +84,15 @@ function RowView({
     <div
       role="group"
       aria-label={row.label}
-      className="py-3 sm:grid sm:grid-cols-[1fr_11rem_1fr] sm:items-stretch sm:gap-3"
+      className="py-3 sm:grid sm:grid-cols-[1fr_12rem_1fr] sm:items-stretch sm:gap-3"
     >
       {/* Category. Mobile: top of card. Desktop: centered middle column. */}
       <div className="mb-2 text-center sm:order-2 sm:mb-0 sm:flex sm:flex-col sm:justify-center">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-cyan">
           {row.label}
         </p>
-        <p className="mt-0.5 hidden text-[11px] leading-snug text-ink-subtle sm:block">
-          {row.help}
-        </p>
+        <p className="mt-0.5 text-[11px] leading-snug text-ink-subtle">{row.help}</p>
+        <WeightNote row={row} />
         {row.winner === "even" && (
           <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">
             Even
@@ -143,8 +171,10 @@ function Cell({
       </p>
       {note && <p className="mt-0.5 text-[11px] text-ink-subtle">{note}</p>}
       {isWinner && (
-        <p className={`mt-1 inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wide ${edgeTextClass}`}>
-          <span aria-hidden="true">◆</span> Edge
+        <p
+          className={`mt-1 inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wide ${edgeTextClass}`}
+        >
+          <span aria-hidden="true">&#9670;</span> Edge
         </p>
       )}
     </div>

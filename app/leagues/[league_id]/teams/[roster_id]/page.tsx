@@ -260,6 +260,23 @@ export default async function TeamDetailPage({
           teamStatus={teamStatus}
         />
 
+        {/* Head-to-head, with this league already attached. The Breakdown reads
+            the league and roster straight off the URL, so the comparison it runs
+            is scored under this league's own rules and measured against this
+            roster's remaining weeks rather than a generic format. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
+          <Link
+            href={`/tools/beacon-breakdown?league=${encodeURIComponent(sleeperLeagueId)}&roster=${sleeperRosterId}`}
+            className="inline-flex min-h-11 items-center gap-2 rounded-card border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2 text-sm font-semibold text-brand-cyan hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            Compare two players for this team
+          </Link>
+          <p className="text-xs text-ink-subtle">
+            Opens the Beacon Breakdown with this league connected, so it prices both players
+            against this roster.
+          </p>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
           <Link
             href={backToTeamsHref}

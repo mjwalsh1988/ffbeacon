@@ -42,6 +42,19 @@ export function formatEasternDate(iso: string | null | undefined): string {
   }).format(d);
 }
 
+/** "Jun 12" in America/New_York, or n/a. For dense axis labels where the year
+ * is already established by the surrounding copy. Date only, so no zone label. */
+export function formatEasternShortDate(iso: string | null | undefined): string {
+  if (!iso) return NA;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return NA;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: SITE_TIME_ZONE,
+  }).format(d);
+}
+
 /**
  * RFC 822 date for RSS `pubDate` and `lastBuildDate`, in America/New_York.
  *

@@ -330,6 +330,10 @@ export type TrendsRow = {
   trend_30d: string | null;
   high_30d: number | null;
   low_30d: number | null;
+  volatility_30d: number | null;
+  rank_change_7d: number | null;
+  rank_change_30d: number | null;
+  rank_change_90d: number | null;
   data_points_30d: number | null;
   show_trend_7d: boolean | null;
   show_trend_30d: boolean | null;
@@ -348,7 +352,7 @@ export async function loadTrends(
   const { data } = await db
     .from("player_value_trends")
     .select(
-      "current_value, change_7d, change_7d_pct, change_30d, change_30d_pct, change_90d, change_90d_pct, trend_7d, trend_30d, high_30d, low_30d, data_points_30d, show_trend_7d, show_trend_30d, show_trend_90d",
+      "current_value, change_7d, change_7d_pct, change_30d, change_30d_pct, change_90d, change_90d_pct, trend_7d, trend_30d, high_30d, low_30d, volatility_30d, rank_change_7d, rank_change_30d, rank_change_90d, data_points_30d, show_trend_7d, show_trend_30d, show_trend_90d",
     )
     .eq("player_id", playerId)
     .eq("format_config_id", formatConfigId)
