@@ -31,7 +31,7 @@ import {
 
 type Admin = SupabaseClient<Database>;
 
-export type HealthComponent = "x_api" | "queue_failures";
+export type HealthComponent = "x_api" | "queue_failures" | "article_volume";
 
 export interface HealthRow {
   component: string;
@@ -248,13 +248,35 @@ export async function shouldEmailQueueFailure(
   admin: Admin,
   settings: BeaconBriefSettings,
 ): Promise<{ send: boolean; suppressedSince: number }> {
-  const health = await loadHealth(admin, "queue_failures");
+  return throttleAlert(admin, settings, "queue_failures");
+}
+
+/**
+ * Same throttle for the per-player daily article cap.
+ *
+ * A cap that trips usually trips several times in a row, because whatever is producing
+ * the extra posts is still producing them. The owner needs to know that a cap fired,
+ * once, not once per post; the Filtered queue holds the detail either way.
+ */
+export async function shouldEmailVolumeCap(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+): Promise<{ send: boolean; suppressedSince: number }> {
+  return throttleAlert(admin, settings, "article_volume");
+}
+
+async function throttleAlert(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+  component: HealthComponent,
+): Promise<{ send: boolean; suppressedSince: number }> {
+  const health = await loadHealth(admin, component);
   const cooldown =
     settings.alertCooldownMinutes > 0 ? settings.alertCooldownMinutes : 360;
   const send = minutesSince(health?.last_alert_at) >= cooldown;
   const suppressedSince = health?.suppressed_alerts ?? 0;
 
-  await upsertHealth(admin, "queue_failures", {
+  await upsertHealth(admin, component, {
     status: "ok",
     consecutive_failures: (health?.consecutive_failures ?? 0) + 1,
     ...(send

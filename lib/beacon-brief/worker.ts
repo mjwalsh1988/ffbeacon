@@ -30,17 +30,24 @@ import {
 } from "@/lib/discord";
 import { logBeaconBrief, runStructuredCall, runWebSearchResearch } from "./ai";
 import { loadBeaconBriefSettings, type BeaconBriefSettings } from "./settings";
-import { sendBeaconBriefFailureEmail } from "./email";
+import {
+  sendBeaconBriefFailureEmail,
+  sendBeaconBriefVolumeCapEmail,
+} from "./email";
 import { runDeletionSweep } from "./deletion";
-import { shouldEmailQueueFailure } from "./health";
+import { shouldEmailQueueFailure, shouldEmailVolumeCap } from "./health";
 import {
   eligibleMergeCandidates,
+  findExactEventMatch,
   findFollowupTarget,
   loadFollowupCandidates,
+  loadOverlapCandidates,
   mergeBlockedByTier,
   type FollowupCandidate,
   type PostSubject,
 } from "./followup";
+import { postAddsNewInformation } from "./merge";
+import { checkArticleVolume } from "./volume-guard";
 import type {
   ArticleResult,
   BeaconBriefMedia,
@@ -116,17 +123,104 @@ function slugify(input: string): string {
   );
 }
 
-async function ensureUniqueSlug(admin: Admin, base: string): Promise<string> {
+/**
+ * How much the post actually says on its own, ignoring links and handles.
+ *
+ * A quote-tweet whose own text is "Worst part of training camp:" carries a link and a
+ * fragment. Once the URL is stripped there are 26 characters of content, and they do
+ * not name a player, an event, or a team.
+ */
+function substantiveTextLength(
+  parts: Array<string | null | undefined>,
+): number {
+  return parts
+    .filter(Boolean)
+    .join(" ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[@#]\w+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim().length;
+}
+
+/**
+ * Below this, a post is a fragment rather than a report. Deliberately low: the aim is
+ * to catch "Worst part of training camp:" and a bare headline, not to second-guess a
+ * short but complete sentence like "Jonathan Taylor officially has signed his two-year
+ * extension." (62 characters, and it says who and what).
+ */
+const MIN_SUBSTANTIVE_POST_CHARS = 60;
+
+/**
+ * The article a colliding slug already belongs to, when the collision looks like a
+ * duplicate rather than a coincidence.
+ */
+interface SlugCollision {
+  article_id: string;
+  title: string;
+  slug: string;
+}
+
+/**
+ * Resolve the slug for a new article, and report a collision that looks like a
+ * duplicate.
+ *
+ * A slug collision is the strongest duplicate signal the pipeline has. The writer
+ * independently reached for the same handful of words, from the same event, about the
+ * same player. Until migration 0177 this was treated as a naming inconvenience: it
+ * appended five random hex characters and published. Every one of those suffixes in
+ * the database marks a duplicate the system detected and then released.
+ *
+ *   peter-skoronski-extension-titans-c6e5c
+ *   jahmyr-gibbs-record-rb-contract-lions-11d5c
+ *   jonathan-taylor-colts-extension-a38a2
+ *
+ * The suffix is still correct for a genuine coincidence, two unrelated stories that
+ * happen to compress to the same words, so it stays. What changes is that the caller
+ * is told when the collision shares a subject with a live article inside the merge
+ * window, which is not a coincidence and should be merged instead of published.
+ */
+async function resolveSlug(
+  admin: Admin,
+  base: string,
+  opts: { playerIds: string[]; windowHours: number },
+): Promise<{ slug: string; collision: SlugCollision | null }> {
   const slug = slugify(base);
-  const { data } = await admin
+  const { data: existing } = await admin
     .from("articles")
-    .select("id")
+    .select("id, title, slug, created_at, status")
     .eq("slug", slug)
     .maybeSingle();
-  if (!data) return slug;
-  // Collision: append a 5-char suffix (plan rule).
+  if (!existing) return { slug, collision: null };
+
   const suffix = randomBytes(4).toString("hex").slice(0, 5);
-  return `${slug}-${suffix}`;
+  const suffixed = `${slug}-${suffix}`;
+
+  const hours = opts.windowHours > 0 ? opts.windowHours : 72;
+  const fresh =
+    Date.now() - new Date(existing.created_at).getTime() < hours * 3_600_000;
+  const live = existing.status === "published" || existing.status === "draft";
+  if (!fresh || !live || opts.playerIds.length === 0) {
+    return { slug: suffixed, collision: null };
+  }
+
+  // Shares a subject? Then this is the same story wearing a different sentence.
+  const { data: shared } = await admin
+    .from("article_players")
+    .select("player_id")
+    .eq("article_id", existing.id)
+    .in("player_id", opts.playerIds)
+    .limit(1);
+  if (!shared || shared.length === 0)
+    return { slug: suffixed, collision: null };
+
+  return {
+    slug: suffixed,
+    collision: {
+      article_id: existing.id,
+      title: existing.title ?? "",
+      slug: existing.slug,
+    },
+  };
 }
 
 function resolvedFrom(ingestion: Ingestion): {
@@ -782,10 +876,37 @@ async function applyRewriteToArticle(
     .maybeSingle();
   if (!article) return { ok: true, applied: false };
 
+  // Does this post actually change the story? Most follow-ups do not: they restate
+  // the same contract in fewer words with a link to someone else's write-up. Ask once,
+  // on the cheap model, before spending anything on prose. See ./merge.ts.
+  const gate = await postAddsNewInformation({
+    admin,
+    settings,
+    article,
+    post: compact,
+    ingestionId: ingestion.id,
+  });
+  if (!gate.addsNewInformation) {
+    await admin
+      .from("news_ingestions")
+      .update({ status: "revised", processed_at: new Date().toISOString() })
+      .eq("id", ingestion.id);
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "info",
+      ingestionId: ingestion.id,
+      message: `folded into "${article.title}" with no rewrite: the post adds nothing the article does not already say`,
+    });
+    // applied: true. The post reached its decision and is recorded against the story;
+    // there was simply nothing to write. Returning false here would send the caller
+    // down the "target no longer exists" path and write a second article.
+    return { ok: true, applied: true };
+  }
+
   const result = await runStructuredCall<RevisionRewriteResult>({
     admin,
     stage: "article_write",
-    model: settings.modelArticle,
+    model: settings.modelMergeRewrite || settings.modelArticle,
     system: settings.prompts.revisionRewrite,
     userContent: JSON.stringify({
       current_article: article,
@@ -851,7 +972,6 @@ async function findLateDuplicateTarget(
   ingestion: Ingestion,
   compact: unknown,
 ): Promise<FollowupCandidate | null> {
-  if (!ingestion.source_id) return null;
   const refs = resolvedFrom(ingestion);
   const ai = (ingestion.ai_result ?? {}) as Record<string, unknown>;
   const subject: PostSubject = {
@@ -860,17 +980,68 @@ async function findLateDuplicateTarget(
     relevanceTier:
       typeof ai.relevance_tier === "number" ? ai.relevance_tier : null,
   };
+
+  // The event key first, exactly as at curation time and for the same reason. This is
+  // the pass that catches what curation structurally cannot: two posts about one event
+  // inside a single poll window, where the first post's article did not exist yet when
+  // the second was curated. Both Peter Skoronski articles published through that gap,
+  // two minutes apart.
+  //
+  // Unlike the model-judged passes below, this one is NOT bounded by
+  // articleCreatedAfter. An exact key match is proof, and proof does not expire
+  // because curation had a chance to see it and missed.
+  if (ingestion.event_key) {
+    const exact = await findExactEventMatch(admin, {
+      eventKey: ingestion.event_key,
+      windowHours: settings.eventKeyWindowHours,
+      excludeArticleId: ingestion.article_id,
+    });
+    if (exact) {
+      await logBeaconBrief(admin, {
+        stage: "revision_link",
+        ingestionId: ingestion.id,
+        message: `late guard: same event as "${exact.title}" (event key ${ingestion.event_key}); folding in without asking the model`,
+      });
+      return {
+        ingestion_id: exact.ingestion_id,
+        article_id: exact.article_id,
+        title: exact.title,
+        summary: "",
+        player_ids: refs.playerIds,
+        team_ids: refs.teamIds,
+      };
+    }
+  }
+
   if (mergeBlockedByTier(subject, settings.mergeBlockRelevanceTier)) {
     await logBeaconBrief(admin, {
       stage: "revision_link",
       ingestionId: ingestion.id,
-      message: `major news (relevance tier ${subject.relevanceTier}); keeping its own article rather than folding into a sibling`,
+      message: `major news (relevance tier ${subject.relevanceTier}) and no exact event match; keeping its own article`,
     });
     return null;
   }
 
+  if (ingestion.event_key) {
+    const overlaps = await loadOverlapCandidates(admin, {
+      eventKey: ingestion.event_key,
+      windowHours: settings.eventKeyWindowHours,
+      excludeArticleId: ingestion.article_id,
+    });
+    if (overlaps.length === 0) return null;
+    return findFollowupTarget({
+      admin,
+      settings,
+      post: compact,
+      candidates: overlaps,
+      ingestionId: ingestion.id,
+    });
+  }
+
+  // No usable key. Fall back to the original narrow question: only articles that did
+  // not exist when this post was curated, because every older one was already offered
+  // to the curate-time matcher and re-asking adds nothing but a second chance to err.
   const candidates = await loadFollowupCandidates(admin, {
-    sourceId: ingestion.source_id,
     lookbackHours: settings.followupLookbackHours,
     excludeIngestionId: ingestion.id,
     articleCreatedAfter: ingestion.created_at,
@@ -888,107 +1059,6 @@ async function findLateDuplicateTarget(
 }
 
 /**
- * Keep Discord to one card per story when the late duplicate guard fires.
- *
- * Curation always enqueues a discord_post for a new post, and a worker run executes
- * Discord jobs ahead of article jobs, so by the time the guard discovers the post is a
- * duplicate its card is usually already in the channel. Leaving it would put the same
- * news in Discord twice, which is the thing the merged article prevents on the site.
- *
- * Three steps, covering both timings:
- *   1. Cancel the duplicate's discord_post if it has not run yet. Guarded on
- *      status = 'pending' so a job another run is actively executing is never stolen.
- *   2. Delete the card if it already posted. deleteWebhookMessage treats an
- *      already-gone message as success, so this is safe to attempt either way.
- *   3. Patch the surviving card with the newer content, which is exactly what the
- *      normal revision path does.
- *
- * Never throws and never changes the job outcome. The rewrite has already been applied
- * and is not idempotent (a retry would add a second revision snapshot), so a Discord
- * hiccup must not send the article_write job back for another attempt. Anything that
- * goes wrong here is logged and leaves a visible duplicate card, which is recoverable
- * by hand; a retried rewrite would not be.
- */
-async function collapseDuplicateDiscordCard(
-  admin: Admin,
-  settings: BeaconBriefSettings,
-  duplicateIngestionId: string,
-  targetIngestionId: string,
-): Promise<void> {
-  try {
-    const { data: cancelled } = await admin
-      .from("beacon_brief_queue")
-      .update({
-        status: "done",
-        last_error:
-          "cancelled: post folded into an existing story by the late duplicate guard",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("job_type", "discord_post")
-      .eq("status", "pending")
-      .filter("payload->>ingestion_id", "eq", duplicateIngestionId)
-      .select("id");
-    if (cancelled && cancelled.length > 0) {
-      await logBeaconBrief(admin, {
-        stage: "discord_post",
-        level: "info",
-        ingestionId: duplicateIngestionId,
-        message: `cancelled ${cancelled.length} queued Discord post(s): folded into an existing story`,
-      });
-    }
-
-    // Re-read rather than trusting the row loaded earlier: the discord_post for this
-    // ingestion very likely ran during this same worker pass and recorded its id
-    // after that read.
-    const dup = await loadIngestion(admin, duplicateIngestionId);
-    if (dup?.discord_message_id) {
-      const url = await activeWebhookUrl(admin, settings);
-      if (url) {
-        const res = await deleteWebhookMessage(url, dup.discord_message_id);
-        await logBeaconBrief(admin, {
-          stage: "discord_patch",
-          level: res.ok ? "info" : "error",
-          ingestionId: duplicateIngestionId,
-          message: res.ok
-            ? "deleted duplicate Discord card; the story keeps one card"
-            : `failed to delete duplicate Discord card: ${res.error}`,
-          responsePayload: res as unknown as Json,
-        });
-        if (res.ok) {
-          // Clear the id so nothing downstream tries to patch a deleted card.
-          // discord_webhook_id stays set on purpose: it is the sentinel that stops
-          // handleDiscordPost from ever reposting this one.
-          await admin
-            .from("news_ingestions")
-            .update({ discord_message_id: null })
-            .eq("id", duplicateIngestionId);
-        }
-      }
-    }
-
-    // Bring the surviving card up to date with the newer post's content.
-    await admin.from("beacon_brief_queue").insert({
-      job_type: "discord_patch",
-      payload: {
-        ingestion_id: duplicateIngestionId,
-        target_ingestion_id: targetIngestionId,
-      } as unknown as Json,
-      status: "pending",
-      run_after: new Date().toISOString(),
-    });
-  } catch (err) {
-    await logBeaconBrief(admin, {
-      stage: "discord_patch",
-      level: "error",
-      ingestionId: duplicateIngestionId,
-      message: `Discord collapse failed after a duplicate merge; a duplicate card may remain: ${
-        err instanceof Error ? err.message : "unknown error"
-      }`,
-    });
-  }
-}
-
-/**
  * Pull a Discord card for a post the article stage decided does not belong here.
  *
  * The relevance gate in ./curate.ts stops the large majority of off-topic posts
@@ -997,8 +1067,10 @@ async function collapseDuplicateDiscordCard(
  * the story is not ours. By then the discord_post job has usually already run.
  *
  * Cancel the job if it is still queued, delete the card if it already posted.
- * Mirrors collapseDuplicateDiscordCard, minus the patch step: there is no
- * surviving story to bring up to date, the post simply leaves the channel.
+ *
+ * This is now the ONLY thing that removes a card. A duplicate keeps its card (see the
+ * Discord note in ./curate.ts processRevision); the card comes down only when the post
+ * turns out not to belong on a fantasy football site at all.
  *
  * Never throws. The ingestion has already been marked filtered by the caller and
  * that outcome must stand even if Discord is unreachable; a stranded card is
@@ -1191,13 +1263,8 @@ async function handleArticleWrite(
         ingestionId: ingestion.id,
         message: `late duplicate guard: folded into article ${lateTarget.article_id} ("${lateTarget.title}") instead of writing a second article`,
       });
-      // One story, one Discord card, matching the one article.
-      await collapseDuplicateDiscordCard(
-        admin,
-        settings,
-        ingestion.id,
-        lateTarget.ingestion_id,
-      );
+      // The Discord card stays. One article, but every beat of the story still lands
+      // in the channel; see the Discord note in ./curate.ts processRevision.
       return { ok: true };
     }
     // The target was deleted between the match and the rewrite. Fall through and
@@ -1211,6 +1278,50 @@ async function handleArticleWrite(
     });
   }
 
+  // Volume backstop. Runs before the research call, which is the expensive one, so a
+  // runaway costs nothing rather than a dollar a post. See ./volume-guard.ts.
+  const volume = await checkArticleVolume(admin, settings, refs.playerIds);
+  if (volume.capped) {
+    await admin
+      .from("news_ingestions")
+      .update({
+        status: "filtered",
+        filter_reason: "volume_cap",
+        filter_detail: {
+          player_id: volume.playerId,
+          player_name: volume.playerName,
+          articles_in_24h: volume.count,
+          cap: volume.cap,
+          stage: "article",
+        } as unknown as Json,
+        processed_at: new Date().toISOString(),
+      })
+      .eq("id", ingestion.id);
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "warn",
+      ingestionId: ingestion.id,
+      message: `daily article cap reached for ${volume.playerName}: ${volume.count} article(s) in 24h against a cap of ${volume.cap}. Discord card kept; article held in the Filtered queue.`,
+    });
+    await closeOrphanedMatchModeration(
+      admin,
+      ingestion.id,
+      `daily article cap for ${volume.playerName}`,
+    );
+    const alert = await shouldEmailVolumeCap(admin, settings);
+    if (alert.send) {
+      await sendBeaconBriefVolumeCapEmail({
+        playerName: volume.playerName ?? "a player",
+        count: volume.count ?? 0,
+        cap: volume.cap ?? 0,
+        suppressedSince: alert.suppressedSince,
+      });
+    }
+    // ok: the job reached a decision. A retry would re-check and re-decide the same
+    // way, and the post is now visible in the admin queue for a one-click override.
+    return { ok: true };
+  }
+
   let researchNotes: string | null = null;
   if (settings.webSearchEnabled && settings.prompts.articleResearch) {
     researchNotes = await runWebSearchResearch({
@@ -1222,6 +1333,56 @@ async function handleArticleWrite(
       maxTokens: 2048,
       maxSearches: settings.researchMaxSearches,
     });
+  }
+
+  // Nothing to write from, in either source. Do not ask the writer anyway.
+  //
+  // This is the structural half of the fabrication fix in migration 0179. A model
+  // handed a fragment and told to produce an article will produce one, and the only
+  // material it has left to build from is what it already believes. That is exactly
+  // how a post whose entire text was "Worst part of training camp:" became a
+  // 700-word article about a groin injury on a named date, at a joint practice
+  // against a named opponent, after a game with a specific score, quoting a head
+  // coach. None of it happened.
+  //
+  // The prompts now forbid inventing those details, but a prompt is an instruction
+  // and this is arithmetic: a post of 26 usable characters plus research that found
+  // nothing is not enough to write from, whatever the writer is told. So the writer
+  // is not asked.
+  //
+  // Both halves have to be empty. A thin post with real research notes is fine, and
+  // a rich post is fine with no research at all, which is also what happens whenever
+  // web search is turned off.
+  const postChars = substantiveTextLength([
+    ingestion.text,
+    (ingestion.quoted as { text?: string } | null)?.text,
+    (ingestion.retweeted as { text?: string } | null)?.text,
+  ]);
+  const researchIsEmpty =
+    !researchNotes ||
+    researchNotes.trim().length === 0 ||
+    /^\W*no results\W*$/i.test(researchNotes.trim());
+  if (postChars < MIN_SUBSTANTIVE_POST_CHARS && researchIsEmpty) {
+    await admin
+      .from("news_ingestions")
+      .update({
+        status: "dropped_no_context",
+        processed_at: new Date().toISOString(),
+      })
+      .eq("id", ingestion.id);
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "warn",
+      ingestionId: ingestion.id,
+      message: `no article written: the post carries ${postChars} characters of usable text and research found nothing. Writing one would mean inventing it. Discord card kept.`,
+    });
+    await closeOrphanedMatchModeration(
+      admin,
+      ingestion.id,
+      "not enough source material to write from",
+    );
+    // ok: a decision was reached. The Discord card stays; only the article is skipped.
+    return { ok: true };
   }
 
   const result = await runStructuredCall<ArticleResult>({
@@ -1283,7 +1444,53 @@ async function handleArticleWrite(
     return { ok: true };
   }
 
-  const slug = await ensureUniqueSlug(admin, result.slug || result.title);
+  // Last line of defence. The writer independently chose a slug that already exists on
+  // a live article about one of the same players, from inside the merge window. That is
+  // not a coincidence, it is the same story, and until migration 0177 it published
+  // anyway behind five random hex characters.
+  const { slug, collision } = await resolveSlug(
+    admin,
+    result.slug || result.title,
+    { playerIds: refs.playerIds, windowHours: settings.eventKeyWindowHours },
+  );
+  if (collision) {
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "warn",
+      ingestionId: ingestion.id,
+      message: `slug collision with live article "${collision.title}" (/${collision.slug}) sharing a player inside the merge window; folding in rather than publishing a second URL`,
+    });
+    const r = await applyRewriteToArticle(
+      admin,
+      settings,
+      ingestion,
+      collision.article_id,
+      compact,
+    );
+    if (r.ok && r.applied) {
+      await admin
+        .from("news_ingestions")
+        .update({ article_id: collision.article_id, is_revision: true })
+        .eq("id", ingestion.id);
+      await admin
+        .from("beacon_brief_moderation")
+        .update({ article_id: collision.article_id })
+        .eq("ingestion_id", ingestion.id)
+        .is("article_id", null)
+        .in("type", ["player_match", "team_match"]);
+      return { ok: true };
+    }
+    // The merge could not be applied (the target vanished, or the call failed). Publish
+    // under the suffixed slug rather than dropping a post we have already paid to
+    // research and write.
+    await logBeaconBrief(admin, {
+      stage: "article_write",
+      level: "warn",
+      ingestionId: ingestion.id,
+      message: `slug-collision merge did not apply (${r.error ?? "target missing"}); publishing under ${slug}`,
+    });
+  }
+
   const published = settings.autopublish;
   const { data: created, error: artErr } = await admin
     .from("articles")
@@ -1297,6 +1504,7 @@ async function handleArticleWrite(
       category_id: refs.categoryId,
       tags: refs.tags,
       origin: "beacon_brief",
+      event_key: ingestion.event_key,
       status: published ? "published" : "draft",
       published_at: published ? new Date().toISOString() : null,
       metadata: (ingestion.metadata as Json) ?? {},

@@ -99,6 +99,87 @@ export async function sendBeaconBriefFailureEmail(
   });
 }
 
+export interface BeaconBriefVolumeCap {
+  playerName: string;
+  /** Articles that player already had inside the 24-hour window. */
+  count: number;
+  cap: number;
+  /** Posts capped during the cooldown that did not get their own email. */
+  suppressedSince?: number;
+}
+
+/**
+ * The per-player daily article cap tripped.
+ *
+ * This is the alert that would have turned the 2026-08 duplicate incident into an
+ * email on day one instead of a four-day, twenty-three-article backlog. It says what
+ * was held and where to release it, and it goes out once per cooldown window however
+ * many posts the cap catches.
+ */
+export async function sendBeaconBriefVolumeCapEmail(
+  cap: BeaconBriefVolumeCap,
+): Promise<void> {
+  const filteredUrl = `${EMAIL_SITE_URL}/admin/beacon-brief/filtered`;
+  const suppressed = cap.suppressedSince ?? 0;
+  const alsoLine =
+    suppressed > 0
+      ? ` ${suppressed} other post${
+          suppressed === 1 ? " was" : "s were"
+        } held since the last alert and are waiting there too.`
+      : "";
+
+  const rows = [
+    { label: "Player", value: cap.playerName },
+    { label: "Articles in the last 24 hours", value: String(cap.count) },
+    { label: "Daily cap", value: String(cap.cap) },
+  ];
+  if (suppressed > 0) {
+    rows.push({ label: "Other posts held since last alert", value: String(suppressed) });
+  }
+
+  const innerHtml = [
+    emailHeading("The Beacon Brief held an article back"),
+    emailParagraph(
+      `A post about ${cap.playerName} would have been that player's article number ${
+        cap.count + 1
+      } in 24 hours, past the cap of ${cap.cap}, so it was not written. The Discord card went out as normal and nothing was deleted. The post is waiting in the Filtered queue, where one click publishes it anyway.${alsoLine}`,
+    ),
+    emailParagraph(
+      "A cap that fires usually means a story is arriving in many separate posts and the duplicate matcher is not folding them together. Worth a look at the Logs page if it keeps happening.",
+    ),
+    emailQuoteCard(rows),
+    emailButton("Review in the Filtered queue", filteredUrl),
+  ].join("");
+
+  const textBody = [
+    `The Beacon Brief held back an article about ${cap.playerName}.`,
+    "",
+    `Articles in the last 24 hours: ${cap.count}`,
+    `Daily cap: ${cap.cap}`,
+    suppressed > 0 ? `Other posts held since last alert: ${suppressed}` : "",
+    "",
+    "The Discord card was posted as normal. Nothing was deleted.",
+    "",
+    `Review or publish anyway: ${filteredUrl}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const { html, text } = buildBrandedEmail({
+    title: "Beacon Brief held an article back",
+    preheader: `${cap.playerName} hit the daily article cap of ${cap.cap}.`,
+    innerHtml,
+    textBody,
+  });
+
+  await sendEmail({
+    to: BEACON_BRIEF_ALERT_TO,
+    subject: `Beacon Brief: daily article cap reached for ${cap.playerName}`,
+    html,
+    text,
+  });
+}
+
 /**
  * Plain-language cause and next step per classified failure kind, so the alert
  * says what to do rather than only what broke. The credits case is the one that

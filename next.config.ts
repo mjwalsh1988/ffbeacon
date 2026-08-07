@@ -104,6 +104,145 @@ const nextConfig: NextConfig = {
           "/brief/geno-smith-battery-investigation-closed-no-charges",
         permanent: true,
       },
+      // The 2026-08 duplicate incident (migrations 0177 and 0178). Twenty-five
+      // slugs retired into eleven articles.
+      //
+      // Same shape as the 0151 pairs above, at a different scale and from a
+      // different cause. Migration 0169 set the never-merge floor at relevance
+      // tier 3, which is the tier the classifier gives every post about a current
+      // player, so merging stopped entirely: one Jonathan Taylor contract became
+      // six articles, one Jalon Walker ACL became five. Migration 0177 replaced
+      // that judgement call with a deterministic event key; 0178 merged what had
+      // already published.
+      //
+      // The survivors were rewritten by hand for 0178 and carry every fact worth
+      // keeping from the whole cluster, so each retired slug is a permanent move
+      // rather than a deletion.
+      {
+        source: "/brief/jonathan-taylor-colts-extension-a38a2",
+        destination: "/brief/jonathan-taylor-colts-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/jonathan-taylor-colts-extension-e6a73",
+        destination: "/brief/jonathan-taylor-colts-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/jonathan-taylor-colts-extension-65193",
+        destination: "/brief/jonathan-taylor-colts-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/jonathan-taylor-colts-extension-4219a",
+        destination: "/brief/jonathan-taylor-colts-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/jonathan-taylor-alec-pierce-colts-extensions",
+        destination: "/brief/jonathan-taylor-colts-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/jahmyr-gibbs-record-rb-contract-lions",
+        destination: "/brief/jahmyr-gibbs-extension-lions",
+        permanent: true,
+      },
+      {
+        source: "/brief/jahmyr-gibbs-record-extension-lions",
+        destination: "/brief/jahmyr-gibbs-extension-lions",
+        permanent: true,
+      },
+      {
+        source: "/brief/jahmyr-gibbs-record-rb-contract-lions-11d5c",
+        destination: "/brief/jahmyr-gibbs-extension-lions",
+        permanent: true,
+      },
+      {
+        source: "/brief/jahmyr-gibbs-extension-lions-66e1d",
+        destination: "/brief/jahmyr-gibbs-extension-lions",
+        permanent: true,
+      },
+      {
+        source: "/brief/jahmyr-gibbs-contract-extension",
+        destination: "/brief/jahmyr-gibbs-extension-lions",
+        permanent: true,
+      },
+      {
+        source: "/brief/bijan-robinson-contract-extension",
+        destination: "/brief/bijan-robinson-contract-extension-falcons",
+        permanent: true,
+      },
+      {
+        source: "/brief/bijan-robinson-deal-gibbs-taylor",
+        destination: "/brief/gibbs-robinson-taylor-20m-rb-extensions",
+        permanent: true,
+      },
+      {
+        source: "/brief/jalon-walker-injury-falcons-camp",
+        destination: "/brief/jalon-walker-acl-tear-falcons",
+        permanent: true,
+      },
+      {
+        source: "/brief/jalon-walker-acl-injury-falcons",
+        destination: "/brief/jalon-walker-acl-tear-falcons",
+        permanent: true,
+      },
+      {
+        source: "/brief/jalon-walker-torn-acl",
+        destination: "/brief/jalon-walker-acl-tear-falcons",
+        permanent: true,
+      },
+      {
+        source: "/brief/jalon-walker-acl-tear-2026",
+        destination: "/brief/jalon-walker-acl-tear-falcons",
+        permanent: true,
+      },
+      {
+        source: "/brief/stefon-diggs-commanders-signing",
+        destination: "/brief/stefon-diggs-signs-commanders",
+        permanent: true,
+      },
+      {
+        source: "/brief/stefon-diggs-washington-commanders",
+        destination: "/brief/stefon-diggs-signs-commanders",
+        permanent: true,
+      },
+      {
+        source: "/brief/stefon-diggs-signs-commanders-a909f",
+        destination: "/brief/stefon-diggs-signs-commanders",
+        permanent: true,
+      },
+      {
+        source: "/brief/darnell-wright-bears-extension-431cc",
+        destination: "/brief/darnell-wright-bears-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/darnell-wright-extension-bears",
+        destination: "/brief/darnell-wright-bears-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/ocyrus-torrence-extension-bills-53b1b",
+        destination: "/brief/ocyrus-torrence-extension-bills",
+        permanent: true,
+      },
+      {
+        source: "/brief/zay-flowers-ravens-extension-3f586",
+        destination: "/brief/zay-flowers-ravens-extension",
+        permanent: true,
+      },
+      {
+        source: "/brief/aaron-donald-rams-workout",
+        destination: "/brief/aaron-donald-rams-workout-comeback",
+        permanent: true,
+      },
+      {
+        source: "/brief/peter-skoronski-extension-titans-c6e5c",
+        destination: "/brief/peter-skoronski-extension-titans",
+        permanent: true,
+      },
       // Signal Scout's leaderboards moved off their own route and into a
       // sidebar on the game page itself, so the standalone page is gone. Old
       // bookmarks and any indexed links land on the game page, which now

@@ -103,9 +103,14 @@ export default async function BeaconBriefFilteredPage() {
         ? "keyword"
         : row.filter_reason === "ai_low_relevance"
           ? "ai_low_relevance"
-          : "ai_non_football";
+          : row.filter_reason === "volume_cap"
+            ? "volume_cap"
+            : "ai_non_football";
     const tier = detailField(row.filter_detail, "relevance_tier");
     const why = detailField(row.filter_detail, "reason");
+    const capPlayer = detailField(row.filter_detail, "player_name");
+    const capCount = detailField(row.filter_detail, "articles_in_24h");
+    const capLimit = detailField(row.filter_detail, "cap");
     return {
       id: row.id,
       created_at: row.created_at,
@@ -117,6 +122,17 @@ export default async function BeaconBriefFilteredPage() {
         typeof why === "string" && why.trim() ? why.trim() : null,
       rejectedAtArticleStage:
         detailField(row.filter_detail, "stage") === "article",
+      volumeCap:
+        reason === "volume_cap"
+          ? {
+              playerName:
+                typeof capPlayer === "string" && capPlayer.trim()
+                  ? capPlayer.trim()
+                  : "This player",
+              count: typeof capCount === "number" ? capCount : 0,
+              cap: typeof capLimit === "number" ? capLimit : 0,
+            }
+          : null,
       post: toIngestedPost(row),
     };
   });

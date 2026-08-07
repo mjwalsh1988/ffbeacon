@@ -143,6 +143,7 @@ export type Database = {
           category_id: string | null;
           content_md: string | null;
           created_at: string;
+          event_key: string | null;
           format_config_id: string | null;
           id: string;
           last_updated: string;
@@ -167,6 +168,7 @@ export type Database = {
           category_id?: string | null;
           content_md?: string | null;
           created_at?: string;
+          event_key?: string | null;
           format_config_id?: string | null;
           id?: string;
           last_updated?: string;
@@ -191,6 +193,7 @@ export type Database = {
           category_id?: string | null;
           content_md?: string | null;
           created_at?: string;
+          event_key?: string | null;
           format_config_id?: string | null;
           id?: string;
           last_updated?: string;
@@ -1932,6 +1935,7 @@ export type Database = {
           deletion_checked_at: string | null;
           discord_message_id: string | null;
           discord_webhook_id: string | null;
+          event_key: string | null;
           external_url: string | null;
           filter_detail: Json | null;
           filter_reason: string | null;
@@ -1958,6 +1962,7 @@ export type Database = {
           deletion_checked_at?: string | null;
           discord_message_id?: string | null;
           discord_webhook_id?: string | null;
+          event_key?: string | null;
           external_url?: string | null;
           filter_detail?: Json | null;
           filter_reason?: string | null;
@@ -1984,6 +1989,7 @@ export type Database = {
           deletion_checked_at?: string | null;
           discord_message_id?: string | null;
           discord_webhook_id?: string | null;
+          event_key?: string | null;
           external_url?: string | null;
           filter_detail?: Json | null;
           filter_reason?: string | null;

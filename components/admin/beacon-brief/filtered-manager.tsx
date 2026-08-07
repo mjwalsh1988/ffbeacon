@@ -12,7 +12,7 @@ import { PostContext, type IngestedPost } from "./moderation-manager";
 export interface FilteredItem {
   id: string;
   created_at: string;
-  reason: "keyword" | "ai_non_football" | "ai_low_relevance";
+  reason: "keyword" | "ai_non_football" | "ai_low_relevance" | "volume_cap";
   /** Blocklist terms that matched (keyword reason only). */
   matchedTerms: string[];
   /** The AI's suggested headline, when it was classified (non-football reason). */
@@ -21,6 +21,12 @@ export interface FilteredItem {
   relevanceTier: number | null;
   /** The classifier's one-clause justification for the tier. */
   relevanceReason: string | null;
+  /**
+   * Set on the volume_cap reason: which player hit the daily article cap, how many
+   * articles they already had, and what the cap is. The post is otherwise fine, so
+   * this is the one reason where forcing it through is a routine decision.
+   */
+  volumeCap: { playerName: string; count: number; cap: number } | null;
   /**
    * True when the article stage rejected the post after research rather than the
    * curation gate rejecting it from the post text. Worth distinguishing in the UI:
@@ -38,6 +44,7 @@ const btnClass =
 function reasonLabel(reason: FilteredItem["reason"]): string {
   if (reason === "keyword") return "Blocked keyword";
   if (reason === "ai_low_relevance") return "No fantasy relevance";
+  if (reason === "volume_cap") return "Daily article cap";
   return "AI flagged as non-football";
 }
 
@@ -116,6 +123,18 @@ export function FilteredManager({ items }: { items: FilteredItem[] }) {
                   <span className="font-semibold text-ink">
                     {item.matchedTerms.join(", ")}
                   </span>
+                </p>
+              ) : null}
+              {item.reason === "volume_cap" && item.volumeCap ? (
+                <p className="mt-1 text-sm text-ink-muted">
+                  {item.volumeCap.playerName} already had{" "}
+                  <span className="font-semibold text-ink">
+                    {item.volumeCap.count}
+                  </span>{" "}
+                  {item.volumeCap.count === 1 ? "article" : "articles"} in 24
+                  hours, at a cap of {item.volumeCap.cap}. Nothing is wrong with
+                  this post and its Discord card was posted as normal. Publish it
+                  if the story warrants another article.
                 </p>
               ) : null}
               {item.reason === "ai_non_football" && item.suggestedTitle ? (

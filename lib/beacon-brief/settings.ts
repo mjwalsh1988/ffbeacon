@@ -31,11 +31,40 @@ export interface BeaconBriefSettings {
   followupLookbackHours: number;
   /**
    * A post whose relevance_tier is at or above this never merges into an existing
-   * article, it always gets its own. 0 disables the floor. Default 3, the tier the
-   * classifier reserves for "a current player's football situation changed", which
-   * is the size of story that must never lose its own headline and Discord card.
+   * article, it always gets its own. 0 disables the floor, which is now the default.
+   *
+   * Shipped at 3 in migration 0169 and disabled in 0177. The classifier rates every
+   * post about a current player's football situation a 3, which is every post that can
+   * become an article, so a floor at 3 did not limit merging, it ended it: the floor
+   * fired 129 times over four days while the matcher ran twice. The event key in
+   * ./event-key.ts replaced the job this was doing, and it does not fire on a proven
+   * same-event match at any tier.
    */
   mergeBlockRelevanceTier: number;
+  /**
+   * How far back an event key looks for the article that already covers this event.
+   * Wider than the follow-up lookback because a signing reported on Tuesday is still
+   * the same signing when it is made official on Thursday.
+   */
+  eventKeyWindowHours: number;
+  /**
+   * Ask the triage model whether a matched post actually changes the article before
+   * paying for a rewrite. Off means every match rewrites, which is the old behaviour.
+   */
+  mergeGateEnabled: boolean;
+  /**
+   * Most articles the Brief may write about one player in 24 hours. A post that would
+   * exceed it keeps its Discord card and lands in the Filtered queue instead of
+   * publishing. 0 disables the cap.
+   */
+  playerArticleCapPerDay: number;
+  /**
+   * Model used to fold a follow-up into an existing article. Defaults to the triage
+   * model: a merge edits an article that already exists rather than writing one from
+   * nothing, and it runs with no web research, so the cheaper model is usually enough.
+   * Set it to the article model when merge prose quality matters more than the cost.
+   */
+  modelMergeRewrite: string;
   /**
    * Age past which a Discord card is too old to update in place. A Discord edit
    * fires no notification and does not move the message, so patching a day-old
@@ -90,9 +119,15 @@ export interface BeaconBriefSettings {
     categorize: string;
     articleResearch: string;
     article: string;
-    revisionTriage: string;
     revisionRewrite: string;
     followupLink: string;
+    /**
+     * Asks whether a matched post changes the article at all. See ./merge.ts.
+     * Replaced bb_revision_triage_prompt in migration 0177: same price, but it reads
+     * the whole article body instead of a summary and it runs in one place instead of
+     * two.
+     */
+    mergeGate: string;
   };
 }
 
@@ -104,7 +139,11 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   autopublish: true,
   contextThreshold: 1,
   followupLookbackHours: 12,
-  mergeBlockRelevanceTier: 3,
+  mergeBlockRelevanceTier: 0,
+  eventKeyWindowHours: 72,
+  mergeGateEnabled: true,
+  playerArticleCapPerDay: 3,
+  modelMergeRewrite: "claude-haiku-4-5",
   patchMaxAgeMinutes: 120,
   queueMaxAttempts: 5,
   discordJobsPerRun: 25,
@@ -144,9 +183,9 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
     categorize: "",
     articleResearch: "",
     article: "",
-    revisionTriage: "",
     revisionRewrite: "",
     followupLink: "",
+    mergeGate: "",
   },
 };
 
@@ -222,6 +261,22 @@ export async function loadBeaconBriefSettings(
     mergeBlockRelevanceTier: asNum(
       map.get("bb_merge_block_relevance_tier"),
       d.mergeBlockRelevanceTier,
+    ),
+    eventKeyWindowHours: asNum(
+      map.get("bb_event_key_window_hours"),
+      d.eventKeyWindowHours,
+    ),
+    mergeGateEnabled: asBool(
+      map.get("bb_merge_gate_enabled"),
+      d.mergeGateEnabled,
+    ),
+    playerArticleCapPerDay: asNum(
+      map.get("bb_player_article_cap_per_day"),
+      d.playerArticleCapPerDay,
+    ),
+    modelMergeRewrite: asStr(
+      map.get("bb_model_merge_rewrite"),
+      d.modelMergeRewrite,
     ),
     patchMaxAgeMinutes: asNum(
       map.get("bb_patch_max_age_minutes"),
@@ -317,10 +372,6 @@ export async function loadBeaconBriefSettings(
         d.prompts.articleResearch,
       ),
       article: asStr(map.get("bb_article_prompt"), d.prompts.article),
-      revisionTriage: asStr(
-        map.get("bb_revision_triage_prompt"),
-        d.prompts.revisionTriage,
-      ),
       revisionRewrite: asStr(
         map.get("bb_revision_rewrite_prompt"),
         d.prompts.revisionRewrite,
@@ -329,6 +380,7 @@ export async function loadBeaconBriefSettings(
         map.get("bb_followup_link_prompt"),
         d.prompts.followupLink,
       ),
+      mergeGate: asStr(map.get("bb_merge_gate_prompt"), d.prompts.mergeGate),
     },
   };
 }

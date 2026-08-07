@@ -24,12 +24,15 @@ import { matchReferences } from "./match";
 import { matchBlockedKeywords, parseBlocklist } from "./keyword-filter";
 import {
   eligibleMergeCandidates,
+  findExactEventMatch,
   findFollowupTarget,
   loadFollowupCandidates,
+  loadOverlapCandidates,
   mergeBlockedByTier,
   type FollowupCandidate,
   type PostSubject,
 } from "./followup";
+import { buildEventKey, classifyEventKind } from "./event-key";
 import { sendBeaconBriefMatchDigestEmail } from "./email";
 import { beginXCall, recordXFailure, recordXSuccess } from "./health";
 import type {
@@ -71,13 +74,6 @@ const CATEGORIZE_SCHEMA = {
     suggested_title: { type: "string" },
     suggested_slug: { type: "string" },
   },
-} as const;
-
-const TRIAGE_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["critical"],
-  properties: { critical: { type: "boolean" } },
 } as const;
 
 /** Compact, model-facing view of a post (keeps prompts small + stable). */
@@ -383,31 +379,123 @@ async function activeCategorySlugs(admin: Admin): Promise<string> {
 }
 
 /**
- * Ask the follow-up matcher, but only about candidates that could really be the
- * same event, and only when this post is small enough to be folded into one.
+ * Compute the event key for a post from everything we know about it.
  *
- * The gates run before the AI call, not after, for two reasons: a rejected merge
- * costs nothing, and a candidate the model never sees is a candidate it cannot
- * talk itself into. Returns the article to merge into, or null to write our own.
+ * The classifier's own suggested title and slug go into the haystack alongside the
+ * post text, because the text alone is sometimes just a stat line or a quote-tweet
+ * stub, and the slug is what says which event it belongs to. See ./event-key.ts.
  */
-async function findGatedFollowup(
+function eventKeyForPost(
+  item: BeaconBriefSourceItem,
+  ai: CategorizeResult,
+  playerIds: string[],
+): string | null {
+  const kind = classifyEventKind([
+    item.text,
+    item.quoted?.text,
+    item.retweeted?.text,
+    ai.suggested_title,
+    ai.suggested_slug,
+    (ai.tags ?? []).join(" "),
+  ]);
+  return buildEventKey(kind, playerIds);
+}
+
+/** How a post was matched to an existing story, for logging and the audit trail. */
+type MatchRoute = "event_key" | "model";
+
+interface DuplicateMatch {
+  target: FollowupCandidate;
+  route: MatchRoute;
+}
+
+/**
+ * Decide whether this post belongs to a story we have already published.
+ *
+ * Three passes, cheapest first, and the first hit wins.
+ *
+ *   1. Exact event key. Same kind of event, same set of people, inside the window.
+ *      Free, deterministic, and it OUTRANKS the relevance-tier floor: a proven
+ *      same-event match is never "too important to merge", because six articles about
+ *      one signing is the failure the floor exists to prevent, not an instance of it
+ *      working.
+ *   2. Overlapping event key. Same kind, some of the same people, different set. One
+ *      cheap triage call against a short list the model has a real chance of judging.
+ *   3. No key at all (unresolved names, or an event kind we cannot read). Falls back
+ *      to the original behaviour: recent articles filtered by the shared-subject gate.
+ *
+ * Returns the article to merge into, or null to write our own.
+ */
+async function findDuplicateTarget(
   admin: Admin,
   source: NewsSource,
   item: BeaconBriefSourceItem,
   settings: Awaited<ReturnType<typeof loadBeaconBriefSettings>>,
-  opts: { subject: PostSubject; lookbackHours: number },
-): Promise<FollowupCandidate | null> {
+  opts: {
+    subject: PostSubject;
+    lookbackHours: number;
+    eventKey: string | null;
+  },
+): Promise<DuplicateMatch | null> {
+  // 1. Exact event key.
+  if (opts.eventKey) {
+    const exact = await findExactEventMatch(admin, {
+      eventKey: opts.eventKey,
+      windowHours: settings.eventKeyWindowHours,
+    });
+    if (exact) {
+      await logBeaconBrief(admin, {
+        stage: "revision_link",
+        sourceId: source.id,
+        message: `same event as "${exact.title}" (event key ${opts.eventKey}); folding in without asking the model`,
+      });
+      return {
+        route: "event_key",
+        target: {
+          ingestion_id: exact.ingestion_id,
+          article_id: exact.article_id,
+          title: exact.title,
+          summary: "",
+          player_ids: opts.subject.playerIds,
+          team_ids: opts.subject.teamIds,
+        },
+      };
+    }
+  }
+
+  // The size floor still governs the two model-judged passes below, where a wrong
+  // merge is a real risk. It is disabled by default (migration 0177) but stays
+  // honoured so the knob keeps working for anyone who turns it back on.
   if (mergeBlockedByTier(opts.subject, settings.mergeBlockRelevanceTier)) {
     await logBeaconBrief(admin, {
       stage: "revision_link",
       sourceId: source.id,
-      message: `major news (relevance tier ${opts.subject.relevanceTier}); writing its own article rather than merging`,
+      message: `major news (relevance tier ${opts.subject.relevanceTier}) and no exact event match; writing its own article`,
     });
     return null;
   }
 
+  // 2. Overlapping event key.
+  if (opts.eventKey) {
+    const overlaps = await loadOverlapCandidates(admin, {
+      eventKey: opts.eventKey,
+      windowHours: settings.eventKeyWindowHours,
+    });
+    if (overlaps.length > 0) {
+      const matched = await findFollowupTarget({
+        admin,
+        settings,
+        post: compactItem(item),
+        candidates: overlaps,
+        sourceId: source.id,
+      });
+      if (matched) return { route: "model", target: matched };
+      return null;
+    }
+  }
+
+  // 3. No usable key: the original path, now across every source rather than one.
   const candidates = await loadFollowupCandidates(admin, {
-    sourceId: source.id,
     lookbackHours: opts.lookbackHours,
   });
   const eligible = eligibleMergeCandidates(opts.subject, candidates);
@@ -418,13 +506,14 @@ async function findGatedFollowup(
       message: `${candidates.length - eligible.length} of ${candidates.length} follow-up candidate(s) rejected: no shared player or team with this post`,
     });
   }
-  return findFollowupTarget({
+  const matched = await findFollowupTarget({
     admin,
     settings,
     post: compactItem(item),
     candidates: eligible,
     sourceId: source.id,
   });
+  return matched ? { route: "model", target: matched } : null;
 }
 
 /**
@@ -448,6 +537,23 @@ async function processRevision(
     revisionTargetArticleId: string | null;
     aiStored: Json | null;
     contextScore: number | null;
+    /** Null for native edits, which reach here with no classification. */
+    eventKey?: string | null;
+    /**
+     * True when the event key proved this is the same event. The rewrite triage below
+     * is skipped in that case: the merge gate in ./merge.ts asks the better question
+     * ("does this change the article?") at the same price, and the worker owns it, so
+     * asking twice would spend twice.
+     */
+    provenSameEvent?: boolean;
+    /**
+     * True only when the source rewrote its OWN post. Decides what happens in Discord:
+     * an edited post patches the card it already has, a separate post about the same
+     * story gets a card of its own.
+     */
+    nativeEdit?: boolean;
+    /** Discord role ids to mention, when this post gets its own card. */
+    roleIds?: string[];
   },
 ): Promise<void> {
   // Revisions insert immediately: the patch job needs the row id, and there is
@@ -469,6 +575,7 @@ async function processRevision(
       revision_of_ingestion_id: opts.revisionOfIngestionId,
       ai_result: opts.aiStored,
       context_score: opts.contextScore,
+      event_key: opts.eventKey ?? null,
       status: "processing",
     })
     .select("id")
@@ -492,41 +599,41 @@ async function processRevision(
     message: `ingested ${item.source_external_id} (revision)`,
   });
 
-  // Bring the story's existing Discord card up to date. The worker decides
-  // whether that card is still fresh enough to edit in place or whether this
-  // follow-up needs its own; see handleDiscordPatch in ./worker.ts.
-  await enqueue(admin, "discord_patch", {
-    ingestion_id: ingestionId,
-    target_ingestion_id: opts.revisionOfIngestionId,
-  });
+  // Discord and the website answer different questions, and as of migration 0177 they
+  // are decided separately.
+  //
+  // The website wants one page per event, because ten pages about one signing split
+  // the search ranking between them and give a reader ten versions of the same thing.
+  // The channel wants every beat: a follow-up that confirms a contract, or turns a
+  // feared injury into a confirmed one, is worth its own notification even though it
+  // is worth no second article. Folding a post into an existing article no longer
+  // costs it a Discord card.
+  //
+  // The one exception is a native source edit, where the reporter rewrote the post we
+  // already carded. There is no new post, so there is nothing to announce, and the
+  // existing card is edited in place.
+  if (opts.nativeEdit) {
+    await enqueue(admin, "discord_patch", {
+      ingestion_id: ingestionId,
+      target_ingestion_id: opts.revisionOfIngestionId,
+    });
+  } else {
+    await enqueue(admin, "discord_post", {
+      ingestion_id: ingestionId,
+      role_ids: opts.roleIds ?? [],
+    });
+  }
   summary.discordQueued += 1;
 
-  // Triage: only rewrite the article when the change is critical.
-  let critical = false;
-  if (opts.revisionTargetArticleId && settings.prompts.revisionTriage) {
-    const { data: art } = await admin
-      .from("articles")
-      .select("title, content_md, tl_dr")
-      .eq("id", opts.revisionTargetArticleId)
-      .maybeSingle();
-    const triage = await runStructuredCall<{ critical: boolean }>({
-      admin,
-      stage: "revision_triage",
-      model: settings.modelTriage,
-      system: settings.prompts.revisionTriage,
-      userContent: JSON.stringify({
-        original_article: art ?? {},
-        new_post: compactItem(item),
-      }),
-      schema: TRIAGE_SCHEMA as unknown as Record<string, unknown>,
-      ingestionId,
-      sourceId: source.id,
-      maxTokens: 256,
-    });
-    critical = triage?.critical === true;
-  }
-
-  if (critical && opts.revisionTargetArticleId) {
+  // Queue the merge and let the worker decide whether it changes anything.
+  //
+  // This used to run its own triage call here ("is this change critical?") and only
+  // enqueue when the answer was yes. The worker now runs the merge gate in ./merge.ts
+  // immediately before the rewrite, asking the sharper question against the full
+  // article body rather than a three-column summary, so keeping the triage here would
+  // be a second paid call to reach the same decision slightly worse. One question, one
+  // place, one charge.
+  if (opts.revisionTargetArticleId) {
     await enqueue(admin, "article_write", {
       ingestion_id: ingestionId,
       mode: "rewrite",
@@ -615,6 +722,7 @@ async function processItem(
         revisionTargetArticleId: prior.article_id,
         aiStored: null,
         contextScore: null,
+        nativeEdit: true,
       });
       return;
     }
@@ -802,16 +910,21 @@ async function processItem(
     teamIds: refs.teamIds,
     relevanceTier: ai.relevance_tier ?? null,
   };
-  const followup = await findGatedFollowup(admin, source, item, settings, {
+  const eventKey = eventKeyForPost(item, ai, refs.playerIds);
+  const followup = await findDuplicateTarget(admin, source, item, settings, {
     subject,
     lookbackHours: settings.followupLookbackHours,
+    eventKey,
   });
   if (followup) {
     await processRevision(admin, source, item, settings, summary, {
-      revisionOfIngestionId: followup.ingestion_id,
-      revisionTargetArticleId: followup.article_id,
+      revisionOfIngestionId: followup.target.ingestion_id,
+      revisionTargetArticleId: followup.target.article_id,
       aiStored,
       contextScore: ai.context_score ?? 0,
+      eventKey,
+      provenSameEvent: followup.route === "event_key",
+      roleIds: refs.roleIds,
     });
     return;
   }
@@ -832,6 +945,7 @@ async function processItem(
       revision_of_ingestion_id: null,
       ai_result: aiStored,
       context_score: ai.context_score ?? 0,
+      event_key: eventKey,
       status: makeArticle ? "processing" : "dropped_no_context",
       processed_at: makeArticle ? null : new Date().toISOString(),
     })
@@ -993,11 +1107,28 @@ export async function forcePushFilteredPost(
 
   const makeArticle = (ai.context_score ?? 0) >= settings.contextThreshold;
 
+  // The key is recorded but NOT acted on here. A force-push is an explicit decision
+  // that this post deserves to be in the pipeline, and the duplicate machinery is
+  // deliberately not given a second chance to overrule it; the worker's late guard
+  // still catches a genuine same-event collision before anything publishes.
+  const forcedEventKey = buildEventKey(
+    classifyEventKind([
+      row.text,
+      (row.quoted as { text?: string } | null)?.text,
+      (row.retweeted as { text?: string } | null)?.text,
+      ai.suggested_title,
+      ai.suggested_slug,
+      (ai.tags ?? []).join(" "),
+    ]),
+    refs.playerIds,
+  );
+
   await admin
     .from("news_ingestions")
     .update({
       ai_result: aiStored,
       context_score: ai.context_score ?? 0,
+      event_key: forcedEventKey,
       status: makeArticle ? "processing" : "dropped_no_context",
       filter_reason: null,
       filter_detail: null,

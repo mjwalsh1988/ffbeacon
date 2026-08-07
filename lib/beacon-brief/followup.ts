@@ -45,11 +45,35 @@
  * the gates reject is never shown to the model. Both are deliberately about facts
  * the model is bad at holding onto (who is this actually about, how big is it) and
  * cheap for us to check exactly.
+ *
+ * WHY THE MODEL IS NOT ASKED FIRST ANY MORE
+ *
+ * The gates above were not enough. Setting the size floor at tier 3 disabled merging
+ * outright, because the classifier rates every post about a current player's football
+ * situation a 3, which is every post that can become an article. Between 2026-08-04
+ * and 2026-08-07 the floor fired 129 times and the matcher ran twice; twenty-three of
+ * forty-nine published articles covered an event another article already covered.
+ *
+ * The fix is not a better prompt or a better threshold. It is to stop asking a
+ * question that has a factual answer. findExactEventMatch() below looks up the event
+ * key from ./event-key.ts, and an exact hit inside the window is the same story by
+ * construction: same kind of event, same set of people, same few days. No model is
+ * consulted, nothing is spent, and the answer does not move when a prompt is edited.
+ *
+ * An exact hit deliberately OUTRANKS the size floor. A record running-back contract
+ * must keep its own headline, which is what the floor is for, but it must keep exactly
+ * one, and six articles about one signing is the failure the floor was meant to
+ * prevent rather than an example of it working.
+ *
+ * The model still decides the weaker case: same kind of event, overlapping but not
+ * identical people. It now sees a handful of genuinely plausible candidates instead of
+ * fifteen recent articles, which is a much easier question than the one it was failing.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { runStructuredCall } from "./ai";
+import { eventKeyKind, eventKeysOverlap } from "./event-key";
 import type { BeaconBriefSettings } from "./settings";
 
 type Admin = SupabaseClient<Database>;
@@ -152,7 +176,16 @@ export function mergeBlockedByTier(
 }
 
 export interface LoadCandidatesOptions {
-  sourceId: string;
+  /**
+   * Restrict candidates to one source account. Optional, and normally left unset.
+   *
+   * It used to be required, which meant two reporters breaking the same signing were
+   * never compared: Schefter's post and Rapoport's post about the same contract each
+   * got their own article because neither was ever offered the other's. The
+   * shared-subject gate below is the check that actually does the work, and it does
+   * not care who posted.
+   */
+  sourceId?: string | null;
   /**
    * How far back to look for a story this post might continue. Hours, not days:
    * at three days the matcher was reaching across unrelated news cycles and the
@@ -193,11 +226,11 @@ export async function loadFollowupCandidates(
   let q = admin
     .from("news_ingestions")
     .select("id, article_id")
-    .eq("source_id", opts.sourceId)
     .not("article_id", "is", null)
     .gte("created_at", cutoff)
     .order("created_at", { ascending: false })
     .limit(limit * 4);
+  if (opts.sourceId) q = q.eq("source_id", opts.sourceId);
   if (opts.excludeIngestionId) q = q.neq("id", opts.excludeIngestionId);
 
   const { data: rows } = await q;
@@ -261,6 +294,142 @@ export async function loadFollowupCandidates(
       summary: art.tl_dr ?? "",
       player_ids: playersByArticle.get(articleId) ?? [],
       team_ids: teamsByArticle.get(articleId) ?? [],
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** The published article an event key resolved to, plus the post that produced it. */
+export interface EventKeyMatch {
+  article_id: string;
+  ingestion_id: string;
+  title: string;
+  event_key: string;
+}
+
+/** Article statuses an event key may resolve to, and the columns we need from them. */
+const EVENT_KEY_COLUMNS = "id, title, tl_dr, event_key, created_at";
+
+/**
+ * The oldest ingestion that produced a given article, which is the one a Discord
+ * patch should target and the one a revision should point at.
+ *
+ * Oldest rather than newest on purpose: it is the post the story started from, so a
+ * chain of follow-ups all hang off one root instead of each other.
+ */
+async function rootIngestionFor(
+  admin: Admin,
+  articleId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("news_ingestions")
+    .select("id")
+    .eq("article_id", articleId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+/**
+ * Is there already a live article for exactly this event?
+ *
+ * The whole duplicate problem reduces to this one query. No model call, no tokens,
+ * no prompt to drift. Returns the OLDEST matching article so every post about one
+ * event converges on a single canonical URL rather than chaining into whichever
+ * duplicate happened to publish most recently.
+ */
+export async function findExactEventMatch(
+  admin: Admin,
+  opts: {
+    eventKey: string;
+    windowHours: number;
+    /** Never match a post against the article it produced itself. */
+    excludeArticleId?: string | null;
+  },
+): Promise<EventKeyMatch | null> {
+  const hours = opts.windowHours > 0 ? opts.windowHours : 72;
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+  let q = admin
+    .from("articles")
+    .select(EVENT_KEY_COLUMNS)
+    .eq("event_key", opts.eventKey)
+    .in("status", MERGEABLE_STATUSES as unknown as string[])
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (opts.excludeArticleId) q = q.neq("id", opts.excludeArticleId);
+
+  const { data } = await q.maybeSingle();
+  if (!data) return null;
+
+  const ingestionId = await rootIngestionFor(admin, data.id);
+  if (!ingestionId) return null;
+  return {
+    article_id: data.id,
+    ingestion_id: ingestionId,
+    title: data.title ?? "",
+    event_key: data.event_key ?? opts.eventKey,
+  };
+}
+
+/**
+ * Articles about the same KIND of event involving at least one of the same people,
+ * where the sets are not identical.
+ *
+ * This is the shortlist the model gets asked about, and it is a far narrower question
+ * than the one it was failing. "The Colts have now handed out major contracts to
+ * their QB/RB/WR trio" names three players; the Jonathan Taylor contract article names
+ * one of them. Same kind, overlapping people, not the same key, so a human-shaped
+ * judgement is genuinely required and it is worth one cheap call to get it.
+ *
+ * Player ids come out of the key itself, so this costs one query rather than a join
+ * across article_players.
+ */
+export async function loadOverlapCandidates(
+  admin: Admin,
+  opts: {
+    eventKey: string;
+    windowHours: number;
+    excludeArticleId?: string | null;
+    limit?: number;
+  },
+): Promise<FollowupCandidate[]> {
+  const kind = eventKeyKind(opts.eventKey);
+  if (!kind) return [];
+  const hours = opts.windowHours > 0 ? opts.windowHours : 72;
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const limit = opts.limit ?? DEFAULT_CANDIDATE_LIMIT;
+
+  let q = admin
+    .from("articles")
+    .select(EVENT_KEY_COLUMNS)
+    .like("event_key", `${kind}:%`)
+    .in("status", MERGEABLE_STATUSES as unknown as string[])
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: true })
+    .limit(limit * 4);
+  if (opts.excludeArticleId) q = q.neq("id", opts.excludeArticleId);
+
+  const { data } = await q;
+  if (!data || data.length === 0) return [];
+
+  const out: FollowupCandidate[] = [];
+  for (const row of data) {
+    // An identical key is not an overlap; it was already handled as an exact match.
+    if (row.event_key === opts.eventKey) continue;
+    if (!eventKeysOverlap(opts.eventKey, row.event_key)) continue;
+    const ingestionId = await rootIngestionFor(admin, row.id);
+    if (!ingestionId) continue;
+    out.push({
+      ingestion_id: ingestionId,
+      article_id: row.id,
+      title: row.title ?? "",
+      summary: row.tl_dr ?? "",
+      player_ids: (row.event_key ?? "").split(":")[1]?.split(",") ?? [],
+      team_ids: [],
     });
     if (out.length >= limit) break;
   }

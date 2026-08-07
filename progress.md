@@ -3323,3 +3323,93 @@ hidden at any breakpoint; 44px targets throughout.
 - npm test: 1334 tests across 99 files, all pass (12 new in manual.test.ts)
 - npm run build: compiles clean, /tools/faab 20 kB
 - No browser testing this pass; no dev server left running.
+
+---
+
+## Beacon Brief: stop the duplicate articles (migrations 0177, 0178)
+
+THE DEFECT
+Migration 0169 set bb_merge_block_relevance_tier to 3. The classifier assigns
+tier 3 to every post about a current player's football situation, which is every
+post that can become an article, so the floor did not limit merging, it ended it.
+Between 2026-08-04 and 2026-08-07 the floor fired 129 times and the follow-up
+matcher ran twice. Twenty-three of forty-nine published articles covered an event
+another article already covered: 6 for one Jonathan Taylor contract, 5 for one
+Gibbs contract, 5 for one Jalon Walker ACL, 4 for one Diggs signing.
+
+THE FIX (migration 0177 + code)
+lib/beacon-brief/event-key.ts computes <kind>:<sorted player ids> from work the
+pipeline has already done. An exact match against a live article inside 72 hours
+is the same event by construction, settled in code with no model call, and it
+outranks the tier floor. Overlapping keys still go to the model, now with a short
+plausible candidate list. Also: the tier floor drops to 0, slug collisions with a
+live same-subject article merge instead of publishing behind a random suffix,
+candidates compare across sources rather than within one account, a merged post
+keeps its Discord card (Discord and the website decide separately now), a merge
+gate asks whether the post changes anything before paying for a rewrite, merge
+rewrites run on the triage model, and a per-player daily article cap (3) backstops
+all of it with a throttled email.
+
+bb_revision_triage_prompt removed; the merge gate replaced it.
+
+THE CLEANUP (migration 0178)
+36 URLs merged into 11 articles across 10 clusters plus one genuine roundup.
+25 slugs 308-redirected in next.config.ts. All replacement prose written by hand
+for the migration; no Anthropic API call produced any of it. The duplicates
+contradicted each other on matters of fact (Montgomery in Detroit vs traded to
+Houston; a fabricated August 13 groin injury for Walker; three different rankings
+for Taylor's contract), so every merged article is written from the source posts
+plus only cross-corroborated detail, and unresolvable conflicts are omitted.
+
+- npx tsc --noEmit: clean
+- npx vitest run: 1392 tests across 102 files, all pass (23 new in event-key.test.ts)
+- npx next build: compiles clean
+- Migrations applied to prod and verified: 25 archived, 0 duplicate event keys
+  among published, 0 posts pointing at archived rows, 0 stale entity links,
+  every redirect source archived and every destination published
+- lib/database.types.ts regenerated (articles.event_key, news_ingestions.event_key)
+- RLS unchanged; new columns inherit existing table policies (verified in pg_policies)
+- Not committed. Discord untouched.
+
+---
+
+## Beacon Brief: stop the fabrication (migration 0179)
+
+THE DEFECT
+Auditing the duplicates for the 0178 merge surfaced a second defect the duplication
+had been hiding: the articles contradicted each other because several contained
+facts that came from nowhere. A post whose entire text was "Worst part of training
+camp:" plus a link produced a 700-word published article naming a groin injury, a
+date, a joint-practice opponent, a 23-20 score, and a quote from a head coach who
+does not coach the team. The real event was a torn ACL on a different date.
+Also found: Montgomery in Detroit vs traded to Houston, Diggs' ACL with New England
+vs Houston, three different rankings for Taylor's contract, 5 vs 6 Flowers
+touchdowns, a July 10 date on a workout reported "today" on August 5.
+
+WHY THE EXISTING RULE FAILED
+bb_article_prompt already said do not invent facts. Everything else in the same
+prompt demanded a full article: ## subheadings, full name plus position plus team
+on first mention, the search phrase in four places, a roster-impact close. Handed a
+fragment, a model cannot satisfy both, and the prompt never said which wins.
+bb_article_research_prompt made it worse by never defining a not-found answer, so
+empty research came back looking like research.
+
+THE FIX
+- bb_article_research_prompt REPLACED: attribution required per line, CONFIRMED vs
+  UNCONFIRMED sections, literal NO RESULTS when nothing is found, never date what
+  was not seen dated.
+- bb_article_prompt + bb_revision_rewrite_prompt: a fabrication section naming the
+  eight categories that were actually invented, stating accuracy outranks structure,
+  and that there is no minimum length. The rewrite version also forbids correcting
+  the existing article from memory.
+- bb_categorize_prompt: context_score rewritten to prefer 0 when torn and to name
+  the quote-tweet-stub shape that got through.
+- worker.ts: refuses to call the writer when the post carries under 60 characters
+  of usable text AND research returned nothing. Both halves must be empty. The
+  Discord card still posts. A prompt is an instruction; this is arithmetic.
+
+- npx tsc --noEmit: clean
+- npx vitest run: 1398 tests across 103 files, all pass (6 new in thin-post.test.ts)
+- npx next build: compiles clean
+- Migration applied to prod and verified: all four prompts carry the new text
+- No schema change, no RLS change, no type regeneration
