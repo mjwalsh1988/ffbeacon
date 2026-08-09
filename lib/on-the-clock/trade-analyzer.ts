@@ -4,11 +4,11 @@
  * Pure, browser-safe, deterministic. NOTHING here touches Sleeper, Supabase, or
  * fetch. It turns the board the cockpit already holds into a draft-room "value
  * check" with two pool-driven modes:
- *   - Everyone  -> Startup Trade Builder: startup draft picks only (made picks valued
- *     by the player taken, upcoming picks projected from the board) plus future pick
+ *   - Everyone  -> startup draft picks only (made picks valued by the player
+ *     taken, upcoming picks projected by the ADP simulation) plus future pick
  *     buckets. The available player pool is NOT a tradeable asset in a startup draft.
- *   - Rookies   -> Rookie Draft Signal Check style: available rookies, current
- *     rookie picks (projected from the rookie board), and future rookie buckets.
+ *   - Rookies   -> available rookies, current rookie picks (projected from the
+ *     rookie board), and future rookie buckets.
  *
  * Player and current-draft pick values come from the FF Beacon board the client
  * already loaded, so there is no DB round trip for those. FUTURE-year pick buckets
@@ -30,6 +30,8 @@
 import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { PlayerPool, ShapedPick } from "./types";
 import type { CurrentDraftPick, TradedFuturePick } from "./pick-ownership";
+import type { DraftAssetRef } from "./trade-assets";
+import type { SimulatedPick } from "./adp-sim";
 
 // ---------------------------------------------------------------------------
 // Constants (documented fallbacks)
@@ -89,6 +91,12 @@ export interface TradeItemOption {
    * false, so the picker only offers each of them once across both sides.
    */
   repeatable?: boolean;
+  /**
+   * The draft-room asset this option stands for, so the dropdown and the
+   * clickable board feed the SAME resolver on the way to Signal Check. Without
+   * it the two paths would have to agree by convention, and they would drift.
+   */
+  ref?: DraftAssetRef;
 }
 
 /** A labeled group of options (renders as an <optgroup> in the picker). */
@@ -122,10 +130,15 @@ export interface TradeCatalogInput {
   myRosterId: number | null;
   /** Sleeper draft settings (teams / rounds). */
   draftSettings: Record<string, number>;
-  /** Overall pick number on the clock (0 when complete/unknown). */
-  onTheClockPickNo: number;
   /** The draft's season (number); future buckets label currentSeason + 1.. */
   currentSeason: number;
+  /**
+   * The ADP simulation for the unmade picks, the SAME map resolveDraftAsset
+   * reads. The catalog used to project an upcoming pick by walking the board in
+   * VALUE order while the resolver used this, so a dropdown could name one
+   * player and add another. One source, one answer.
+   */
+  simulated: Map<number, SimulatedPick>;
 }
 
 export type TradeLean = "empty" | "fair" | "a-lean" | "b-lean" | "a-strong" | "b-strong";
@@ -150,13 +163,6 @@ export interface TradeAnalysisResult {
 
 function sortByValueDesc(players: RankedPlayer[]): RankedPlayer[] {
   return players.slice().sort((a, b) => b.value - a.value || a.overallRank - b.overallRank);
-}
-
-/** The board player projected at a 0-based index (clamped). Null on empty board. */
-function projectAt(sortedDesc: RankedPlayer[], index: number): RankedPlayer | null {
-  if (sortedDesc.length === 0) return null;
-  const i = Math.min(Math.max(0, Math.round(index)), sortedDesc.length - 1);
-  return sortedDesc[i];
 }
 
 /** Index FF Beacon pick values by `${season}|${round}|${bucket}` for O(1) lookup. */
@@ -215,6 +221,17 @@ function ownerLabel(
   return teamNameByRosterId[rosterId] ?? `Team ${rosterId}`;
 }
 
+/** Plain team name, with no "Your pick" substitution. Reads inside a sentence. */
+function teamLabel(
+  rosterId: number | null,
+  myRosterId: number | null,
+  teamNameByRosterId: Record<number, string>,
+): string {
+  if (rosterId == null) return "an unknown team";
+  if (myRosterId != null && rosterId === myRosterId) return "yours";
+  return teamNameByRosterId[rosterId] ?? `Team ${rosterId}`;
+}
+
 /**
  * Sort comparator: natural draft order by overall pick number (1.01, 1.02, ...).
  * This is a generic trade builder, so every pick is listed in board order
@@ -250,8 +267,8 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
     teamNameByRosterId,
     myRosterId,
     draftSettings,
-    onTheClockPickNo,
     currentSeason,
+    simulated,
   } = input;
   const teams = Number.isFinite(draftSettings.teams) && draftSettings.teams > 0 ? draftSettings.teams : 12;
 
@@ -291,6 +308,7 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
         value,
         kind: "player" as const,
         estimated: false,
+        ref: { kind: "player", playerId: p.playerId } as DraftAssetRef,
       };
     });
     if (playerOptions.length > 0) {
@@ -318,6 +336,7 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
             : `Made pick${posLabel}, value unavailable, ${owner}`,
         value: val !== null ? Math.round(val) : 0,
         kind: pickKind,
+        ref: { kind: "current-pick", overall: p.overall } as DraftAssetRef,
         // A made pick valued by a real player value is NOT a projection; only an
         // unmappable selection is flagged estimated/unavailable.
         estimated: val === null,
@@ -327,25 +346,28 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
     groups.push({ label: "Made picks", options: madeOptions });
   }
 
-  // 3. UPCOMING picks (any team), projected from the available board.
+  // 3. UPCOMING picks (any team), projected by the ADP simulation. This is the
+  // same map resolveDraftAsset reads, so the label in the dropdown names the
+  // player the asset actually lands as. A slot the simulation cannot reach (the
+  // board runs out before it) is shown as unpriced rather than floored at an
+  // invented number, which is also what the resolver does with it.
   const upcomingOptions: TradeItemOption[] = currentPicks
     .filter((p) => !p.made)
     .slice()
     .sort(byOverall)
     .map((p) => {
-      // How many selections happen before this pick from now (0 = on the clock).
-      const picksUntil = onTheClockPickNo > 0 ? Math.max(0, p.overall - onTheClockPickNo) : p.overall - 1;
-      const projected = projectAt(availSorted, picksUntil);
+      const projected = simulated.get(p.overall) ?? null;
       const owner = ownerLabel(p.currentOwnerRosterId, myRosterId, teamNameByRosterId);
       return {
         id: `up-${p.overall}`,
         label: `${p.round}.${pad2(p.pickInRound)} - projected`,
         detail: projected
-          ? `Projected: ${projected.name}, ${projected.position}, ${owner}`
-          : `Projected pick, ${owner}`,
-        value: projected ? Math.round(projected.value) : FALLBACK_PICK_VALUE,
+          ? `Projected: ${projected.player.name}, ${projected.player.position}, ${owner}`
+          : `The board runs out before this pick, ${owner}`,
+        value: projected ? Math.round(projected.player.value) : 0,
         kind: pickKind,
         estimated: true,
+        ref: { kind: "current-pick", overall: p.overall } as DraftAssetRef,
       };
     });
   if (upcomingOptions.length > 0) {
@@ -375,6 +397,7 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
           // Generic buckets are not a specific slot, so they can be added repeatedly
           // (a deal can include two 2027 1sts).
           repeatable: true,
+          ref: { kind: "future-pick", season, round, bucket },
         });
       }
     }
@@ -386,19 +409,32 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
   // 5. Concrete traded FUTURE picks (owner-aware), valued from the FF Beacon value
   // for the round's mid bucket (the slot is unknown until that draft). A pick with no
   // published FF Beacon value is omitted. Real values, not estimates.
+  //
+  // The ref carries originalRosterId so the resolver mints the SAME id this
+  // option advertises. Without it the option resolved to the generic bucket:
+  // usedIds never suppressed it (the ids did not match) and the asset that
+  // landed had lost which team's pick it was.
   const tradedFutureOptions: TradeItemOption[] = tradedFuturePicks
     .filter((t) => t.season - currentSeason >= 1 && t.season - currentSeason <= FUTURE_SEASON_COUNT)
     .map((t): TradeItemOption | null => {
       const val = lookupPickValue(pickLookup, t.season, t.round, "mid");
       if (val === null) return null;
-      const owner = ownerLabel(t.currentOwnerRosterId, myRosterId, teamNameByRosterId);
+      const holder = ownerLabel(t.currentOwnerRosterId, myRosterId, teamNameByRosterId);
+      const from = teamLabel(t.originalRosterId, myRosterId, teamNameByRosterId);
       return {
         id: `tfut-${t.season}-${t.round}-${t.originalRosterId}`,
-        label: `${t.season} ${ordinal(t.round)} - ${owner}`,
-        detail: "FF Beacon pick value",
+        label: `${t.season} ${ordinal(t.round)} - originally ${from}`,
+        detail: `FF Beacon pick value, held by ${holder}`,
         value: Math.round(val),
         kind: "future-pick",
         estimated: false,
+        ref: {
+          kind: "future-pick",
+          season: t.season,
+          round: t.round,
+          bucket: "mid",
+          originalRosterId: t.originalRosterId,
+        },
       };
     })
     .filter((o): o is TradeItemOption => o !== null);

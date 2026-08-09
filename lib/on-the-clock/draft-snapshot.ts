@@ -27,6 +27,11 @@ import type { Database, Json } from "@/lib/database.types";
 import { getAllSleeperTransactions, getSleeperLeague } from "@/lib/sleeper";
 import { adpFormatKeyCandidates, attachAdpToPlayers, classifyPickValue, pickValueDelta } from "./adp";
 import { computeDraftAwards, type Award } from "./awards";
+import { computeDraftGrades, type DraftGrade } from "./draft-grade";
+import { buildMarketCurve, computePickSurplus } from "./surplus";
+import { getDraftPulseOnly } from "./pulse-service";
+import { tradeMarginsFor } from "./trade-margins";
+import type { DraftPulseResult } from "./draft-pulse";
 import { readDraftCache } from "./cache";
 import {
   deriveDraftState,
@@ -60,6 +65,15 @@ type PickSnapshotInsert = Database["public"]["Tables"]["on_the_clock_pick_snapsh
 
 /** Same cap as the live transactions route: a pathological league stays bounded. */
 const MAX_SNAPSHOT_TRADES = 250;
+
+/**
+ * The payload contract version written into new snapshots.
+ *   1  the original six awards, no grades, no Draft Pulse
+ *   2  the full award set plus grades plus Draft Pulse
+ * A version 1 row renders without the grades tab and with its own six awards,
+ * rather than showing seven cards that can never be filled in.
+ */
+export const SNAPSHOT_VERSION = 2;
 
 export type DraftSnapshotOutcome =
   | { status: "ready"; snapshot: DraftSnapshotPayload; created: boolean }
@@ -97,6 +111,9 @@ function rowToPayload(row: SnapshotRow): DraftSnapshotPayload {
     cache: row.draft as unknown as ShapedDraftCache,
     transactions: (row.transactions as unknown as HistoryTransaction[]) ?? [],
     awards: (row.awards as unknown as Award[]) ?? [],
+    grades: (row.grades as unknown as DraftGrade[]) ?? [],
+    pulse: row.pulse && Object.keys(row.pulse).length > 0 ? (row.pulse as unknown as DraftPulseResult) : null,
+    snapshotVersion: Number(row.snapshot_version) || 1,
   };
 }
 
@@ -395,9 +412,26 @@ export async function getOrCreateDraftSnapshot(
     teamNameByRosterId,
     myRosterId: null,
     teams,
-    onTheClockPickNo: 0,
     currentSeason: seasonNum,
+    // No `simulated`: this only runs for a COMPLETE draft, where every pick in
+    // the current season has been made and the unmade-pick branch is dead.
   };
+
+  // Draft Pulse at completion. Best effort: a projection outage must not stop a
+  // draft locking, so a failure freezes an empty pulse and the awards and grades
+  // that depend on it stay honestly pending in that snapshot forever. That is
+  // the right trade. A snapshot is permanent, and a permanent record saying "we
+  // could not project this draft" beats one that quietly graded on less.
+  let pulse: DraftPulseResult | null = null;
+  try {
+    pulse = await getDraftPulseOnly(admin, draftId, {
+      includePreDraftRoster: pool === "rookies",
+    });
+  } catch (err) {
+    console.error("[on-the-clock/draft-snapshot] draft pulse failed", err);
+  }
+  const pulseTeams = pulse?.teams ?? [];
+  const isDynasty = /dynasty/i.test(formatSlug ?? "");
 
   const awards = computeDraftAwards({
     rollups,
@@ -408,7 +442,37 @@ export async function getOrCreateDraftSnapshot(
     draftSettings: cache.draft.settings,
     settings,
     adpBySleeperId: adp.adpBySleeperId,
+    board: players,
+    pulseTeams,
+    isDynasty,
   });
+
+  // Grades, from exactly the inputs the awards used. Local names, because the
+  // pick-snapshot writer above already holds richer maps under the obvious ones.
+  const gradeValueByPlayerId = new Map<string, number>();
+  const gradeValueBySleeperId = new Map<string, number>();
+  for (const p of players) {
+    gradeValueByPlayerId.set(p.playerId, p.value);
+    if (p.sleeperId) gradeValueBySleeperId.set(p.sleeperId, p.value);
+  }
+  const pickSurpluses = computePickSurplus({
+    picks: cache.picks,
+    valueByPlayerId: gradeValueByPlayerId,
+    valueBySleeperId: gradeValueBySleeperId,
+    curve: buildMarketCurve(players),
+  });
+  const grades: DraftGrade[] = settings.grades.enabled
+    ? computeDraftGrades({
+        rollups,
+        pulseTeams,
+        pickSurpluses,
+        tradeMarginByRoster: tradeMarginsFor(trades, tradeContext),
+        startingSlotCount: pulse?.slots.length ?? 0,
+        isDynasty,
+        settings: settings.grades,
+        inProgress: false,
+      })
+    : [];
 
   // 9. Provenance + persistence. Upserts keep concurrent first-opens idempotent
   //    (both compute from the same frozen inputs; last write wins harmlessly).
@@ -447,6 +511,9 @@ export async function getOrCreateDraftSnapshot(
     draft: cache as unknown as Json,
     transactions: trades as unknown as Json,
     awards: awards as unknown as Json,
+    grades: grades as unknown as Json,
+    pulse: (pulse ?? {}) as unknown as Json,
+    snapshot_version: SNAPSHOT_VERSION,
     metadata: {
       threshold_picks: threshold,
       adp_key_candidates: adpFormatKeyCandidates(formatSlug, pool),
@@ -505,6 +572,9 @@ export async function getOrCreateDraftSnapshot(
     cache,
     transactions: trades,
     awards,
+    grades,
+    pulse,
+    snapshotVersion: SNAPSHOT_VERSION,
   };
   return { status: "ready", snapshot: payload, created: true };
 }

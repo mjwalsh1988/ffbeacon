@@ -141,6 +141,11 @@ export const MOCK_DRAFT_CACHE: ShapedDraftCache = {
     ),
     settings: { teams: MOCK_TEAMS, rounds: MOCK_ROUNDS },
     lastSyncedAt: null, // filled with a relative label by the client mock
+    // A one-QB PPR shape with a flex, matching the mock's roster construction.
+    scoringSettings: { rec: 1, pass_td: 4, rush_td: 6, rec_td: 6 },
+    rosterPositions: ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN", "BN", "BN"],
+    playoffTeams: 6,
+    playoffWeekStart: 15,
   },
   users: Array.from({ length: MOCK_TEAMS }, (_, i) => ({
     userId: `u${i + 1}`,

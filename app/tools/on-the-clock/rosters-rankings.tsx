@@ -16,6 +16,8 @@
 import { useId, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
+import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
 import {
   ROSTER_POSITIONS,
   type RosterFuturePick,
@@ -30,6 +32,16 @@ function fmt(v: number): string {
   return Math.round(v).toLocaleString();
 }
 
+function ordinalRank(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  if (mod10 === 1) return `${n}st`;
+  if (mod10 === 2) return `${n}nd`;
+  if (mod10 === 3) return `${n}rd`;
+  return `${n}th`;
+}
+
 function ordinalRound(n: number): string {
   if (n === 1) return "1st";
   if (n === 2) return "2nd";
@@ -41,10 +53,20 @@ export function RostersRankings({
   teams,
   myRosterId,
   boardReady,
+  pulseTeams = [],
+  isDynasty = false,
+  sortBy = "value",
+  onSortChange,
 }: {
   teams: TeamRollup[];
   myRosterId: number | null;
   boardReady: boolean;
+  /** Draft Pulse standings. Empty when projections are unavailable. */
+  pulseTeams?: DraftPulseTeam[];
+  /** Archetype chips are dynasty-only: in redraft every team is competing. */
+  isDynasty?: boolean;
+  sortBy?: "value" | "pulse";
+  onSortChange?: (next: "value" | "pulse") => void;
 }) {
   const hasMine = myRosterId != null && teams.some((t) => t.isYou);
   const [subView, setSubView] = useState<"all" | "mine">("all");
@@ -69,13 +91,48 @@ export function RostersRankings({
 
   const showMine = subView === "mine" && hasMine;
 
+  const pulseById = new Map(pulseTeams.map((t) => [t.rosterId, t]));
+  const pulseAvailable = pulseTeams.length > 0;
+  // Whichever ordering is active, BOTH numbers stay on every card, mirroring the
+  // League Pulse rule: switching the sort must never hide data.
+  const byPulse = sortBy === "pulse" && pulseAvailable;
+  const ordered = byPulse
+    ? teams
+        .slice()
+        .sort(
+          (a, b) =>
+            (pulseById.get(a.rosterId)?.rank ?? Number.MAX_SAFE_INTEGER) -
+            (pulseById.get(b.rosterId)?.rank ?? Number.MAX_SAFE_INTEGER),
+        )
+    : teams;
+  const orderAnnouncement = `Teams ordered by ${
+    byPulse ? "Draft Pulse" : "FF Beacon value"
+  }. ${ordered[0]?.ownerName ?? "No team"} is now first.`;
+
+  // The same classifier League Pulse uses, so a team reads the same way in both
+  // places. Dynasty only: in a redraft league every team is competing by
+  // definition, and labelling one a rebuilder would be a different claim.
+  const statusFor = (rosterId: number): TeamStatus | null => {
+    if (!isDynasty || !pulseAvailable) return null;
+    const pulse = pulseById.get(rosterId);
+    const rollup = teams.find((t) => t.rosterId === rosterId);
+    if (!pulse || !rollup) return null;
+    return classifyTeamStatus({
+      pulseRank: pulse.rank,
+      valueRank: rollup.rank,
+      teamCount: teams.length,
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
+          {/* h2, matching every other tab panel. This one opened at h3 with no
+              h2 above it, so the outline skipped a level here and nowhere else. */}
+          <h2 id="otc-rosters-title" className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
             Rosters and rankings
-          </h3>
+          </h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
             Every team so far by FF Beacon value: drafted players plus their future draft picks.
             {showMine ? " Your team only." : " Ordered by power ranking."} Future pick values are
@@ -113,6 +170,39 @@ export function RostersRankings({
         </div>
       </div>
 
+      {pulseAvailable && !showMine && onSortChange && (
+        <div
+          role="group"
+          aria-label="Order teams by"
+          className="inline-flex overflow-hidden rounded-card border border-line"
+        >
+          {(
+            [
+              { id: "value" as const, label: "Order by value" },
+              { id: "pulse" as const, label: "Order by Draft Pulse" },
+            ]
+          ).map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={sortBy === id}
+              onClick={() => onSortChange(id)}
+              className={`inline-flex min-h-11 items-center px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan ${
+                sortBy === id ? "bg-beacon text-black" : "bg-base text-ink-muted hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Changing the order moves every card. AvailableList announces its
+          re-sort; this one used to do it in silence. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {orderAnnouncement}
+      </p>
+
       {!hasMine && (
         <p className="rounded-card border border-dashed border-line bg-surface/40 px-3 py-2 text-xs text-ink-subtle">
           We could not detect which team is yours, so the My team view is unavailable. Make a pick
@@ -121,12 +211,20 @@ export function RostersRankings({
       )}
 
       {showMine && myTeam ? (
-        <TeamRosterCard team={myTeam} />
+        <TeamRosterCard
+          team={myTeam}
+          pulse={pulseById.get(myTeam.rosterId) ?? null}
+          status={statusFor(myTeam.rosterId)}
+        />
       ) : (
         <ol role="list" className="space-y-3">
-          {teams.map((t) => (
+          {ordered.map((t) => (
             <li key={t.rosterId}>
-              <TeamRosterCard team={t} />
+              <TeamRosterCard
+                team={t}
+                pulse={pulseById.get(t.rosterId) ?? null}
+                status={statusFor(t.rosterId)}
+              />
             </li>
           ))}
         </ol>
@@ -135,12 +233,23 @@ export function RostersRankings({
   );
 }
 
-function TeamRosterCard({ team }: { team: TeamRollup }) {
+function TeamRosterCard({
+  team,
+  pulse,
+  status,
+}: {
+  team: TeamRollup;
+  pulse: DraftPulseTeam | null;
+  status: TeamStatus | null;
+}) {
+  const headingId = `otc-team-${team.rosterId}`;
   return (
+    // Labelled BY the heading rather than with a written-out summary. The old
+    // aria-label repeated the rank, the owner, the value, the Pulse, and the
+    // archetype, all of which are rendered as text inside, so entering the card
+    // spoke the whole thing and then read it again.
     <article
-      aria-label={`Power ranking ${team.rank}. ${team.ownerName}${
-        team.teamName ? `, team ${team.teamName}` : ""
-      }${team.isYou ? ", your team" : ""}. FF Beacon value ${fmt(team.totalValue)}.`}
+      aria-labelledby={headingId}
       className={`overflow-hidden rounded-card border bg-surface/60 ${
         team.isYou ? "border-brand-purple/60 ring-1 ring-inset ring-brand-purple/40" : "border-line"
       }`}
@@ -153,7 +262,11 @@ function TeamRosterCard({ team }: { team: TeamRollup }) {
           {team.rank}
         </span>
         <div className="min-w-0 flex-1">
-          <h4 className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-semibold text-ink">
+          <h3
+            id={headingId}
+            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-semibold text-ink"
+          >
+            <span className="sr-only">Rank {team.rank}, </span>
             <span className="truncate">{team.ownerName}</span>
             {team.teamName && (
               <span className="truncate text-xs font-normal text-ink-subtle">{team.teamName}</span>
@@ -163,17 +276,56 @@ function TeamRosterCard({ team }: { team: TeamRollup }) {
                 You
               </span>
             )}
-          </h4>
+          </h3>
           <p className="mt-0.5 text-xs text-ink-subtle">
             {team.playerCount} drafted, {team.futurePicks.length} future pick
             {team.futurePicks.length === 1 ? "" : "s"}
           </p>
+          {/* The archetype sits with the name rather than in a column, so it
+              survives the mobile stack without hiding anything. */}
+          {status && (
+            <p className="mt-1">
+              <span
+                title={status.reason}
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  status.key === "competitor"
+                    ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
+                    : status.key === "rebuilder"
+                      ? "border-sky-400/50 bg-sky-400/10 text-sky-300"
+                      : "border-zinc-400/40 bg-zinc-400/10 text-zinc-300"
+                }`}
+              >
+                {status.label}
+              </span>
+              {/* The reason lives in a title attribute, which most screen
+                  readers never surface. It is the useful half of the chip. */}
+              <span className="sr-only">, {status.reason}</span>
+            </p>
+          )}
         </div>
-        <div className="text-right">
-          <p className="font-mono text-lg font-bold tabular-nums text-ink">
-            {fmt(team.totalValue)}
-          </p>
-          <p className="text-[10px] uppercase tracking-wide text-ink-subtle">FF Beacon value</p>
+        {/* Both numbers, always. Sorting by one never removes the other. */}
+        <div className="flex shrink-0 items-start gap-4 text-right">
+          {pulse && (
+            <div>
+              <p className="font-mono text-lg font-bold tabular-nums text-brand-cyan">
+                {pulse.score}
+              </p>
+              <p className="text-[10px] uppercase tracking-wide text-ink-subtle">
+                Draft Pulse, {ordinalRank(pulse.rank)}
+              </p>
+              <p className="text-[10px] tabular-nums text-ink-subtle">
+                {pulse.meanStartingPoints.toFixed(1)} pts/wk
+              </p>
+            </div>
+          )}
+          <div>
+            <p className="font-mono text-lg font-bold tabular-nums text-ink">
+              {fmt(team.totalValue)}
+            </p>
+            <p className="text-[10px] uppercase tracking-wide text-ink-subtle">
+              FF Beacon value, {ordinalRank(team.rank)}
+            </p>
+          </div>
         </div>
       </header>
 
@@ -215,7 +367,11 @@ function PositionColumn({
   total: number;
 }) {
   return (
-    <section
+    // A group, not a section. As a section each of these becomes a landmark,
+    // and a twelve-team league would publish sixty of them, which makes the
+    // landmark rotor useless for finding anything.
+    <div
+      role="group"
       aria-label={`${position}: ${players.length} drafted, total value ${fmt(total)}`}
       className="flex min-w-0 flex-col rounded-card border border-line bg-base"
     >
@@ -246,7 +402,7 @@ function PositionColumn({
           ))}
         </ul>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -260,7 +416,12 @@ function FuturePicksColumn({ picks, total }: { picks: RosterFuturePick[]; total:
   const hiddenCount = picks.length - visible.length;
 
   return (
-    <section
+    // A group, not a section, for the same reason PositionColumn above is one: a
+    // named section is a landmark, and one per team puts a dozen entries called
+    // "Future picks" in the rotor. This column was missed when the others were
+    // fixed.
+    <div
+      role="group"
       aria-label={`Future picks: ${picks.length}, estimated total value ${fmt(total)}`}
       className="flex min-w-0 flex-col rounded-card border border-line bg-base"
     >
@@ -320,6 +481,6 @@ function FuturePicksColumn({ picks, total }: { picks: RosterFuturePick[]; total:
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }

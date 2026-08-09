@@ -1,34 +1,41 @@
 "use client";
 
 /**
- * Rankings & Awards tab for the On The Clock draft room.
+ * The Awards tab for the On The Clock draft room.
  *
- * Two sections, both live (they re-resolve on every resync):
- *   1. Startup draft awards: six bright, distinct trophy cards (one icon + accent
- *      per award) showing the team(s) that currently hold each award, with the
- *      owner's Sleeper avatar. An unearned award reads "Up for grabs".
- *   2. Power rankings: a condensed table of every team ordered by total FF Beacon
- *      value (rank, owner + team name, value), the connected team highlighted.
+ * Bright, distinct trophy cards (one icon and accent per award) showing the
+ * team or teams that currently hold each award, with the owner's Sleeper
+ * avatar. An unearned award reads "Up for grabs". Everything re-resolves on
+ * every resync, so holders change as the picks and trades roll in.
  *
- * Pure presentation: the awards and rollups arrive already computed as props
- * (lib/on-the-clock/awards.ts + lib/on-the-clock/rosters.ts). NOTHING here calls
- * Sleeper, Supabase, or any API.
+ * The power-rankings table that used to live under these cards moved to its own
+ * Draft Pulse tab (draft-pulse-board.tsx), where a value ranking sits next to a
+ * points ranking and the gap between them can be read directly. A ranking table
+ * was never really an award.
+ *
+ * Pure presentation: the awards arrive already computed as props
+ * (lib/on-the-clock/awards.ts). NOTHING here calls Sleeper, Supabase, or any API.
  */
 
 import {
+  Activity,
   Flame,
   Gem,
-  Sun,
+  HeartPulse,
   MicOff,
-  Star,
-  TrendingDown,
   RefreshCw,
+  Sprout,
+  Star,
+  Sun,
+  Target,
+  TrendingDown,
+  Trophy,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { Award, AwardClaimant, AwardId } from "@/lib/on-the-clock/awards";
-import type { TeamRollup } from "@/lib/on-the-clock/rosters";
-import { EmptyCard, ErrorCard, LoadingCard } from "./states";
+import { EmptyCard, ErrorCard, LoadingCard, NotStartedCard } from "./states";
 
 /** Per-award visual identity: icon + accent classes (FF Beacon dark brand). */
 const AWARD_THEME: Record<
@@ -77,6 +84,55 @@ const AWARD_THEME: Record<
     accentBg: "bg-rose-400/10",
     glow: "shadow-[0_0_60px_-40px_rgba(251,113,133,0.9)]",
   },
+  "best-starting-lineup": {
+    icon: Activity,
+    accentText: "text-brand-cyan",
+    accentBorder: "border-brand-cyan/50",
+    accentBg: "bg-brand-cyan/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(34,211,238,0.9)]",
+  },
+  "long-game": {
+    icon: Sprout,
+    accentText: "text-emerald-300",
+    accentBorder: "border-emerald-400/50",
+    accentBg: "bg-emerald-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(52,211,153,0.9)]",
+  },
+  "most-reliable": {
+    icon: Target,
+    accentText: "text-sky-300",
+    accentBorder: "border-sky-400/50",
+    accentBg: "bg-sky-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(125,211,252,0.9)]",
+  },
+  "boom-bust": {
+    icon: Zap,
+    accentText: "text-orange-300",
+    accentBorder: "border-orange-400/50",
+    accentBg: "bg-orange-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(253,186,116,0.9)]",
+  },
+  "iron-man": {
+    icon: HeartPulse,
+    accentText: "text-teal-300",
+    accentBorder: "border-teal-400/50",
+    accentBg: "bg-teal-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(94,234,212,0.9)]",
+  },
+  "steal-of-draft": {
+    icon: Gem,
+    accentText: "text-brand-purple",
+    accentBorder: "border-brand-purple/50",
+    accentBg: "bg-brand-purple/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(168,85,247,0.9)]",
+  },
+  "reach-of-draft": {
+    icon: TrendingDown,
+    accentText: "text-amber-300",
+    accentBorder: "border-amber-400/50",
+    accentBg: "bg-amber-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(251,191,36,0.9)]",
+  },
 };
 
 /** Awards that depend on the league's trades, used to show a loading-aware note. */
@@ -89,23 +145,18 @@ const TRADE_AWARDS = new Set<AwardId>([
 /** How many winner rows to show before collapsing the rest into "+N more". */
 const MAX_CLAIMANTS_SHOWN = 3;
 
-function fmt(v: number): string {
-  return Math.round(v).toLocaleString();
-}
-
 export function RankingsAwards({
   awards,
-  teams,
-  myRosterId,
   boardReady,
+  draftStarted,
   tradesLoading,
   tradesError,
   onRetryTrades,
 }: {
   awards: Award[];
-  teams: TeamRollup[];
-  myRosterId: number | null;
   boardReady: boolean;
+  /** False before the first pick lands: nothing has been earned yet. */
+  draftStarted: boolean;
   tradesLoading: boolean;
   tradesError: string | null;
   onRetryTrades: () => void;
@@ -114,18 +165,35 @@ export function RankingsAwards({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="Rankings & Awards ranks teams and grades the draft by FF Beacon value. Once this format's FF Beacon rankings are published, the awards and the power rankings table fill in here."
+        body="The awards are decided by FF Beacon value. Once this format's FF Beacon rankings are published, they fill in here."
+      />
+    );
+  }
+
+  // A full grid of cards reading "Up for grabs" before anyone has picked looks
+  // like a broken page rather than an empty one. Say what will happen instead.
+  if (!draftStarted) {
+    return (
+      <NotStartedCard
+        icon={Trophy}
+        eyebrow="Draft awards"
+        title="No hardware handed out yet"
+        body="Every award is decided by what teams actually do in this draft, so they all sit unclaimed until the first pick lands. Nothing here is a prediction."
+        points={[
+          `${awards.length} awards, recalculated on every sync as the picks and trades roll in.`,
+          "Best and worst drafter, the steal and the reach of the draft, and the first team to fill a starting lineup.",
+          "Trade awards for the most active and the most successful dealer in the room.",
+        ]}
       />
     );
   }
 
   return (
     <div className="space-y-8">
-      {/* ---- Section 1: Awards ---- */}
       <section aria-labelledby="otc-awards-title" className="space-y-4">
         <div className="min-w-0">
           <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl" id="otc-awards-title">
-            Startup draft awards
+            Draft awards
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
             Live hardware for your league. Every award recalculates on each sync, so the holders
@@ -168,25 +236,6 @@ export function RankingsAwards({
         </ul>
       </section>
 
-      {/* ---- Section 2: Power rankings ---- */}
-      <section aria-labelledby="otc-power-title" className="space-y-4">
-        <div className="min-w-0">
-          <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl" id="otc-power-title">
-            Power rankings
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Every team ordered by total FF Beacon value (drafted players plus their future picks).
-          </p>
-        </div>
-        {teams.length === 0 ? (
-          <EmptyCard
-            title="No teams to rank yet."
-            body="Teams appear here as soon as the draft has rosters. Press Sync draft to pull the latest."
-          />
-        ) : (
-          <PowerRankingsTable teams={teams} myRosterId={myRosterId} />
-        )}
-      </section>
     </div>
   );
 }
@@ -275,6 +324,15 @@ function AwardCard({
                 <ClaimantRow key={c.rosterId} claimant={c} />
               ))}
             </ul>
+            {/* The pick awards name a moment rather than a season, so the
+                player and the slot sit under the claimant. */}
+            {award.pickHighlight && (
+              <p className="rounded-card border border-line bg-base/40 px-2.5 py-1.5 text-xs text-ink">
+                <span className="font-semibold">{award.pickHighlight.playerName}</span>
+                {award.pickHighlight.position ? `, ${award.pickHighlight.position}` : ""} at pick{" "}
+                {award.pickHighlight.pickNo}
+              </p>
+            )}
             {extra > 0 && (
               <p className="text-xs text-ink-muted">
                 and {extra} more {extra === 1 ? "team" : "teams"} tied
@@ -308,85 +366,5 @@ function ClaimantRow({ claimant }: { claimant: AwardClaimant }) {
         )}
       </span>
     </li>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Power rankings table
-// ---------------------------------------------------------------------------
-
-function PowerRankingsTable({
-  teams,
-  myRosterId,
-}: {
-  teams: TeamRollup[];
-  myRosterId: number | null;
-}) {
-  return (
-    <div className="overflow-hidden rounded-modal border border-line bg-surface/40">
-      <table className="w-full border-collapse text-left">
-        <caption className="sr-only">
-          Power rankings: every team ordered by total FF Beacon value, highest first.
-        </caption>
-        <thead>
-          <tr className="border-b border-line text-[10px] uppercase tracking-[0.14em] text-ink-muted">
-            <th scope="col" className="w-px whitespace-nowrap px-3 py-2.5 text-center font-semibold">
-              Rank
-            </th>
-            <th scope="col" className="px-2 py-2.5 font-semibold">
-              Team
-            </th>
-            <th scope="col" className="whitespace-nowrap px-3 py-2.5 text-right font-semibold">
-              Value
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {teams.map((team) => {
-            const isYou = myRosterId != null && team.rosterId === myRosterId;
-            return (
-              <tr
-                key={team.rosterId}
-                className={`border-b border-line/60 last:border-0 ${
-                  isYou ? "bg-brand-purple/10" : ""
-                }`}
-              >
-                <td className="w-px whitespace-nowrap px-3 py-2.5 text-center align-middle">
-                  <span
-                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full font-mono text-sm font-bold tabular-nums ${
-                      isYou
-                        ? "bg-brand-purple/20 text-brand-purple"
-                        : "bg-base text-ink-muted"
-                    }`}
-                  >
-                    {team.rank}
-                  </span>
-                </td>
-                <th scope="row" className="px-2 py-2.5 text-left align-middle font-normal">
-                  <span className="flex flex-col justify-center">
-                    <span className="flex flex-wrap items-baseline gap-x-1.5">
-                      <span className="truncate text-sm font-semibold text-ink">
-                        {team.ownerName}
-                      </span>
-                      {isYou && (
-                        <span className="shrink-0 rounded-full border border-brand-purple/50 bg-brand-purple/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-purple">
-                          You
-                        </span>
-                      )}
-                    </span>
-                    {team.teamName && (
-                      <span className="truncate text-xs text-ink-muted">{team.teamName}</span>
-                    )}
-                  </span>
-                </th>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right align-middle font-mono text-sm font-bold tabular-nums text-ink">
-                  {fmt(team.totalValue)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }

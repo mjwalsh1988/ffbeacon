@@ -11,6 +11,8 @@
  */
 
 import type { Award } from "./awards";
+import type { DraftGrade } from "./draft-grade";
+import type { DraftPulseResult } from "./draft-pulse";
 import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { HistoryTransaction } from "./trade-history";
 import type { PlayerPool, ShapedDraftCache } from "./types";
@@ -67,4 +69,14 @@ export interface DraftSnapshotPayload {
   cache: ShapedDraftCache;
   transactions: HistoryTransaction[];
   awards: Award[];
+  /** Frozen per-team grades. Empty on a version 1 snapshot. */
+  grades: DraftGrade[];
+  /** Frozen Draft Pulse standings. Null on a version 1 snapshot. */
+  pulse: DraftPulseResult | null;
+  /**
+   * Payload contract version. 1 is the original six awards with no grades; the
+   * client gates the grades tab and the projection-backed award cards on this,
+   * so an old snapshot never renders a grid it cannot fill.
+   */
+  snapshotVersion: number;
 }

@@ -12,14 +12,19 @@ export function deriveLeagueFormat(league: SleeperLeague): DerivedFormat {
   const positions = league.roster_positions ?? [];
   const settings = league.settings ?? {};
 
-  // league_type: Sleeper settings.type === 2 indicates dynasty.
-  // previous_league_id being a non-empty string also indicates a
-  // multi-season league (dynasty / keeper carryover).
+  // league_type: Sleeper's own field is the only signal. 0 = redraft,
+  // 1 = keeper, 2 = dynasty, 3 = chopped. Only type 2 is dynasty; keeper and
+  // chopped leagues price as redraft, which is how they play.
+  //
+  // We do NOT read previous_league_id. Sleeper sets it on ANY league carried
+  // season to season, redraft included, so treating it as a dynasty signal
+  // priced continued redraft leagues (a real one: "Brooklyn 99 Redraft",
+  // type 0, 16 rounds, with a prior season) off the dynasty board and told the
+  // On The Clock room it was a dynasty startup. lib/league-category.ts already
+  // classifies on type alone; this now matches it.
   const sleeperType = Number(settings.type ?? 0);
-  const hasPriorSeason =
-    typeof league.previous_league_id === "string" && league.previous_league_id.length > 0;
   const league_type: DerivedFormat["league_type"] =
-    sleeperType === 2 || hasPriorSeason ? "dynasty" : "redraft";
+    sleeperType === 2 ? "dynasty" : "redraft";
 
   // scoring_type: reception scoring is the deciding signal.
   const rec = Number(scoring.rec ?? 0);

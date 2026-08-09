@@ -104,4 +104,63 @@ export const DEFAULT_ON_THE_CLOCK_SETTINGS: OnTheClockSettings = {
   mappingVisibility: {
     showUnmappedPanel: true,
   },
+
+  buildMode: {
+    enabled: true,
+    // Balanced is the honest starting point: we have not asked the drafter yet,
+    // so we do not assume they are chasing this season or next.
+    defaultMode: "balanced",
+    // An empty lineup is almost entirely a points question, a full one is
+    // almost entirely an asset question. See marginal.ts pointsWeightFor.
+    pointsWeightEmpty: 0.8,
+    pointsWeightFull: 0.35,
+    competePointsBoost: 1.15,
+    rebuildPointsCap: 0.25,
+    youthWeight: 0.35,
+    upsideWeight: 0.2,
+    competeValueTilt: 0.45,
+    rebuildValueTilt: 0.4,
+  },
+
+  marginal: {
+    insuranceWeight: 0.35,
+    dropoffWeight: 0.5,
+    // Even a starter who has never missed a week leaves his backup some credit;
+    // the accuracy table only knows the seasons it has seen.
+    minStarterRisk: 0.12,
+    maxCandidates: 160,
+  },
+
+  awards: {
+    // Empty map means every award is on. The admin page writes explicit falses.
+    enabled: {},
+    minSuccessfulTraderTrades: 1,
+    minAdpPicks: 3,
+    minAccuracyWeeks: 8,
+    minPlayersForLineupAwards: 5,
+  },
+
+  grades: {
+    enabled: true,
+    weights: {
+      market: 0.28,
+      lineup: 0.26,
+      construction: 0.14,
+      reliability: 0.1,
+      future: 0.12,
+      trades: 0.1,
+    },
+    // Mostly curved: every team in a startup drafts from the same pool, so the
+    // interesting question is who did better than the room, not who cleared an
+    // arbitrary bar. A little absolute so a genuinely strong room is not forced
+    // to produce an F.
+    absoluteBlend: 0.25,
+  },
+
+  alerts: {
+    runWindow: 8,
+    runThreshold: 4,
+    tierCliffRemaining: 3,
+    maxGoneBefore: 12,
+  },
 };

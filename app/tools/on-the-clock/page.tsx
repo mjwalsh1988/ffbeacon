@@ -142,7 +142,7 @@ function FeatureOffNotice() {
 const OTC_FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: Target, title: "Best pick, live", body: "Best Available and Team Need" },
   { icon: Scale, title: "Trade calculator", body: "Weigh any offer fast" },
-  { icon: ArrowLeftRight, title: "Trade analyzer", body: "Startup and rookie drafts" },
+  { icon: ArrowLeftRight, title: "Trade builder", body: "Click the board to build a deal" },
   { icon: Users, title: "Every roster", body: "All teams, one view" },
   { icon: Receipt, title: "Trades and moves", body: "Full transaction history" },
   { icon: TrendingUp, title: "Power rankings", body: "Live and league-tuned" },
@@ -178,7 +178,7 @@ function Hero({ isMember }: { isMember: boolean }) {
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
           Drafting right now? Connect your live Sleeper draft and FF Beacon calls out
           exactly where your team needs help, runs trade offers through a built-in
-          calculator and an analyzer for startup and rookie drafts, and opens every team
+          calculator and a trade builder for startup and rookie drafts, and opens every team
           roster, the full trade history, live power rankings, and startup draft grades
           and awards. Every view works the same whether you read it or hear it.
         </p>

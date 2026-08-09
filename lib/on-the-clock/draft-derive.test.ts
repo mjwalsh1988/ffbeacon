@@ -69,6 +69,10 @@ function cacheWith(pickCount: number): ShapedDraftCache {
       slotToRosterId: Object.fromEntries(Array.from({ length: 8 }, (_, i) => [String(i + 1), i + 1])),
       settings: { teams: 8, rounds: 5 },
       lastSyncedAt: null,
+      scoringSettings: {},
+      rosterPositions: [],
+      playoffTeams: null,
+      playoffWeekStart: null,
     },
     users: Array.from({ length: 8 }, (_, i) => ({
       userId: `u${i + 1}`,

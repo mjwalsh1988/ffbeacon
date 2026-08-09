@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
+  deriveLeagueFormat,
   mapToFormatSlug,
   pickClosestSupportedFormat,
   describeDerivedFormat,
   type DerivedFormat,
   type FormatCandidate,
 } from "./sleeper-to-format";
+import type { SleeperLeague } from "@/lib/sleeper";
 
 // The supported FF Beacon formats today (active, FF Beacon publishes values).
 const CANDIDATES: FormatCandidate[] = [
@@ -19,6 +21,46 @@ const CANDIDATES: FormatCandidate[] = [
 function derived(over: Partial<DerivedFormat>): DerivedFormat {
   return { league_type: "redraft", scoring_type: "ppr", is_superflex: false, is_tep: false, ...over };
 }
+
+function sleeperLeague(over: Partial<SleeperLeague>): SleeperLeague {
+  return {
+    league_id: "1",
+    name: "Test",
+    season: "2026",
+    scoring_settings: { rec: 1 },
+    roster_positions: ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"],
+    settings: { type: 0 },
+    ...over,
+  } as SleeperLeague;
+}
+
+describe("deriveLeagueFormat league_type", () => {
+  it("keeps a redraft league that has run before on the redraft board", () => {
+    // Sleeper sets previous_league_id on ANY league carried season to season.
+    // Reading it as a dynasty signal priced continued redraft leagues off the
+    // dynasty board and told On The Clock the room was a dynasty startup.
+    const d = deriveLeagueFormat(
+      sleeperLeague({ settings: { type: 0 }, previous_league_id: "1253794481229004800" }),
+    );
+    expect(d.league_type).toBe("redraft");
+    expect(mapToFormatSlug(d)).toBe("redraft-ppr-std");
+  });
+
+  it("reads a keeper league (type 1) as redraft", () => {
+    expect(
+      deriveLeagueFormat(sleeperLeague({ settings: { type: 1 }, previous_league_id: "999" }))
+        .league_type,
+    ).toBe("redraft");
+  });
+
+  it("reads type 2 as dynasty, with or without a prior season", () => {
+    expect(deriveLeagueFormat(sleeperLeague({ settings: { type: 2 } })).league_type).toBe("dynasty");
+    expect(
+      deriveLeagueFormat(sleeperLeague({ settings: { type: 2 }, previous_league_id: "999" }))
+        .league_type,
+    ).toBe("dynasty");
+  });
+});
 
 describe("mapToFormatSlug", () => {
   it("sends every TE-premium league to its own TE-premium board", () => {

@@ -108,7 +108,17 @@ export interface RecommendationSettings {
 }
 
 export interface DstkSettings {
-  /** DST/K present in board / lists / picks / My Draft. Default on. */
+  /**
+   * DST/K present in board / lists / picks / My Draft.
+   *
+   * ALWAYS TRUE, and nothing reads it. Hiding a position from the board would
+   * mean hiding it from the draft board, the pick list, every roster, and the
+   * trade builder, all of which read a Sleeper draft that contains those picks
+   * whatever we think of them: the room would then disagree with Sleeper. What
+   * an admin actually wants is control over RECOMMENDING them, which is what
+   * the three settings below do, and they are the ones the admin panel exposes.
+   * Kept in the shape so a stored settings row does not fail validation.
+   */
   includedInRoom: boolean;
   /** Whether/when DST/K can be a Team-Need recommendation. */
   recommendBehavior: DstkRecommendBehavior;
@@ -156,6 +166,100 @@ export interface MappingVisibilitySettings {
   showUnmappedPanel: boolean;
 }
 
+/**
+ * How the drafter wants this team built. Only offered in a dynasty STARTUP,
+ * where the choice is real: a redraft team is always competing, and a rookie
+ * draft sits on top of a team whose direction is already set.
+ */
+export type BuildMode = "compete" | "balanced" | "rebuild";
+
+export interface BuildModeSettings {
+  /** Master toggle for offering the selector at all. */
+  enabled: boolean;
+  /** Starting mode in a dynasty startup before the drafter chooses. */
+  defaultMode: BuildMode;
+  /**
+   * Weight on this season's points when the starting lineup is EMPTY. Almost
+   * everything, because every early pick is a starter.
+   */
+  pointsWeightEmpty: number;
+  /**
+   * Weight on points when the starting lineup is FULL. Much lower, because the
+   * next pick is a bench player who starts only on a bye or an injury, and
+   * ranking bench players by points added to a lineup they cannot crack
+   * produces a wall of zeroes and no advice at all.
+   */
+  pointsWeightFull: number;
+  /** Multiplier on both weights in compete mode. Above 1 leans win-now harder. */
+  competePointsBoost: number;
+  /** Ceiling on the points weight in rebuild mode, so the long game stays in charge. */
+  rebuildPointsCap: number;
+  /** Credit for youth in rebuild scoring (0 to 1 of a rescaled age score). */
+  youthWeight: number;
+  /** Credit for a projection that outruns the market price, in rebuild scoring. */
+  upsideWeight: number;
+  /** How hard Best Value tilts toward this season's points in compete mode. */
+  competeValueTilt: number;
+  /** How hard Best Value tilts toward youth and upside in rebuild mode. */
+  rebuildValueTilt: number;
+}
+
+/** Weights for the marginal starting-lineup engine (lib/on-the-clock/marginal.ts). */
+export interface MarginalValueSettings {
+  /** Credit for what a player is worth if the starter ahead of him misses time. */
+  insuranceWeight: number;
+  /** Credit for the cost of waiting until your next pick. */
+  dropoffWeight: number;
+  /** Floor on assumed starter injury risk, so a healthy starter still leaves credit. */
+  minStarterRisk: number;
+  /** How many available players get priced per request. */
+  maxCandidates: number;
+}
+
+export interface AwardsSettings {
+  /** Per-award on/off, keyed by award id. A missing key means enabled. */
+  enabled: Record<string, boolean>;
+  /** Minimum completed trades to qualify for the trade-quality award. */
+  minSuccessfulTraderTrades: number;
+  /** Minimum ADP-known picks before a drafting award can be earned. */
+  minAdpPicks: number;
+  /** Minimum weeks of projection history before a reliability award can be earned. */
+  minAccuracyWeeks: number;
+  /** Minimum drafted players before the lineup-shaped awards can be earned. */
+  minPlayersForLineupAwards: number;
+}
+
+export interface GradeSettings {
+  enabled: boolean;
+  /** Component weights. Normalized at use, so they need not sum to 1. */
+  weights: {
+    market: number;
+    lineup: number;
+    construction: number;
+    reliability: number;
+    future: number;
+    trades: number;
+  };
+  /**
+   * How much of the final grade is absolute rather than curved within the
+   * league. 0 is a pure curve, which guarantees somebody gets an F even in a
+   * strong room; 1 ignores the league entirely. The default leans on the curve
+   * because every startup drains the same player pool.
+   */
+  absoluteBlend: number;
+}
+
+export interface DraftAlertSettings {
+  /** How many recent picks a positional run looks at. */
+  runWindow: number;
+  /** How many of those must share a position before it counts as a run. */
+  runThreshold: number;
+  /** Warn about a tier when this many or fewer players remain in it. */
+  tierCliffRemaining: number;
+  /** Cap on the "gone before your next pick" list. */
+  maxGoneBefore: number;
+}
+
 export interface OnTheClockSettings {
   feature: FeatureSettings;
   sourceFormat: SourceFormatSettings;
@@ -169,6 +273,11 @@ export interface OnTheClockSettings {
   positionFallbackTargets: PositionFallbackTargets;
   valueIndicators: ValueIndicatorSettings;
   mappingVisibility: MappingVisibilitySettings;
+  buildMode: BuildModeSettings;
+  marginal: MarginalValueSettings;
+  awards: AwardsSettings;
+  grades: GradeSettings;
+  alerts: DraftAlertSettings;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +368,26 @@ export interface ShapedDraftMeta {
   /** Sleeper draft settings (teams / rounds / reversal_round, etc). */
   settings: Record<string, number>;
   lastSyncedAt: string | null;
+  /**
+   * The league's literal Sleeper scoring_settings map, captured with the league
+   * object at sync time. Empty when the league fetch failed or predates the
+   * league_metadata column (migration 0180). Everything points-based (Draft
+   * Pulse, the marginal starting-lineup engine, draft grades) scores through
+   * this rather than a scoring preset, exactly like Power Pulse.
+   */
+  scoringSettings: Record<string, number>;
+  /**
+   * The league's roster_positions array, verbatim ("QB","RB","RB","WR","WR",
+   * "TE","FLEX","SUPER_FLEX","BN",...). This is the ONLY honest source of the
+   * starting lineup: draft.settings.slots_* flattens REC_FLEX / WR_TE /
+   * WRRB_FLEX into one bucket. Empty when unavailable, in which case the slot
+   * model falls back to slots_* and then to the admin fallback targets.
+   */
+  rosterPositions: string[];
+  /** Sleeper settings.playoff_teams, or null when unknown. */
+  playoffTeams: number | null;
+  /** Sleeper settings.playoff_week_start, or null when unknown. */
+  playoffWeekStart: number | null;
 }
 
 /**

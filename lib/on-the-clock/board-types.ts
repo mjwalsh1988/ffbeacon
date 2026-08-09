@@ -53,6 +53,17 @@ export interface RankedPlayer {
   recentFinishes?: string[];
   /** One short scouting line (not wired from data yet). */
   shortNote?: string;
+  // ---- Projection enrichment (optional; supplied by the pulse route) ----
+  /** Projected points per remaining week in the LEAGUE'S own scoring. */
+  projPointsPerWeek?: number | null;
+  /** Projected points across the remaining slate. */
+  projSeasonPoints?: number | null;
+  /** How often this player has met or beaten their projection, 0 to 1. */
+  beatRate?: number | null;
+  /** Weeks played over weeks projected, 0 to 1. */
+  availability?: number | null;
+  /** Weeks of history behind beatRate/availability, for the sample gates. */
+  accuracyWeeks?: number | null;
   // ---- 7-day movement (optional; carried for future UI, not rendered yet) ----
   change7d?: number | null;
   change7dPct?: number | null;
@@ -67,6 +78,23 @@ export interface RecommendationCardData {
   reason: string;
   decidingFactor: "value" | "need" | "reach" | "none";
   filledSlot: string | null;
+  /**
+   * Card heading when the build mode changes what the card means, e.g. "Best
+   * value for a contender". Absent falls back to the component's default.
+   */
+  title?: string;
+  /**
+   * Short supporting facts, each already phrased for display and for a screen
+   * reader ("Adds 6.2 points a week to your starters"). Empty when the engine
+   * had no numbers to show.
+   */
+  metrics?: string[];
+  /**
+   * Which engine produced this card. "points" means the marginal
+   * starting-lineup model ran; "heuristic" means projections were unavailable
+   * and the slot-fill model answered instead. Surfaced so the room can say so.
+   */
+  engine?: "points" | "heuristic";
 }
 
 /**

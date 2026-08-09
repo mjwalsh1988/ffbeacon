@@ -336,8 +336,25 @@ export type SleeperDraftPick = {
   metadata?: Record<string, unknown> | null;
 };
 
+/**
+ * Every pick in a draft, or NULL when the request failed.
+ *
+ * The distinction matters, and collapsing it is a bug we have shipped before:
+ * `[]` means Sleeper answered and the draft has no picks, while `null` means we
+ * do not know. A caller that treats a throttled or 5xx response as "no picks"
+ * will conclude the draft is empty and act on it. See the same rule for
+ * getSleeperMatchups, and CLAUDE.md's Power Pulse note about a failed request
+ * not being evidence.
+ */
+export async function getSleeperDraftPicksOrNull(
+  draftId: string,
+): Promise<SleeperDraftPick[] | null> {
+  return await safeFetch<SleeperDraftPick[]>(`${BASE}/draft/${draftId}/picks`);
+}
+
+/** Picks, with a failure flattened to empty. Only safe where empty is harmless. */
 export async function getSleeperDraftPicks(draftId: string): Promise<SleeperDraftPick[]> {
-  return (await safeFetch<SleeperDraftPick[]>(`${BASE}/draft/${draftId}/picks`)) ?? [];
+  return (await getSleeperDraftPicksOrNull(draftId)) ?? [];
 }
 
 export type SleeperNflState = {

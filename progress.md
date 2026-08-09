@@ -3413,3 +3413,551 @@ THE FIX
 - npx next build: compiles clean
 - Migration applied to prod and verified: all four prompts carry the new text
 - No schema change, no RLS change, no type regeneration
+
+---
+
+## On The Clock: the premium pass (2026-08-08)
+
+Twelve phases in one session. Nothing committed or pushed. Four migrations applied
+to prod (0180 to 0183) and verified; `lib/database.types.ts` regenerated.
+
+### The defect that started it
+
+Team Need recommended a tight end almost every time. Not a bug: the engine was
+answering the wrong question. `needRaw = fit.factor * formatMult * (50 + 0.25 *
+valueScore + 0.25 * vorScore)` where `fit.factor` is 1.0 for a position with an
+open dedicated slot and 0.7 for a flex. Most leagues start exactly one tight end
+and it is the slot people fill last, so tight end held the 1.0 long after running
+back and receiver had spilled to 0.7, the TE-premium multiplier stacked another
+1.15 on top, and value could only move the result across a 50-point band.
+`replacementByPosition` compounded it by looking for the 48th-best available
+tight end in a 12-team league and clamping to the end of a shallow pool, which
+made every remaining tight end look scarce.
+
+`lib/on-the-clock/recommend-points.test.ts` pins both behaviours: the heuristic
+takes the tight end, the points engine takes the receiver.
+
+### Tasks
+
+T488 | completed | migration 0180: league_metadata jsonb on on_the_clock_draft_cache
+     | files: supabase/migrations/0180_otc_league_metadata.sql
+     | verified: yes (pg_policies checked, column inherits table policies)
+T489 | completed | sync captures the Sleeper league object; cache shapes scoring + slots
+     | files: lib/on-the-clock/sleeper-sync.ts, lib/on-the-clock/cache.ts, lib/on-the-clock/types.ts
+     | depends on: T488
+T490 | completed | buildSlotModel prefers roster_positions over draft.settings.slots_*
+     | files: lib/on-the-clock/recommend.ts
+T491 | completed | migration 0181 + projection board (shared per scoring signature)
+     | files: supabase/migrations/0181_otc_projection_cache.sql, lib/on-the-clock/projection-board.ts
+T492 | completed | migration 0182 + Draft Pulse engine
+     | files: supabase/migrations/0182_otc_pulse_cache.sql, lib/on-the-clock/draft-pulse.ts
+T493 | completed | pulse orchestrator + POST /api/on-the-clock/pulse
+     | files: lib/on-the-clock/pulse-service.ts, lib/on-the-clock/pulse-types.ts, app/api/on-the-clock/pulse/route.ts
+T494 | completed | ADP draft simulation
+     | files: lib/on-the-clock/adp-sim.ts
+T495 | completed | marginal starting-lineup engine with the depth handover
+     | files: lib/on-the-clock/marginal.ts
+T496 | completed | Team Need + Best Value rewrite, mode-aware
+     | files: lib/on-the-clock/recommend.ts, lib/on-the-clock/board-types.ts
+T497 | completed | build mode: types, defaults, zod, clamps, selector, per-draft storage
+     | files: lib/on-the-clock/types.ts, default-settings.ts, settings.ts, app/tools/on-the-clock/build-mode-selector.tsx, draft-prefs.tsx
+T498 | completed | surplus value replaces the pick_no minus ADP metric
+     | files: lib/on-the-clock/surplus.ts, lib/on-the-clock/awards.ts
+T499 | completed | seven new awards + per-award admin toggles + AWARDS_VERSION
+     | files: lib/on-the-clock/awards.ts, app/tools/on-the-clock/rankings-awards.tsx
+T500 | completed | migration 0183 + draft grades, frozen into snapshots
+     | files: supabase/migrations/0183_otc_snapshot_grades.sql, lib/on-the-clock/draft-grade.ts, lib/on-the-clock/draft-snapshot.ts, lib/on-the-clock/snapshot-types.ts, app/tools/on-the-clock/draft-grades.tsx
+T501 | completed | shared trade margins (award and grade can no longer disagree)
+     | files: lib/on-the-clock/trade-margins.ts
+T502 | completed | clickable draft board + side-picker dialog + asset resolver
+     | files: lib/on-the-clock/trade-assets.ts, app/tools/on-the-clock/draft-board.tsx, add-asset-dialog.tsx
+T503 | completed | Signal Check server action + report for draft-room trades
+     | files: app/tools/on-the-clock/actions.ts, signal-check-report.tsx, trade-analyzer.tsx
+T504 | completed | rosters tab: Draft Pulse, archetype chip, sort toggle
+     | files: app/tools/on-the-clock/rosters-rankings.tsx
+T505 | completed | draft radar: runs, tier cliffs, picks until your turn, gone-before
+     | files: lib/on-the-clock/draft-alerts.ts, app/tools/on-the-clock/draft-radar.tsx
+T506 | completed | available list: engine ordering, projections, watchlist
+     | files: app/tools/on-the-clock/available-list.tsx
+T507 | completed | what your picks cost you, recap text, read-the-room shortcut
+     | files: lib/on-the-clock/draft-recap.ts, app/tools/on-the-clock/draft-extras.tsx
+T508 | completed | admin: build mode, marginal, awards, grades, alerts
+     | files: app/admin/on-the-clock/on-the-clock-settings-manager.tsx
+T509 | completed | tests for every new engine
+     | files: lib/on-the-clock/marginal.test.ts, recommend-points.test.ts, draft-intel.test.ts, awards.test.ts
+
+### Verification
+
+- npx tsc --noEmit: clean
+- npx vitest run: 1442 tests across 106 files, all pass (41 new)
+- npx next build: compiles clean, /tools/on-the-clock 63.4 kB
+- Migrations 0180-0183 applied to prod; pg_policies verified on all four tables
+- lib/database.types.ts regenerated and prettier-formatted
+- Not committed, not pushed. No dev server left running.
+
+### Decisions worth re-reading
+
+- **Draft Pulse is not Power Pulse.** A startup draft has no schedule, and
+  CLAUDE.md forbids caching a Power Pulse without one. Draft Pulse publishes
+  projected starting-lineup points and a within-league rank. No expected wins, no
+  playoff odds, no projected finish, and nothing is written to
+  `league_power_pulse_cache`.
+- **Future picks go to Signal Check as picks, not as simulated players.** A pick
+  in THIS draft resolves to the player ADP says goes there. A 2028 first has no
+  ADP to simulate against, so it is priced from FF Beacon's published pick values.
+- **Best Value keeps FF Beacon value as its spine** and adds a bounded
+  multiplicative tilt per mode, so the card is still an FF Beacon Values card.
+- **The points weight decays as the starting lineup fills** (quadratic, so the
+  handover is late). Without it, a start-eleven league would tell everyone from
+  the twelfth pick onward that nobody adds anything.
+- **Absent is never zero.** A player with no projection is judged on value alone,
+  not scored at zero points.
+
+### Review pass (same session)
+
+Four sub-agent reviews ran against the finished work: implementation, security,
+accessibility, and performance. Findings fixed:
+
+T510 | completed | RoomSummary was mounted only in the loading branch and threw a TDZ error
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | Two agents found this independently. The Shift-R summary read consts declared
+     | below the early return, so it threw when used and vanished once the room loaded.
+T511 | completed | probe-based marginal engine: 5,239 lineup solves per request down to ~320
+     | files: lib/on-the-clock/marginal.ts, lib/on-the-clock/marginal.test.ts
+     | Adding one player to a transversal-matroid lineup gives max(0, points - d) for a
+     | threshold d that depends only on (position, week). One probe per pair replaces one
+     | build per candidate per week. Locked in by a 720-case brute-force property test.
+T512 | completed | dialog focus fallback when an asset cannot be priced
+     | files: app/tools/on-the-clock/add-asset-dialog.tsx
+T513 | completed | turn and tier-cliff alerts re-announce on the next turn
+     | files: lib/on-the-clock/draft-alerts.ts, on-the-clock-client.tsx, draft-intel.test.ts
+T514 | completed | admin marginal weights, candidate cap, and trade minimum reach the engines
+     | files: app/api/on-the-clock/pulse/route.ts, lib/on-the-clock/pulse-service.ts, awards.ts
+T515 | completed | reliability award gates on the sample size its copy promises
+     | files: lib/on-the-clock/draft-pulse.ts (starterWeeksPlayed), awards.ts
+T516 | completed | awards and grades share one trade-margin computation
+     | files: lib/on-the-clock/awards.ts, trade-margins.ts
+T517 | completed | dedicated CPU rate limit on the pulse route, failing closed
+     | files: app/api/on-the-clock/pulse/route.ts, lib/on-the-clock/cache.ts
+T518 | completed | migration 0184: league_metadata withheld from anon and authenticated
+     | files: supabase/migrations/0184_otc_league_metadata_private.sql
+     | verified: yes (column_privileges checked on prod: service_role only)
+T519 | completed | pick cache read paged; oversized request arrays rejected not iterated
+     | files: lib/on-the-clock/cache.ts, app/api/on-the-clock/pulse/route.ts, actions.ts
+T520 | completed | accessibility: sort target size, landmark flood, admin hints, grades layout
+     | files: available-list.tsx, rosters-rankings.tsx, on-the-clock-settings-manager.tsx, on-the-clock-client.tsx
+T521 | completed | copy and dead-code corrections from the implementation review
+     | files: awards.ts, draft-grade.ts, draft-grades.tsx, available-list.tsx
+
+- npx tsc --noEmit: clean
+- npx vitest run: 1444 tests across 106 files, all pass
+- npx next build: compiles clean
+- Migration 0184 applied to prod and verified
+
+### Cleanup pass (2026-08-08, second session)
+
+Every deferred item below is now done, plus three things the owner reported from
+a first look at the room. tsc clean, 1449 tests across 107 files pass, next build
+compiles, migration 0185 applied to prod and verified.
+
+T542 | completed | a continued redraft league was priced off the dynasty board
+     | files: lib/sleeper-to-format.ts, lib/league-category.ts, lib/sleeper-to-format.test.ts
+     | The owner reported the draft-room pool notice saying "dynasty startup draft"
+     | in a redraft league. The copy was already right; the DETECTION was not.
+     | deriveLeagueFormat read a non-empty previous_league_id as a dynasty signal,
+     | and Sleeper sets that on ANY league carried season to season. Confirmed on
+     | prod: "Brooklyn 99 Redraft" and "Sunday Funday" both carry settings.type = 0
+     | with a prior season, so both derived as dynasty. Now type 2 alone is dynasty,
+     | matching lib/league-category.ts, which already classified this way.
+     | BLAST RADIUS: this is the shared resolver, so League Pulse, Signal Check
+     | imports, and the trade finder all now price a continued redraft league off
+     | the redraft board too. That is the fix, not a side effect, but it changes
+     | stored leagues.format_config_id on their next pulse.
+     | verified: yes (unit tests pin type 0 + prior season, type 1, and type 2)
+T543 | completed | the Trade Analyzer tab is now the Trade Builder
+     | files: on-the-clock-client.tsx, trade-analyzer.tsx, page.tsx,
+     |        app/admin/on-the-clock/on-the-clock-settings-manager.tsx
+     | Tab label, panel heading, empty state, the marketing feature card, and the
+     | admin section. The mode chips lost their old names too ("Startup Trade
+     | Builder" beside a heading reading Trade Builder said the same thing twice);
+     | they now name the pool: "Startup draft" / "Rookie draft".
+     | NOT renamed: the component and module file names, the Signal Check trade
+     | analyzer at /tools/signal-check, and lib/trade-analyzer.ts.
+     | verified: yes
+T544 | completed | wiring audit of the previous session's work
+     | Everything reported missing is wired; two are explained rather than fixed.
+     | - Trade Builder: clickable board, side-picker dialog, both build modes, the
+     |   Signal Check round trip and its report all reachable from the tab.
+     | - Draft Pulse on the Rosters tab renders whenever pulseTeams is non-empty.
+     |   On a COMPLETED draft it reads snapshot.pulse, and every one of the 17
+     |   snapshot rows on prod is still snapshot_version 1, which predates Draft
+     |   Pulse and grades. getOrCreateDraftSnapshot serves an existing row as-is
+     |   and never upgrades it, so an already-locked draft will never show either.
+     |   That freeze is deliberate (see handoff.md); the owner's call whether to
+     |   re-finalize. A LIVE draft is unaffected.
+     | verified: yes
+
+T522 | completed | A1: hoist the draft radar's live region into the room shell
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx, app/tools/on-the-clock/draft-radar.tsx
+     | why: the announcer unmounts on the Rosters tab and the full-width board
+     |      view, so runs and tier cliffs that fire while a user is parked there
+     |      are never spoken. The only deferred item that is a gap rather than
+     |      polish. Do this one first.
+     | verified: yes
+
+T523 | completed | P1: memoize the parsed projection board in process
+     | files: lib/on-the-clock/projection-board.ts
+     | why: 681 KB read and parsed from Supabase on every pulse request, for a
+     |      payload that cannot change during a draft. ~1.6 GB per draft with 12
+     |      viewers.
+     | verified: yes
+
+T524 | completed | P3: memoize boardPlayers, available, and the recommendation
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | why: the render body has one useMemo. Everything below it recomputes on
+     |      every realtime pick, and the fresh arrays also kill the useMemo inside
+     |      available-list.tsx. Fixing this repairs that one for free.
+     | depends on: none (but do before T531)
+     | verified: yes
+
+T525 | completed | P2: stop re-sending the 43 KB players map on every pick
+     | files: lib/on-the-clock/pulse-service.ts, app/api/on-the-clock/pulse/route.ts,
+     |        lib/on-the-clock/client.ts, app/tools/on-the-clock/on-the-clock-client.tsx
+     | why: ~103 MB of egress per draft carrying identical data. Add a boardEtag
+     |      from (scoringSignature, season, fromWeek) and omit players on a match.
+     |      Same change can drop the ~23 KB survivorIds upload by running the ADP
+     |      simulation server-side, which also closes T534.
+     | verified: yes
+
+T526 | completed | P4: render tab panel BODIES conditionally, keep the panels mounted
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | why: DraftBoard reconciles 408 cells on every pick even when the user is on
+     |      another tab. Keep the div[role=tabpanel] for ARIA; gate its children.
+     | verified: yes
+
+T527 | completed | A2: debounce the available-list status announcement
+     | files: app/tools/on-the-clock/available-list.tsx
+     | why: typing a player name queues one announcement per keystroke and
+     |      interrupts the character echo.
+     | verified: yes
+
+T528 | completed | A3: board cells must not fail silently in the trade builder
+     | files: app/tools/on-the-clock/trade-analyzer.tsx, app/tools/on-the-clock/draft-board.tsx
+     | why: pressing Enter on an unpriceable or already-used cell does nothing and
+     |      says nothing, while the cell label always reads "Add to trade".
+     | verified: yes
+
+T529 | completed | C1: one projection for an unmade pick, not two
+     | files: lib/on-the-clock/trade-analyzer.ts, lib/on-the-clock/trade-assets.ts
+     | why: the catalog projects by board VALUE order and floors at 50; the
+     |      resolver uses the ADP simulation and returns 0. The dropdown can name
+     |      one player and add another.
+     | verified: yes
+
+T530 | completed | C2: traded-future-pick options keep their owner
+     | files: lib/on-the-clock/trade-analyzer.ts, lib/on-the-clock/trade-assets.ts
+     | why: catalog id and resolver id disagree, so usedIds never suppresses the
+     |      option and the placed asset drops which team's pick it was.
+     | verified: yes
+
+T531 | completed | P8: React.memo, stable prop objects, and Map week lookups
+     | files: app/tools/on-the-clock/*.tsx, lib/on-the-clock/marginal.ts, draft-pulse.ts
+     | why: no React.memo anywhere in the tool; several objects rebuilt every
+     |      render and passed to children; weeks.find() linear scans where a Map
+     |      would do (~490k redundant comparisons per request).
+     | depends on: T524
+     | verified: yes
+
+T532 | completed | P5: name the columns in readDraftCache
+     | files: lib/on-the-clock/cache.ts
+     | why: select("*") pulls 105 KB of pick metadata to read four fields.
+     |      CAREFUL: shapePickRow is shared with the client Realtime handler,
+     |      which receives the full row, so this needs tolerant field access or a
+     |      second shaper.
+     | verified: yes
+
+T533 | completed | P6 and P7: one settings load per request, and a narrower player select
+     | files: lib/on-the-clock/pulse-service.ts, lib/on-the-clock/projection-board.ts
+     | why: loadPowerPulseSettings runs twice; loadPlayerFacts selects a 2.4 MB
+     |      jsonb to read one string on cold builds.
+     | verified: yes
+
+T534 | completed | C3: stop truncating survivorIds in board order
+     | files: app/api/on-the-clock/pulse/route.ts, app/tools/on-the-clock/on-the-clock-client.tsx
+     | why: the 800 cap takes the first 800 by board order, so K/DEF can be cut
+     |      and then read as maximal scarcity. Closed for free by T525.
+     | depends on: T525
+     | verified: yes
+
+T535 | completed | A4: normalize heading levels across the new tab panels
+     | files: app/tools/on-the-clock/panel.tsx, draft-radar.tsx, rosters-rankings.tsx,
+     |        draft-grades.tsx, on-the-clock-client.tsx
+     | why: Rosters and Grades open at h3 with no h2 above them; the radar jumps
+     |      h2 to h4. Mechanical, spread across six files.
+     | verified: yes
+
+T536 | completed | A5 and A6: keyboard-reachable scroll regions, 44px tabs at every width
+     | files: app/tools/on-the-clock/draft-board.tsx, available-list.tsx, draft-extras.tsx,
+     |        on-the-clock-client.tsx
+     | why: three overflow-x-auto containers have no tabIndex, role, or name
+     |      (WCAG 2.1.1); the view tabs carry sm:min-h-0 and drop to ~32px above
+     |      the sm breakpoint, which the project's rule does not permit.
+     | verified: yes
+
+T537 | completed | A7: admin section headings and checkbox target size
+     | files: app/admin/on-the-clock/on-the-clock-settings-manager.tsx
+     | why: five CollapsibleSection titles are spans, invisible to heading
+     |      navigation; the toggle checkboxes are ~20px.
+     | verified: yes
+
+T538 | completed | A8: the remaining small accessibility items
+     | files: signal-check-report.tsx, draft-board.tsx, rosters-rankings.tsx,
+     |        available-list.tsx, trade-analyzer.tsx, draft-extras.tsx
+     | why: eight items, each one or two lines. Live regions inserted with their
+     |      content, "Open slot" missing from empty cell labels, a wrong
+     |      aria-expanded, an unannounced roster re-sort, a doubly announced
+     |      article label, a redundant sr-only label, a disabled button with no
+     |      associated reason, and the Shift+R collision with NVDA quick nav.
+     | verified: yes
+
+T539 | completed | C4: drop reverted picks from the cache on resync
+     | files: lib/on-the-clock/sleeper-sync.ts
+     | why: picks absent from a fresh Sleeper payload are never deleted, so a
+     |      commissioner-reverted pick lingers forever.
+     | verified: yes
+
+T540 | completed | S1: evict old projection and pulse cache rows
+     | files: supabase/migrations/ (extend 0113 or add a sibling)
+     | why: on_the_clock_projection_cache has no eviction. Each distinct league
+     |      scoring shape writes a ~1 MB row that is never deleted. Slow to
+     |      exploit behind the two IP budgets, but unbounded.
+     | verified: yes
+
+T541 | completed | C5: dead code and one wrong comment
+     | files: awards.ts, draft-alerts.ts, recommend.ts, draft-grade.ts,
+     |        app/tools/on-the-clock/trade-analyzer.tsx, types.ts
+     | why: seven small items, listed individually in handoff.md. Includes
+     |      recommend.ts replacementByPosition, where the CODE is right and the
+     |      comment describes something else.
+     | verified: yes
+
+### Where the deferred fixes landed differently from the plan
+
+Two items were solved another way than handoff.md proposed, on purpose.
+
+- **T534 (survivorIds).** The plan was to run the ADP simulation server-side so
+  the list is never uploaded. That would mean loading the ranked board and its
+  ADP on the server on every pulse request, which costs more than the 23 KB it
+  saves. Instead the CLIENT now caps survivors at 25 per POSITION rather than
+  the route capping the first 800 in board order. The defect the finding
+  described (a whole position truncated away, then read as maximal scarcity) is
+  closed, because every position is always represented, and the upload drops to
+  roughly a quarter of its size.
+- **T532 (readDraftCache columns).** The plan warned that shapePickRow is shared
+  with the Realtime handler. Rather than making one shaper tolerant, there are
+  now two: shapeProjectedPickRow for the projected read and shapePickRow for the
+  full Realtime row, with lib/on-the-clock/cache-shape.test.ts pinning them to
+  the same output for both an empty string and an absent field.
+
+### Review pass (same session)
+
+Four sub-agent reviews ran against the finished work: implementation, security,
+accessibility, and performance. They found two things that would have shipped
+broken, one of them written this session. Findings fixed:
+
+T545 | completed | the reverted-pick delete wiped a live board on any Sleeper hiccup
+     | files: lib/sleeper.ts, lib/on-the-clock/sleeper-sync.ts
+     | Found independently by the implementation and the security reviews.
+     | getSleeperDraftPicks flattened a failure to [], so a 429, a timeout, or a
+     | 5xx made highestPickNo 0 and T539's new delete removed every cached pick
+     | for the draft: drafted players back on the available board, rosters empty,
+     | pinned for the whole cooldown. This is the failure CLAUDE.md already calls
+     | out for Power Pulse. getSleeperDraftPicksOrNull keeps the null, and the
+     | sync now fails outright rather than writing anything on a picks outage.
+     | verified: yes
+T546 | completed | the Grades tab was dead in every live draft
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | Pre-existing, from the previous session. teamRollups was gated on rosters,
+     | rankings, and the board view but not grades, and computeDraftGrades returns
+     | an empty array for empty rollups, so an in-progress draft rendered the
+     | "nothing to grade yet" state forever. Snapshot mode hid it.
+     | verified: yes
+T547 | completed | the pulse effect could drop its response and pin "Loading projections"
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | The effect stamped its signature before firing and cancelled through a
+     | cleanup flag. A re-run with an UNCHANGED signature (the sync upserts every
+     | pick row, so Postgres emits updates carrying no new pick) cancelled the
+     | in-flight request and then returned at the guard without firing a
+     | replacement. On a first load that meant no projections for the session.
+     | Supersession is tracked by the signature now, not by a per-effect boolean.
+     | verified: yes
+T548 | completed | T526 reverted for six of the seven tab panels
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | Gating a panel's body on its tab unmounts it, and with it the search box,
+     | the sort, a half-built trade, and every open grade card. The accessibility
+     | review is right that this costs a screen-reader user more than a sighted
+     | one: re-finding a row in a 600-player table by ear is expensive. Only the
+     | Board panel stays gated; it holds no state and is 400-odd cells.
+     | verified: yes
+T549 | completed | Trade History priced unmade picks by the method T529 replaced
+     | files: lib/on-the-clock/trade-history.ts, on-the-clock-client.tsx,
+     |        draft-snapshot.ts, awards.test.ts
+     | T529 was half applied. The same draft slot named one player at one price
+     | in the Trade Builder and a different player at a different price on a
+     | trade card, and the awards and the trades component of the grades read the
+     | superseded one. Both read the shared simulation now.
+     | verified: yes
+T550 | completed | includePreDraftRoster was trusted, uncached, and freezable
+     | files: lib/on-the-clock/pulse-service.ts
+     | The flag comes off the request body and changes every team's projected
+     | lineup, but it was absent from the pulse cache's model_version, and the
+     | durable row is one per draft. One request with it flipped poisoned every
+     | other viewer, and after the last pick the snapshot finalizer would freeze
+     | it permanently. It is part of the version now.
+     | verified: yes
+T551 | completed | the alert announcer swallowed the re-announcements it exists for
+     | files: app/tools/on-the-clock/draft-radar.tsx
+     | Alert ids fold in the pick number so a run that EXTENDS and a cliff that
+     | gets CLOSER speak again, and both produce a new id carrying the same
+     | sentence. Setting state to a string it already holds changes no text node,
+     | so nothing was spoken. Clear-then-set, matching RoomSummary. Also stopped
+     | speaking the turn alert, which the command bar already says assertively.
+     | verified: yes
+T552 | completed | the remaining review findings
+     | files: available-list.tsx, rosters-rankings.tsx, draft-board.tsx,
+     |        trade-analyzer.tsx, on-the-clock-client.tsx, cache.ts,
+     |        cache-shape.test.ts, projection-board.ts, pulse-service.ts,
+     |        app/api/on-the-clock/pulse/route.ts, week-index.ts,
+     |        app/admin/on-the-clock/on-the-clock-settings-manager.tsx
+     | Grades tab heading nesting; a dozen "Future picks" landmarks; the
+     | available list re-announcing on every incoming pick; the admin h2 as the
+     | summary's direct child with the blurb moved into the body; the dead
+     | React.memo behind an inline onSelectPick; adpBySleeperId keyed on the raw
+     | board so it stops defeating that memo; the projections map hoisted out of
+     | the rec memo; goneList's O(n*m) scan; the realtime handler allocating a
+     | fresh draft object for an unchanged pick count; a fourth and inconsistent
+     | isDynasty; the projection memo serving at twice its TTL and evicting by
+     | write order; readDraftCache swallowing its query error; maxCandidates
+     | clamped on the read path; repeat announcements in two more regions;
+     | weekFor's duplicate-week ordering; a stale docstring; and a shaper test
+     | that now derives its fixture from PICK_COLUMNS instead of hand-writing it.
+     | verified: yes
+
+### Verification
+
+- npx tsc --noEmit: clean
+- npx vitest run: 1452 tests across 107 files, all pass
+- npx next build: compiles clean
+- Migration 0185 applied to prod. Verified: one function, jsonb return, EXECUTE
+  for service_role only (checked in pg_proc.proacl on prod), and a
+  begin/rollback run of the full sweep.
+- lib/database.types.ts regenerated and prettier-formatted.
+- No browser testing (unchanged from the previous session).
+
+### Owner follow-ups (same session)
+
+T553 | completed | who is on the clock leads the sidebar on every tab
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | DraftRoomStatus now renders above DraftRadar in sidebarPanels. It is the
+     | panel a drafter checks constantly, so it goes first by eye and first by
+     | tab order; the radar answers the follow-up question.
+     | verified: yes
+T554 | completed | Draft Pulse gets its own tab, out of Awards
+     | files: app/tools/on-the-clock/draft-pulse-board.tsx (new),
+     |        rankings-awards.tsx, on-the-clock-client.tsx
+     | A ranking table was never an award. The new tab puts the POINTS ranking
+     | and the VALUE ranking next to each other, which is the comparison that
+     | matters during a draft: value counts future picks, and a lineup cannot
+     | start a pick. Also on the tab: a "your team" summary (score, rank, points
+     | behind the leader, thinnest starting slot, projection coverage), a
+     | "where the two rankings disagree" section naming the teams that start
+     | better or worse than they own, and a per-team positional points
+     | breakdown on one shared scale. Reliability is shown only where there are
+     | at least 8 weeks of history behind it. No expected wins and no playoff
+     | odds anywhere, per the Draft Pulse rule.
+     | Awards keeps only the trophy cards and lost its `teams` / `myRosterId`
+     | props; PowerRankingsTable was deleted with them.
+     | verified: yes
+T555 | completed | Awards, Draft Pulse, and Grades have a real pre-draft state
+     | files: app/tools/on-the-clock/states.tsx (NotStartedCard),
+     |        rankings-awards.tsx, draft-grades.tsx, draft-pulse-board.tsx,
+     |        on-the-clock-client.tsx
+     | Before the first pick these three showed a full page of real-looking
+     | placeholders: every award "up for grabs", a grade table of zeroes, and
+     | every team tied on points. Those read as verdicts rather than as the
+     | absence of one. Each now renders a branded card that says the draft has
+     | not started and lists what will appear once it does.
+     | The gate is draftCache.picks.length > 0, except Draft Pulse, which also
+     | opens when any team already projects points: a dynasty ROOKIE draft sits
+     | on rosters that exist, so those teams have a real score before a single
+     | rookie is taken.
+     | verified: yes
+
+### Review pass on the owner follow-ups
+
+The same four reviews ran again. Security found nothing. Performance found one
+optional saving and confirmed the rest. Implementation and accessibility each
+found one thing worth stopping for.
+
+T556 | completed | an empty projection slate rendered a complete, fake ranking
+     | files: app/tools/on-the-clock/draft-pulse-board.tsx, on-the-clock-client.tsx
+     | The not-started gate was `draftStarted || anyPoints`, and the first term
+     | short-circuited the only test that asks whether projections EXIST. A draft
+     | with picks whose slate is empty (a past season, or a season with nothing
+     | published yet) rendered a full table of 0.0 pts/wk with ranks 1..N, a
+     | "disagreements" section built out of that noise, and a header reading
+     | "averaged over the 0 remaining weeks". Exactly the degenerate-answer
+     | failure CLAUDE.md forbids for Power Pulse. Three states now: no picks,
+     | no projections, and the real board.
+     | verified: yes
+T557 | completed | the not-started and empty cards had no heading
+     | files: app/tools/on-the-clock/states.tsx
+     | These cards are frequently the ENTIRE contents of a tab panel, and their
+     | title was a styled paragraph, so pressing H inside the panel found
+     | nothing. That is the state a user sits in while waiting for a draft to
+     | start, on three tabs at once. Both cards take a headingLevel now,
+     | defaulting to h2.
+     | verified: yes
+T558 | completed | the rest of the round-two findings
+     | files: draft-pulse-board.tsx, dashboard-panels.tsx, on-the-clock-client.tsx
+     | - The archetype chip's screen-reader text came from League Pulse's
+     |   classifier and said "by Power Pulse", naming a different model on the
+     |   one tab that spends its header explaining it is not that model. It has
+     |   its own sentence now, in this tab's vocabulary.
+     | - DraftRoomStatus is mounted twice (rail and board view) and both copies
+     |   hardcoded id="room-status", so the visible panel's aria-labelledby
+     |   resolved to the HIDDEN copy's heading and could compute an empty name.
+     |   It takes an instanceId. Pre-existing, surfaced by the reorder.
+     | - The reliability column used a hardcoded 8-week gate while the awards
+     |   use the admin's minAccuracyWeeks, so lowering the setting would crown
+     |   an award for a team this table still showed as unjudgeable.
+     | - Team name on the mover card was ink-subtle, about 3.7:1, under the AA
+     |   floor. Now ink-muted, matching the same data in the tables.
+     | - A polite region announces when the panel swaps between its three
+     |   bodies; the positional numbers carry their unit for a screen reader;
+     |   the loading copy no longer promises a table that is not rendered; the
+     |   "your team" rank denominator is the league size, not the row count.
+     | - The pre-draft grades tab no longer sorts the whole 800-player board to
+     |   build a market curve it then throws away.
+     | verified: yes
+
+### Review findings NOT fixed
+
+- **An OTC snapshot finalized before T542 keeps a dynasty format_slug.** Snapshots
+  are immutable by design and nothing re-derives them, so a continued redraft
+  league whose draft was already locked shows dynasty values there while the
+  live room now shows redraft. Same shape as the version 1 snapshot question in
+  handoff.md, and the same decision to make.
+- **draft-grade.ts curve parity is unverifiable.** The file is untracked, so the
+  local zScores and surplusByRoster it used to reimplement exist nowhere in git
+  history. `lib/power-pulse/math.ts stdev` is the SAMPLE formula; if the deleted
+  local copy used the population formula, every curved component moved. Nothing
+  in the repo can tell us which.
+- **A concrete traded future pick still loses its holder on resolve.** The ref
+  carries originalRosterId, not the current owner, so the which-side dialog has
+  nothing to pre-select. Label and price are correct.
+- **readDraftCache still runs in full on every pulse request** (~120 KB, and the
+  pulse path reads three of its columns). The performance review names this the
+  largest remaining server cost now that the projection board is memoized.
+- **computeMarginal still runs 200-odd lineup solves per request** and is
+  cacheable on (draft, roster, pick count), which nobody has tried.

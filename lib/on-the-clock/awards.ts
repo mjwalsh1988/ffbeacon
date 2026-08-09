@@ -12,18 +12,36 @@
  *   - First to Fill Starting Roster (The Full Beam Award): first team to fill every
  *     required starting slot, by overall pick number.
  *   - Most Boring League Mate (The Dead Air Award): fewest completed trades.
- *   - Best Drafter            (The North Star Award): most draft value captured
- *     versus Sleeper ADP (sum of pick_no - ADP across the team's non-keeper
- *     picks with a known ADP). Rewards beating the market, not raw totals.
- *   - Worst Drafter           (The Lost Signal Award): the exact mirror. Lowest
- *     total pick_no - ADP: the drafter who reached earliest and most often,
- *     losing the most value against the market.
+ *   - Best Drafter            (The North Star Award): most SURPLUS VALUE captured
+ *     against the market (see surplus.ts). Rewards beating the market where a
+ *     pick is expensive, not simply holding more picks.
+ *   - Worst Drafter           (The Lost Signal Award): the exact mirror, lowest
+ *     surplus: the drafter who paid the most over the market price.
  *
- * Trade values reuse trade-history.ts analyzeTradeTransaction (the same FF Beacon
- * board projection the Trade History tab uses), so there is no DB round trip and no
- * dependence on KTC pick values. Best / Worst Drafter share ONE per-roster total of
- * (pick_no - ADP) over ADP-known, non-keeper picks; North Star takes the max and
- * Lost Signal the min, so both judge market timing, not raw roster value.
+ * Plus seven that only became possible once the room could project points
+ * (draft-pulse.ts) and read projection accuracy:
+ *   - Best Starting Lineup    (The Full Signal Award): highest Draft Pulse.
+ *   - Best Long-Term Build    (The Long Game Award): dynasty only. Owns the most
+ *     and wins the least right now. That gap IS the rebuild.
+ *   - Most Reliable Roster    (The Sure Thing Award): highest points-weighted
+ *     beat rate among projected starters.
+ *   - Most Volatile Roster    (The Glass Cannon Award): highest weekly spread
+ *     relative to the mean.
+ *   - Most Available Roster   (The Iron Man Award): highest weighted availability.
+ *   - Best Single Pick        (The Steal of the Draft): largest single surplus.
+ *   - Biggest Single Reach    (The Reach of the Draft): the mirror.
+ *
+ * Trade values reuse trade-history.ts analyzeTradeTransaction, the same FF Beacon
+ * board projection the Trade History tab uses, so an award and the tab can never
+ * disagree about who won a deal, and no DB round trip is needed. The interactive
+ * Trade Analyzer routes through Signal Check instead, because a trade the user is
+ * BUILDING deserves the full ruleset; grading a league's whole completed trade
+ * history through it would mean one server analysis per historical trade to fill
+ * in a card.
+ *
+ * Best / Worst Drafter share ONE per-roster surplus total (surplus.ts); North Star
+ * takes the max and Lost Signal the min, so both judge market timing rather than
+ * raw roster value.
  *
  * Every award stays "up for grabs" until it can be earned honestly: trade awards
  * until at least one trade exists and there is a standout, the drafter awards until
@@ -32,8 +50,11 @@
  * surface every co-winner.
  */
 
-import type { DraftPosition } from "./board-types";
+import type { DraftPosition, RankedPlayer } from "./board-types";
 import type { OnTheClockSettings, ShapedPick } from "./types";
+import type { DraftPulseTeam } from "./draft-pulse";
+import { buildMarketCurve, computePickSurplus, surplusByRoster } from "./surplus";
+import { tradeMarginsFor } from "./trade-margins";
 import type { TeamRollup } from "./rosters";
 import {
   analyzeTradeTransaction,
@@ -52,7 +73,21 @@ export type AwardId =
   | "first-starting-roster"
   | "most-boring"
   | "best-drafter"
-  | "worst-drafter";
+  | "worst-drafter"
+  | "best-starting-lineup"
+  | "long-game"
+  | "most-reliable"
+  | "boom-bust"
+  | "iron-man"
+  | "steal-of-draft"
+  | "reach-of-draft";
+
+/**
+ * The award-set contract version frozen into a snapshot. A snapshot written
+ * before the projection-backed awards existed is version 1 and renders the
+ * original six rather than a grid with seven permanently empty cards.
+ */
+export const AWARDS_VERSION = 2;
 
 /** One team that currently holds an award (usually one; more on an exact tie). */
 export interface AwardClaimant {
@@ -82,6 +117,17 @@ export interface Award {
   pending: boolean;
   /** Why it is pending (shown on the card in the pending state). */
   pendingLabel: string;
+  /**
+   * For the two pick awards, the single pick that earned it. Absent on team
+   * awards. Rendered under the claimant so the card names the actual moment.
+   */
+  pickHighlight?: {
+    playerName: string;
+    position: string | null;
+    pickNo: number;
+    /** Signed surplus, already rounded for display. */
+    surplus: number;
+  } | null;
 }
 
 export interface DraftAwardsInput {
@@ -101,10 +147,19 @@ export interface DraftAwardsInput {
   settings: OnTheClockSettings;
   /**
    * Sleeper player id -> ADP (overall pick number) for the draft's resolved ADP
-   * market. Drives Best Drafter (value captured vs the market). Pass {} when no
-   * ADP snapshot exists; the award then stays pending.
+   * market. Kept for the board indicators and the pending copy. Pass {} when no
+   * ADP snapshot exists; the drafting awards then stay pending.
    */
   adpBySleeperId: Record<string, number>;
+  /**
+   * The FULL board, used to build the market price curve for surplus value and
+   * to value each made pick. Empty leaves the drafting awards pending.
+   */
+  board: RankedPlayer[];
+  /** Draft Pulse standings, when projections were available. Empty is fine. */
+  pulseTeams: DraftPulseTeam[];
+  /** True for a dynasty format; gates the dynasty-only Long Game award. */
+  isDynasty: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,17 +257,23 @@ function pickExtreme(
 const ZERO_HAVE: Record<DraftPosition, number> = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };
 
 /**
- * Minimum completed-trade counts to qualify for Most Successful Trader, tried in
- * order. We start at 3 so a single lopsided trade cannot steal the award, then relax
- * to 2, then to any team that has traded, so a low-volume league still surfaces a
- * winner instead of leaving the award permanently up for grabs.
+ * The Most Successful Trader ladder, seeded from the admin's configured minimum.
+ * It relaxes one step at a time down to a single trade, so a low-volume league
+ * still surfaces a winner rather than leaving the award permanently up for
+ * grabs. The original hardcoded default was 3, which is where the admin setting
+ * starts: high enough that a single lopsided trade cannot steal the award.
  */
-const MIN_SUCCESSFUL_TRADER_TRADES = [3, 2, 1];
+function traderThresholds(minimum: number): number[] {
+  const start = Math.max(1, Math.round(minimum));
+  const out: number[] = [];
+  for (let n = start; n >= 1; n -= 1) out.push(n);
+  return out;
+}
 
 /**
- * Compute all six awards. Deterministic and side-effect free. Returns them in the
- * fixed product order (Signal Flare, Value Beacon, Full Beam, Dead Air, North Star,
- * Lost Signal). Callers render the array directly.
+ * Compute every award. Deterministic and side-effect free. Returns them in the
+ * fixed product order, with any award the admin has switched off removed.
+ * Callers render the array directly.
  */
 export function computeDraftAwards(input: DraftAwardsInput): Award[] {
   const {
@@ -224,6 +285,9 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     draftSettings,
     settings,
     adpBySleeperId,
+    board,
+    pulseTeams,
+    isDynasty,
   } = input;
 
   const base = buildClaimantBase(rollups, avatarByRosterId);
@@ -245,33 +309,17 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
   // the count of trades each roster moved value in, so the Most Successful Trader can
   // be judged by AVERAGE margin per trade rather than a cumulative total (which just
   // tracks trade volume and would duplicate Most Active Trader).
+  // ONE per-roster margin computation, shared with the draft grades (see
+  // trade-margins.ts). It used to be duplicated here, which meant an award and a
+  // grade could quietly disagree about who won a deal.
   const rosterIdSet = new Set(rosterIds);
   const marginSum = new Map<number, number>();
   const marginTradeCount = new Map<number, number>();
   const netReady = tradeContext != null;
-  if (tradeContext) {
-    for (const txn of transactions) {
-      const entry = analyzeTradeTransaction(txn, tradeContext);
-      // Value received + value given per roster, within this single trade.
-      const received = new Map<number, number>();
-      const given = new Map<number, number>();
-      for (const side of entry.sides) {
-        received.set(side.rosterId, (received.get(side.rosterId) ?? 0) + side.total);
-        for (const asset of side.assets) {
-          if (asset.fromRosterId != null) {
-            given.set(asset.fromRosterId, (given.get(asset.fromRosterId) ?? 0) + asset.value);
-          }
-        }
-      }
-      // Every roster that moved value in this trade records one per-trade margin.
-      const involved = new Set<number>([...received.keys(), ...given.keys()]);
-      for (const rid of involved) {
-        if (!rosterIdSet.has(rid)) continue;
-        const margin = (received.get(rid) ?? 0) - (given.get(rid) ?? 0);
-        marginSum.set(rid, (marginSum.get(rid) ?? 0) + margin);
-        marginTradeCount.set(rid, (marginTradeCount.get(rid) ?? 0) + 1);
-      }
-    }
+  for (const [rosterId, margin] of tradeMarginsFor(transactions, tradeContext)) {
+    if (!rosterIdSet.has(rosterId)) continue;
+    marginSum.set(rosterId, margin.total);
+    marginTradeCount.set(rosterId, margin.trades);
   }
 
   // Average margin per trade, per roster (only rosters that actually moved value).
@@ -281,22 +329,30 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     if (c > 0) avgMargin.set(id, (marginSum.get(id) ?? 0) / c);
   }
 
-  // ---- ADP value captured (best AND worst drafter) ----
-  // Per roster: sum of (pick_no - ADP) over its made, non-keeper picks with a
-  // known Sleeper ADP. Positive = players landed later than the market expected
-  // (discounts); negative = reaches. Keepers are excluded: their slot is
-  // assigned, not a market decision. North Star takes the max; Lost Signal takes
-  // the min of the same totals.
+  // ---- Surplus value against the market (best AND worst drafter) ----
+  // Per roster: the sum, over its made non-keeper picks, of what the player was
+  // worth minus what the market said that slot was worth (see surplus.ts). This
+  // replaced a sum of (pick_no - ADP), which rewarded holding more picks and
+  // valued a round-one bargain the same as a round-fourteen one. Keepers are
+  // excluded: their slot is assigned, not a market decision. North Star takes
+  // the max; Lost Signal takes the min of the same totals.
+  const valueByPlayerId = new Map<string, number>();
+  const valueBySleeperId = new Map<string, number>();
+  for (const p of board) {
+    valueByPlayerId.set(p.playerId, p.value);
+    if (p.sleeperId) valueBySleeperId.set(p.sleeperId, p.value);
+  }
+  const curve = buildMarketCurve(board);
+  const pickSurpluses = computePickSurplus({ picks, valueByPlayerId, valueBySleeperId, curve });
+  const surplusTotals = surplusByRoster(pickSurpluses);
   const adpDeltaSum = new Map<number, number>();
   const adpPickCount = new Map<number, number>();
-  for (const pk of picks) {
-    if (pk.rosterId == null || pk.isKeeper) continue;
-    const adp = pk.sleeperPlayerId ? adpBySleeperId[pk.sleeperPlayerId] : undefined;
-    if (typeof adp !== "number" || !Number.isFinite(adp) || adp <= 0) continue;
-    adpDeltaSum.set(pk.rosterId, (adpDeltaSum.get(pk.rosterId) ?? 0) + (pk.pickNo - adp));
-    adpPickCount.set(pk.rosterId, (adpPickCount.get(pk.rosterId) ?? 0) + 1);
+  for (const [rosterId, entry] of surplusTotals) {
+    adpDeltaSum.set(rosterId, entry.total);
+    adpPickCount.set(rosterId, entry.count);
   }
-  const adpEligibleIds = rosterIds.filter((id) => (adpPickCount.get(id) ?? 0) > 0);
+  const minAdpPicks = Math.max(1, settings.awards.minAdpPicks);
+  const adpEligibleIds = rosterIds.filter((id) => (adpPickCount.get(id) ?? 0) >= minAdpPicks);
 
   // ---- First to fill the starting lineup ----
   const completionPick = computeStartingRosterCompletion(picks, draftSettings, settings, base);
@@ -323,9 +379,9 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
   {
     // Judge by AVERAGE value margin per trade, so the sharpest dealmaker wins rather
     // than simply the busiest trader. Qualify on a minimum trade count that relaxes
-    // 3 -> 2 -> 1 when no team meets the higher bar (see MIN_SUCCESSFUL_TRADER_TRADES).
+    // 3 -> 2 -> 1 when no team meets the higher bar (see traderThresholds).
     let candidateIds: number[] = [];
-    for (const threshold of MIN_SUCCESSFUL_TRADER_TRADES) {
+    for (const threshold of traderThresholds(settings.awards.minSuccessfulTraderTrades)) {
       const ids = rosterIds.filter((id) => (marginTradeCount.get(id) ?? 0) >= threshold);
       if (ids.length > 0) {
         candidateIds = ids;
@@ -404,16 +460,16 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
     });
   }
 
-  // 5. Best Drafter (The North Star Award). Judged against the market: the team
-  // that captured the most total draft value versus Sleeper ADP (sum of
-  // pick_no - ADP across its picks) wins, so consistently landing players after
-  // their ADP beats simply hoarding the biggest names. Uses the ADP map the
-  // caller resolved for THIS draft (the locked snapshot for completed drafts),
-  // never live market data.
+  // 5. Best Drafter (The North Star Award). Judged against the market in FF
+  // Beacon value: the team whose picks were worth the most MORE than the market
+  // price of the slots they used (see surplus.ts). A round-one bargain therefore
+  // counts for more than a round-fourteen one, which the old pick-number metric
+  // could not express. Uses the ADP map the caller resolved for THIS draft (the
+  // locked snapshot for completed drafts), never live market data.
   {
     const r = pickExtreme(base, adpDeltaSum, adpEligibleIds, "max");
-    const noAdp = Object.keys(adpBySleeperId).length === 0 || adpEligibleIds.length === 0;
-    const pending = noAdp || adpEligibleIds.length < 2 || r.allTied || r.extreme == null;
+    const noMarket = curve.sample === 0 || pickSurpluses.length === 0;
+    const pending = noMarket || adpEligibleIds.length < 2 || r.allTied || r.extreme == null;
     const winnerCounts = r.claimants.map((c) => adpPickCount.get(c.rosterId) ?? 0);
     const sharedCount =
       winnerCounts.length > 0 && winnerCounts.every((c) => c === winnerCounts[0])
@@ -424,30 +480,27 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
       id: "best-drafter",
       title: "The North Star Award",
       category: "Best Drafter",
-      description: "Finds the most draft value compared to Sleeper ADP.",
+      description: "Gets the most value for the draft slots they spent.",
       claimants: pending ? [] : r.claimants,
       metricLabel: pending
         ? null
         : sharedCount != null
-          ? `${signed} picks of ADP value across ${sharedCount} ${sharedCount === 1 ? "pick" : "picks"}`
-          : `${signed} picks of ADP value`,
+          ? `${signed} value over market across ${sharedCount} ${sharedCount === 1 ? "pick" : "picks"}`
+          : `${signed} value over market`,
       pending,
-      pendingLabel: noAdp
-        ? "Sleeper ADP is not available for this draft yet, so no one has earned this."
-        : "Not enough teams have made picks with a known ADP yet.",
+      pendingLabel: noMarket
+        ? "Sleeper ADP is not available for this draft yet, so there is no market to beat."
+        : `Not enough teams have made ${minAdpPicks} priced picks yet.`,
     });
   }
 
   // 6. Worst Drafter (The Lost Signal Award). The exact mirror of North Star:
-  // the team with the LOWEST total draft value versus Sleeper ADP (sum of
-  // pick_no - ADP across its picks), i.e. the drafter who consistently reached
-  // for players well before the market expected them to go. Uses the same
-  // per-draft ADP map (the locked snapshot for completed drafts), so the loser
-  // is as stable as the winner.
+  // the team that paid the most OVER the market price of the slots it used.
+  // Same per-draft market curve, so the loser is as stable as the winner.
   {
     const r = pickExtreme(base, adpDeltaSum, adpEligibleIds, "min");
-    const noAdp = Object.keys(adpBySleeperId).length === 0 || adpEligibleIds.length === 0;
-    const pending = noAdp || adpEligibleIds.length < 2 || r.allTied || r.extreme == null;
+    const noMarket = curve.sample === 0 || pickSurpluses.length === 0;
+    const pending = noMarket || adpEligibleIds.length < 2 || r.allTied || r.extreme == null;
     const loserCounts = r.claimants.map((c) => adpPickCount.get(c.rosterId) ?? 0);
     const sharedCount =
       loserCounts.length > 0 && loserCounts.every((c) => c === loserCounts[0])
@@ -458,21 +511,241 @@ export function computeDraftAwards(input: DraftAwardsInput): Award[] {
       id: "worst-drafter",
       title: "The Lost Signal Award",
       category: "Worst Drafter",
-      description: "Loses the most draft value compared to Sleeper ADP by reaching early.",
+      description: "Pays the most over market for the draft slots they spent.",
       claimants: pending ? [] : r.claimants,
       metricLabel: pending
         ? null
         : sharedCount != null
-          ? `${signed} picks of ADP value across ${sharedCount} ${sharedCount === 1 ? "pick" : "picks"}`
-          : `${signed} picks of ADP value`,
+          ? `${signed} value over market across ${sharedCount} ${sharedCount === 1 ? "pick" : "picks"}`
+          : `${signed} value over market`,
       pending,
-      pendingLabel: noAdp
-        ? "Sleeper ADP is not available for this draft yet, so no one is on the hook."
-        : "Not enough teams have made picks with a known ADP yet.",
+      pendingLabel: noMarket
+        ? "Sleeper ADP is not available for this draft yet, so nobody is on the hook."
+        : `Not enough teams have made ${minAdpPicks} priced picks yet.`,
     });
   }
 
-  return awards;
+  // ---- Projection-backed awards ----
+  // Every one of these needs Draft Pulse, which needs Sleeper's weekly
+  // projections scored under the league's own settings. When projections are
+  // unavailable the whole group stays pending with a truthful reason rather than
+  // being computed from something weaker that looks the same on the card.
+  const pulseById = new Map<number, DraftPulseTeam>();
+  for (const t of pulseTeams) pulseById.set(t.rosterId, t);
+  const minPlayers = Math.max(1, settings.awards.minPlayersForLineupAwards);
+  const lineupEligibleIds = rosterIds.filter((id) => {
+    const t = pulseById.get(id);
+    return t != null && t.projectedCount >= minPlayers;
+  });
+  const noPulse = pulseTeams.length === 0;
+  const pulsePendingLabel = noPulse
+    ? "Weekly projections are not available for this league yet, so nothing has been scored."
+    : `No team has ${minPlayers} projected players yet.`;
+
+  // 7. Best Starting Lineup (The Full Signal Award).
+  {
+    const values = new Map<number, number>();
+    for (const id of lineupEligibleIds) values.set(id, pulseById.get(id)?.meanStartingPoints ?? 0);
+    const r = pickExtreme(base, values, lineupEligibleIds, "max");
+    const pending = noPulse || lineupEligibleIds.length < 2 || r.allTied || r.extreme == null;
+    awards.push({
+      id: "best-starting-lineup",
+      title: "The Full Signal Award",
+      category: "Best Starting Lineup",
+      description: "Projects the most points from their starting lineup each week.",
+      claimants: pending ? [] : r.claimants,
+      metricLabel: pending ? null : `${r.extreme!.toFixed(1)} projected points a week`,
+      pending,
+      pendingLabel: pulsePendingLabel,
+    });
+  }
+
+  // 8. Best Long-Term Build (The Long Game Award). Dynasty only, and it is the
+  // gap that earns it: owning the most while projecting near the bottom right
+  // now is the signature of a rebuild, and it is a compliment here rather than
+  // an accusation. In a redraft league the same gap would just be a bad team.
+  {
+    const gaps = new Map<number, number>();
+    const teamCount = rosterIds.length;
+    if (isDynasty && teamCount > 1) {
+      const valueRank = new Map<number, number>();
+      rollups.forEach((r) => valueRank.set(r.rosterId, r.rank));
+      for (const id of lineupEligibleIds) {
+        const pulse = pulseById.get(id);
+        const vRank = valueRank.get(id);
+        if (!pulse || vRank == null) continue;
+        // Both as percentiles so an eight-team league and a sixteen read alike.
+        const valuePct = (teamCount - vRank) / (teamCount - 1);
+        const pulsePct = (teamCount - pulse.rank) / (teamCount - 1);
+        gaps.set(id, valuePct - pulsePct);
+      }
+    }
+    const eligible = [...gaps.keys()];
+    const r = pickExtreme(base, gaps, eligible, "max");
+    const pending =
+      !isDynasty || noPulse || eligible.length < 2 || r.allTied || r.extreme == null || r.extreme <= 0;
+    awards.push({
+      id: "long-game",
+      title: "The Long Game Award",
+      category: "Best Long-Term Build",
+      description: "Owns far more than they start: the clearest rebuild in the room.",
+      claimants: pending ? [] : r.claimants,
+      metricLabel:
+        pending || r.extreme == null
+          ? null
+          : `${Math.round(r.extreme * 100)} percentile points more value than lineup`,
+      pending,
+      pendingLabel: !isDynasty
+        ? "This is a redraft league, where every team is trying to win now."
+        : noPulse
+          ? pulsePendingLabel
+          : "No team is holding more than it starts yet.",
+    });
+  }
+
+  // 9. Most Reliable Roster (The Sure Thing Award).
+  {
+    const minWeeks = settings.awards.minAccuracyWeeks;
+    const values = new Map<number, number>();
+    const eligible: number[] = [];
+    for (const id of lineupEligibleIds) {
+      const t = pulseById.get(id);
+      if (!t || t.starterBeatRate == null) continue;
+      // The gate the pending copy promises. A beat rate over one week is a
+      // number, not evidence, and crowning it would make the card a lie.
+      if ((t.starterWeeksPlayed ?? 0) < minWeeks) continue;
+      values.set(id, t.starterBeatRate);
+      eligible.push(id);
+    }
+    const r = pickExtreme(base, values, eligible, "max");
+    const pending = noPulse || eligible.length < 2 || r.allTied || r.extreme == null;
+    awards.push({
+      id: "most-reliable",
+      title: "The Sure Thing Award",
+      category: "Most Reliable Roster",
+      description: "Their starters beat their projections more often than anyone else's.",
+      claimants: pending ? [] : r.claimants,
+      metricLabel:
+        pending || r.extreme == null ? null : `Starters beat projection ${Math.round(r.extreme * 100)}% of weeks`,
+      pending,
+      pendingLabel: noPulse
+        ? pulsePendingLabel
+        : `Not enough teams have starters with ${minWeeks} weeks of history yet.`,
+    });
+  }
+
+  // 10. Most Volatile Roster (The Glass Cannon Award). Spread relative to the
+  // mean, not raw spread: a high-scoring lineup swings more in absolute points
+  // simply for being high-scoring, and calling that volatility would just crown
+  // the best team twice.
+  {
+    const values = new Map<number, number>();
+    const eligible: number[] = [];
+    for (const id of lineupEligibleIds) {
+      const t = pulseById.get(id);
+      if (!t || t.meanStartingPoints <= 0) continue;
+      values.set(id, t.sigma / t.meanStartingPoints);
+      eligible.push(id);
+    }
+    const r = pickExtreme(base, values, eligible, "max");
+    const pending = noPulse || eligible.length < 2 || r.allTied || r.extreme == null;
+    awards.push({
+      id: "boom-bust",
+      title: "The Glass Cannon Award",
+      category: "Most Volatile Roster",
+      description: "The widest weekly swing in the league, for better and worse.",
+      claimants: pending ? [] : r.claimants,
+      metricLabel:
+        pending || r.extreme == null ? null : `Weekly swing of ${Math.round(r.extreme * 100)}% of their average`,
+      pending,
+      pendingLabel: pulsePendingLabel,
+    });
+  }
+
+  // 11. Most Available Roster (The Iron Man Award).
+  {
+    const values = new Map<number, number>();
+    const eligible: number[] = [];
+    for (const id of lineupEligibleIds) {
+      const t = pulseById.get(id);
+      if (!t || t.starterAvailability == null) continue;
+      values.set(id, t.starterAvailability);
+      eligible.push(id);
+    }
+    const r = pickExtreme(base, values, eligible, "max");
+    const pending = noPulse || eligible.length < 2 || r.allTied || r.extreme == null;
+    awards.push({
+      id: "iron-man",
+      title: "The Iron Man Award",
+      category: "Most Available Roster",
+      description: "Drafted the starters most likely to actually be on the field.",
+      claimants: pending ? [] : r.claimants,
+      metricLabel:
+        pending || r.extreme == null ? null : `Starters available ${Math.round(r.extreme * 100)}% of weeks`,
+      pending,
+      pendingLabel: pulsePendingLabel,
+    });
+  }
+
+  // 12 and 13. The two pick awards. These name a moment rather than a season, so
+  // they carry a pickHighlight and their claimant is whoever made that one pick.
+  {
+    const sorted = pickSurpluses.slice().sort((a, b) => b.surplus - a.surplus);
+    const steal = sorted[0] ?? null;
+    const reach = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+    const noMarket = curve.sample === 0 || pickSurpluses.length === 0;
+
+    const stealPending = noMarket || steal === null || steal.surplus <= 0;
+    awards.push({
+      id: "steal-of-draft",
+      title: "The Steal of the Draft",
+      category: "Best Single Pick",
+      description: "The one pick that beat its slot by the widest margin.",
+      claimants: stealPending || !steal ? [] : [base.get(steal.rosterId)].filter((c): c is AwardClaimant => c != null),
+      metricLabel: stealPending || !steal ? null : `+${fmtValue(steal.surplus)} over the market price of pick ${steal.pickNo}`,
+      pending: stealPending,
+      pendingLabel: noMarket
+        ? "Sleeper ADP is not available for this draft yet, so there is no market to beat."
+        : "No pick has beaten its slot yet.",
+      pickHighlight:
+        stealPending || !steal
+          ? null
+          : {
+              playerName: steal.playerName,
+              position: steal.position,
+              pickNo: steal.pickNo,
+              surplus: Math.round(steal.surplus),
+            },
+    });
+
+    const reachPending = noMarket || reach === null || reach.surplus >= 0;
+    awards.push({
+      id: "reach-of-draft",
+      title: "The Reach of the Draft",
+      category: "Biggest Single Reach",
+      description: "The one pick that paid the most over its slot.",
+      claimants: reachPending || !reach ? [] : [base.get(reach.rosterId)].filter((c): c is AwardClaimant => c != null),
+      metricLabel:
+        reachPending || !reach ? null : `${fmtValue(Math.abs(reach.surplus))} under the market price of pick ${reach.pickNo}`,
+      pending: reachPending,
+      pendingLabel: noMarket
+        ? "Sleeper ADP is not available for this draft yet, so nobody is on the hook."
+        : "No pick has come in under its slot yet.",
+      pickHighlight:
+        reachPending || !reach
+          ? null
+          : {
+              playerName: reach.playerName,
+              position: reach.position,
+              pickNo: reach.pickNo,
+              surplus: Math.round(reach.surplus),
+            },
+    });
+  }
+
+  // Admin can switch any award off. A missing key means on, so a settings row
+  // written before an award existed never hides it.
+  return awards.filter((a) => settings.awards.enabled[a.id] !== false);
 }
 
 /**

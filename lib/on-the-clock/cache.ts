@@ -6,9 +6,13 @@
  *   1. RPC wrappers (claimSync / completeSync / releaseSync / claimLookup) - these
  *      call the SECURITY DEFINER functions and MUST be invoked with the
  *      service-role admin client (the RPCs are service-role-only EXECUTE).
- *   2. readDraftCache - reads the draft + pick cache rows and shapes them to the
- *      whitelisted wire payload (ShapedDraftCache). This can use any client; the
- *      cache tables are public-read.
+ *   2. readDraftCache - SERVICE ROLE ONLY. Migration 0184 revoked the
+ *      table-level SELECT grant on on_the_clock_draft_cache and re-granted
+ *      fourteen columns by name (league_metadata carries Sleeper's league chat
+ *      tail), so this function's `select("*")` fails for anon and authenticated.
+ *      Every caller passes createAdminClient today. It reads the draft + pick
+ *      cache rows and shapes them to the whitelisted wire payload
+ *      (ShapedDraftCache).
  *
  * No Sleeper calls happen here. This module only touches Supabase.
  */
@@ -112,22 +116,47 @@ export async function claimLookup(
 export const IP_BUDGET_WINDOW_SECONDS = 60;
 export const IP_BUDGET_MAX_REQUESTS = 40;
 
-export async function claimIpBudget(admin: Client, ipKey: string): Promise<boolean> {
+export async function claimIpBudget(
+  admin: Client,
+  ipKey: string,
+  opts?: { maxRequests?: number; windowSeconds?: number },
+): Promise<boolean> {
   const { data, error } = await admin.rpc(
     "try_claim_on_the_clock_ip_budget" as never,
     {
       p_ip_key: ipKey,
-      p_max_requests: IP_BUDGET_MAX_REQUESTS,
-      p_window_seconds: IP_BUDGET_WINDOW_SECONDS,
+      p_max_requests: opts?.maxRequests ?? IP_BUDGET_MAX_REQUESTS,
+      p_window_seconds: opts?.windowSeconds ?? IP_BUDGET_WINDOW_SECONDS,
     } as never,
   );
   if (error) throw new Error(`try_claim_on_the_clock_ip_budget failed: ${error.message}`);
   return Boolean(data);
 }
 
+/**
+ * Budget for the Draft Pulse route, which burns CPU rather than Sleeper calls:
+ * up to 160 candidates each rebuilt across every remaining week. It gets its own
+ * key prefix and a far more generous ceiling than the Sleeper fan-out budget,
+ * because a real draft room legitimately refetches on every pick from several
+ * tabs at once, and two requests a second sustained is well past anything a
+ * human draft produces while still capping what a script can burn.
+ */
+export const PULSE_BUDGET_MAX_REQUESTS = 120;
+export const PULSE_BUDGET_WINDOW_SECONDS = 60;
+
+export function claimPulseBudget(admin: Client, ip: string): Promise<boolean> {
+  return claimIpBudget(admin, `pulse:${ip}`, {
+    maxRequests: PULSE_BUDGET_MAX_REQUESTS,
+    windowSeconds: PULSE_BUDGET_WINDOW_SECONDS,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Cache read + shaping (any client; cache tables are public-read)
 // ---------------------------------------------------------------------------
+
+/** Supabase's silent row cap. Reads that can exceed it page explicitly. */
+const PICK_PAGE = 1000;
 
 type DraftRow = Database["public"]["Tables"]["on_the_clock_draft_cache"]["Row"];
 type PickRow = Database["public"]["Tables"]["on_the_clock_pick_cache"]["Row"];
@@ -147,20 +176,36 @@ function readString(obj: Record<string, unknown>, key: string): string | null {
   return typeof v === "string" ? v : typeof v === "number" ? String(v) : null;
 }
 
+/** Coerce a raw jsonb map to a number map, dropping non-numeric entries. */
+function numberMap(raw: Record<string, unknown>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const n = Number(v);
+    if (Number.isFinite(n)) out[k] = n;
+  }
+  return out;
+}
+
 function shapeMeta(row: DraftRow): ShapedDraftMeta {
   const meta = asObject(row.metadata);
+  // The raw Sleeper LEAGUE object (migration 0180). Absent on rows written
+  // before that migration, or when the league fetch failed during a sync; every
+  // consumer treats an empty scoring map / roster_positions as "unknown" and
+  // degrades rather than substituting a default league shape.
+  const league = asObject(row.league_metadata);
+  const leagueSettings = asObject(league.settings);
+  const playoffTeams = Number(leagueSettings.playoff_teams);
+  const playoffWeekStart = Number(leagueSettings.playoff_week_start);
+  const rosterPositions = asArray(league.roster_positions)
+    .map((p) => (typeof p === "string" ? p : null))
+    .filter((p): p is string => p !== null);
   const slotRaw = asObject(meta.slot_to_roster_id);
   const slotToRosterId: Record<string, number> = {};
   for (const [slot, rosterId] of Object.entries(slotRaw)) {
     const n = Number(rosterId);
     if (Number.isFinite(n)) slotToRosterId[slot] = n;
   }
-  const settingsRaw = asObject(meta.settings);
-  const settings: Record<string, number> = {};
-  for (const [k, v] of Object.entries(settingsRaw)) {
-    const n = Number(v);
-    if (Number.isFinite(n)) settings[k] = n;
-  }
+  const settings = numberMap(asObject(meta.settings));
   return {
     sleeperDraftId: row.sleeper_draft_id,
     sleeperLeagueId: row.sleeper_league_id,
@@ -171,6 +216,10 @@ function shapeMeta(row: DraftRow): ShapedDraftMeta {
     slotToRosterId,
     settings,
     lastSyncedAt: row.last_synced_at,
+    scoringSettings: numberMap(asObject(league.scoring_settings)),
+    rosterPositions,
+    playoffTeams: Number.isFinite(playoffTeams) ? playoffTeams : null,
+    playoffWeekStart: Number.isFinite(playoffWeekStart) ? playoffWeekStart : null,
   };
 }
 
@@ -204,6 +253,62 @@ function shapeRosters(row: DraftRow): ShapedRoster[] {
       players,
     };
   });
+}
+
+/**
+ * The columns readDraftCache actually needs, with the four fields it reads out of
+ * `metadata` projected in Postgres rather than shipped as the whole jsonb.
+ *
+ * Measured on the largest real draft: 408 picks at 190 KB a read, of which
+ * 105 KB was metadata, to read four short strings out of it.
+ *
+ * The Realtime path CANNOT use this (Postgres Changes delivers the full row,
+ * metadata and all), which is why shapePickRow below still exists and still
+ * reads from the jsonb. Two shapers, one output type, and a test that pins them
+ * to the same answer.
+ */
+export const PICK_COLUMNS =
+  "pick_no, round, draft_slot, roster_id, picked_by, sleeper_player_id, player_id, is_keeper, " +
+  "first_name:metadata->>first_name, last_name:metadata->>last_name, " +
+  "position:metadata->>position, team:metadata->>team";
+
+export interface ProjectedPickRow {
+  pick_no: number;
+  round: number | null;
+  draft_slot: number | null;
+  roster_id: number | null;
+  picked_by: string | null;
+  sleeper_player_id: string | null;
+  player_id: string | null;
+  is_keeper: boolean;
+  first_name: string | null;
+  last_name: string | null;
+  position: string | null;
+  team: string | null;
+}
+
+/** The projected row, shaped into the same wire pick shapePickRow produces. */
+export function shapeProjectedPickRow(row: ProjectedPickRow): ShapedPick {
+  return {
+    pickNo: row.pick_no,
+    round: row.round,
+    draftSlot: row.draft_slot,
+    rosterId: row.roster_id,
+    pickedBy: row.picked_by,
+    sleeperPlayerId: row.sleeper_player_id,
+    playerId: row.player_id,
+    isKeeper: row.is_keeper,
+    // Straight through, deliberately. `metadata->>key` gives the same answer
+    // readString does for every case these four fields actually take: absent and
+    // JSON null both arrive as SQL NULL, a number arrives as its text, and an
+    // empty string stays an empty string. Normalizing "" to null HERE and not in
+    // the Realtime path would be a drift, which is exactly what this shaper
+    // exists to avoid.
+    firstName: row.first_name,
+    lastName: row.last_name,
+    position: row.position,
+    team: row.team,
+  };
 }
 
 /**
@@ -258,17 +363,6 @@ function shapeTradedPicks(row: DraftRow): ShapedTradedPick[] {
   });
 }
 
-/** Build the full shaped payload from one draft row and its pick rows. */
-export function shapeDraftCache(draftRow: DraftRow, pickRows: PickRow[]): ShapedDraftCache {
-  return {
-    draft: shapeMeta(draftRow),
-    users: shapeUsers(draftRow),
-    rosters: shapeRosters(draftRow),
-    picks: pickRows.map(shapePickRow),
-    tradedPicks: shapeTradedPicks(draftRow),
-  };
-}
-
 /**
  * Read the cache for a draft and shape it. Returns null when no draft row exists
  * (a cold cache). Picks are ordered by pick_no. No Sleeper call.
@@ -281,11 +375,35 @@ export async function readDraftCache(client: Client, draftId: string): Promise<S
     .maybeSingle();
   if (error || !draftRow) return null;
 
-  const { data: pickRows } = await client
-    .from("on_the_clock_pick_cache")
-    .select("*")
-    .eq("sleeper_draft_id", draftId)
-    .order("pick_no", { ascending: true });
+  // Paged explicitly. A select() silently truncates at 1000 rows, and a deep
+  // draft (32 teams, 32 rounds) runs past that. A truncated pick list would not
+  // just hide picks: it would also understate the highest pick number, which is
+  // the Draft Pulse cache key, so a stale pulse would look fresh.
+  const picks: ShapedPick[] = [];
+  for (let from = 0; ; from += PICK_PAGE) {
+    const { data, error: pickErr } = await client
+      .from("on_the_clock_pick_cache")
+      .select(PICK_COLUMNS)
+      .eq("sleeper_draft_id", draftId)
+      .order("pick_no", { ascending: true })
+      .range(from, from + PICK_PAGE - 1)
+      .overrideTypes<ProjectedPickRow[]>();
+    // Throw rather than return a draft with no picks. A named-column select can
+    // fail in ways `select("*")` could not (a renamed column, a missing grant),
+    // and swallowing the error here would hand every caller a perfectly
+    // well-formed cache reporting an empty board: the same silent-empty class of
+    // bug as treating a failed Sleeper fetch as zero picks.
+    if (pickErr) throw new Error(`otc pick cache read failed: ${pickErr.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data) picks.push(shapeProjectedPickRow(row));
+    if (data.length < PICK_PAGE) break;
+  }
 
-  return shapeDraftCache(draftRow, pickRows ?? []);
+  return {
+    draft: shapeMeta(draftRow),
+    users: shapeUsers(draftRow),
+    rosters: shapeRosters(draftRow),
+    picks,
+    tradedPicks: shapeTradedPicks(draftRow),
+  };
 }

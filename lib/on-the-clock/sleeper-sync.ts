@@ -24,7 +24,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import {
   getSleeperDraft,
-  getSleeperDraftPicks,
+  getSleeperDraftPicksOrNull,
+  getSleeperLeague,
   getSleeperLeagueUsers,
   getSleeperRosters,
   getSleeperTradedPicks,
@@ -194,12 +195,35 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
     // on any failure, so a traded-picks outage degrades to "no traded picks"
     // (pick ownership falls back to the original draft order) without breaking the
     // sync. All league fetches use the AUTHORITATIVE league id, never the hint.
-    const [picks, users, rosters, tradedPicks] = await Promise.all([
-      getSleeperDraftPicks(draftId),
+    // The LEAGUE object joins the fan-out because scoring_settings and
+    // roster_positions are what every points-based feature scores through (Draft
+    // Pulse, the marginal starting-lineup engine, draft grades). It is one extra
+    // request inside the existing per-draft cooldown and IP budget, and it
+    // returns null on failure, in which case we keep whatever league_metadata is
+    // already stored rather than blanking a good row with an empty object.
+    //
+    // The picks fetch keeps its null: `[]` means Sleeper answered and the draft
+    // has no picks, `null` means the request failed and we know nothing. They
+    // are not the same thing, and the reverted-pick cleanup below deletes on the
+    // strength of that answer.
+    const [fetchedPicks, users, rosters, tradedPicks, league] = await Promise.all([
+      getSleeperDraftPicksOrNull(draftId),
       getSleeperLeagueUsers(authoritativeLeagueId),
       getSleeperRosters(authoritativeLeagueId),
       getSleeperTradedPicks(authoritativeLeagueId),
+      getSleeperLeague(authoritativeLeagueId),
     ]);
+    // No picks, no sync. Everything below writes on the strength of this answer:
+    // pick_count, the pick rows themselves, and the reverted-pick cleanup that
+    // deletes anything above the highest pick number in it. A throttled or 5xx
+    // response used to arrive here as an empty array and take all three of those
+    // with it, wiping the cached board and pinning it empty for the whole
+    // cooldown. Failing the sync outright releases the lock WITHOUT advancing
+    // the cooldown, so the next attempt can retry immediately.
+    if (fetchedPicks === null) {
+      throw new Error(`sleeper picks fetch failed for draft ${draftId}`);
+    }
+    const picks = fetchedPicks;
 
     // Resolve every drafted player's id once, here.
     const sleeperPlayerIds = picks
@@ -236,6 +260,11 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
         league_users: leagueUsersJson as unknown as Json,
         rosters: rostersJson as unknown as Json,
         traded_picks: tradedPicks as unknown as Json,
+        // Only overwrite league_metadata when Sleeper actually answered. A failed
+        // league fetch must not blank a previously captured scoring map, which
+        // would silently switch every points-based feature into its degraded
+        // path until the next successful sync.
+        ...(league ? { league_metadata: league as unknown as Json } : {}),
         updated_at: new Date().toISOString(),
       },
       { onConflict: "sleeper_draft_id" },
@@ -265,6 +294,27 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
         .from("on_the_clock_pick_cache")
         .upsert(pickRows, { onConflict: "sleeper_draft_id,pick_no" });
       if (pickErr) throw new Error(`pick cache upsert failed: ${pickErr.message}`);
+    }
+
+    // A commissioner can REVERT picks, and Sleeper simply stops returning them.
+    // Upserting alone never removes a row, so a reverted pick stayed on the board
+    // forever, kept its player off the available list, and kept counting toward
+    // a roster. Sleeper always returns picks 1..N with no gaps, so anything above
+    // the highest pick in this payload no longer exists.
+    //
+    // Safe to delete on: a failed fetch never reaches this line (see the guard
+    // above), so an empty payload here really does mean an empty draft, which is
+    // what a reset draft looks like.
+    const highestPickNo = picks.reduce((max, p) => Math.max(max, Number(p.pick_no) || 0), 0);
+    const { error: staleErr } = await admin
+      .from("on_the_clock_pick_cache")
+      .delete()
+      .eq("sleeper_draft_id", draftId)
+      .gt("pick_no", highestPickNo);
+    // Never fail a good sync over the cleanup: the picks that DO exist are
+    // already correct, and the next sync retries this.
+    if (staleErr) {
+      console.error("[on-the-clock/sync] reverted-pick cleanup failed", staleErr.message);
     }
 
     await completeSync(admin, {

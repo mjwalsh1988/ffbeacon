@@ -13,8 +13,22 @@
  *     TE premium raises TE) and a tier-gated positional reach penalty so a needed
  *     position is never vetoed for sitting below an unrelated global top.
  *
- * One canonical equation (all components rescaled 0-100):
+ * TWO ENGINES, AND WHICH ONE RUNS
+ *
+ * When per-player projections are available (the pulse route supplies them), Team
+ * Need is answered in POINTS: how much does this player add to your optimal
+ * starting lineup, what does he cost you to wait on, and what is he worth if the
+ * starter ahead of him gets hurt. See marginal.ts for that math and for why the
+ * weight on points decays as the starting lineup fills.
+ *
+ * When they are not (a projection outage, a season with nothing published, a
+ * player nobody projects), the original heuristic runs unchanged:
  *   blended(p) = wValue * valueScore(p) + wNeed * needScore(p) - wReach * reachScore(p)
+ * where needScore is the slot-fill model below. The card says which one it used.
+ *
+ * The heuristic is kept rather than deleted because it is the only thing that
+ * works with no projection data at all, and a draft room that goes blank because
+ * Sleeper did not publish is worse than one that reasons from value alone.
  *
  * DST/K are ALWAYS in the room (board / lists / picks) and CAN be Best Available if
  * the user position-filters to them, but Team Need suppresses DST/K until a late
@@ -23,8 +37,9 @@
  */
 
 import type { DraftPosition, RankedPlayer, RecommendationCardData } from "./board-types";
-import type { OnTheClockSettings, PlayerPool } from "./types";
+import type { BuildMode, OnTheClockSettings, PlayerPool } from "./types";
 import { pickBestByValue } from "./draft-derive";
+import { pointsWeightFor, type MarginalOutput, type MarginalResult } from "./marginal";
 
 // ---------------------------------------------------------------------------
 // Inputs / outputs
@@ -33,14 +48,28 @@ import { pickBestByValue } from "./draft-derive";
 export interface RecommendInput {
   /** Available board: excludeDrafted + filterPool already applied by the caller. */
   available: RankedPlayer[];
-  /** Active pool ("everyone" | "rookies"). Drives the rookie-pool degrade copy. */
+  /**
+   * Active pool ("everyone" | "rookies").
+   *
+   * NOT read by the engine. `available` already has filterPool applied, so the
+   * pool cannot change an answer here; the "no ranked players in this pool"
+   * copy is written from the empty board rather than from this flag. Kept on the
+   * input because every caller has it and because a future rookie-specific
+   * ordering would want it, but it is documentation, not a dependency.
+   */
   pool: PlayerPool;
   /** Detected FF Beacon format slug (used for Superflex / TEP detection). */
   formatSlug: string;
-  /** Detected FF Beacon format display label (for copy). */
+  /** Detected FF Beacon format display label. Carried for callers, not read here. */
   formatLabel: string;
   /** Sleeper draft.settings (slots_qb/rb/wr/te/flex/super_flex/k/def, teams, rounds). */
   draftSettings: Record<string, number>;
+  /**
+   * The league's roster_positions, when captured. Preferred over draft.settings
+   * for the slot model because it is the only source that separates a receiving
+   * flex from a superflex. Optional so callers without it still work.
+   */
+  rosterPositions?: string[];
   /** Positions of the connected user's in-draft picks. */
   myDraftedPositions: DraftPosition[];
   /** Positions of the connected user's pre-draft roster (dynasty only; [] otherwise). */
@@ -51,6 +80,34 @@ export interface RecommendInput {
   currentRound: number;
   /** Admin settings (weights, DST/K gate, format multipliers, fallback targets). */
   settings: OnTheClockSettings;
+  /**
+   * How the drafter wants this team built. Only meaningful in a dynasty startup;
+   * every other room passes the mode its format forces. Defaults to "balanced",
+   * which reproduces the pre-mode behaviour exactly.
+   */
+  mode?: BuildMode;
+  /**
+   * Marginal starting-lineup values from the pulse route, keyed by player id.
+   * Null switches Team Need back to the slot-fill heuristic, and the card says so.
+   */
+  marginal?: MarginalOutput | null;
+  /**
+   * Per-player projection summaries for the reason copy and the compete tilt.
+   * Keyed by player id; a missing player simply has no points opinion.
+   */
+  projections?: Record<string, { ppw: number; br: number | null }> | null;
+  /**
+   * How many selections happen before the connected user's next pick, from the
+   * ADP simulation. Drives the scarcity sentence ("nine backs go before you are
+   * back up"). Null when the next pick could not be resolved.
+   */
+  picksUntilNext?: number | null;
+  /**
+   * Player id to display name for the roster the recommendation is FOR, so the
+   * copy can name whoever a pick would displace. The available board cannot
+   * supply it: the displaced player is already drafted and therefore off it.
+   */
+  myRosterNames?: Record<string, string>;
 }
 
 /** Per-player score breakdown, returned in debug for tests (never rendered raw). */
@@ -82,6 +139,21 @@ export interface RecommendResult {
   positionNeeds: PositionNeed[];
   /** Per-player breakdowns keyed by playerId, for tests. Not for noisy UI. */
   debug: Record<string, ScoreBreakdown>;
+  /** The build mode the cards were produced under. */
+  mode: BuildMode;
+  /** Which engine answered Team Need. */
+  engine: "points" | "heuristic";
+  /**
+   * How much of Team Need rode on this season's points, 0 to 1. Zero on the
+   * heuristic path. Surfaced so the room can explain a full-lineup handover.
+   */
+  pointsWeight: number;
+  /**
+   * Ordering score per available player, keyed by id, on the same scale the
+   * cards were chosen with. The available list sorts by this so the board a
+   * drafter reads always matches the recommendation above it.
+   */
+  orderScore: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,14 +177,76 @@ export interface SlotModel {
 const ZERO_HAVE: Record<DraftPosition, number> = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };
 
 /**
- * Build the starting-slot model from the Sleeper draft.settings slot counts. When
- * no slot keys are present (some drafts omit them), fall back to the admin
- * positionFallbackTargets. slots_rec_flex (WR/TE) is folded into FLEX for MVP.
+ * Which SlotModel bucket a Sleeper roster_positions token belongs to. Null for
+ * bench / IR / taxi and for tokens we cannot fill (IDP).
+ *
+ * The receiving flexes (REC_FLEX, WR_TE) and the run-pass flexes (WRRB_FLEX,
+ * WRRB_WRT) all fold into FLEX here. This model is deliberately coarse: it
+ * drives roster-need copy and the "is the lineup full" checks. The exact
+ * eligibility that decides who actually starts lives in PULSE_SLOT_ELIGIBILITY
+ * and is used by the lineup optimizer, which is what the points-based
+ * recommendation and Draft Pulse score through.
+ */
+function slotBucketFor(token: string): keyof SlotModel | null {
+  switch (token.toUpperCase()) {
+    case "QB":
+      return "QB";
+    case "RB":
+      return "RB";
+    case "WR":
+      return "WR";
+    case "TE":
+      return "TE";
+    case "K":
+      return "K";
+    case "DEF":
+    case "DST":
+      return "DEF";
+    case "FLEX":
+    case "REC_FLEX":
+    case "WR_TE":
+    case "WRRB_FLEX":
+    case "WRRB_WRT":
+      return "FLEX";
+    case "SUPER_FLEX":
+    case "Q_FLEX":
+      return "SUPER_FLEX";
+    default:
+      return null;
+  }
+}
+
+/** True when the league's own roster_positions produced at least one startable slot. */
+function modelFromRosterPositions(rosterPositions: string[]): SlotModel | null {
+  const model: SlotModel = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 0, K: 0, DEF: 0 };
+  let any = false;
+  for (const token of rosterPositions) {
+    const bucket = slotBucketFor(token);
+    if (!bucket) continue;
+    model[bucket] += 1;
+    any = true;
+  }
+  return any ? model : null;
+}
+
+/**
+ * Build the starting-slot model. Three sources, best first:
+ *   1. The league's own roster_positions (captured with the league object,
+ *      migration 0180). This is the only source that distinguishes a receiving
+ *      flex from a superflex, so it is always preferred when present.
+ *   2. The Sleeper draft.settings slots_* counts, which flatten the flex family.
+ *   3. The admin positionFallbackTargets, when a draft carries neither.
  */
 export function buildSlotModel(
   draftSettings: Record<string, number>,
   settings: OnTheClockSettings,
+  rosterPositions?: string[],
 ): SlotModel {
+  if (rosterPositions && rosterPositions.length > 0) {
+    const fromLeague = modelFromRosterPositions(rosterPositions);
+    if (fromLeague) return fromLeague;
+  }
+
   const s = draftSettings;
   const num = (k: string) => (Number.isFinite(s[k]) ? s[k] : 0);
   const slotsPresent =
@@ -263,10 +397,18 @@ function startableDepth(pos: DraftPosition, model: SlotModel, superflex: boolean
 }
 
 /**
- * Replacement value per position = the value of the league-wide last startable
- * player still AVAILABLE at that position. Computed from the available board, so
- * scarcity tracks what is actually left (a run on RBs raises every remaining RB's
- * VORP). VORP(p) = max(0, value(p) - replacement[pos]).
+ * Replacement value per position = the value of the FIRST NON-startable player
+ * still available at that position, which is the conventional replacement level.
+ * `depth` counts the startable slots league-wide, and a 0-based index of `depth`
+ * is the player one past them.
+ *
+ * (The doc here used to say "last startable player", which is the player one
+ * index EARLIER. The code was always the conventional definition; the sentence
+ * was the thing that was wrong.)
+ *
+ * Computed from the AVAILABLE board, so scarcity tracks what is actually left: a
+ * run on running backs raises every remaining back's VORP.
+ * VORP(p) = max(0, value(p) - replacement[pos]).
  */
 function replacementByPosition(
   available: RankedPlayer[],
@@ -377,12 +519,133 @@ function buildNeedReason(
   return `Your starting lineup is set, so ${name} is the best value to add for depth and upside.`;
 }
 
+/**
+ * Reason copy for the points engine. Every sentence names the number it came
+ * from, because "fills a need" is an assertion and "adds 6.2 points a week to
+ * your starters" is a fact the reader can check against the board.
+ */
+function buildPointsReason(
+  player: RankedPlayer,
+  m: MarginalResult,
+  ctx: {
+    mode: BuildMode;
+    lineupFull: boolean;
+    picksUntilNext: number | null;
+    displacedName: string | null;
+  },
+): string {
+  const name = player.name;
+  const pts = (n: number) => `${n.toFixed(1)} ${n === 1 ? "point" : "points"}`;
+
+  if (ctx.mode === "rebuild") {
+    const age = player.ageDecimal ?? player.age;
+    const agePart = typeof age === "number" ? `${age.toFixed(1)} years old` : "young";
+    return `You are rebuilding, so the empty spots in this year's lineup are not the point. ${name} is ${agePart} and the best long-term asset on the board for you.`;
+  }
+
+  if (m.driver === "scarcity" && m.dropoffEdge > 0.1) {
+    const when =
+      ctx.picksUntilNext !== null && ctx.picksUntilNext > 0
+        ? `before your next pick ${ctx.picksUntilNext} selections from now`
+        : "before you are back on the clock";
+    return `${name} is ${pts(m.dropoffEdge)} a week better than the best ${player.position} we expect to still be there ${when}. Waiting costs you that.`;
+  }
+
+  if (m.driver === "upgrade" && ctx.displacedName) {
+    return `${name} starts over ${ctx.displacedName} and adds ${pts(m.startingAdd)} a week to your lineup.`;
+  }
+
+  if (m.driver === "starter" && m.startingAdd > 0.1) {
+    return `${name} steps straight into your starting lineup and adds ${pts(m.startingAdd)} a week.`;
+  }
+
+  if (m.driver === "insurance" && m.insuranceAdd > 0.1) {
+    return `Your lineup is set at ${player.position}, but if your starter misses time ${name} is worth ${pts(m.insuranceAdd)} a week to you. That is what a bench spot is for.`;
+  }
+
+  if (ctx.lineupFull) {
+    return `Your starting lineup is full, so this pick is about the asset rather than this week's points. ${name} is the best value left that fits.`;
+  }
+
+  return `${name} is the best combination of value and lineup impact on the board right now.`;
+}
+
+// ---------------------------------------------------------------------------
+// Build-mode scoring helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * The age past which a dynasty asset at this position stops being an
+ * appreciating one. Running backs fall off years before quarterbacks do, so a
+ * single number would call a 26-year-old back young and a 26-year-old
+ * quarterback old, and both would be wrong.
+ */
+const YOUTH_REFERENCE_AGE: Record<DraftPosition, number> = {
+  QB: 30,
+  RB: 26.5,
+  WR: 28.5,
+  TE: 29,
+  K: 30,
+  DEF: 30,
+};
+
+/** Years below the reference age that map to a full youth score. */
+const YOUTH_SPAN = 7;
+
+/**
+ * 0 to 100 on youth, position-adjusted. A player at or past the reference age
+ * scores zero rather than negative: a rebuild does not want to be told that a
+ * 33-year-old is worse than a 31-year-old, only that neither is the point.
+ * Unknown age scores 50, which neither rewards nor punishes a missing birth date.
+ */
+export function youthScore(player: RankedPlayer): number {
+  const age = player.ageDecimal ?? player.age;
+  if (typeof age !== "number" || !Number.isFinite(age)) return 50;
+  const reference = YOUTH_REFERENCE_AGE[player.position];
+  return Math.max(0, Math.min(100, ((reference - age) / YOUTH_SPAN) * 100));
+}
+
+/** Percentile of a value within a sorted-descending list, 0 to 1. */
+function percentileOf(value: number, sortedDesc: number[]): number {
+  if (sortedDesc.length <= 1) return 0.5;
+  let below = 0;
+  for (const v of sortedDesc) if (v < value) below += 1;
+  return below / (sortedDesc.length - 1);
+}
+
+/**
+ * How far this player's projected production outruns his market price. A player
+ * the projections like more than the board does is exactly what a rebuild wants
+ * to buy, because the price has not caught up yet. Only positive gaps count;
+ * being expensive relative to production is already priced into valueScore.
+ */
+function upsideScore(
+  player: RankedPlayer,
+  valuePct: number,
+  pointsPct: number | null,
+): number {
+  if (pointsPct === null) return 0;
+  return Math.max(0, pointsPct - valuePct) * 100;
+}
+
 // ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
 const FALLBACK_NEED_REASON =
   "No clear roster-need edge yet. Best Available is your safest signal until you make a pick or we can read your team.";
+
+/**
+ * The mode-and-engine fields for the degenerate early returns (no board, Team
+ * Need switched off, only gated kickers left). Nothing was scored, so nothing is
+ * claimed: balanced mode, the heuristic engine, no points weight, no ordering.
+ */
+const DEGRADED = {
+  mode: "balanced" as const,
+  engine: "heuristic" as const,
+  pointsWeight: 0,
+  orderScore: {} as Record<string, number>,
+};
 
 function emptyNeedCard(): RecommendationCardData {
   return {
@@ -414,7 +677,7 @@ export function recommend(input: RecommendInput): RecommendResult {
     filledSlot: null,
   };
 
-  const model = buildSlotModel(draftSettings, settings);
+  const model = buildSlotModel(draftSettings, settings, input.rosterPositions);
   const teams = Number.isFinite(draftSettings.teams) && draftSettings.teams > 0 ? draftSettings.teams : 12;
   const superflex = isSuperflexFormat(formatSlug, model);
   const tep = isTepFormat(formatSlug);
@@ -427,7 +690,15 @@ export function recommend(input: RecommendInput): RecommendResult {
 
   // No players, or the Team-Need card is disabled by admin: degrade gracefully.
   if (available.length === 0) {
-    return { best, need: emptyNeedCard(), aligned: false, rosterKnown: input.rosterKnown, positionNeeds, debug: {} };
+    return {
+      best,
+      need: emptyNeedCard(),
+      aligned: false,
+      rosterKnown: input.rosterKnown,
+      positionNeeds,
+      debug: {},
+      ...DEGRADED,
+    };
   }
   if (!settings.recommendation.teamNeedEnabled) {
     return {
@@ -437,6 +708,7 @@ export function recommend(input: RecommendInput): RecommendResult {
       rosterKnown: input.rosterKnown,
       positionNeeds,
       debug: {},
+      ...DEGRADED,
     };
   }
 
@@ -461,60 +733,158 @@ export function recommend(input: RecommendInput): RecommendResult {
       rosterKnown: input.rosterKnown,
       positionNeeds,
       debug: {},
+      ...DEGRADED,
     };
   }
 
-  // valueScore / vorScore are normalized across the available board.
+  // ---- Normalization shared by both engines ----
   const values = available.map((p) => p.value);
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
+  const sortedValues = values.slice().sort((a, b) => b - a);
+
   const vorRaw = new Map<string, number>();
   for (const p of available) vorRaw.set(p.playerId, Math.max(0, p.value - replacement[p.position]));
-  const vorValues = [...vorRaw.values()];
-  const maxVor = Math.max(...vorValues, 0);
+  const maxVor = Math.max(...vorRaw.values(), 0);
 
+  // Projected points per week, for the compete tilt and the upside term. Missing
+  // players carry no entry, never a zero: we have no opinion, not a bad one.
+  const projections = input.projections ?? null;
+  const ppwByPlayer = new Map<string, number>();
+  if (projections) {
+    for (const p of available) {
+      const proj = projections[p.playerId];
+      if (proj && Number.isFinite(proj.ppw)) ppwByPlayer.set(p.playerId, proj.ppw);
+    }
+  }
+  // Within-position percentiles, so a quarterback is measured against
+  // quarterbacks. A cross-position points comparison would just rank every
+  // passer first, which is true of raw points and useless as advice.
+  const ppwByPosition = new Map<DraftPosition, number[]>();
+  for (const p of available) {
+    const ppw = ppwByPlayer.get(p.playerId);
+    if (ppw === undefined) continue;
+    const list = ppwByPosition.get(p.position) ?? [];
+    list.push(ppw);
+    ppwByPosition.set(p.position, list);
+  }
+  for (const list of ppwByPosition.values()) list.sort((a, b) => b - a);
+  const pointsPctFor = (p: RankedPlayer): number | null => {
+    const ppw = ppwByPlayer.get(p.playerId);
+    if (ppw === undefined) return null;
+    return percentileOf(ppw, ppwByPosition.get(p.position) ?? []);
+  };
+  const valuePctFor = (p: RankedPlayer): number => percentileOf(p.value, sortedValues);
+
+  const marginal = input.marginal ?? null;
+  const hasMarginal = marginal !== null && Object.keys(marginal.byPlayer).length > 0;
+  const mode: BuildMode = input.mode ?? "balanced";
+  const bm = settings.buildMode;
   const weights = settings.recommendation.weights;
   const debug: Record<string, ScoreBreakdown> = {};
+
+  // How much of Team Need rides on this season's points. Decays as the starting
+  // lineup fills, so a full roster is judged on the asset rather than on a lineup
+  // the next pick cannot crack. Compete leans harder on points; rebuild is capped
+  // so the long game stays in charge whatever the lineup looks like.
+  let pointsWeight = 0;
+  if (hasMarginal && marginal) {
+    pointsWeight = pointsWeightFor(marginal.fullness, {
+      empty: bm.pointsWeightEmpty,
+      full: bm.pointsWeightFull,
+    });
+    if (mode === "compete") pointsWeight = Math.min(1, pointsWeight * bm.competePointsBoost);
+    if (mode === "rebuild") pointsWeight = Math.min(pointsWeight, bm.rebuildPointsCap);
+  }
+  const engine: "points" | "heuristic" = hasMarginal ? "points" : "heuristic";
+
+  // ---- Per-player components ----
+  const effectiveAdds: number[] = [];
+  if (hasMarginal && marginal) {
+    for (const p of eligible) {
+      const m = marginal.byPlayer[p.playerId];
+      if (m) effectiveAdds.push(m.effectiveAdd);
+    }
+  }
+  const maxEffective = Math.max(...effectiveAdds, 0);
+  const minEffective = Math.min(...effectiveAdds, 0);
+
+  // Rebuild scoring, rescaled after the loop so youth and upside land on the same
+  // 0-100 scale as everything else.
+  const rebuildRaw = new Map<string, number>();
 
   for (const p of eligible) {
     const valueScore = rescale(p.value, minValue, maxValue);
     const vor = vorRaw.get(p.playerId) ?? 0;
     const vorScore = rescale(vor, 0, maxVor);
 
+    rebuildRaw.set(
+      p.playerId,
+      valueScore +
+        bm.youthWeight * youthScore(p) +
+        bm.upsideWeight * upsideScore(p, valuePctFor(p), pointsPctFor(p)),
+    );
+
     const fit = slotFitFor(p.position, open);
+
+    // The heuristic need score. Format multipliers live here and ONLY here: the
+    // points engine gets superflex and TE premium for free, because it scores
+    // through the league's own scoring settings and its own starting slots, and
+    // applying a multiplier on top of that would double count the same effect.
+    // That double count is exactly what made tight end win Team Need forever.
     let formatMult = 1;
     if (p.position === "QB" && superflex) formatMult *= settings.positionAdjust.superflexQbMultiplier;
     if (p.position === "TE" && tep) formatMult *= settings.positionAdjust.tePremiumMultiplier;
-
-    // Need blends a slot-fill base (so an open starting slot matters even for a
-    // lower-value player, and the format multiplier has something to scale) with
-    // scarcity (vorScore) and raw value, weighted by slot fit and the format
-    // multiplier, then rescaled 0-100 below. Inner range is 50..100.
-    const needRaw = fit.factor * formatMult * (50 + 0.25 * valueScore + 0.25 * vorScore);
-
-    const reachComponent = reachScoreFor(p, eligible, settings.recommendation.maxReachTierBreak);
+    const heuristicNeedRaw = fit.factor * formatMult * (50 + 0.25 * valueScore + 0.25 * vorScore);
 
     debug[p.playerId] = {
       playerId: p.playerId,
       valueComponent: valueScore,
-      needComponent: needRaw, // rescaled in the second pass
-      reachComponent,
+      needComponent: heuristicNeedRaw, // rescaled in the second pass
+      reachComponent: reachScoreFor(p, eligible, settings.recommendation.maxReachTierBreak),
       vor,
       blended: 0,
       filledSlot: fit.slot,
     };
   }
 
-  // Rescale needRaw across the eligible pool, then compute blended.
-  const needRaws = eligible.map((p) => debug[p.playerId].needComponent);
-  const minNeed = Math.min(...needRaws);
-  const maxNeed = Math.max(...needRaws);
+  // ---- Blend ----
+  const heuristicRaws = eligible.map((p) => debug[p.playerId].needComponent);
+  const minNeed = Math.min(...heuristicRaws);
+  const maxNeed = Math.max(...heuristicRaws);
+  const rebuildValues = [...rebuildRaw.values()];
+  const minRebuild = Math.min(...rebuildValues);
+  const maxRebuild = Math.max(...rebuildValues);
+
+  const orderScore: Record<string, number> = {};
+
   for (const p of eligible) {
     const b = debug[p.playerId];
-    const needScore = rescale(b.needComponent, minNeed, maxNeed);
-    b.needComponent = needScore;
-    b.blended =
-      weights.value * b.valueComponent + weights.need * needScore - weights.reach * b.reachComponent;
+    const heuristicNeedScore = rescale(b.needComponent, minNeed, maxNeed);
+    b.needComponent = heuristicNeedScore;
+
+    if (!hasMarginal || !marginal) {
+      b.blended =
+        weights.value * b.valueComponent +
+        weights.need * heuristicNeedScore -
+        weights.reach * b.reachComponent;
+      orderScore[p.playerId] = b.blended;
+      continue;
+    }
+
+    // Points path. A player with no projection has no points opinion, so his
+    // weight on points is zero and he is judged purely on the asset score. That
+    // is honest; scoring him at zero points would bury every unprojected rookie.
+    const m = marginal.byPlayer[p.playerId];
+    const wp = m ? pointsWeight : 0;
+    const pointsScore = m ? rescale(m.effectiveAdd, minEffective, maxEffective) : 0;
+    const assetScore =
+      mode === "rebuild"
+        ? rescale(rebuildRaw.get(p.playerId) ?? 0, minRebuild, maxRebuild)
+        : b.valueComponent;
+
+    b.blended = wp * pointsScore + (1 - wp) * assetScore - weights.reach * b.reachComponent;
+    orderScore[p.playerId] = b.blended;
   }
 
   // Team Need = highest blended, deterministic tie-break: blended -> raw value ->
@@ -540,41 +910,206 @@ export function recommend(input: RecommendInput): RecommendResult {
     }
   }
 
+  // ---- Best Value, tilted by mode ----
+  // FF Beacon value stays the spine and the mode adds a bounded tilt on top, so
+  // the card is always recognisably an FF Beacon Values card rather than a
+  // different ranking wearing its name. Compete tilts toward this season's
+  // production WITHIN POSITION, which keeps the tilt roster-independent and stops
+  // it simply promoting every quarterback.
+  const modeBestPlayer =
+    pickBestForMode(available, {
+      mode,
+      tilt: mode === "compete" ? bm.competeValueTilt : bm.rebuildValueTilt,
+      pointsPctFor,
+      valuePctFor,
+    }) ?? bestPlayer;
+
+  const bestCard: RecommendationCardData = {
+    kind: "best",
+    player: modeBestPlayer,
+    reason: modeBestPlayer
+      ? mode === "compete"
+        ? "The strongest combination of FF Beacon value and this season's projected production left on the board."
+        : mode === "rebuild"
+          ? "The strongest combination of FF Beacon value and long-term upside left on the board."
+          : "Highest FF Beacon value still on the board."
+      : "No ranked players are available in this pool yet.",
+    decidingFactor: "value",
+    filledSlot: null,
+    title:
+      mode === "compete"
+        ? "Best value for a contender"
+        : mode === "rebuild"
+          ? "Best value for a rebuild"
+          : undefined,
+    metrics: modeBestPlayer ? describeMetrics(modeBestPlayer, projections) : [],
+    engine,
+  };
+
   // No roster context: keep Team Need honest. The blended winner is still the
   // scarcity/value pick, but we tell the user it is not a roster-tailored edge.
   // aligned stays false so the fallback copy never shows under a "value and need
   // align" header.
   if (!input.rosterKnown) {
-    const player = needWinner ?? bestPlayer;
+    const player = needWinner ?? modeBestPlayer;
     return {
-      best,
+      best: bestCard,
       need: player
-        ? { kind: "need", player, reason: FALLBACK_NEED_REASON, decidingFactor: "none", filledSlot: null }
+        ? {
+            kind: "need",
+            player,
+            reason: FALLBACK_NEED_REASON,
+            decidingFactor: "none",
+            filledSlot: null,
+            engine,
+            metrics: describeMetrics(player, projections),
+          }
         : emptyNeedCard(),
       aligned: false,
       rosterKnown: false,
       positionNeeds,
       debug,
+      mode,
+      engine,
+      pointsWeight,
+      orderScore,
     };
   }
 
-  const aligned = Boolean(bestPlayer && needWinner && bestPlayer.playerId === needWinner.playerId);
+  const aligned = Boolean(
+    modeBestPlayer && needWinner && modeBestPlayer.playerId === needWinner.playerId,
+  );
   const winnerSlot = needWinner ? debug[needWinner.playerId].filledSlot : null;
+  const winnerMarginal =
+    hasMarginal && marginal && needWinner ? marginal.byPlayer[needWinner.playerId] : undefined;
 
   const need: RecommendationCardData = needWinner
     ? {
         kind: "need",
         player: needWinner,
         reason: aligned
-          ? "The best value on the board is also your biggest roster need."
-          : buildNeedReason(needWinner, winnerSlot, { superflex, tep }),
+          ? mode === "rebuild"
+            ? "The best long-term asset on the board is also the best fit for your build."
+            : "The best value on the board is also your biggest roster need."
+          : winnerMarginal
+            ? buildPointsReason(needWinner, winnerMarginal, {
+                mode,
+                lineupFull: (marginal?.fullness ?? 0) >= 0.999,
+                picksUntilNext: input.picksUntilNext ?? null,
+                displacedName: displacedNameFor(winnerMarginal, input.myRosterNames ?? {}),
+              })
+            : buildNeedReason(needWinner, winnerSlot, { superflex, tep }),
         decidingFactor: aligned ? "value" : "need",
-        filledSlot: winnerSlot && winnerSlot !== needWinner.position ? labelForSlot(winnerSlot) : winnerSlot,
+        filledSlot:
+          winnerSlot && winnerSlot !== needWinner.position ? labelForSlot(winnerSlot) : winnerSlot,
+        engine,
+        metrics: buildNeedMetrics(needWinner, winnerMarginal, projections),
       }
     : emptyNeedCard();
 
-  return { best, need, aligned, rosterKnown: true, positionNeeds, debug };
+  return {
+    best: bestCard,
+    need,
+    aligned,
+    rosterKnown: true,
+    positionNeeds,
+    debug,
+    mode,
+    engine,
+    pointsWeight,
+    orderScore,
+  };
 }
+
+/**
+ * Best Value under a build mode. FF Beacon value is the base; the mode adds a
+ * bounded multiplicative tilt so a mediocre asset can never leapfrog a great one
+ * on the strength of the tilt alone.
+ */
+function pickBestForMode(
+  available: RankedPlayer[],
+  ctx: {
+    mode: BuildMode;
+    tilt: number;
+    pointsPctFor: (p: RankedPlayer) => number | null;
+    valuePctFor: (p: RankedPlayer) => number;
+  },
+): RankedPlayer | null {
+  if (available.length === 0) return null;
+  if (ctx.mode === "balanced" || ctx.tilt <= 0) return pickBestByValue(available);
+
+  let winner: RankedPlayer | null = null;
+  let winnerScore = -Infinity;
+  for (const p of available) {
+    let factor = 0;
+    if (ctx.mode === "compete") {
+      // No projection means no tilt, which is not the same as a penalty.
+      factor = ctx.pointsPctFor(p) ?? 0;
+    } else {
+      const upside = upsideScore(p, ctx.valuePctFor(p), ctx.pointsPctFor(p)) / 100;
+      factor = (youthScore(p) / 100) * 0.7 + upside * 0.3;
+    }
+    const score = p.value * (1 + ctx.tilt * factor);
+    if (
+      score > winnerScore ||
+      (score === winnerScore && winner !== null && p.overallRank < winner.overallRank)
+    ) {
+      winner = p;
+      winnerScore = score;
+    }
+  }
+  return winner;
+}
+
+/** The displaced starter's name, from the caller's roster name map. */
+function displacedNameFor(m: MarginalResult, names: Record<string, string>): string | null {
+  if (!m.displaces) return null;
+  return names[m.displaces.playerId] ?? null;
+}
+
+/** Short supporting facts for a card. Empty when nothing was measured. */
+function describeMetrics(
+  player: RankedPlayer,
+  projections: Record<string, { ppw: number; br: number | null }> | null | undefined,
+): string[] {
+  const out: string[] = [];
+  const proj = projections?.[player.playerId];
+  if (proj && Number.isFinite(proj.ppw)) {
+    out.push(`Projected ${proj.ppw.toFixed(1)} points a week`);
+  }
+  if (proj && proj.br !== null) {
+    out.push(`Beats his projection in ${Math.round(proj.br * 100)}% of weeks`);
+  }
+  const age = player.ageDecimal ?? player.age;
+  if (typeof age === "number") out.push(`${age.toFixed(1)} years old`);
+  return out;
+}
+
+function buildNeedMetrics(
+  player: RankedPlayer,
+  m: MarginalResult | undefined,
+  projections: Record<string, { ppw: number; br: number | null }> | null | undefined,
+): string[] {
+  const out: string[] = [];
+  if (m) {
+    if (m.startingAdd > 0.05) {
+      out.push(`Adds ${m.startingAdd.toFixed(1)} points a week to your starters`);
+    }
+    if (m.dropoffEdge > 0.05) {
+      out.push(
+        `${m.dropoffEdge.toFixed(1)} points a week better than the next one you could wait for`,
+      );
+    }
+    if (m.insuranceAdd > 0.05) {
+      out.push(`Worth ${m.insuranceAdd.toFixed(1)} points a week as injury insurance`);
+    }
+    if (m.weeksStarting > 0) {
+      out.push(`Starts for you in ${m.weeksStarting} of ${m.weeksConsidered} remaining weeks`);
+    }
+  }
+  return out.length > 0 ? out : describeMetrics(player, projections);
+}
+
 
 /**
  * Positional reach: how far p sits below the best AVAILABLE player at the SAME

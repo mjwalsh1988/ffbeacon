@@ -15,6 +15,9 @@ import type { LeagueCard, PlayerPool, ShapedDraftCache, SyncStatus } from "./typ
 import type { BoardResult } from "./board-types";
 import type { DraftSnapshotPayload } from "./snapshot-types";
 import type { HistoryTransaction } from "./trade-history";
+import type { PulsePayload as OtcPulsePayload } from "./pulse-types";
+
+export type { OtcPulsePayload };
 
 /** Header that every On The Clock route requires (CSRF-lite / bot filter). */
 export const OTC_REQUEST_HEADER = { "x-requested-with": "ff-beacon" } as const;
@@ -231,5 +234,46 @@ export function syncDraft(params: {
       cache: (body.cache as ShapedDraftCache | null) ?? null,
       ...(typeof body.error === "string" ? { error: body.error } : {}),
     }),
+  );
+}
+
+/**
+ * POST /api/on-the-clock/pulse. Draft Pulse for every team, per-player
+ * projection summaries for the board, and the marginal starting-lineup value of
+ * the candidates named.
+ *
+ * Sends asset REFERENCES only. Values, the roster contents, the league's scoring
+ * and its slot model all come from the server's own cache; a candidate list is a
+ * filter, not an assertion.
+ *
+ * Every caller must treat a failure as "no projections", never as an error worth
+ * blocking the room over: the value-based half of On The Clock worked before
+ * Draft Pulse existed and still does when this returns nothing. That includes a
+ * 429, which the route returns on its own CPU budget rather than the shared
+ * Sleeper one.
+ */
+export function fetchPulse(params: {
+  draftId: string;
+  includePreDraftRoster: boolean;
+  myRosterId: number | null;
+  candidateIds: string[];
+  survivorIds: string[] | null;
+  nextPickNo: number | null;
+  picksUntilNext: number | null;
+  /**
+   * The projection board fingerprint from the last response. When it still
+   * matches, the server leaves the ~43 KB per-player map out and the caller
+   * keeps the one it already has.
+   */
+  boardEtag?: string | null;
+}): Promise<ApiResult<{ pulse: OtcPulsePayload }>> {
+  return request(
+    `/api/on-the-clock/pulse`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    },
+    (body) => ({ pulse: body.pulse as OtcPulsePayload }),
   );
 }

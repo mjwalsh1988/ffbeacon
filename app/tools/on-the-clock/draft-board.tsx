@@ -18,6 +18,7 @@
  * hidden at any breakpoint).
  */
 
+import { memo } from "react";
 import { AlertTriangle, ArrowLeftRight, Gem, User } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
@@ -34,12 +35,23 @@ import {
   POSITION_CELL_FALLBACK,
 } from "@/lib/on-the-clock/position-colors";
 
+/** Shared empty set, so the default prop does not remount anything. */
+const EMPTY_USED: Set<number> = new Set();
+
 function shortName(pick: ShapedPick): string {
   const first = pick.firstName ? `${pick.firstName[0]}.` : "";
   return `${first} ${pick.lastName ?? ""}`.trim() || "Pick";
 }
 
-export function DraftBoard({
+/**
+ * Memoized. The board is 400-odd cells on a deep draft and every one of its
+ * props is now passed by a stable reference from the room, so a realtime pick
+ * that does not touch the board (a state change elsewhere in the room)
+ * re-renders nothing here.
+ */
+export const DraftBoard = memo(DraftBoardInner);
+
+function DraftBoardInner({
   draft,
   picks,
   currentPicks,
@@ -49,6 +61,8 @@ export function DraftBoard({
   lastPickNo,
   adpBySleeperId = {},
   adpThreshold = 6,
+  onSelectPick = null,
+  usedPickNos = EMPTY_USED,
 }: {
   draft: ShapedDraftCache["draft"];
   picks: ShapedPick[];
@@ -63,7 +77,21 @@ export function DraftBoard({
   adpBySleeperId?: Record<string, number>;
   /** Neutral band (picks) before a pick is flagged good value / reach. */
   adpThreshold?: number;
+  /**
+   * When set, every cell becomes a button that adds that draft slot to the trade
+   * builder. The button lives INSIDE the cell rather than replacing it, so the
+   * table keeps its row and column semantics and a screen reader can still
+   * navigate the board as a grid.
+   */
+  onSelectPick?: ((overallPickNo: number) => void) | null;
+  /**
+   * Overall pick numbers already placed on one side of the trade. Their cells
+   * say so rather than repeating "Add to trade" for a press that will do
+   * nothing.
+   */
+  usedPickNos?: Set<number>;
 }) {
+  const selectable = typeof onSelectPick === "function";
   const teams = draft.settings.teams ?? 0;
   const rounds = draft.settings.rounds ?? 0;
   const shape = draftShapeFromMeta(draft);
@@ -81,7 +109,15 @@ export function DraftBoard({
   };
 
   return (
-    <div className="mx-auto w-full max-w-[2400px] overflow-x-auto rounded-card border border-line">
+    // Focusable and named: a scroll container that only a mouse can pan is
+    // unreachable by keyboard (WCAG 2.1.1), and the board is the widest thing
+    // in the room.
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label="Draft board, scrollable"
+      className="mx-auto w-full max-w-[2400px] overflow-x-auto rounded-card border border-line focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
+    >
       {/* border-separate + page-colored (base) background and spacing puts a thin gap
           in the page's own color between every cell, so the solid drafted tiles read
           as distinct blocks rather than one merged slab.
@@ -92,6 +128,9 @@ export function DraftBoard({
         <caption className="sr-only">
           Draft board. Columns are draft seats, rows are rounds. Each cell names the
           overall pick number, and the drafted player when the pick has been made.
+          {selectable
+            ? " Every cell is a button that adds that pick to the trade you are building."
+            : ""}
         </caption>
         <thead>
           <tr>
@@ -188,18 +227,31 @@ export function DraftBoard({
                   pick ? `${pick.firstName ?? ""} ${pick.lastName ?? ""}`.trim() : null,
                   pick?.position ?? null,
                   pick?.team ?? null,
+                  // An empty cell reads "Open slot" on screen, and used to read as
+                  // nothing at all by ear: the state was in the visible text but
+                  // never in the label. "Your upcoming pick" rather than a bare
+                  // "open slot, your pick", which is hard to tell from a pick of
+                  // yours that has already been made.
+                  !pick && !isOnClock ? (isYours ? "your upcoming pick" : "open slot") : null,
                   adpLabel,
-                  isYours ? "your pick" : null,
+                  isYours && (pick || isOnClock) ? "your pick" : null,
                   isOnClock ? "on the clock" : null,
                   isLast ? "last pick" : null,
                 ]
                   .filter(Boolean)
                   .join(", ");
 
+                // The cell says what pressing it will DO, which is not the same
+                // sentence for a pick already sitting on one side of the trade.
+                const alreadyAdded = selectable && usedPickNos.has(pickNo);
+                const cellLabel = selectable
+                  ? `${label}. ${alreadyAdded ? "Already added to the trade" : "Add to trade"}`
+                  : label;
+
                 return (
                   <td
                     key={seat}
-                    aria-label={label}
+                    aria-label={selectable ? undefined : label}
                     // A made pick is tinted with its position color so taken seats read
                     // by position at a glance: scanning the board, the run of colored
                     // cells stops right at the on-the-clock pick. Your own made picks
@@ -221,6 +273,12 @@ export function DraftBoard({
                             : ""
                     }`}
                   >
+                    <CellShell
+                      selectable={selectable}
+                      label={cellLabel}
+                      pickNo={pickNo}
+                      onSelect={() => onSelectPick?.(pickNo)}
+                    >
                     {isOnClock ? (
                       // One big, centered gold label (no duplicate "On the clock"
                       // line); the shine border around the cell is the CSS class above.
@@ -307,6 +365,7 @@ export function DraftBoard({
                         )}
                       </>
                     )}
+                    </CellShell>
                   </td>
                 );
               })}
@@ -315,5 +374,45 @@ export function DraftBoard({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * The interactive wrapper for one board cell.
+ *
+ * A button INSIDE the td rather than a click handler ON the td. Making the cell
+ * itself clickable would either strip its table semantics or leave a control
+ * that a keyboard cannot reach, and the board being navigable as a real grid is
+ * the whole reason it reads well by ear. When the board is not selectable this
+ * renders its children untouched, so the read-only board carries no extra
+ * elements at all.
+ */
+function CellShell({
+  selectable,
+  label,
+  pickNo,
+  onSelect,
+  children,
+}: {
+  selectable: boolean;
+  label: string;
+  pickNo: number;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  if (!selectable) return <>{children}</>;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      // Queried by the trade builder to restore focus after its dialog closes.
+      data-otc-pick-button={pickNo}
+      onClick={onSelect}
+      // Fills the cell so the tap target is the whole tile, which is already
+      // wider and taller than the 44px floor.
+      className="block h-full w-full min-h-11 cursor-pointer text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
+    >
+      {children}
+    </button>
   );
 }

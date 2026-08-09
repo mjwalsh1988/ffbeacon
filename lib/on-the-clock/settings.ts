@@ -26,8 +26,10 @@ const d = DEFAULT_ON_THE_CLOCK_SETTINGS;
 const playerPool = z.enum(["everyone", "rookies"]);
 const aggressiveness = z.enum(["conservative", "balanced", "aggressive"]);
 const dstkBehavior = z.enum(["suppress_until_need", "never", "always_allowed"]);
+const buildMode = z.enum(["compete", "balanced", "rebuild"]);
 
 const nonNegative = z.number().min(0);
+const unitInterval = z.number().min(0).max(1);
 const positiveInt = z.number().int().positive();
 const nonNegativeInt = z.number().int().min(0);
 
@@ -136,6 +138,80 @@ export const onTheClockSettingsSchema = z.object({
       showUnmappedPanel: z.boolean().default(d.mappingVisibility.showUnmappedPanel),
     })
     .default(d.mappingVisibility),
+
+  buildMode: z
+    .object({
+      enabled: z.boolean().default(d.buildMode.enabled),
+      defaultMode: buildMode.default(d.buildMode.defaultMode),
+      pointsWeightEmpty: unitInterval.default(d.buildMode.pointsWeightEmpty),
+      pointsWeightFull: unitInterval.default(d.buildMode.pointsWeightFull),
+      competePointsBoost: z.number().positive().default(d.buildMode.competePointsBoost),
+      rebuildPointsCap: unitInterval.default(d.buildMode.rebuildPointsCap),
+      youthWeight: nonNegative.default(d.buildMode.youthWeight),
+      upsideWeight: nonNegative.default(d.buildMode.upsideWeight),
+      competeValueTilt: nonNegative.default(d.buildMode.competeValueTilt),
+      rebuildValueTilt: nonNegative.default(d.buildMode.rebuildValueTilt),
+    })
+    .default(d.buildMode),
+
+  marginal: z
+    .object({
+      insuranceWeight: nonNegative.default(d.marginal.insuranceWeight),
+      dropoffWeight: nonNegative.default(d.marginal.dropoffWeight),
+      minStarterRisk: unitInterval.default(d.marginal.minStarterRisk),
+      maxCandidates: positiveInt.default(d.marginal.maxCandidates),
+    })
+    .default(d.marginal),
+
+  awards: z
+    .object({
+      enabled: z.record(z.string(), z.boolean()).default(d.awards.enabled),
+      minSuccessfulTraderTrades: positiveInt.default(d.awards.minSuccessfulTraderTrades),
+      minAdpPicks: positiveInt.default(d.awards.minAdpPicks),
+      minAccuracyWeeks: nonNegativeInt.default(d.awards.minAccuracyWeeks),
+      minPlayersForLineupAwards: positiveInt.default(d.awards.minPlayersForLineupAwards),
+    })
+    .default(d.awards),
+
+  grades: z
+    .object({
+      enabled: z.boolean().default(d.grades.enabled),
+      weights: z
+        .object({
+          market: nonNegative.default(d.grades.weights.market),
+          lineup: nonNegative.default(d.grades.weights.lineup),
+          construction: nonNegative.default(d.grades.weights.construction),
+          reliability: nonNegative.default(d.grades.weights.reliability),
+          future: nonNegative.default(d.grades.weights.future),
+          trades: nonNegative.default(d.grades.weights.trades),
+        })
+        .default(d.grades.weights),
+      absoluteBlend: unitInterval.default(d.grades.absoluteBlend),
+    })
+    .default(d.grades)
+    .refine(
+      (g) =>
+        g.weights.market +
+          g.weights.lineup +
+          g.weights.construction +
+          g.weights.reliability +
+          g.weights.future +
+          g.weights.trades >
+        0,
+      { message: "at least one grade component must carry weight" },
+    ),
+
+  alerts: z
+    .object({
+      runWindow: positiveInt.default(d.alerts.runWindow),
+      runThreshold: positiveInt.default(d.alerts.runThreshold),
+      tierCliffRemaining: positiveInt.default(d.alerts.tierCliffRemaining),
+      maxGoneBefore: positiveInt.default(d.alerts.maxGoneBefore),
+    })
+    .default(d.alerts)
+    .refine((a) => a.runThreshold <= a.runWindow, {
+      message: "runThreshold must be <= runWindow",
+    }),
 });
 
 export type ParsedOnTheClockSettings = z.infer<typeof onTheClockSettingsSchema>;
@@ -254,6 +330,92 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
       ),
       K: clampInt(raw.positionFallbackTargets?.K, 0, 20, dd.positionFallbackTargets.K),
       DEF: clampInt(raw.positionFallbackTargets?.DEF, 0, 20, dd.positionFallbackTargets.DEF),
+    },
+    buildMode: {
+      ...dd.buildMode,
+      ...raw.buildMode,
+      pointsWeightEmpty: clampFloat(
+        raw.buildMode?.pointsWeightEmpty,
+        0,
+        1,
+        dd.buildMode.pointsWeightEmpty,
+      ),
+      pointsWeightFull: clampFloat(
+        raw.buildMode?.pointsWeightFull,
+        0,
+        1,
+        dd.buildMode.pointsWeightFull,
+      ),
+      competePointsBoost: clampFloat(
+        raw.buildMode?.competePointsBoost,
+        0.5,
+        3,
+        dd.buildMode.competePointsBoost,
+      ),
+      rebuildPointsCap: clampFloat(raw.buildMode?.rebuildPointsCap, 0, 1, dd.buildMode.rebuildPointsCap),
+      youthWeight: clampFloat(raw.buildMode?.youthWeight, 0, 2, dd.buildMode.youthWeight),
+      upsideWeight: clampFloat(raw.buildMode?.upsideWeight, 0, 2, dd.buildMode.upsideWeight),
+      competeValueTilt: clampFloat(raw.buildMode?.competeValueTilt, 0, 2, dd.buildMode.competeValueTilt),
+      rebuildValueTilt: clampFloat(raw.buildMode?.rebuildValueTilt, 0, 2, dd.buildMode.rebuildValueTilt),
+    },
+    marginal: {
+      ...dd.marginal,
+      ...raw.marginal,
+      insuranceWeight: clampFloat(raw.marginal?.insuranceWeight, 0, 2, dd.marginal.insuranceWeight),
+      dropoffWeight: clampFloat(raw.marginal?.dropoffWeight, 0, 2, dd.marginal.dropoffWeight),
+      minStarterRisk: clampFloat(raw.marginal?.minStarterRisk, 0, 1, dd.marginal.minStarterRisk),
+      // The ceiling is a real cost control: each candidate costs a full lineup
+      // rebuild for every remaining week, so this is what bounds the request.
+      maxCandidates: clampInt(raw.marginal?.maxCandidates, 10, 300, dd.marginal.maxCandidates),
+    },
+    awards: {
+      ...dd.awards,
+      ...raw.awards,
+      enabled: raw.awards?.enabled && typeof raw.awards.enabled === "object" ? raw.awards.enabled : {},
+      minSuccessfulTraderTrades: clampInt(
+        raw.awards?.minSuccessfulTraderTrades,
+        1,
+        20,
+        dd.awards.minSuccessfulTraderTrades,
+      ),
+      minAdpPicks: clampInt(raw.awards?.minAdpPicks, 1, 30, dd.awards.minAdpPicks),
+      minAccuracyWeeks: clampInt(raw.awards?.minAccuracyWeeks, 0, 60, dd.awards.minAccuracyWeeks),
+      minPlayersForLineupAwards: clampInt(
+        raw.awards?.minPlayersForLineupAwards,
+        1,
+        40,
+        dd.awards.minPlayersForLineupAwards,
+      ),
+    },
+    grades: {
+      ...dd.grades,
+      ...raw.grades,
+      weights: {
+        market: clampFloat(raw.grades?.weights?.market, 0, 1, dd.grades.weights.market),
+        lineup: clampFloat(raw.grades?.weights?.lineup, 0, 1, dd.grades.weights.lineup),
+        construction: clampFloat(
+          raw.grades?.weights?.construction,
+          0,
+          1,
+          dd.grades.weights.construction,
+        ),
+        reliability: clampFloat(raw.grades?.weights?.reliability, 0, 1, dd.grades.weights.reliability),
+        future: clampFloat(raw.grades?.weights?.future, 0, 1, dd.grades.weights.future),
+        trades: clampFloat(raw.grades?.weights?.trades, 0, 1, dd.grades.weights.trades),
+      },
+      absoluteBlend: clampFloat(raw.grades?.absoluteBlend, 0, 1, dd.grades.absoluteBlend),
+    },
+    alerts: {
+      ...dd.alerts,
+      ...raw.alerts,
+      runWindow: clampInt(raw.alerts?.runWindow, 2, 40, dd.alerts.runWindow),
+      // Kept at or below the window so the schema refinement always holds.
+      runThreshold: Math.min(
+        clampInt(raw.alerts?.runWindow, 2, 40, dd.alerts.runWindow),
+        clampInt(raw.alerts?.runThreshold, 2, 40, dd.alerts.runThreshold),
+      ),
+      tierCliffRemaining: clampInt(raw.alerts?.tierCliffRemaining, 1, 20, dd.alerts.tierCliffRemaining),
+      maxGoneBefore: clampInt(raw.alerts?.maxGoneBefore, 1, 60, dd.alerts.maxGoneBefore),
     },
   };
 }

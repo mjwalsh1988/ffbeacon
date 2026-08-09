@@ -23,6 +23,7 @@
 import type { PickBucketValue, RankedPlayer } from "./board-types";
 import type { CurrentDraftPick } from "./pick-ownership";
 import { buildPickValueLookup, lookupPickValue, bucketSlot, FALLBACK_PICK_VALUE } from "./trade-analyzer";
+import type { SimulatedPick } from "./adp-sim";
 
 // ---------------------------------------------------------------------------
 // Shaped transaction (the wire shape the transactions route returns)
@@ -146,10 +147,15 @@ export interface TradeHistoryContext {
   myRosterId: number | null;
   /** Teams in the draft (defaults to 12 when unknown). */
   teams: number;
-  /** Overall pick number on the clock (0 when complete/unknown). */
-  onTheClockPickNo: number;
   /** The current draft's season; future buckets are currentSeason + 1.. */
   currentSeason: number;
+  /**
+   * The ADP simulation, the SAME map the trade builder reads. Optional only so
+   * a caller without a board can still render made picks; an unmade pick with
+   * no simulation is reported as unpriced rather than floored at an invented
+   * number.
+   */
+  simulated?: Map<number, SimulatedPick>;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,19 +252,24 @@ export function analyzeTradeTransaction(
           fromRosterId: pick.previousOwnerRosterId,
         };
       }
-      // Known seat, not yet made -> project who is expected to be there.
+      // Known seat, not yet made -> the ADP simulation, the same map the trade
+      // builder and resolveDraftAsset read. This used to walk the board in VALUE
+      // order with a 50-point floor, so one draft slot carried two different
+      // players and two different prices depending on which tab you were
+      // looking at, and the awards and the trades component of the draft grades
+      // were valued by the one nobody else used.
       if (cp && !cp.made) {
-        const picksUntil =
-          ctx.onTheClockPickNo > 0 ? Math.max(0, cp.overall - ctx.onTheClockPickNo) : cp.overall - 1;
-        const projected = projectAt(availSorted, picksUntil);
+        const projected = ctx.simulated?.get(cp.overall) ?? null;
         return {
           key: `up-${cp.overall}`,
           kind: "upcoming-pick",
           label: `${cp.round}.${pad2(cp.pickInRound)} pick`,
-          detail: projected ? `Projected: ${projected.name}, ${projected.position}` : "Projected pick",
-          value: projected ? projected.value : FALLBACK_PICK_VALUE,
+          detail: projected
+            ? `Projected: ${projected.player.name}, ${projected.player.position}`
+            : "The board runs out before this pick",
+          value: projected ? projected.player.value : 0,
           estimated: true,
-          noValue: false,
+          noValue: !projected,
           fromRosterId: pick.previousOwnerRosterId,
         };
       }

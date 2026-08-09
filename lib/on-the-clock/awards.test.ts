@@ -79,6 +79,13 @@ const ROLLUPS: TeamRollup[] = [
 
 const AVATARS = { 1: "av1", 2: null, 3: "av3" } as Record<number, string | null>;
 
+/** A three-player board with ADP, so the surplus curve has something to price against. */
+const BOARD = [
+  { ...player("A", 100, "sA"), adp: 20 },
+  { ...player("B", 300, "sB"), adp: 30 },
+  { ...player("C", 250, "sC"), adp: 10 },
+];
+
 function ctx(): TradeHistoryContext {
   const board = [player("A", 100, "sA"), player("B", 300, "sB"), player("C", 250, "sC")];
   return {
@@ -90,7 +97,6 @@ function ctx(): TradeHistoryContext {
     teamNameByRosterId: { 1: "Alpha", 2: "Bravo", 3: "Cara" },
     myRosterId: 1,
     teams: 3,
-    onTheClockPickNo: 0,
     currentSeason: 2026,
   };
 }
@@ -105,6 +111,9 @@ function baseInput(over: Partial<DraftAwardsInput> = {}): DraftAwardsInput {
     draftSettings: { teams: 3 },
     settings: DEFAULT_ON_THE_CLOCK_SETTINGS,
     adpBySleeperId: {},
+    board: [],
+    pulseTeams: [],
+    isDynasty: false,
     ...over,
   };
 }
@@ -116,7 +125,7 @@ function find(awards: ReturnType<typeof computeDraftAwards>, id: string) {
 // --- tests ------------------------------------------------------------------
 
 describe("computeDraftAwards", () => {
-  it("returns the six awards in product order", () => {
+  it("returns every enabled award in product order", () => {
     const awards = computeDraftAwards(baseInput());
     expect(awards.map((a) => a.id)).toEqual([
       "most-active-trader",
@@ -125,55 +134,101 @@ describe("computeDraftAwards", () => {
       "most-boring",
       "best-drafter",
       "worst-drafter",
+      "best-starting-lineup",
+      "long-game",
+      "most-reliable",
+      "boom-bust",
+      "iron-man",
+      "steal-of-draft",
+      "reach-of-draft",
     ]);
   });
 
-  it("crowns the best drafter by total value captured versus Sleeper ADP", () => {
-    // Delta = pick_no - ADP: positive means the player fell past his market
-    // price (value). Alpha (roster 1): sA at pick 8 with ADP 20 (-12, a reach)
-    // and sB at pick 44 with ADP 30 (+14). Net +2. Bravo (roster 2): sC at pick
-    // 28 with ADP 10 (+18). Bravo wins even though Alpha's roster carries more
-    // raw FF Beacon value.
+  it("drops an award the admin has switched off", () => {
+    const awards = computeDraftAwards(
+      baseInput({
+        settings: {
+          ...DEFAULT_ON_THE_CLOCK_SETTINGS,
+          awards: { ...DEFAULT_ON_THE_CLOCK_SETTINGS.awards, enabled: { "boom-bust": false } },
+        },
+      }),
+    );
+    expect(awards.map((a) => a.id)).not.toContain("boom-bust");
+    // Everything else survives: a missing key means enabled.
+    expect(awards.map((a) => a.id)).toContain("iron-man");
+  });
+
+  it("crowns the best drafter by surplus value, not by pick number", () => {
+    // The market curve comes from the board sorted by ADP: sC (ADP 10, value
+    // 250), sA (ADP 20, value 100), sB (ADP 30, value 100 after the monotonic
+    // clamp). So pick 1 is priced at 250 and everything past index 2 at 100.
+    //
+    // Alpha takes sA (value 100) at pick 8, priced 100, surplus 0.
+    // Bravo takes sB (value 300) at pick 2, priced 100, surplus +200.
+    // Cara takes sC (value 250) at pick 1, priced 250, surplus 0.
+    //
+    // Bravo wins on surplus even though Cara's pick came first, which is the
+    // whole point: the metric measures what you got for the slot you spent.
     const picks = [
       pick({ pickNo: 8, rosterId: 1, sleeperPlayerId: "sA" }),
-      pick({ pickNo: 44, rosterId: 1, sleeperPlayerId: "sB" }),
-      pick({ pickNo: 28, rosterId: 2, sleeperPlayerId: "sC" }),
+      pick({ pickNo: 2, rosterId: 2, sleeperPlayerId: "sB" }),
+      pick({ pickNo: 1, rosterId: 3, sleeperPlayerId: "sC" }),
     ];
     const awards = computeDraftAwards(
-      baseInput({ picks, adpBySleeperId: { sA: 20, sB: 30, sC: 10 } }),
+      baseInput({
+        picks,
+        board: BOARD,
+        settings: {
+          ...DEFAULT_ON_THE_CLOCK_SETTINGS,
+          awards: { ...DEFAULT_ON_THE_CLOCK_SETTINGS.awards, minAdpPicks: 1 },
+        },
+      }),
     );
     const best = find(awards, "best-drafter");
     expect(best.pending).toBe(false);
     expect(best.claimants.map((c) => c.ownerName)).toEqual(["Bravo"]);
-    expect(best.metricLabel).toBe("+18 picks of ADP value across 1 pick");
-    expect(best.description).toBe("Finds the most draft value compared to Sleeper ADP.");
-    // The Lost Signal Award is the exact mirror: lowest net delta. Between the
-    // two eligible teams, Alpha's net +2 is the worst total here.
-    const worst = find(awards, "worst-drafter");
-    expect(worst.pending).toBe(false);
-    expect(worst.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
-    expect(worst.metricLabel).toBe("+2 picks of ADP value across 2 picks");
-    expect(worst.description).toBe(
-      "Loses the most draft value compared to Sleeper ADP by reaching early.",
-    );
+    expect(best.metricLabel).toContain("value over market");
   });
 
-  it("crowns the worst drafter for the biggest net reach versus ADP", () => {
-    // Alpha reaches hard: sA at pick 5 with ADP 35 (-30). Bravo banks value: sC
-    // at pick 40 with ADP 22 (+18). Cara is modestly negative: sB at pick 12
-    // with ADP 16 (-4). Alpha holds the Lost Signal.
+  it("names the steal and the reach of the draft as single picks", () => {
     const picks = [
-      pick({ pickNo: 5, rosterId: 1, sleeperPlayerId: "sA" }),
-      pick({ pickNo: 12, rosterId: 3, sleeperPlayerId: "sB" }),
-      pick({ pickNo: 40, rosterId: 2, sleeperPlayerId: "sC" }),
+      pick({ pickNo: 20, rosterId: 2, sleeperPlayerId: "sB", lastName: "Steal" }),
+      pick({ pickNo: 1, rosterId: 1, sleeperPlayerId: "sA", lastName: "Reach" }),
     ];
     const awards = computeDraftAwards(
-      baseInput({ picks, adpBySleeperId: { sA: 35, sB: 16, sC: 22 } }),
+      baseInput({
+        picks,
+        board: BOARD,
+        settings: {
+          ...DEFAULT_ON_THE_CLOCK_SETTINGS,
+          awards: { ...DEFAULT_ON_THE_CLOCK_SETTINGS.awards, minAdpPicks: 1 },
+        },
+      }),
     );
-    const worst = find(awards, "worst-drafter");
-    expect(worst.pending).toBe(false);
-    expect(worst.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
-    expect(worst.metricLabel).toBe("-30 picks of ADP value across 1 pick");
+    const steal = find(awards, "steal-of-draft");
+    expect(steal.pending).toBe(false);
+    expect(steal.pickHighlight?.pickNo).toBe(20);
+    expect(steal.pickHighlight?.surplus).toBeGreaterThan(0);
+
+    const reach = find(awards, "reach-of-draft");
+    expect(reach.pending).toBe(false);
+    expect(reach.pickHighlight?.pickNo).toBe(1);
+    expect(reach.pickHighlight?.surplus).toBeLessThan(0);
+  });
+
+  it("leaves the projection-backed awards pending with no Draft Pulse", () => {
+    const awards = computeDraftAwards(baseInput({ pulseTeams: [] }));
+    for (const id of ["best-starting-lineup", "most-reliable", "boom-bust", "iron-man"]) {
+      const award = find(awards, id);
+      expect(award.pending).toBe(true);
+      expect(award.pendingLabel).toContain("projections");
+    }
+  });
+
+  it("keeps the Long Game award out of a redraft league entirely", () => {
+    const award = find(computeDraftAwards(baseInput({ isDynasty: false })), "long-game");
+    expect(award.pending).toBe(true);
+    expect(award.pendingLabel).toContain("redraft");
   });
 
   it("leaves both drafter awards pending when no ADP data exists for the draft", () => {

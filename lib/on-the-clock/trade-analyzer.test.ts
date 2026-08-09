@@ -10,6 +10,7 @@ import {
 } from "./trade-analyzer";
 import { draftShapeFromMeta } from "./draft-derive";
 import { resolveCurrentDraftPicks, resolveTradedFuturePicks } from "./pick-ownership";
+import { simulateRemainingDraft } from "./adp-sim";
 import type { ShapedDraftCache, ShapedPick } from "./types";
 import type { PickBucketValue, RankedPlayer } from "./board-types";
 
@@ -131,8 +132,14 @@ function catalogInput(over: Partial<TradeCatalogInput> = {}): TradeCatalogInput 
     teamNameByRosterId: over.teamNameByRosterId ?? TEAM_NAMES,
     myRosterId: over.myRosterId ?? 5,
     draftSettings: { teams: 12, rounds: 15 },
-    onTheClockPickNo: 13,
     currentSeason: 2026,
+    // The catalog and resolveDraftAsset read the SAME simulation, so the test
+    // builds the real one rather than a stub.
+    simulated: simulateRemainingDraft({
+      available: b,
+      currentPicks,
+      onTheClockPickNo: 13,
+    }),
     ...over,
   };
 }
@@ -372,9 +379,22 @@ describe("buildTradeCatalog - future picks (Task 7)", () => {
     );
     const traded = groups.find((g) => g.label === "Traded future picks")!;
     expect(traded.options.length).toBe(1);
-    expect(traded.options[0].label).toMatch(/2027 1st - Your pick/);
+    // The label names the team the pick came FROM (that is what distinguishes
+    // one traded 2027 1st from another); the detail names who holds it now.
+    expect(traded.options[0].label).toMatch(/2027 1st - originally Team 3/);
+    expect(traded.options[0].detail).toMatch(/held by Your pick/);
     expect(traded.options[0].value).toBe(pickValueFor(2027, 1, "mid"));
     expect(traded.options[0].estimated).toBe(false);
+    // The id must be the one resolveDraftAsset mints for this ref, or usedIds
+    // never suppresses the option and the owner is lost when it is placed.
+    expect(traded.options[0].id).toBe("tfut-2027-1-3");
+    expect(traded.options[0].ref).toEqual({
+      kind: "future-pick",
+      season: 2027,
+      round: 1,
+      bucket: "mid",
+      originalRosterId: 3,
+    });
   });
 });
 

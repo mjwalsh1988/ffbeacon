@@ -31,6 +31,7 @@ export function DraftRoomStatus({
   onTheClockOverallPickNo,
   isYourTurn,
   lastPickLabel,
+  instanceId = "room-status",
 }: {
   draft: ShapedDraftCache["draft"];
   onTheClockTeam: string;
@@ -39,6 +40,15 @@ export function DraftRoomStatus({
   onTheClockOverallPickNo: number;
   isYourTurn: boolean;
   lastPickLabel: string;
+  /**
+   * Unique per mounted copy. The room renders this panel TWICE (the sticky rail
+   * and the full-width board view), and both copies are in the DOM at once
+   * because inactive tab panels are hidden rather than unmounted. With one
+   * hardcoded id, both sections pointed `aria-labelledby` at the same heading,
+   * and the hidden copy owns it: content inside `hidden` is out of the
+   * accessibility tree, so the VISIBLE panel could resolve to no name at all.
+   */
+  instanceId?: string;
 }) {
   const statusWord = draft.draftStatus === "drafting" ? "Drafting" : draft.draftStatus ?? "Unknown";
   const onClock = onTheClockOverallPickNo > 0;
@@ -46,8 +56,8 @@ export function DraftRoomStatus({
 
   return (
     <section
-      id="room-status"
-      aria-labelledby="room-status-heading"
+      id={instanceId}
+      aria-labelledby={`${instanceId}-heading`}
       className="relative scroll-mt-40 overflow-hidden rounded-modal border border-brand-cyan/40 bg-surface/60 p-4 sm:p-5"
       style={{
         boxShadow: "0 0 80px -48px rgba(34, 211, 238, 0.6)",
@@ -64,7 +74,7 @@ export function DraftRoomStatus({
             "linear-gradient(90deg, transparent 0%, #22D3EE 30%, #A855F7 70%, transparent 100%)",
         }}
       />
-      <h2 id="room-status-heading" className="sr-only">
+      <h2 id={`${instanceId}-heading`} className="sr-only">
         Room status
       </h2>
 

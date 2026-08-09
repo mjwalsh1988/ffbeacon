@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useId,
+  useState,
+  useTransition,
+  type ReactElement,
+} from "react";
 import { ChevronDown, Lock, RotateCcw } from "lucide-react";
 import type {
   OnTheClockSettings,
@@ -17,12 +25,39 @@ const labelCls = "block text-xs font-medium text-ink-subtle";
 
 /* Controlled number input with a local text buffer (lets decimals be typed without
    the parsed value fighting the keystrokes). Same pattern as the FAAB manager. */
+/** Every award the room can hand out, for the on/off grid. */
+const AWARD_TOGGLES: { id: string; label: string }[] = [
+  { id: "most-active-trader", label: "Most Active Trader" },
+  { id: "most-successful-trader", label: "Most Successful Trader" },
+  { id: "first-starting-roster", label: "First to Fill Starting Roster" },
+  { id: "most-boring", label: "Most Boring League Mate" },
+  { id: "best-drafter", label: "Best Drafter" },
+  { id: "worst-drafter", label: "Worst Drafter" },
+  { id: "best-starting-lineup", label: "Best Starting Lineup" },
+  { id: "long-game", label: "Best Long-Term Build (dynasty)" },
+  { id: "most-reliable", label: "Most Reliable Roster" },
+  { id: "boom-bust", label: "Most Volatile Roster" },
+  { id: "iron-man", label: "Most Available Roster" },
+  { id: "steal-of-draft", label: "Steal of the Draft" },
+  { id: "reach-of-draft", label: "Reach of the Draft" },
+];
+
+const GRADE_WEIGHTS: { key: keyof OnTheClockSettings["grades"]["weights"]; label: string }[] = [
+  { key: "market", label: "Value vs market" },
+  { key: "lineup", label: "Starting lineup" },
+  { key: "construction", label: "Roster construction" },
+  { key: "reliability", label: "Starter reliability" },
+  { key: "future", label: "Future assets" },
+  { key: "trades", label: "Trades" },
+];
+
 function NumberInput({
   id,
   value,
   onChange,
   step = "any",
   min,
+  max,
   describedBy,
 }: {
   id: string;
@@ -30,6 +65,8 @@ function NumberInput({
   onChange: (n: number) => void;
   step?: string;
   min?: number;
+  /** Renders the native ceiling. The server clamps again; this is a courtesy. */
+  max?: number;
   describedBy?: string;
 }) {
   const [text, setText] = useState(String(value));
@@ -44,6 +81,7 @@ function NumberInput({
       inputMode="decimal"
       step={step}
       min={min}
+      max={max}
       value={text}
       aria-describedby={describedBy}
       onFocus={() => setFocused(true)}
@@ -75,12 +113,21 @@ function Field({
   children: React.ReactNode;
 }) {
   const hintId = `${htmlFor}-hint`;
+  // The hint is rendered with an id but nothing referenced it, so every one of
+  // these fields announced its label and then stopped, including the ones whose
+  // hint carries a hard constraint. Cloning the control is the smallest fix that
+  // covers all of them at once, rather than threading describedBy through forty
+  // call sites and relying on nobody forgetting it.
+  const described =
+    hint && isValidElement(children)
+      ? cloneElement(children as ReactElement<{ describedBy?: string }>, { describedBy: hintId })
+      : children;
   return (
     <div>
       <label htmlFor={htmlFor} className={labelCls}>
         {label}
       </label>
-      {children}
+      {described}
       {hint && (
         <p id={hintId} className="mt-1 text-[11px] text-ink-subtle">
           {hint}
@@ -106,14 +153,20 @@ function Toggle({
   const hintId = `${id}-hint`;
   return (
     <div>
-      <label htmlFor={id} className="flex items-center gap-2 text-sm text-ink">
+      {/* The whole row is the label, so the 44px floor is met by the row rather
+          than by growing the box itself: min-h-11 on the label plus generous
+          padding, with the checkbox at a size that still reads as a checkbox. */}
+      <label
+        htmlFor={id}
+        className="flex min-h-11 cursor-pointer items-center gap-2.5 py-1.5 text-sm text-ink"
+      >
         <input
           id={id}
           type="checkbox"
           checked={checked}
           aria-describedby={hint ? hintId : undefined}
           onChange={(e) => onChange(e.target.checked)}
-          className="h-4 w-4"
+          className="h-5 w-5 shrink-0 cursor-pointer accent-brand-purple"
         />
         {label}
       </label>
@@ -161,17 +214,23 @@ function CollapsibleSection({
 }) {
   return (
     <details className="group rounded-card border border-line bg-surface/40">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-card p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:p-5">
-        <span className="min-w-0">
-          <span className="block text-lg font-semibold text-ink">{title}</span>
-          <span className="mt-1 block text-sm text-ink-muted">{blurb}</span>
-        </span>
+      {/* The h2 is the summary's ONLY child, which is the one shape HTML's
+          content model blesses (summary takes phrasing content OR a single
+          heading) and the one browsers reliably expose as a heading. Wrapping it
+          in a span alongside the blurb claimed neither, and it also made the
+          disclosure's accessible name the title plus three sentences of blurb.
+          The blurb moved into the body, where it is read once, on open. */}
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-card p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:p-5">
+        <h2 className="min-w-0 text-lg font-semibold text-ink">{title}</h2>
         <ChevronDown
           aria-hidden="true"
-          className="mt-1 h-5 w-5 shrink-0 text-ink-muted motion-safe:transition-transform group-open:rotate-180"
+          className="h-5 w-5 shrink-0 text-ink-muted motion-safe:transition-transform group-open:rotate-180"
         />
       </summary>
-      <div className="border-t border-line p-4 sm:p-5">{children}</div>
+      <div className="border-t border-line p-4 sm:p-5">
+        <p className="mb-4 text-sm text-ink-muted">{blurb}</p>
+        {children}
+      </div>
     </details>
   );
 }
@@ -231,6 +290,27 @@ export function OnTheClockSettingsManager({
       ...s,
       positionFallbackTargets: { ...s.positionFallbackTargets, ...next },
     }));
+  const patchBuildMode = (next: Partial<OnTheClockSettings["buildMode"]>) =>
+    setSettings((s) => ({ ...s, buildMode: { ...s.buildMode, ...next } }));
+  const patchMarginal = (next: Partial<OnTheClockSettings["marginal"]>) =>
+    setSettings((s) => ({ ...s, marginal: { ...s.marginal, ...next } }));
+  const patchAwards = (next: Partial<OnTheClockSettings["awards"]>) =>
+    setSettings((s) => ({ ...s, awards: { ...s.awards, ...next } }));
+  const patchGrades = (next: Partial<OnTheClockSettings["grades"]>) =>
+    setSettings((s) => ({ ...s, grades: { ...s.grades, ...next } }));
+  const patchGradeWeights = (next: Partial<OnTheClockSettings["grades"]["weights"]>) =>
+    setSettings((s) => ({
+      ...s,
+      grades: { ...s.grades, weights: { ...s.grades.weights, ...next } },
+    }));
+  const patchAlerts = (next: Partial<OnTheClockSettings["alerts"]>) =>
+    setSettings((s) => ({ ...s, alerts: { ...s.alerts, ...next } }));
+  const toggleAward = (id: string, enabled: boolean) =>
+    setSettings((s) => ({
+      ...s,
+      awards: { ...s.awards, enabled: { ...s.awards.enabled, [id]: enabled } },
+    }));
+
   const patchValueIndicators = (next: Partial<OnTheClockSettings["valueIndicators"]>) =>
     setSettings((s) => ({ ...s, valueIndicators: { ...s.valueIndicators, ...next } }));
 
@@ -412,6 +492,410 @@ export function OnTheClockSettingsManager({
           </Field>
         </div>
       </SectionCard>
+
+      {/* Build mode, marginal engine, awards, grades, alerts */}
+      <SectionCard
+        title="Build mode"
+        blurb="Compete, balanced, or rebuild. The selector is only offered in a dynasty startup: a redraft team is competing by definition, and a rookie draft sits on top of a team whose direction is already set."
+      >
+        <div className="space-y-4">
+          <Toggle
+            id={`${ids}-buildmode-enabled`}
+            checked={settings.buildMode.enabled}
+            onChange={(v) => patchBuildMode({ enabled: v })}
+            label="Offer the compete / rebuild selector"
+            hint="Off hides the control everywhere and treats every room as balanced."
+          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Default mode"
+              htmlFor={`${ids}-buildmode-default`}
+              hint="Where a dynasty startup starts before the drafter chooses."
+            >
+              <select
+                id={`${ids}-buildmode-default`}
+                value={settings.buildMode.defaultMode}
+                onChange={(e) =>
+                  patchBuildMode({ defaultMode: e.target.value as OnTheClockSettings["buildMode"]["defaultMode"] })
+                }
+                className={inputCls}
+              >
+                <option value="compete">Compete</option>
+                <option value="balanced">Balanced</option>
+                <option value="rebuild">Rebuild</option>
+              </select>
+            </Field>
+            <Field
+              label="Points weight, empty lineup"
+              htmlFor={`${ids}-buildmode-pwe`}
+              hint="How much of Team Need rides on this season's points when no starting slot is filled. An empty lineup is almost entirely a points question."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-pwe`}
+                value={settings.buildMode.pointsWeightEmpty}
+                onChange={(n) => patchBuildMode({ pointsWeightEmpty: n })}
+                step="0.05"
+                min={0}
+                max={1}
+              />
+            </Field>
+            <Field
+              label="Points weight, full lineup"
+              htmlFor={`${ids}-buildmode-pwf`}
+              hint="And when every starting slot is filled. Lower, because the next pick is a bench player and ranking bench players by points added to a lineup they cannot crack is a wall of zeroes."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-pwf`}
+                value={settings.buildMode.pointsWeightFull}
+                onChange={(n) => patchBuildMode({ pointsWeightFull: n })}
+                step="0.05"
+                min={0}
+                max={1}
+              />
+            </Field>
+            <Field
+              label="Compete boost"
+              htmlFor={`${ids}-buildmode-boost`}
+              hint="Multiplier on both weights in compete mode. Above 1 leans win-now harder."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-boost`}
+                value={settings.buildMode.competePointsBoost}
+                onChange={(n) => patchBuildMode({ competePointsBoost: n })}
+                step="0.05"
+                min={0.5}
+                max={3}
+              />
+            </Field>
+            <Field
+              label="Rebuild points cap"
+              htmlFor={`${ids}-buildmode-cap`}
+              hint="Ceiling on the points weight in rebuild mode, so the long game stays in charge however empty the lineup is."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-cap`}
+                value={settings.buildMode.rebuildPointsCap}
+                onChange={(n) => patchBuildMode({ rebuildPointsCap: n })}
+                step="0.05"
+                min={0}
+                max={1}
+              />
+            </Field>
+            <Field
+              label="Youth weight"
+              htmlFor={`${ids}-buildmode-youth`}
+              hint="Credit for youth in rebuild scoring. Age is position-adjusted, so a 26-year-old back and a 26-year-old quarterback are not treated alike."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-youth`}
+                value={settings.buildMode.youthWeight}
+                onChange={(n) => patchBuildMode({ youthWeight: n })}
+                step="0.05"
+                min={0}
+                max={2}
+              />
+            </Field>
+            <Field
+              label="Upside weight"
+              htmlFor={`${ids}-buildmode-upside`}
+              hint="Credit when the projections like a player more than the market price does."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-upside`}
+                value={settings.buildMode.upsideWeight}
+                onChange={(n) => patchBuildMode({ upsideWeight: n })}
+                step="0.05"
+                min={0}
+                max={2}
+              />
+            </Field>
+            <Field
+              label="Best Value tilt, compete"
+              htmlFor={`${ids}-buildmode-ctilt`}
+              hint="How hard the Best Value card tilts toward this season's production. FF Beacon value stays the base, so the tilt can shade the winner but never invent one."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-ctilt`}
+                value={settings.buildMode.competeValueTilt}
+                onChange={(n) => patchBuildMode({ competeValueTilt: n })}
+                step="0.05"
+                min={0}
+                max={2}
+              />
+            </Field>
+            <Field
+              label="Best Value tilt, rebuild"
+              htmlFor={`${ids}-buildmode-rtilt`}
+              hint="The same, toward youth and upside."
+            >
+              <NumberInput
+                id={`${ids}-buildmode-rtilt`}
+                value={settings.buildMode.rebuildValueTilt}
+                onChange={(n) => patchBuildMode({ rebuildValueTilt: n })}
+                step="0.05"
+                min={0}
+                max={2}
+              />
+            </Field>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Marginal value engine"
+        blurb="How Team Need prices a player in points: what he adds to the optimal starting lineup, what waiting costs, and what he is worth if the starter ahead of him misses time."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Insurance weight"
+            htmlFor={`${ids}-marg-ins`}
+            hint="Credit for what a player is worth with the starter ahead of him removed, scaled by that starter's real availability."
+          >
+            <NumberInput
+              id={`${ids}-marg-ins`}
+              value={settings.marginal.insuranceWeight}
+              onChange={(n) => patchMarginal({ insuranceWeight: n })}
+              step="0.05"
+              min={0}
+              max={2}
+            />
+          </Field>
+          <Field
+            label="Dropoff weight"
+            htmlFor={`${ids}-marg-drop`}
+            hint="Credit for the cost of waiting: how much better he is than the best player at his position expected to survive to the drafter's next pick."
+          >
+            <NumberInput
+              id={`${ids}-marg-drop`}
+              value={settings.marginal.dropoffWeight}
+              onChange={(n) => patchMarginal({ dropoffWeight: n })}
+              step="0.05"
+              min={0}
+              max={2}
+            />
+          </Field>
+          <Field
+            label="Minimum starter injury risk"
+            htmlFor={`${ids}-marg-risk`}
+            hint="Floor on the risk used to weight insurance. Even a starter who has never missed a week leaves his backup some credit, because the accuracy table only knows the seasons it has seen."
+          >
+            <NumberInput
+              id={`${ids}-marg-risk`}
+              value={settings.marginal.minStarterRisk}
+              onChange={(n) => patchMarginal({ minStarterRisk: n })}
+              step="0.01"
+              min={0}
+              max={1}
+            />
+          </Field>
+          <Field
+            label="Candidates priced per request"
+            htmlFor={`${ids}-marg-cap`}
+            hint="Each candidate costs a full lineup rebuild for every remaining week on the server, so this is the real cost control. 160 covers far more of the board than anyone reads."
+          >
+            <NumberInput
+              id={`${ids}-marg-cap`}
+              value={settings.marginal.maxCandidates}
+              onChange={(n) => patchMarginal({ maxCandidates: Math.round(n) })}
+              step="10"
+              min={10}
+              max={300}
+            />
+          </Field>
+        </div>
+      </SectionCard>
+
+      <CollapsibleSection
+        title="Awards"
+        blurb="Which awards the room hands out, and how much evidence each one needs before it can be earned. An award that cannot be earned honestly stays up for grabs rather than being given to the least bad team."
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Minimum trades for the trade-quality award"
+              htmlFor={`${ids}-aw-trades`}
+              hint="Below this a single lopsided deal could take it."
+            >
+              <NumberInput
+                id={`${ids}-aw-trades`}
+                value={settings.awards.minSuccessfulTraderTrades}
+                onChange={(n) => patchAwards({ minSuccessfulTraderTrades: Math.round(n) })}
+                step="1"
+                min={1}
+              />
+            </Field>
+            <Field
+              label="Minimum priced picks for the drafting awards"
+              htmlFor={`${ids}-aw-picks`}
+              hint="How many picks with a known market price a team needs before it can be called the best or worst drafter."
+            >
+              <NumberInput
+                id={`${ids}-aw-picks`}
+                value={settings.awards.minAdpPicks}
+                onChange={(n) => patchAwards({ minAdpPicks: Math.round(n) })}
+                step="1"
+                min={1}
+              />
+            </Field>
+            <Field
+              label="Minimum weeks of history for reliability"
+              htmlFor={`${ids}-aw-weeks`}
+              hint="Shown in the pending copy for the reliability awards."
+            >
+              <NumberInput
+                id={`${ids}-aw-weeks`}
+                value={settings.awards.minAccuracyWeeks}
+                onChange={(n) => patchAwards({ minAccuracyWeeks: Math.round(n) })}
+                step="1"
+                min={0}
+              />
+            </Field>
+            <Field
+              label="Minimum projected players for the lineup awards"
+              htmlFor={`${ids}-aw-players`}
+              hint="A team with two projected players has not built a lineup worth grading."
+            >
+              <NumberInput
+                id={`${ids}-aw-players`}
+                value={settings.awards.minPlayersForLineupAwards}
+                onChange={(n) => patchAwards({ minPlayersForLineupAwards: Math.round(n) })}
+                step="1"
+                min={1}
+              />
+            </Field>
+          </div>
+          <fieldset className="rounded-card border border-line p-3">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+              Awards on or off
+            </legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {AWARD_TOGGLES.map((a) => (
+                <Toggle
+                  key={a.id}
+                  id={`${ids}-aw-${a.id}`}
+                  checked={settings.awards.enabled[a.id] !== false}
+                  onChange={(v) => toggleAward(a.id, v)}
+                  label={a.label}
+                />
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Draft grades"
+        blurb="Per-team letter grades. Components are scored against the rest of the league, because every team in a startup drafts from one pool; the absolute blend pulls part of the way back so a strong room is not forced to produce an F."
+      >
+        <div className="space-y-4">
+          <Toggle
+            id={`${ids}-gr-enabled`}
+            checked={settings.grades.enabled}
+            onChange={(v) => patchGrades({ enabled: v })}
+            label="Grade drafts"
+            hint="Off hides the Grades tab and writes no grades into new snapshots."
+          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Absolute blend"
+              htmlFor={`${ids}-gr-blend`}
+              hint="0 is a pure curve, which guarantees somebody gets an F. 1 ignores the league entirely. The default leans on the curve, because the curve is the honest part."
+            >
+              <NumberInput
+                id={`${ids}-gr-blend`}
+                value={settings.grades.absoluteBlend}
+                onChange={(n) => patchGrades({ absoluteBlend: n })}
+                step="0.05"
+                min={0}
+                max={1}
+              />
+            </Field>
+          </div>
+          <fieldset className="rounded-card border border-line p-3">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+              Component weights
+            </legend>
+            <p className="mb-3 text-[11px] text-ink-subtle">
+              They do not have to sum to one. A component with no data for a team is dropped and the
+              rest are renormalized, so a redraft league simply has no future-assets component.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {GRADE_WEIGHTS.map((w) => (
+                <Field key={w.key} label={w.label} htmlFor={`${ids}-gw-${w.key}`}>
+                  <NumberInput
+                    id={`${ids}-gw-${w.key}`}
+                    value={settings.grades.weights[w.key]}
+                    onChange={(n) => patchGradeWeights({ [w.key]: n })}
+                    step="0.02"
+                    min={0}
+                    max={1}
+                  />
+                </Field>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Draft radar alerts"
+        blurb="Positional runs, tier cliffs, and the list of players expected to go before the drafter is back on the clock."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Run window (picks)"
+            htmlFor={`${ids}-al-window`}
+            hint="How many recent picks a run looks at."
+          >
+            <NumberInput
+              id={`${ids}-al-window`}
+              value={settings.alerts.runWindow}
+              onChange={(n) => patchAlerts({ runWindow: Math.round(n) })}
+              step="1"
+              min={2}
+            />
+          </Field>
+          <Field
+            label="Run threshold"
+            htmlFor={`${ids}-al-threshold`}
+            hint="How many of those must share a position. Kept at or below the window."
+          >
+            <NumberInput
+              id={`${ids}-al-threshold`}
+              value={settings.alerts.runThreshold}
+              onChange={(n) => patchAlerts({ runThreshold: Math.round(n) })}
+              step="1"
+              min={2}
+            />
+          </Field>
+          <Field
+            label="Tier cliff threshold"
+            htmlFor={`${ids}-al-tier`}
+            hint="Warn when a position's current top tier is down to this many players or fewer."
+          >
+            <NumberInput
+              id={`${ids}-al-tier`}
+              value={settings.alerts.tierCliffRemaining}
+              onChange={(n) => patchAlerts({ tierCliffRemaining: Math.round(n) })}
+              step="1"
+              min={1}
+            />
+          </Field>
+          <Field
+            label="Gone-before list length"
+            htmlFor={`${ids}-al-gone`}
+            hint="How many players to list as likely gone before the drafter's next pick."
+          >
+            <NumberInput
+              id={`${ids}-al-gone`}
+              value={settings.alerts.maxGoneBefore}
+              onChange={(n) => patchAlerts({ maxGoneBefore: Math.round(n) })}
+              step="1"
+              min={1}
+            />
+          </Field>
+        </div>
+      </CollapsibleSection>
 
       {/* 4. Recommendation engine */}
       <SectionCard
@@ -597,10 +1081,10 @@ export function OnTheClockSettingsManager({
         </div>
       </SectionCard>
 
-      {/* 5. Trade Analyzer (informational) */}
+      {/* 5. Trade Builder (informational) */}
       <SectionCard
-        title="Trade Analyzer"
-        blurb="The in-draft Trade Analyzer compares the value of two sides of a deal."
+        title="Trade Builder"
+        blurb="The in-draft Trade Builder compares the value of two sides of a deal."
       >
         <LockedNote>
           Trade values are read from the same FF Beacon board. Draft pick values are projected from

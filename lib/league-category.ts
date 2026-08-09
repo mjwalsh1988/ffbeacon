@@ -37,8 +37,8 @@ const CATEGORY_ORDER: { key: LeagueCategoryKey; label: string }[] = [
  * signal here: Sleeper sets previous_league_id on ANY league continued season
  * to season, including redraft leagues, so leaning on it misfiles continued
  * redraft leagues (e.g. "Brooklyn 99 Redraft", type 0 with a prior season) as
- * dynasty. lib/sleeper-to-format.ts keeps that heuristic for value-format
- * resolution, which is a separate concern from list grouping.
+ * dynasty. lib/sleeper-to-format.ts now classifies the same way, so a continued
+ * redraft league groups as redraft AND prices off the redraft board.
  *
  * Sleeper league types: 0 = redraft, 1 = keeper, 2 = dynasty, 3 = chopped.
  * Only type 2 is dynasty; every other type groups as redraft (or best-ball

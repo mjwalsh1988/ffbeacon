@@ -2223,6 +2223,7 @@ export type Database = {
           draft_status: string | null;
           draft_type: string | null;
           last_synced_at: string | null;
+          league_metadata: Json;
           league_users: Json | null;
           metadata: Json;
           pick_count: number;
@@ -2239,6 +2240,7 @@ export type Database = {
           draft_status?: string | null;
           draft_type?: string | null;
           last_synced_at?: string | null;
+          league_metadata?: Json;
           league_users?: Json | null;
           metadata?: Json;
           pick_count?: number;
@@ -2255,6 +2257,7 @@ export type Database = {
           draft_status?: string | null;
           draft_type?: string | null;
           last_synced_at?: string | null;
+          league_metadata?: Json;
           league_users?: Json | null;
           metadata?: Json;
           pick_count?: number;
@@ -2283,14 +2286,17 @@ export type Database = {
           finalized_at: string;
           format_label: string | null;
           format_slug: string | null;
+          grades: Json;
           league_name: string | null;
           metadata: Json;
           player_pool: string;
+          pulse: Json;
           rounds: number | null;
           season: string;
           sleeper_draft_id: string;
           sleeper_league_id: string;
           snapshot_confidence: string;
+          snapshot_version: number;
           teams: number | null;
           transactions: Json;
           updated_at: string;
@@ -2311,14 +2317,17 @@ export type Database = {
           finalized_at?: string;
           format_label?: string | null;
           format_slug?: string | null;
+          grades?: Json;
           league_name?: string | null;
           metadata?: Json;
           player_pool?: string;
+          pulse?: Json;
           rounds?: number | null;
           season: string;
           sleeper_draft_id: string;
           sleeper_league_id: string;
           snapshot_confidence?: string;
+          snapshot_version?: number;
           teams?: number | null;
           transactions?: Json;
           updated_at?: string;
@@ -2339,14 +2348,17 @@ export type Database = {
           finalized_at?: string;
           format_label?: string | null;
           format_slug?: string | null;
+          grades?: Json;
           league_name?: string | null;
           metadata?: Json;
           player_pool?: string;
+          pulse?: Json;
           rounds?: number | null;
           season?: string;
           sleeper_draft_id?: string;
           sleeper_league_id?: string;
           snapshot_confidence?: string;
+          snapshot_version?: number;
           teams?: number | null;
           transactions?: Json;
           updated_at?: string;
@@ -2534,6 +2546,57 @@ export type Database = {
             referencedColumns: ["sleeper_draft_id"];
           },
         ];
+      };
+      on_the_clock_projection_cache: {
+        Row: {
+          computed_at: string;
+          from_week: number;
+          payload: Json;
+          player_count: number;
+          scoring_signature: string;
+          season: number;
+        };
+        Insert: {
+          computed_at?: string;
+          from_week: number;
+          payload?: Json;
+          player_count?: number;
+          scoring_signature: string;
+          season: number;
+        };
+        Update: {
+          computed_at?: string;
+          from_week?: number;
+          payload?: Json;
+          player_count?: number;
+          scoring_signature?: string;
+          season?: number;
+        };
+        Relationships: [];
+      };
+      on_the_clock_pulse_cache: {
+        Row: {
+          computed_at: string;
+          model_version: string;
+          payload: Json;
+          sleeper_draft_id: string;
+          through_pick_no: number;
+        };
+        Insert: {
+          computed_at?: string;
+          model_version: string;
+          payload?: Json;
+          sleeper_draft_id: string;
+          through_pick_no?: number;
+        };
+        Update: {
+          computed_at?: string;
+          model_version?: string;
+          payload?: Json;
+          sleeper_draft_id?: string;
+          through_pick_no?: number;
+        };
+        Relationships: [];
       };
       on_the_clock_settings: {
         Row: {
@@ -5044,8 +5107,9 @@ export type Database = {
         Args: {
           p_active_ttl_hours?: number;
           p_completed_retention_hours?: number;
+          p_projection_retention_hours?: number;
         };
-        Returns: number;
+        Returns: Json;
       };
       cleanup_on_the_clock_rate_limits: {
         Args: { p_max_age_hours?: number };
