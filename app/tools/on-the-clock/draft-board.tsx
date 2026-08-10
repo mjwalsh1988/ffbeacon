@@ -16,10 +16,18 @@
  * No color-only state: "On the clock", "Your pick", "Last pick", and "Open slot"
  * are all text. Horizontal scroll keeps every seat visible on mobile (no data
  * hidden at any breakpoint).
+ *
+ * IN THE TRADE BUILDER, A CELL TOGGLES. Pressing an unplaced cell asks which side
+ * the pick belongs on; pressing one already in the trade takes it back out. The
+ * cell wears a white ring and a colored footer naming its side, so the trade is
+ * readable off the board itself rather than only from the builder below it. The
+ * remove control is the cell, not a button inside it: the cell is already a
+ * button, a button cannot contain another button, and a second control small
+ * enough to fit here would land well under the 44px tap-target floor.
  */
 
 import { memo } from "react";
-import { AlertTriangle, ArrowLeftRight, Gem, User } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Gem, User, X } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import type { ShapedDraftCache, ShapedPick } from "@/lib/on-the-clock/types";
 import type { CurrentDraftPick } from "@/lib/on-the-clock/pick-ownership";
@@ -35,8 +43,18 @@ import {
   POSITION_CELL_FALLBACK,
 } from "@/lib/on-the-clock/position-colors";
 
-/** Shared empty set, so the default prop does not remount anything. */
-const EMPTY_USED: Set<number> = new Set();
+/**
+ * One board pick sitting on one side of the trade being built. `sideLabel` is
+ * the builder's own wording for that side, shortened to fit a cell footer, so
+ * the board never invents a second name for a side the builder already named.
+ */
+export interface PlacedPickMark {
+  side: "a" | "b";
+  sideLabel: string;
+}
+
+/** Shared empty map, so the default prop does not remount anything. */
+const EMPTY_PLACED: ReadonlyMap<number, PlacedPickMark> = new Map();
 
 function shortName(pick: ShapedPick): string {
   const first = pick.firstName ? `${pick.firstName[0]}.` : "";
@@ -62,7 +80,7 @@ function DraftBoardInner({
   adpBySleeperId = {},
   adpThreshold = 6,
   onSelectPick = null,
-  usedPickNos = EMPTY_USED,
+  placedPickSides = EMPTY_PLACED,
 }: {
   draft: ShapedDraftCache["draft"];
   picks: ShapedPick[];
@@ -79,17 +97,17 @@ function DraftBoardInner({
   adpThreshold?: number;
   /**
    * When set, every cell becomes a button that adds that draft slot to the trade
-   * builder. The button lives INSIDE the cell rather than replacing it, so the
-   * table keeps its row and column semantics and a screen reader can still
-   * navigate the board as a grid.
+   * builder, or removes it when it is already in the trade. The button lives
+   * INSIDE the cell rather than replacing it, so the table keeps its row and
+   * column semantics and a screen reader can still navigate the board as a grid.
    */
   onSelectPick?: ((overallPickNo: number) => void) | null;
   /**
-   * Overall pick numbers already placed on one side of the trade. Their cells
-   * say so rather than repeating "Add to trade" for a press that will do
-   * nothing.
+   * Overall pick number -> which side of the trade it is currently on. Drives
+   * the ring, the footer, and the "press to remove" wording, so a cell that is
+   * in the trade never reads the same as one that is not.
    */
-  usedPickNos?: Set<number>;
+  placedPickSides?: ReadonlyMap<number, PlacedPickMark>;
 }) {
   const selectable = typeof onSelectPick === "function";
   const teams = draft.settings.teams ?? 0;
@@ -129,7 +147,7 @@ function DraftBoardInner({
           Draft board. Columns are draft seats, rows are rounds. Each cell names the
           overall pick number, and the drafted player when the pick has been made.
           {selectable
-            ? " Every cell is a button that adds that pick to the trade you are building."
+            ? " Every cell is a button: it adds that pick to the trade you are building, or removes it when the pick is already in the trade."
             : ""}
         </caption>
         <thead>
@@ -243,10 +261,32 @@ function DraftBoardInner({
 
                 // The cell says what pressing it will DO, which is not the same
                 // sentence for a pick already sitting on one side of the trade.
-                const alreadyAdded = selectable && usedPickNos.has(pickNo);
-                const cellLabel = selectable
-                  ? `${label}. ${alreadyAdded ? "Already added to the trade" : "Add to trade"}`
-                  : label;
+                // It used to read "Already added to the trade", which described
+                // the state and left the press itself unexplained.
+                const placed = selectable ? (placedPickSides.get(pickNo) ?? null) : null;
+                const cellLabel = !selectable
+                  ? label
+                  : placed
+                    ? `${label}. In the trade, ${placed.sideLabel}. Press to remove it from the trade.`
+                    : `${label}. Add to trade`;
+
+                // In-trade wins the ring outright rather than layering over the
+                // ownership one. Two ring classes on one element is still ONE
+                // ring color (they set the same custom property, and stylesheet
+                // order decides the winner, not the order written here), so
+                // stacking them would pick a color at random. The User icon in
+                // the corner still says whose pick it is.
+                const ring = placed
+                  ? "ring-2 ring-inset ring-ink shadow-[0_0_18px_-2px_rgba(244,244,248,0.55)]"
+                  : isOnClock
+                    ? ""
+                    : pick
+                      ? isYours
+                        ? "ring-2 ring-inset ring-brand-purple shadow-[0_0_16px_-1px_rgba(168,85,247,0.85)]"
+                        : ""
+                      : isYours
+                        ? "ring-1 ring-inset ring-brand-purple/45"
+                        : "";
 
                 return (
                   <td
@@ -259,19 +299,24 @@ function DraftBoardInner({
                     // is still distinct from position. Open slots stay transparent (your
                     // upcoming seats keep the faint purple wash). The on-the-clock cell
                     // carries the animated gold shine border (CSS).
+                    //
+                    // A placed cell grows its bottom padding to make room for the
+                    // side footer. The footer overlays nothing: covering the
+                    // position/team/pick line to save a row height would hide data
+                    // that has nowhere else to go on this board.
                     className={`relative px-2.5 ${
-                      isOnClock ? "py-2 align-middle" : "pb-2 pt-[31px] align-bottom rounded-[4px]"
+                      isOnClock
+                        ? `${placed ? "pb-[30px] pt-2" : "py-2"} align-middle`
+                        : `${placed ? "pb-[30px]" : "pb-2"} pt-[31px] align-bottom rounded-[4px]`
                     } ${
                       isOnClock
                         ? "otc-onclock-cell bg-brand-cyan/10"
                         : pick
-                          ? isYours
-                            ? `${posFill} ring-2 ring-inset ring-brand-purple shadow-[0_0_16px_-1px_rgba(168,85,247,0.85)]`
-                            : posFill
+                          ? posFill
                           : isYours
-                            ? "bg-brand-purple/10 ring-1 ring-inset ring-brand-purple/45"
+                            ? "bg-brand-purple/10"
                             : ""
-                    }`}
+                    } ${ring}`}
                   >
                     <CellShell
                       selectable={selectable}
@@ -364,6 +409,32 @@ function DraftBoardInner({
                           </span>
                         )}
                       </>
+                    )}
+                    {/* Which side of the trade this pick is on, and the press
+                        that takes it back off. Inside the cell button on
+                        purpose: it is not a control of its own, it is a label
+                        for what the cell now does. The side is written, not
+                        just colored, so the two sides are told apart without
+                        relying on hue. */}
+                    {placed && (
+                      <span
+                        title="Press to remove this pick from the trade"
+                        className={`absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 px-1.5 py-[3px] text-[9px] font-bold uppercase tracking-wide ${
+                          // Matches the cell's own corner: 6px on the on-the-clock
+                          // cell (set in globals.css), 4px everywhere else.
+                          isOnClock ? "rounded-b-[6px]" : "rounded-b-[4px]"
+                        } ${
+                          placed.side === "a"
+                            ? "bg-brand-purple text-black"
+                            : "bg-brand-cyan text-black"
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-1">
+                          <ArrowLeftRight aria-hidden="true" className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">{placed.sideLabel}</span>
+                        </span>
+                        <X aria-hidden="true" className="h-3 w-3 shrink-0" />
+                      </span>
                     )}
                     </CellShell>
                   </td>

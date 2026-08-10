@@ -10,6 +10,14 @@
  * as one gets a fix the other does not. The board is the interesting one: a
  * drafter thinks in slots ("I want their 2.03"), not in a list of labels.
  *
+ * The board also SHOWS the trade. Every pick already on a side wears a ring and
+ * a footer naming that side, and pressing it takes it back out, so a deal being
+ * assembled off a 400-cell board can be read and edited without scrolling down
+ * to the side lists to find out what is in it. Both views read placedPickSides,
+ * which is derived from the two side arrays, so a pick removed from either view
+ * disappears from the other in the same render, and the dropdown that had been
+ * suppressing it as "already used" offers it again.
+ *
  * ONE VERDICT
  * Each side shows its running board total, so the numbers move at the speed of
  * clicking. The only graded answer is Signal Check's, which lands underneath
@@ -40,7 +48,7 @@ import {
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import { analyzeDraftTrade } from "./actions";
 import { AddAssetDialog } from "./add-asset-dialog";
-import { DraftBoard } from "./draft-board";
+import { DraftBoard, type PlacedPickMark } from "./draft-board";
 import { SignalCheckReport } from "./signal-check-report";
 import { EmptyCard } from "./states";
 
@@ -115,12 +123,28 @@ export function TradeAnalyzer({
   const [buildFrom, setBuildFrom] = useState<"list" | "board">("list");
   const [pendingAsset, setPendingAsset] = useState<ResolvedAsset | null>(null);
   const [returnFocusTo, setReturnFocusTo] = useState<number | null>(null);
-  /** Why the last board cell press did nothing. Empty when it did something. */
-  const [pickNotice, setPickNotice] = useState("");
-  const announcePickNotice = useCallback((message: string) => {
-    setPickNotice("");
-    window.setTimeout(() => setPickNotice(message), 60);
+  /**
+   * What the last board cell press did, or why it did nothing. The tone matters
+   * now that a press can succeed: "removed from the trade" printed in the amber
+   * this line uses for refusals reads as something having gone wrong.
+   */
+  const [pickNotice, setPickNotice] = useState<{ text: string; tone: "done" | "refused" }>({
+    text: "",
+    tone: "refused",
+  });
+  const clearPickNotice = useCallback(() => {
+    setPickNotice({ text: "", tone: "refused" });
   }, []);
+  const announcePickNotice = useCallback(
+    (text: string, tone: "done" | "refused" = "refused") => {
+      // Cleared first, then set, so the SAME message twice in a row speaks
+      // twice. Writing an identical string changes no text node, and a live
+      // region with no change announces nothing.
+      setPickNotice({ text: "", tone });
+      window.setTimeout(() => setPickNotice({ text, tone }), 60);
+    },
+    [],
+  );
 
   const [report, setReport] = useState<BuilderView | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -161,11 +185,15 @@ export function TradeAnalyzer({
     if (asset) place(side, asset);
   };
 
-  const removeItem = (side: SideId, instanceId: string) => {
+  // useCallback because the board's press handler depends on it, and that
+  // handler is a prop on a memoized 400-cell table. No deps: `setter` only ever
+  // returns setSideA or setSideB, and a state setter is stable for the life of
+  // the component.
+  const removeItem = useCallback((side: SideId, instanceId: string) => {
     setter(side)((prev) => prev.filter((i) => i.instanceId !== instanceId));
     setReport(null);
     setReportError(null);
-  };
+  }, []);
 
   const reset = () => {
     setSideA([]);
@@ -174,47 +202,89 @@ export function TradeAnalyzer({
     setReportError(null);
   };
 
+  const headingA = myRosterId !== null ? "Your side" : "Side A";
+  const headingB = "The other side";
+
   /**
-   * A board cell that cannot be added has to SAY so. Pressing Enter and getting
-   * silence reads as a broken control, and the two reasons a press does nothing
-   * (the pick is already on a side, or it cannot be priced) are both worth
-   * knowing.
+   * Every board pick currently in the trade, keyed by its overall pick number,
+   * carrying the side it sits on and the instance to pull when it comes back
+   * off. Derived from the same two arrays the side lists render, so the board
+   * and the builder cannot disagree: removing from either one is removing from
+   * this, and both re-render off it.
+   *
+   * `sideLabel` is deliberately shorter than the side headings ("Other side",
+   * not "The other side"), because it has to fit a 7.5rem cell footer.
+   */
+  const placedPickSides = useMemo(() => {
+    const map = new Map<number, PlacedPickMark & { instanceId: string; label: string }>();
+    const sides: Array<[SideId, PlacedItem[], string]> = [
+      ["a", sideA, headingA],
+      ["b", sideB, "Other side"],
+    ];
+    for (const [side, items, sideLabel] of sides) {
+      for (const i of items) {
+        if (i.asset.ref.kind !== "current-pick") continue;
+        map.set(i.asset.ref.overall, {
+          side,
+          sideLabel,
+          instanceId: i.instanceId,
+          label: i.asset.label,
+        });
+      }
+    }
+    return map;
+  }, [sideA, sideB, headingA]);
+
+  /**
+   * One press per board cell, doing whichever of the two things that cell is
+   * for: adding the pick, or taking a pick already in the trade back out. A
+   * press that does NOTHING has to say why, because silence off a button reads
+   * as a broken control.
+   *
+   * Removal lives on the cell itself rather than in a small button drawn inside
+   * it. A cell is already a button and buttons do not nest, and a control that
+   * fit alongside the pick in a 7.5rem cell would be far under the 44px tap
+   * target this board holds everywhere else.
    */
   // useCallback, or DraftBoard's React.memo is dead here: an inline arrow is a
   // new prop on every render, so every keystroke in this builder re-rendered all
   // 400-odd board cells.
   const onSelectPick = useCallback((overall: number) => {
     if (!resolveContext) return;
+    const placed = placedPickSides.get(overall);
+    if (placed) {
+      removeItem(placed.side, placed.instanceId);
+      announcePickNotice(`${placed.label} removed from the trade.`, "done");
+      return;
+    }
     const slot = currentPicks.find((p) => p.overall === overall);
     const slotLabel = slot ? `${slot.round}.${String(slot.pickInRound).padStart(2, "0")}` : `pick ${overall}`;
     const asset = resolveDraftAsset({ kind: "current-pick", overall }, resolveContext);
     if (!asset) {
-      // Cleared first, then set, so pressing the SAME dead cell twice speaks
-      // twice. Writing an identical string changes no text node, and a live
-      // region with no change announces nothing.
       announcePickNotice(
         `${slotLabel} cannot be priced from this board, so it cannot be traded.`,
       );
       return;
     }
+    // A repeatable asset (a generic future bucket) never comes from the board,
+    // so anything left that is already used is a pick placed under a different
+    // id than the board mints, which the placed map above would have caught.
     if (!asset.repeatable && usedIds.has(asset.id)) {
       announcePickNotice(`${asset.label} is already in this trade.`);
       return;
     }
-    setPickNotice("");
+    clearPickNotice();
     setReturnFocusTo(overall);
     setPendingAsset(asset);
-  }, [resolveContext, currentPicks, usedIds, announcePickNotice]);
-
-  // Overall pick numbers already placed, so every cell's label reflects its own
-  // state instead of all of them reading "Add to trade".
-  const usedPickNos = useMemo(() => {
-    const s = new Set<number>();
-    for (const i of [...sideA, ...sideB]) {
-      if (i.asset.ref.kind === "current-pick") s.add(i.asset.ref.overall);
-    }
-    return s;
-  }, [sideA, sideB]);
+  }, [
+    resolveContext,
+    currentPicks,
+    usedIds,
+    announcePickNotice,
+    clearPickNotice,
+    placedPickSides,
+    removeItem,
+  ]);
 
   const closeDialog = useCallback(() => {
     setPendingAsset(null);
@@ -239,7 +309,6 @@ export function TradeAnalyzer({
   const sideALabel =
     myRosterId !== null ? `your side (${teamNameByRosterId[myRosterId] ?? "you"})` : "Side A";
   const sideBLabel = "the other side";
-  const headingA = myRosterId !== null ? "Your side" : "Side A";
 
   // The strip that used to sit under the two sides carried the only live region
   // for the running totals, so deleting it would have left a screen-reader user
@@ -355,13 +424,20 @@ export function TradeAnalyzer({
           {buildFrom === "board" && (
             <div className="rounded-modal border border-line bg-surface/30 p-3">
               <p className="mb-2 text-xs text-ink-muted">
-                Every cell is a button. Choose a pick and we will ask which side of the trade it
-                belongs on.
+                Every cell is a button. Choose a pick and we will ask which side it belongs on. Picks
+                already in the trade are ringed in white and footed with their side; press one again
+                to take it out.
               </p>
-              {/* Why a press did nothing. Mounted empty and written into, so the
-                  message actually announces. */}
-              <p role="status" aria-live="polite" className="mb-2 text-xs text-amber-300">
-                {pickNotice}
+              {/* What the last press did, or why it did nothing. Mounted empty
+                  and written into, so the message actually announces. */}
+              <p
+                role="status"
+                aria-live="polite"
+                className={`mb-2 text-xs ${
+                  pickNotice.tone === "done" ? "text-brand-cyan" : "text-amber-300"
+                }`}
+              >
+                {pickNotice.text}
               </p>
               <DraftBoard
                 draft={draftCache.draft}
@@ -374,7 +450,7 @@ export function TradeAnalyzer({
                 adpBySleeperId={adpBySleeperId}
                 adpThreshold={adpThreshold}
                 onSelectPick={onSelectPick}
-                usedPickNos={usedPickNos}
+                placedPickSides={placedPickSides}
               />
             </div>
           )}
@@ -394,7 +470,7 @@ export function TradeAnalyzer({
             />
             <TradeSide
               side="b"
-              heading="The other side"
+              heading={headingB}
               items={sideB}
               total={totalB}
               groups={groups}
