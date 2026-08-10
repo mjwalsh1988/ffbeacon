@@ -18,8 +18,29 @@ export interface BeaconBriefSettings {
    * Cap on web searches the research call may run. The server-side search loop
    * re-bills the whole accumulated conversation each round, so token cost grows
    * with the SQUARE of this number. 0 or less means no cap (ai.ts omits max_uses).
+   *
+   * Measured on our own logs: 2 searches averaged 39,755 input tokens per call,
+   * 3 averaged 126,553. Each step up roughly triples the bill.
    */
   researchMaxSearches: number;
+  /**
+   * Ask the triage model whether the post already carries everything an accurate
+   * article would say, before paying for research. Off researches every post,
+   * which is what the pipeline did before migration 0186.
+   */
+  researchGateEnabled: boolean;
+  /**
+   * Characters of usable text below which a post always researches, whatever the
+   * gate decides. A thin post is the one case where skipping research is
+   * dangerous rather than merely thinner: it leaves the writer with nothing but
+   * its own memory to build from. See the fabrication note in ./worker.ts.
+   */
+  researchGateMinPostChars: number;
+  /**
+   * Domains the research search may draw from. Empty searches the whole web.
+   * Parsed from the comma-separated bb_research_domains setting.
+   */
+  researchDomains: string[];
   autopublish: boolean;
   contextThreshold: number;
   /**
@@ -113,10 +134,20 @@ export interface BeaconBriefSettings {
   /** Minimum CategorizeResult.relevance_tier a post needs to stay in the pipeline. */
   relevanceThreshold: number;
   modelArticle: string;
+  /**
+   * Model for the web-search research call, separate from modelArticle.
+   *
+   * Split in migration 0186. Research is fact gathering (search, read, quote the
+   * source) and it was 95% of the Brief's Anthropic bill; writing is the part
+   * that needs the stronger model, and it costs under two dollars a week. Set
+   * this to modelArticle's value to put them back on one model.
+   */
+  modelResearch: string;
   modelTriage: string;
   webhookId: string;
   prompts: {
     categorize: string;
+    researchGate: string;
     articleResearch: string;
     article: string;
     revisionRewrite: string;
@@ -135,7 +166,10 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   enabled: true,
   discordEnabled: true,
   webSearchEnabled: true,
-  researchMaxSearches: 3,
+  researchMaxSearches: 2,
+  researchGateEnabled: true,
+  researchGateMinPostChars: 180,
+  researchDomains: [],
   autopublish: true,
   contextThreshold: 1,
   followupLookbackHours: 12,
@@ -177,10 +211,12 @@ export const BEACON_BRIEF_DEFAULTS: BeaconBriefSettings = {
   relevanceFilterEnabled: true,
   relevanceThreshold: 2,
   modelArticle: "claude-sonnet-4-6",
+  modelResearch: "claude-haiku-4-5",
   modelTriage: "claude-haiku-4-5",
   webhookId: "",
   prompts: {
     categorize: "",
+    researchGate: "",
     articleResearch: "",
     article: "",
     revisionRewrite: "",
@@ -224,6 +260,38 @@ export function parseCheckSchedule(v: unknown, fallback: number[]): number[] {
   return hours.length > 0 ? hours : fallback;
 }
 
+/**
+ * Parse the research domain allowlist from its comma-separated setting value.
+ *
+ * Ships as a string for the same reason the deletion schedule does:
+ * beacon_settings.value_type only allows number | boolean | string.
+ *
+ * The API wants bare hostnames, so a pasted URL is reduced to one rather than
+ * rejected: "https://www.espn.com/nfl/" becomes "espn.com". Getting this wrong
+ * in the other direction is expensive, because a malformed entry does not error,
+ * it silently matches nothing and quietly narrows the search. An empty result
+ * means no restriction, which is the correct reading of an empty field.
+ */
+export function parseDomainList(v: unknown): string[] {
+  if (typeof v !== "string") return [];
+  return [
+    ...new Set(
+      v
+        .split(",")
+        .map((part) =>
+          part
+            .trim()
+            .toLowerCase()
+            .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+            .replace(/^www\./, "")
+            .replace(/[/?#].*$/, "")
+            .replace(/\.+$/, ""),
+        )
+        .filter((host) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host)),
+    ),
+  ];
+}
+
 export async function loadBeaconBriefSettings(
   admin: SupabaseClient<Database>,
 ): Promise<BeaconBriefSettings> {
@@ -249,6 +317,15 @@ export async function loadBeaconBriefSettings(
       map.get("bb_research_max_searches"),
       d.researchMaxSearches,
     ),
+    researchGateEnabled: asBool(
+      map.get("bb_research_gate_enabled"),
+      d.researchGateEnabled,
+    ),
+    researchGateMinPostChars: asNum(
+      map.get("bb_research_gate_min_post_chars"),
+      d.researchGateMinPostChars,
+    ),
+    researchDomains: parseDomainList(map.get("bb_research_domains")),
     autopublish: asBool(map.get("bb_autopublish"), d.autopublish),
     contextThreshold: asNum(
       map.get("bb_context_threshold"),
@@ -363,10 +440,15 @@ export async function loadBeaconBriefSettings(
       d.relevanceThreshold,
     ),
     modelArticle: asStr(map.get("bb_model_article"), d.modelArticle),
+    modelResearch: asStr(map.get("bb_model_research"), d.modelResearch),
     modelTriage: asStr(map.get("bb_model_triage"), d.modelTriage),
     webhookId: asStr(map.get("bb_webhook_id"), d.webhookId),
     prompts: {
       categorize: asStr(map.get("bb_categorize_prompt"), d.prompts.categorize),
+      researchGate: asStr(
+        map.get("bb_research_gate_prompt"),
+        d.prompts.researchGate,
+      ),
       articleResearch: asStr(
         map.get("bb_article_research_prompt"),
         d.prompts.articleResearch,

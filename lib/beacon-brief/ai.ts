@@ -31,6 +31,7 @@ export type BeaconLogStage =
   | "revision_link"
   | "revision_triage"
   | "categorize"
+  | "research_gate"
   | "article_write"
   | "discord_post"
   | "discord_patch"
@@ -124,7 +125,10 @@ const CHARS_PER_TOKEN = 4.5;
  * the ideal shape: the prompt is byte-identical on every call (it comes from
  * beacon_settings), and nothing volatile precedes it.
  */
-export function shouldCacheSystemPrompt(model: string, system: string): boolean {
+export function shouldCacheSystemPrompt(
+  model: string,
+  system: string,
+): boolean {
   const min =
     PROMPT_CACHE_MIN_TOKENS.find(([prefix]) => model.startsWith(prefix))?.[1] ??
     DEFAULT_CACHE_MIN_TOKENS;
@@ -250,6 +254,47 @@ interface ResearchArgs {
    * declaration below for why an unbounded loop is expensive.
    */
   maxSearches?: number;
+  /**
+   * Domains the search may draw from. Empty or undefined searches the whole web.
+   *
+   * Two effects, both wanted. Aggregator and SEO-spam pages are usually the
+   * longest results in a batch, so excluding them cuts the token count the loop
+   * re-bills each round. And every surviving result comes from somewhere the
+   * research prompt can name as a source, which is what it already demands.
+   *
+   * Subdomains are matched automatically, so "nbcsports.com" also covers
+   * profootballtalk.nbcsports.com.
+   */
+  allowedDomains?: string[];
+}
+
+/**
+ * Input size past which a single research call is worth flagging on the Logs page.
+ *
+ * The search loop re-bills the whole accumulated conversation every round, so one
+ * bad batch of long pages can cost more than a day of everything else: the worst
+ * single call measured before migration 0186 billed 673,861 input tokens, about
+ * $2.02 to research one article. This does not change behaviour, it makes the
+ * outlier visible instead of leaving it averaged into a monthly total.
+ */
+const RESEARCH_INPUT_WARN_TOKENS = 120_000;
+
+/**
+ * Whether an API error is the "we cannot crawl these domains" rejection.
+ *
+ * The API validates allowed_domains against what its crawler can actually reach
+ * and rejects the WHOLE request with a 400 if any entry fails, naming the bad
+ * ones. It is not a warning and it does not drop them silently.
+ *
+ * This is worth catching by hand because of how it fails. A bad entry kills every
+ * research call, the caller returns null, and the writer then treats the article
+ * as one with nothing to research: articles keep publishing, research spend drops
+ * to zero, and on a cost dashboard that is indistinguishable from the saving
+ * working. Seven of the twenty-two domains first seeded in migration 0186 were
+ * blocked this way, including apnews.com and reuters.com.
+ */
+export function isDomainAccessError(message: string): boolean {
+  return /domains are not accessible/i.test(message);
 }
 
 /**
@@ -274,16 +319,37 @@ export async function runWebSearchResearch(
     typeof args.maxSearches === "number" && args.maxSearches > 0
       ? Math.floor(args.maxSearches)
       : null;
+  // An empty list is not the same as no list: sending allowed_domains: [] would
+  // mean "search nothing". Omit the field entirely instead.
+  const domains =
+    args.allowedDomains && args.allowedDomains.length > 0
+      ? args.allowedDomains
+      : null;
   const request: Json = {
     model,
     system,
     user: userContent,
     tool: "web_search_20260209",
     max_uses: searchCap,
+    allowed_domains: domains,
+    allowed_callers: ["direct"],
   };
 
-  try {
-    const res = await client.messages.create({
+  /**
+   * One attempt. `withDomains: false` is the retry after a domain rejection.
+   *
+   * allowed_callers is pinned to ["direct"] rather than left at its default.
+   * The default is ["code_execution_20260120"], which routes the search through
+   * the dynamic-filtering path, and that has two consequences we do not want.
+   * It is only available on models that support programmatic tool calling, so
+   * Haiku 4.5 rejects the request outright with a 400. And measured on this
+   * pipeline's own research prompt it is far MORE expensive, not less: the
+   * filtering code runs as extra billed rounds, costing about 47k input tokens
+   * per search against about 14k going direct. Pinning it makes the cheaper
+   * models usable and cuts the bill on every model.
+   */
+  const attempt = (withDomains: boolean) =>
+    client.messages.create({
       model,
       max_tokens: args.maxTokens ?? 2048,
       system,
@@ -292,27 +358,66 @@ export async function runWebSearchResearch(
         {
           type: "web_search_20260209",
           name: "web_search",
+          allowed_callers: ["direct"],
           ...(searchCap !== null ? { max_uses: searchCap } : {}),
+          ...(withDomains && domains !== null
+            ? { allowed_domains: domains }
+            : {}),
         },
       ],
     });
+
+  try {
+    let res: Anthropic.Message;
+    let domainsDropped = false;
+    try {
+      res = await attempt(true);
+    } catch (err) {
+      // A single unreachable domain 400s the whole call. Losing research
+      // entirely is far worse than searching more widely than intended, so
+      // fall back to an unrestricted search and make the bad list loud.
+      if (
+        domains === null ||
+        !(err instanceof Error) ||
+        !isDomainAccessError(err.message)
+      ) {
+        throw err;
+      }
+      domainsDropped = true;
+      await logBeaconBrief(admin, {
+        stage: "article_write",
+        level: "warn",
+        message: `the research domain list was rejected, so this search ran against the whole web instead. Fix bb_research_domains on the Settings page. API said: ${err.message.slice(0, 400)}`,
+        ingestionId,
+        sourceId,
+        model,
+      });
+      res = await attempt(false);
+    }
     const text = textOf(res);
     // stop_reason is the only signal that the loop was cut short rather than
     // finishing on its own: "pause_turn" means the server-side search loop hit its
     // iteration limit and these notes are partial. Surfaced so a cap set too low
     // shows up on the Logs page instead of silently thinning the research.
     const truncated = res.stop_reason === "pause_turn";
+    const inputTokens = res.usage?.input_tokens ?? 0;
+    const oversized = inputTokens > RESEARCH_INPUT_WARN_TOKENS;
     await logBeaconBrief(admin, {
       stage: "article_write",
-      level: !text || truncated ? "warn" : "info",
+      level: !text || truncated || oversized ? "warn" : "info",
       message: !text
         ? "empty research response"
         : truncated
           ? "research incomplete: search loop hit its limit (partial notes used)"
-          : "research ok",
+          : oversized
+            ? `research ok, but it billed ${inputTokens.toLocaleString("en-US")} input tokens against a warning line of ${RESEARCH_INPUT_WARN_TOKENS.toLocaleString("en-US")}. The search returned unusually long pages. Lower the search cap or tighten the domain list if this repeats.`
+            : "research ok",
       ingestionId,
       sourceId,
-      requestPayload: request,
+      requestPayload: {
+        ...(request as object),
+        domains_dropped: domainsDropped,
+      } as Json,
       responsePayload: (text || null) as Json,
       model,
       tokenUsage: res.usage as unknown as Json,

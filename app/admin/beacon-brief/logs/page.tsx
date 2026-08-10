@@ -14,6 +14,7 @@ const STAGES = [
   "revision_link",
   "revision_triage",
   "categorize",
+  "research_gate",
   "article_write",
   "discord_post",
   "discord_patch",

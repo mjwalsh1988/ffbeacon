@@ -47,6 +47,11 @@ import {
   type PostSubject,
 } from "./followup";
 import { postAddsNewInformation } from "./merge";
+import {
+  researchPrecheck,
+  verdictAllowsSkip,
+  type ResearchGateVerdict,
+} from "./research-gate";
 import { checkArticleVolume } from "./volume-guard";
 import type {
   ArticleResult,
@@ -93,6 +98,16 @@ const REWRITE_SCHEMA = {
     tl_dr: { type: "string" },
     body_md: { type: "string" },
     change_summary: { type: "string" },
+  },
+} as const;
+
+const RESEARCH_GATE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["needs_research", "reason"],
+  properties: {
+    needs_research: { type: "boolean" },
+    reason: { type: "string" },
   },
 } as const;
 
@@ -1194,6 +1209,80 @@ async function closeOrphanedMatchModeration(
   }
 }
 
+/**
+ * Whether this post can be written from on its own, with no web research.
+ *
+ * Research is the most expensive thing the Brief does by a wide margin. The
+ * web_search loop runs on Anthropic's servers and re-bills the whole accumulated
+ * conversation every round, so one article's research averaged 126,553 input
+ * tokens and the stage accounted for 95% of the monthly bill. Plenty of those
+ * calls bought nothing: when Schefter posts the full terms of a trade, the search
+ * comes back with the same facts the post already stated.
+ *
+ * So ask first, on the triage model. The gate prompt and a post come to roughly
+ * 600 input tokens on Haiku 4.5, well under a tenth of a cent per call.
+ *
+ * Every path that is not a clear "the post says it all" researches. The decision
+ * itself lives in ./research-gate.ts, with no IO in it, so the paths can be
+ * enumerated in ./research-gate.test.ts. This function is the IO around it.
+ *
+ * Worth noting what the downstream guards already cover, because it bounds how
+ * bad a wrong skip can be. Skipping leaves researchNotes null, so a short post
+ * still hits the dropped_no_context check below and is never written. A long post
+ * written without research is a thinner article, not an invented one, because the
+ * article prompt admits only the post and the notes as sources.
+ */
+async function shouldSkipResearch(
+  admin: Admin,
+  settings: BeaconBriefSettings,
+  ingestion: Ingestion,
+  compact: unknown,
+  postChars: number,
+): Promise<boolean> {
+  const pre = researchPrecheck({
+    gateEnabled: settings.researchGateEnabled,
+    postChars,
+    minPostChars: settings.researchGateMinPostChars,
+    gatePrompt: settings.prompts.researchGate,
+  });
+  if (pre.why !== "ask_model") {
+    // Only the floor is worth a log line. The other two are configuration the
+    // admin already set on purpose, and logging them on every post would bury
+    // the gate's real decisions.
+    if (pre.why === "post_too_short") {
+      await logBeaconBrief(admin, {
+        stage: "research_gate",
+        level: "info",
+        ingestionId: ingestion.id,
+        message: `gate not consulted: the post carries ${postChars} characters of usable text, under the ${settings.researchGateMinPostChars} floor, so it researches regardless.`,
+      });
+    }
+    return false;
+  }
+
+  const verdict = await runStructuredCall<ResearchGateVerdict>({
+    admin,
+    stage: "research_gate",
+    model: settings.modelTriage,
+    system: settings.prompts.researchGate,
+    userContent: JSON.stringify(compact),
+    schema: RESEARCH_GATE_SCHEMA as unknown as Record<string, unknown>,
+    ingestionId: ingestion.id,
+    maxTokens: 256,
+    cacheSystem: settings.promptCacheEnabled,
+  });
+
+  if (!verdictAllowsSkip(verdict)) return false;
+
+  await logBeaconBrief(admin, {
+    stage: "research_gate",
+    level: "info",
+    ingestionId: ingestion.id,
+    message: `research skipped: ${verdict?.reason || "the post carries its own facts"}`,
+  });
+  return true;
+}
+
 async function handleArticleWrite(
   admin: Admin,
   job: QueueRow,
@@ -1322,17 +1411,40 @@ async function handleArticleWrite(
     return { ok: true };
   }
 
+  // How much the post says on its own. Read twice from here: the research gate
+  // uses it as a floor, and the no-context guard below uses it as the other half
+  // of its test. Computed once so the two can never disagree.
+  const postChars = substantiveTextLength([
+    ingestion.text,
+    (ingestion.quoted as { text?: string } | null)?.text,
+    (ingestion.retweeted as { text?: string } | null)?.text,
+  ]);
+
+  // The expensive call. See shouldSkipResearch above for why it is gated, and
+  // migration 0186 for the token arithmetic behind the search cap.
   let researchNotes: string | null = null;
   if (settings.webSearchEnabled && settings.prompts.articleResearch) {
-    researchNotes = await runWebSearchResearch({
+    const skip = await shouldSkipResearch(
       admin,
-      model: settings.modelArticle,
-      system: settings.prompts.articleResearch,
-      userContent: JSON.stringify(compact),
-      ingestionId: ingestion.id,
-      maxTokens: 2048,
-      maxSearches: settings.researchMaxSearches,
-    });
+      settings,
+      ingestion,
+      compact,
+      postChars,
+    );
+    if (!skip) {
+      researchNotes = await runWebSearchResearch({
+        admin,
+        // Its own model, not modelArticle. Research gathers and quotes facts;
+        // the writing call below is the one that needs the stronger model.
+        model: settings.modelResearch,
+        system: settings.prompts.articleResearch,
+        userContent: JSON.stringify(compact),
+        ingestionId: ingestion.id,
+        maxTokens: 2048,
+        maxSearches: settings.researchMaxSearches,
+        allowedDomains: settings.researchDomains,
+      });
+    }
   }
 
   // Nothing to write from, in either source. Do not ask the writer anyway.
@@ -1352,12 +1464,7 @@ async function handleArticleWrite(
   //
   // Both halves have to be empty. A thin post with real research notes is fine, and
   // a rich post is fine with no research at all, which is also what happens whenever
-  // web search is turned off.
-  const postChars = substantiveTextLength([
-    ingestion.text,
-    (ingestion.quoted as { text?: string } | null)?.text,
-    (ingestion.retweeted as { text?: string } | null)?.text,
-  ]);
+  // web search is turned off, or whenever the research gate skips the search.
   const researchIsEmpty =
     !researchNotes ||
     researchNotes.trim().length === 0 ||
@@ -1392,7 +1499,14 @@ async function handleArticleWrite(
     system: settings.prompts.article,
     userContent: JSON.stringify({
       post: compact,
-      research_notes: researchNotes ?? "",
+      // "NO RESULTS", not an empty string. The article prompt keys its most
+      // important instruction for this case on that exact token: "If the
+      // research notes say NO RESULTS, write from the post alone. The article
+      // will be short. That is the correct outcome and not a problem to solve by
+      // adding background." An empty string never fires it, leaving the writer
+      // with no guidance at the moment it is most likely to pad from memory.
+      // Empty research used to be rare; the research gate makes it routine.
+      research_notes: researchNotes ?? "NO RESULTS",
     }),
     schema: ARTICLE_SCHEMA as unknown as Record<string, unknown>,
     ingestionId: ingestion.id,
@@ -1673,7 +1787,8 @@ async function processJob(
         stage: "deletion_check",
         level: "info",
         ingestionId: (job.payload as unknown as QueueJobPayload)?.ingestion_id,
-        message: "legacy deletion_check retired; the batched sweep covers this post",
+        message:
+          "legacy deletion_check retired; the batched sweep covers this post",
       });
       outcome = { ok: true };
     } else outcome = { ok: false, error: `unknown job type ${job.job_type}` };
@@ -1737,11 +1852,7 @@ export async function runWorker(admin: Admin): Promise<WorkerSummary> {
     p_limit: settings.articleJobsPerRun,
     // deletion_check is claimed only to retire the legacy rows that predate the
     // batched sweep; nothing creates new ones.
-    p_job_types: [
-      "article_write",
-      "deletion_sweep",
-      "deletion_check",
-    ],
+    p_job_types: ["article_write", "deletion_sweep", "deletion_check"],
   });
 
   // Discord jobs lead so the inter-send pacing applies to the contiguous batch.
