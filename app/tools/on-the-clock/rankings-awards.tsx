@@ -165,7 +165,7 @@ export function RankingsAwards({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="The awards are decided by FF Beacon value. Once this format's FF Beacon rankings are published, they fill in here."
+        body="The awards are decided by FF Beacon value. They fill in once this format's rankings publish."
       />
     );
   }
@@ -178,10 +178,10 @@ export function RankingsAwards({
         icon={Trophy}
         eyebrow="Draft awards"
         title="No hardware handed out yet"
-        body="Every award is decided by what teams actually do in this draft, so they all sit unclaimed until the first pick lands. Nothing here is a prediction."
+        body="Every award is decided by what teams actually do in this draft, so they sit unclaimed until the first pick lands. None of it is a prediction."
         points={[
-          `${awards.length} awards, recalculated on every sync as the picks and trades roll in.`,
-          "Best and worst drafter, the steal and the reach of the draft, and the first team to fill a starting lineup.",
+          `${awards.length} awards, recalculated on every sync.`,
+          "Best and worst drafter, the steal and the reach, and the first full starting lineup.",
           "Trade awards for the most active and the most successful dealer in the room.",
         ]}
       />
@@ -196,8 +196,8 @@ export function RankingsAwards({
             Draft awards
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Live hardware for your league. Every award recalculates on each sync, so the holders
-            change as the draft and the trades roll in.
+            Live hardware for your league. Holders change on every sync as the picks and trades roll
+            in.
           </p>
         </div>
 

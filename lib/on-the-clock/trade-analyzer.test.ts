@@ -1,12 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   buildTradeCatalog,
-  analyzeTradeSides,
   bucketSlot,
-  futureDiscount,
   FALLBACK_PICK_VALUE,
   type TradeCatalogInput,
-  type TradeItemOption,
 } from "./trade-analyzer";
 import { draftShapeFromMeta } from "./draft-derive";
 import { resolveCurrentDraftPicks, resolveTradedFuturePicks } from "./pick-ownership";
@@ -144,55 +141,14 @@ function catalogInput(over: Partial<TradeCatalogInput> = {}): TradeCatalogInput 
   };
 }
 
-function opt(value: number, over: Partial<TradeItemOption> = {}): TradeItemOption {
-  return { id: `o${value}`, label: `Asset ${value}`, value, kind: "player", estimated: false, ...over };
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-describe("bucketSlot / futureDiscount", () => {
+describe("bucketSlot", () => {
   it("maps early/mid/late to ascending seats", () => {
     expect(bucketSlot("early", 12)).toBeLessThan(bucketSlot("mid", 12));
     expect(bucketSlot("mid", 12)).toBeLessThan(bucketSlot("late", 12));
-  });
-  it("discounts further-out seasons more", () => {
-    expect(futureDiscount(0)).toBe(1);
-    expect(futureDiscount(1)).toBeGreaterThan(futureDiscount(2));
-  });
-});
-
-// ---------------------------------------------------------------------------
-// analyzeTradeSides
-// ---------------------------------------------------------------------------
-
-describe("analyzeTradeSides", () => {
-  it("returns the empty state with nothing placed", () => {
-    expect(analyzeTradeSides([], []).lean).toBe("empty");
-  });
-  it("sums player-for-player totals", () => {
-    const r = analyzeTradeSides([opt(100), opt(50)], [opt(140)]);
-    expect(r.totalA).toBe(150);
-    expect(r.totalB).toBe(140);
-  });
-  it("calls a within-5% trade fair", () => {
-    expect(analyzeTradeSides([opt(100)], [opt(98)]).lean).toBe("fair");
-  });
-  it("calls a 5-15% gap a slight edge", () => {
-    expect(analyzeTradeSides([opt(110)], [opt(100)]).lean).toBe("a-lean");
-  });
-  it("calls a >15% gap a strong edge", () => {
-    expect(analyzeTradeSides([opt(100)], [opt(200)]).lean).toBe("b-strong");
-  });
-  it("flags estimates", () => {
-    expect(analyzeTradeSides([opt(100, { estimated: true })], [opt(100)]).hasEstimates).toBe(true);
-  });
-  it("DEF/K assets are summed at face value, no boost", () => {
-    const def = opt(300, { label: "Ravens, DEF" });
-    const r = analyzeTradeSides([def], [opt(300)]);
-    expect(r.totalA).toBe(300);
-    expect(r.lean).toBe("fair");
   });
 });
 
@@ -442,16 +398,17 @@ describe("buildTradeCatalog - values are always whole numbers", () => {
     expect(madeGroup.options[0].value).toBe(5123);
   });
 
-  it("keeps side totals whole when summing rounded option values", () => {
+  it("keeps a side total whole when summing rounded option values", () => {
     idSeq = 0;
     const avail = board(40, { startValue: 4999.6, step: 250 });
     const groups = buildTradeCatalog(
       catalogInput({ mode: "rookie", pool: "rookies", available: avail, poolBoard: avail, valueBoard: avail }),
     );
+    // The Trade Builder adds a side up itself, so every option it hands out has
+    // to be whole or the running total shows a fraction of a value point.
     const options = groups.flatMap((g) => g.options);
-    const result = analyzeTradeSides(options.slice(0, 3), options.slice(3, 5));
-    expect(Number.isInteger(result.totalA)).toBe(true);
-    expect(Number.isInteger(result.totalB)).toBe(true);
+    const total = options.slice(0, 3).reduce((sum, o) => sum + o.value, 0);
+    expect(Number.isInteger(total)).toBe(true);
   });
 });
 

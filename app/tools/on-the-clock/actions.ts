@@ -22,7 +22,6 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { runSignalCheck, type RunSignalCheckResult } from "@/app/tools/signal-check/actions";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
-import { readDraftCache } from "@/lib/on-the-clock/cache";
 import { detectLeagueFormat, ffbeaconFormatCandidates } from "@/lib/on-the-clock/format-detect";
 import type { SleeperLeague } from "@/lib/sleeper";
 
@@ -85,26 +84,31 @@ function sanitizeSide(raw: unknown): DraftTradeAssetInput[] {
  * Resolve the FF Beacon format for a draft from the cached Sleeper league. Falls
  * back to the admin default only when the league object was never captured,
  * which is the same fallback the room's own board load uses.
+ *
+ * The RAW cached league object goes to the detector, not a rebuilt subset of it.
+ * The old rebuild copied scoring_settings and roster_positions and dropped
+ * `settings`, and `settings.type` is the only signal deriveLeagueFormat has for
+ * dynasty vs redraft. Every draft-room trade therefore priced as redraft, and a
+ * trade carrying a future pick was rejected outright as dynasty-only. Every
+ * other reader of a stored league (Signal Check's import, the league pages, the
+ * OG routes) passes the whole object through; this one now does too, so a field
+ * the detector starts reading tomorrow cannot go missing again.
  */
 async function resolveDraftFormat(draftId: string): Promise<string | null> {
   const admin = createAdminClient();
-  const cache = await readDraftCache(admin, draftId);
-  if (!cache) return null;
+  const { data: row } = await admin
+    .from("on_the_clock_draft_cache")
+    .select("league_metadata")
+    .eq("sleeper_draft_id", draftId)
+    .maybeSingle();
+  if (!row) return null;
 
-  // Rebuild the minimal SleeperLeague shape the detector reads. The cache holds
-  // the whole raw league object; this is the whitelisted view of it.
-  const league = {
-    league_id: cache.draft.sleeperLeagueId,
-    name: "",
-    season: cache.draft.season,
-    sport: "nfl",
-    status: cache.draft.draftStatus ?? "",
-    total_rosters: cache.rosters.length,
-    scoring_settings: cache.draft.scoringSettings,
-    roster_positions: cache.draft.rosterPositions,
-  } as SleeperLeague;
+  const league = (row.league_metadata ?? {}) as unknown as SleeperLeague;
+  const rosterPositions = Array.isArray(league.roster_positions) ? league.roster_positions : [];
 
-  if (cache.draft.rosterPositions.length === 0) {
+  // No roster_positions means the league fetch failed at sync time (or the row
+  // predates migration 0180), so there is nothing to detect from.
+  if (rosterPositions.length === 0) {
     const settings = await loadOnTheClockSettings(admin);
     return settings.sourceFormat.defaultFormatFallback;
   }

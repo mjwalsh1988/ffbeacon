@@ -45,7 +45,7 @@ export function DraftGrades({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="Grades are built from what each pick was worth against the market price of its slot. Once this format's FF Beacon values load, every team gets a grade."
+        body="Grades compare what each pick was worth against the market price of its slot. Every team gets one once this format's FF Beacon values load."
       />
     );
   }
@@ -57,11 +57,11 @@ export function DraftGrades({
         icon={GraduationCap}
         eyebrow="Draft grades"
         title="Nothing to grade yet"
-        body="A grade is an argument about picks that have been made. Nobody has picked, so there is no case to make. These fill in from the first selection and move with every one after it."
+        body="A grade needs picks to argue about. These fill in from the first selection and move with every one after it."
         points={[
-          "A letter and a 0 to 100 score for every team, curved against this room rather than against every draft on the site.",
-          "Every grade opens to the components behind it, each with the number that produced it.",
-          "A written review that leads with whichever component actually moved the letter.",
+          "A letter and a 0 to 100 score for every team, curved against this room.",
+          "Every grade opens to the components behind it, each with its own number.",
+          "A written review that leads with whatever actually moved the letter.",
         ]}
       />
     );
@@ -84,16 +84,15 @@ export function DraftGrades({
           {inProgress ? "Draft grades so far" : "Draft grades"}
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-          Graded against the {grades.length - 1} other{" "}
-          {grades.length === 2 ? "draft" : "drafts"} in this room rather than against every draft on
-          the site, because every team here is drafting from the same pool. Someone finishes last in
-          a great room, and someone finishes first in a poor one.
+          Curved against the {grades.length - 1} other{" "}
+          {grades.length === 2 ? "draft" : "drafts"} in this room, not against every draft on the
+          site. Everyone here picks from the same pool.
           {inProgress && " The draft is still running, so these move with every pick."}
         </p>
         {!pulseAvailable && (
           <p className="mt-2 rounded-card border border-dashed border-line bg-surface/40 px-3 py-2 text-xs text-ink-subtle">
-            Weekly projections are unavailable for this league, so the starting lineup and starter
-            reliability components were left out and the remaining components carry the full weight.
+            No weekly projections for this league, so the starting lineup and reliability components
+            were left out. The rest carry the full weight.
           </p>
         )}
       </div>
@@ -194,9 +193,9 @@ export function DraftGrades({
       <p className="flex items-start gap-1.5 text-xs text-ink-subtle">
         <GraduationCap aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          A component with no data is dropped rather than scored zero, and the remaining components
-          carry its weight. A redraft league has no future-assets component, and a team that never
-          traded has no trades component.
+          A component with no data is dropped, not scored zero, and the others carry its weight.
+          Redraft leagues have no future-assets component, and a team that never traded has no
+          trades component.
         </span>
       </p>
     </div>

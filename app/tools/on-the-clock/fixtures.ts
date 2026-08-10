@@ -297,7 +297,7 @@ export const MOCK_SYNC_STATUS = {
 };
 
 // ---------------------------------------------------------------------------
-// Trade Analyzer fixtures removed in Phase 6C. The draft-room Trade Analyzer now
-// builds its catalog from the live FF Beacon board via lib/on-the-clock/
-// trade-analyzer.ts (buildTradeCatalog) and totals/verdicts via analyzeTradeSides.
+// Trade Builder fixtures removed in Phase 6C. The Trade Builder builds its
+// catalog from the live FF Beacon board via lib/on-the-clock/trade-analyzer.ts
+// (buildTradeCatalog), and the verdict comes from Signal Check.
 // ---------------------------------------------------------------------------

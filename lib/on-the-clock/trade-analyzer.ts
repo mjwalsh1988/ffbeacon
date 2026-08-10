@@ -1,9 +1,17 @@
 /**
- * On The Clock Trade Analyzer (Phase 6C).
+ * The Trade Builder's asset catalog: everything a draft-room trade can contain,
+ * priced.
+ *
+ * CATALOG ONLY. This module used to also grade a trade, totalling both sides and
+ * printing its own verdict, and the Trade Builder showed that verdict above
+ * Signal Check's. Two answers to one question, from two different models, and
+ * they disagreed often enough to be a support problem. The grading is Signal
+ * Check's job now (app/tools/on-the-clock/actions.ts analyzeDraftTrade), so what
+ * is left here builds the list of tradeable assets and nothing else.
  *
  * Pure, browser-safe, deterministic. NOTHING here touches Sleeper, Supabase, or
- * fetch. It turns the board the cockpit already holds into a draft-room "value
- * check" with two pool-driven modes:
+ * fetch. It turns the board the cockpit already holds into a pickable catalog
+ * with two pool-driven modes:
  *   - Everyone  -> startup draft picks only (made picks valued by the player
  *     taken, upcoming picks projected by the ADP simulation) plus future pick
  *     buckets. The available player pool is NOT a tradeable asset in a startup draft.
@@ -44,19 +52,6 @@ import type { SimulatedPick } from "./adp-sim";
  * is never a hidden magic number.
  */
 export const FALLBACK_PICK_VALUE = 50;
-
-/**
- * Per-year discount for a FUTURE pick vs an equivalent current-draft slot.
- * Geometric 0.85^yearsAhead (next year ~0.85, the year after ~0.72).
- *
- * NOTE: The Trade Analyzer and Trade History NO LONGER use this for future picks;
- * they read real FF Beacon pick values instead. This is retained only for the
- * Rosters & Rankings power-ranking rollups (lib/on-the-clock/rosters.ts), which
- * still estimate future-pick value from the board.
- */
-export function futureDiscount(yearsAhead: number): number {
-  return Math.pow(0.85, Math.max(0, yearsAhead));
-}
 
 /** How many future seasons of buckets to offer, and which rounds (1st through 4th). */
 const FUTURE_SEASON_COUNT = 2;
@@ -139,22 +134,6 @@ export interface TradeCatalogInput {
    * player and add another. One source, one answer.
    */
   simulated: Map<number, SimulatedPick>;
-}
-
-export type TradeLean = "empty" | "fair" | "a-lean" | "b-lean" | "a-strong" | "b-strong";
-
-export interface TradeAnalysisResult {
-  totalA: number;
-  totalB: number;
-  /** Absolute value difference. */
-  diff: number;
-  /** Difference as a percent of the larger side (0..100). */
-  diffPct: number;
-  lean: TradeLean;
-  headline: string;
-  detail: string;
-  /** True when any placed asset on either side is an estimate (a projected pick). */
-  hasEstimates: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -443,75 +422,4 @@ export function buildTradeCatalog(input: TradeCatalogInput): TradeItemGroup[] {
   }
 
   return groups;
-}
-
-// ---------------------------------------------------------------------------
-// Analysis (Task 2)
-// ---------------------------------------------------------------------------
-
-const EMPTY_RESULT: TradeAnalysisResult = {
-  totalA: 0,
-  totalB: 0,
-  diff: 0,
-  diffPct: 0,
-  lean: "empty",
-  headline: "Build both sides to see the value check",
-  detail:
-    "Add players or picks to Side A and Side B, then we will show which side carries more FF Beacon value. This is a value signal, not a guarantee.",
-  hasEstimates: false,
-};
-
-/**
- * Total each side and produce a plain-English verdict. Thresholds mirror the
- * site's trade analyzer: within 5% is fair, within 15% is a lean, beyond that is a
- * strong edge. Pure: no rounding surprises, deterministic for a given input.
- */
-export function analyzeTradeSides(
-  sideA: TradeItemOption[],
-  sideB: TradeItemOption[],
-): TradeAnalysisResult {
-  if (sideA.length === 0 && sideB.length === 0) return EMPTY_RESULT;
-
-  const totalA = sideA.reduce((sum, i) => sum + i.value, 0);
-  const totalB = sideB.reduce((sum, i) => sum + i.value, 0);
-  const hasEstimates = [...sideA, ...sideB].some((i) => i.estimated);
-
-  const diff = Math.abs(totalA - totalB);
-  const max = Math.max(totalA, totalB, 1);
-  const diffPct = (diff / max) * 100;
-  const pctLabel = `${Math.round(diffPct)}%`;
-  const diffLabel = Math.round(diff).toLocaleString();
-  const estimateNote = hasEstimates
-    ? " Some values are estimated pick projections, so treat this as a rough signal."
-    : "";
-
-  if (diffPct <= 5) {
-    return {
-      totalA,
-      totalB,
-      diff,
-      diffPct,
-      lean: "fair",
-      headline: "Fair deal",
-      detail: `Both sides land within ${pctLabel} of each other (${diffLabel} points apart). By FF Beacon value this is an even swap.${estimateNote}`,
-      hasEstimates,
-    };
-  }
-
-  const aLeads = totalA > totalB;
-  const winner = aLeads ? "Side A" : "Side B";
-  const strong = diffPct > 15;
-  const lean: TradeLean = strong ? (aLeads ? "a-strong" : "b-strong") : aLeads ? "a-lean" : "b-lean";
-  const headline = strong ? `Strong edge to ${winner}` : `Slight edge to ${winner}`;
-  const margin = strong ? "a clear margin" : "a small margin";
-  return {
-    totalA,
-    totalB,
-    diff,
-    diffPct,
-    lean,
-    headline,
-    detail: `${winner} carries about ${pctLabel} more value (${diffLabel} points), ${margin}. This is a value signal, not a recommendation to accept or reject.${estimateNote}`,
-    hasEstimates,
-  };
 }

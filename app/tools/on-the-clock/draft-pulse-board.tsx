@@ -123,7 +123,7 @@ export function DraftPulseBoard({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="Draft Pulse ranks teams by projected starting points and by FF Beacon value. Once this format's FF Beacon rankings are published, both tables fill in here."
+        body="Draft Pulse ranks teams by projected starting points and by FF Beacon value. Both tables fill in once this format's rankings publish."
       />
     );
   }
@@ -148,13 +148,13 @@ export function DraftPulseBoard({
         title="Nobody has picked yet"
         body={
           isDynasty
-            ? "Draft Pulse scores the best starting lineup each roster can field, week by week, for the rest of the season. Every team is level until the first pick lands."
-            : "Draft Pulse scores the best starting lineup each roster can field, week by week, for the rest of the season. With nobody drafted, every lineup is empty and every team would tie."
+            ? "Draft Pulse scores each roster's best starting lineup for the rest of the season. Every team is level until the first pick lands."
+            : "Draft Pulse scores each roster's best starting lineup for the rest of the season. With nobody drafted, every lineup is empty."
         }
         points={[
-          "A points-per-week score for every team, ranked inside your league.",
-          "The same teams ranked by FF Beacon value, so you can see who is starting better than they own.",
-          "Where each team's points come from by position, and the starting slot they still have not filled.",
+          "A points-per-week score for every team, ranked in your league.",
+          "The same teams ranked by FF Beacon value, so you can see who owns more than they can start.",
+          "Each team's points by position, and the starting slot they still need.",
         ]}
       />
     );
@@ -167,7 +167,7 @@ export function DraftPulseBoard({
         body={
           pulseLoading
             ? "Draft Pulse is being computed for this league. It will replace this message when it lands."
-            : "We have no weekly projections for this league's season, so there is nothing to score a lineup with. Every value-based panel still works, and this fills in as soon as projections publish."
+            : "No weekly projections exist for this season, so there is no lineup to score. Every value panel still works, and this fills in when projections publish."
         }
       />
     );
@@ -197,7 +197,7 @@ export function DraftPulseBoard({
         body={
           pulseLoading
             ? "Draft Pulse is being computed for this league. The FF Beacon value ranking below does not need it."
-            : "We could not project this league's weekly scoring, so Draft Pulse has nothing to rank. Every value-based panel still works, and this fills in on the next sync."
+            : "We could not project this league's weekly scoring, so Draft Pulse has nothing to rank. Every value panel still works, and this fills in on the next sync."
         }
       />
     );
@@ -232,10 +232,9 @@ export function DraftPulseBoard({
           Draft Pulse
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-          The best starting lineup each roster can field, scored week by week in your league&apos;s
-          own scoring and averaged over the {weeks === 1 ? "one remaining week" : `${weeks} remaining weeks`}.
-          Ranked inside this league only. This is not a win projection: a draft has no schedule to
-          play, so there are no expected wins or playoff odds here.
+          Each roster&apos;s best starting lineup, scored in your league&apos;s scoring over the{" "}
+          {weeks === 1 ? "one remaining week" : `${weeks} remaining weeks`} and ranked inside this
+          league. No expected wins or playoff odds: a draft has no schedule to play.
         </p>
         {(slotsEstimated || scoringEstimated) && (
           <p className="mt-2 rounded-card border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
@@ -263,8 +262,8 @@ export function DraftPulseBoard({
             Ranked by Draft Pulse
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Who can put the most points on the field right now. The slot column names the starting
-            spot each team still has the least in.
+            Who can put the most points on the field right now. The slot column is where each team
+            is thinnest.
           </p>
         </div>
         <PulseTable rows={byPulse} myRosterId={myRosterId} hasSample={hasSample} />
@@ -277,9 +276,8 @@ export function DraftPulseBoard({
             Ranked by FF Beacon value
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            What each roster is worth: drafted players plus their future picks. Picks carry real
-            value in a trade and score nothing in a lineup, which is why this order differs from the
-            one above.
+            What each roster is worth: drafted players plus future picks. Picks trade well and score
+            nothing, so this order differs from the one above.
           </p>
         </div>
         <ValueTable rows={byValue} myRosterId={myRosterId} />
@@ -293,8 +291,8 @@ export function DraftPulseBoard({
               Where the two rankings disagree
             </h3>
             <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-              A team that starts better than it owns is getting more out of less. A team that owns
-              more than it starts is holding value it cannot play yet, usually picks or depth.
+              Starting better than you own means getting more out of less. Owning more than you
+              start usually means picks and bench depth.
             </p>
           </div>
           <ul role="list" className="grid gap-3 sm:grid-cols-2">
@@ -314,8 +312,8 @@ export function DraftPulseBoard({
             Where the points come from
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Projected starter points per week by position, for each team. A position at zero means
-            nobody on that roster is projected to start there yet.
+            Projected starter points a week by position. Zero means nobody is projected to start
+            there yet.
           </p>
         </div>
         <PositionBreakdown rows={byPulse} myRosterId={myRosterId} />

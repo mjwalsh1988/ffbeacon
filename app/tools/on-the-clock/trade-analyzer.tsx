@@ -10,12 +10,15 @@
  * as one gets a fix the other does not. The board is the interesting one: a
  * drafter thinks in slots ("I want their 2.03"), not in a list of labels.
  *
- * TWO RESULTS, IN THE ORDER THEY ARRIVE
- * The value strip totals both sides off the board the moment an asset lands, so
- * numbers move at the speed of clicking. The Signal Check verdict lands
- * underneath after a round trip, and it is the real answer: the same pipeline
- * /tools/signal-check runs, with calibration, the value adjustment, thresholds,
- * confidence, and the written explanation.
+ * ONE VERDICT
+ * Each side shows its running board total, so the numbers move at the speed of
+ * clicking. The only graded answer is Signal Check's, which lands underneath
+ * after a round trip: the same pipeline /tools/signal-check runs, with
+ * calibration, the value adjustment, thresholds, confidence, and the written
+ * explanation. There used to be a second verdict here, a plain totals
+ * comparison printed above the button, and it regularly disagreed with the one
+ * below it. Two answers to one question is worse than a slower single answer,
+ * so it is gone.
  *
  * Nothing here calls Sleeper. The analysis goes through a server action that
  * re-derives the format from the cached league and prices asset references
@@ -26,12 +29,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { ArrowLeftRight, LayoutGrid, List, Plus, Scale, Sparkles, X, type LucideIcon } from "lucide-react";
 import type { PlayerPool, ShapedDraftCache } from "@/lib/on-the-clock/types";
 import type { CurrentDraftPick } from "@/lib/on-the-clock/pick-ownership";
-import {
-  analyzeTradeSides,
-  type TradeAnalysisResult,
-  type TradeItemGroup,
-  type TradeItemOption,
-} from "@/lib/on-the-clock/trade-analyzer";
+import type { TradeItemGroup, TradeItemOption } from "@/lib/on-the-clock/trade-analyzer";
 import {
   resolveDraftAsset,
   toSignalCheckAssets,
@@ -65,7 +63,7 @@ function modeFor(pool: PlayerPool): {
       modeIcon: Sparkles,
       addLabel: "Add a rookie or pick",
       blurb:
-        "Rookie players carry their FF Beacon value. A rookie pick that has not been made is priced as the player Sleeper ADP says would go there. Future-year picks use FF Beacon pick values.",
+        "Rookies carry their FF Beacon value. An unmade rookie pick is priced as the player Sleeper ADP says goes there. Future-year picks use FF Beacon pick values.",
     };
   }
   return {
@@ -73,7 +71,7 @@ function modeFor(pool: PlayerPool): {
     modeIcon: Scale,
     addLabel: "Add a draft pick",
     blurb:
-      "A made pick is worth the player who was taken. A pick that has not been made yet is priced as the player Sleeper ADP says would go there. Future-year picks use FF Beacon pick values, because a class nobody has scouted has no ADP to simulate.",
+      "A made pick is worth the player taken. An unmade pick is priced as the player Sleeper ADP says goes there. Future-year picks use FF Beacon pick values, since an unscouted class has no ADP.",
   };
 }
 
@@ -233,14 +231,24 @@ export function TradeAnalyzer({
     setReturnFocusTo(null);
   }, [pendingAsset, returnFocusTo]);
 
-  const result = analyzeTradeSides(
-    sideA.map((i) => toOption(i.asset)),
-    sideB.map((i) => toOption(i.asset)),
-  );
+  // Running board totals only. Deliberately not a verdict: the graded answer is
+  // Signal Check's, and a second opinion sitting next to it just confused people.
+  const totalA = sideA.reduce((sum, i) => sum + i.asset.value, 0);
+  const totalB = sideB.reduce((sum, i) => sum + i.asset.value, 0);
 
   const sideALabel =
     myRosterId !== null ? `your side (${teamNameByRosterId[myRosterId] ?? "you"})` : "Side A";
   const sideBLabel = "the other side";
+  const headingA = myRosterId !== null ? "Your side" : "Side A";
+
+  // The strip that used to sit under the two sides carried the only live region
+  // for the running totals, so deleting it would have left a screen-reader user
+  // adding assets in silence. The announcement stays; the verdict it used to
+  // print does not.
+  const totalsAnnouncement =
+    sideA.length > 0 || sideB.length > 0
+      ? `Board value: ${headingA} ${totalA.toLocaleString()}, the other side ${totalB.toLocaleString()}.`
+      : "";
 
   const simulatedLabels = [...sideA, ...sideB]
     .filter((i) => i.asset.simulated)
@@ -374,9 +382,9 @@ export function TradeAnalyzer({
           <div className="grid gap-4 lg:grid-cols-2">
             <TradeSide
               side="a"
-              heading={myRosterId !== null ? `Your side` : "Side A"}
+              heading={headingA}
               items={sideA}
-              total={result.totalA}
+              total={totalA}
               groups={groups}
               usedIds={usedIds}
               addLabel={addLabel}
@@ -388,7 +396,7 @@ export function TradeAnalyzer({
               side="b"
               heading="The other side"
               items={sideB}
-              total={result.totalB}
+              total={totalB}
               groups={groups}
               usedIds={usedIds}
               addLabel={addLabel}
@@ -398,7 +406,9 @@ export function TradeAnalyzer({
             />
           </div>
 
-          <QuickTotals result={result} />
+          <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+            {totalsAnnouncement}
+          </p>
 
           <div className="flex flex-wrap items-center gap-2">
             {/* aria-disabled, not disabled: a `disabled` button drops out of the
@@ -459,19 +469,6 @@ export function TradeAnalyzer({
       )}
     </section>
   );
-}
-
-/** The resolved asset seen as a catalog option, for the instant totals. */
-function toOption(asset: ResolvedAsset): TradeItemOption {
-  return {
-    id: asset.id,
-    label: asset.label,
-    detail: asset.detail,
-    value: asset.value,
-    kind: asset.ref.kind === "future-pick" ? "future-pick" : "player",
-    estimated: asset.simulated,
-    repeatable: asset.repeatable,
-  };
 }
 
 function TradeSide({
@@ -626,23 +623,5 @@ function TradeSide({
         </ul>
       )}
     </section>
-  );
-}
-
-/**
- * The instant strip. Board totals only, and it says so: the verdict underneath
- * is the graded answer and these two numbers are not it.
- */
-function QuickTotals({ result }: { result: TradeAnalysisResult }) {
-  return (
-    <div className="rounded-modal border border-line bg-surface/40 p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-        Quick value check
-      </p>
-      <div aria-live="polite" aria-atomic="true" className="mt-1.5">
-        <p className="text-sm font-semibold text-ink">{result.headline}</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{result.detail}</p>
-      </div>
-    </div>
   );
 }
