@@ -374,9 +374,17 @@ export default async function LeaguePowerPulsePage({
                   simulationRuns={pulseSettings.simulation.runs}
                 />
 
+                {/* "Regular season" is doing real work in this title. The
+                    champion card above ranks by title odds, which are decided in
+                    the bracket, and the two orders legitimately disagree: a team
+                    can lead this table on the back of an easy schedule and still
+                    not be the favorite, because the playoffs only pit it against
+                    the other qualifiers. Without the qualifier a reader sees
+                    themselves first here, somebody else named champion above,
+                    and no way to tell which one is wrong. Neither is. */}
                 <Panel
                   eyebrow="Where this ends up"
-                  title="Projected final standings"
+                  title="Projected final regular season standings"
                   helper={`Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
                   bodyClassName="p-0"
                 >

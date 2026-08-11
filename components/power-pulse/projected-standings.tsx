@@ -27,9 +27,9 @@ export function ProjectedStandings({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <caption className="sr-only">
-          Projected final standings, ordered by expected wins. The top{" "}
-          {playoffTeams} teams make the playoffs. Columns: projected seed, team,
-          projected record, playoff odds, and points per week.
+          Projected final regular season standings, ordered by expected wins. The
+          top {playoffTeams} teams make the playoffs. Columns: projected seed,
+          team, projected record, playoff odds, and points per week.
         </caption>
         <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
           <tr>
