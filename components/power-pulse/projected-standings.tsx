@@ -116,8 +116,8 @@ export function ProjectedStandings({
         </tbody>
       </table>
       <p className="border-t border-line px-4 py-2.5 text-[11px] text-ink-subtle">
-        Top {playoffTeams} make the playoffs. Records are the average across every
-        simulated season, so they land on fractions.
+        Top {playoffTeams} make the playoffs. Records average every simulated
+        season, so they land on fractions.
       </p>
     </div>
   );

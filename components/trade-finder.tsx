@@ -466,10 +466,10 @@ export function TradeFinder(props: {
                 behind the reader and they only ever hear the explanation for a
                 choice they have already made. Option text is read on every
                 arrow press, which is the moment it is needed. */}
-            <Field
-              label="Kind of trade"
-              hint={TRADE_GOALS.find((g) => g.key === goal)?.blurb ?? ""}
-            >
+            {/* A static hint, because the per-goal description now rides in the
+                option text where it is actually read. Repeating it here would
+                announce the same phrase twice for one choice. */}
+            <Field label="Kind of trade" hint="What the trade has to do for you.">
               {(id, describedBy) => (
                 <select
                   id={id}
@@ -535,7 +535,7 @@ export function TradeFinder(props: {
             </button>
             <p className="text-xs text-ink-muted">
               {isLeague
-                ? "Runs the search again. Use the arrows below to move between the trades it found."
+                ? "Runs the search again. Use the arrows to move between results."
                 : leaguesLeft !== null && leaguesLeft > 0
                   ? `Searches the next ${leaguesLeft === 1 ? "league" : "leagues"}. ${leaguesLeft} to go.`
                   : "Runs the search again across your leagues."}
@@ -851,10 +851,10 @@ function EmptyState({
       {mode === "league" ? (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
           {declinedAll
-            ? "Search again for a fresh set, or change the goal to look at different kinds of deal."
+            ? "Search again for a fresh set, or change the kind of trade."
             : meta && meta.consideredTeams === 0
               ? "No other team has a piece it would move yet."
-              : "Everything we could build either does nothing for you or would be refused. Try a different goal, or name a player you want."}
+              : "Nothing we could build helps you or would be accepted. Try a different kind of trade, or name a player."}
         </p>
       ) : (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">

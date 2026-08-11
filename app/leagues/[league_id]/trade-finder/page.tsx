@@ -215,8 +215,7 @@ export default async function LeagueTradeFinderPage({
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
             One trade at a time, built from what every roster in this league
-            needs. Step through them, save the ones worth keeping, and pass on
-            the rest.
+            needs.
           </p>
         </section>
 
@@ -321,7 +320,7 @@ async function TradeFinderSection({
       <Panel eyebrow="Not ready" title="Nothing to search yet">
         <p className="text-sm leading-relaxed text-ink-muted">
           No value source covers this league&apos;s format, so there is nothing
-          to price a trade against. See the Overview tab.
+          to price trades against. See the Overview tab.
         </p>
       </Panel>
     );

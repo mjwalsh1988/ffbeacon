@@ -51,18 +51,19 @@ export function TradeFinderPanel({
       size="lg"
     >
       <div className="space-y-4">
+        {/* The subtitle already says "one trade at a time, across N leagues",
+            so this only has to say the part it does not: that a press covers
+            some of them and the button is how you reach the rest. */}
         <p className="text-sm leading-relaxed text-ink-muted">
-          Every league you are in, searched a few at a time. Step through what it
-          finds, save the ones worth coming back to, and search again for the
-          leagues it has not opened yet.
+          A few leagues per search. Search again to reach the rest.
         </p>
 
         {unsynced > 0 && (
           <p className="rounded-card border border-line bg-base/40 p-3 text-sm text-ink-muted">
             {unsynced} of your {sleeperLeagueIds.length} leagues{" "}
             {unsynced === 1 ? "is" : "are"} not synced, so{" "}
-            {unsynced === 1 ? "it is" : "they are"} not searched. Open one once
-            to bring it in.
+            {unsynced === 1 ? "it is" : "they are"} skipped. Open one to bring it
+            in.
           </p>
         )}
 

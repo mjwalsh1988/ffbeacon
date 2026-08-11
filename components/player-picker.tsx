@@ -206,8 +206,8 @@ export const PlayerPicker = memo(function PlayerPicker({
         {filterLabel}
       </label>
       <p id={filterHintId} className="mt-0.5 text-xs text-ink-muted">
-        Type a name or a team to narrow the list below. Press Enter to move to
-        the list, and if only one player matches he is picked for you.
+        Type a name or team to narrow the list. Enter jumps to the list, picking
+        the player if only one matches.
       </p>
       <div className="relative mt-1.5">
         <Search

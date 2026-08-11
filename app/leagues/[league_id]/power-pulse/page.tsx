@@ -264,10 +264,9 @@ export default async function LeaguePowerPulsePage({
             Power Pulse
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            Every other power ranking adds up what your roster is worth. This one
-            estimates what it will actually do: your real starting lineup, week by
-            week, scored under your league's own rules, against the schedule you
-            were dealt.
+            Other rankings add up what your roster is worth. This one projects
+            what it will do: your best lineup each week, under your league's
+            scoring, against your real schedule.
           </p>
           {view && (
             <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -301,9 +300,8 @@ export default async function LeaguePowerPulsePage({
               helper="This runs on the first load after a league syncs."
             >
               <p className="text-sm text-ink-muted">
-                We need Sleeper's weekly projections and this league's head-to-head
-                schedule before we can project anything. Both arrive on the next
-                sync, so refreshing in a moment usually does it.
+                We need Sleeper's weekly projections and this league's schedule
+                first. Both arrive on the next sync, so try again in a moment.
               </p>
             </Panel>
           </div>
@@ -359,7 +357,7 @@ export default async function LeaguePowerPulsePage({
                 <Panel
                   eyebrow="The ranking"
                   title="Power Pulse rankings"
-                  helper="Ranked by expected performance. The value column shows each team's trade-value rank and how far it sits from where it competes."
+                  helper="Ranked by expected performance. The value column compares that to each team's trade-value rank."
                   bodyClassName="p-0"
                   glow
                 >
@@ -379,7 +377,7 @@ export default async function LeaguePowerPulsePage({
                 <Panel
                   eyebrow="Where this ends up"
                   title="Projected final standings"
-                  helper={`Ordered by expected wins across every simulated season, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
+                  helper={`Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
                   bodyClassName="p-0"
                 >
                   <ProjectedStandings teams={view.teams} playoffTeams={playoffTeams} />

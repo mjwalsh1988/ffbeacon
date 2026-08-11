@@ -35,31 +35,36 @@ export type TradeGoal =
   | "add-picks"
   | "get-younger";
 
+/**
+ * The blurb is read aloud on every arrow press, because it rides in the option
+ * text rather than in a hint beside the control. That is the reason to keep it
+ * to a phrase: it is heard five times while somebody makes one choice.
+ */
 export const TRADE_GOALS: { key: TradeGoal; label: string; blurb: string }[] = [
   {
     key: "balanced",
     label: "Open to all trades",
-    blurb: "Any shape of deal, whatever helps most.",
+    blurb: "any shape of deal",
   },
   {
     key: "consolidate",
     label: "Consolidate",
-    blurb: "Two or three mid pieces, plus a pick if it helps, for one better player.",
+    blurb: "two or three pieces for one better player",
   },
   {
     key: "split-assets",
     label: "Split assets",
-    blurb: "One of your better players for several mid-tier pieces with upside, often plus a pick.",
+    blurb: "one good player for several with upside",
   },
   {
     key: "add-picks",
     label: "Obtain draft picks",
-    blurb: "Bring back draft capital, on its own or alongside players.",
+    blurb: "draft capital, alone or with players",
   },
   {
     key: "get-younger",
     label: "Get younger",
-    blurb: "Younger players with room to grow, and the picks that come with them.",
+    blurb: "younger players and rookie picks",
   },
 ];
 

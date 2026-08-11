@@ -73,14 +73,13 @@ export function PreDraftNotice({
             {heading}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            {gap} Power Pulse scores a real starting lineup week by week against
-            the opponents you were dealt, so until both of those exist there is
-            nothing honest to rank.
+            {gap} Power Pulse needs a real lineup and a real schedule, so there
+            is nothing to rank yet.
           </p>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
             {variant === "full"
-              ? `Come back once your ${season ?? ""} draft wraps and the schedule posts. Every team below will have a score, projected record, and playoff odds on your first visit after that.`
-              : "The teams below are listed for reference. Their order is not a ranking yet."}
+              ? `Once your ${season ?? ""} draft wraps and the schedule posts, every team gets a score, projected record, and playoff odds.`
+              : "The teams below are listed for reference. The order is not a ranking."}
           </p>
         </div>
       </div>

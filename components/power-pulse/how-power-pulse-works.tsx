@@ -37,10 +37,9 @@ export function HowPowerPulseWorks({
 
       <div className="space-y-4 border-t border-line px-4 py-4 text-xs leading-relaxed text-ink-muted">
         <p>
-          Power Pulse estimates how many games a team should win from here. It is
-          a 1 to 99 score, ranked inside this league only, so a 70 means
-          "seventieth percentile against these eleven opponents" rather than
-          against every league on the site.
+          How many games a team should win from here, as a 1 to 99 score ranked
+          inside this league only. A 70 is the seventieth percentile against
+          these opponents, not against every league on the site.
         </p>
 
         <div>
@@ -50,36 +49,33 @@ export function HowPowerPulseWorks({
           <ul className="mt-2 space-y-2">
             <li>
               <span className="font-semibold text-ink">Your league's scoring.</span>{" "}
-              Every projection is rescored under your actual settings, not generic
-              PPR. This league reads as: {scoringDescription}.
+              Every projection rescored under your actual settings, not generic
+              PPR. Here: {scoringDescription}.
             </li>
             <li>
               <span className="font-semibold text-ink">Your best lineup, every week.</span>{" "}
-              We fill your real starting slots optimally for each remaining week,
-              handling byes, superflex, and every flex variant.
+              Your real starting slots filled optimally, including byes,
+              superflex, and every flex variant.
             </li>
             <li>
               <span className="font-semibold text-ink">Opponent strength.</span>{" "}
-              How many points each NFL defense actually gave up to each position
-              over the last two completed seasons, weighted toward the more
-              recent one.
+              Points each NFL defense gave up to each position over the last two
+              seasons, weighted toward the recent one.
             </li>
             <li>
               <span className="font-semibold text-ink">Player reliability.</span>{" "}
-              How often each player beats their own projection, with the current
-              season counting far more heavily than past seasons, and small
-              samples pulled toward neutral so three good games do not overrule
-              everything else.
+              How often each player beats their own projection, with this season
+              weighted heaviest and small samples pulled toward neutral.
             </li>
             <li>
               <span className="font-semibold text-ink">Availability and injuries.</span>{" "}
-              Current designations suppress the upcoming week; season-long ones
-              suppress the rest of the year, and the next player up takes the slot.
+              Current designations suppress the coming week, season-long ones the
+              rest of the year, and the next player up takes the slot.
             </li>
             <li>
               <span className="font-semibold text-ink">The actual schedule.</span>{" "}
-              Your real head-to-head slate from Sleeper, simulated thousands of
-              times to produce playoff and title odds.
+              Your real slate from Sleeper, simulated thousands of times for
+              playoff and title odds.
             </li>
           </ul>
         </div>
@@ -104,17 +100,16 @@ export function HowPowerPulseWorks({
             What it deliberately ignores
           </h3>
           <p className="mt-2">
-            Draft picks. A 2028 first is a real asset, but it cannot start for you
-            in week 4, so it has no place in a competitive score. Picks still
-            count toward the trade-value rankings on the Overview tab, which is
-            what the value rank column compares against.
+            Draft picks. A 2028 first cannot start for you in week 4, so it has
+            no place in a competitive score. Picks still count toward the
+            trade-value rankings the value column compares against.
           </p>
         </div>
 
         <p className="text-ink-subtle">
-          Honest limits: projections are one source's opinion, weekly outcomes are
-          modeled as independent, and the playoff bracket reseeds each round. The
-          odds are a guide to how a season is likely to break, not a promise.
+          Limits: projections are one source's opinion, weekly outcomes are
+          modeled as independent, and the bracket reseeds each round. The odds
+          are a guide, not a promise.
         </p>
       </div>
     </details>

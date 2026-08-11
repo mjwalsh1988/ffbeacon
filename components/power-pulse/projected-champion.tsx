@@ -258,8 +258,7 @@ export function ProjectedChampion({
     return (
       <Panel eyebrow="Simulated season" title="Projected champion">
         <p className="text-sm text-ink-muted">
-          Picking a favorite needs a full head-to-head schedule from Sleeper.
-          This fills in once the league schedule is published.
+          This fills in once Sleeper publishes your league's full schedule.
         </p>
       </Panel>
     );
@@ -291,7 +290,7 @@ export function ProjectedChampion({
     <Panel
       eyebrow="Simulated season"
       title="Projected champion"
-      helper={`${simulationRuns.toLocaleString("en-US")} simulated seasons against your league's real schedule and bracket.`}
+      helper={`${simulationRuns.toLocaleString("en-US")} simulated seasons on your real schedule and bracket.`}
       glow
     >
       {/* The answer, and the only thing on this panel that needs to be seen
