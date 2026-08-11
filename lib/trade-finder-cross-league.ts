@@ -41,11 +41,24 @@ type AnySupabase =
   | SupabaseClient<Database>
   | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
-/** Leagues loaded per press. The ceiling on what one request can cost. */
-const LEAGUE_WINDOW = 3;
+/**
+ * Leagues loaded per press. The ceiling on what one request can cost.
+ *
+ * Four rather than three because four is what most of the readers this is built
+ * for actually have, and a window that cannot hold the whole portfolio is what
+ * turned "search my leagues" into "search my first league repeatedly". The cost
+ * is one more roster load per press.
+ */
+const LEAGUE_WINDOW = 4;
 
-/** Deals taken from any one league, so a single room cannot fill the window. */
-const PER_LEAGUE_TAKE = 4;
+/**
+ * Deals taken from any one league, so a single room cannot fill the window.
+ *
+ * Three, so a full window of four leagues fills the twelve slots exactly one
+ * league at a time. The point is not the number, it is that no room can supply
+ * more than its share while another room has something to say.
+ */
+const PER_LEAGUE_TAKE = 3;
 
 /** Deals returned in total. Matches the action's transport window. */
 const SUGGESTION_TAKE = 12;
@@ -77,13 +90,11 @@ export type CrossLeagueResult = {
   /** Leagues this press actually opened. */
   examined: number;
   /**
-   * Leagues this walk has not opened yet.
+   * Leagues this walk has not opened yet, counted from the end of the window.
    *
-   * Counted from the end of the window rather than from the cursor. The cursor
-   * deliberately sticks on a league that still has deals in it, so counting from
-   * there would report every league including the one on screen, and a reader
-   * who had just searched three would be told there were still twenty-seven to
-   * go.
+   * Reaches zero on the press that opens the last league, and the cursor wraps
+   * to the start on the same press, so a reader who has walked the whole
+   * portfolio is told it is finished and can still search it again.
    */
   remaining: number;
   /**
@@ -115,18 +126,26 @@ export async function findCrossLeagueTrade(
   },
 ): Promise<CrossLeagueResult> {
   const ids = params.sleeperLeagueIds.slice(0, MAX_CROSS_LEAGUES);
-  const start = Math.max(0, Math.min(params.cursor, ids.length));
+  if (ids.length === 0) {
+    return {
+      suggestions: [],
+      nextCursor: 0,
+      examined: 0,
+      remaining: 0,
+      unreadable: 0,
+    };
+  }
 
-  const empty: CrossLeagueResult = {
-    suggestions: [],
-    // Past the end. A reader who has walked their whole portfolio should be told
-    // it is finished rather than sent back to the start of it.
-    nextCursor: ids.length,
-    examined: 0,
-    remaining: 0,
-    unreadable: 0,
-  };
-  if (ids.length === 0 || start >= ids.length) return empty;
+  // Wrapped into range rather than clamped to the end. A cursor sitting past the
+  // last league used to be a terminal state that returned nothing forever, so a
+  // reader who walked their whole portfolio could never search it again without
+  // reloading the page.
+  // The finite check belongs here rather than only at the action. NaN survives
+  // Math.trunc and Math.max, and NaN % n is NaN, which would empty the window
+  // and pin nextCursor at NaN for the rest of the session. The action sanitises
+  // its own input, but this function is exported and called directly by tests.
+  const rawCursor = Number.isFinite(params.cursor) ? Math.trunc(params.cursor) : 0;
+  const start = Math.max(0, rawCursor) % ids.length;
 
   const sessionExcluded = new Set(params.sessionExcluded);
 
@@ -148,9 +167,8 @@ export async function findCrossLeagueTrade(
   );
 
   let unreadable = 0;
-  const found: CrossLeagueSuggestion[] = [];
-  /** The earliest league in this window that still has something to offer. */
-  let firstLiveIndex: number | null = null;
+  /** This window's deals, kept per league so the merge can interleave them. */
+  const byLeague: CrossLeagueSuggestion[][] = [];
 
   for (let offset = 0; offset < window.length; offset += 1) {
     const sleeperLeagueId = window[offset];
@@ -182,9 +200,8 @@ export async function findCrossLeagueTrade(
       .slice(0, PER_LEAGUE_TAKE);
     if (live.length === 0) continue;
 
-    if (firstLiveIndex === null) firstLiveIndex = start + offset;
-    for (const s of live) {
-      found.push({
+    byLeague.push(
+      live.map((s) => ({
         ...s,
         league: {
           sleeperLeagueId: league.sleeperLeagueId,
@@ -193,22 +210,27 @@ export async function findCrossLeagueTrade(
           sourceDisplay: league.sourceDisplay,
           pickSourceDisplay: league.pickSourceDisplay,
         },
-      });
-    }
+      })),
+    );
   }
 
-  // Merged on score across the window, then spread so consecutive deals are in
-  // different leagues where possible. Without that, one strong room supplies the
-  // first four and the reader pages through a portfolio feature that only ever
-  // talks about one league.
-  found.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
-  const suggestions = spreadByLeague(found).slice(0, SUGGESTION_TAKE);
+  const suggestions = interleaveLeagues(byLeague).slice(0, SUGGESTION_TAKE);
 
-  // A league that still has suggestions holds the cursor where it is, so the
-  // next press reconsiders it with one fewer candidate. A window that produced
-  // nothing moves the cursor past every league in it, which is what stops a
-  // portfolio of empty leagues looping forever.
-  const nextCursor = firstLiveIndex ?? index;
+  /**
+   * Where the next press starts.
+   *
+   * Always past this window, wrapping at the end.
+   *
+   * It used to stop on the earliest league that still had a deal in it, on the
+   * reasoning that the room was not exhausted yet. The effect was the opposite
+   * of what a portfolio search is for: a reader whose first league always has
+   * something to offer, which is every reader, had a cursor that never moved
+   * off zero, so leagues five and beyond were never opened at all no matter how
+   * many times they pressed. Advancing is what makes "search again" mean the
+   * next part of the portfolio; the window itself already returns several deals
+   * per league, so nothing is left behind by moving on.
+   */
+  const nextCursor = index >= ids.length ? 0 : index;
 
   return {
     suggestions,
@@ -220,24 +242,42 @@ export async function findCrossLeagueTrade(
 }
 
 /**
- * Reorder so consecutive suggestions come from different leagues.
+ * Round-robin the leagues: best from each, then second best from each.
  *
- * Same greedy walk the single-league engine uses to spread by player and by
- * counterparty, applied to the room. Stable: the input is already sorted by
- * score and nothing is dropped, so a league with the best four deals still
- * supplies four, just not four in a row.
+ * The old merge sorted the whole window by score and then walked it, only
+ * avoiding two deals from the same league back to back. That is a weaker
+ * promise than it sounds: a league whose deals all score well still supplied
+ * most of the window, so a manager in four rooms would page through a list that
+ * was three-quarters about one of them, which is the report this fixes.
+ *
+ * Taking one from each league in turn makes the shares equal by construction,
+ * and each league's own deals stay in its own order, so the best deal in every
+ * room is on the first lap. Nothing is dropped: a league that runs out simply
+ * stops contributing and the rest carry on.
  */
-function spreadByLeague(sorted: CrossLeagueSuggestion[]): CrossLeagueSuggestion[] {
-  const remaining = [...sorted];
-  const out: CrossLeagueSuggestion[] = [];
-  let lastLeague: string | null = null;
+function interleaveLeagues(
+  groups: CrossLeagueSuggestion[][],
+): CrossLeagueSuggestion[] {
+  // Rooms with more to say go first on each lap, so the lap order is stable and
+  // does not depend on which league happened to load first.
+  // Each league's own order is left ALONE. It arrives from the engine's variety
+  // walk, which is not score order and deliberately so: it is what stops two
+  // consecutive cards from the same room leading with the same player. Sorting
+  // each group by score here, which the first version did, threw that away and
+  // reintroduced inside one league exactly the repetition the engine spends its
+  // last pass preventing. Only the ORDER OF THE LEAGUES is chosen here, by each
+  // one's best deal, so the lap order does not depend on which league's rosters
+  // happened to load first.
+  const ordered = groups
+    .filter((g) => g.length > 0)
+    .sort((a, b) => b[0].score - a[0].score || a[0].key.localeCompare(b[0].key));
 
-  while (remaining.length > 0) {
-    let index = remaining.findIndex((s) => s.league.sleeperLeagueId !== lastLeague);
-    if (index === -1) index = 0;
-    const [next] = remaining.splice(index, 1);
-    out.push(next);
-    lastLeague = next.league.sleeperLeagueId;
+  const out: CrossLeagueSuggestion[] = [];
+  const depth = Math.max(0, ...ordered.map((g) => g.length));
+  for (let lap = 0; lap < depth; lap += 1) {
+    for (const group of ordered) {
+      if (lap < group.length) out.push(group[lap]);
+    }
   }
   return out;
 }

@@ -36,9 +36,38 @@ import { assetValue, type AssetRef } from "./packages";
 import type { AcceptanceBand, FinderPlayer, SideImpact, TradeGoal } from "./types";
 
 /** Below this share of the larger side, the two sides read as even. */
-const EVEN_GAP = 0.06;
-/** Above this, one side is being asked to eat a loss they can see from space. */
-const LOPSIDED_GAP = 0.2;
+const EVEN_GAP = 0.08;
+/**
+ * Above this, one side is being asked to eat a loss they can see from space.
+ *
+ * Raised from 20%. Twenty percent of a mid-tier receiver is inside the spread
+ * between two published value sources on the same player, and calling every deal
+ * past it a long shot was quietly deciding, on the reader's behalf, that most of
+ * their league would refuse to talk. It also compounded: a long shot is scored
+ * at a fraction of its worth, so a band set too tight does not merely mislabel
+ * deals, it removes them from the top of the ranking entirely.
+ */
+const LOPSIDED_GAP = 0.26;
+/**
+ * How big a value gap has to be before losing points off the lineup as well is
+ * fatal to a deal's chances.
+ *
+ * Two bad things together used to be an automatic long shot however small either
+ * one was, which caught the ordinary trade where a contender gives up a fraction
+ * of a point in the flex to fix a real hole somewhere else. It is fatal when the
+ * other manager can SEE both, so the value side now has to be visible first.
+ */
+const VISIBLE_LOSS_GAP = 0.1;
+/**
+ * A lineup loss this size is its own argument for refusing, whatever the value
+ * column says.
+ *
+ * Twice the "this is a real subtraction" bar. Half a starting flex is a cost a
+ * contender might absorb for the right piece; three points a week is most of a
+ * starter, and a team chasing January turns that down on a level deal without
+ * reading the rest of the offer.
+ */
+const SEVERE_LINEUP_LOSS = 3;
 /**
  * Points per week a team has to lose off its starting lineup before the trade
  * is a real subtraction rather than a rounding error.
@@ -215,12 +244,21 @@ export function acceptanceOf(
    */
   const lineupMatters = profile.direction !== "rebuild";
   const hurtsLineup = lineupMatters && (theirs.lineupDelta ?? 0) < -HURTS_LINEUP;
+  const guttedLineup = lineupMatters && (theirs.lineupDelta ?? 0) < -SEVERE_LINEUP_LOSS;
 
   // Worse off on the field AND worse off on paper, for a team that cares about
   // the field. Whatever else the deal does for their timeline, there is nothing
   // here to say yes to, and calling it "worth asking" would send somebody to
   // their league chat with an offer that has no argument behind it.
-  if (hurtsLineup && losingValue) return "long-shot";
+  //
+  // Two bars rather than one. A lineup loss of this size refuses itself and the
+  // value column does not get a vote. Below it, the value side has to be a gap
+  // they can actually see before the pair is fatal: a level deal that costs a
+  // contender half a point in the flex to fix a hole elsewhere is an ordinary
+  // trade, and treating it as a long shot was quietly deleting most of the
+  // realistic deals in any league where somebody is competing.
+  if (losingValue && guttedLineup) return "long-shot";
+  if (losingValue && hurtsLineup && effectiveGap > VISIBLE_LOSS_GAP) return "long-shot";
 
   const younger = (theirs.ageDelta ?? 0) < -MEANINGFULLY_YOUNGER;
   const gainsPicks = theirs.pickCountDelta > 0;
@@ -238,34 +276,69 @@ export function acceptanceOf(
 }
 
 /**
+ * How much better the piece coming back has to be before "you moved up a tier"
+ * is a true sentence rather than a rearrangement.
+ *
+ * Consolidating two players into one of equal value is not consolidating, it is
+ * shuffling. Fifteen percent on the lead asset is the point at which the reader
+ * is demonstrably holding a better player than either of the ones they sent.
+ */
+const TIER_JUMP = 1.15;
+
+/** The shape of a candidate deal, as the goal tests need to read it. */
+export type TradeShape = {
+  incoming: number;
+  outgoing: number;
+  /** Value of the single best asset on each side. */
+  incomingTop: number;
+  outgoingTop: number;
+};
+
+/**
  * Does this deal do the thing the reader asked for?
  *
- * A goal is a constraint, not a hint. Somebody who picks "Add picks" and is
- * shown a deal with no picks in it has been ignored, however good the deal is,
- * and a weighting that merely prefers picks will hand them exactly that the
- * moment a big lineup upgrade turns up. So the goal filters first and the
+ * A goal is a constraint, not a hint. Somebody who picks "Obtain draft picks"
+ * and is shown a deal with no picks in it has been ignored, however good the
+ * deal is, and a weighting that merely prefers picks will hand them exactly that
+ * the moment a big lineup upgrade turns up. So the goal filters first and the
  * weights only order what survives.
  *
- * "Best available" constrains nothing, which is what it says on the label.
+ * What a goal constrains is the SHAPE, never the contents. "Obtain draft picks"
+ * requires a pick to come back and says nothing about what may come with it, so
+ * a first plus a starting receiver is squarely the thing being asked for.
+ *
+ * "Open to all trades" constrains nothing, which is what it says on the label.
  */
 export function satisfiesGoal(
   goal: TradeGoal,
   mine: SideImpact,
-  shape: { incoming: number; outgoing: number },
+  shape: TradeShape,
 ): boolean {
   switch (goal) {
-    case "win-now":
-      // Null means we could not measure the lineup at all, which is a reason to
-      // stay quiet about it rather than a reason to reject the trade.
-      return mine.lineupDelta === null || mine.lineupDelta > 0;
     case "get-younger":
       return mine.ageDelta === null || mine.ageDelta < 0;
     case "add-picks":
+      // At least one pick has to come back. Players alongside it are welcome,
+      // which is why this reads the count rather than the composition: a first
+      // and a starting receiver for one good player is squarely the deal a
+      // reader asking for picks wants to be shown.
       return mine.pickCountDelta > 0;
     case "consolidate":
-      return shape.outgoing > shape.incoming;
-    case "add-depth":
-      return shape.incoming > shape.outgoing;
+      // Several pieces out, fewer in, and the one coming back is genuinely
+      // better than anything that left.
+      return (
+        shape.outgoing > shape.incoming &&
+        shape.incomingTop >= shape.outgoingTop * TIER_JUMP
+      );
+    case "split-assets":
+      // The mirror image: one good player out, several back, and what left was
+      // the best asset in the deal. Without the second test this would accept
+      // any two-for-one, including the ones where the reader is the one moving
+      // up a tier, which is the opposite request.
+      return (
+        shape.incoming > shape.outgoing &&
+        shape.outgoingTop >= shape.incomingTop * TIER_JUMP
+      );
     default:
       return true;
   }
@@ -285,8 +358,14 @@ export function satisfiesGoal(
  */
 const ACCEPTANCE_WEIGHT: Record<AcceptanceBand, number> = {
   likely: 1,
-  "worth-asking": 0.72,
-  "long-shot": 0.12,
+  "worth-asking": 0.75,
+  // Raised from 0.12. The discount has to be heavy enough that a lopsided deal
+  // never opens the ranking, and 0.12 was heavier than that: it pushed long
+  // shots so far down that they effectively did not exist, and in a quiet league
+  // the panel had nothing to show at all rather than showing the honest answer,
+  // which is "you would have to overpay". A fifth is still a demotion of four
+  // places or more against any realistic deal.
+  "long-shot": 0.2,
 };
 
 /**
@@ -318,11 +397,11 @@ export function scoreSuggestion(params: {
 
   let total: number;
   switch (goal) {
-    case "win-now":
-      total = lineupScore * 2.2 + valueScore * 0.5 - pickScore * 0.5;
-      break;
     case "get-younger":
-      total = youthScore * 2 + valueScore * 1 + lineupScore * 0.3;
+      // Picks carry real weight here as well as youth: a rookie pick is the
+      // youngest asset in the game and the reader asking for a younger roster
+      // wants to be shown the ones that come with draft capital attached.
+      total = youthScore * 2 + valueScore * 1 + pickScore * 0.8 + lineupScore * 0.3;
       break;
     case "add-picks":
       total = pickScore * 2.5 + valueScore * 1.2 + lineupScore * 0.2;
@@ -332,8 +411,12 @@ export function scoreSuggestion(params: {
       // about which consolidation is the best one.
       total = lineupScore * 1.4 + valueScore * 1.2;
       break;
-    case "add-depth":
-      total = lineupScore * 1.4 + valueScore * 1.2;
+    case "split-assets":
+      // Same two terms, because the question is the same one pointing the other
+      // way: of the deals that split a good player up, which leaves the reader
+      // best off. Youth counts a little, since upside is most of the reason to
+      // do this at all.
+      total = lineupScore * 1.4 + valueScore * 1.2 + youthScore * 0.5;
       break;
     default:
       total = lineupScore * 1.3 + valueScore * 1 + youthScore * 0.4 + pickScore * 0.3;
@@ -345,6 +428,9 @@ export function scoreSuggestion(params: {
 export const RANK_THRESHOLDS = {
   EVEN_GAP,
   LOPSIDED_GAP,
+  VISIBLE_LOSS_GAP,
   HURTS_LINEUP,
+  SEVERE_LINEUP_LOSS,
   MEANINGFULLY_YOUNGER,
+  TIER_JUMP,
 };

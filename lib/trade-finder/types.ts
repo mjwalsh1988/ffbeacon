@@ -19,45 +19,47 @@
 import type { TeamStatusKey } from "@/lib/league-team-status";
 import type { TradeQualityConfig } from "@/lib/trade-quality";
 
-/** What the reader is trying to do. Weights the ranking; never fabricates data. */
+/**
+ * What the reader is trying to do. Weights the ranking; never fabricates data.
+ *
+ * Each of these names a SHAPE of deal rather than a filter on what may appear in
+ * it. "Obtain draft picks" means at least one pick has to come back, not that
+ * nothing else may; a pick plus a receiver still counts, and so it should, since
+ * refusing to name that deal would hide the best version of the thing the reader
+ * asked for.
+ */
 export type TradeGoal =
   | "balanced"
-  | "win-now"
-  | "get-younger"
-  | "add-picks"
   | "consolidate"
-  | "add-depth";
+  | "split-assets"
+  | "add-picks"
+  | "get-younger";
 
 export const TRADE_GOALS: { key: TradeGoal; label: string; blurb: string }[] = [
   {
     key: "balanced",
-    label: "Best available",
-    blurb: "Whatever helps most, however it helps.",
-  },
-  {
-    key: "win-now",
-    label: "Win now",
-    blurb: "Points in the starting lineup this season, age be damned.",
-  },
-  {
-    key: "get-younger",
-    label: "Get younger",
-    blurb: "Trade the age curve down without giving away the roster.",
-  },
-  {
-    key: "add-picks",
-    label: "Add picks",
-    blurb: "Turn players into future draft capital.",
+    label: "Open to all trades",
+    blurb: "Any shape of deal, whatever helps most.",
   },
   {
     key: "consolidate",
     label: "Consolidate",
-    blurb: "Two good pieces for one better one.",
+    blurb: "Two or three mid pieces, plus a pick if it helps, for one better player.",
   },
   {
-    key: "add-depth",
-    label: "Add depth",
-    blurb: "One big name for two starters.",
+    key: "split-assets",
+    label: "Split assets",
+    blurb: "One of your better players for several mid-tier pieces with upside, often plus a pick.",
+  },
+  {
+    key: "add-picks",
+    label: "Obtain draft picks",
+    blurb: "Bring back draft capital, on its own or alongside players.",
+  },
+  {
+    key: "get-younger",
+    label: "Get younger",
+    blurb: "Younger players with room to grow, and the picks that come with them.",
   },
 ];
 
@@ -224,6 +226,20 @@ export type TradeSuggestion = {
   score: number;
   /** One sentence naming the deal. */
   headline: string;
+  /**
+   * Why this deal is in front of the reader at all.
+   *
+   * Distinct from `whyYou`, which describes the deltas once a deal exists. This
+   * one answers the question a reader actually asks of a suggestion engine:
+   * "why are you showing me this?" It names the shape they asked for, the hole
+   * on their roster it fills, and what about the other team's situation put the
+   * piece on the table. Across the portfolio surface it is the only thing that
+   * explains why a deal came out of one league rather than another.
+   *
+   * Assembled from figures the engine already computed. Nothing here is a model
+   * output and nothing is invented.
+   */
+  rationale: string;
   /** Why the reader should want it. */
   whyYou: string;
   /** Why the other manager might say yes. */

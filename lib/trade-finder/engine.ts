@@ -31,12 +31,37 @@
  *   deal they have not thought of beats a slightly better variant of the deal
  *   above it, and the ordering says so explicitly.
  *
+ *   The same failure has a mirror image on the other side of the deal, and it
+ *   survived the first fix: the reader kept being told to ACQUIRE the same
+ *   player over and over. Every asset tally is now kept on both sides and fed
+ *   back into the search while it runs, not merely consulted while reordering
+ *   what it produced.
+ *
+ * ANSWERING BEATS ANSWERING PERFECTLY
+ *   The bands that decide whether a package is fair are judgements, and a
+ *   judgement that returns nothing is not a careful answer, it is a missing one.
+ *   So the search runs on the WIDER bands and records, for each deal, whether it
+ *   would also have cleared the strict ones. Strict-clearing deals sort ahead of
+ *   the rest at every level: inside the package chooser, in the ranking, and in
+ *   the variety walk. A reader with plenty of good options sees exactly what the
+ *   strict search would have given them; a reader who would otherwise be told
+ *   there is nothing gets the honest wider answer behind it.
+ *
+ *   This started life as two passes, strict then relaxed, on the theory that the
+ *   second one only ran when the first had found almost nothing and was
+ *   therefore cheap. Measurement said otherwise: the cost of a package is paid
+ *   in the lineup fills of measureImpact, which happen BEFORE the bands can
+ *   reject anything, so "found little" and "did little work" turned out to be
+ *   unrelated. The most expensive search in the set was the one that triggered
+ *   the retry, and running it twice cost 72% more for the same answer one pass
+ *   produces.
+ *
  * Cost is bounded at every level rather than by a timeout. A twelve-team league
- * evaluates eleven counterparties, at most ten acquirable pieces each, and at
- * most three packages per piece, plus one anchored search per uncovered asset,
- * so the ceiling is a few hundred candidate deals and roughly twice that many
- * lineup fills. That is a fraction of a second, and it does not grow with the
- * size of the site.
+ * evaluates eleven counterparties, at most ten acquirable pieces and six pairs
+ * each, and at most three packages per piece, plus one anchored search per
+ * uncovered asset, so the ceiling is a few hundred candidate deals and roughly
+ * twice that many lineup fills. Widening the band changes which candidates are
+ * scanned, which is arithmetic, not which are measured, which is the expense.
  *
  * Pure. No database, no React, no clock: two runs over the same league produce
  * the same suggestions in the same order, which is what makes a stored pass
@@ -49,19 +74,23 @@ import {
   type TeamProfile,
 } from "./profile";
 import {
-  PACKAGE_LIMITS,
+  RELAXED_TOLERANCES,
+  STRICT_TOLERANCES,
   acquirablePool,
   anchorCandidates,
-  anchorOf,
   assetId,
   assetValue,
   balancePackages,
   givablePool,
-  incomingPairs,
+  incomingCombos,
   type AssetRef,
   type QualityGate,
+  type Tolerances,
 } from "./packages";
-import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
+import {
+  DEFAULT_TRADE_QUALITY_CONFIG,
+  type TradeQualityConfig,
+} from "@/lib/trade-quality";
 import {
   acceptanceOf,
   measureImpact,
@@ -74,6 +103,7 @@ import {
   buildCaveats,
   buildHeadline,
   buildPitch,
+  buildRationale,
   buildWhyThem,
   buildWhyYou,
 } from "./explain";
@@ -82,6 +112,7 @@ import type {
   SuggestionAsset,
   TradeFinderInput,
   TradeFinderResult,
+  TradeGoal,
   TradeSuggestion,
 } from "./types";
 
@@ -97,6 +128,26 @@ const MAX_RESULTS = 40;
  */
 const COVERAGE_ANCHORS = 14;
 const COVERAGE_PER_ANCHOR = 2;
+
+/**
+ * How many ideas a NAMED player gets, when the reader has asked about one.
+ *
+ * Two is right when fourteen assets are each getting a turn and the panel has to
+ * cover a roster. It is wrong when the reader has asked one question about one
+ * player: they want the market, not a sample of it, and every idea here is a
+ * distinct offer from a distinct manager rather than a variant.
+ */
+const NAMED_ANCHOR_TAKE = 12;
+
+/**
+ * How far down the roster the consolidation pairing reaches.
+ *
+ * Eight assets is twenty-eight pairs, of which the fourteen most valuable are
+ * kept. Past that the pairs are two bench players adding up to a third bench
+ * player, which is not moving up a tier and is not what anyone means by
+ * consolidating.
+ */
+const CONSOLIDATE_PAIR_DEPTH = 8;
 
 /** A need this size is worth naming in the explanation. Points per week. */
 const NAMEABLE_NEED = 0.5;
@@ -134,7 +185,10 @@ function toSuggestionAsset(asset: AssetRef): SuggestionAsset {
  * moved. A trade that adds a fourth good receiver to a team already three deep
  * names no position, which is correct: nothing was fixed.
  */
-function positionHelped(incoming: AssetRef[], mine: TeamProfile): string | null {
+function positionHelped(
+  incoming: AssetRef[],
+  mine: TeamProfile,
+): { position: string; need: number } | null {
   let best: string | null = null;
   let bestNeed = NAMEABLE_NEED;
   for (const asset of incoming) {
@@ -145,7 +199,112 @@ function positionHelped(incoming: AssetRef[], mine: TeamProfile): string | null 
       best = asset.player.position;
     }
   }
-  return best;
+  return best ? { position: best, need: bestNeed } : null;
+}
+
+/** The single most valuable asset in a set. */
+function topValue(assets: AssetRef[]): number {
+  let max = 0;
+  for (const a of assets) max = Math.max(max, assetValue(a));
+  return max;
+}
+
+/** A shape constraint the package search can apply while it builds. */
+type ShapeConstraint = {
+  accept?: (assets: AssetRef[]) => boolean;
+  maxAssets?: number;
+};
+
+/** No constraint at all. What a named player gets, whatever the goal says. */
+const NO_SHAPE: ShapeConstraint = {};
+
+/**
+ * How many assets the OUTGOING side needs, for goals that describe its shape.
+ *
+ * Expressed as a search constraint rather than a filter applied afterwards. The
+ * package search prefers the smallest package that balances, so leaving this to
+ * a downstream test meant every package it offered was a single asset and every
+ * one of them was then rejected for being the wrong shape.
+ */
+function outgoingShapeFor(goal: TradeGoal): ShapeConstraint {
+  if (goal === "consolidate") {
+    return { accept: (assets) => assets.length >= 2, maxAssets: 3 };
+  }
+  if (goal === "split-assets") {
+    // One piece leaves and several come back. More than one on the way out is a
+    // different trade, and the goal test would refuse it anyway.
+    return { maxAssets: 1 };
+  }
+  return {};
+}
+
+/** What the INCOMING side has to look like, when the goal says so. */
+function incomingShapeFor(goal: TradeGoal): ShapeConstraint {
+  if (goal === "add-picks") {
+    // A pick has to be in it. Players alongside are welcome and common, which
+    // is why this asks for at least one rather than for picks only.
+    return { accept: (assets) => assets.some((a) => a.kind === "pick") };
+  }
+  if (goal === "split-assets") {
+    return { accept: (assets) => assets.length >= 2 };
+  }
+  if (goal === "get-younger") {
+    // Singles pass freely. A PAIR has to actually be about youth, or it is just
+    // two players bundled, which the singles already describe one at a time.
+    // Without this the goal was the only one paying for the pair scan and
+    // getting nothing back for it: measured at 1.5x the engine time of every
+    // other goal, for candidates the ranking then sorted to the bottom anyway.
+    return {
+      accept: (assets) =>
+        assets.length < 2 ||
+        assets.some(
+          (a) =>
+            a.kind === "pick" || (a.player.age !== null && a.player.age <= YOUNG_AGE),
+        ),
+    };
+  }
+  return {};
+}
+
+/** At or under this, a player counts as young for the get-younger shape test. */
+const YOUNG_AGE = 25;
+
+/** What one run of the whole search produced. */
+type PassResult = {
+  suggestions: TradeSuggestion[];
+  considered: Set<number>;
+  passedTargets: Set<string>;
+  /**
+   * Fingerprints of deals that only cleared the WIDER band.
+   *
+   * Not a rejection. These sort behind everything that cleared the strict band,
+   * at both the ranking and the variety walk, so widening the search adds ideas
+   * underneath the good ones instead of mixing them in.
+   */
+  loose: Set<string>;
+};
+
+/**
+ * Would this deal have cleared the strict quality band?
+ *
+ * Read off the suggestion's own quality ratio, which is the same number the
+ * search gate computed: qualityBalance reports the second side over the first,
+ * and both the ordinary gate and the reversed one end up comparing outgoing
+ * against incoming, exactly as qualityRatioOf does.
+ *
+ * The raw value gap is checked symmetrically rather than in the direction the
+ * search happened to assemble, which makes this slightly conservative: a deal
+ * whose assembled side overshoots can be filed as loose when the strict search
+ * would have taken it. That costs nothing, because this only ever decides
+ * ordering. Nothing is dropped on the strength of it.
+ */
+function clearsStrictBands(qualityRatio: number, valueGap: number): boolean {
+  if (!Number.isFinite(qualityRatio)) return false;
+  if (valueGap > STRICT_TOLERANCES.over) return false;
+  return (
+    qualityRatio >= 1 - STRICT_TOLERANCES.qualityUnder &&
+    qualityRatio <= 1 + STRICT_TOLERANCES.qualityOver
+  );
 }
 
 export function findTrades(input: TradeFinderInput): TradeFinderResult {
@@ -165,23 +324,6 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
   if (!mine) return empty;
 
   const lineupUnavailable = profiles.every((p) => p.startingTotal === null);
-  const excluded = new Set(input.excludeKeys);
-
-  // The reader's own currency is the same whoever they are talking to, so it is
-  // assembled once rather than per counterparty.
-  const givable = givablePool(mine, {
-    goal: input.goal,
-    offerPlayerId: input.offerPlayerId,
-    allowPicks: input.allowPicks,
-  });
-  const required = input.offerPlayerId
-    ? (givable.find((a) => assetId(a) === input.offerPlayerId) ?? null)
-    : null;
-
-  // A named player the reader wants to move but that we cannot find, or cannot
-  // value, leaves nothing honest to build from.
-  if (input.offerPlayerId && !required) return { ...empty, lineupUnavailable };
-  if (givable.length === 0) return { ...empty, lineupUnavailable };
 
   // The consolidation model, on admin settings when the caller loaded them and
   // on the published defaults when it did not. Either way the finder and Signal
@@ -191,6 +333,88 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     config: input.quality?.config ?? DEFAULT_TRADE_QUALITY_CONFIG,
     poolMax: input.quality?.poolMax ?? null,
   };
+
+  const { suggestions, considered, passedTargets, loose } = collect(
+    input,
+    profiles,
+    mine,
+    slots,
+    quality,
+  );
+
+  // A target the reader has already refused sinks below everything they have
+  // not seen, and a deal that only cleared the wider band sinks below every deal
+  // that cleared the strict one. Score decides inside each band, then the
+  // fingerprint. The tiebreak is not cosmetic: two deals that score identically
+  // must come back in the same order on every run, or a pass would move the
+  // goalposts instead of advancing the queue.
+  const ranked = [...suggestions].sort((a, b) => {
+    const aPassed = passedTargets.has(targetKeyOf(a)) ? 1 : 0;
+    const bPassed = passedTargets.has(targetKeyOf(b)) ? 1 : 0;
+    if (aPassed !== bPassed) return aPassed - bPassed;
+    const aLoose = loose.has(a.key) ? 1 : 0;
+    const bLoose = loose.has(b.key) ? 1 : 0;
+    if (aLoose !== bLoose) return aLoose - bLoose;
+    return b.score - a.score || a.key.localeCompare(b.key);
+  });
+
+  return {
+    suggestions: selectVaried(
+      ranked,
+      (s) => passedTargets.has(targetKeyOf(s)),
+      (s) => loose.has(s.key),
+    ).slice(0, MAX_RESULTS),
+    consideredTeams: considered.size,
+    lineupUnavailable,
+  };
+}
+
+/**
+ * The search itself.
+ *
+ * Split out of findTrades so the ranking and the variety walk read as one
+ * paragraph rather than being buried under six hundred lines of loop.
+ */
+function collect(
+  input: TradeFinderInput,
+  profiles: TeamProfile[],
+  mine: TeamProfile,
+  slots: string[],
+  quality: { config: TradeQualityConfig; poolMax: number | null },
+): PassResult {
+  // Every package is searched on the wider band and filed by whether it also
+  // cleared the strict one. See the header: the strict band decides ORDER here,
+  // not membership.
+  const tolerances: Tolerances = RELAXED_TOLERANCES;
+
+  const emptyPass: PassResult = {
+    suggestions: [],
+    considered: new Set<number>(),
+    passedTargets: new Set<string>(),
+    loose: new Set<string>(),
+  };
+
+  const excluded = new Set(input.excludeKeys);
+  const specificAsk = Boolean(input.targetPlayerId || input.offerPlayerId);
+
+  // The reader's own currency is the same whoever they are talking to, so it is
+  // assembled once rather than per counterparty. A named player widens it: see
+  // givablePool for why answering "what would it take" out of bench pieces is
+  // not answering it.
+  const givable = givablePool(mine, {
+    goal: input.goal,
+    offerPlayerId: input.offerPlayerId,
+    allowPicks: input.allowPicks,
+    widen: specificAsk,
+  });
+  const required = input.offerPlayerId
+    ? (givable.find((a) => assetId(a) === input.offerPlayerId) ?? null)
+    : null;
+
+  // A named player the reader wants to move but that we cannot find, or cannot
+  // value, leaves nothing honest to build from.
+  if (input.offerPlayerId && !required) return emptyPass;
+  if (givable.length === 0) return emptyPass;
 
   const suggestions: TradeSuggestion[] = [];
   const seenKeys = new Set<string>();
@@ -205,6 +429,8 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
    * the distinct players and the alternative prices are still there behind them.
    */
   const passedTargets = new Set<string>();
+  /** Deals that only cleared the wider band. Ordering, never exclusion. */
+  const loose = new Set<string>();
   /**
    * How many offers each asset has already appeared in, on each side.
    *
@@ -216,13 +442,19 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
    */
   const outgoingUsage = new Map<string, number>();
   const incomingUsage = new Map<string, number>();
-  const acquirableByRoster = new Map<number, AssetRef[]>();
   /** Counterparties with something on the table, in either pass. */
   const considered = new Set<number>();
 
   const note = (tally: Map<string, number>, assets: AssetRef[]) => {
     for (const a of assets) {
       const id = assetId(a);
+      tally.set(id, (tally.get(id) ?? 0) + 1);
+    }
+  };
+  /** The same tally, fed from a finished suggestion rather than from refs. */
+  const noteAssets = (tally: Map<string, number>, assets: SuggestionAsset[]) => {
+    for (const a of assets) {
+      const id = a.kind === "player" ? a.playerId : a.key;
       tally.set(id, (tally.get(id) ?? 0) + 1);
     }
   };
@@ -267,13 +499,22 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     const theirImpact = measureImpact(theirs, slots, outgoing, incoming);
 
     // The goal is a constraint. A reader who asked for picks and is shown a
-    // deal without one has been ignored, however good it is. A named target
-    // overrides it, because naming a player IS the more specific request.
+    // deal without one has been ignored, however good it is.
+    //
+    // Naming a player overrides it, from EITHER side, because naming a player is
+    // the more specific request. This applied only to the player the reader
+    // wanted, and the asymmetry had teeth: the anchored search always sends
+    // exactly one asset, so "Consolidate" plus a named player to move could
+    // never satisfy the shape test and returned nothing at all for every star on
+    // the roster. A reader who has typed a name is asking about that player, not
+    // about the dropdown they set a minute ago.
     if (
-      !input.targetPlayerId &&
+      !specificAsk &&
       !satisfiesGoal(input.goal, myImpact, {
         incoming: incoming.length,
         outgoing: outgoing.length,
+        incomingTop: topValue(incoming),
+        outgoingTop: topValue(outgoing),
       })
     ) {
       return null;
@@ -293,6 +534,7 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     if (score <= 0 && !input.targetPlayerId && !opts.allowNeutral) return null;
 
     seenKeys.add(key);
+    if (!clearsStrictBands(qualityRatio, gap)) loose.add(key);
 
     const incomingAssets = incoming.map(toSuggestionAsset);
     const outgoingAssets = outgoing.map(toSuggestionAsset);
@@ -316,7 +558,16 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
       acceptance,
       score,
       headline: buildHeadline(incomingAssets, outgoingAssets, theirs.team.teamName),
-      whyYou: buildWhyYou(myImpact, input.goal, helped),
+      rationale: buildRationale({
+        goal: input.goal,
+        direction: theirs.direction,
+        teamName: theirs.team.teamName,
+        positionHelped: helped?.position ?? null,
+        needPoints: helped?.need ?? null,
+        named: input.targetPlayerId ? "target" : input.offerPlayerId ? "offer" : null,
+        mine: myImpact,
+      }),
+      whyYou: buildWhyYou(myImpact, input.goal, helped?.position ?? null),
       whyThem: buildWhyThem(
         theirImpact,
         theirs.direction,
@@ -345,6 +596,14 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     };
   };
 
+  // A named player is the more specific request and overrides the goal, exactly
+  // as the goal test in build() does. Leaving the shape constraints on would
+  // filter the named player out of his own search before the override ever got a
+  // chance to run: ask for picks, then ask about a tight end, and the incoming
+  // side would be required to contain a pick that the tight end is not.
+  const outgoingShape = specificAsk ? NO_SHAPE : outgoingShapeFor(input.goal);
+  const incomingShape = specificAsk ? NO_SHAPE : incomingShapeFor(input.goal);
+
   for (const theirs of profiles) {
     if (theirs.team.rosterId === input.myRosterId) continue;
 
@@ -353,28 +612,18 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
       targetPlayerId: input.targetPlayerId,
       allowPicks: input.allowPicks,
     });
-    acquirableByRoster.set(theirs.team.rosterId, acquirable);
     if (acquirable.length === 0) continue;
     considered.add(theirs.team.rosterId);
 
-    // What the reader might receive: one piece at a time, plus genuine pairs
-    // when they have asked to turn a name into depth.
-    const incomingSets: AssetRef[][] = acquirable.map((a) => [a]);
-    if (input.goal === "add-depth" && required) {
-      incomingSets.push(
-        ...incomingPairs(
-          acquirable,
-          assetValue(required),
-          PACKAGE_LIMITS.QUALITY_RAW_OVER_TOLERANCE,
-        ),
-      );
-    }
+    // What the reader might receive. One piece at a time, plus genuine
+    // combinations for the goals whose whole shape is "more than one thing
+    // comes back".
+    const incomingSets = incomingCombos(acquirable, input.goal).filter(
+      (set) => !incomingShape.accept || incomingShape.accept(set),
+    );
 
     for (const incoming of incomingSets) {
-      const target = incoming.reduce(
-        (sum, a) => sum + (a.kind === "player" ? a.player.value : a.pick.value),
-        0,
-      );
+      const target = incoming.reduce((sum, a) => sum + assetValue(a), 0);
       if (target <= 0) continue;
 
       const gate: QualityGate = {
@@ -384,9 +633,11 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
       };
       const packages = balancePackages(target, givable, {
         required,
-        maxAssets: input.goal === "consolidate" ? 3 : undefined,
+        maxAssets: outgoingShape.maxAssets,
+        accept: outgoingShape.accept,
         quality: gate,
         usage: outgoingUsage,
+        tolerances,
       });
 
       for (const outgoing of packages) {
@@ -409,28 +660,83 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
    * player was never one. That is not an answer, it is a blind spot, and the
    * question "what could I get for him" is the most natural one a manager asks.
    *
-   * So each unmentioned asset anchors its own search, with the deal built
-   * around it instead of it being built around somebody else. The fairness
-   * bands are the same ones every other suggestion passes, so an idea that
-   * cannot come back level is still not shown. What changes is only which
-   * question gets asked.
+   * So each asset anchors its own search, with the deal built around it instead
+   * of it being built around somebody else. The fairness bands are the same ones
+   * every other suggestion passes, so an idea that cannot come back level is
+   * still not shown. What changes is only which question gets asked.
+   *
+   * WHY THIS RUNS FOR A NAMED PLAYER TOO
+   *   It used to be skipped entirely whenever the reader named somebody, and
+   *   that is exactly backwards. This pass is the ONLY one that can build a
+   *   multi-piece return around a single expensive player, because the browse
+   *   loop fixes the incoming side and asks what pays for it, and nothing in a
+   *   normal roster's spare parts costs as much as a quarterback anyone wants.
+   *   So a reader who watched the engine suggest a deal for a star, then typed
+   *   that star's name into "player you would move", was told no trade could be
+   *   found, by the code that had just built one. Naming a player now anchors
+   *   this pass on him instead of turning it off.
+   *
+   * WHY AN ANCHOR IS A SET RATHER THAN AN ASSET
+   *   It used to send exactly one piece, and that made this pass structurally
+   *   incapable of consolidating: "two or three out, one better one back" cannot
+   *   be built from a fixed side of one. Consolidation was therefore left
+   *   entirely to the browse loop, which fixes the INCOMING side from what the
+   *   other team can spare, and what a team can spare is by definition not a
+   *   tier above what the reader is sending. So the one goal whose whole purpose
+   *   is moving up a tier could only be offered deals that did not. On a league
+   *   with real tiers it returned nothing at all.
+   *
+   *   The fixed side is now a set. For most goals it holds one asset, exactly as
+   *   before. For consolidation it holds a pair, and the search asks the question
+   *   that goal is actually about: who has one player worth roughly what these
+   *   two are worth together.
    */
-  const specificAsk = Boolean(input.targetPlayerId || input.offerPlayerId);
-  if (!specificAsk) {
-    const mentioned = new Set<string>();
-    for (const s of suggestions) {
-      for (const a of s.outgoing) mentioned.add(a.kind === "player" ? a.playerId : a.key);
-    }
+  const anchorSets: AssetRef[][] = required
+    ? [[required]]
+    : (() => {
+        const mentioned = new Set<string>();
+        for (const s of suggestions) {
+          for (const a of s.outgoing) {
+            mentioned.add(a.kind === "player" ? a.playerId : a.key);
+          }
+        }
+        const candidates = anchorCandidates(mine, {
+          goal: input.goal,
+          allowPicks: input.allowPicks,
+        });
 
-    const anchors = anchorCandidates(mine, {
-      goal: input.goal,
-      allowPicks: input.allowPicks,
-    })
-      .filter((a) => !mentioned.has(assetId(a)))
-      .slice(0, COVERAGE_ANCHORS);
+        if (input.goal === "consolidate") {
+          // Pairs drawn from the top of the roster, because two pieces nobody
+          // wants do not add up to one somebody does, and bounded so the pairing
+          // stays a constant rather than a square.
+          //
+          // Walked diagonally rather than sorted by combined value. Sorting that
+          // way puts every pair containing the single best asset at the front,
+          // so the fourteen kept were fourteen ways to trade the same player and
+          // the reader was handed one idea over and over. The diagonal takes
+          // neighbours first, which spreads the lead asset across the roster.
+          const head = candidates.slice(0, CONSOLIDATE_PAIR_DEPTH);
+          const pairs: AssetRef[][] = [];
+          for (let span = 1; span < head.length && pairs.length < COVERAGE_ANCHORS; span += 1) {
+            for (let i = 0; i + span < head.length && pairs.length < COVERAGE_ANCHORS; i += 1) {
+              pairs.push([head[i], head[i + span]]);
+            }
+          }
+          return pairs;
+        }
 
-    for (const anchor of anchors) {
-      const anchorValue = assetValue(anchor);
+        return candidates
+          .filter((a) => !mentioned.has(assetId(a)))
+          .slice(0, COVERAGE_ANCHORS)
+          .map((a) => [a]);
+      })();
+
+  // A named target is answered by the browse loop, which already fixes that
+  // player on the incoming side; anchoring the reader's own assets as well would
+  // build deals that do not contain the player they asked about.
+  if (!input.targetPlayerId) {
+    for (const anchorSet of anchorSets) {
+      const anchorValue = anchorSet.reduce((sum, a) => sum + assetValue(a), 0);
       if (anchorValue <= 0) continue;
       const found: TradeSuggestion[] = [];
 
@@ -444,7 +750,7 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
           targetPlayerId: null,
           allowPicks: input.allowPicks,
           comparableTo: anchorValue,
-        });
+        }).filter((a) => !anchorSet.some((held) => assetId(held) === assetId(a)));
         if (pool.length === 0) continue;
         // A team with nothing spare can still have somebody the reader can
         // match, so this pass reaches counterparties the browse loop skipped.
@@ -455,48 +761,56 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
         const gate: QualityGate = {
           config: quality.config,
           poolMax: quality.poolMax,
-          incomingValues: [anchorValue],
+          incomingValues: anchorSet.map(assetValue),
           reversed: true,
         };
         const returns = balancePackages(anchorValue, pool, {
           quality: gate,
           usage: incomingUsage,
+          tolerances,
+          // Consolidating means ONE piece comes back. Anything else would be
+          // the shape the reader asked to move away from.
+          maxAssets: input.goal === "consolidate" ? 1 : undefined,
+          accept: incomingShape.accept,
         });
 
         for (const incoming of returns) {
-          const suggestion = build(theirs, incoming, [anchor], { allowNeutral: true });
+          const suggestion = build(theirs, incoming, anchorSet, { allowNeutral: true });
           if (suggestion) found.push(suggestion);
         }
       }
 
       found.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
-      const kept = found.slice(0, COVERAGE_PER_ANCHOR);
+
+      // Keep the best few, but never two that bring back the same lead player.
+      // Without this the two ideas offered for one anchor were routinely the
+      // same acquisition at two prices, which is one idea printed twice.
+      const take = required ? NAMED_ANCHOR_TAKE : COVERAGE_PER_ANCHOR;
+      const kept: TradeSuggestion[] = [];
+      const keptLeads = new Set<string>();
+      for (const s of found) {
+        if (kept.length >= take) break;
+        const lead = incomingLeadKeyOf(s);
+        if (keptLeads.has(lead)) continue;
+        keptLeads.add(lead);
+        kept.push(s);
+      }
+
       for (const s of kept) {
         suggestions.push(s);
-        note(outgoingUsage, [anchor]);
+        note(outgoingUsage, anchorSet);
+        // The missing half of the tally. Without this line the incoming counts
+        // never grew during coverage, so every anchor's return search saw a
+        // pool where nothing had been used yet and reached for the same
+        // attractive players again. That is the "it keeps telling me to acquire
+        // the same guy" report, and it survived the outgoing-side fix precisely
+        // because only the outgoing side was being counted.
+        noteAssets(incomingUsage, s.incoming);
       }
     }
   }
 
-  // A target the reader has already refused sinks below everything they have
-  // not seen. Score decides inside each band, then the fingerprint. The tiebreak
-  // is not cosmetic: two deals that score identically must come back in the same
-  // order on every run, or a pass would move the goalposts instead of advancing
-  // the queue.
-  suggestions.sort((a, b) => {
-    const aPassed = passedTargets.has(targetKeyOf(a)) ? 1 : 0;
-    const bPassed = passedTargets.has(targetKeyOf(b)) ? 1 : 0;
-    if (aPassed !== bPassed) return aPassed - bPassed;
-    return b.score - a.score || a.key.localeCompare(b.key);
-  });
-
-  return {
-    suggestions: selectVaried(suggestions, (s) =>
-      passedTargets.has(targetKeyOf(s)),
-    ).slice(0, MAX_RESULTS),
-    consideredTeams: considered.size,
-    lineupUnavailable,
-  };
+  return { suggestions, considered, passedTargets, loose };
 }
 
 /** Identifies "this player, from this team", whatever the price. */
@@ -524,12 +838,21 @@ function paymentKeyOf(s: TradeSuggestion): string {
   return best.kind === "player" ? best.playerId : best.key;
 }
 
-/** The player or players coming back, regardless of who is sending them. */
-function incomingKeyOf(s: TradeSuggestion): string {
-  return s.incoming
-    .map((a) => (a.kind === "player" ? a.playerId : a.key))
-    .sort()
-    .join(",");
+/**
+ * The headline asset coming back.
+ *
+ * The whole incoming set used to be the variety key, and that quietly let the
+ * same acquisition through repeatedly: "Olave", "Olave and a 2027 3rd", and
+ * "Olave and a bench back" are three different sets and one idea. What a reader
+ * notices is the name at the front of the card, so that is what is counted.
+ */
+function incomingLeadKeyOf(s: TradeSuggestion): string {
+  let best: SuggestionAsset | null = null;
+  for (const asset of s.incoming) {
+    if (!best || asset.value > best.value) best = asset;
+  }
+  if (!best) return "";
+  return best.kind === "player" ? best.playerId : best.key;
 }
 
 /**
@@ -555,11 +878,16 @@ function bump(tally: Map<string, number>, key: string): void {
  * was preventing exactly that.
  *
  * One walk, one set of rules. The next deal shown is never a repeat of the one
- * directly before it, on either the asset or the partner, while an alternative
- * exists. Among the rest it is whichever repeats least of everything shown so
- * far, and only then the better score. Freshness beats a better deal on purpose.
- * The reader is being handed ideas to build on, and the eighth variant of one
- * idea is worth less to them than the first version of a new one.
+ * directly before it, on the asset going out, the asset coming back, or the
+ * partner, while an alternative exists. Among the rest it is whichever repeats
+ * least of everything shown so far, and only then the better score. Freshness
+ * beats a better deal on purpose. The reader is being handed ideas to build on,
+ * and the eighth variant of one idea is worth less to them than the first
+ * version of a new one.
+ *
+ * The incoming guard is measured on the LEAD asset rather than the whole set,
+ * because a reader looking at two cards that both open with the same player has
+ * been shown that player twice whatever else was bundled with him.
  *
  * The opener is exempt: it is the best deal in the league, full stop. Variety
  * decides everything after it.
@@ -572,10 +900,22 @@ function bump(tally: Map<string, number>, key: string): void {
 function selectVaried(
   sorted: TradeSuggestion[],
   isPassed: (s: TradeSuggestion) => boolean,
+  isLoose: (s: TradeSuggestion) => boolean,
 ): TradeSuggestion[] {
   if (sorted.length <= 2) return sorted;
 
-  const remaining = sorted.slice(0, DIVERSITY_POOL);
+  // Precomputed once per suggestion rather than recomputed for every candidate
+  // on every round of the walk below, which is quadratic and was re-deriving
+  // keys that cannot change.
+  const rows = sorted.slice(0, DIVERSITY_POOL).map((s) => ({
+    s,
+    outKey: paymentKeyOf(s),
+    inKey: incomingLeadKeyOf(s),
+    partner: s.counterparty.rosterId,
+    passed: isPassed(s) ? 1 : 0,
+    loose: isLoose(s) ? 1 : 0,
+  }));
+  const remaining = rows;
   const tail = sorted.slice(DIVERSITY_POOL);
   const out: TradeSuggestion[] = [];
 
@@ -584,16 +924,18 @@ function selectVaried(
   const partnerUses = new Map<string, number>();
 
   let lastOutgoing: string | null = null;
+  let lastIncoming: string | null = null;
   let lastPartner: number | null = null;
 
   const take = (index: number) => {
     const [next] = remaining.splice(index, 1);
-    out.push(next);
-    bump(outgoingUses, paymentKeyOf(next));
-    bump(incomingUses, incomingKeyOf(next));
-    bump(partnerUses, String(next.counterparty.rosterId));
-    lastOutgoing = paymentKeyOf(next);
-    lastPartner = next.counterparty.rosterId;
+    out.push(next.s);
+    bump(outgoingUses, next.outKey);
+    bump(incomingUses, next.inKey);
+    bump(partnerUses, String(next.partner));
+    lastOutgoing = next.outKey;
+    lastIncoming = next.inKey;
+    lastPartner = next.partner;
   };
 
   take(0);
@@ -604,26 +946,50 @@ function selectVaried(
     let bestTiebreak = "";
 
     for (let i = 0; i < remaining.length; i += 1) {
-      const s = remaining[i];
-      const outKey = paymentKeyOf(s);
-      const inKey = incomingKeyOf(s);
+      const row = remaining[i];
+      const s = row.s;
+      const { outKey, inKey } = row;
       const outUses = outgoingUses.get(outKey) ?? 0;
       const inUses = incomingUses.get(inKey) ?? 0;
+      const repeatOut = outKey === lastOutgoing ? 1 : 0;
+      const repeatIn = inKey === lastIncoming ? 1 : 0;
       const key = [
-        isPassed(s) ? 1 : 0,
-        // Never twice in a row, on either axis, while any alternative exists.
-        // These outrank the tallies below because two identical cards back to
-        // back is the failure a reader notices first, and because keeping both
-        // guards inside ONE key is what stops them undoing each other the way
-        // the separate passes did.
-        outKey === lastOutgoing ? 1 : 0,
-        s.counterparty.rosterId === lastPartner ? 1 : 0,
+        row.passed,
+        // Never twice in a row, on either asset, while an alternative exists.
+        // These outrank the tallies below because two similar cards back to back
+        // is the failure a reader notices first, and keeping every guard inside
+        // ONE key is what stops them undoing each other the way the separate
+        // reordering passes did.
+        //
+        // The SUM comes first so the two guards cannot be played off against
+        // each other. Ranked one above the other, a deal that kept the payment
+        // fresh outranked one that kept the acquisition fresh, and once the only
+        // remaining fresh payments all led with the same incoming player the
+        // reader was handed that player two and three cards running: the exact
+        // repetition this pair of guards exists to prevent, produced by the
+        // guards themselves.
+        repeatOut + repeatIn,
+        // When something has to repeat, repeat the payment rather than the
+        // acquisition. Two ways to pay for one player is a price and an
+        // alternative; two players you could get for one asset is two ideas.
+        // The second is worth more to a reader looking for somewhere to start.
+        repeatIn,
+        repeatOut,
+        row.partner === lastPartner ? 1 : 0,
+        // Then the band. Deliberately BELOW the no-repeat guards rather than
+        // above them: the opener is already the best strict-band deal, because
+        // the caller sorted the list that way and this walk takes [0] as given,
+        // so putting the band above the guards would buy nothing at the top and
+        // would cost the one thing the guards exist for. When the only strict
+        // deal left repeats the partner on screen, a wider-band deal with a
+        // different partner is the better card.
+        row.loose,
         // Then how stale the deal is on whichever side has been shown more.
         // Taking the larger of the two keeps both ends fresh instead of trading
         // one kind of repetition for another.
         Math.max(outUses, inUses),
         outUses + inUses,
-        partnerUses.get(String(s.counterparty.rosterId)) ?? 0,
+        partnerUses.get(String(row.partner)) ?? 0,
         -s.score,
       ];
       if (bestKey === null || compareKeys(key, s.key, bestKey, bestTiebreak) < 0) {
@@ -650,5 +1016,6 @@ export const ENGINE_LIMITS = {
   MAX_RESULTS,
   COVERAGE_ANCHORS,
   COVERAGE_PER_ANCHOR,
+  NAMED_ANCHOR_TAKE,
   DIVERSITY_POOL,
 };

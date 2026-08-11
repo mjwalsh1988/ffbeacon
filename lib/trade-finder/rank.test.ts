@@ -115,32 +115,58 @@ describe("acceptanceOf", () => {
 });
 
 describe("satisfiesGoal", () => {
-  const shape = { incoming: 1, outgoing: 1 };
+  /** A one-for-one of comparable players. Neither side moves up a tier. */
+  const shape = { incoming: 1, outgoing: 1, incomingTop: 3000, outgoingTop: 3000 };
 
-  it("lets everything through on best available", () => {
+  it("lets everything through on open to all trades", () => {
     expect(satisfiesGoal("balanced", impact({ valueDelta: -500 }), shape)).toBe(true);
   });
 
   it("requires the thing the reader asked for", () => {
     expect(satisfiesGoal("add-picks", impact({ pickCountDelta: 0 }), shape)).toBe(false);
     expect(satisfiesGoal("add-picks", impact({ pickCountDelta: 1 }), shape)).toBe(true);
-    expect(satisfiesGoal("win-now", impact({ lineupDelta: -1 }), shape)).toBe(false);
     expect(satisfiesGoal("get-younger", impact({ ageDelta: 0.4 }), shape)).toBe(false);
     expect(satisfiesGoal("get-younger", impact({ ageDelta: -0.4 }), shape)).toBe(true);
   });
 
   it("does not reject a trade for a number it could not measure", () => {
-    // An unmeasurable lineup is a reason to say nothing about it, not a reason
-    // to throw the trade away.
-    expect(satisfiesGoal("win-now", impact({ lineupDelta: null }), shape)).toBe(true);
+    // An unmeasurable age is a reason to say nothing about it, not a reason to
+    // throw the trade away.
     expect(satisfiesGoal("get-younger", impact({ ageDelta: null }), shape)).toBe(true);
   });
 
-  it("enforces the shape goals", () => {
-    expect(satisfiesGoal("consolidate", impact(), { incoming: 1, outgoing: 2 })).toBe(true);
-    expect(satisfiesGoal("consolidate", impact(), { incoming: 1, outgoing: 1 })).toBe(false);
-    expect(satisfiesGoal("add-depth", impact(), { incoming: 2, outgoing: 1 })).toBe(true);
-    expect(satisfiesGoal("add-depth", impact(), { incoming: 1, outgoing: 1 })).toBe(false);
+  it("counts a pick plus a player as adding picks", () => {
+    // The goal names what has to come back, not what may not. Refusing this
+    // shape would hide the best version of the deal the reader asked for.
+    expect(
+      satisfiesGoal("add-picks", impact({ pickCountDelta: 1 }), {
+        incoming: 2,
+        outgoing: 1,
+        incomingTop: 3000,
+        outgoingTop: 3200,
+      }),
+    ).toBe(true);
+  });
+
+  it("makes consolidating mean moving up a tier, not just sending more bodies", () => {
+    const jump = { incoming: 1, outgoing: 2, incomingTop: 5000, outgoingTop: 3000 };
+    const sideways = { incoming: 1, outgoing: 2, incomingTop: 3000, outgoingTop: 3000 };
+    expect(satisfiesGoal("consolidate", impact(), jump)).toBe(true);
+    // Two for one where the piece coming back is no better than what left is a
+    // rearrangement, and calling it consolidation would be a lie the reader can
+    // see on the card.
+    expect(satisfiesGoal("consolidate", impact(), sideways)).toBe(false);
+    expect(satisfiesGoal("consolidate", impact(), shape)).toBe(false);
+  });
+
+  it("makes splitting assets mean the good player is the one leaving", () => {
+    const split = { incoming: 2, outgoing: 1, incomingTop: 3000, outgoingTop: 5000 };
+    // Two mid pieces for one better player is consolidation seen from the other
+    // seat, and it is the opposite of what this reader asked for.
+    const backwards = { incoming: 2, outgoing: 1, incomingTop: 5000, outgoingTop: 3000 };
+    expect(satisfiesGoal("split-assets", impact(), split)).toBe(true);
+    expect(satisfiesGoal("split-assets", impact(), backwards)).toBe(false);
+    expect(satisfiesGoal("split-assets", impact(), shape)).toBe(false);
   });
 });
 

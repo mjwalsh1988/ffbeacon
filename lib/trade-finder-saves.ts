@@ -57,7 +57,19 @@ const MAX_ASSETS_PER_SIDE = 6;
 const MAX_TEXT = 400;
 const MAX_PITCH = 2000;
 
-const finiteNumber = z.number().finite();
+/**
+ * Finite AND of a plausible magnitude.
+ *
+ * `.finite()` alone rejects NaN and Infinity, which it has to, because JSON
+ * round-trips both to null and the column would end up holding a null where a
+ * number is declared. It still admits 1e308, and since the client posts the
+ * snapshot wholesale a forged bookmark could render its own author an asset
+ * worth a googol. Bounded here instead: trade values live in the low thousands
+ * on every source we carry, so a million is slack rather than licence.
+ */
+const finiteNumber = z.number().finite().min(-1e6).max(1e6);
+/** Nobody has ever been 200. Ages arrive from Sleeper as a decimal year. */
+const ageNumber = z.number().finite().min(0).max(60);
 
 /**
  * Version-agnostic on purpose.
@@ -82,7 +94,7 @@ const suggestionAssetSchema = z.union([
       position: z.string().max(12),
       team: z.string().max(12).nullable(),
       value: finiteNumber,
-      age: finiteNumber.nullable(),
+      age: ageNumber.nullable(),
       projPoints: finiteNumber.nullable(),
     })
     .strict(),
@@ -134,6 +146,17 @@ export const savedSuggestionSchema = z
     acceptance: z.enum(["likely", "worth-asking", "long-shot"]),
     score: finiteNumber,
     headline: z.string().max(MAX_TEXT),
+    /**
+     * Optional, and it has to stay that way.
+     *
+     * Every bookmark written before this field existed is a stored object
+     * without it, and the schema runs on the way OUT as well as on the way in.
+     * Requiring it would not fail loudly, it would make those rows silently
+     * vanish from the reader's Saved tab, which is the worst possible way for a
+     * new field to land. Absent means an older snapshot, and the card handles
+     * that by showing nothing rather than an empty heading.
+     */
+    rationale: z.string().max(MAX_TEXT).optional(),
     whyYou: z.string().max(MAX_TEXT),
     whyThem: z.string().max(MAX_TEXT),
     pitch: z.string().max(MAX_PITCH),
@@ -182,7 +205,14 @@ export async function loadSavedTrades(supabase: SessionClient): Promise<SavedTra
         suggestionKey: row.suggestion_key,
         sleeperLeagueId: row.sleeper_league_id,
         leagueName: row.league_name,
-        suggestion: parsed.data as TradeSuggestion,
+        // `rationale` is optional in the stored shape and required on the type,
+        // so it is filled here rather than papered over by the cast. A bookmark
+        // written before the field existed renders without the block, which is
+        // what the card's own guard expects.
+        suggestion: {
+          ...parsed.data,
+          rationale: parsed.data.rationale ?? "",
+        } as TradeSuggestion,
         grade: grade?.success ? (grade.data as SuggestionGrade) : null,
         savedAtIso: row.saved_at,
       });

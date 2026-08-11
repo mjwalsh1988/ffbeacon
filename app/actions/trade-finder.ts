@@ -85,14 +85,18 @@ const MAX_SESSION_EXCLUDED = 200;
  * per actor per minute. That is generous for a human pressing a button every few
  * seconds and thin enough that one caller cannot sit on the database.
  *
- * The portfolio limit is a third of it because each press opens up to three
- * leagues: six a minute is about 41 seconds, the same order of magnitude.
+ * The portfolio limit is a third of it because each press opens up to FOUR
+ * leagues: four a minute is about 37 seconds, the same order of magnitude. It
+ * was six against a three-league window, and the window widened so that a reader
+ * with four leagues sees all of them in one press rather than the same league
+ * repeatedly. Keeping the old number would have raised the per-actor ceiling by
+ * three quarters as a side effect of a change that was about coverage.
  *
  * The league surface is public, so its limit is the one that matters most.
  */
 const RATE_WINDOW_SECONDS = 60;
 const LEAGUE_RATE_MAX = 12;
-const PORTFOLIO_RATE_MAX = 6;
+const PORTFOLIO_RATE_MAX = 4;
 
 const GOAL_KEYS = new Set(TRADE_GOALS.map((g) => g.key));
 

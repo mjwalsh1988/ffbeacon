@@ -296,7 +296,7 @@ describe("givablePool", () => {
       BASELINES,
     );
     const pool = givablePool(mine, {
-      goal: "win-now",
+      goal: "consolidate",
       offerPlayerId: null,
       allowPicks: true,
     });
@@ -425,5 +425,63 @@ describe("givablePool value spread", () => {
       allowPicks: false,
     });
     expect(pool.length).toBeLessThanOrEqual(PACKAGE_LIMITS.GIVE_LIMIT);
+  });
+});
+
+describe("balancePackages does not trust the caller's ordering", () => {
+  // The two-asset scans break out of their inner loop as soon as a running total
+  // overshoots the band, which is only sound walking UP a pool. The coverage
+  // search hands this function a pool sorted by appetite DESCENDING, where the
+  // first pair tried is the largest, the break fires immediately, and every
+  // smaller pair behind it is discarded unexamined. That pass is the only
+  // producer of multi-piece returns for a named player, so it was quietly
+  // throwing away answers it had in hand.
+  const values = [3000, 2000, 1200, 1000, 900];
+  const build = (order: number[]) =>
+    order.map((v, i) => asRef(v, `p${values.indexOf(v)}${i}`));
+
+  it("finds the same packages whichever way the pool is sorted", () => {
+    const target = 3500;
+    const ascending = balancePackages(target, build([...values].sort((a, b) => a - b)));
+    const descending = balancePackages(target, build([...values].sort((a, b) => b - a)));
+
+    const shapes = (packages: AssetRef[][]) =>
+      packages
+        .map((p) => p.map(assetValue).sort((a, b) => a - b).join("+"))
+        .sort();
+
+    expect(shapes(ascending).length).toBeGreaterThan(0);
+    expect(shapes(descending)).toEqual(shapes(ascending));
+  });
+
+  it("reaches the pairs a descending walk would have skipped", () => {
+    const packages = balancePackages(3500, build([...values].sort((a, b) => b - a)));
+    const totals = packages.map((p) => p.reduce((s, a) => s + assetValue(a), 0));
+    // 3000 + 900 and 3000 + 1000 both land in the band. A descending scan that
+    // breaks on the first overshoot never sees either.
+    expect(totals.some((t) => t >= 3325 && t <= 4025)).toBe(true);
+  });
+});
+
+describe("balancePackages honours maxAssets", () => {
+  it("stops at one asset even when a required piece is pinned", () => {
+    // Only the two- and three-asset scans consulted maxAssets, so the "required
+    // plus one more" loop returned two-asset packages under maxAssets: 1 and the
+    // constraint was a lie the caller could not see.
+    const required = asRef(2000, "req");
+    const packages = balancePackages(3000, [required, asRef(900, "a"), asRef(1100, "b")], {
+      required,
+      maxAssets: 1,
+    });
+    for (const p of packages) expect(p.length).toBeLessThanOrEqual(1);
+  });
+
+  it("still builds the pair when there is room for it", () => {
+    const required = asRef(2000, "req");
+    const packages = balancePackages(3000, [required, asRef(900, "a"), asRef(1100, "b")], {
+      required,
+      maxAssets: 2,
+    });
+    expect(packages.some((p) => p.length === 2)).toBe(true);
   });
 });

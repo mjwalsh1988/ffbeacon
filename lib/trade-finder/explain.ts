@@ -23,6 +23,24 @@ import type {
   TradeGoal,
 } from "./types";
 
+/** How the reader described what they were after, in the engine's own words. */
+const GOAL_CLAUSE: Record<TradeGoal, string> = {
+  balanced: "You did not narrow the search, so this is the best deal on the board.",
+  consolidate: "You asked to consolidate, and this is that shape of deal.",
+  "split-assets": "You asked to split an asset up, and this is that shape of deal.",
+  "add-picks": "You asked for draft capital, and this is that shape of deal.",
+  "get-younger": "You asked to get younger, and this is that shape of deal.",
+};
+
+/**
+ * Ceiling on the finished sentence.
+ *
+ * The saved-trade schema caps every text field at 400 characters, and a bookmark
+ * that fails to save because a team name was long is a failure the reader can do
+ * nothing about and would not understand. Kept comfortably under it.
+ */
+const MAX_RATIONALE = 360;
+
 /** "Bijan Robinson", "Bijan Robinson and a 2027 1st", "A, B, and C". */
 export function listAssets(assets: SuggestionAsset[]): string {
   const names = assets.map((a) => (a.kind === "player" ? a.name : a.label));
@@ -48,6 +66,104 @@ export function buildHeadline(
   teamName: string,
 ): string {
   return `Send ${listAssets(outgoing)} to ${teamName} for ${listAssets(incoming)}.`;
+}
+
+/**
+ * Why this deal is being shown at all.
+ *
+ * Every other sentence on the card describes the deal. This one describes the
+ * SEARCH, and it is here because a suggestion engine that will not say why it
+ * chose something reads as arbitrary, which is the single most common thing
+ * managers said about the portfolio surface: four leagues in, four deals out, no
+ * account of what made any of them the one to show.
+ *
+ * Three clauses at most, each of which is a fact the engine already established:
+ * the shape the reader asked for, the counterparty's own situation that put the
+ * piece within reach, and the measured hole on the reader's roster it lands in.
+ * A clause with nothing true behind it is dropped rather than padded, so this
+ * can be one sentence or three, and the shortest version is still honest.
+ *
+ * The league name is deliberately absent. On the league tab it is the page, and
+ * on the portfolio panel the card already carries it as a chip, so repeating it
+ * here would be the same word twice in two lines.
+ */
+export function buildRationale(params: {
+  goal: TradeGoal;
+  /**
+   * What the counterparty's roster is pointing at.
+   *
+   * The status LABEL is deliberately not taken. The card already carries it as a
+   * chip two lines above ("They are a Rebuilder"), and restating it here made a
+   * screen reader announce the same fact twice within a breath. The direction
+   * carries the same information and this sentence spends it on the consequence
+   * instead, which is the part the chip cannot say.
+   */
+  direction: TeamDirection;
+  teamName: string;
+  /** The position the reader's lineup measurably gains at, when there is one. */
+  positionHelped: string | null;
+  /** Points per week that position was short by. */
+  needPoints: number | null;
+  /** Whether the deal was built around a player the reader named. */
+  named: "target" | "offer" | null;
+  mine: SideImpact;
+}): string {
+  const parts: string[] = [];
+
+  if (params.named === "target") {
+    parts.push("This is what it would take to get the player you named.");
+  } else if (params.named === "offer") {
+    parts.push("This is what the player you named brings back.");
+  } else {
+    parts.push(GOAL_CLAUSE[params.goal] ?? GOAL_CLAUSE.balanced);
+  }
+
+  // Why THIS team. A manager's willingness is the part a reader cannot see from
+  // their own roster, and it is the reason one counterparty came up over ten
+  // others who own comparable players.
+  //
+  // Every branch is a complete sentence in both shapes. The first version built
+  // one out of a noun phrase that only had a verb in it when a status label
+  // existed, and a league with no Power Pulse row got "Bob's Bombers with no
+  // strong pull either way, which is who tends to answer." On a page a fragment
+  // skims past. Read aloud, which is how this site is used, it lands as a glitch
+  // and the listener backs up.
+  const team = params.teamName;
+  if (params.direction === "rebuild") {
+    parts.push(
+      `${team} are rebuilding, so the pieces they would move are the ones with a shelf life.`,
+    );
+  } else if (params.direction === "win-now") {
+    parts.push(
+      `${team} are chasing this season, so what they can spare is the depth behind their starters.`,
+    );
+  } else {
+    parts.push(
+      `${team} have no strong pull either way, which is the kind of team that tends to answer.`,
+    );
+  }
+
+  if (
+    params.positionHelped &&
+    params.needPoints !== null &&
+    params.needPoints > 0
+  ) {
+    // "short at X" rather than "thinnest at X". The engine measured the need at
+    // the positions this deal actually brings in, not across the whole roster,
+    // so calling it the thinnest spot would be a claim it never established.
+    parts.push(
+      `Your lineup is short at ${params.positionHelped}, about ${params.needPoints.toFixed(1)} points a week behind, and this deal lands there.`,
+    );
+  } else if (params.mine.pickCountDelta > 0) {
+    parts.push(
+      `It brings back ${params.mine.pickCountDelta} draft ${params.mine.pickCountDelta === 1 ? "pick" : "picks"}.`,
+    );
+  }
+
+  const sentence = parts.join(" ");
+  return sentence.length <= MAX_RATIONALE
+    ? sentence
+    : `${sentence.slice(0, MAX_RATIONALE - 1).trimEnd()}.`;
 }
 
 /**

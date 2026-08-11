@@ -136,6 +136,18 @@ export function TradeFinderCard({
         )}
       </p>
 
+      {/* Why this deal is in front of you, before the deal itself.
+          A reader who does not know why a suggestion was chosen reads the whole
+          card as arbitrary, and on the cross-league panel it is the only thing
+          that accounts for the league it came out of. Older bookmarks predate
+          the field and simply do not render this block. */}
+      {suggestion.rationale && (
+        <p className="mt-3 border-l-2 border-brand-purple/50 pl-3 text-sm leading-relaxed text-ink-muted">
+          <strong className="font-semibold text-ink">Why this one: </strong>
+          {suggestion.rationale}
+        </p>
+      )}
+
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <AssetColumn
           title="You get"

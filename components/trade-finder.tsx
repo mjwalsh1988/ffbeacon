@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { TradeFinderCard } from "@/components/trade-finder-card";
+import { PlayerPicker, type PlayerOption } from "@/components/player-picker";
 import { formatEastern } from "@/lib/datetime";
 import {
   declineSuggestion,
@@ -66,12 +67,11 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *   Save deliberately does NOT move focus, because saving is not navigation.
  */
 
-export type PlayerOption = {
-  playerId: string;
-  label: string;
-  /** The team that holds him, for the acquire picker's option groups. */
-  group: string;
-};
+/**
+ * Re-exported so the page that builds these lists keeps importing them from the
+ * component it hands them to, rather than reaching past it into the picker.
+ */
+export type { PlayerOption };
 
 type AnySuggestion = TradeSuggestion | CrossLeagueSuggestion;
 
@@ -356,10 +356,18 @@ export function TradeFinder(props: {
             : "Removed. You have no saved trades left.",
         );
       } else {
+        // The league block is stripped before posting. A portfolio suggestion is
+        // a TradeSuggestion plus a `league` field, and the save schema is strict,
+        // so posting it whole meant every bookmark taken from the cross-league
+        // panel was rejected and the reader was told the trade could not be
+        // saved with no way to work out why. The league is carried alongside in
+        // `sleeperLeagueId` and `leagueName`, which is where the row keeps it.
+        const { league: _league, ...snapshot } =
+          shownSuggestion as AnySuggestion & { league?: unknown };
         const res = await saveSuggestion({
           sleeperLeagueId: leagueId,
           leagueName: leagueNameOf(shownSuggestion, currentSaved?.leagueName),
-          suggestion: shownSuggestion,
+          suggestion: snapshot,
           grade: shownGrade,
         });
         if (!res.ok) {
@@ -450,7 +458,18 @@ export function TradeFinder(props: {
           </legend>
 
           <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Goal" hint="What the trade has to do for you.">
+            {/* The description rides in the OPTION text, not only in the hint.
+                These five differ in ways a two-word label cannot hold ("Split
+                assets" is not self-explanatory), and a describedby hint is the
+                wrong place for the difference: arrowing through a closed select
+                changes the value immediately, so the hint updates silently
+                behind the reader and they only ever hear the explanation for a
+                choice they have already made. Option text is read on every
+                arrow press, which is the moment it is needed. */}
+            <Field
+              label="Kind of trade"
+              hint={TRADE_GOALS.find((g) => g.key === goal)?.blurb ?? ""}
+            >
               {(id, describedBy) => (
                 <select
                   id={id}
@@ -468,7 +487,7 @@ export function TradeFinder(props: {
                 >
                   {TRADE_GOALS.map((g) => (
                     <option key={g.key} value={g.key}>
-                      {g.label}
+                      {g.label}: {g.blurb}
                     </option>
                   ))}
                 </select>
@@ -476,37 +495,25 @@ export function TradeFinder(props: {
             </Field>
 
             {isLeague && (props.theirPlayers?.length ?? 0) > 0 && (
-              <Field label="Player you want" hint="Works out what he would cost.">
-                {(id, describedBy) => (
-                  <select
-                    id={id}
-                    aria-describedby={describedBy}
-                    value={targetPlayerId}
-                    onChange={(e) => setTargetPlayerId(e.target.value)}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">Anyone</option>
-                    {groupOptions(props.theirPlayers ?? [])}
-                  </select>
-                )}
-              </Field>
+              <PlayerPicker
+                filterLabel="Find a player to get"
+                label="Player you want"
+                hint="Works out what he would cost."
+                options={props.theirPlayers ?? []}
+                value={targetPlayerId}
+                onChange={setTargetPlayerId}
+              />
             )}
 
             {isLeague && (props.myPlayers?.length ?? 0) > 0 && (
-              <Field label="Player you would move" hint="Shows what he brings back.">
-                {(id, describedBy) => (
-                  <select
-                    id={id}
-                    aria-describedby={describedBy}
-                    value={offerPlayerId}
-                    onChange={(e) => setOfferPlayerId(e.target.value)}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">Anyone</option>
-                    {groupOptions(props.myPlayers ?? [])}
-                  </select>
-                )}
-              </Field>
+              <PlayerPicker
+                filterLabel="Find a player to send"
+                label="Player you would move"
+                hint="Shows what he brings back."
+                options={props.myPlayers ?? []}
+                value={offerPlayerId}
+                onChange={setOfferPlayerId}
+              />
             )}
           </div>
 
@@ -740,8 +747,12 @@ function describeFound(count: number): string {
     : `Found ${count} trades. Showing trade 1 of ${count}. Use Previous and Next to move between them.`;
 }
 
+// border-ink-subtle rather than border-line. Against the surface behind it,
+// border-line measures 1.18:1 and bg-base 1.06:1, so neither the edge nor the
+// fill tells a low-vision reader there is a control there at all; 1.4.11 asks
+// for 3:1 on a control boundary and ink-subtle gives 3.65:1.
 const SELECT_CLASS =
-  "min-h-11 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+  "min-h-11 w-full rounded-card border border-ink-subtle bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
 const NAV_BUTTON_CLASS =
   "inline-flex min-h-11 items-center gap-1 rounded-card border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-50";
@@ -779,25 +790,6 @@ function TabButton({
       {children}
     </button>
   );
-}
-
-/** Options grouped by the team that holds each player. */
-function groupOptions(options: PlayerOption[]) {
-  const groups = new Map<string, PlayerOption[]>();
-  for (const option of options) {
-    const list = groups.get(option.group) ?? [];
-    list.push(option);
-    groups.set(option.group, list);
-  }
-  return [...groups.entries()].map(([group, list]) => (
-    <optgroup key={group} label={group}>
-      {list.map((option) => (
-        <option key={option.playerId} value={option.playerId}>
-          {option.label}
-        </option>
-      ))}
-    </optgroup>
-  ));
 }
 
 /**
