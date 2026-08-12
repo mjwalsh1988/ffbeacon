@@ -1,5 +1,7 @@
 import { Plus } from "lucide-react";
 
+import { PLAYER_PHOTO_RADIUS } from "@/components/player-headshot";
+
 /**
  * The consolidation credit, shown as its own line inside a side's asset list.
  *
@@ -11,6 +13,9 @@ import { Plus } from "lucide-react";
  * Points when the admin shows raw values, a share of the trade when they do not.
  * The percentage carries the same meaning without exposing the value scale, so
  * the line stays honest at either setting rather than disappearing at one.
+ *
+ * The badge takes PLAYER_PHOTO_RADIUS, the same corner as every headshot and
+ * pick badge on the site, so the column of squares reads as one shape.
  *
  * No hooks, so the client builder and the server-rendered share page can both
  * use it.
@@ -40,7 +45,7 @@ export function ValueAdjustmentRow({
     <li className="flex items-center gap-2.5">
       <span
         aria-hidden="true"
-        className="flex shrink-0 items-center justify-center rounded-card border border-dashed border-brand-cyan/50 bg-brand-cyan/[0.06] text-brand-cyan"
+        className={`flex shrink-0 items-center justify-center ${PLAYER_PHOTO_RADIUS} border border-dashed border-brand-cyan/50 bg-brand-cyan/[0.06] text-brand-cyan`}
         style={{ width: size, height: size }}
       >
         <Plus className="h-4 w-4" />
