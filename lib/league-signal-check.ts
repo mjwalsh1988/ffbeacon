@@ -27,6 +27,7 @@ import { buildValueResolver } from "@/lib/signal-check/values";
 import { loadSignalCheckSettings, loadActiveRuleset } from "@/lib/signal-check/settings";
 import { runPipeline } from "@/lib/signal-check/pipeline";
 import { toBuilderView, type BuilderView } from "@/lib/signal-check/builder-view";
+import { buildPickPositionResolver } from "@/lib/league-pick-position";
 import { SignalCheckError } from "@/lib/signal-check/errors";
 import type { AnalysisInput, AssetInput, SideKey } from "@/lib/signal-check/types";
 
@@ -109,6 +110,11 @@ export async function analyzeLeagueTrades(
     trades: LeagueTradeInput[];
     /** sleeper_roster_id -> team display label, for the side headings. */
     rosterLabels: Record<number, string>;
+    /**
+     * leagues.id. Used to slot traded picks from projected standings; without it
+     * every pick falls back to the early/mid/late blend.
+     */
+    leagueRowId: string;
   },
 ): Promise<LeagueTradesAnalysis> {
   if (params.trades.length === 0) return EMPTY;
@@ -139,6 +145,10 @@ export async function analyzeLeagueTrades(
     for (const sid of Object.keys(t.adds ?? {})) allSleeperIds.add(sid);
   }
   const playerMap = await mapSleeperPlayers(admin, Array.from(allSleeperIds));
+
+  // Draft order + projected standings once for the whole page, so every pick on
+  // it is placed against the same ranking.
+  const pickPositions = await buildPickPositionResolver(admin, params.leagueRowId);
 
   // Build each trade's analysis input, collecting the union of all assets so a
   // single value resolver covers the whole page.
@@ -178,14 +188,32 @@ export async function analyzeLeagueTrades(
 
     if (format.allowsPicks) {
       for (const p of picks) {
-        const pick = p as { season?: unknown; round?: unknown; owner_id?: unknown };
+        const pick = p as {
+          season?: unknown;
+          round?: unknown;
+          owner_id?: unknown;
+          roster_id?: unknown;
+        };
         const season = Number(pick.season);
         const round = Number(pick.round);
         const owner = Number(pick.owner_id);
         if (!Number.isFinite(season) || !Number.isFinite(round) || !Number.isFinite(owner)) continue;
         if (owner !== rosterA && owner !== rosterB) continue;
         const side = rosterToSide(owner);
-        const asset: AssetInput = { kind: "pick", season, round };
+        // roster_id is the pick's ORIGINAL team, which is what sets its slot,
+        // and is regularly neither side of this trade: a pick can change hands
+        // more than once. owner_id only says who ends up holding it.
+        const origin = Number(pick.roster_id);
+        const placed = Number.isFinite(origin) ? pickPositions.resolve(origin, season) : null;
+        const asset: AssetInput = placed
+          ? {
+              kind: "pick",
+              season,
+              round,
+              pickPosition: placed.position,
+              slotEstimated: placed.estimated,
+            }
+          : { kind: "pick", season, round };
         sideAssets[side].push(asset);
         assetMeta[side].push({ kind: "pick", sleeperId: null, round });
         unionAssets.push(asset);

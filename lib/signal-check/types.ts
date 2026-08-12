@@ -45,6 +45,13 @@ export interface PickAssetInput {
   round: number;
   /** Optional. When absent, the engine falls back to a generic season+round value. */
   pickPosition?: PickPosition;
+  /**
+   * True when pickPosition was ESTIMATED from the originating team's projected
+   * finish (see lib/league-pick-slots.ts) rather than chosen by a user. Travels
+   * in the input so a frozen analysis can still say which it was on replay.
+   * Never set by the manual builder or On The Clock, which send real choices.
+   */
+  slotEstimated?: boolean;
 }
 
 export type AssetInput = PlayerAssetInput | PickAssetInput;
@@ -89,8 +96,13 @@ export interface PricedPick {
   label: string;
   baseValue: number;
   noValue: boolean;
-  /** True when early/mid/late was assumed rather than supplied/known. */
-  assumed: boolean;
+  /**
+   * True when the price is the season+round blend across early/mid/late rather
+   * than one slot's value. Set on a Sleeper-sourced pick we could not slot.
+   */
+  blendedValue: boolean;
+  /** True when the slot came from projected standings, not from a user. */
+  slotEstimated: boolean;
 }
 
 export type PricedAsset = PricedPlayer | PricedPick;
@@ -259,8 +271,10 @@ export interface SignalCheckAnalysis {
   explanation: string;
   trace: RuleTraceEntry[];
   hasMissingValues: boolean;
-  /** True when any pick used an assumed early/mid/late bucket. */
-  hasAssumedPicks: boolean;
+  /** True when any pick was priced by the season+round blend, slot unknown. */
+  hasBlendedPicks: boolean;
+  /** True when any pick's slot was estimated from projected standings. */
+  hasEstimatedPicks: boolean;
   valueEngineVersion: string;
   ruleInterpreterVersion: string;
   rulesetVersion: number | null;

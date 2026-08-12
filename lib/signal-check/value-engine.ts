@@ -40,6 +40,14 @@ export interface ResolvedPickValue {
   /** null => no pick value row for this season+round (+bucket). */
   value: number | null;
   capturedAt: string | null;
+  /**
+   * True when the value is the season+round blend across early/mid/late rather
+   * than one slot's own value. The spread is wide (a 2027 1st runs ~6,000 early
+   * against ~4,200 late), so this is not a rounding detail: it is the single
+   * biggest reason an imported trade and the same trade typed by hand can
+   * disagree, and every surface showing the result has to be able to say it.
+   */
+  blended: boolean;
 }
 
 export interface ValueResolver {
@@ -47,8 +55,8 @@ export interface ValueResolver {
   player(playerId: string): ResolvedPlayerValue | null;
   /**
    * Resolve a pick value. For pos="unknown", the resolver returns a generic
-   * season+round value (e.g. an average of available buckets), NOT a guessed
-   * bucket. A bucket is only assumed when evidence supplies one.
+   * season+round value (an average of the current buckets), NOT a guessed
+   * bucket, and reports it via `blended`.
    */
   pick(season: number, round: number, pos: PickPosition | "unknown"): ResolvedPickValue;
 }
@@ -58,7 +66,8 @@ export interface PricedSides {
   trace: RuleTraceEntry[];
   valueCapturedAt: string | null;
   hasMissingValues: boolean;
-  hasAssumedPicks: boolean;
+  hasBlendedPicks: boolean;
+  hasEstimatedPicks: boolean;
 }
 
 const ORDINALS: Record<number, string> = {
@@ -141,9 +150,16 @@ function pricePick(
       label: pickLabel(input.season, input.round, pos),
       baseValue: resolved.value ?? 0,
       noValue,
-      // We never silently guess a bucket: "unknown" stays generic. assumed is
-      // reserved for evidence-derived bucket inference (Sleeper import path).
-      assumed: false,
+      // We never silently guess a bucket: "unknown" stays generic, and this
+      // records that the price is that blend. It used to be hardcoded false
+      // with no code path setting it, so the "treat that pick as an estimate"
+      // note it gates could never render and the confidence penalty for a
+      // slotless pick never applied.
+      blendedValue: resolved.blended,
+      // A slot the caller estimated from projected standings. Only meaningful
+      // alongside a real bucket; a blend is not an estimated slot, it is no
+      // slot, and the two carry different wording and different confidence.
+      slotEstimated: input.slotEstimated === true && pos !== "unknown",
     },
     capturedAt: resolved.capturedAt,
   };
@@ -158,7 +174,8 @@ export function priceSides(
   const trace: RuleTraceEntry[] = [];
   let valueCapturedAt: string | null = null;
   let hasMissingValues = false;
-  let hasAssumedPicks = false;
+  let hasBlendedPicks = false;
+  let hasEstimatedPicks = false;
 
   (["a", "b"] as SideKey[]).forEach((side) => {
     for (const input of sidesInput[side]) {
@@ -173,7 +190,8 @@ export function priceSides(
       sides[side].push(asset);
       valueCapturedAt = laterCaptured(valueCapturedAt, priced.capturedAt);
       if (asset.noValue) hasMissingValues = true;
-      if (asset.kind === "pick" && asset.assumed) hasAssumedPicks = true;
+      if (asset.kind === "pick" && asset.blendedValue) hasBlendedPicks = true;
+      if (asset.kind === "pick" && asset.slotEstimated) hasEstimatedPicks = true;
 
       const display = asset.kind === "player" ? asset.name : asset.label;
       trace.push({
@@ -195,5 +213,5 @@ export function priceSides(
     }
   });
 
-  return { sides, trace, valueCapturedAt, hasMissingValues, hasAssumedPicks };
+  return { sides, trace, valueCapturedAt, hasMissingValues, hasBlendedPicks, hasEstimatedPicks };
 }

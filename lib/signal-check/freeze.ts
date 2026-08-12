@@ -40,7 +40,10 @@ function assetDetail(asset: SignalCheckAnalysis["sides"]["a"]["assets"][number][
     const parts = [asset.position, asset.team].filter((p): p is string => Boolean(p));
     return parts.length ? parts.join(", ") : null;
   }
-  return asset.pickPosition === "unknown" ? "Draft pick" : `Draft pick (${asset.pickPosition})`;
+  if (asset.pickPosition === "unknown") return "Draft pick, slot unknown";
+  return asset.slotEstimated
+    ? `Draft pick (${asset.pickPosition}, projected)`
+    : `Draft pick (${asset.pickPosition})`;
 }
 
 function buildSidePayload(

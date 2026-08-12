@@ -8,7 +8,7 @@ import { SITE } from "@/lib/site";
 import type { PublicSharePayload, SideKey } from "@/lib/signal-check/types";
 import { TradeMarginGraph } from "../../trade-margin-graph";
 import { AssetAvatar } from "../../asset-avatar";
-import { ValueAdjustmentRow } from "../../value-adjustment-row";
+import { ValueAdjustmentRow } from "@/components/value-adjustment-row";
 import { HeroLavaField } from "@/components/hero-lava-field";
 
 export const dynamic = "force-dynamic";

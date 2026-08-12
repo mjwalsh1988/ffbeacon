@@ -99,6 +99,7 @@ export async function TradesTab({
               draftPicks: t.raw.draftPicks,
             })),
             rosterLabels,
+            leagueRowId,
           });
           for (const [txId, view] of analysis.results) graded.set(txId, view);
         } catch (err) {

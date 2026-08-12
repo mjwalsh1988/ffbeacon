@@ -150,12 +150,25 @@ export async function buildValueResolver(
   let pickDisplay = FFBEACON_SOURCE_DISPLAY;
 
   if (hasPicks && format.allowsPicks) {
+    // Only the seasons and rounds this trade references. The old query pulled
+    // every pick row for the format, which on a table carrying months of daily
+    // snapshots (237 rows for a single season+round already) ran straight into
+    // PostgREST's 1000-row cap, so which snapshots came back was a function of
+    // how much history existed rather than of the trade being priced.
+    const wantedPicks = [...input.sides.a, ...input.sides.b].filter(
+      (a): a is Extract<AnalysisInput["sides"]["a"][number], { kind: "pick" }> => a.kind === "pick",
+    );
+    const seasons = Array.from(new Set(wantedPicks.map((p) => p.season)));
+    const rounds = Array.from(new Set(wantedPicks.map((p) => p.round)));
+
     const loadPicks = async (sourceSlug: string) => {
       const { data } = await supabase
         .from("draft_pick_values")
         .select("season, round, pick_position, value, captured_at")
         .eq("format_config_id", format.configId)
         .eq("source", sourceSlug)
+        .in("season", seasons)
+        .in("round", rounds)
         .order("captured_at", { ascending: false });
       return data ?? [];
     };
@@ -176,14 +189,24 @@ export async function buildValueResolver(
       if (!pickByKey.has(key)) {
         pickByKey.set(key, { value: row.value, capturedAt: row.captured_at ?? null });
       }
-      const gkey = `${row.season}|${row.round}`;
+    }
+
+    // The slot-agnostic value averages TODAY's early/mid/late and nothing else.
+    // Building it from every returned row instead averaged months of history
+    // into one number: a 2027 1st priced at 5,062 against a true 4,960, drifting
+    // further every night as more snapshots landed. That number is what the
+    // Sleeper import uses for every pick, because Sleeper never tells us the
+    // slot, so the drift landed on exactly the path that cannot check it.
+    for (const [key, hit] of pickByKey) {
+      const [season, round] = key.split("|");
+      const gkey = `${season}|${round}`;
       const g = genericByRound.get(gkey);
       if (g) {
-        g.sum += row.value;
+        g.sum += hit.value;
         g.count += 1;
-        g.capturedAt = later(g.capturedAt, row.captured_at ?? null);
+        g.capturedAt = later(g.capturedAt, hit.capturedAt);
       } else {
-        genericByRound.set(gkey, { sum: row.value, count: 1, capturedAt: row.captured_at ?? null });
+        genericByRound.set(gkey, { sum: hit.value, count: 1, capturedAt: hit.capturedAt });
       }
     }
   }
@@ -204,15 +227,17 @@ export async function buildValueResolver(
     pick(season: number, round: number, pos: PickPosition | "unknown"): ResolvedPickValue {
       if (pos !== "unknown") {
         const hit = pickByKey.get(`${season}|${round}|${pos}`);
-        if (hit) return { value: hit.value, capturedAt: hit.capturedAt };
+        if (hit) return { value: hit.value, capturedAt: hit.capturedAt, blended: false };
       }
       // Unknown bucket (or specific bucket missing): use the generic
-      // season+round average across available buckets.
+      // season+round average across available buckets. `blended` travels with
+      // it so the surfaces can say so; an early 1st and a late 1st are far
+      // enough apart that the blend can decide a verdict on its own.
       const g = genericByRound.get(`${season}|${round}`);
       if (g && g.count > 0) {
-        return { value: g.sum / g.count, capturedAt: g.capturedAt };
+        return { value: g.sum / g.count, capturedAt: g.capturedAt, blended: true };
       }
-      return { value: null, capturedAt: null };
+      return { value: null, capturedAt: null, blended: false };
     },
   };
 

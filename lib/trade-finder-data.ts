@@ -31,6 +31,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
+import { buildPickPositionResolver, NO_PICK_POSITIONS } from "@/lib/league-pick-position";
 import { loadLeagueTeamCards, type TeamCardData } from "@/lib/league-view-data";
 import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
 import { startingSlots } from "@/lib/power-pulse/lineup";
@@ -294,7 +295,7 @@ export async function loadTradeFinderLeague(
 
   // Pick prices need only the format, so they are fetched alongside the rosters
   // rather than waiting behind them with the reads that need player ids.
-  const [cards, pulseView, rosterRows, pickValues, poolMax] = await Promise.all([
+  const [cards, pulseView, rosterRows, pickValues, poolMax, pickPositions] = await Promise.all([
     loadLeagueTeamCards(
       supabase,
       league.id,
@@ -323,6 +324,9 @@ export async function loadTradeFinderLeague(
         )
       : Promise.resolve(new Map<string, number>()),
     loadPoolMax(supabase, context.formatConfigId, context.sourceSlug),
+    isDynasty
+      ? buildPickPositionResolver(supabase as SupabaseClient<Database>, league.id)
+      : Promise.resolve(NO_PICK_POSITIONS),
   ]);
 
   if (cards.length < 2) return null;
@@ -395,7 +399,17 @@ export async function loadTradeFinderLeague(
 
     const picks: FinderPick[] = isDynasty
       ? card.draftPicks.map((pick) => {
-          const position = (pick.pick_position ?? "mid") as FinderPick["pickPosition"];
+          // A roster's own future picks carry no slot, and defaulting them all
+          // to "mid" priced a contender's 1st and a bottom team's 1st the same.
+          // The published draft order answers first, the projected finish of the
+          // pick's ORIGINAL team second, "mid" only when neither can.
+          const placed = pickPositions.resolve(
+            Number(pick.original_roster_id),
+            Number(pick.season),
+          );
+          const position = (pick.pick_position ??
+            placed?.position ??
+            "mid") as FinderPick["pickPosition"];
           const value =
             pickValues.get(`${pick.season}|${pick.round}|${position}`) ??
             pickValues.get(`${pick.season}|${pick.round}|mid`) ??

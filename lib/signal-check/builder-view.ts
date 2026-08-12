@@ -47,7 +47,8 @@ export interface BuilderView {
   explanation: string;
   sides: BuilderSideView[];
   hasMissingValues: boolean;
-  hasAssumedPicks: boolean;
+  hasBlendedPicks: boolean;
+  hasEstimatedPicks: boolean;
   showRawValues: boolean;
   /** Row label for the consolidation credit. Null when none applied. */
   adjustmentLabel: string | null;
@@ -60,7 +61,15 @@ function assetDetail(
     const parts = [asset.position, asset.team].filter((p): p is string => Boolean(p));
     return parts.length ? parts.join(", ") : null;
   }
-  return asset.pickPosition === "unknown" ? "Draft pick" : `Draft pick (${asset.pickPosition})`;
+  // "Draft pick" alone reads as a complete description, so a reader comparing
+  // this against a hand-built trade (where every pick carries a slot) has no
+  // way to see that the two priced the pick differently. An estimated slot has
+  // to read as an estimate for the same reason: "(late)" on its own claims we
+  // know where a pick two seasons out lands.
+  if (asset.pickPosition === "unknown") return "Draft pick, slot unknown";
+  return asset.slotEstimated
+    ? `Draft pick (${asset.pickPosition}, projected)`
+    : `Draft pick (${asset.pickPosition})`;
 }
 
 export function toBuilderView(
@@ -103,7 +112,8 @@ export function toBuilderView(
     explanation: analysis.explanation,
     sides,
     hasMissingValues: analysis.hasMissingValues,
-    hasAssumedPicks: analysis.hasAssumedPicks,
+    hasBlendedPicks: analysis.hasBlendedPicks,
+    hasEstimatedPicks: analysis.hasEstimatedPicks,
     showRawValues: settings.showRawValues,
     adjustmentLabel: consolidation.applied ? settings.qualityAdjustmentLabel : null,
   };

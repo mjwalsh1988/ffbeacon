@@ -83,11 +83,15 @@ export function fakeResolver(
     pick(season: number, round: number, pos: PickPosition | "unknown"): ResolvedPickValue {
       if (pos !== "unknown") {
         const hit = picks[`${season}|${round}|${pos}`];
-        if (hit !== undefined) return { value: hit, capturedAt: "2026-06-01T00:00:00.000Z" };
+        if (hit !== undefined) {
+          return { value: hit, capturedAt: "2026-06-01T00:00:00.000Z", blended: false };
+        }
       }
       const g = generic.get(`${season}|${round}`);
-      if (g) return { value: g.sum / g.count, capturedAt: "2026-06-01T00:00:00.000Z" };
-      return { value: null, capturedAt: null };
+      if (g) {
+        return { value: g.sum / g.count, capturedAt: "2026-06-01T00:00:00.000Z", blended: true };
+      }
+      return { value: null, capturedAt: null, blended: false };
     },
   };
 }

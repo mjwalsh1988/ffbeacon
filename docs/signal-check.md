@@ -212,6 +212,23 @@ favoured side.
 the UI shows the plain asset sum with the credit as its own "Value adjustment"
 row, so a displayed total always equals the rows above it.
 
+Every surface that renders a side's asset list MUST render that row, via
+`components/value-adjustment-row.tsx`, gated on `view.adjustmentLabel` (or
+`payload.adjustmentLabel` on the share page). The credit is already inside the
+verdict and the margin, so a surface that omits the row shows a side with fewer
+points winning and says nothing about why. The four surfaces today:
+
+| Surface | File |
+| --- | --- |
+| Calculator + Sleeper import | `app/tools/signal-check/trade-result.tsx` |
+| Public share page | `app/tools/signal-check/v/[shareId]/page.tsx` |
+| League transactions feed, player profile trades tab | `components/signal-check-trade-card.tsx` |
+| On The Clock report | `app/tools/on-the-clock/signal-check-report.tsx` |
+
+The OG image (`app/api/og/signal-check/[shareId]/route.tsx`) is the one
+exception: it already truncates the asset list to five, so it is a summary card
+rather than a breakdown.
+
 Two deliberate refusals:
 
 - **One-for-ones get nothing** (`signal_check_quality_min_assets`, default 2).
@@ -271,7 +288,7 @@ package) -> depth. Each key maps to an admin-editable label
 ### Confidence
 
 `computeConfidence()` starts at 60 and adjusts: + separation (margin),
-- picks (noisier), - missing values, - assumed pick bucket, + clean Sleeper
+- picks (noisier), - missing values, - a slotless pick, + clean Sleeper
 detection, - material pile-on, - a consolidation credit shaping the verdict
 (a modelled number rather than a measured one), - a capped balance solve,
 + admin rule confidence_modifiers. Clamped
@@ -324,6 +341,87 @@ minus `signal_check_disabled_formats`. `allowsPicks = league_type === 'dynasty'`
 (`player_value_trends.current_value` for the format, source `ffbeacon`) and
 pick values (`draft_pick_values`, ffbeacon, KTC fallback). An unknown pick
 bucket resolves to a generic season+round average (never a guessed bucket).
+
+### Placing a traded pick: early, mid, or late
+
+`lib/league-pick-position.ts buildPickPositionResolver(admin, leagueRowId)` says
+which end of the round a Sleeper-sourced pick lands in, for the pick's ORIGINAL
+team (`draft_picks[].roster_id`, which is frequently neither side of the trade).
+Two sources, best first:
+
+1. **The published draft order.** If the league already has a draft for that
+   season, `league_drafts.slot_to_roster_id` gives the exact slot. Read through
+   the existing `lib/league-pick-slots.ts`. Not an estimate, not labelled as one.
+2. **Projected standings.** Otherwise rank the teams by projected regular season
+   finish (Power Pulse, ordered by the shared `compareProjectedFinish`) and split
+   into thirds: top third sends LATE picks, middle MID, bottom EARLY. A pick for
+   season S reads season S-1's projection, so a 2027 pick uses the 2026 finish
+   and a 2028 pick has nothing to read and stays on the blend.
+
+The split is proportional so it scales with league size: 12 teams split 4/4/4,
+10 teams split 3/3/4, remainder to EARLY (the bottom of the table is where the
+valuable picks come from). `positionFromDraftSlot` is defined as the REVERSAL of
+`positionFromProjectedFinish` rather than by its own cut points, because
+finishing 1st earns the last pick while holding slot 1 is the first pick; written
+out separately the remainder lands at the wrong end and a team changes bucket
+depending on which source answered. A test pins them together.
+
+Applied wherever the league is known and the pick came from Sleeper: the league
+transactions feed, the player-profile trades tab, the Sleeper import on
+/tools/signal-check, and Trade Finder inside a league (which previously priced
+every roster's own future picks as "mid"). NOT the manual builder and NOT On The
+Clock: both send a slot the user chose, and an estimate must never overrule a
+real choice.
+
+An estimated slot sets `slotEstimated` on the pick input, which surfaces as
+`hasEstimatedPicks` on the analysis, a "(late, projected)" suffix on the asset
+line, and a 4-point confidence penalty (half the blend's 8, because it is a real
+estimate with evidence behind it but still a projection of an unplayed season).
+
+The resolver refuses rather than guesses when Power Pulse has not run, when a
+projected win total is missing, or when every team projects identically. Ranking
+a flat projection would dress a coin flip up as a finish.
+
+### The slotless pick, and why two runs of one trade can disagree
+
+The builder only ever offers slotted picks (`2027 1st (Early|Mid|Late)`); the
+search endpoint deliberately does not offer a whole-round option, because it has
+no value of its own. The Sleeper import is the opposite: a traded pick in
+Sleeper's payload carries season, round and owner but no slot, so EVERY imported
+pick resolves through the blend. The two entry points therefore price the same
+pick differently, and the gap is not small. A 2027 1st in `dynasty-ppr-tep-sflex`
+on 2026-08-12:
+
+| Slot | Value |
+| --- | --- |
+| Early | 6,013 |
+| Mid | 4,686 |
+| Late | 4,182 |
+| Blend (import) | 4,960 |
+
+That range is wide enough to decide a verdict on its own. On one real Syndicate
+trade (Olave + A. Williams for Robinson + Boutte + Addison + a 2027 1st) the slot
+alone moves the answer from "Adiff by 23.5%" (early) to "Fair Trade" (late),
+because at the low end the concentrated side wins the quality comparison and
+collects a 3,115-point consolidation credit that does not exist at the high end.
+
+Two rules follow:
+
+- The blend MUST average only the newest snapshot per bucket. Averaging every
+  row the query returns mixes months of history into the number, and since pick
+  values have been falling, that biased every imported pick upward (5,062 against
+  a true 4,960, and drifting). Scope the query to the seasons and rounds in the
+  trade too: the table holds ~237 rows per season+round and the unscoped read hit
+  PostgREST's 1000-row cap, so how much history existed decided which snapshots
+  the blend saw.
+- Any surface showing the result must say the pick had no slot. That is
+  `hasBlendedPicks` on the analysis, which also costs 8 confidence points.
+
+The blend is now the LAST resort rather than the only answer: see "Placing a
+traded pick" above. On the Syndicate trade, placing Adiff's own 2027 1st as a
+late pick (they project to finish 1st) moved the imported grade from "Adiff by
+19%" to "Fair Trade", which is what the same trade built by hand already said.
+Picks the resolver cannot place, a 2028 pick today, still blend.
 
 ## Public builder + autocomplete
 

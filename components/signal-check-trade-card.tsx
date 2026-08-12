@@ -16,7 +16,13 @@ import { Scale, Trophy, ScrollText, Sparkles } from "lucide-react";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { SideKey } from "@/lib/signal-check/types";
 import type { LeagueTradeAssetMeta } from "@/lib/league-signal-check";
+import {
+  BLENDED_PICKS_NOTE,
+  ESTIMATED_PICKS_NOTE,
+  MISSING_VALUES_NOTE,
+} from "@/lib/signal-check/copy";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { ValueAdjustmentRow } from "@/components/value-adjustment-row";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
 
@@ -223,6 +229,22 @@ export function SignalCheckTradeCard({
                       </li>
                     );
                   })}
+                  {/*
+                    The consolidation credit is part of the verdict above, so it
+                    has to be visible here too. Without it a side with fewer
+                    points still wins and nothing on the card says why, and the
+                    header total (which includes the credit) does not add up to
+                    the rows beneath it. Same line the calculator shows, sized to
+                    this card's smaller glyphs.
+                  */}
+                  {view.adjustmentLabel && (
+                    <ValueAdjustmentRow
+                      label={view.adjustmentLabel}
+                      points={s.adjustment}
+                      pct={s.adjustmentPct}
+                      size={32}
+                    />
+                  )}
                   {s.assets.length === 0 && (
                     <li className="text-xs italic text-ink-subtle">Nothing of value received.</li>
                   )}
@@ -242,14 +264,11 @@ export function SignalCheckTradeCard({
           </ExplainerCard>
         </div>
 
-        {(view.hasMissingValues || view.hasAssumedPicks) && (
+        {(view.hasMissingValues || view.hasBlendedPicks || view.hasEstimatedPicks) && (
           <p className="text-xs text-ink-subtle" role="note">
-            {view.hasMissingValues
-              ? "One or more assets had no FF Beacon value, so they were left out of the totals. The verdict is based on the rest. "
-              : ""}
-            {view.hasAssumedPicks
-              ? "A draft pick used a general season and round value because the exact slot was not set, so treat that pick as an estimate."
-              : ""}
+            {view.hasMissingValues ? `${MISSING_VALUES_NOTE} ` : ""}
+            {view.hasEstimatedPicks ? `${ESTIMATED_PICKS_NOTE} ` : ""}
+            {view.hasBlendedPicks ? BLENDED_PICKS_NOTE : ""}
           </p>
         )}
       </div>

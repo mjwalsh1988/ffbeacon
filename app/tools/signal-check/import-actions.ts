@@ -23,6 +23,7 @@ import { loadSignalCheckSettings, loadActiveRuleset } from "@/lib/signal-check/s
 import { runPipeline } from "@/lib/signal-check/pipeline";
 import { freezeAnalysis } from "@/lib/signal-check/freeze";
 import { toBuilderView, type BuilderView } from "@/lib/signal-check/builder-view";
+import { buildPickPositionResolver } from "@/lib/league-pick-position";
 import { SignalCheckError } from "@/lib/signal-check/errors";
 import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
 
@@ -344,16 +345,37 @@ export async function importAndAnalyze(args: {
   }
 
   if (format.allowsPicks) {
+    const pickPositions = await buildPickPositionResolver(admin, league.id);
     for (const p of picks) {
-      const pick = p as { season?: unknown; round?: unknown; owner_id?: unknown };
+      const pick = p as {
+        season?: unknown;
+        round?: unknown;
+        owner_id?: unknown;
+        roster_id?: unknown;
+      };
       const season = Number(pick.season);
       const round = Number(pick.round);
       const owner = Number(pick.owner_id);
       if (!Number.isFinite(season) || !Number.isFinite(round) || !Number.isFinite(owner)) continue;
       if (owner !== rosterA && owner !== rosterB) continue;
       const side = rosterToSide(owner);
-      // Slot is unknown from Sleeper; the engine uses a generic season+round value.
-      sideAssets[side].push({ kind: "pick", season, round });
+      // Sleeper never sends the position in the round, so we take it from the
+      // published draft order when one exists, and otherwise from the projected
+      // finish of the pick's ORIGINAL team (roster_id, often a third team).
+      // Failing both, the engine falls back to the season+round blend.
+      const origin = Number(pick.roster_id);
+      const placed = Number.isFinite(origin) ? pickPositions.resolve(origin, season) : null;
+      sideAssets[side].push(
+        placed
+          ? {
+              kind: "pick",
+              season,
+              round,
+              pickPosition: placed.position,
+              slotEstimated: placed.estimated,
+            }
+          : { kind: "pick", season, round },
+      );
       assetMeta[side].push({ kind: "pick", sleeperId: null, round });
     }
   } else if (picks.length > 0) {

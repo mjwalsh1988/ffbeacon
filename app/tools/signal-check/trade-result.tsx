@@ -3,10 +3,15 @@
 import { useEffect, useRef } from "react";
 import { Check, Copy, Lightbulb, ScrollText, Sparkles, Trophy } from "lucide-react";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
+import {
+  BLENDED_PICKS_NOTE,
+  ESTIMATED_PICKS_NOTE,
+  MISSING_VALUES_NOTE,
+} from "@/lib/signal-check/copy";
 import type { SideKey } from "@/lib/signal-check/types";
 import { AssetAvatar } from "./asset-avatar";
 import { TradeMarginGraph } from "./trade-margin-graph";
-import { ValueAdjustmentRow } from "./value-adjustment-row";
+import { ValueAdjustmentRow } from "@/components/value-adjustment-row";
 
 /** Per-asset headshot metadata, aligned by index to view.sides[side].assets. */
 export interface ResultAssetMeta {
@@ -178,14 +183,11 @@ export function TradeResult({
         <ExplainerCard icon={Sparkles} title="Why format matters">
           {formatTip(view.formatDisplay)}
         </ExplainerCard>
-        {(view.hasMissingValues || view.hasAssumedPicks) && (
+        {(view.hasMissingValues || view.hasBlendedPicks || view.hasEstimatedPicks) && (
           <ExplainerCard icon={Lightbulb} title="Good to know">
-            {view.hasMissingValues
-              ? "One or more assets had no FF Beacon value, so they were left out of the totals. The verdict is based on the rest. "
-              : ""}
-            {view.hasAssumedPicks
-              ? "A draft pick used a general value because the exact slot was not set. Treat that pick as an estimate."
-              : ""}
+            {view.hasMissingValues ? `${MISSING_VALUES_NOTE} ` : ""}
+            {view.hasEstimatedPicks ? `${ESTIMATED_PICKS_NOTE} ` : ""}
+            {view.hasBlendedPicks ? BLENDED_PICKS_NOTE : ""}
           </ExplainerCard>
         )}
       </div>

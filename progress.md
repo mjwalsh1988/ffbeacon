@@ -3940,6 +3940,92 @@ T558 | completed | the rest of the round-two findings
      | - The pre-draft grades tab no longer sorts the whole 800-player board to
      |   build a market curve it then throws away.
      | verified: yes
+T559 | completed | league-feed trades hid the consolidation credit that decided them
+     | files: components/signal-check-trade-card.tsx, components/value-adjustment-row.tsx,
+     |        app/tools/signal-check/trade-result.tsx,
+     |        app/tools/signal-check/v/[shareId]/page.tsx, docs/signal-check.md
+     | Trades pulled from a Sleeper league are graded by the same pipeline as the
+     | calculator, and the consolidation credit was computed and folded into the
+     | verdict and the margin, but SignalCheckTradeCard never rendered the "Value
+     | adjustment" row. On 19 of 51 real trades in one league the card showed a
+     | side with fewer assets winning, or a 4-for-2 called "Fair Trade" off a
+     | 16.8% credit, with nothing on screen naming the reason. Measured by
+     | running analyzeLeagueTrades over that league, not by reading the code: the
+     | four callers of runPipeline are byte-identical in how they pass settings
+     | and poolMax, so the gap was only ever in the render.
+     | The row moved from app/tools/signal-check/ to components/ because the card
+     | is the third surface to need it and a shared component importing out of a
+     | route folder inverts the dependency. docs/signal-check.md now lists all
+     | four surfaces so a fifth cannot quietly skip it.
+     | verified: yes
+T560 | completed | the slotless pick: blended over history, and never disclosed
+     | files: lib/signal-check/values.ts, value-engine.ts, types.ts, pipeline.ts,
+     |        confidence.ts, builder-view.ts, freeze.ts, _test-kit.ts,
+     |        pipeline.test.ts, trade-shape.test.ts,
+     |        app/tools/signal-check/trade-result.tsx,
+     |        components/signal-check-trade-card.tsx, docs/signal-check.md
+     | Reported as "the import gets a different answer than typing the same trade
+     | in by hand". It does, and most of the gap is not a bug: the builder only
+     | offers slotted picks, Sleeper never says where a traded pick lands, so the
+     | import blends early/mid/late. On the Syndicate's Olave trade the slot alone
+     | swings it from Adiff by 23.5% (early) to Fair Trade (late), because at the
+     | low end mjwalsh wins the quality comparison and collects a 3,115 credit.
+     | Two real bugs underneath it:
+     | - The blend averaged EVERY row the query returned, not the newest snapshot
+     |   per bucket, so it mixed months of history into one number. Pick values
+     |   have been falling, so this biased every imported pick upward: a 2027 1st
+     |   priced 5,062 against a true 4,960, drifting further nightly. The query
+     |   also read the whole table and hit the 1000-row cap (237 rows per
+     |   season+round), so how much history existed decided which snapshots the
+     |   blend even saw. Now scoped to the trade's seasons/rounds and averaged
+     |   over the deduped latest per bucket.
+     | - `assumed` was hardcoded false in the value engine with no code path
+     |   setting it, so the "treat that pick as an estimate" note and the 8-point
+     |   confidence penalty were dead on the one path where every pick is
+     |   slotless. Renamed to blendedValue / hasBlendedPicks, wired to the
+     |   resolver, and both surfaces now say the slot is unknown. The per-asset
+     |   line reads "Draft pick, slot unknown" instead of "Draft pick".
+     | Two regression tests: the flag fires only for a slotless pick, and the
+     | early/late spread flips a verdict.
+     | Not done, needs a product call: Sleeper's pick payload carries roster_id
+     | (the pick's ORIGINAL owner), so the slot could be estimated from that
+     | team's projected finish rather than blended. Done in T561.
+     | verified: yes
+T561 | completed | place a traded pick by projected finish instead of blending it
+     | files: lib/league-pick-position.ts (new), lib/league-pick-position.test.ts (new),
+     |        lib/signal-check/copy.ts (new), lib/league-signal-check.ts,
+     |        lib/trade-finder-data.ts, lib/signal-check/{types,value-engine,pipeline,
+     |        confidence,builder-view,freeze}.ts, lib/signal-check/rules/schema.ts,
+     |        app/tools/signal-check/{import-actions.ts,trade-result.tsx},
+     |        app/leagues/[league_id]/transactions/page.tsx,
+     |        components/{signal-check-trade-card.tsx,player-profile/trades-tab.tsx},
+     |        docs/signal-check.md
+     | Where the league is known, a Sleeper-sourced pick is now placed in the
+     | round rather than blended across it. Published draft order first
+     | (league_drafts.slot_to_roster_id, via the EXISTING lib/league-pick-slots.ts,
+     | which is a different thing: it returns the numeric 1.04 slot), projected
+     | regular season finish second, blend last. Thirds of the league, keyed off
+     | the pick's ORIGINAL team (draft_picks[].roster_id, often a third team, not
+     | either side): top third sends late picks, bottom third early.
+     | Proportional, so 12 splits 4/4/4 and 10 splits 3/3/4 with the remainder in
+     | early. positionFromDraftSlot is the REVERSAL of positionFromProjectedFinish
+     | rather than its own cut points; a test caught that independent floor() cuts
+     | put the remainder at opposite ends and moved a team between buckets
+     | depending on which source answered.
+     | Verified on The Syndicate: Adiff projects 1st of 12, so their own 2027 1st
+     | is a late pick, and the trade the bug report started from now grades Fair
+     | Trade with a 15.2% adjustment on the import, matching what the same trade
+     | built by hand already said.
+     | Applied to the transactions feed, the player-profile trades tab, the
+     | Sleeper import, and Trade Finder inside a league (which had been calling
+     | every roster's own future picks "mid", pricing a contender's 1st and a
+     | bottom team's 1st identically). NOT On The Clock and NOT the manual
+     | builder: both send a slot the user chose and it must win.
+     | Refuses rather than guesses when Power Pulse has not run, a projected win
+     | total is missing, or every team projects identically.
+     | An estimate is disclosed: "(late, projected)" on the asset line, a note
+     | naming the rule, and -4 confidence (half the blend's -8).
+     | verified: yes
 
 ### Review findings NOT fixed
 

@@ -3,9 +3,10 @@
  *
  * Deterministic 0..100 composite from interpretable factors, mapped to
  * low/medium/high by admin thresholds. Higher margin and clean inputs raise
- * confidence; picks (noisier valuations), missing values, assumed pick buckets,
- * and a material pile-on lower it. Auto-detected Sleeper formats get a small
- * boost. Admin rule confidence_modifiers are summed in last.
+ * confidence; picks (noisier valuations), missing values, slotless picks priced
+ * by the season+round blend, and a material pile-on lower it. Auto-detected
+ * Sleeper formats get a small boost. Admin rule confidence_modifiers are summed
+ * in last.
  */
 
 import type {
@@ -19,7 +20,9 @@ export interface ConfidenceInputs {
   marginRaw: number;
   pickCount: number;
   noValueCount: number;
-  hasAssumedPicks: boolean;
+  hasBlendedPicks: boolean;
+  /** A pick's slot came from projected standings rather than from a user. */
+  hasEstimatedPicks?: boolean;
   /** True only on the Sleeper path when format detection was clean. */
   formatAutoDetected: boolean;
   pileOnFired: boolean;
@@ -54,7 +57,11 @@ export function computeConfidence(
   if (pickPenalty !== 0) add("picks", pickPenalty, `${inputs.pickCount} pick(s) add valuation noise`);
 
   if (inputs.noValueCount > 0) add("missing_values", -25, `${inputs.noValueCount} asset(s) had no value`);
-  if (inputs.hasAssumedPicks) add("assumed_picks", -8, "A pick bucket was assumed");
+  if (inputs.hasBlendedPicks) add("blended_picks", -8, "A pick was priced without a known slot");
+  // Half the blend's penalty. A slot read off projected standings is a real
+  // estimate with real evidence behind it, but it is still a projection of a
+  // season that has not been played.
+  if (inputs.hasEstimatedPicks) add("estimated_picks", -4, "A pick's slot was estimated from projected standings");
   if (inputs.formatAutoDetected) add("format_detected", 5, "Format auto-detected cleanly from Sleeper");
   if (inputs.pileOnFired) add("pile_on", -10, "Pile-on materially changed a side total");
   // A consolidation credit is a modelled number rather than a measured one, so

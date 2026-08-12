@@ -117,4 +117,66 @@ describe("redraft vs dynasty pick handling", () => {
     // generic = (100+80+60)/3 = 80
     expect(r.sides.a.totalPost).toBe(80);
   });
+
+  // hasBlendedPicks gates the "this pick has no slot" note on every surface and
+  // an 8-point confidence penalty. It was hardcoded false in the value engine,
+  // so neither ever fired, on the one path (Sleeper import) where EVERY pick is
+  // slotless. That is what let an imported trade and the same trade typed by
+  // hand disagree with nothing on screen accounting for it.
+  it("flags a slotless pick as blended, and a slotted one as not", () => {
+    const buckets = { "2026|1|early": 100, "2026|1|mid": 80, "2026|1|late": 60 };
+    const resolver = fakeResolver(players, buckets);
+
+    const slotless = runPipeline({
+      ...base(),
+      resolver,
+      input: {
+        formatSlug: "dynasty-ppr-sflex",
+        sides: { a: [{ kind: "pick", season: 2026, round: 1 }], b: [{ kind: "player", playerId: "p2" }] },
+      },
+    });
+    expect(slotless.hasBlendedPicks).toBe(true);
+    expect(slotless.confidence.factors.some((f) => f.key === "blended_picks")).toBe(true);
+
+    const slotted = runPipeline({
+      ...base(),
+      resolver,
+      input: {
+        formatSlug: "dynasty-ppr-sflex",
+        sides: {
+          a: [{ kind: "pick", season: 2026, round: 1, pickPosition: "mid" }],
+          b: [{ kind: "player", playerId: "p2" }],
+        },
+      },
+    });
+    expect(slotted.hasBlendedPicks).toBe(false);
+    expect(slotted.confidence.factors.some((f) => f.key === "blended_picks")).toBe(false);
+  });
+
+  // The spread across slots is the whole reason the blend needs saying out loud.
+  it("prices an early and a late pick far enough apart to move a verdict", () => {
+    const resolver = fakeResolver(players, {
+      "2026|1|early": 100,
+      "2026|1|mid": 80,
+      "2026|1|late": 60,
+    });
+    const sidesFor = (pickPosition?: "early" | "late"): AnalysisInput => ({
+      formatSlug: "dynasty-ppr-sflex",
+      sides: {
+        a: [{ kind: "player", playerId: "p1" }],
+        b: pickPosition
+          ? [{ kind: "pick", season: 2026, round: 1, pickPosition }, { kind: "player", playerId: "p3" }]
+          : [{ kind: "pick", season: 2026, round: 1 }, { kind: "player", playerId: "p3" }],
+      },
+    });
+    const early = runPipeline({ ...base(), resolver, input: sidesFor("early") });
+    const late = runPipeline({ ...base(), resolver, input: sidesFor("late") });
+    const blend = runPipeline({ ...base(), resolver, input: sidesFor() });
+
+    expect(early.sides.b.totalPost).toBe(130); // 100 + 30
+    expect(late.sides.b.totalPost).toBe(90); // 60 + 30
+    expect(blend.sides.b.totalPost).toBe(110); // 80 + 30
+    expect(early.verdict.winnerSide).toBe("b");
+    expect(late.verdict.winnerSide).toBe("a");
+  });
 });

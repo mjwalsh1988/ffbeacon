@@ -165,6 +165,7 @@ export default async function LeagueTransactionsPage({
             draftPicks: r.draftPicks,
           })),
           rosterLabels,
+          leagueRowId: league.id,
         })
       : null;
   const gradedTrades: Map<string, LeagueTradeSignalCheck> =

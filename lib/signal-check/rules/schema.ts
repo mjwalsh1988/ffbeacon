@@ -30,6 +30,9 @@ export const pickAssetSchema = z
     season: z.number().int().min(2000).max(2100),
     round: z.number().int().min(1).max(10),
     pickPosition: z.enum(["early", "mid", "late"]).optional(),
+    // Provenance only: it changes the wording shown next to the pick and the
+    // confidence, never the value. The builder never sends it.
+    slotEstimated: z.boolean().optional(),
   })
   .strict();
 

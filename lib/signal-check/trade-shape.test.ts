@@ -14,7 +14,8 @@ function asset(id: string, value: number, kind: "player" | "pick" = "player"): P
       label: id,
       baseValue: value,
       noValue: false,
-      assumed: false,
+      blendedValue: false,
+      slotEstimated: false,
     };
   }
   return {
