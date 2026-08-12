@@ -1,15 +1,23 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { pulseLeague } from "@/lib/league-pulse";
+import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
   describeDerived,
   type LeagueContext,
+  type LeagueContextEmpty,
 } from "@/lib/league-format-resolution";
-import { loadLeagueTransactions, type TransactionFilter } from "@/lib/league-transactions-data";
+import {
+  loadLeagueTransactions,
+  loadTradeAnalyses,
+  ALL_TYPES_SENTINEL,
+  DEFAULT_TYPE_FILTER,
+  type TransactionFilter,
+} from "@/lib/league-transactions-data";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import {
   analyzeLeagueTrades,
@@ -86,9 +94,14 @@ export default async function LeagueTransactionsPage({
       ? sp.username.trim()
       : null;
 
-  // Idempotent first-touch pulse, same as the deep view.
+  // First-touch pulse, split in two exactly as the deep view does. The core is
+  // the league, its rosters and its members: everything the header, tabs and
+  // info panel need. The derived half (transaction history, trade values, Power
+  // Pulse) is what the feed waits on, and it waits inside a Suspense boundary
+  // below, so the page paints its shell immediately instead of holding a blank
+  // screen for the whole sync.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
+  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
   if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
@@ -101,14 +114,25 @@ export default async function LeagueTransactionsPage({
     .maybeSingle();
   if (!league) notFound();
 
-  // Shared header action data (in-view switcher + admin refresh gate).
-  const { otherLeagues } = await loadLeagueHeaderActions(
-    supabase,
-    league.id,
-    sleeperLeagueId,
-    searchedUsername,
-    league.season != null ? String(league.season) : null,
-  );
+  // The two shell reads. Both are needed before first paint (the switcher, and
+  // the source/format line on the info panel), and neither feeds the other.
+  const sleeperLeague = league.metadata as unknown as Parameters<
+    typeof resolveLeagueContext
+  >[1];
+  const [{ otherLeagues }, context] = await Promise.all([
+    loadLeagueHeaderActions(
+      supabase,
+      league.id,
+      sleeperLeagueId,
+      searchedUsername,
+      league.season != null ? String(league.season) : null,
+    ),
+    // Format is derived from the Sleeper league settings; only the value source
+    // follows the user's preference.
+    resolveSourceSlug(supabase, sp.source).then((resolved) =>
+      resolveLeagueContext(adminClient, sleeperLeague, resolved.slug),
+    ),
+  ]);
 
   // Back-links forward the searched handle so the switcher and overview
   // context survive the round trip.
@@ -121,55 +145,7 @@ export default async function LeagueTransactionsPage({
   // Copy link is the clean, shareable canonical URL (no personal username).
   const copyHref = `/leagues/${sleeperLeagueId}/transactions`;
 
-  // Resolve league context (format + source), source respects user prefs;
-  // format is derived from the actual Sleeper league settings.
-  const sleeperLeague = league.metadata as unknown as Parameters<
-    typeof resolveLeagueContext
-  >[1];
-  const resolvedSource = await resolveSourceSlug(supabase, sp.source);
-  const context = await resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug);
-
-  // Parse filters from URL
   const filter = parseFiltersFromSearchParams(sp);
-
-  // Filter facet counts come from the unfiltered set (so users can see
-  // every possible filter without first picking one).
-  const facets = await loadFacets(supabase, league.id);
-
-  const { total, rows } = await loadLeagueTransactions(
-    supabase,
-    league.id,
-    context.coverage === "none" ? null : (context as LeagueContext),
-    { ...filter, limit: PAGE_SIZE },
-  );
-
-  const currentOffset = filter.offset ?? 0;
-  const hasPrev = currentOffset > 0;
-  const hasNext = currentOffset + rows.length < total;
-
-  // Grade every trade on this page through the real Signal Check pipeline (FF
-  // Beacon values, the league's derived format, the published ruleset), so each
-  // trade shows the same verdict a user gets typing it into /tools/signal-check.
-  const tradeRows = rows.filter((r) => r.type === "trade");
-  const rosterLabels: Record<number, string> = {};
-  for (const [rid, identity] of Object.entries(rows[0]?.rosterIdentities ?? {})) {
-    rosterLabels[Number(rid)] = identity.teamName;
-  }
-  const tradeAnalysis =
-    tradeRows.length > 0
-      ? await analyzeLeagueTrades(adminClient, {
-          sleeperLeague: league.metadata as unknown as SleeperLeague,
-          trades: tradeRows.map((r) => ({
-            sleeperTransactionId: r.sleeperTransactionId,
-            adds: r.adds,
-            draftPicks: r.draftPicks,
-          })),
-          rosterLabels,
-          leagueRowId: league.id,
-        })
-      : null;
-  const gradedTrades: Map<string, LeagueTradeSignalCheck> =
-    tradeAnalysis?.results ?? new Map();
 
   // League identity + context for the highlighted sidebar card, mirroring the
   // overview page so every deep-view surface reads as one dashboard. Format is
@@ -210,14 +186,6 @@ export default async function LeagueTransactionsPage({
     fallbackDisplay,
     pickSourceDisplay,
   };
-
-  // At-a-glance transaction counts from the unfiltered facet set (so the
-  // snapshot reflects the whole league, not the current filter).
-  const typeCountBy = new Map(facets.types.map((t) => [t.value, t.count]));
-  const totalAll = facets.types.reduce((sum, t) => sum + t.count, 0);
-  const tradeCount = typeCountBy.get("trade") ?? 0;
-  const waiverCount =
-    (typeCountBy.get("waiver") ?? 0) + (typeCountBy.get("free_agent") ?? 0);
 
   // In-view links back to the other deep-view surfaces (username forwarded so
   // the switcher + Teams owner default survive the hop).
@@ -284,9 +252,12 @@ export default async function LeagueTransactionsPage({
                 mobile rather than reading a stack of secondary links. */}
             <Panel eyebrow="At a glance" title="Activity" className="hidden xl:block">
               <dl className="grid grid-cols-3 gap-2">
-                <StatReadout label="Total" value={String(totalAll)} accent="ink" />
-                <StatReadout label="Trades" value={String(tradeCount)} accent="purple" />
-                <StatReadout label="Waivers" value={String(waiverCount)} accent="cyan" />
+                <Suspense fallback={<ActivityGlanceSkeleton />}>
+                  <ActivityGlance
+                    leagueRowId={league.id}
+                    resynced={!pulseResult.cached}
+                  />
+                </Suspense>
               </dl>
             </Panel>
 
@@ -317,24 +288,144 @@ export default async function LeagueTransactionsPage({
           </aside>
 
           <div className="min-w-0 space-y-6">
-            <TransactionFilters
-              sleeperLeagueId={sleeperLeagueId}
-              types={facets.types}
-              teams={facets.teams}
-              weeks={facets.weeks}
-            />
+            <Suspense fallback={<FeedSkeleton />}>
+              <TransactionsFeed
+                leagueRowId={league.id}
+                sleeperLeagueId={sleeperLeagueId}
+                sleeperLeague={league.metadata as unknown as SleeperLeague}
+                context={context}
+                filter={filter}
+                sp={sp}
+                resynced={!pulseResult.cached}
+              />
+            </Suspense>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
 
-            <Panel
+/**
+ * Everything below the filter bar, and the filter bar itself.
+ *
+ * All of it depends on the derived half of the pulse (the transaction history),
+ * so it lives behind a Suspense boundary and the rest of the page does not wait
+ * for it. pulseLeagueDerived coalesces per league, so this boundary and the
+ * Activity tally beside it share one sync rather than racing for it.
+ */
+async function TransactionsFeed({
+  leagueRowId,
+  sleeperLeagueId,
+  sleeperLeague,
+  context,
+  filter,
+  sp,
+  resynced,
+}: {
+  leagueRowId: string;
+  sleeperLeagueId: string;
+  sleeperLeague: SleeperLeague;
+  context: LeagueContext | LeagueContextEmpty;
+  filter: TransactionFilter;
+  sp: Record<string, string | undefined>;
+  resynced: boolean;
+}) {
+  const adminClient = createAdminClient();
+  await pulseLeagueDerived(adminClient, leagueRowId, { resynced });
+
+  const supabase = await createClient();
+  const [facets, loaded] = await Promise.all([
+    // Facet counts come from the unfiltered set, so a user can see every filter
+    // without first picking one.
+    loadFacets(supabase, leagueRowId),
+    loadLeagueTransactions(supabase, leagueRowId, { ...filter, limit: PAGE_SIZE }),
+  ]);
+  const { total, rows } = loaded;
+
+  const currentOffset = filter.offset ?? 0;
+  const hasPrev = currentOffset > 0;
+  const hasNext = currentOffset + rows.length < total;
+
+  // Grade every trade on this page through the real Signal Check pipeline (FF
+  // Beacon values, the league's derived format, the published ruleset), so each
+  // trade shows the same verdict a user gets typing it into /tools/signal-check.
+  const tradeRows = rows.filter((r) => r.type === "trade");
+  // From the loaded identity map rather than the first row, so the labels are
+  // right on a page whose first row happens to be a non-trade (or is empty).
+  const rosterLabels: Record<number, string> = {};
+  for (const [rid, identity] of Object.entries(loaded.rosterIdentities)) {
+    rosterLabels[Number(rid)] = identity.teamName;
+  }
+  const tradeAnalysis =
+    tradeRows.length > 0
+      ? await analyzeLeagueTrades(adminClient, {
+          sleeperLeague,
+          trades: tradeRows.map((r) => ({
+            sleeperTransactionId: r.sleeperTransactionId,
+            adds: r.adds,
+            draftPicks: r.draftPicks,
+          })),
+          rosterLabels,
+          leagueRowId,
+        })
+      : null;
+  const gradedTrades: Map<string, LeagueTradeSignalCheck> =
+    tradeAnalysis?.results ?? new Map();
+
+  // Only the trades Signal Check could not take (a three-team deal, an
+  // unmatched player) need the plain value analyzer, and they get it
+  // concurrently. Normally this list is empty and no valuation runs at all.
+  const ungradedTrades = tradeRows.filter((r) => !gradedTrades.has(r.sleeperTransactionId));
+  const fallbackAnalyses = await loadTradeAnalyses(
+    supabase,
+    leagueRowId,
+    context.coverage === "none" ? null : (context as LeagueContext),
+    ungradedTrades,
+    loaded,
+  );
+
+  const coverageOk = context.coverage !== "none";
+  const sourceDisplay = coverageOk ? context.sourceDisplay : "N/A";
+  const formatDisplay = coverageOk ? (context as LeagueContext).formatDisplay : "N/A";
+
+  // `total` is the count AFTER filtering, and the feed is filtered by default,
+  // so "N total transactions" would have read as the league's whole history
+  // while showing only its trades. Name what is actually on screen instead.
+  const showingOnlyTrades =
+    filter.types?.length === 1 && filter.types[0] === DEFAULT_TYPE_FILTER;
+  const noun = showingOnlyTrades
+    ? total === 1
+      ? "trade"
+      : "trades"
+    : total === 1
+      ? "transaction"
+      : "transactions";
+  const feedTitle = showingOnlyTrades ? "Trades" : "Transactions";
+  const countLabel = `${total} ${noun}`;
+
+  return (
+    <>
+      <TransactionFilters
+        sleeperLeagueId={sleeperLeagueId}
+        types={facets.types}
+        teams={facets.teams}
+        weeks={facets.weeks}
+        defaultType={DEFAULT_TYPE_FILTER}
+        allTypesValue={ALL_TYPES_SENTINEL}
+      />
+
+      <Panel
               eyebrow="Feed"
-              title="Transactions"
+              title={feedTitle}
               helper={
                 gradedTrades.size > 0
-                  ? `${total} total ${total === 1 ? "transaction" : "transactions"}. Trades graded by Signal Check using FF Beacon values${tradeAnalysis?.formatDisplay ? ` in ${tradeAnalysis.formatDisplay}` : ""}.`
+                  ? `${countLabel}. Graded by Signal Check using FF Beacon values${tradeAnalysis?.formatDisplay ? ` in ${tradeAnalysis.formatDisplay}` : ""}.`
                   : coverageOk
-                    ? `${total} total ${total === 1 ? "transaction" : "transactions"}, values via ${sourceDisplay} in ${formatDisplay}.`
-                    : `${total} total ${total === 1 ? "transaction" : "transactions"}.`
+                    ? `${countLabel}, values via ${sourceDisplay} in ${formatDisplay}.`
+                    : `${countLabel}.`
               }
-              bodyClassName="p-4 sm:p-5"
+              bodyClassName="bg-base/30 p-4 sm:p-5"
             >
               {tradeAnalysis?.formatNotice && (
                 <p
@@ -348,11 +439,21 @@ export default async function LeagueTransactionsPage({
               {rows.length === 0 ? (
                 <div className="rounded-card border border-line bg-base/40 p-8 text-center">
                   <p className="text-sm text-ink-muted">
-                    No transactions match the current filters.
+                    {showingOnlyTrades
+                      ? "No trades in this league yet. Uncheck Trade in the filters to see waivers and free agent moves."
+                      : "No transactions match the current filters."}
                   </p>
                 </div>
               ) : (
-                <ol className="space-y-4" role="list" aria-label="League transactions">
+                // Wide gaps, not hairlines. Each entry is a self-contained
+                // card, so the empty space between them is what says one has
+                // ended, and 1rem did not read as a gap between two bordered
+                // blocks sitting on a similar background.
+                <ol
+                  className="space-y-7 sm:space-y-8"
+                  role="list"
+                  aria-label={showingOnlyTrades ? "League trades" : "League transactions"}
+                >
                   {rows.map((row) => {
                     const graded =
                       row.type === "trade"
@@ -371,7 +472,13 @@ export default async function LeagueTransactionsPage({
                             status={row.status}
                           />
                         ) : (
-                          <TransactionRow data={row} sleeperLeagueId={sleeperLeagueId} />
+                          <TransactionRow
+                            data={{
+                              ...row,
+                              analysis: fallbackAnalyses.get(row.sleeperTransactionId) ?? null,
+                            }}
+                            sleeperLeagueId={sleeperLeagueId}
+                          />
                         )}
                       </li>
                     );
@@ -401,11 +508,78 @@ export default async function LeagueTransactionsPage({
                   </div>
                 </nav>
               )}
-            </Panel>
-          </div>
+      </Panel>
+    </>
+  );
+}
+
+/**
+ * The Activity tally. Its own boundary because the counts are only known once
+ * the history sync has run, and that must not hold up the league identity card
+ * sitting above them.
+ */
+async function ActivityGlance({
+  leagueRowId,
+  resynced,
+}: {
+  leagueRowId: string;
+  resynced: boolean;
+}) {
+  await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("league_transactions")
+    .select("type")
+    .eq("league_id", leagueRowId);
+
+  let total = 0;
+  let trades = 0;
+  let waivers = 0;
+  for (const row of data ?? []) {
+    total += 1;
+    if (row.type === "trade") trades += 1;
+    else if (row.type === "waiver" || row.type === "free_agent") waivers += 1;
+  }
+
+  return (
+    <>
+      <StatReadout label="Total" value={String(total)} accent="ink" />
+      <StatReadout label="Trades" value={String(trades)} accent="purple" />
+      <StatReadout label="Waivers" value={String(waivers)} accent="cyan" />
+    </>
+  );
+}
+
+function ActivityGlanceSkeleton() {
+  return (
+    <>
+      <StatReadout label="Total" value="..." accent="ink" />
+      <StatReadout label="Trades" value="..." accent="purple" />
+      <StatReadout label="Waivers" value="..." accent="cyan" />
+    </>
+  );
+}
+
+/**
+ * Stand-in for the feed while the derived sync finishes. Announced politely so
+ * a screen reader hears that work is in progress rather than sitting on
+ * silence, and replaced in place the moment the real feed streams in.
+ */
+function FeedSkeleton() {
+  return (
+    <div role="status" aria-live="polite" className="space-y-6">
+      <div className="rounded-modal border border-line bg-surface/50 px-4 py-3 sm:px-5">
+        <p className="text-sm text-ink-muted">Loading filters</p>
+      </div>
+      <div className="rounded-modal border border-line bg-surface/50 p-4 sm:p-5">
+        <p className="text-sm text-ink-muted">Loading transactions</p>
+        <div aria-hidden="true" className="mt-4 space-y-7">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-40 animate-pulse rounded-modal bg-base/60" />
+          ))}
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -506,9 +680,15 @@ function parseFiltersFromSearchParams(sp: {
   week?: string;
   offset?: string;
 }): TransactionFilter {
-  const types = sp.type
+  const explicitTypes = sp.type
     ? sp.type.split(",").map((v) => v.trim()).filter((v) => v.length > 0)
-    : undefined;
+    : [];
+  const types =
+    sp.type === ALL_TYPES_SENTINEL
+      ? undefined
+      : explicitTypes.length > 0
+        ? explicitTypes
+        : [DEFAULT_TYPE_FILTER];
   const rosterIds = sp.team
     ? sp.team
         .split(",")

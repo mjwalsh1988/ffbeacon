@@ -15,6 +15,10 @@ type TransactionFiltersProps = {
   teams: TeamOption[];
   /** Available weeks (descending). */
   weeks: number[];
+  /** Type the feed shows when the URL carries no type. */
+  defaultType: string;
+  /** Sentinel written to ?type= to mean "every type". */
+  allTypesValue: string;
 };
 
 /**
@@ -41,6 +45,8 @@ export function TransactionFilters({
   types,
   teams,
   weeks,
+  defaultType,
+  allTypesValue,
 }: TransactionFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -48,7 +54,17 @@ export function TransactionFilters({
   const [collapsed, setCollapsed] = useState(false);
   const bodyId = useId();
 
-  const selectedTypes = parseMulti(searchParams.get("type"));
+  // Mirrors parseFiltersFromSearchParams on the server: no type means the
+  // default, the sentinel means none. If the two ever disagree the chips stop
+  // describing the feed underneath them.
+  const rawType = searchParams.get("type");
+  const showingAllTypes = rawType === allTypesValue;
+  const selectedTypes = showingAllTypes
+    ? []
+    : rawType
+      ? parseMulti(rawType)
+      : [defaultType];
+  const usingDefaultType = !rawType;
   const selectedTeams = parseMulti(searchParams.get("team"))
     .map((v) => Number.parseInt(v, 10))
     .filter((n) => Number.isFinite(n));
@@ -77,6 +93,22 @@ export function TransactionFilters({
     startTransition(() => router.replace(buildHref(next), { scroll: false }));
   };
 
+  /**
+   * Type toggles start from the EFFECTIVE selection, not from the raw param,
+   * so unchecking the default-checked Trade chip clears it instead of adding a
+   * second one. Emptying the set writes the all-types sentinel: deleting the
+   * param would just re-apply the default and the chip would spring back.
+   */
+  const toggleType = (value: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    const set = new Set(selectedTypes);
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+    next.set("type", set.size === 0 ? allTypesValue : Array.from(set).join(","));
+    next.delete("offset");
+    startTransition(() => router.replace(buildHref(next), { scroll: false }));
+  };
+
   const clearAll = () => {
     // Preserve the searched username so clearing filters doesn't drop the
     // in-view league switcher context.
@@ -88,7 +120,11 @@ export function TransactionFilters({
 
   const activeCount =
     selectedTypes.length + selectedTeams.length + (selectedWeek !== null ? 1 : 0);
+  // The badge counts the default, because the feed really is filtered by it.
+  // "Clear all" appears only when the URL holds something to clear, so it is
+  // never a control that does nothing.
   const hasAnyFilter = activeCount > 0;
+  const canClear = Boolean(rawType || searchParams.get("team") || selectedWeek);
 
   return (
     <div
@@ -124,13 +160,13 @@ export function TransactionFilters({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {hasAnyFilter && (
+          {canClear && (
             <button
               type="button"
               onClick={clearAll}
               className="text-xs font-medium text-brand-cyan underline-offset-2 hover:underline focus-visible:underline"
             >
-              Clear all
+              Reset filters
             </button>
           )}
           <button
@@ -167,6 +203,7 @@ export function TransactionFilters({
             </span>
             {types.map((t) => {
               const checked = selectedTypes.includes(t.value);
+              const isDefault = t.value === defaultType;
               return (
                 <label
                   key={t.value}
@@ -179,9 +216,11 @@ export function TransactionFilters({
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => toggleMulti("type", t.value)}
+                    onChange={() => toggleType(t.value)}
                     className="sr-only"
-                    aria-label={`${t.label}, ${t.count} ${t.count === 1 ? "transaction" : "transactions"}`}
+                    aria-label={`${t.label}, ${t.count} ${t.count === 1 ? "transaction" : "transactions"}${
+                      checked && isDefault && usingDefaultType ? ", shown by default" : ""
+                    }`}
                   />
                   <span aria-hidden="true">
                     {t.label} <span className="text-ink-subtle">({t.count})</span>
@@ -189,6 +228,11 @@ export function TransactionFilters({
                 </label>
               );
             })}
+            <p className="w-full text-[11px] leading-relaxed text-ink-subtle">
+              {showingAllTypes
+                ? "Showing every transaction type. Pick a type to narrow the feed."
+                : "The feed opens on trades. Uncheck every type to see waivers and free agent moves too."}
+            </p>
           </div>
 
           <div

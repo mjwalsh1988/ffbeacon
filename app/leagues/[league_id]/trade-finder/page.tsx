@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { pulseLeague } from "@/lib/league-pulse";
+import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
@@ -81,10 +81,12 @@ export default async function LeagueTradeFinderPage({
     return Number.isFinite(n) ? n : null;
   })();
 
-  // The same idempotent first-touch pulse every deep-view surface runs, so this
-  // tab works as a direct link rather than only after somebody visited Overview.
+  // The same first-touch pulse every deep-view surface runs, so this tab works
+  // as a direct link rather than only after somebody visited Overview. Core
+  // only: the derived half feeds the suggestion engine, so it runs inside the
+  // streamed section below instead of holding the header back.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
+  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
   if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
@@ -267,6 +269,8 @@ export default async function LeagueTradeFinderPage({
             <Suspense fallback={<FinderSkeleton />}>
               <TradeFinderSection
                 sleeperLeagueId={sleeperLeagueId}
+                leagueRowId={league.id}
+                resynced={!pulseResult.cached}
                 sourceSlug={resolvedSource.slug}
                 searchedUsername={searchedUsername}
                 rosterParam={rosterParam}
@@ -294,12 +298,16 @@ export default async function LeagueTradeFinderPage({
  */
 async function TradeFinderSection({
   sleeperLeagueId,
+  leagueRowId,
+  resynced,
   sourceSlug,
   searchedUsername,
   rosterParam,
   isSignedIn,
 }: {
   sleeperLeagueId: string;
+  leagueRowId: string;
+  resynced: boolean;
   /** Null when the registry has no active value source at all. */
   sourceSlug: string | null;
   searchedUsername: string | null;
@@ -308,6 +316,10 @@ async function TradeFinderSection({
 }) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
+
+  // The engine reads transaction history and the Power Pulse cache, so the
+  // derived half has to have run. It waits here rather than in the shell.
+  await pulseLeagueDerived(adminClient, leagueRowId, { resynced });
 
   const finderLeague = await loadTradeFinderLeague(supabase, {
     sleeperLeagueId,

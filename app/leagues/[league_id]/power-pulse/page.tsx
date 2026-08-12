@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { pulseLeague } from "@/lib/league-pulse";
+import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
@@ -73,10 +74,12 @@ export default async function LeaguePowerPulsePage({
   const searchedUsername =
     typeof sp.username === "string" && sp.username.trim() ? sp.username.trim() : null;
 
-  // Same idempotent first-touch pulse as every other deep-view surface. This is
-  // also what computes Power Pulse when it is stale.
+  // Core pulse only: the league, its rosters and its members. The derived half
+  // is what computes Power Pulse when it is stale, and that is the slow part, so
+  // it runs inside the Suspense boundaries below and the header, tabs and intro
+  // paint without waiting for it.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeague(adminClient, sleeperLeagueId);
+  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
   if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
@@ -113,53 +116,6 @@ export default async function LeaguePowerPulsePage({
   const resolvedSource = await resolveSourceSlug(supabase, sp.source);
   const context = await resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug);
   const coverageOk = context.coverage !== "none";
-
-  // Readiness first: a league that has not drafted, or that Sleeper has not
-  // paired up yet, has no honest numbers to show and gets the waiting state
-  // instead of a table of zeroes. See lib/league-readiness.ts.
-  const readiness = await loadLeagueReadiness(
-    supabase,
-    league.id,
-    Number(league.season),
-    league.status ?? null,
-  );
-
-  // The champion section states how many seasons were simulated, so it reads
-  // the same admin-editable setting the simulation itself runs on rather than
-  // repeating a number that could drift out of date.
-  const pulseSettings = await loadPowerPulseSettings(adminClient);
-
-  const view = readiness.preDraft
-    ? null
-    : await loadPowerPulseView(
-        supabase,
-        league.id,
-        Number(league.season),
-        coverageOk ? context.formatConfigId : null,
-        coverageOk ? context.sourceSlug : null,
-      );
-
-  // The roster list is only needed for the waiting state, where it is the
-  // whole point: the reader still gets to see who is in the league.
-  const preDraftTeams = readiness.preDraft
-    ? (
-        await loadLeagueTeamCards(
-          supabase,
-          league.id,
-          null,
-          null,
-          league.season != null ? String(league.season) : null,
-          league.status ?? null,
-          false,
-        )
-      ).map((t) => ({
-        rosterRowId: t.rosterRowId,
-        sleeperRosterId: t.sleeperRosterId,
-        teamName: t.teamName,
-        ownerHandle: t.ownerSleeperUsername,
-        ownerAvatarId: t.ownerAvatarId,
-      }))
-    : [];
 
   const settings = (league.metadata as { settings?: Record<string, number> } | null)?.settings ?? {};
   const playoffTeams = Number(settings.playoff_teams ?? 6);
@@ -268,27 +224,162 @@ export default async function LeaguePowerPulsePage({
             what it will do: your best lineup each week, under your league's
             scoring, against your real schedule.
           </p>
-          {view && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Chip
-                label={view.preseason ? "Preseason" : `Through week ${view.throughWeek}`}
-                accent
-              />
-              <Chip label={`${view.teams.length} teams`} />
-              <Chip label={scoringDescription} />
-              {view.generatedAt && (
-                <Chip label={`Updated ${formatEastern(view.generatedAt)}`} />
-              )}
-            </div>
-          )}
+          <Suspense fallback={null}>
+            <IntroChips
+              leagueRowId={league.id}
+              season={Number(league.season)}
+              status={league.status ?? null}
+              formatConfigId={coverageOk ? context.formatConfigId : null}
+              sourceSlug={coverageOk ? context.sourceSlug : null}
+              resynced={!pulseResult.cached}
+              scoringDescription={scoringDescription}
+            />
+          </Suspense>
         </section>
 
+        <Suspense fallback={<PulseBodySkeleton />}>
+          <PowerPulseBody
+            leagueRowId={league.id}
+            sleeperLeagueId={sleeperLeagueId}
+            season={Number(league.season)}
+            seasonLabel={league.season}
+            status={league.status ?? null}
+            formatConfigId={coverageOk ? context.formatConfigId : null}
+            sourceSlug={coverageOk ? context.sourceSlug : null}
+            resynced={!pulseResult.cached}
+            searchedUsername={searchedUsername}
+            scoringDescription={scoringDescription}
+            playoffTeams={playoffTeams}
+            valueLabel={valueLabel}
+            infoPanelProps={infoPanelProps}
+          />
+        </Suspense>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * The chips under the intro heading. Their own boundary because every number on
+ * them comes from the Power Pulse cache, and the heading above them should not
+ * wait on a recompute to appear.
+ */
+async function IntroChips({
+  leagueRowId,
+  season,
+  status,
+  formatConfigId,
+  sourceSlug,
+  resynced,
+  scoringDescription,
+}: {
+  leagueRowId: string;
+  season: number;
+  status: string | null;
+  formatConfigId: string | null;
+  sourceSlug: string | null;
+  resynced: boolean;
+  scoringDescription: string;
+}) {
+  const { view } = await getPulseData(
+    leagueRowId,
+    season,
+    status,
+    formatConfigId,
+    sourceSlug,
+    resynced,
+  );
+  if (!view) return null;
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      <Chip
+        label={view.preseason ? "Preseason" : `Through week ${view.throughWeek}`}
+        accent
+      />
+      <Chip label={`${view.teams.length} teams`} />
+      <Chip label={scoringDescription} />
+      {view.generatedAt && <Chip label={`Updated ${formatEastern(view.generatedAt)}`} />}
+    </div>
+  );
+}
+
+/**
+ * Everything below the intro strip: the waiting states and the full ranking.
+ *
+ * All three branches need the derived pulse, so the branch itself is chosen in
+ * here rather than in the shell. getPulseData is React-cached, so this boundary
+ * and the chips above share one read and one sync.
+ */
+async function PowerPulseBody({
+  leagueRowId,
+  sleeperLeagueId,
+  season,
+  seasonLabel,
+  status,
+  formatConfigId,
+  sourceSlug,
+  resynced,
+  searchedUsername,
+  scoringDescription,
+  playoffTeams,
+  valueLabel,
+  infoPanelProps,
+}: {
+  leagueRowId: string;
+  sleeperLeagueId: string;
+  season: number;
+  seasonLabel: string | number | null;
+  status: string | null;
+  formatConfigId: string | null;
+  sourceSlug: string | null;
+  resynced: boolean;
+  searchedUsername: string | null;
+  scoringDescription: string;
+  playoffTeams: number;
+  valueLabel: string | null;
+  infoPanelProps: Parameters<typeof LeagueInfoPanel>[0];
+}) {
+  const { readiness, view } = await getPulseData(
+    leagueRowId,
+    season,
+    status,
+    formatConfigId,
+    sourceSlug,
+    resynced,
+  );
+
+  // The roster list is only needed for the waiting state, where it is the
+  // whole point: the reader still gets to see who is in the league.
+  const supabase = await createClient();
+  const pulseSettings = await loadPowerPulseSettings(createAdminClient());
+  const preDraftTeams = readiness.preDraft
+    ? (
+        await loadLeagueTeamCards(
+          supabase,
+          leagueRowId,
+          null,
+          null,
+          seasonLabel != null ? String(seasonLabel) : null,
+          status,
+          false,
+        )
+      ).map((t) => ({
+        rosterRowId: t.rosterRowId,
+        sleeperRosterId: t.sleeperRosterId,
+        teamName: t.teamName,
+        ownerHandle: t.ownerSleeperUsername,
+        ownerAvatarId: t.ownerAvatarId,
+      }))
+    : [];
+
+  return (
+    <>
         {readiness.preDraft ? (
           <div className="mt-6 space-y-6">
             <PreDraftNotice
               readiness={readiness}
               teams={preDraftTeams}
-              season={league.season}
+              season={seasonLabel}
             />
             <LeagueInfoPanel layout="horizontal" headingLevel={2} {...infoPanelProps} />
           </div>
@@ -401,8 +492,59 @@ export default async function LeaguePowerPulsePage({
               </div>
             </div>
         )}
+    </>
+  );
+}
+
+/**
+ * One read of everything the two boundaries below the intro need.
+ *
+ * React's cache() dedupes it across them for a single render, so the chips and
+ * the body share one derived sync and one view read instead of racing to do
+ * both twice. Every argument is a primitive, which is what makes the cache key
+ * match between the two call sites.
+ */
+const getPulseData = cache(
+  async (
+    leagueRowId: string,
+    season: number,
+    status: string | null,
+    formatConfigId: string | null,
+    sourceSlug: string | null,
+    resynced: boolean,
+  ) => {
+    await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+    const supabase = await createClient();
+    // Readiness first: a league that has not drafted, or that Sleeper has not
+    // paired up yet, has no honest numbers to show and gets the waiting state
+    // instead of a table of zeroes. See lib/league-readiness.ts.
+    const readiness = await loadLeagueReadiness(supabase, leagueRowId, season, status);
+    const view = readiness.preDraft
+      ? null
+      : await loadPowerPulseView(supabase, leagueRowId, season, formatConfigId, sourceSlug);
+    return { readiness, view };
+  },
+);
+
+/**
+ * Stand-in for the ranking while the derived sync finishes. Announced politely
+ * so a screen reader hears that work is in progress rather than sitting on
+ * silence.
+ */
+function PulseBodySkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mt-6 rounded-modal border border-line bg-surface/50 p-6"
+    >
+      <p className="text-sm text-ink-muted">Loading Power Pulse</p>
+      <div aria-hidden="true" className="mt-4 space-y-2">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <div key={i} className="h-9 animate-pulse rounded-card bg-base/60" />
+        ))}
       </div>
-    </main>
+    </div>
   );
 }
 

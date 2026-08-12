@@ -64,11 +64,27 @@ export function TransactionRow({
   const isTrade = data.type === "trade";
   const isComplete = (data.status ?? "").toLowerCase() === "complete";
 
+  // Type-coloured top edge + a lifted surface. In a stacked feed the eye needs
+  // an unambiguous "this is where the next one starts", and a plain hairline
+  // border between two same-coloured blocks does not provide one. This mirrors
+  // the beacon edge on the graded trade card so the two read as siblings.
+  const edge =
+    data.type === "trade"
+      ? "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)"
+      : data.type === "waiver"
+        ? "linear-gradient(90deg, transparent 0%, #22D3EE 50%, transparent 100%)"
+        : "linear-gradient(90deg, transparent 0%, rgba(148,163,184,0.6) 50%, transparent 100%)";
+
   return (
     <article
-      className="rounded-card border border-line bg-surface p-4 sm:p-5"
+      className="relative overflow-hidden rounded-modal border border-line bg-surface p-4 shadow-lg shadow-black/20 sm:p-5"
       aria-label={typeLabel}
     >
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-0.5"
+        style={{ backgroundImage: edge }}
+      />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <TypePill type={data.type} label={typeLabel} />

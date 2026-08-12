@@ -2,12 +2,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { analyzeTrade, type TradeAnalysis } from "@/lib/trade-analyzer";
 import type { LeagueContext } from "@/lib/league-format-resolution";
-import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
+import { loadLeagueDraftSlots, type LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
 import type { TransactionRowData } from "@/components/transaction-row";
 
 type AnySupabase =
   | SupabaseClient<Database>
   | Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
+
+/**
+ * The feed opens on trades.
+ *
+ * Trades are what people come to this page to read, and they are the rows that
+ * carry a graded verdict; waivers and free-agent adds are the long tail that
+ * buries them. So "no type in the URL" means trades, and ALL_TYPES_SENTINEL is
+ * the explicit escape hatch the filter bar writes when every type is
+ * deselected. Without that sentinel there would be no way to express "show
+ * everything", because an empty selection is exactly what the default fills in.
+ */
+export const DEFAULT_TYPE_FILTER = "trade";
+export const ALL_TYPES_SENTINEL = "all";
 
 export type TransactionFilter = {
   /** "trade" | "waiver" | "free_agent" | "commissioner". null = all. */
@@ -24,25 +37,35 @@ export type TransactionFilter = {
   offset?: number;
 };
 
+export type RosterIdentities = Record<
+  number,
+  { teamName: string; ownerHandle: string | null; avatarId: string | null }
+>;
+
 export type LoadedTransactions = {
   total: number;
+  /** Rows carry `analysis: null`. See loadTradeAnalyses. */
   rows: TransactionRowData[];
+  /** Reused by loadTradeAnalyses so it does not re-read either. */
+  rosterIdentities: RosterIdentities;
+  slotIndex: LeagueDraftSlotIndex;
 };
 
 /**
- * Load transactions for a league with optional filters, resolve every trade
- * into a TradeAnalysis using the supplied LeagueContext, and build the
+ * Load transactions for a league with optional filters and build the
  * TransactionRowData payload the UI component consumes.
  *
- * `context` may be null when the league has no resolved format (rare,
- * Sleeper league with no canonical format mapping and a source that
- * supports nothing else). When null, trades render without analysis
- * (verdict / values are hidden).
+ * Trade VALUATION is deliberately not done here. Every trade the page can grade
+ * renders through SignalCheckTradeCard, which never reads `analysis`, so running
+ * the analyzer up front meant computing a full valuation per trade and throwing
+ * all of it away. On a 25-row page of one real league that was 1.6 seconds of
+ * the load, in a sequential await loop. The caller now grades first and asks for
+ * analyses only for the trades Signal Check could not take, via
+ * loadTradeAnalyses.
  */
 export async function loadLeagueTransactions(
   supabase: AnySupabase,
   leagueRowId: string,
-  context: LeagueContext | null,
   filter: TransactionFilter = {},
 ): Promise<LoadedTransactions> {
   const limit = Math.min(filter.limit ?? 50, 200);
@@ -95,10 +118,7 @@ export async function loadLeagueTransactions(
   ]);
 
   const userBySleeperId = new Map(userRows?.map((u) => [u.sleeper_user_id, u]) ?? []);
-  const rosterIdentities: Record<
-    number,
-    { teamName: string; ownerHandle: string | null; avatarId: string | null }
-  > = {};
+  const rosterIdentities: RosterIdentities = {};
   for (const r of rosterRows ?? []) {
     const u = r.owner_user_id ? userBySleeperId.get(r.owner_user_id) : null;
     rosterIdentities[r.sleeper_roster_id] = {
@@ -127,7 +147,6 @@ export async function loadLeagueTransactions(
   }
   const playerLookup = await resolvePlayers(supabase, Array.from(allSleeperIds));
 
-  // For each trade row, run the analyzer using the league context.
   const rows: TransactionRowData[] = [];
   for (const r of txRows ?? []) {
     const adds = (r.adds as Record<string, number> | null) ?? null;
@@ -136,26 +155,6 @@ export async function loadLeagueTransactions(
     const waiverBudget = Array.isArray(r.waiver_budget)
       ? (r.waiver_budget as Array<{ sender: number; receiver: number; amount: number }>)
       : [];
-
-    let analysis: TradeAnalysis | null = null;
-    if (r.type === "trade" && context && context.formatConfigId && context.sourceSlug) {
-      analysis = await analyzeTrade(supabase, {
-        leagueRowId,
-        adds,
-        draftPicks,
-        rosterIdentities,
-        slotIndex,
-        context: {
-          formatConfigId: context.formatConfigId,
-          formatSlug: context.formatSlug,
-          formatDisplay: context.formatDisplay,
-          sourceSlug: context.sourceSlug,
-          sourceDisplay: context.sourceDisplay,
-          pickSourceSlug: context.pickSource?.slug ?? null,
-          pickSourceDisplay: context.pickSource?.display ?? null,
-        },
-      });
-    }
 
     // Stamp pick_label on each raw draft pick for the non-trade MovesBody
     // renderer. The trade analyzer attaches its own label, so this branch
@@ -196,11 +195,65 @@ export async function loadLeagueTransactions(
       waiverBudget,
       playerLookup,
       rosterIdentities,
-      analysis,
+      analysis: null,
     });
   }
 
-  return { total: count ?? rows.length, rows };
+  return { total: count ?? rows.length, rows, rosterIdentities, slotIndex };
+}
+
+/**
+ * Value the trades the caller asks for, all at once.
+ *
+ * Only the trades Signal Check could not grade need this, which is normally
+ * none of them, and the work runs concurrently rather than in a queue: the old
+ * sequential loop made a page of trades cost the sum of every valuation.
+ *
+ * Returns a map keyed by sleeper_transaction_id. A trade that throws is simply
+ * absent, so one bad row degrades to the plain adds/drops layout instead of
+ * failing the feed.
+ */
+export async function loadTradeAnalyses(
+  supabase: AnySupabase,
+  leagueRowId: string,
+  context: LeagueContext | null,
+  rows: TransactionRowData[],
+  loaded: Pick<LoadedTransactions, "rosterIdentities" | "slotIndex">,
+): Promise<Map<string, TradeAnalysis>> {
+  const out = new Map<string, TradeAnalysis>();
+  if (!context?.formatConfigId || !context.sourceSlug) return out;
+  const trades = rows.filter((r) => r.type === "trade");
+  if (trades.length === 0) return out;
+
+  const analyzerContext = {
+    formatConfigId: context.formatConfigId,
+    formatSlug: context.formatSlug,
+    formatDisplay: context.formatDisplay,
+    sourceSlug: context.sourceSlug,
+    sourceDisplay: context.sourceDisplay,
+    pickSourceSlug: context.pickSource?.slug ?? null,
+    pickSourceDisplay: context.pickSource?.display ?? null,
+  };
+
+  await Promise.all(
+    trades.map(async (r) => {
+      try {
+        const analysis = await analyzeTrade(supabase, {
+          leagueRowId,
+          adds: r.adds,
+          draftPicks: r.draftPicks,
+          rosterIdentities: loaded.rosterIdentities,
+          slotIndex: loaded.slotIndex,
+          context: analyzerContext,
+        });
+        if (analysis) out.set(r.sleeperTransactionId, analysis);
+      } catch (err) {
+        console.error("[transactions] trade analysis failed", r.sleeperTransactionId, err);
+      }
+    }),
+  );
+
+  return out;
 }
 
 async function resolvePlayers(

@@ -373,9 +373,34 @@ export type SleeperNflState = {
  * Current NFL state: which season, phase, and week Sleeper considers live.
  * `season_type` is "off" between the Super Bowl and the next preseason, which
  * is the signal the stats sync uses to skip work entirely. Null on failure.
+ *
+ * Memoised in-process for NFL_STATE_TTL_MS. This answer changes at most once a
+ * week, and every league page load asks for it (Power Pulse checks it before
+ * deciding it has nothing to recompute), so an uncached call put a Sleeper
+ * round trip on the critical path of a page that otherwise reads only our own
+ * database. A failure is not cached, so a blip is retried on the next call.
  */
+const NFL_STATE_TTL_MS = 60 * 1000;
+let nflStateCache: { at: number; value: SleeperNflState } | null = null;
+let nflStateInFlight: Promise<SleeperNflState | null> | null = null;
+
 export async function getNflState(): Promise<SleeperNflState | null> {
-  return safeFetch<SleeperNflState>(`${BASE}/state/nfl`);
+  if (nflStateCache && Date.now() - nflStateCache.at < NFL_STATE_TTL_MS) {
+    return nflStateCache.value;
+  }
+  // Concurrent callers (a page rendering several league surfaces at once) share
+  // one request rather than starting a stampede of identical ones.
+  if (!nflStateInFlight) {
+    nflStateInFlight = safeFetch<SleeperNflState>(`${BASE}/state/nfl`)
+      .then((value) => {
+        if (value) nflStateCache = { at: Date.now(), value };
+        return value;
+      })
+      .finally(() => {
+        nflStateInFlight = null;
+      });
+  }
+  return nflStateInFlight;
 }
 
 export type SleeperSeasonType = "regular" | "post" | "pre";
