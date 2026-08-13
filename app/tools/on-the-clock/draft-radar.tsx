@@ -75,6 +75,7 @@ export function DraftRadar({
   nextPickLabel,
   goneBefore,
   boardReady,
+  headingLevel = 2,
 }: {
   alerts: DraftAlert[];
   picksUntilNext: number | null;
@@ -82,22 +83,31 @@ export function DraftRadar({
   nextPickLabel: string | null;
   goneBefore: GoneBeforeEntry[];
   boardReady: boolean;
+  /**
+   * Level for the panel title. The three subsection headings shift with it, so
+   * this panel keeps a valid outline wherever it is mounted. The room passes 3
+   * inside the mobile Quick info dialog, where these panels sit under the
+   * dialog's own h2.
+   */
+  headingLevel?: 2 | 3;
 }) {
+  const Sub = headingLevel === 3 ? "h4" : "h3";
   return (
     <Panel
       eyebrow="Draft radar"
       title="What is happening"
       helper="Runs, tier cliffs, and who the market takes before your next pick."
+      headingLevel={headingLevel}
     >
       <div className="space-y-4">
         <section aria-labelledby="otc-radar-turn">
-          <h3
+          <Sub
             id="otc-radar-turn"
             className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle"
           >
             <Clock aria-hidden="true" className="h-3.5 w-3.5" />
             Your next pick
-          </h3>
+          </Sub>
           <p className="mt-1 text-sm text-ink">
             {picksUntilNext === null || nextPickLabel === null ? (
               "You have no picks left in this draft."
@@ -115,13 +125,13 @@ export function DraftRadar({
         </section>
 
         <section aria-labelledby="otc-radar-alerts">
-          <h3
+          <Sub
             id="otc-radar-alerts"
             className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-subtle"
           >
             <Radar aria-hidden="true" className="h-3.5 w-3.5" />
             Alerts
-          </h3>
+          </Sub>
           {alerts.length === 0 ? (
             <p className="mt-1 text-sm text-ink-muted">Nothing unusual on the board right now.</p>
           ) : (
@@ -146,12 +156,12 @@ export function DraftRadar({
         </section>
 
         <section aria-labelledby="otc-radar-gone">
-          <h3
+          <Sub
             id="otc-radar-gone"
             className="text-xs font-semibold uppercase tracking-wide text-ink-subtle"
           >
             Likely gone before your pick
-          </h3>
+          </Sub>
           {!boardReady ? (
             <p className="mt-1 text-sm text-ink-muted">Loading the board.</p>
           ) : goneBefore.length === 0 ? (

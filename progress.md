@@ -4608,3 +4608,169 @@ T581 | completed | tighten the On The Clock player column
      | Tier cell renders "T1" visually with "Tier 1" as sr-only text, so the
      | column narrows without the cell reading as a bare letter and number.
      | verified: yes (tsc clean, 1618 tests across 117 files, next build clean)
+
+T582 | completed | write the draft-signal rationale engine
+     | files: lib/on-the-clock/rationale.ts, lib/on-the-clock/rationale.test.ts
+     | depends on: T581
+     | Pure module that turns a recommendation into plain-English argument cards
+     | plus one caveat. Separate from recommend.ts because every sentence needs
+     | facts the scorer never sees (real positional finishes, ADP, picks until
+     | your next turn, who a pick displaces), and because copy changes far more
+     | often than scoring does.
+     | Five lenses: value and market, lineup impact, cost of waiting, how the
+     | pick fits the league and the build, and what the player has actually
+     | finished. Capped at 4 per card. Team Need leads with the lineup and the
+     | clock; Best Available leads with the board and the market.
+     | Rules the copy holds to: name the number, never claim what was not
+     | measured, never describe our own outage as a fact about the player, call
+     | the league what it actually is, and write for the ear (no parenthetical
+     | asides, no untranslated jargon, verb before any long clause).
+     | Sample gates are explicit. A beat rate under 4 graded weeks reports the
+     | rate and withholds the verdict; youth is only asserted when the engine's
+     | own position-adjusted youthScore agrees.
+     | verified: yes (tsc clean, 1647 tests across 118 files, next build clean)
+
+T583 | completed | load season finishes for the recommended players
+     | files: lib/on-the-clock/player-brief.ts,
+     |        app/api/on-the-clock/player-brief/route.ts,
+     |        lib/on-the-clock/client.ts
+     | depends on: T582
+     | Reads player_positional_finishes (the nightly cache behind the player
+     | profile) for up to 4 player ids in the format's own scoring, so a finish
+     | means the same thing in a draft room as it does on a profile page.
+     | Deliberately NOT part of the board load: that carries ~800 players and
+     | would move tens of thousands of rows to render six numbers.
+     | Route follows the board route exactly: x-requested-with guard, feature
+     | gate, force-dynamic, private no-store, fixed error strings. ids param is
+     | length-capped before splitting and UUID-filtered; unknown format is a 400
+     | rather than a silent PPR default. A failed read throws so the route can
+     | answer 503, because swallowing it into an empty brief made an outage look
+     | like "this player has never scored a point" and got cached as such.
+     | verified: yes (RLS confirmed public SELECT on player_positional_finishes,
+     |           security review clean, tsc clean, 1647 tests, next build clean)
+
+T584 | completed | rebuild the two draft-signal spotlights
+     | files: app/tools/on-the-clock/player-spotlight.tsx,
+     |        app/tools/on-the-clock/on-the-clock-client.tsx
+     | depends on: T583
+     | Team Need was a single line of name, position rank and value with no
+     | reasoning attached. It is now a full peer of Best Available.
+     | Both cards carry a six-tile stat rail (FF Beacon value, position rank and
+     | tier, projected points a week with season points left, beat rate with its
+     | graded-week sample, market ADP against our own beacon_pick, availability),
+     | the rationale cards, a season-finish strip, and the caveat.
+     | Absent numbers are spoken as reasons, never left as a bare dash.
+     | Accessibility: sr-only card label prefixes the h3 so the two cards are
+     | tellable apart in a heading list; finish chips are aria-hidden with their
+     | own sr-only sentence rather than an aria-label on a bare li; shortLabel
+     | shortens pixels only and the full label is always what is announced;
+     | ink-subtle replaced with ink-muted on every data-bearing label (3.7:1 to
+     | 8.3:1); no data hidden at any breakpoint (grid-cols-2 sm:grid-cols-3).
+     | The finish-loading line is deliberately NOT a live region: the card
+     | recomputes on every pick and would talk over the alert announcer.
+     | verified: yes (tsc clean, 1647 tests across 118 files, next build clean)
+
+T585 | completed | make the rationale copy format-aware
+     | files: lib/sleeper-to-format.ts, lib/on-the-clock/types.ts,
+     |        app/api/on-the-clock/leagues/route.ts, lib/on-the-clock/recommend.ts,
+     |        lib/on-the-clock/rationale.ts, app/tools/on-the-clock/fixtures.ts,
+     |        app/tools/on-the-clock/on-the-clock-client.tsx
+     | depends on: T584
+     | The card told dynasty drafters "This is a keeper league". DerivedFormat's
+     | league_type folds keeper into redraft because keeper leagues PRICE off the
+     | one-year board, so it cannot name a league on its own.
+     | Added deriveKeeperStyle (Sleeper type 2 dynasty, 1 keeper, 0 and 3
+     | redraft) and carried it on LeagueCard as keeperStyle, separate from the
+     | format slug. All three now get their own copy, and none is told it chose
+     | a build mode it was never offered.
+     | recommend() now returns superflex and tep so the copy can explain why a
+     | quarterback is priced the way he is here without re-deriving it from the
+     | slug (a SUPER_FLEX league counts even when its closest format is 1QB).
+     | The one-quarterback note is confined to Best Available: on a Team Need
+     | card that named QB as the open slot it argued against the pick beside it.
+     | verified: yes (tsc clean, 1647 tests across 118 files, next build clean)
+
+T586 | completed | move the mobile side rail into a bottom sheet
+     | files: app/tools/on-the-clock/sidebar-sheet.tsx, components/bottom-sheet.tsx,
+     |        app/tools/on-the-clock/dashboard-panels.tsx,
+     |        app/tools/on-the-clock/on-the-clock-client.tsx
+     | depends on: T585
+     | Below xl the rail used to stack under the whole page, so its four panels
+     | sat past the entire board. They now live in a slide-up sheet behind a
+     | full-width bar directly under the view tabs, on every tab including the
+     | two that hide the desktop rail.
+     | The bar re-docks under the site header once scrolled past and lets go at
+     | the same point on the way back up. IntersectionObserver on the bar's own
+     | slot, not position:sticky: the room shell's overflow-hidden turns sticky
+     | into static. The slot keeps its height so the page never jumps, and the
+     | docked inset matches the flow inset so the bar does not jump either.
+     | The dock trigger is computed from the root font size rather than assuming
+     | 16px per rem, so it stays correct at a larger browser default.
+     | railInSheet is a real media query, not a hidden xl:block class: several
+     | panels carry fixed DOM ids and display:none leaves the duplicates in the
+     | document. BestRemainingByPosition gained instanceId for the board view's
+     | second copy.
+     | BottomSheet gained hideAboveClass (default md:hidden, unchanged for its
+     | two existing callers), motion-reduce on both the panel and the backdrop,
+     | and a document-connected check before restoring focus.
+     | The sheet's onClose is a stable useCallback: a fresh closure per render
+     | re-ran BottomSheet's focus-and-scroll-lock effect on every realtime pick,
+     | which moved focus twice a pick for as long as the sheet stayed open.
+     | verified: yes (tsc clean, 1647 tests across 118 files, next build clean)
+
+T587 | completed | apply the four review passes on T582 through T586
+     | files: lib/on-the-clock/rationale.ts, lib/on-the-clock/rationale.test.ts,
+     |        lib/sleeper-to-format.ts, lib/on-the-clock/types.ts,
+     |        app/api/on-the-clock/leagues/route.ts, app/tools/on-the-clock/fixtures.ts,
+     |        app/tools/on-the-clock/sidebar-sheet.tsx, components/bottom-sheet.tsx,
+     |        app/tools/on-the-clock/dashboard-panels.tsx,
+     |        app/tools/on-the-clock/draft-radar.tsx,
+     |        app/tools/on-the-clock/on-the-clock-client.tsx
+     | depends on: T586
+     | Implementation, accessibility, security and performance reviews were run
+     | against the two rounds. Security found nothing. What the other three
+     | found and what changed:
+     | The build point sat fifth of five on the Team Need card with a cap of
+     | four, so the sentence naming the drafter's league was the one being cut
+     | on the card most drafters act on. Reordered so track record is last on
+     | both cards: the finish strip and the beat-rate tile carry that data
+     | elsewhere, and the league type appears nowhere else.
+     | Worst-case build body was 88 words in one unbroken paragraph. The
+     | projection sentence is now dropped whenever a format sentence earned its
+     | place (the number is in a tile a few inches up), and the two longest
+     | sentences were cut down. Worst case is now three sentences.
+     | The keeper fix was incomplete: keeper leagues were being told they were
+     | one-year leagues. deriveKeeperStyle now carries Sleeper's type through
+     | LeagueCard.keeperStyle, and all three league types get their own copy.
+     | BottomSheet's focus-and-scroll-lock effect keys on the onClose identity,
+     | and SidebarSheet was passing a fresh closure every render. In a live
+     | draft that re-ran the effect on every pick, moving focus twice a pick and
+     | rewriting document.body.style.overflow twice a pick for as long as the
+     | sheet stayed open. onClose is now a stable useCallback.
+     | mounted.current was cleared on unmount but never set on mount, so React
+     | Strict Mode's development double-mount left it false and every season
+     | finish response was dropped for the rest of the dev session.
+     | scroll-padding-top of 8.5rem is set on the document while the mobile bar
+     | is mounted, so no focused control lands under the docked bar (WCAG 2.4.11
+     | Focus Not Obscured). One declaration covers every focusable in the room.
+     | The dialog is now named by its own visible h2 via labelledBy rather than a
+     | duplicate hidden span, and the summary line is aria-hidden because it is
+     | the tail of the trigger's accessible name. "Quick info" was being spoken
+     | three times and the summary twice.
+     | Dropped aria-expanded from the trigger: it is a disclosure property and
+     | this opens a modal, so screen readers were announcing "collapsed" about
+     | content that never expands in place.
+     | The four rail panels take a headingLevel and render at h3 inside the
+     | dialog, so the outline reads as a container with four panels rather than
+     | five peers. DraftRadar shifts its three subsection headings with it.
+     | The dock trigger is computed from the root font size instead of assuming
+     | 16px per rem, and the docked bar's horizontal inset matches its in-flow
+     | inset so it no longer jumps 17px left on detaching.
+     | BottomSheet also gained: a document-connected guard before restoring
+     | focus, form fields in the focus-trap selector, and motion-reduce on the
+     | backdrop as well as the panel.
+     | The one-quarterback note is confined to Best Available, LeagueShape.label
+     | was removed as dead, and xl:scroll-mt-24 keeps the tab scroll margin
+     | honest at widths where the bar does not exist.
+     | verified: yes (tsc clean, 1650 tests across 118 files, next build clean,
+     |           all-ASCII scan clean across every changed file)

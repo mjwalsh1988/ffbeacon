@@ -7,6 +7,28 @@ export type DerivedFormat = {
   is_tep: boolean;
 };
 
+/**
+ * How long a team carries its players, in the league's own terms.
+ *
+ * DerivedFormat.league_type deliberately collapses keeper and chopped leagues
+ * into "redraft", because that is how they PRICE. This is the other question:
+ * what the league actually IS, for copy that has to name it out loud. Telling a
+ * keeper drafter he is in a one-year league is the same mistake as telling a
+ * dynasty drafter he is in a keeper league, and league_type cannot tell them
+ * apart by design.
+ *
+ * Sleeper league types: 0 = redraft, 1 = keeper, 2 = dynasty, 3 = chopped.
+ * Chopped reads as redraft here, which is how it plays.
+ */
+export type KeeperStyle = "redraft" | "keeper" | "dynasty";
+
+export function deriveKeeperStyle(league: SleeperLeague): KeeperStyle {
+  const type = Number(league.settings?.type ?? 0);
+  if (type === 2) return "dynasty";
+  if (type === 1) return "keeper";
+  return "redraft";
+}
+
 export function deriveLeagueFormat(league: SleeperLeague): DerivedFormat {
   const scoring = league.scoring_settings ?? {};
   const positions = league.roster_positions ?? [];

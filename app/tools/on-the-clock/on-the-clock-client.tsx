@@ -55,6 +55,13 @@ import type { TradeItemGroup } from "@/lib/on-the-clock/trade-analyzer";
 import type { CurrentDraftPick } from "@/lib/on-the-clock/pick-ownership";
 import type { DraftSnapshotPayload } from "@/lib/on-the-clock/snapshot-types";
 import { recommend } from "@/lib/on-the-clock/recommend";
+import {
+  buildCaveat,
+  buildRationale,
+  type RationaleInput,
+  type RationalePoint,
+  type SeasonFinish,
+} from "@/lib/on-the-clock/rationale";
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchLeagues,
@@ -64,6 +71,7 @@ import {
   fetchSnapshot,
   fetchTransactions,
   fetchPulse,
+  fetchPlayerBrief,
   type OtcPulsePayload,
 } from "@/lib/on-the-clock/client";
 import type { PulsePlayerSummary } from "@/lib/on-the-clock/pulse-types";
@@ -112,7 +120,8 @@ import { PoolNotice, markPoolNoticeSeen, poolNoticeSeen } from "./pool-notice";
 import { ReportFormatDialog, type FormatReportContext } from "./report-format-dialog";
 import { StepRail } from "./step-rail";
 import { CommandHeader } from "./command-header";
-import { PlayerSpotlight, SecondaryPick } from "./player-spotlight";
+import { PlayerSpotlight, type SpotlightExtras } from "./player-spotlight";
+import { SidebarSheet } from "./sidebar-sheet";
 import { Panel } from "./panel";
 import { DraftRoomStatus, BestRemainingByPosition } from "./dashboard-panels";
 import { AvailableList } from "./available-list";
@@ -169,6 +178,13 @@ const VIEWS: Array<{ id: View; label: string; icon: typeof Target }> = [
 
 // Frozen empties, shared by reference. A fresh [] or new Map() every render is
 // what defeats a child's useMemo, which is the whole point of the block below.
+/**
+ * The width at which the side rail gets its own column. Below it the rail's
+ * panels move into the bottom sheet. Kept in one place so the media query and
+ * the `xl:hidden` classes on the sheet can never drift apart.
+ */
+const RAIL_QUERY = "(min-width: 1280px)";
+
 const NO_PLAYERS: RankedPlayer[] = [];
 const NO_PICKS: ShapedPick[] = [];
 const NO_CURRENT_PICKS: CurrentDraftPick[] = [];
@@ -309,6 +325,43 @@ export function OnTheClockClient({
   // payload (board, cache, trades, awards); nothing recalculates from current
   // values. Active drafts stay fully live.
   const snapshotMode = snapshot !== null;
+
+  /**
+   * Below xl the layout has no second column, so the side rail moves into a
+   * bottom sheet behind a bar under the view tabs.
+   *
+   * This is a real media query rather than a `hidden xl:block` class because
+   * the panels have to be rendered in exactly ONE place: several of them carry
+   * fixed DOM ids, and `display:none` leaves the duplicates in the document
+   * where they break every aria-labelledby that points at them.
+   *
+   * Reading matchMedia in the initializer is safe here even though this is a
+   * client component Next also renders on the server. The room never reaches
+   * the server HTML: `step` starts at "connect" and the rail lives behind two
+   * early returns, so the server and the first client render agree on the
+   * markup whatever this value is.
+   */
+  const [railInSheet, setRailInSheet] = useState(
+    () => typeof window !== "undefined" && !window.matchMedia(RAIL_QUERY).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(RAIL_QUERY);
+    const apply = () => setRailInSheet(!mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // ADP neutral band, in picks. Declared up here rather than beside the render
+  // because the spotlight rationale (a hook, below) needs it too, and hooks
+  // cannot read a value declared under the step-based early returns.
+  //
+  // Snapshot mode uses the threshold the draft was GRADED with (frozen at
+  // finalize), so a later admin tuning can never change a finalized draft's
+  // icons or verdicts; live mode uses the current setting.
+  const adpThreshold = snapshot !== null
+    ? snapshot.thresholdPicks
+    : settings.valueIndicators.thresholdPicks;
 
   const activeBoard: BoardResult | null = useMemo(() => {
     if (!snapshot) return board;
@@ -503,6 +556,24 @@ export function OnTheClockClient({
 
   const picksUntilNext = pulseInputs?.picksUntilNext ?? null;
 
+  // Names for the roster the recommendation is FOR, so the copy can say who a
+  // pick would displace. The available board cannot supply them: a displaced
+  // starter is already drafted and therefore off it.
+  //
+  // Hoisted out of the recommendation memo because the spotlight rationale needs
+  // the same map to name a displaced starter, and building it twice would let
+  // the two disagree.
+  const myRosterNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    if (!cache || derivedState?.myRosterId === null || derivedState === null) return names;
+    for (const pk of cache.picks) {
+      if (pk.rosterId !== null && pk.rosterId === derivedState.myRosterId && pk.playerId) {
+        names[pk.playerId] = `${pk.firstName ?? ""} ${pk.lastName ?? ""}`.trim() || "a starter";
+      }
+    }
+    return names;
+  }, [cache, derivedState]);
+
   // The recommendation engine (Best Available = pure value, Team Need =
   // value-aware roster need). Null only while the room has no cache, which is
   // the state the early return below already handles.
@@ -530,22 +601,6 @@ export function OnTheClockClient({
         seededPositions = myRoster.players
           .map((id) => posBySleeperId.get(id) ?? null)
           .filter((p): p is DraftPosition => p !== null);
-      }
-    }
-
-    // Names for the roster the recommendation is FOR, so the copy can say who a
-    // pick would displace. The available board cannot supply them: a displaced
-    // starter is already drafted and therefore off it.
-    const myRosterNames: Record<string, string> = {};
-    for (const pk of cache.picks) {
-      if (
-        pk.rosterId !== null &&
-        derivedState.myRosterId !== null &&
-        pk.rosterId === derivedState.myRosterId &&
-        pk.playerId
-      ) {
-        myRosterNames[pk.playerId] =
-          `${pk.firstName ?? ""} ${pk.lastName ?? ""}`.trim() || "a starter";
       }
     }
 
@@ -584,6 +639,155 @@ export function OnTheClockClient({
     pulse,
     projectionsForRec,
     picksUntilNext,
+    myRosterNames,
+  ]);
+
+  // -------------------------------------------------------------------------
+  // Spotlight enrichment: season history for the two recommended players, and
+  // the plain-English argument built on top of it.
+  // -------------------------------------------------------------------------
+
+  // Season finishes, keyed by "<format>|<playerId>" so switching leagues cannot
+  // serve one format's scoring under another's label.
+  const [finishCache, setFinishCache] = useState<Record<string, SeasonFinish[]>>({});
+  const [finishScoringLabel, setFinishScoringLabel] = useState<string | undefined>(undefined);
+  const [finishesLoading, setFinishesLoading] = useState(false);
+  // Ids already asked about. A player with no finish rows is a real answer, so
+  // this must not retry him on every re-render.
+  const requestedFinishes = useRef<Set<string>>(new Set());
+  // Requests still in the air. A count, not a boolean, so a fast response
+  // cannot clear the flag while a slower sibling is still running.
+  const finishesInFlight = useRef(0);
+  // Set on the way IN as well as cleared on the way out. React Strict Mode
+  // mounts, unmounts and remounts the same instance in development, so a
+  // cleanup-only version left this false for the rest of the session and every
+  // history response was dropped before it reached the cache.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // The joined id list, so the effect below depends on the CONTENTS rather than
+  // on a fresh array identity, which changes on every pick.
+  const bestPlayerId = rec?.best.player?.playerId;
+  const needPlayerId = rec?.need.player?.playerId;
+  const spotlightIdKey = [bestPlayerId, needPlayerId === bestPlayerId ? undefined : needPlayerId]
+    .filter(Boolean)
+    .join(",");
+
+  // NO per-run cancellation here, deliberately. The effect's cleanup fires when
+  // the recommended players change, which happens constantly in a live draft,
+  // and a run cancelled that way had already marked its ids as requested. That
+  // stranded those players with no history for the rest of the session and left
+  // the loading flag stuck on. A late response is harmless instead: the cache
+  // is a keyed merge, so it can only ever add the right rows under the right
+  // keys. The only thing worth skipping is a response that lands after unmount.
+  useEffect(() => {
+    if (!detectedFormatSlug) return;
+    const ids = spotlightIdKey ? spotlightIdKey.split(",") : [];
+    const missing = ids.filter((id) => !requestedFinishes.current.has(`${detectedFormatSlug}|${id}`));
+    if (missing.length === 0) return;
+    for (const id of missing) requestedFinishes.current.add(`${detectedFormatSlug}|${id}`);
+
+    finishesInFlight.current += 1;
+    setFinishesLoading(true);
+    void fetchPlayerBrief(detectedFormatSlug, missing).then((res) => {
+      finishesInFlight.current -= 1;
+      if (!mounted.current) return;
+      if (finishesInFlight.current === 0) setFinishesLoading(false);
+      // History is enrichment: a failure leaves the spotlight exactly as it was
+      // before this existed. Releasing the ids lets a LATER recommendation
+      // change try again, and cannot loop, because this effect only re-runs when
+      // the id list itself changes.
+      if (!res.ok) {
+        for (const id of missing) requestedFinishes.current.delete(`${detectedFormatSlug}|${id}`);
+        return;
+      }
+      setFinishScoringLabel(res.data.scoringLabel);
+      setFinishCache((prev) => {
+        const next = { ...prev };
+        for (const b of res.data.briefs) next[`${detectedFormatSlug}|${b.playerId}`] = b.finishes;
+        return next;
+      });
+    });
+  }, [spotlightIdKey, detectedFormatSlug]);
+
+  // The argument for each card. Pure, and rebuilt only when something it reads
+  // actually changed, because it runs on every realtime pick otherwise.
+  const spotlightExtras = useMemo((): { best: SpotlightExtras; need: SpotlightExtras } => {
+    const blank: SpotlightExtras = { rationale: [], caveat: null, finishes: [] };
+    if (!rec) return { best: blank, need: blank };
+
+    const openSlots = rec.positionNeeds.map((n) => n.label);
+    const marginalByPlayer = pulse?.marginal?.byPlayer ?? {};
+
+    const buildFor = (kind: "best" | "need"): SpotlightExtras => {
+      const card = kind === "best" ? rec.best : rec.need;
+      const player = card.player;
+      if (!player) return blank;
+      const marginal = marginalByPlayer[player.playerId] ?? null;
+      const displacedId = marginal?.displaces?.playerId ?? null;
+      const input: RationaleInput = {
+        kind,
+        player,
+        marginal,
+        mode: rec.mode,
+        engine: rec.engine,
+        // Whether the projection service answered AT ALL, which is a fact about
+        // us. A player with no projection row inside a working service is a
+        // fact about him, and the two must not share a sentence.
+        projectionsAvailable: pulse !== null,
+        filledSlot: card.filledSlot,
+        openSlots,
+        picksUntilNext,
+        displacedName: displacedId ? (myRosterNames[displacedId] ?? null) : null,
+        adpThreshold,
+        finishes: finishCache[`${detectedFormatSlug}|${player.playerId}`] ?? [],
+        // The league's real shape, not a boolean.
+        //
+        // `type` comes from Sleeper's own league type, NOT from the format slug.
+        // The slug prices a keeper league off the redraft board, so testing it
+        // would tell a keeper drafter he is in a one-year league. Falling back
+        // to the slug only when no league card is in hand keeps a snapshot
+        // opened without one from claiming anything it cannot know.
+        //
+        // superflex/tep come from the engine, which reads the league's own slot
+        // model, so a SUPER_FLEX league still counts as superflex when its
+        // closest FF Beacon format is a one-quarterback one.
+        league: {
+          type: league?.keeperStyle ?? (isDynasty ? "dynasty" : "redraft"),
+          superflex: rec.superflex,
+          tep: rec.tep,
+        },
+        rosterKnown: rec.rosterKnown,
+      };
+      const rationale: RationalePoint[] = buildRationale(input);
+      return {
+        rationale,
+        caveat: buildCaveat(input),
+        finishes: input.finishes,
+        finishScoringLabel,
+        finishesLoading:
+          finishesLoading && !(`${detectedFormatSlug}|${player.playerId}` in finishCache),
+      };
+    };
+
+    return { best: buildFor("best"), need: buildFor("need") };
+  }, [
+    rec,
+    pulse,
+    picksUntilNext,
+    myRosterNames,
+    adpThreshold,
+    finishCache,
+    finishScoringLabel,
+    finishesLoading,
+    detectedFormatSlug,
+    isDynasty,
+    league?.keeperStyle,
   ]);
 
   // Runs, tier cliffs, and the turn warning. Memoized because detectTierCliffs
@@ -1189,14 +1393,6 @@ export function OnTheClockClient({
   const activeBoardLoading = snapshotMode ? false : boardLoading || snapshotLoading;
   const activeBoardError = snapshotMode ? null : boardError;
 
-  // ADP context: player-keyed map (for board/list pick indicators + awards) and
-  // the neutral threshold. Snapshot mode uses the threshold the draft was GRADED
-  // with (frozen at finalize), so a later admin tuning can never change a
-  // finalized draft's icons or verdicts; live mode uses the current setting.
-  const adpThreshold = snapshotMode
-    ? snapshot.thresholdPicks
-    : settings.valueIndicators.thresholdPicks;
-
   // The roster that currently owns the on-the-clock pick (trade-aware). When a pick
   // has been traded, this is the team that traded FOR it, not the seat's original
   // owner. Null when the draft is complete or ownership could not be resolved.
@@ -1497,9 +1693,14 @@ export function OnTheClockClient({
       .filter(Boolean)
       .join(" ");
 
-  // The three supporting panels (room status, best remaining, your draft) for the
-  // sticky right rail, shown on every view except Rosters and the full board view.
-  const sidebarPanels = (
+  // The four supporting panels (room status, radar, best remaining, your draft).
+  //
+  // A function of the heading level rather than a const, because these render in
+  // two places that sit at different depths: the desktop rail, where they are
+  // top-level panels, and the mobile Quick info dialog, where they sit under the
+  // dialog's own h2 and would otherwise read as five peers instead of a
+  // container with four panels inside it.
+  const renderSidebarPanels = (headingLevel: 2 | 3) => (
     <>
       {/* Who is on the clock leads the rail, on every tab. It is the one thing a
           drafter checks constantly, so it goes first by eye and first by tab
@@ -1512,6 +1713,7 @@ export function OnTheClockClient({
         onTheClockOverallPickNo={derived.onTheClockPickNo}
         isYourTurn={isYourTurn}
         lastPickLabel={lastPickLabelFor(derived.lastPick)}
+        headingLevel={headingLevel}
       />
       <DraftRadar
         alerts={alerts}
@@ -1523,9 +1725,10 @@ export function OnTheClockClient({
         }
         goneBefore={goneList}
         boardReady={tradeReady}
+        headingLevel={headingLevel}
       />
-      <BestRemainingByPosition players={available} />
-      <Panel eyebrow="Your team" title="Your draft">
+      <BestRemainingByPosition players={available} headingLevel={headingLevel} />
+      <Panel eyebrow="Your team" title="Your draft" headingLevel={headingLevel}>
         <MyDraft
           picks={draftCache.picks}
           connectedUserId={myUserId ?? ""}
@@ -1694,7 +1897,12 @@ export function OnTheClockClient({
                       // min-h-11 at EVERY width. The tap-target floor is not a
                       // mobile rule; a trackpad in a fast draft room needs the
                       // target as much as a thumb does.
-                      className={`flex min-h-11 items-center gap-1.5 rounded-card border px-3.5 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+                      //
+                      // scroll-mt-36 clears both fixed things that can sit over
+                      // a tab the browser has just scrolled to: the 4.5rem site
+                      // header and the docked Quick info bar below it. At xl the
+                      // bar does not exist, so only the header needs clearing.
+                      className={`flex min-h-11 scroll-mt-36 items-center gap-1.5 rounded-card border px-3.5 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan xl:scroll-mt-24 ${
                         active
                           ? "border-brand-cyan/70 bg-brand-cyan/15 text-brand-cyan shadow-[0_0_22px_-8px_rgba(34,211,238,0.85)]"
                           : "border-transparent bg-base/50 text-ink-muted hover:bg-surface hover:text-ink"
@@ -1707,6 +1915,19 @@ export function OnTheClockClient({
                 })}
               </div>
             </div>
+
+            {/* The side rail, on anything narrower than xl. It sits directly
+                under the view tabs on EVERY tab, including the two that hide
+                the desktop rail, because "who is on the clock" is worth the
+                same on the rosters tab as it is anywhere else. */}
+            {railInSheet && (
+              <SidebarSheet
+                label="Quick info"
+                summary="Who is on the clock, the draft radar, best remaining by position, and your draft."
+              >
+                {renderSidebarPanels(3)}
+              </SidebarSheet>
+            )}
 
             {/* View: Who to pick */}
             <div
@@ -1762,16 +1983,14 @@ export function OnTheClockClient({
                 {recommendationsAlign && bestCard.player ? (
                   // Value and need point at the same player: show one aligned card,
                   // never demote the user to a worse runner-up.
-                  <PlayerSpotlight data={needCard} variant="aligned" />
+                  <PlayerSpotlight data={needCard} variant="aligned" {...spotlightExtras.need} />
                 ) : (
-                  <div className="space-y-3">
-                    <PlayerSpotlight data={bestCard} variant="best" />
-                    <div className="relative">
-                      <div className="mb-1.5">
-                        <span className="text-xs font-semibold text-ink-muted">Team Need</span>
-                      </div>
-                      <SecondaryPick data={needCard} variant="need" />
-                    </div>
+                  // Two full peers, not a hero and a footnote. Team Need is the
+                  // card most drafters act on, and it used to be a single line of
+                  // name and value with no reasoning attached to it at all.
+                  <div className="space-y-4">
+                    <PlayerSpotlight data={bestCard} variant="best" {...spotlightExtras.best} />
+                    <PlayerSpotlight data={needCard} variant="need" {...spotlightExtras.need} />
                   </div>
                 )}
               </section>
@@ -1899,7 +2118,14 @@ export function OnTheClockClient({
                       />
                     </div>
                     <div className="lg:col-span-2">
-                      <BestRemainingByPosition players={available} columns={2} />
+                      {/* Its own id: below xl the Quick info sheet holds a
+                          second copy of this panel, and two elements cannot
+                          share one. */}
+                      <BestRemainingByPosition
+                        players={available}
+                        columns={2}
+                        instanceId="otc-best-remaining-board"
+                      />
                     </div>
                   </div>
 
@@ -2159,10 +2385,13 @@ export function OnTheClockClient({
           </div>
 
           {/* ---- Persistent right rail (hidden on the full-width Rosters tab and on
-              the full-width board view, where the panels move to a top bar) ---- */}
-          {view !== "rosters" && !boardFull && (
+              the full-width board view, where the panels move to a top bar).
+              Below xl this does not render at all: the same panels are inside
+              the Quick info sheet above, and rendering both would put two
+              copies of every panel id in the document. ---- */}
+          {!railInSheet && view !== "rosters" && !boardFull && (
             <aside aria-label="Draft room panels" className="space-y-5 xl:sticky xl:top-32 xl:self-start">
-              {sidebarPanels}
+              {renderSidebarPanels(2)}
             </aside>
           )}
         </div>

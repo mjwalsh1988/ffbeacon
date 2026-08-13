@@ -12,6 +12,10 @@
  * rankings / value rows the Rankings Board reads; it never changes them.
  */
 
+import type { KeeperStyle } from "@/lib/sleeper-to-format";
+
+export type { KeeperStyle };
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
@@ -353,6 +357,13 @@ export interface LeagueCard {
   formatDerivedLabel: string | null;
   /** True when the exact format is not carried and a closest FF Beacon format was used. */
   formatIsClosest: boolean;
+  /**
+   * How long the league carries players, straight from Sleeper's own league
+   * type. Separate from formatSlug on purpose: keeper leagues PRICE off the
+   * redraft board, so the slug says redraft, but a keeper league is not a
+   * one-year league and the room's explanatory copy must not call it one.
+   */
+  keeperStyle: KeeperStyle;
 }
 
 /** The draft header + lock/sync state, whitelisted for the wire. */

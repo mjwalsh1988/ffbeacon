@@ -144,6 +144,14 @@ export interface RecommendResult {
   /** Which engine answered Team Need. */
   engine: "points" | "heuristic";
   /**
+   * The format shape the cards were scored under, so the explanatory copy can
+   * say WHY a quarterback is priced the way he is here without re-deriving it.
+   * Superflex is not a slug test alone: a league carrying a SUPER_FLEX slot
+   * counts even when its closest FF Beacon format does not say so.
+   */
+  superflex: boolean;
+  tep: boolean;
+  /**
    * How much of Team Need rode on this season's points, 0 to 1. Zero on the
    * heuristic path. Surfaced so the room can explain a full-lineup handover.
    */
@@ -697,6 +705,8 @@ export function recommend(input: RecommendInput): RecommendResult {
       rosterKnown: input.rosterKnown,
       positionNeeds,
       debug: {},
+      superflex,
+      tep,
       ...DEGRADED,
     };
   }
@@ -708,6 +718,8 @@ export function recommend(input: RecommendInput): RecommendResult {
       rosterKnown: input.rosterKnown,
       positionNeeds,
       debug: {},
+      superflex,
+      tep,
       ...DEGRADED,
     };
   }
@@ -733,6 +745,8 @@ export function recommend(input: RecommendInput): RecommendResult {
       rosterKnown: input.rosterKnown,
       positionNeeds,
       debug: {},
+      superflex,
+      tep,
       ...DEGRADED,
     };
   }
@@ -971,6 +985,8 @@ export function recommend(input: RecommendInput): RecommendResult {
       debug,
       mode,
       engine,
+      superflex,
+      tep,
       pointsWeight,
       orderScore,
     };
@@ -1016,6 +1032,8 @@ export function recommend(input: RecommendInput): RecommendResult {
     debug,
     mode,
     engine,
+    superflex,
+    tep,
     pointsWeight,
     orderScore,
   };

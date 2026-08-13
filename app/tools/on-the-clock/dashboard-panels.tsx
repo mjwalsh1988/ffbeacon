@@ -32,6 +32,7 @@ export function DraftRoomStatus({
   isYourTurn,
   lastPickLabel,
   instanceId = "room-status",
+  headingLevel = 2,
 }: {
   draft: ShapedDraftCache["draft"];
   onTheClockTeam: string;
@@ -49,7 +50,15 @@ export function DraftRoomStatus({
    * accessibility tree, so the VISIBLE panel could resolve to no name at all.
    */
   instanceId?: string;
+  /**
+   * Level for this panel's sr-only heading. Defaults to 2, which is right in
+   * the page. Inside the mobile Quick info dialog the panels sit under the
+   * dialog's own h2, so the room passes 3 and the outline reads as a container
+   * with four panels rather than five peers.
+   */
+  headingLevel?: 2 | 3;
 }) {
+  const StatusHeading = headingLevel === 3 ? "h3" : "h2";
   const statusWord = draft.draftStatus === "drafting" ? "Drafting" : draft.draftStatus ?? "Unknown";
   const onClock = onTheClockOverallPickNo > 0;
   const pickLabel = onClock ? `${pad(onTheClockRound)}.${pad(onTheClockPickInRound)}` : null;
@@ -74,9 +83,9 @@ export function DraftRoomStatus({
             "linear-gradient(90deg, transparent 0%, #22D3EE 30%, #A855F7 70%, transparent 100%)",
         }}
       />
-      <h2 id={`${instanceId}-heading`} className="sr-only">
+      <StatusHeading id={`${instanceId}-heading`} className="sr-only">
         Room status
-      </h2>
+      </StatusHeading>
 
       <div className="flex items-start gap-3">
         <span
@@ -143,11 +152,22 @@ const POSITION_ORDER: DraftPosition[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
 export function BestRemainingByPosition({
   players,
   columns = 1,
+  instanceId = "otc-best-remaining",
+  headingLevel = 2,
 }: {
   players: RankedPlayer[];
   /** 1 = single stacked list (sidebar). 2 = two columns (board-view top bar), which
    *  keeps the panel short enough to sit beside the room-status card. */
   columns?: 1 | 2;
+  /**
+   * DOM id for the panel. Override when a second copy can be on the page at the
+   * same time (the board view renders one inline while the mobile sidebar sheet
+   * holds another), because two elements sharing an id break every
+   * aria-labelledby and every in-page link that points at it.
+   */
+  instanceId?: string;
+  /** See DraftRoomStatus.headingLevel. Forwarded to Panel. */
+  headingLevel?: 2 | 3;
 }) {
   const best = POSITION_ORDER.map((pos) => {
     const top = players
@@ -160,11 +180,11 @@ export function BestRemainingByPosition({
 
   return (
     <Panel
-      id="otc-best-remaining"
+      id={instanceId}
       eyebrow="At a glance"
       title="Best remaining by position"
       helper="The top value still available at each spot."
-      headingLevel={2}
+      headingLevel={headingLevel}
     >
       <ul
         role="list"

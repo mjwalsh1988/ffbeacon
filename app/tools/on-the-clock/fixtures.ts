@@ -53,6 +53,7 @@ export const MOCK_LEAGUES: LeagueCard[] = [
     formatLabel: "Dynasty Superflex",
     formatDerivedLabel: "Dynasty PPR Superflex",
     formatIsClosest: false,
+    keeperStyle: "dynasty",
   },
   {
     leagueId: "3333333333",
@@ -67,6 +68,7 @@ export const MOCK_LEAGUES: LeagueCard[] = [
     formatLabel: "Redraft PPR",
     formatDerivedLabel: "Redraft PPR",
     formatIsClosest: false,
+    keeperStyle: "redraft",
   },
   {
     leagueId: "5555555555",
@@ -81,6 +83,7 @@ export const MOCK_LEAGUES: LeagueCard[] = [
     formatLabel: "Dynasty Superflex",
     formatDerivedLabel: "Dynasty PPR Superflex",
     formatIsClosest: false,
+    keeperStyle: "dynasty",
   },
 ];
 

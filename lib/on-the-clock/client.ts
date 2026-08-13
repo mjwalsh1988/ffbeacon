@@ -16,6 +16,7 @@ import type { BoardResult } from "./board-types";
 import type { DraftSnapshotPayload } from "./snapshot-types";
 import type { HistoryTransaction } from "./trade-history";
 import type { PulsePayload as OtcPulsePayload } from "./pulse-types";
+import type { SeasonFinish } from "./rationale";
 
 export type { OtcPulsePayload };
 
@@ -142,6 +143,33 @@ export function fetchBoard(
   const qs = new URLSearchParams({ format: formatSlug, pool }).toString();
   return request(`/api/on-the-clock/board?${qs}`, { method: "GET" }, (body) => ({
     board: body.board as BoardResult,
+  }));
+}
+
+export interface PlayerBriefResponse {
+  /** Display label for the scoring the finishes were computed in ("PPR"). */
+  scoringLabel: string;
+  briefs: Array<{ playerId: string; finishes: SeasonFinish[] }>;
+}
+
+/**
+ * GET /api/on-the-clock/player-brief?format=&ids= (season-end positional
+ * finishes for the players the spotlight is recommending).
+ *
+ * Enrichment only. Every caller must treat a failure as "no history", never as
+ * an error worth surfacing: the spotlight rendered without finishes before this
+ * route existed and still does.
+ */
+export function fetchPlayerBrief(
+  formatSlug: string,
+  playerIds: string[],
+): Promise<ApiResult<PlayerBriefResponse>> {
+  const qs = new URLSearchParams({ format: formatSlug, ids: playerIds.join(",") }).toString();
+  return request(`/api/on-the-clock/player-brief?${qs}`, { method: "GET" }, (body) => ({
+    scoringLabel: typeof body.scoringLabel === "string" ? body.scoringLabel : "PPR",
+    briefs: Array.isArray(body.briefs)
+      ? (body.briefs as PlayerBriefResponse["briefs"])
+      : [],
   }));
 }
 

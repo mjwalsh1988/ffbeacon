@@ -6,6 +6,7 @@ import { claimLookup, claimIpBudget } from "@/lib/on-the-clock/cache";
 import { isValidUsername, isValidSeason, normalizeUsername } from "@/lib/on-the-clock/validation";
 import { getTrustedClientIp } from "@/lib/client-ip";
 import { ffbeaconFormatCandidates, detectLeagueFormat } from "@/lib/on-the-clock/format-detect";
+import { deriveKeeperStyle } from "@/lib/sleeper-to-format";
 import type { LeagueCard } from "@/lib/on-the-clock/types";
 
 export const dynamic = "force-dynamic";
@@ -150,6 +151,10 @@ export async function GET(req: Request) {
       formatLabel: detected?.label ?? null,
       formatDerivedLabel: detected?.derivedLabel ?? null,
       formatIsClosest: detected?.isClosest ?? false,
+      // Sleeper's own league type, kept separate from the format slug. The slug
+      // prices a keeper league off the redraft board, which is right, but the
+      // room's copy has to be able to call it a keeper league.
+      keeperStyle: deriveKeeperStyle(l),
     };
   });
 
