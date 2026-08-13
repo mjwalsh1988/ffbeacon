@@ -77,7 +77,7 @@ export default async function GuidesPage() {
       <DiscordCtaSection
         eyebrow="While you wait"
         heading="Waiting on a guide? Ask a real person right now."
-        body="The glossary is live and the rest are being written while we build out the platform. In the meantime, drop into our Discord and real fantasy players will walk you through any concept, free. Want to know what's already live? Read about FF Beacon."
+        body="Two are live and the last is being written while we build out the platform. In the meantime, drop into our Discord and real fantasy players will walk you through any concept, free. Want to know what's already live? Read about FF Beacon."
         isMember={isMember}
         memberHeading="While the rest cook, explore the tools."
         memberBody="You're already in the crew, so hang tight on the guides still being written. In the meantime, the free FF Beacon tools are live and ready to put to work on your team."
@@ -154,13 +154,15 @@ const GUIDES: Guide[] = [
   },
   {
     icon: ListOrdered,
-    title: "2026 fantasy football draft guide",
+    title: "Fantasy football draft guide",
+    href: "/guides/fantasy-football-draft-guide",
     description:
-      "Everything worth knowing before you go on the clock this year. Strategy by format, the sleepers worth a late pick, the value the room keeps passing on, and the names we're staying away from.",
+      "The players the room is late on, and the ones it is early on, in every format we carry. Rebuilt nightly from our own values, projected points above a replacement starter, and real draft ADP.",
     bullets: [
-      "Draft plans that hold up in PPR, superflex, and dynasty",
-      "Sleepers, value picks, and the players we're fading in 2026",
-      "Round-by-round targets, and what to do when your board falls apart",
+      "Steals, late-round swings, and fades, per format",
+      "A plain-English verdict on every name, not just a number",
+      "Tier-based drafting explained in plain English, including how to read a cliff",
+      "What to do with the list on draft day, including when your board falls apart",
     ],
   },
   {
@@ -190,12 +192,12 @@ function GuidesSection() {
           id="guides-heading"
           className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
         >
-          Start with the vocabulary.
+          Start with the vocabulary, then go draft.
         </h2>
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
-          The glossary is live and free to read right now. The other two are
-          being written while we focus on the rest of the platform, and
-          they&apos;ll land here as they&apos;re ready.
+          The glossary and the draft guide are live and free to read right now.
+          The last one is being written while we focus on the rest of the
+          platform, and it&apos;ll land here when it&apos;s ready.
         </p>
 
         <ul

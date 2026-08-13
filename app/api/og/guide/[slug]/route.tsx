@@ -41,6 +41,14 @@ const GUIDE_CARDS: Record<string, GuideCard> = {
       "PPR, superflex, FAAB, ADP, target share, and every other word your league chat assumes you already know.",
     badge: "Glossary",
   },
+  "fantasy-football-draft-guide": {
+    eyebrow: "Fantasy Football Guide",
+    headlineTop: "The draft guide:",
+    headlineBottom: "who the room is late on",
+    subhead:
+      "Steals, late-round swings, and fades in every format, from our own values and projected points above a replacement starter against real draft ADP.",
+    badge: "Rebuilt nightly",
+  },
 };
 
 /**

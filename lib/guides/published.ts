@@ -44,6 +44,18 @@ export const PUBLISHED_GUIDES: PublishedGuide[] = [
     updatedAt: "2026-08-01T09:00:00-04:00",
     priority: 0.8,
   },
+  {
+    slug: "fantasy-football-draft-guide",
+    title: "Fantasy football draft guide: steals, swings, and fades",
+    summary:
+      "The players going later than they should in each format, from FF Beacon values and projected points above a replacement starter measured against real draft ADP",
+    // No year in the slug on purpose: the method does not expire even though the
+    // names on it refresh nightly, and a dated URL would need redirecting every
+    // August. See the note at the top of the page component.
+    publishedAt: "2026-08-12T09:00:00-04:00",
+    updatedAt: "2026-08-12T09:00:00-04:00",
+    priority: 0.8,
+  },
 ];
 
 /** Look up one published guide by slug, or undefined when it is not published. */
