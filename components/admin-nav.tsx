@@ -15,6 +15,7 @@ import {
   Timer,
   Radar,
   Activity,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +69,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: Activity,
     description:
       "League Pulse expected-performance model: component weights, recency weighting, reliability caps, injury and opponent adjustments, variance, and the season simulation.",
+  },
+  {
+    href: "/admin/draft-value",
+    label: "Beacon Steals Model",
+    icon: Target,
+    description:
+      "Draft-guide board model: league shape and replacement levels, the value-against-points blend, confidence decay, positional centering, and the steal / swing / fade thresholds.",
   },
   {
     href: "/admin/on-the-clock",
