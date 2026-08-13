@@ -46,6 +46,7 @@
     "calculate:power-pulse": "tsx --env-file=.env.local scripts/calculate-league-power-pulse.ts",
     "calculate:defense-splits": "tsx --env-file=.env.local scripts/calculate-defense-splits.ts",
     "calculate:projection-accuracy": "tsx --env-file=.env.local scripts/calculate-projection-accuracy.ts",
+    "calculate:draft-value": "tsx --env-file=.env.local scripts/calculate-draft-value.ts",
     "sync:stats:full": "npm run sync:stats && npm run calculate:finishes && npm run calculate:defense-splits && npm run calculate:projection-accuracy",
     "sync:ktc:full": "npm run sync:ktc && npm run seed:rankings && npm run calculate:trends",
     "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run sync:dynastyprocess && npm run seed:rankings && npm run calculate:trends",
@@ -58,6 +59,7 @@
     "backfill:ktc:community": "tsx --env-file=.env.local scripts/backfill-ktc-community-archive.ts",
     "backfill:dynastyprocess": "tsx --env-file=.env.local scripts/backfill-dynastyprocess-history.ts",
     "backfill:rookie-adp": "tsx --env-file=.env.local scripts/backfill-rookie-adp-history.ts",
+    "backfill:draft-selections": "tsx --env-file=.env.local scripts/backfill-draft-selections.ts",
     "backfill:all": "npm run backfill:ktc && npm run backfill:dynastyprocess && npm run backfill:rookie-adp && npm run calculate:trends"
   },
   "dependencies": {

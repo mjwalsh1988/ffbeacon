@@ -38,6 +38,10 @@
       "schedule": "0 13 * * *"
     },
     {
+      "path": "/api/cron/rebuild-draft-value",
+      "schedule": "0 15 * * *"
+    },
+    {
       "path": "/api/cron/beacon-reference-drift",
       "schedule": "0 14 * * *"
     },

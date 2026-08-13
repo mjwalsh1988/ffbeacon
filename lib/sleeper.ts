@@ -349,7 +349,12 @@ export type SleeperDraftPick = {
 export async function getSleeperDraftPicksOrNull(
   draftId: string,
 ): Promise<SleeperDraftPick[] | null> {
-  return await safeFetch<SleeperDraftPick[]>(`${BASE}/draft/${draftId}/picks`);
+  // Encoded like getSleeperMatchups does with its league id. Every caller today
+  // passes a value that originated from Sleeper itself, so this is not
+  // exploitable, but the id now also reaches here from the League Pulse capture
+  // path rather than only from a route that had already validated it.
+  const id = encodeURIComponent(draftId);
+  return await safeFetch<SleeperDraftPick[]>(`${BASE}/draft/${id}/picks`);
 }
 
 /** Picks, with a failure flattened to empty. Only safe where empty is harmless. */

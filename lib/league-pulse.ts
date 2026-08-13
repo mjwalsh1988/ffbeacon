@@ -17,6 +17,7 @@ import {
 import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import { refreshPowerPulse } from "@/lib/league-power-pulse";
+import { captureLeagueDraftSelections } from "@/lib/league-draft-selections";
 import type { Database } from "@/lib/database.types";
 
 export const LEAGUE_PULSE_TTL_MS = 60 * 60 * 1000; // 60 minutes
@@ -415,6 +416,29 @@ export async function pulseLeagueDerived(
       // Power Pulse: expected competitive performance under the league's own
       // scoring. Independent of the value source, so no format/source loop.
       timed("power-pulse", () => refreshPowerPulse(supabase, leagueRowId, { force })),
+
+      // Completed drafts into the pick ledger. A finished draft never changes,
+      // so its picks are worth exactly one Sleeper request ever; the capture
+      // skips anything already stored and caps itself per run. Gated on an
+      // actual resync so a cached load never touches Sleeper for this.
+      (async () => {
+        if (!force && !resynced) return;
+        try {
+          const captured = await timed("draft-picks", () =>
+            captureLeagueDraftSelections(supabase, leagueRowId),
+          );
+          if (captured.draftsCaptured > 0) {
+            console.log(
+              `[pulseLeague] captured ${captured.picksWritten} picks from ${captured.draftsCaptured} completed drafts for league ${leagueRowId}`,
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[pulseLeague] draft-pick capture failed for league ${leagueRowId}:`,
+            (err as Error).message,
+          );
+        }
+      })(),
     ]);
 
     const { count } = await supabase

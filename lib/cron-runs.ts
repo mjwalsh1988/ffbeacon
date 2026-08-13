@@ -93,7 +93,8 @@ export type CronJobName =
   | "sync-weekly-projections"
   | "beacon-brief-curate"
   | "beacon-brief-worker"
-  | "league-sync-worker";
+  | "league-sync-worker"
+  | "rebuild-draft-value";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
 
@@ -150,6 +151,13 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "0 10 * * *",
     description:
       "Rebuilds the global rankings and player_value_trends tables from the latest values.",
+  },
+  {
+    name: "rebuild-draft-value",
+    label: "Beacon Steals board rebuild",
+    schedule: "0 15 * * *",
+    description:
+      "Rebuilds draft_market_adp from the synced pick ledger, then the draft_value_targets board the draft guide renders. Runs after rankings, ADP, and weekly projections so every input is same-day fresh. Global (one row per format, season, player), so it never iterates leagues.",
   },
   {
     name: "beacon-reference-rebuild",
