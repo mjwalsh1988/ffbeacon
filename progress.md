@@ -4047,3 +4047,564 @@ T561 | completed | place a traded pick by projected finish instead of blending i
   largest remaining server cost now that the projection board is memoized.
 - **computeMarginal still runs 200-odd lineup solves per request** and is
   cacheable on (draft, roster, pick count), which nobody has tried.
+
+## Beacon Steals: draft value against the market (2026-08-12)
+
+Plan of record: `docs/beacon-steals-plan.md`. Read it first; it carries the data
+audit, the two failure modes found by running the naive version against prod, and
+the schema and math this task list implements.
+
+Scope note from the owner: build everything EXCEPT a standalone `/tools` page.
+The launch surface is the draft guide under `/guides`.
+
+T562 | completed | write the Beacon Steals plan of record
+     | files: docs/beacon-steals-plan.md
+     | depends on: none
+     | Full technical plan. Records the audit (7,552 On The Clock picks stored,
+     | 99 completed League Pulse drafts with NO picks stored anywhere, Sleeper
+     | ADP across 10 market keys, DynastyProcess rookie ADP back to 2023), the
+     | two traps, the four migrations, the positional-currency math, confidence,
+     | categories, ingestion, and the three surfaces.
+     | The two traps are the reason the design is not "adp minus rank":
+     |   1. Raw gap is largest exactly where both numbers are least reliable
+     |      (top hits were all players past pick 230 in a 360-player market).
+     |      Fixed by a confidence factor that decays with market and value depth.
+     |   2. Overall rank is a CROSS-POSITION value rank and ADP is a SCARCITY
+     |      price, so every QB in a 1QB format reads as a steal (6 of the top 12
+     |      redraft PPR hits were QBs). Fixed by converting both sides to a pick
+     |      ladder built from points above a replacement STARTER, which prices
+     |      scarcity the same way a draft room does.
+     | verified: n/a (planning artifact)
+
+T563 | completed | canonical draft pick ledger (migration 0188)
+     | files: supabase/migrations/0188_draft_selections.sql, lib/database.types.ts
+     | depends on: T562
+     | draft_selections: one row per pick in any draft we have ever synced, from
+     | either path, with draft context (format_slug, player_pool, teams, rounds,
+     | season) denormalized onto the row so the ADP build is one indexed scan.
+     | Does NOT replace on_the_clock_pick_cache: that stays the live-room cache
+     | and the Realtime source, and its rows get deleted on a commissioner
+     | revert, which is exactly why a separate ledger is needed.
+     | service_role ONLY, no client policies. Nothing client-side reads it, it
+     | carries picked_by (a Sleeper user id) and the raw pick object, and every
+     | consumer publishes its output instead. Verified in pg_policies.
+     | Partial index on (format_slug, player_pool, season) where format_slug and
+     | player_id are both non-null, which is the only shape the ADP build reads.
+     | verified: yes (RLS confirmed, types regenerated)
+T564 | completed | FF Beacon room ADP table (migration 0189)
+     | files: supabase/migrations/0189_draft_market_adp.sql, lib/database.types.ts
+     | depends on: T563
+     | draft_market_adp: where OUR OWN synced rooms take each player, per
+     | (format, pool, season). Mean, median, earliest, latest, stdev, and
+     | draft_rate (picks_sampled / drafts_sampled).
+     | draft_rate is the honest denominator. A player taken in 4 of 30 drafts
+     | has a real ADP of "usually undrafted"; the mean over those 4 hides it.
+     | Deliberately NOT blended into the published ADP. At current volume a
+     | player has single-digit observations. It feeds ONE thing: the room
+     | agreement confidence factor in the value model.
+     | service_role only, derived table so no metadata column.
+     | verified: yes (RLS confirmed)
+T565 | completed | Beacon Steals model settings (migration 0190)
+     | files: supabase/migrations/0190_draft_value_settings.sql, lib/database.types.ts
+     | depends on: T562
+     | Single pinned row id='global', same shape as league_power_pulse_settings
+     | and on_the_clock_settings. Code fallbacks land in T567 so a missing row
+     | degrades to a working model rather than an error.
+     | Saving does not fan out a recompute; bumping modelVersion is what forces
+     | the next nightly rebuild to rescore.
+     | verified: yes (RLS confirmed, seed row inserted)
+T566 | completed | Beacon Steals board table (migration 0191)
+     | files: supabase/migrations/0191_draft_value_targets.sql, lib/database.types.ts
+     | depends on: T563, T564, T565
+     | draft_value_targets: per (format, season, player), the market side, the
+     | FF Beacon side, the competitive side, and the output (value_gap,
+     | steal_score, confidence, category, verdict).
+     | beacon_pick is the load-bearing column and it is NOT overall_rank. The
+     | table comment spells out why: overall_rank is a cross-position VALUE rank
+     | and ADP is a SCARCITY price, so comparing them flags every QB in every
+     | single-QB format. Measured on prod before writing any of this: six of the
+     | top twelve raw-gap hits in redraft PPR were quarterbacks.
+     | Sign convention matches lib/on-the-clock/adp.ts: positive value_gap means
+     | taken later than expected, which is value. A number means the same thing
+     | here and in the live draft room.
+     | Public SELECT (the draft guide renders it) + service_role writes.
+     | verified: yes (RLS confirmed, both policies present)
+T567 | completed | the ledger writer (lib/draft-selections.ts)
+     | files: lib/draft-selections.ts (new), lib/draft-selections.test.ts (new)
+     | depends on: T563
+     | One way in. shapeDraftSelections is PURE (picks + context + an already
+     | resolved id map -> rows) and is the whole test surface, 13 cases.
+     | recordDraftSelections does the I/O and NEVER THROWS: both callers sit on
+     | a path a user is waiting on, and the ledger is analytics input.
+     | Only one drop rule: a pick with no usable pick_no. An UNMAPPED player is
+     | still stored with player_id null, because the raw Sleeper id is worth
+     | keeping and the mapping can succeed later once the player row exists.
+     | Duplicate pick_no inside one payload keeps the LAST, matching upsert
+     | semantics, so a payload can never make Postgres reject the batch for
+     | touching one key twice.
+     | draftIdsWithSelections filters to pick_no = 1 on purpose. Selecting every
+     | row for a set of drafts returns hundreds per draft and hits PostgREST's
+     | silent 1000-row ceiling, which would report later drafts as unseen and
+     | re-fetch them forever. One row per captured draft instead.
+     | verified: yes (13/13 tests pass)
+T568 | completed | both sync paths now feed the ledger
+     | files: lib/on-the-clock/sleeper-sync.ts, lib/league-pulse.ts,
+     |        lib/league-draft-selections.ts (new), lib/draft-selections.ts
+     | depends on: T567
+     | On The Clock: performDraftSync writes the ledger after its own cache is
+     | consistent, inside its own try/catch. The id map it already built for the
+     | pick cache is HANDED OVER rather than re-resolved, so the ledger costs no
+     | extra player lookup. A null league object (failed fetch) stores a null
+     | format; the next successful sync upserts the same rows with a real one,
+     | so the gap self-heals instead of sticking.
+     | Added epochMsToIso because Sleeper's draft start_time is epoch ms and
+     | new Date(NaN).toISOString() throws a RangeError, which would have taken
+     | the whole ledger write down on a malformed field.
+     | League Pulse: capture runs in pulseLeagueDerived (the half that streams
+     | in behind the page), NOT in the core path that paints the header.
+     | The fetch policy IS the design. A completed draft never changes, so its
+     | picks are worth exactly one Sleeper request ever:
+     |   1. status='complete' only. Half a draft would poison an ADP with picks
+     |      that have not happened.
+     |   2. skip anything already in the ledger, checked in ONE query first.
+     |   3. cap 5 drafts per run, 250ms apart. A decade-old dynasty league can
+     |      have a dozen completed drafts and must not fan out twelve
+     |      simultaneous Sleeper requests the first time anyone opens it.
+     | Gated on force || resynced, so a cached load never touches Sleeper here.
+     | getSleeperDraftPicksOrNull's null is respected: null (request failed,
+     | retry later) is not collapsed into [] (Sleeper answered, no picks).
+     | verified: yes (tsc --noEmit clean)
+T569 | completed | one-time backfill of the pick ledger
+     | files: scripts/backfill-draft-selections.ts (new), package.json
+     | depends on: T568
+     | npm run backfill:draft-selections. Two passes, and --skip-sleeper runs
+     | pass A alone. NEVER wired to a cron; the sync paths keep it current now.
+     | Pass A (no Sleeper traffic): on_the_clock_pick_cache -> ledger. Player ids
+     | were already resolved at sync time, so the id map is built FROM THE CACHE
+     | ROWS rather than re-queried.
+     | Pass B: Sleeper -> ledger for completed league_drafts with no rows yet.
+     | Format resolved once per LEAGUE, not per draft.
+     | RESULT: 20,955 picks across 139 drafts, up from 7,552 with almost no
+     | usable context. Pass B alone recovered 13,401 picks from 99 drafts that
+     | existed nowhere in our database. 0 drafts unreachable.
+     | First run classified only 6 of 40 On The Clock drafts, because
+     | on_the_clock_draft_cache.league_metadata only arrived in migration 0180
+     | and older cached drafts have a null. Added a fallback to the `leagues`
+     | table by sleeper_league_id, which recovered 24 of the 34. Final coverage
+     | 19,677 of 20,955 picks and 129 of 139 drafts carry a format.
+     | Largest cohorts: dynasty-ppr-tep-sflex startup (28 drafts, 9,046 picks)
+     | and dynasty-ppr-tep-sflex rookie (47 drafts, 2,306 picks).
+     | verified: yes (run against prod, counts confirmed by query)
+T570 | completed | FF Beacon room ADP (lib/draft-value/room-adp.ts)
+     | files: lib/draft-value/room-adp.ts (new), lib/draft-value/room-adp.test.ts (new)
+     | depends on: T564, T569
+     | Aggregates the ledger into draft_market_adp. Pure aggregation, 16 tests.
+     | Three things a naive average gets wrong, all fixed here:
+     |   1. Pick numbers are normalized to a 12-team draft BEFORE averaging.
+     |      Pick 24 is round 3 in a ten-team room and round 2 in a twelve, so a
+     |      raw average silently rewards whoever drafts in smaller rooms. The
+     |      transform is applied to the OFFSET from pick 1, not the pick number,
+     |      so pick 1 stays pick 1 in every room size.
+     |   2. Keepers are excluded from a player's own ADP but still count their
+     |      draft toward the cohort denominator. A keeper is a roster already
+     |      made, not a market decision.
+     |   3. Auction drafts are dropped entirely. Pick order there is bid order.
+     | draft_rate is published next to the mean because the mean hides its
+     | denominator: 4 of 30 drafts means "usually undrafted".
+     | Full replace per run with a stale prune, so a player who leaves a cohort
+     | does not keep an ADP forever.
+     | Result on prod: 2,672 players across 11 cohorts from 19,669 picks.
+     | verified: yes (16/16 tests, run against prod)
+T571 | completed | the scoring engine (lib/draft-value/engine.ts)
+     | files: lib/draft-value/{engine,default-settings,settings,verdict}.ts (new),
+     |        lib/draft-value/{engine,verdict}.test.ts (new),
+     |        supabase/migrations/0192_draft_value_position_adjusted_gap.sql (new)
+     | depends on: T565, T570
+     | Pure. 75 tests across the three test files. Two of them are regression
+     | guards named after the production failures they prevent.
+     | A THIRD failure mode showed up during the build that the plan had not
+     | anticipated, and finding it is why the fixture is grounded in a real
+     | measurement rather than a guess.
+     | 1. SCALE. The first version compared a ladder INDEX to an ADP. Those are
+     |    not the same unit. A ladder over N players tops out at N while the
+     |    market runs deeper, so every deep player reads as a huge steal purely
+     |    because the ladder cannot produce a number that large. Measured: it
+     |    made the QB artifact WORSE than the naive version it was fixing, 10 of
+     |    the top 12 instead of 6. Fixed by projectOntoMarketScale, which takes
+     |    the pick slots the market actually spent and hands them out in OUR
+     |    order. beacon_pick is then literally "the pick he would go at if the
+     |    room drafted the same players in our order", and both sides are the
+     |    same unit by construction.
+     | 2. POSITIONS. Even with the scarcity ladder, a points-above-replacement
+     |    model wants elite QBs earlier than a 1QB room takes them. That is the
+     |    long-running VOR-versus-market argument, not a per-player insight, and
+     |    a steal list is the wrong place to relay it. Fixed by subtracting each
+     |    position's MEDIAN gap before ranking (median, not mean, so a few
+     |    genuinely mispriced players cannot drag the correction and hide
+     |    themselves). Migration 0192 adds position_adjusted_gap to store it.
+     |    value_gap stays the RAW arithmetic because that is what the verdict
+     |    quotes and a reader can check it.
+     | The engine.test.ts fixture reproduces the MEASURED per-position offsets
+     | from prod (QB +26.6, WR +8.9, RB -0.5, TE -5.7 rank slots, redraft PPR),
+     | and one test asserts the fixture reproduces the trap before another
+     | asserts the engine removes it.
+     | Projections are RESCORED per format, not read off a column. Sleeper emits
+     | bonus_rec_te as the TE's projected reception count, so summing weekly
+     | stat lines and taking the dot product against the format's canonical
+     | scoring makes TE premium exact instead of an invented multiplier.
+     | verified: yes (75/75 tests)
+T572 | completed | build orchestrator + npm script
+     | files: lib/draft-value/build.ts (new), scripts/calculate-draft-value.ts (new),
+     |        package.json
+     | depends on: T571
+     | npm run calculate:draft-value. Two stages in order (room ADP feeds the
+     | board's confidence input, so never in parallel).
+     | Market ADP resolution reuses adpFormatKeyCandidates, the SAME ordered
+     | fall-through the live draft room grades against, so a player's market
+     | number cannot differ between the guide and On The Clock. A candidate key
+     | carried by fewer than 50 players is treated as a partial write, not a
+     | market.
+     | A format with no rankings or no market is SKIPPED, never written empty.
+     | An empty board is a bug; a missing board is a fact.
+     | RESULT ON PROD: 4,136 rows across 8 formats. redraft-half-std and
+     | redraft-std-std skipped, correctly: neither has FF Beacon rankings.
+     | Per-position mean gap, raw -> centered, redraft-ppr-sflex:
+     |   QB -29.4 -> -8.0, WR +17.2 -> +5.9, RB -5.4 -> -4.5, TE +2.3 -> +1.4
+     | Top dynasty-SF steals are recognizable names rather than deep-board
+     | noise: Chig Okonkwo, Jaylen Warren, Stefon Diggs, Parker Washington,
+     | Josh Downs, Jayden Reed.
+     | The three names the naive method put at the top all fell: Stribling to
+     | 69 (confidence 0.37), Raridon to 62 and out of the steal bucket
+     | (confidence 0.25), Caleb Douglas to 60 and out (confidence 0.20).
+     | KNOWN LIMITATION, left in deliberately: centering uses the MEDIAN, so a
+     | skewed position can still show a non-zero MEAN afterwards. Two cases on
+     | prod (dynasty-ppr-std QB +15.2 raw -> +18.0 centered; redraft-ppr-tep TE
+     | +0.7 -> -8.2). Using the mean instead would let a cluster of genuinely
+     | mispriced players hide itself, which is the worse failure.
+     | Fixed a copy bug caught by reading real output: the verdict said "63
+     | picks later than he actually lasts" when he lasts 63 picks LONGER than
+     | we would wait. Now "and he lasts 63 picks longer than that", with a test.
+     | verified: yes (run against prod, output inspected by hand)
+T573 | completed | nightly cron for the board
+     | files: app/api/cron/rebuild-draft-value/route.ts (new), vercel.json,
+     |        lib/cron-runs.ts
+     | depends on: T572
+     | 15:00 UTC, after every input it reads: recalculate-derived (10:00,
+     | rankings + trends), sync-sleeper-market (11:00, ADP + projections),
+     | sync-weekly-projections (12:00, the stat lines it rescores).
+     | Does NOT iterate leagues. The board is global, one row per (format,
+     | season, player), so it stays the same size at any traffic level.
+     | Per-league work stays on demand per the CLAUDE.md rule.
+     | Stage 1 (room ADP) is best-effort; stage 2 failing throws, and a run that
+     | builds zero formats throws too, because leaving yesterday's board in
+     | place is a silent staleness rather than a visible failure.
+     | Registered in CRON_JOBS so the admin health panel shows it even before
+     | its first run.
+     | verified: yes (tsc clean, next build compiles the route)
+T574 | completed | On The Clock reads the same board
+     | files: lib/on-the-clock/board-types.ts, lib/on-the-clock/board-loader.ts,
+     |        app/tools/on-the-clock/available-list.tsx,
+     |        app/tools/on-the-clock/available-market-line.test.ts (new)
+     | depends on: T572
+     | The available-players ADP line used describeBeaconVsAdp, which compares
+     | overall_rank to ADP. That is the exact unit error the engine exists to
+     | fix, and it was live in the draft room.
+     | loadRankedBoard now fetches draft_value_targets alongside rankings and
+     | values (one more parallel query, no extra round trips), and
+     | describeAvailableVsMarket prefers beacon_pick, which is already on the
+     | market's pick scale. Copy went from "Sleeper ADP is 12 picks later" to
+     | "Lasts 28 picks past our pick 92".
+     | The old comparison is kept as the FALLBACK, not deleted: a format with no
+     | ADP market, a kicker or defense (Beacon Steals ranks only QB/RB/WR/TE),
+     | and any board loaded before the first nightly build all still get a line.
+     | The room and the guide now read the SAME rows, so a player's verdict
+     | cannot differ between them.
+     | verified: yes (7 new tests, tsc clean)
+T575 | completed | the draft guide (/guides/fantasy-football-draft-guide)
+     | files: app/guides/fantasy-football-draft-guide/{page.tsx,steal-row.tsx} (new),
+     |        lib/draft-value/guide-data.ts (new), lib/guides/published.ts,
+     |        app/guides/page.tsx, app/api/og/guide/[slug]/route.tsx
+     | depends on: T572
+     | The launch surface, and the coming-soon card on /guides is now a link.
+     | No year in the slug, same reasoning the glossary page documents: a dated
+     | URL needs redirecting every August and the method does not expire even
+     | though the names on it refresh nightly.
+     | Format switching is a set of real ANCHORS carrying ?format=, not a JS
+     | control. Works without JavaScript, keyboard navigable by default, every
+     | format gets a shareable URL, aria-current="page" on the active one, and a
+     | screen reader moves through it as the list of links it is.
+     | Format resolution goes through resolveFormatSlug (URL -> DB -> cookie ->
+     | default) per the sync rule. A saved format with no ADP market falls
+     | through to one that has a board and SAYS SO, without persisting the swap.
+     | Rows are stacked blocks, not table rows, specifically so the mobile
+     | layout carries every number the wide one does. There is no `hidden sm:`
+     | in steal-row.tsx.
+     | The verdict paragraph sits ABOVE the numbers and is the primary content,
+     | so the page reads the same by ear as by eye. Confidence renders as a word
+     | (high / solid / moderate / thin) because a bare 0.37 means nothing.
+     | Registered in PUBLISHED_GUIDES so the sitemap and llms.txt pick it up,
+     | and given an OG card entry (a slug with no card 404s by design).
+     | verified: yes (next build compiles it, tsc clean)
+T576 | completed | admin editor (/admin/draft-value)
+     | files: app/admin/draft-value/{page.tsx,actions.ts,
+     |        draft-value-settings-manager.tsx} (new),
+     |        lib/draft-value/validate.ts (new), components/admin-nav.tsx
+     | depends on: T571
+     | Mirrors /admin/power-pulse. requireAdmin on both the page and the action;
+     | the client payload is never trusted and must pass the full zod schema
+     | before it is written through the service-role client.
+     | validate.ts also catches the configurations that PARSE but produce
+     | nonsense: an inverted reliability or room-agreement band, a steal
+     | threshold above the saturation point (nothing could ever qualify), a
+     | swing threshold above the steal threshold (unreachable bucket), flex
+     | shares summing past one whole slot, an all-zero blend, and a market
+     | trusted depth so far past the value depth that the confidence decay is
+     | effectively switched off.
+     | The page shows a live board summary (rows, buckets, last rebuilt, model
+     | version) so tuning is not blind, with the timestamp through formatEastern.
+     | verified: yes (tsc clean, next build compiles the route)
+
+### Verification (Beacon Steals)
+
+- `npx tsc --noEmit` clean.
+- `npx vitest run`: 1605 tests across 116 files pass (98 of them new here).
+- `npx next build` compiles clean, including the new guide, admin, and cron routes.
+- Migrations 0188 to 0192 applied to prod; RLS confirmed in pg_policies.
+- `npm run backfill:draft-selections` run against prod: 20,955 picks, 139 drafts.
+- `npm run calculate:draft-value` run against prod: 4,136 rows, 8 formats.
+- Nothing committed or pushed.
+
+### Review pass (four sub-agents, same session)
+
+Implementation, security, performance, and accessibility, each scoped to the
+Beacon Steals files only. Security found no vulnerabilities and verified RLS
+live against prod with rollback-wrapped probes. The other three found real
+problems and every confirmed finding below is fixed.
+
+T577 | completed | apply the review findings
+     | files: supabase/migrations/0193_draft_value_board_formats_and_capture_state.sql (new),
+     |        lib/draft-value/{build,engine,verdict,guide-data,room-adp}.ts,
+     |        lib/draft-selections.ts, lib/league-draft-selections.ts, lib/sleeper.ts,
+     |        lib/on-the-clock/{board-loader,sleeper-sync}.ts,
+     |        app/guides/fantasy-football-draft-guide/{page.tsx,steal-row.tsx},
+     |        app/guides/page.tsx, app/admin/draft-value/{page.tsx,
+     |        draft-value-settings-manager.tsx}, app/tools/on-the-clock/available-list.tsx,
+     |        lib/database.types.ts, plus tests
+     | depends on: T576
+     |
+     | THE ONE THAT MATTERED MOST: category and verdict contradicted each other,
+     | live on prod. Nine rows were category='steal' with a NEGATIVE raw
+     | value_gap, because the board ranks on position_adjusted_gap while the
+     | sentence quotes value_gap. Brock Purdy, going at 36.2 against our pick
+     | 40.1, rendered under a Steals heading carrying "the room is spending 4
+     | picks too early on him". Both numbers were right; neither explained the
+     | other. The verdict now adds the missing clause whenever the two diverge:
+     | "The room drafts every QB in this format about 21 picks earlier than our
+     | board does, so against the rest of the position he is 18 picks of value."
+     |
+     | Reading that fixed output surfaced a SECOND bug the review had not
+     | caught. Kirk Cousins, going at pick 238 and projecting 182 points BELOW a
+     | replacement starter, was also a steal, lifted there purely by positional
+     | centering. categorize now requires a steal to have either positive points
+     | above replacement or none measured (a rookie, where the value board is
+     | the whole case). That is the same test the swing bucket already used.
+     | Verified: 0 steals below replacement, down from 9 contradictory rows.
+     |
+     | PERFORMANCE. The nightly build read the whole (format, ffbeacon)
+     | player_value_history ordered by captured_at desc to recover the latest
+     | value per player: 60,652 rows and 61 round trips per format to get 805
+     | values, 32MB of JSON across eight formats, and growing 779 rows per
+     | format per day forever. It was on track to blow the 300s cron ceiling
+     | inside a year. Replaced with player_value_trends.current_value, which is
+     | one row per (player, format, source) and is what CLAUDE.md's Pre-Calc
+     | rule says to read. The old code also swallowed a read error with
+     | an `if (error) break`, producing a board where every value was null and
+     | the ladder silently fell back to ranking by negative beaconRank; it
+     | throws now.
+     | MEASURED: board build 48.3s to 11.1s, and flat as the database ages.
+     | Also hoisted the market snapshot above the format loop (it never depended
+     | on the format: 5,400 rows fetched to learn 675 rows' worth), and cut the
+     | admin summary from a 5,000-row read to count aggregates.
+     |
+     | CORRECTNESS. Every draft_value_targets read was missing the season
+     | filter, while the build's prune is season-scoped by design, so next
+     | August two seasons would have interleaved silently. Added a distinct
+     | view (0193) because `.limit(5000)` never defeated PostgREST's 1000-row
+     | cap: the format switcher and the admin counts were already truncating.
+     | Published buckets had no tiebreak on an integer, heavily-tied score, so
+     | the top 12 reshuffled between page loads.
+     | The stale prune deleted every format's rows on one format's transient
+     | failure, and the cron still reported success. Now scoped to built slugs.
+     | Room-agreement confidence gated on drafts_sampled (a property of the
+     | COHORT) instead of picks_sampled (the player). 127 rows had the gate open
+     | on a single observed pick.
+     | The room-ADP prune only ran when the run produced rows, so an empty run
+     | left the table stale indefinitely.
+     |
+     | LIVE DRAFT PATH. recordDraftSelections re-upserted the whole pick array
+     | on every poll: roughly 130,000 row writes over a two-hour draft to
+     | persist 180 picks, each carrying a raw Sleeper object. Now writes only
+     | picks above the previously stored count, and skips the two format-lookup
+     | queries entirely when the league object failed to load.
+     | League Pulse retried uncapturable drafts forever, because "pending" meant
+     | "no ledger rows" and a reset draft never gets any. 0193 adds
+     | picks_captured_at and pick_capture_attempts so a definitive answer stops
+     | the asking and a failure retries a bounded number of times.
+     |
+     | SECURITY (hardening only; no vulnerabilities found). isValidDraftId now
+     | enforced in shapeDraftSelections, where BOTH callers pass through, and
+     | getSleeperDraftPicksOrNull encodes its path segment like its sibling
+     | getSleeperMatchups already did.
+     |
+     | ACCESSIBILITY. role="list" on the ranked board: Tailwind preflight
+     | removes list-style, Safari/VoiceOver then drops list semantics, and the
+     | visible rank number is aria-hidden, so nothing was left telling a screen
+     | reader this was a ranked list or where a player sat in it.
+     | text-ink-subtle (#6B6B7D) measures 3.68:1 on these surfaces and fails
+     | WCAG 1.4.3 AA. It was carrying every stat label and every admin form
+     | label, so the value read at 17.5:1 and the word explaining it at 3.68:1.
+     | Moved to text-ink-muted (8.6:1).
+     | The h1 aria-label said something different from the visible text.
+     | The Gap pill read "+14", and screen readers drop a leading plus sign at
+     | default verbosity, so the sign (the entire meaning) was inaudible. Now
+     | words: "14 picks later" or "14 picks earlier".
+     | Admin field hints are tied to their inputs with aria-describedby, the
+     | eight setting groups are labelled regions, a save failure announces as an
+     | alert, and the save button uses aria-disabled so Chrome does not throw
+     | keyboard focus to body mid-save. Null stat pills are dropped rather than
+     | reading "Goes at unknown". The player link now clears the 44px floor.
+     | verified: yes (tsc clean, 1612 tests across 116 files, next build clean,
+     | board rebuilt against prod and inspected by hand)
+
+### Review findings deliberately NOT fixed
+
+- **Rookie-pool boards.** Room ADP builds rookie cohorts and the ADP key mapping
+  supports them, but the board only builds the `everyone` pool, so the
+  DynastyProcess branch of `marketLabel` is unreachable. Recorded in the plan's
+  deferred section rather than deleted, because `selectMarketAdp` now takes a
+  pool argument and the wiring is one call away once someone decides what a
+  rookie-draft section should say.
+- **Caching the guide page.** Five index-backed reads per request, the bucket
+  read measures 2.9ms, and the page has to stay dynamic anyway because
+  resolveFormatSlug reads cookies.
+- **SQL-side room ADP aggregation.** 21,000 rows into memory is fine today.
+- **backfill:draft-selections is not in `backfill:all`.** It hits Sleeper and is
+  a one-time recovery, so it stays out. CLAUDE.md says backfill:all runs every
+  backfill script; one of the two should change, and that is the owner's call.
+- **text-ink-subtle is failing AA everywhere, not just here.** Fixed in the new
+  files. Raising the token itself is a site-wide change and out of this scope.
+- **aria-describedby and aria-disabled are also missing in
+  app/admin/power-pulse.** The Beacon Steals form inherited both from it. Fixed
+  here only; the older form is untouched.
+
+T578 | completed | make the guide's player cards read as players
+     | files: app/guides/fantasy-football-draft-guide/steal-row.tsx,
+     |        app/guides/fantasy-football-draft-guide/steal-row.test.ts (new),
+     |        app/guides/fantasy-football-draft-guide/page.tsx,
+     |        lib/draft-value/guide-data.ts
+     | depends on: T577
+     | Owner feedback: the cards read as paragraphs with numbers in them, not as
+     | players, and the numbers were not doing enough work.
+     | Card now leads with a 56px headshot (PlayerHeadshot, the shared component,
+     | so the radius rule holds), the name at text-lg/xl, the position in its own
+     | POSITION_BADGE hue, the team abbreviation on the team's own brand color,
+     | the full team name, and the category badge.
+     | The argument is now the biggest thing on the card: "Goes at" and "We'd
+     | take" as 3xl/4xl tabular figures in a recessed panel, with the swing
+     | between them spelled out underneath ("Lasts 36 picks longer than we would
+     | wait"). Supporting stats moved to a 2-up/3-up tile grid.
+     | Also fixed the summary card rendering black text: it used bg-white/[0.03],
+     | a near-transparent wash that takes whatever is behind it. Now an opaque
+     | #16162A panel inside the beacon gradient border, matching the same block
+     | on /guides/fantasy-football-terms, which had already been written that way
+     | for the same reason.
+     | guide-data now also selects players.external_ids (for the Sleeper CDN id)
+     | and joins nfl_teams once per page for name + primary_color.
+     | readableAccent lifts a near-black team color until it clears a minimum
+     | perceived brightness. Pittsburgh is #101820 and Washington is #5A1414;
+     | painted onto a #0F0F1A surface both vanish, so the accent would silently
+     | disappear for several teams. Blends toward white in small steps so the
+     | hue survives, and refuses a malformed value rather than emitting broken
+     | CSS. 6 tests.
+     | Accessibility held: no `hidden sm:` anywhere in the file, the sign of
+     | every figure is spelled out rather than relying on a leading plus that
+     | screen readers drop, color is never the only channel (the position hue
+     | sits behind the position's own letters, the team color behind its own
+     | abbreviation), the name link keeps its 44px target, and the verdict
+     | paragraph is still the primary content.
+     | verified: yes (tsc clean, 1618 tests across 117 files, next build clean)
+
+T579 | completed | guide visuals + tier-based drafting explainer
+     | files: app/guides/fantasy-football-draft-guide/{page.tsx,steal-row.tsx},
+     |        app/guides/page.tsx
+     | depends on: T578
+     | Owner feedback, four items.
+     | 1. Section titles. New SectionHeader: a beacon gradient rule across the
+     |    full width, a colored eyebrow naming the kind of section, then the
+     |    heading at text-3xl/4xl (was text-2xl). Cyan for the board sections,
+     |    purple for the prose ones. Rule and eyebrow are aria-hidden; the
+     |    heading still carries the meaning and is what aria-labelledby points at.
+     | 2. Stat tiles now match the player profile: font-mono, bold, tabular,
+     |    text-brand-purple on a purple-tinted card with a purple border, same
+     |    treatment as overview-sidebar.tsx and weekly-projections.tsx, so a
+     |    number reads the same way everywhere on the site.
+     | 3. Removed the redundant plain-text full team name. The abbreviation tag
+     |    stays and is now aria-hidden, with the full team name as sr-only text
+     |    inside the same tag: the eye gets "WAS", the ear gets "Washington
+     |    Commanders". Dropping the name outright would have left a screen reader
+     |    with three unexplained letters.
+     | 4. New "Tier-based drafting, explained properly" section, six subsections.
+     |    RESEARCHED, not written from memory: The Fantasy Footballers' tiered
+     |    rankings guide, FantasyPros' 2026 tiers strategy piece, Lindy's and
+     |    Athlon's beginner explainers, and Yahoo's positional-scarcity primer.
+     |    The two load-bearing ideas every source converges on are the ones the
+     |    section is built around: a tier break is a cliff you should not cross,
+     |    and counting the names left in a tier is what tells you whether you can
+     |    wait. Also covers the positional run (the most common way a draft gets
+     |    away from someone), why scarcity is not a reason to reach, and that
+     |    tier numbers do not transfer across positions.
+     |    Metadata, keywords, and the /guides card bullets updated to match.
+     | Writing check: scanned both files at byte level, zero characters above
+     | U+007E. One fix from the first draft: "Not 'take the highest ranked
+     | player', but 'which cliff...'" was a contrastive construction close
+     | enough to negative parallelism to be worth rewriting; it now reads "The
+     | question stops being which player is ranked highest and becomes which
+     | cliff you are about to fall off."
+     | verified: yes (tsc clean, 1618 tests across 117 files, next build clean)
+
+T580 | completed | compact the On The Clock ADP and projection columns
+     | files: components/info-tooltip.tsx, app/tools/on-the-clock/available-list.tsx
+     | depends on: T574
+     | Owner feedback: the full sentences under the ADP and projection numbers
+     | squeezed the whole available-players table.
+     | Added ValueTooltip alongside the existing InfoTooltip, sharing its proven
+     | open/close wiring but using the VALUE ITSELF as the trigger instead of an
+     | info icon. Hover, keyboard focus, and tap all open it; Escape and outside
+     | click close it.
+     | ADP column is now the number plus a chip like (+28). Projection column is
+     | the number plus (53%). Both color coded: emerald when it favours the
+     | reader, rose when it does not, grey inside the neutral band.
+     | NO aria-live region, deliberately. The full sentence is the trigger
+     | button's aria-label, so a screen reader speaks it the moment the control
+     | takes focus, whether or not the bubble is painted. That is the contract
+     | InfoTooltip already uses. A live region on open would say the same
+     | sentence twice, once from the label and once from the region.
+     | Color is never the only channel: the sign is inside the chip text and the
+     | direction is stated in words in the label. Trigger keeps a 44px target.
+     | Beat-rate bands are not 50/50, because league-wide a player beats his own
+     | weekly projection about a third of the time (measured: mean beat_rate
+     | 0.322 to 0.353 across scoring bases in player_projection_accuracy). So
+     | 45% and up is green and 28% and below is red.
+     | verified: yes (tsc clean, 1618 tests across 117 files, next build clean)
+
+T581 | completed | tighten the On The Clock player column
+     | files: app/tools/on-the-clock/available-list.tsx
+     | depends on: T580
+     | Player cell is now a 32px headshot beside a two-line stack: name on top,
+     | position and team (and Rookie) underneath. Previously those ran inline
+     | after the name and stretched the column.
+     | Photo is decorative (name="" on PlayerHeadshot) because the name sits
+     | immediately beside it, so a screen reader is not told the name twice.
+     | Tier cell renders "T1" visually with "Tier 1" as sr-only text, so the
+     | column narrows without the cell reading as a bare letter and number.
+     | verified: yes (tsc clean, 1618 tests across 117 files, next build clean)
