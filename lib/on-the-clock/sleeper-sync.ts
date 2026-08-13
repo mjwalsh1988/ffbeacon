@@ -32,8 +32,11 @@ import {
   type SleeperDraft,
 } from "@/lib/sleeper";
 import { mapSleeperToPlayerIds } from "@/lib/players/sleeper-map";
+import { recordDraftSelections } from "@/lib/draft-selections";
 import { sanitizeSleeperPlayerId } from "./validation";
 import { claimSync, completeSync, releaseSync, readDraftCache, claimIpBudget, IP_BUDGET_WINDOW_SECONDS } from "./cache";
+import { ffbeaconFormatCandidates, detectLeagueFormat } from "./format-detect";
+import { inferPlayerPool } from "./draft-derive";
 import type { SyncOutcome } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -56,6 +59,18 @@ export interface PerformSyncParams {
 /** Sleeper uses "0" as an empty-roster-slot placeholder; never store it. */
 function validPlayerId(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && id !== "0";
+}
+
+/**
+ * Sleeper's draft start_time is epoch milliseconds. Returns null for anything
+ * that is not a real instant rather than letting `new Date(NaN).toISOString()`
+ * throw a RangeError inside the ledger write.
+ */
+function epochMsToIso(value: unknown): string | null {
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 /**
@@ -248,6 +263,17 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
       players: (r.players ?? []).filter(validPlayerId),
     }));
 
+    // How many picks the ledger has already seen for this draft, read BEFORE the
+    // cache row below overwrites it. A single-column primary-key lookup, and it
+    // is what lets the ledger write only the new picks instead of the whole
+    // array on every poll of a live draft.
+    const { data: priorCache } = await admin
+      .from("on_the_clock_draft_cache")
+      .select("pick_count")
+      .eq("sleeper_draft_id", draftId)
+      .maybeSingle();
+    const existingPickCount = priorCache?.pick_count ?? 0;
+
     const { error: draftErr } = await admin.from("on_the_clock_draft_cache").upsert(
       {
         sleeper_draft_id: draftId,
@@ -315,6 +341,62 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
     // already correct, and the next sync retries this.
     if (staleErr) {
       console.error("[on-the-clock/sync] reverted-pick cleanup failed", staleErr.message);
+    }
+
+    // The durable ledger (draft_selections). Every pick this room sees is also a
+    // data point for the Beacon Steals market model, and the live cache above is
+    // the wrong place to keep it: its rows are DELETED on a commissioner revert,
+    // and the draft context lives in a different table.
+    //
+    // Fully non-fatal and awaited AFTER the cache is consistent. A live draft
+    // must never fail because an analytics write did. The id map is handed over
+    // rather than re-resolved, so this costs no extra player lookup.
+    try {
+      // Only the picks that are NEW since the last sync. A live room polls every
+      // few seconds, and re-upserting the whole array each time meant a two-hour
+      // draft wrote on the order of 130,000 rows to persist 180 real picks, each
+      // carrying a raw Sleeper object in metadata, with the index churn and dead
+      // tuples that implies. `pickCount` is what the previous completeSync
+      // stored, so anything above it is genuinely new. A commissioner revert
+      // lowers the count, which makes the next sync re-send the tail and heal it.
+      const alreadyRecorded = Number(existingPickCount ?? 0);
+      const newPicks =
+        alreadyRecorded > 0 ? picks.filter((p) => Number(p.pick_no) > alreadyRecorded) : picks;
+
+      // Both of these are effectively static (13 format rows and one source row)
+      // and the result is discarded when the league object failed to load, so
+      // they are skipped entirely rather than run on every poll.
+      const candidates =
+        league && newPicks.length > 0 ? await ffbeaconFormatCandidates(admin) : [];
+      const detected = league && candidates.length > 0 ? detectLeagueFormat(league, candidates) : null;
+      const rounds = Number(draftObj.settings?.rounds ?? 0);
+      const teams = Number(draftObj.settings?.teams ?? 0);
+      const seasonNum = Number(authoritativeSeason);
+      if (newPicks.length > 0 && Number.isFinite(seasonNum) && seasonNum > 0) {
+        await recordDraftSelections(
+          admin,
+          newPicks,
+          {
+            sleeperDraftId: draftId,
+            sleeperLeagueId: authoritativeLeagueId,
+            season: seasonNum,
+            draftType: draftObj.type ?? null,
+            draftStatus: draftObj.status ?? null,
+            // Null when the league object failed to load this time. The next
+            // successful sync upserts the same rows with a real format, so the
+            // gap self-heals rather than sticking.
+            formatSlug: detected?.slug ?? null,
+            playerPool: detected ? inferPlayerPool({ formatSlug: detected.slug, rounds }) : null,
+            teams: Number.isFinite(teams) && teams > 0 ? teams : null,
+            rounds: Number.isFinite(rounds) && rounds > 0 ? rounds : null,
+            draftedAt: epochMsToIso(draftObj.start_time),
+            ingestSource: "on_the_clock",
+          },
+          { playerIdBySleeperId: idMap },
+        );
+      }
+    } catch (ledgerErr) {
+      console.error("[on-the-clock/sync] draft-selections ledger write failed", ledgerErr);
     }
 
     await completeSync(admin, {

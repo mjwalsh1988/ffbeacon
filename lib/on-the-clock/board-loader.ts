@@ -211,7 +211,7 @@ export async function loadRankedBoard(
     // for source='ffbeacon', in parallel. We do NOT filter player_value_history by
     // player id: with hundreds of UUIDs the PostgREST URL overflows; the (format,
     // source) pair already bounds the rows (mirrors the Rankings Board note).
-    const [rankingsResult, valuesResult, trendsResult, picksResult] = await Promise.all([
+    const [rankingsResult, valuesResult, trendsResult, picksResult, stealsResult] = await Promise.all([
       supabase
         .from("rankings")
         .select(
@@ -244,6 +244,24 @@ export async function loadRankedBoard(
         .eq("format_config_id", format.id)
         .eq("source", FFBEACON_SOURCE_SLUG)
         .order("captured_at", { ascending: false }),
+      // Beacon Steals, precomputed nightly. The live room reads the SAME rows
+      // the draft guide renders, so a player's verdict cannot differ between
+      // the two. Absent (a format with no ADP market, or before the first
+      // nightly build) simply leaves the fields undefined and the room falls
+      // back to its original rank-vs-ADP line.
+      // Scoped to the NEWEST season on the board and ordered, both deliberately.
+      // The primary key is (format_slug, season, player_id) and the build prunes
+      // per season, so last season's rows survive; filtering on format alone
+      // would let the Map below keep whichever season happened to arrive last.
+      // The order also makes the BOARD_ROW_CAP truncation point deterministic
+      // instead of arbitrary.
+      supabase
+        .from("draft_value_targets")
+        .select("player_id, beacon_pick, steal_score, category, verdict, confidence, season")
+        .eq("format_slug", format.slug)
+        .order("season", { ascending: false })
+        .order("steal_score", { ascending: false })
+        .limit(BOARD_ROW_CAP),
     ]);
 
     const rankings = (rankingsResult.data ?? []) as unknown as RankingJoinRow[];
@@ -258,6 +276,22 @@ export async function loadRankedBoard(
     >();
     for (const t of trendsResult.data ?? []) trendByPlayer.set(t.player_id, t);
 
+    const stealByPlayer = new Map<
+      string,
+      {
+        beacon_pick: number | null;
+        steal_score: number | null;
+        category: string;
+        verdict: string;
+        confidence: number | null;
+      }
+    >();
+    // Rows arrive newest season first, so the first row per player is the
+    // current one and a later season's row can never overwrite it.
+    for (const s of stealsResult.data ?? []) {
+      if (!stealByPlayer.has(s.player_id)) stealByPlayer.set(s.player_id, s);
+    }
+
     const now = new Date();
     const rookieSeasonNum = Number(rookieSeason);
 
@@ -269,6 +303,7 @@ export async function loadRankedBoard(
       if (!position) continue; // drop IDP / non-draftable positions
 
       const trend = trendByPlayer.get(pl.id);
+      const steal = stealByPlayer.get(pl.id);
       players.push({
         playerId: pl.id,
         sleeperId: readSleeperId(pl.external_ids),
@@ -283,6 +318,11 @@ export async function loadRankedBoard(
         yearsExperience: pl.years_experience ?? undefined,
         age: ageFromBirthDate(pl.birth_date, now),
         ageDecimal: computeAgeDecimal(pl.birth_date, now) ?? undefined,
+        beaconPick: steal?.beacon_pick ?? null,
+        stealScore: steal?.steal_score ?? null,
+        stealCategory: steal?.category ?? null,
+        stealVerdict: steal?.verdict ?? null,
+        stealConfidence: steal?.confidence ?? null,
         change7d: trend?.change_7d ?? null,
         change7dPct: trend?.change_7d_pct ?? null,
         trend7d: trend?.trend_7d ?? null,

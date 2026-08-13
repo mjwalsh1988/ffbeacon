@@ -84,7 +84,14 @@ export default async function OnTheClockPage() {
         aria-labelledby="otc-app-heading"
         className="scroll-mt-24 border-b border-line"
       >
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {/* Wider than the site's usual max-w-7xl. The draft room is the one
+            screen on the site that is genuinely column-starved: the available
+            players table carries seven or eight columns at once and a drafter is
+            reading it under time pressure. Every step BEFORE the room constrains
+            itself with its own max-w-3xl / max-w-4xl wrapper inside this one, so
+            the connect flow stays narrow and centered and only the room spreads
+            out. */}
+        <div className="mx-auto max-w-[96rem] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
           <h2 id="otc-app-heading" className="sr-only">
             Connect a draft
           </h2>

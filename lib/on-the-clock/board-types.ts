@@ -64,6 +64,22 @@ export interface RankedPlayer {
   availability?: number | null;
   /** Weeks of history behind beatRate/availability, for the sample gates. */
   accuracyWeeks?: number | null;
+  // ---- Beacon Steals (optional; from draft_value_targets, loaded per format) ----
+  /**
+   * Where FF Beacon would draft this player, as a pick number on the market's
+   * own scale. This is NOT overall_rank: a cross-position value rank compared to
+   * a scarcity-priced ADP flags every quarterback in a single-QB format. See
+   * lib/draft-value/engine.ts for the measurement behind that.
+   */
+  beaconPick?: number | null;
+  /** 0 to 100, 50 being neutral. Above 50 the market is late on him. */
+  stealScore?: number | null;
+  /** steal | swing | fade | fair. */
+  stealCategory?: string | null;
+  /** The plain-English verdict, already written by the nightly build. */
+  stealVerdict?: string | null;
+  /** 0 to 1. Gates whether the room is willing to call this a steal out loud. */
+  stealConfidence?: number | null;
   // ---- 7-day movement (optional; carried for future UI, not rendered yet) ----
   change7d?: number | null;
   change7dPct?: number | null;

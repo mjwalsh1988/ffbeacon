@@ -7,10 +7,16 @@
  *
  * Carries a Sleeper ADP column beside the FF Beacon value so users can compare
  * the market against the Beacon board at a glance. The ADP cell shows the raw
- * ADP with a plain-English comparison line ("Sleeper ADP is 12 picks later.
- * Beacon says value.") from lib/on-the-clock/adp.ts describeBeaconVsAdp, so
- * "Beacon recommends this player now even though the market waits" is readable
- * in one cell. Nothing is conveyed by color alone.
+ * ADP with a plain-English comparison line under it. Nothing is conveyed by
+ * color alone.
+ *
+ * That line comes from describeAvailableVsMarket below, which prefers the
+ * nightly Beacon Steals read (beacon_pick, already on the market's own pick
+ * scale) and falls back to the older overall-rank comparison only when the board
+ * has no row for the player. The two are not interchangeable: overall_rank is a
+ * cross-position VALUE rank and ADP is a SCARCITY price, and comparing them
+ * directly flagged six quarterbacks in the top twelve when it was measured
+ * against production. See lib/draft-value/engine.ts.
  *
  * Accessibility: <caption>, scope headers, aria-sort, aria-pressed filter chips,
  * a polite live region announcing the visible count and sort changes, 44px targets.
@@ -20,6 +26,8 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import type { DraftPosition, RankedPlayer } from "./fixtures";
 import { describeBeaconVsAdp } from "@/lib/on-the-clock/adp";
+import { ValueTooltip, VALUE_TONE, type ValueTone } from "@/components/info-tooltip";
+import { PlayerHeadshot } from "@/components/player-headshot";
 import type { BuildMode } from "@/lib/on-the-clock/types";
 
 /**
@@ -39,6 +47,95 @@ const ANNOUNCE_DELAY_MS = 500;
 function ariaSortFor(active: boolean, dir: SortDir): "ascending" | "descending" | "none" {
   if (!active) return "none";
   return dir === "asc" ? "ascending" : "descending";
+}
+
+/**
+ * The line under a player's ADP, comparing our opinion to the market.
+ *
+ * Prefers the Beacon Steals read (beacon_pick, computed nightly) and falls back
+ * to the original overall-rank comparison when the board has no row for this
+ * player, which happens for a format with no ADP market, for kickers and
+ * defenses, and before the first nightly build.
+ *
+ * WHY THE PREFERENCE MATTERS. describeBeaconVsAdp compares overall_rank, a
+ * CROSS-POSITION VALUE rank, to a scarcity-priced ADP. Those units disagree
+ * about every quarterback in every single-QB league, which put six quarterbacks
+ * in the top twelve when the same comparison was measured against production.
+ * beacon_pick is already on the market's own pick scale, so the same sentence
+ * means what it says. See lib/draft-value/engine.ts.
+ */
+export function describeAvailableVsMarket(
+  player: RankedPlayer,
+  thresholdPicks: number,
+): { gap: number | null; label: string; lean: "beacon-higher" | "market-higher" | "even" | "none" } {
+  const adp = player.adp ?? null;
+  const beaconPick = player.beaconPick ?? null;
+
+  if (typeof adp === "number" && typeof beaconPick === "number") {
+    const gap = adp - beaconPick;
+    const t = Math.max(1, thresholdPicks);
+    const picks = (n: number) => {
+      const v = Math.round(Math.abs(n));
+      return `${v} ${v === 1 ? "pick" : "picks"}`;
+    };
+    if (gap >= t) {
+      return {
+        gap,
+        label: `Lasts ${picks(gap)} past where our board takes him (${Math.round(beaconPick)}).`,
+        lean: "beacon-higher",
+      };
+    }
+    if (gap <= -t) {
+      return {
+        gap,
+        label: `Goes ${picks(gap)} before where our board takes him (${Math.round(beaconPick)}).`,
+        lean: "market-higher",
+      };
+    }
+    return { gap, label: `Near where our board takes him (${Math.round(beaconPick)}).`, lean: "even" };
+  }
+
+  return describeBeaconVsAdp(player.overallRank, adp, thresholdPicks);
+}
+
+/**
+ * The compact chip for the ADP column, e.g. "(+28)".
+ *
+ * The full sentence lives in the tooltip. It used to render inline under the
+ * number and it squeezed the whole table, which is the entire reason this is a
+ * chip now. The sign stays in the text so the direction never depends on color.
+ */
+function signedPicks(gap: number): string {
+  const n = Math.round(gap);
+  return n > 0 ? `(+${n})` : n < 0 ? `(${n})` : "(0)";
+}
+
+/** Green when he lasts past our pick, red when the room takes him early. */
+function adpTone(lean: "beacon-higher" | "market-higher" | "even" | "none"): ValueTone {
+  if (lean === "beacon-higher") return "good";
+  if (lean === "market-higher") return "bad";
+  return "neutral";
+}
+
+/**
+ * Beat rate reads high-is-good, but the honest bands are not 50/50: across the
+ * league a player beats his own weekly projection roughly a third of the time,
+ * so 45% is genuinely strong and 25% is genuinely poor.
+ */
+function beatRateTone(beatRate: number): ValueTone {
+  if (beatRate >= 0.45) return "good";
+  if (beatRate <= 0.28) return "bad";
+  return "neutral";
+}
+
+/** The sentence behind the beat-rate chip. */
+function describeBeatRate(beatRate: number, weeks: number | null | undefined): string {
+  const pct = Math.round(beatRate * 100);
+  const sample =
+    typeof weeks === "number" && weeks > 0
+      ? ` Measured over ${weeks} graded ${weeks === 1 ? "week" : "weeks"}.`
+      : "";
+  return `Beats his own weekly projection ${pct}% of the time, so the number to his left is one he clears about ${pct} weeks in 100.${sample}`;
 }
 
 function sortValue(
@@ -259,8 +356,8 @@ function AvailableListInner({
           <thead className="bg-surface/60 text-xs uppercase tracking-wide text-ink-subtle">
             <tr>
               {watchlist && (
-                <th scope="col" className="px-2 py-2 text-left font-semibold">
-                  Watch
+                <th scope="col" className="w-px px-1 py-2 text-left font-semibold">
+                  <span className="sr-only">Watchlist</span>
                 </th>
               )}
               <th scope="col" className="px-3 py-2 text-left font-semibold">
@@ -273,21 +370,24 @@ function AvailableListInner({
                   className="px-3 py-2 text-left"
                 >
                   <button type="button" className={headerBtn} onClick={() => toggleSort("recommended")}>
-                    Our order
+                    <span aria-hidden="true">Order</span>
+                    <span className="sr-only">Our recommended order</span>
                   </button>
                 </th>
               )}
               <th scope="col" aria-sort={ariaSortFor(sortKey === "positionRank", sortDir)} className="px-3 py-2 text-left">
                 <button type="button" className={headerBtn} onClick={() => toggleSort("positionRank")}>
-                  Pos rank
+                  <span aria-hidden="true">Pos</span>
+                  <span className="sr-only">Position rank</span>
                 </button>
               </th>
-              <th scope="col" className="px-3 py-2 text-left font-semibold">
+              <th scope="col" className="px-2 py-2 text-left font-semibold">
                 Tier
               </th>
               <th scope="col" aria-sort={ariaSortFor(sortKey === "adp", sortDir)} className="px-3 py-2 text-left">
                 <button type="button" className={headerBtn} onClick={() => toggleSort("adp")}>
-                  Sleeper ADP
+                  <span aria-hidden="true">ADP</span>
+                  <span className="sr-only">Sleeper ADP</span>
                 </button>
               </th>
               {projectionsAvailable && (
@@ -301,7 +401,8 @@ function AvailableListInner({
                     className={`${headerBtn} justify-end`}
                     onClick={() => toggleSort("projected")}
                   >
-                    Proj / wk
+                    <span aria-hidden="true">Proj</span>
+                    <span className="sr-only">Projected points per week</span>
                   </button>
                 </th>
               )}
@@ -324,11 +425,11 @@ function AvailableListInner({
               </tr>
             ) : (
               shown.map((p) => {
-                const comparison = describeBeaconVsAdp(p.overallRank, p.adp ?? null, adpThreshold);
+                const comparison = describeAvailableVsMarket(p, adpThreshold);
                 return (
                   <tr key={p.playerId} className="border-t border-line/60">
                     {watchlist && (
-                      <td className="px-2 py-2">
+                      <td className="w-px px-1 py-2">
                         <button
                           type="button"
                           aria-pressed={watchlist.has(p.playerId)}
@@ -348,11 +449,24 @@ function AvailableListInner({
                       </td>
                     )}
                     <th scope="row" className="px-3 py-2 text-left font-normal">
-                      <span className="font-semibold text-ink">{p.name}</span>
-                      <span className="ml-2 text-xs text-ink-muted">
-                        {p.position}
-                        {p.team ? `, ${p.team}` : ""}
-                        {p.isRookie ? ", Rookie" : ""}
+                      {/* Photo, then name over position and team on a second
+                          line. Stacking the meta under the name keeps this
+                          column narrow instead of forcing one long row. The
+                          photo is decorative: the name sits right beside it. */}
+                      <span className="flex items-center gap-2">
+                        <span className="shrink-0">
+                          <PlayerHeadshot sleeperId={p.sleeperId} name="" size={32} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block font-semibold leading-tight text-ink">
+                            {p.name}
+                          </span>
+                          <span className="block text-xs leading-tight text-ink-muted">
+                            {p.position}
+                            {p.team ? `, ${p.team}` : ""}
+                            {p.isRookie ? ", Rookie" : ""}
+                          </span>
+                        </span>
                       </span>
                     </th>
                     {hasOrdering && (
@@ -371,22 +485,30 @@ function AvailableListInner({
                       {p.position}
                       {p.positionRank}
                     </td>
-                    <td className="px-3 py-2 text-ink-muted">Tier {p.tier}</td>
+                    {/* "T1" visually to save a column's worth of width; the
+                        full word is kept for screen readers so the cell does
+                        not read as a bare letter and number. */}
+                    <td className="px-3 py-2 text-ink-muted">
+                      <span aria-hidden="true">T{p.tier}</span>
+                      <span className="sr-only">Tier {p.tier}</span>
+                    </td>
                     <td className="px-3 py-2">
                       {typeof p.adp === "number" ? (
                         <span className="block">
-                          <span className="font-mono tabular-nums text-ink">{p.adp.toFixed(1)}</span>
-                          <span
-                            className={`block text-[11px] ${
-                              comparison.lean === "beacon-higher"
-                                ? "font-medium text-brand-cyan"
-                                : comparison.lean === "market-higher"
-                                  ? "text-amber-300"
-                                  : "text-ink-subtle"
-                            }`}
-                          >
-                            {comparison.label}
+                          <span className="block font-mono leading-tight tabular-nums text-ink">
+                            {p.adp.toFixed(1)}
                           </span>
+                          {comparison.gap !== null ? (
+                            <span className="block leading-tight">
+                              <ValueTooltip
+                                short={signedPicks(comparison.gap)}
+                                content={comparison.label}
+                                className={VALUE_TONE[adpTone(comparison.lean)]}
+                                align="start"
+                                compact
+                              />
+                            </span>
+                          ) : null}
                         </span>
                       ) : (
                         // aria-label on a generic span is unreliable across AT;
@@ -405,12 +527,18 @@ function AvailableListInner({
                       <td className="px-3 py-2 text-right">
                         {typeof p.projPointsPerWeek === "number" ? (
                           <span className="block">
-                            <span className="font-mono tabular-nums text-ink">
+                            <span className="block font-mono leading-tight tabular-nums text-ink">
                               {p.projPointsPerWeek.toFixed(1)}
                             </span>
                             {typeof p.beatRate === "number" && (
-                              <span className="block text-[11px] text-ink-subtle">
-                                beats {Math.round(p.beatRate * 100)}% of weeks
+                              <span className="block leading-tight">
+                                <ValueTooltip
+                                  short={`(${Math.round(p.beatRate * 100)}%)`}
+                                  content={describeBeatRate(p.beatRate, p.accuracyWeeks)}
+                                  className={VALUE_TONE[beatRateTone(p.beatRate)]}
+                                  align="end"
+                                  compact
+                                />
                               </span>
                             )}
                           </span>
