@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Database, Layers, Users, Filter } from "lucide-react";
+import {
+  ArrowRight,
+  Database,
+  Layers,
+  Users,
+  Filter,
+  Info,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -276,8 +283,8 @@ export async function RankingsView({
               <span className="font-medium text-ink">
                 Switched to {reconciled.fallback.toName}
               </span>{" "}
-              because {reconciled.fallback.sourceName} doesn{"'"}t provide values
-              for {reconciled.fallback.fromName}.
+              because {reconciled.fallback.sourceName} doesn{"'"}t provide
+              values for {reconciled.fallback.fromName}.
             </p>
           )}
           {rankingsResolution.fellBack && rankingsResolution.source && (
@@ -288,7 +295,8 @@ export async function RankingsView({
               <span className="font-medium text-ink">Heads up:</span> No{" "}
               {describeSource(registry, rankingsResolution.requested)} data
               available for {format.display_name}. Showing{" "}
-              {describeSource(registry, rankingsResolution.source)} data instead.
+              {describeSource(registry, rankingsResolution.source)} data
+              instead.
             </p>
           )}
           {eyebrow && (
@@ -353,6 +361,7 @@ export async function RankingsView({
                 value={rows.length.toLocaleString()}
               />
             </dl>
+            <SwitchFormatHint />
           </div>
         </div>
       </header>
@@ -382,8 +391,8 @@ export async function RankingsView({
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
               {rows.length.toLocaleString()} players in {format.display_name},
-              sorted by current market value. Click any column header to re-sort,
-              or open a player&apos;s row for the full breakdown.
+              sorted by current market value. Click any column header to
+              re-sort, or open a player&apos;s row for the full breakdown.
             </p>
           </div>
 
@@ -493,6 +502,50 @@ function FilterLink({
     >
       {label}
     </Link>
+  );
+}
+
+/**
+ * Sits under the "Currently viewing" tiles and answers the question readers keep
+ * asking: how do I see another format, and do you even publish them? Both are
+ * already true and already shipped, they just live in a header control people
+ * miss, especially on a phone where it hides behind the hamburger.
+ *
+ * The instructions differ by device because the control does. The breakpoint
+ * matches site-header.tsx exactly: below md the toggles live in MobileMenu,
+ * at md and up they live in the PreferencesMenu popover labelled "Values".
+ * Only one sentence is in the DOM's accessibility tree at a time (Tailwind's
+ * `hidden` sets display:none, which removes it from the tree as well as the
+ * screen), so a screen reader hears the directions for the device in hand and
+ * never both. No information is lost at either breakpoint; the same instruction
+ * is simply worded for the control that is actually on screen.
+ */
+function SwitchFormatHint() {
+  return (
+    <div
+      className="mt-3 flex items-start gap-3 rounded-card border border-dashed border-line bg-surface px-4 py-3.5"
+      style={{ boxShadow: "0 0 48px -40px rgba(34, 211, 238, 0.55)" }}
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+      >
+        <Info className="h-4 w-4" />
+      </span>
+      <p className="min-w-0 flex-1 self-center text-sm leading-relaxed text-ink-muted">
+        <span className="font-semibold text-ink">Play a different format?</span>{" "}
+        Redraft, dynasty, superflex, and TE premium are all ranked already,
+        updated daily.{" "}
+        <span className="md:hidden">
+          To switch, tap the menu button at the top right, scroll to the bottom
+          of the menu, and choose a Format.
+        </span>
+        <span className="hidden md:inline">
+          To switch, open the Values button in the header, then choose a League
+          format.
+        </span>
+      </p>
+    </div>
   );
 }
 
