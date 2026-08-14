@@ -178,7 +178,7 @@ export function BeamPanel({
       <div
         ref={panelRef}
         style={{ willChange: "transform", contain: "layout paint" }}
-        className={`relative flex h-[88vh] w-full max-w-2xl transform-gpu flex-col overflow-hidden rounded-t-modal border border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-w-lg sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-r-0 ${panelTransform}`}
+        className={`relative flex h-[88vh] w-full max-w-2xl transform-gpu flex-col overflow-hidden rounded-t-modal border border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-w-3xl sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-r-0 ${panelTransform}`}
       >
         {/* Mobile drag handle (decorative). */}
         <div className="flex justify-center pt-2 sm:hidden">
