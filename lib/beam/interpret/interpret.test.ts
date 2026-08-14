@@ -528,6 +528,44 @@ describe("projections and beat rates", () => {
   });
 });
 
+describe("leaderboards", () => {
+  it("routes a top-N question to the ranked list", () => {
+    for (const q of [
+      "top 10 quarterbacks",
+      "who are the top 25 running backs",
+      "top 10 overall players",
+      "best 5 tight ends",
+      "top wide receivers",
+    ]) {
+      expect(topReading(q), q).toBe("rankings.top");
+    }
+  });
+
+  it("claims the count before the season parser can read it as a year", () => {
+    // "top 25" would otherwise be a question about the 2025 season.
+    const e = extractEntities(normalizeText("who are the top 25 running backs"));
+    expect(e.topN).toMatchObject({ count: 25, stated: true });
+    expect(e.seasons).toEqual([]);
+    expect(e.positions).toEqual(["RB"]);
+    expect(e.nameSpans).toEqual([]);
+  });
+
+  it("defaults the count without claiming the reader asked for one", () => {
+    const e = extractEntities(normalizeText("top quarterbacks"));
+    expect(e.topN).toMatchObject({ count: 10, stated: false });
+  });
+
+  it("caps an unreasonable count instead of refusing it", () => {
+    expect(extractEntities(normalizeText("top 500 running backs")).topN).toMatchObject({
+      count: 50,
+    });
+  });
+
+  it("still sends a question about one named player to the rank capability", () => {
+    expect(topReading("where does puka nacua rank")).toBe("player.rank");
+  });
+});
+
 describe("out-of-scope detection", () => {
   it("flags questions about the reader's own league", async () => {
     const { looksOutOfScope } = await import("./lexicon");

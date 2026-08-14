@@ -96,6 +96,10 @@ function slotFilled(
       return entities.concepts.includes("projection");
     case "reliability":
       return entities.concepts.includes("reliability");
+    case "leaderboard":
+      // Either the words ("the leaders", "top players") or the shape: "top 10
+      // quarterbacks" names no concept at all, it is a count and a position.
+      return entities.concepts.includes("leaderboard") || entities.topN !== null;
     case "lens":
       return entities.lens !== null;
     case "position":
@@ -202,6 +206,7 @@ const CAPABILITY_CONCEPTS: Record<string, ConceptTag[]> = {
   "player.weeks.projection": ["project", "projection"],
   "player.projection": ["projection"],
   "player.compare.projection": ["projection"],
+  "rankings.top": ["leaderboard", "rank"],
   "player.reliability": ["reliability"],
   "player.compare.reliability": ["reliability"],
   "glossary.term": ["define"],

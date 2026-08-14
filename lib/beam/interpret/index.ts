@@ -53,6 +53,7 @@ import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { positionTeam } from "@/lib/beam/answers/format";
 import { extractEntities, type ExtractedEntities, type NameSpan } from "./entities";
 import { seasonsForSpan, spanLabel } from "./season-span";
+import { DEFAULT_TOP_N } from "./top-n";
 import { normalizeText } from "./normalize";
 import { scoreCapabilities, subjectCount } from "./score";
 import { looksOutOfScope, type SeasonToken } from "./lexicon";
@@ -244,6 +245,35 @@ export class DeterministicInterpreter implements BeamInterpreter {
           params: parsed.params as Record<string, unknown>,
           confidence: score,
           evidence: [{ kind: "head", text: term, value: term }],
+        },
+        matchedPlayers: [],
+      };
+    }
+
+    /* ---- the leaderboard path names no player either ---------------- */
+
+    if (capability.id === "rankings.top") {
+      const parsed = capability.parse({
+        position: entities.positions[0] ?? null,
+        count: entities.topN?.count ?? DEFAULT_TOP_N,
+        countStated: entities.topN?.stated ?? false,
+      } as never);
+      if (!parsed.ok) return { kind: "unsupported", reason: "no-intent" };
+      // A leaderboard question that also names a player is not a leaderboard
+      // question. "Where does Puka rank" has a subject; "top 10 receivers" does
+      // not, and answering the first with a list would ignore the name.
+      if (entities.nameSpans.length > 0) {
+        return { kind: "unsupported", reason: "no-intent" };
+      }
+      return {
+        kind: "request",
+        request: {
+          capability: capability.id,
+          params: parsed.params as Record<string, unknown>,
+          confidence: score,
+          evidence: entities.topN
+            ? [...evidence, { kind: "head", text: entities.topN.text, value: String(entities.topN.count) }]
+            : evidence,
         },
         matchedPlayers: [],
       };

@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Info, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Info, TriangleAlert } from "lucide-react";
+import { PlayerHeadshot } from "@/components/player-headshot";
 import { formatEastern } from "@/lib/datetime";
-import type { BeamAnswer, BeamMatchedPlayer } from "@/lib/beam/types";
+import type { BeamAnswer, BeamMatchedPlayer, BeamPlayerTable } from "@/lib/beam/types";
 
 /**
  * One answer.
@@ -19,7 +21,122 @@ import type { BeamAnswer, BeamMatchedPlayer } from "@/lib/beam/types";
  * real links, and a screen reader user browsing the transcript reads the same
  * content again in visual order, which is the correct behaviour for a
  * transcript.
+ *
+ * A leaderboard answer carries a table instead of facts, rendered by
+ * PlayerTable below.
  */
+
+/**
+ * A ranked list, ten to a page.
+ *
+ * Paged in the component rather than by refetching: the whole list arrived with
+ * the answer, so a page turn is free and works with no network. The rows are a
+ * real <table> because that is what this is, and a screen reader user moving
+ * through it by cell gets the rank read with the name rather than as a loose
+ * number.
+ *
+ * PAGE CHANGES ANNOUNCE. Turning a page swaps every row underneath a reader who
+ * cannot see it happen, so the live region says which page they are on and how
+ * many rows it holds. Focus stays on the button they pressed.
+ */
+function PlayerTable({ table }: { table: BeamPlayerTable }) {
+  const captionId = useId();
+  const statusId = useId();
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(table.rows.length / table.pageSize));
+
+  // A new answer in the same card resets the pager, so page 3 of a previous
+  // list never shows as page 3 of a shorter one.
+  useEffect(() => setPage(0), [table]);
+
+  const start = page * table.pageSize;
+  const rows = table.rows.slice(start, start + table.pageSize);
+
+  return (
+    <div className="mt-4">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <caption id={captionId} className="sr-only">
+            {table.caption}. Page {page + 1} of {pageCount}.
+          </caption>
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.12em] text-ink-muted">
+              <th scope="col" className="w-10 py-2 pr-2 text-right font-semibold">
+                #
+              </th>
+              <th scope="col" className="py-2 font-semibold">
+                Player
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.slug} className="border-b border-line/60 last:border-b-0">
+                <td className="py-2 pr-3 text-right font-mono text-sm tabular-nums text-ink-muted">
+                  {row.rank}
+                </td>
+                <td className="py-2">
+                  <Link
+                    href={`/players/${row.slug}`}
+                    className="flex min-h-11 items-center gap-2.5 rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  >
+                    <PlayerHeadshot
+                      sleeperId={row.sleeperId}
+                      position={row.position ?? undefined}
+                      name={row.name}
+                      size={32}
+                      className="shrink-0"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-ink">{row.name}</span>
+                      {(row.position || row.team) && (
+                        <span className="block truncate text-xs text-ink-muted">
+                          {[row.position, row.team].filter(Boolean).join(", ")}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {pageCount > 1 && (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            aria-disabled={page === 0}
+            aria-controls={captionId}
+            className="inline-flex min-h-11 items-center gap-1 rounded-card border border-line px-3 text-sm font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan aria-disabled:opacity-40"
+          >
+            <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+            Previous
+          </button>
+          <p className="text-xs text-ink-muted" aria-hidden="true">
+            {start + 1} to {start + rows.length} of {table.rows.length}
+          </p>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            aria-disabled={page >= pageCount - 1}
+            aria-controls={captionId}
+            className="inline-flex min-h-11 items-center gap-1 rounded-card border border-line px-3 text-sm font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan aria-disabled:opacity-40"
+          >
+            Next
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+          </button>
+          <p id={statusId} aria-live="polite" className="sr-only">
+            Page {page + 1} of {pageCount}, ranks {start + 1} to {start + rows.length}.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Is this value a sentence rather than a figure?
  *
@@ -78,6 +195,8 @@ export function BeamAnswerCard({
             ))}
         </div>
       ) : null}
+
+      {answer.table ? <PlayerTable table={answer.table} /> : null}
 
       {/* Measurements: label and value, two per row where they fit. */}
       {measured.length > 0 && (

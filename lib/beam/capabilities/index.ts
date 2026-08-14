@@ -25,6 +25,7 @@ import { playerCompareStat } from "./player-compare-stat";
 import { playerSeasonStat } from "./player-season-stat";
 import { playerWeeksProjection } from "./player-weeks-projection";
 import { playerProjection } from "./player-projection";
+import { rankingsTop } from "./rankings-top";
 import { playerCompareProjection } from "./player-compare-projection";
 import { playerReliability } from "./player-reliability";
 import { playerCompareReliability } from "./player-compare-reliability";
@@ -45,6 +46,10 @@ import { glossaryTerm } from "./glossary-term";
 // both are viable when a question names two people, and the pair is the more
 // specific reading.
 export const CAPABILITIES: AnyBeamCapability[] = [
+  // First: it is the only capability that answers with no player named at all,
+  // so nothing else can be confused with it, and a bare "top 10 quarterbacks"
+  // otherwise scores as a question about a player called Quarterbacks.
+  rankingsTop as unknown as AnyBeamCapability,
   playerCompareReliability as unknown as AnyBeamCapability,
   playerCompareProjection as unknown as AnyBeamCapability,
   playerWeeksProjection as unknown as AnyBeamCapability,
@@ -76,6 +81,7 @@ export function enabledCapabilities(disabled: readonly CapabilityId[]): AnyBeamC
 }
 
 export {
+  rankingsTop,
   playerWeeksProjection,
   playerProjection,
   playerCompareProjection,

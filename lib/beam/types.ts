@@ -38,6 +38,7 @@ export type AnyBeamClient =
  * capability module, and its phrasings to the lexicon. Nothing else changes.
  */
 export const CAPABILITY_IDS = [
+  "rankings.top",
   "player.season.stat",
   "player.stat.line",
   "player.compare.stat",
@@ -206,6 +207,31 @@ export type BeamFact = {
   hint?: string | null;
 };
 
+/**
+ * One row of a ranked list.
+ *
+ * Deliberately thin. A leaderboard is a browse surface: rank, face, name, and
+ * the two things that identify a player at a glance. Anything more turns it
+ * into a worse copy of the rankings page, which is one link away.
+ */
+export type BeamPlayerRow = {
+  rank: number;
+  name: string;
+  slug: string;
+  position: string | null;
+  team: string | null;
+  /** For the headshot. Null renders the position-coloured placeholder. */
+  sleeperId: string | null;
+};
+
+export type BeamPlayerTable = {
+  /** Screen-reader caption, e.g. "Top 10 quarterbacks in Redraft PPR". */
+  caption: string;
+  rows: BeamPlayerRow[];
+  /** Rows per page. The card pages client-side; nothing refetches. */
+  pageSize: number;
+};
+
 export type BeamLink = {
   href: string;
   label: string;
@@ -238,6 +264,11 @@ export type BeamAnswer = {
    * only for text meant to be read as sentences.
    */
   body?: string | null;
+  /**
+   * A ranked list of players, rendered as a paginated table. Separate from
+   * `facts` because a fact is a label and a value, and a leaderboard is neither.
+   */
+  table?: BeamPlayerTable | null;
   /**
    * What the live region announces. Usually the headline plus the facts read as
    * a sentence, because a visual two-column fact grid does not read aloud in a
@@ -288,6 +319,8 @@ export type BeamSlot =
   | "projection"
   /** The reader asked how often the projection has been beaten. */
   | "reliability"
+  /** The reader asked for a ranked list rather than about one player. */
+  | "leaderboard"
   | "lens"
   | "term"
   | "position";

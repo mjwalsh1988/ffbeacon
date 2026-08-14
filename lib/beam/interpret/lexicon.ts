@@ -309,7 +309,9 @@ export type ConceptTag =
   /** What a player is projected to score from here. */
   | "projection"
   /** How often the projection has been beaten. */
-  | "reliability";
+  | "reliability"
+  /** A ranked list rather than one player. */
+  | "leaderboard";
 
 const conceptPhrases: PhraseEntry<ConceptTag>[] = [
   { phrase: "worth", value: "value" },
@@ -317,6 +319,13 @@ const conceptPhrases: PhraseEntry<ConceptTag>[] = [
   { phrase: "valued", value: "value" },
   { phrase: "trade value", value: "value" },
   { phrase: "market value", value: "value" },
+  // A ranked LIST. Distinct from "rank", which asks where one named player
+  // sits: these questions name no player at all.
+  { phrase: "overall players", value: "leaderboard" },
+  { phrase: "players overall", value: "leaderboard" },
+  { phrase: "leaderboard", value: "leaderboard" },
+  { phrase: "leaders", value: "leaderboard" },
+  { phrase: "rankings board", value: "leaderboard" },
   { phrase: "rank", value: "rank" },
   { phrase: "ranks", value: "rank" },
   { phrase: "ranked", value: "rank" },
@@ -593,6 +602,7 @@ const fillerPhrases: PhraseEntry<true>[] = [
   "during",
   "span",
   "stretch",
+  "overall",
   "against",
   "often",
   "higher",

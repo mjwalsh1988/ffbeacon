@@ -35,6 +35,7 @@ import { getStat, type BeamStat, type BeamStatId } from "@/lib/beam/stats/regist
 import { normalizeText } from "./normalize";
 import { scanWeekRange, type WeekRange } from "./weeks";
 import { scanSeasonSpan, type SeasonSpan } from "./season-span";
+import { scanTopN, type TopN } from "./top-n";
 
 export type NameSpan = {
   text: string;
@@ -64,6 +65,8 @@ export type ExtractedEntities = {
   weeks: WeekRange | null;
   /** "over the last 3 years", "since 2023". Null when one season or none. */
   seasonSpan: SeasonSpan | null;
+  /** "top 10", "best 25". Null when the question was not a leaderboard. */
+  topN: TopN | null;
   lens: LensToken | null;
   positions: string[];
   teams: string[];
@@ -103,12 +106,16 @@ export function extractEntities(rawNormalized: string): ExtractedEntities {
   //    or the question turns into one about two seasons nobody mentioned.
   const weeks = scanWeekRange(tokens, claimed);
 
-  // 4. Season spans, before single seasons: "last 3 years" contains "last
+  // 4. Leaderboard counts, before seasons for the same reason as weeks: "top
+  //    25" would otherwise be read as the 2025 season.
+  const topN = scanTopN(tokens, claimed);
+
+  // 5. Season spans, before single seasons: "last 3 years" contains "last
   //    year", and the lexicon would claim that and leave "3 years" behind as a
   //    candidate player name.
   const seasonSpan = scanSeasonSpan(tokens, claimed);
 
-  // 5. Season words, then bare year tokens.
+  // 6. Season words, then bare year tokens.
   const seasonMatches = SEASON_MATCHER.matchAll(tokens, claimed);
   const seasons: SeasonToken[] = seasonMatches.map((m) => m.value);
   for (let i = 0; i < tokens.length; i++) {
@@ -120,26 +127,26 @@ export function extractEntities(rawNormalized: string): ExtractedEntities {
     }
   }
 
-  // 6. Lens words. After seasons, because "this week" is a lens and "this year"
+  // 7. Lens words. After seasons, because "this week" is a lens and "this year"
   //    is a season, and they share a leading token.
   const lensMatches = LENS_MATCHER.matchAll(tokens, claimed);
 
-  // 7. Positions, then teams. Both are disambiguation hints for the resolver.
+  // 8. Positions, then teams. Both are disambiguation hints for the resolver.
   const positionMatches = POSITION_MATCHER.matchAll(tokens, claimed);
   const teamMatches = TEAM_MATCHER.matchAll(tokens, claimed);
 
-  // 8. Question heads, then comparators. Heads run before concepts so "how old
+  // 9. Question heads, then comparators. Heads run before concepts so "how old
   //    is" is read as one head rather than as the concept word "old" with a
   //    broken head around it.
   const headMatches = HEAD_MATCHER.matchAll(tokens, claimed);
   const comparatorMatches = COMPARATOR_MATCHER.matchAll(tokens, claimed);
 
-  // 9. Concept words. These have to be claimed, not merely noticed: an
+  // 10. Concept words. These have to be claimed, not merely noticed: an
   //    unclaimed "worth" next to "bijan robinson" would be absorbed into the
   //    name span and sent to the resolver as part of the name.
   const conceptMatches = CONCEPT_MATCHER.matchAll(tokens, claimed);
 
-  // 10. Filler last, so it can never outrank a real vocabulary.
+  // 11. Filler last, so it can never outrank a real vocabulary.
   FILLER_MATCHER.matchAll(tokens, claimed);
 
   /* ---- the verb rule ------------------------------------------------ */
@@ -230,6 +237,7 @@ export function extractEntities(rawNormalized: string): ExtractedEntities {
     seasons,
     weeks,
     seasonSpan,
+    topN,
     lens: lensMatches.length > 0 ? lensMatches[0].value : null,
     positions: dedupe(positionMatches.map((m) => m.value)),
     teams: dedupe(teamMatches.map((m) => m.value)),

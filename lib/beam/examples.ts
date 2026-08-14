@@ -35,6 +35,7 @@ export function starterExamples(
   // named here still appears, after these, in registry order.
   const priority: CapabilityId[] = [
     "player.season.stat",
+    "rankings.top",
     "player.compare.verdict",
     "player.value",
     "player.compare.stat",
