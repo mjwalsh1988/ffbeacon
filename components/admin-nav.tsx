@@ -16,6 +16,7 @@ import {
   Radar,
   Activity,
   Target,
+  MessageCircleQuestion,
   type LucideIcon,
 } from "lucide-react";
 
@@ -76,6 +77,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: Target,
     description:
       "Draft-guide board model: league shape and replacement levels, the value-against-points blend, confidence decay, positional centering, and the steal / swing / fade thresholds.",
+  },
+  {
+    href: "/admin/beam",
+    label: "Ask BEAM",
+    icon: MessageCircleQuestion,
+    description:
+      "The natural-language assistant: confidence thresholds, capability switches, the learning-request queue, and the questions BEAM could not answer.",
   },
   {
     href: "/admin/on-the-clock",

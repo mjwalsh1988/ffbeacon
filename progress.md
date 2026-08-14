@@ -4774,3 +4774,487 @@ T587 | completed | apply the four review passes on T582 through T586
      | honest at widths where the bar does not exist.
      | verified: yes (tsc clean, 1650 tests across 118 files, next build clean,
      |           all-ASCII scan clean across every changed file)
+
+T588 | completed | BEAM schema: player search columns, aliases, query log, requests, settings
+     | files: supabase/migrations/0194_beam_player_search_name.sql,
+     |        supabase/migrations/0195_beam_player_aliases.sql,
+     |        supabase/migrations/0196_beam_queries.sql,
+     |        supabase/migrations/0197_beam_learning_requests.sql,
+     |        supabase/migrations/0198_beam_settings.sql,
+     |        supabase/migrations/0199_beam_search_players_rpc.sql,
+     |        lib/database.types.ts
+     | depends on: none
+     | players gains two stored generated columns, search_name and
+     | search_last_name, plus a GIN trigram index and two btree indexes. The
+     | expressions rebuild from first_name/last_name because full_name is itself
+     | generated and Postgres forbids one generated column referencing another.
+     | beam_player_aliases is the editorial nickname map (122 seeded), public
+     | SELECT. beam_queries is the question log, beam_learning_requests the
+     | feedback queue, beam_settings the single pinned config row: all three
+     | service-role only with no client policies. beam_search_players is a
+     | SECURITY INVOKER RPC for trigram matching, which PostgREST cannot express;
+     | grants named against all three roles, not just public.
+     | verified: yes (policies queried from pg_policies, anon read tested per
+     |           table under begin/rollback, types regenerated via MCP)
+
+T589 | completed | BEAM engine: interpreter, resolver, stat registry, capabilities
+     | files: lib/beam/types.ts, lib/beam/default-settings.ts, lib/beam/settings.ts,
+     |        lib/beam/clock.ts, lib/beam/context.ts, lib/beam/engine.ts,
+     |        lib/beam/validate.ts, lib/beam/log.ts, lib/beam/examples.ts,
+     |        lib/beam/interpret/{normalize,tokens,trie,lexicon,entities,score,index}.ts,
+     |        lib/beam/resolve/{distance,player}.ts,
+     |        lib/beam/stats/{registry,query}.ts,
+     |        lib/beam/answers/{format,templates}.ts,
+     |        lib/beam/capabilities/*.ts, lib/beam/interpret/interpret.test.ts,
+     |        scripts/beam-smoke.ts
+     | depends on: T588
+     | The seam is BeamRequest: the interpreter is the only component that sees
+     | raw text, and capabilities take validated params plus resolved ids. That
+     | is what makes the future LLM layer one new file implementing
+     | BeamInterpreter rather than a rewrite.
+     | Eight capabilities: season stat, stat line, compare stat, compare verdict
+     | (which calls the real Beacon Breakdown stack rather than reimplementing a
+     | verdict), value, rank, bio, glossary term.
+     | Player resolution is five tiers plus a fuzzy tier, grouped so only the
+     | best tier competes. First and last name share one tier at one confidence
+     | on purpose: "brock" is Kevin Brock's surname and Brock Purdy's given name,
+     | and ranking surnames higher would confidently answer with a backup tight
+     | end. Uniqueness decides, so "purdy" answers and "brock" asks.
+     | Intent routing has no margin gate. Candidate readings are TRIED in order
+     | and the first that can be built wins, so "what is faab" fails at player
+     | resolution in microseconds and answers as a definition.
+     | verified: yes (tsc clean, 36 new tests, 1686 total across 119 files,
+     |           smoke run against production data across 24 real questions)
+
+T590 | completed | BEAM public surface: /tools/ask-beam and the two API routes
+     | files: app/api/beam/ask/route.ts, app/api/beam/learn/route.ts,
+     |        app/tools/ask-beam/{page,ask-beam-client,beam-answer-card,
+     |        beam-clarify,beam-unsupported,beam-learn-form}.tsx,
+     |        components/beam/beam-mark.tsx, lib/email/beam-emails.ts
+     | depends on: T589
+     | The ask route is transport only: same-origin header, length cap before
+     | parsing, durable per-actor rate limit that fails closed. The learn route
+     | copies /api/guide/submit exactly: full origin check, honeypot, validation,
+     | rate limit, after() for email. It re-reads the question from the logged
+     | row rather than trusting the body, so a submission cannot be filed against
+     | someone else's question.
+     | One visually-hidden aria-live region carries the announcement; the
+     | transcript is deliberately not live, because a live transcript announces
+     | every fact grid in visual order.
+     | verified: yes (tsc clean, next build clean, both routes present)
+
+T591 | completed | BEAM admin, site wiring, and the Signal Guide page
+     | files: app/admin/beam/{page,actions}.ts(x),
+     |        app/admin/beam/{gaps,requests,aliases}/page.tsx,
+     |        components/admin/beam-{settings,requests,aliases}-manager.tsx,
+     |        lib/beam-admin-nav.ts, components/admin-nav.tsx, lib/site.ts,
+     |        app/tools/page.tsx, app/sitemap.ts, lib/guide/registry.ts,
+     |        supabase/migrations/0200_signal_guide_ask_beam.sql
+     | depends on: T590
+     | Four admin surfaces: settings, the unanswered-question list grouped by
+     | normalized question, the learning-request queue, and the nickname editor.
+     | Every server action re-checks requireAdmin itself.
+     | The unanswered list is the loop that matters: read what people typed that
+     | BEAM could not place, add it to the nickname map, done.
+     | Nine Signal Guide entries seeded so the tool explains itself in place.
+     | verified: yes (tsc clean, next build clean, guide page seeded with 9 entries)
+
+T592 | completed | apply the four review passes on T588 through T591
+     | files: supabase/migrations/0201_beam_review_fixes.sql, lib/beam/**,
+     |        app/api/beam/**, app/tools/ask-beam/**, app/admin/beam/**,
+     |        components/admin/beam-*.tsx, lib/email/beam-emails.ts,
+     |        app/api/cron/recalculate-derived/route.ts,
+     |        lib/guide/registry.test.ts
+     | depends on: T591
+     | Implementation, security, accessibility and performance reviews were run.
+     | Everything they found that was real is fixed. The ones that mattered:
+     | 48 seeded aliases were just the player's own surname. An alias outranks
+     | the algorithmic surname tier, so "cook" answered for James Cook with six
+     | other Cooks in the table and never asked. All 48 deleted, and the admin
+     | editor now refuses a surname alias with the reason.
+     | The comparison capability and the sentence template kept SEPARATE lists of
+     | which stats are better when lower. They disagreed about points allowed, so
+     | the answer named the right team with the wrong verb. One flag on the
+     | registry now feeds both.
+     | lookupDirect had an unordered LIMIT 60 over a set that reaches 81 rows for
+     | "williams". Dropping the exactly-matching row silently skipped the exact
+     | tier and let a different Williams answer at 0.88. Ordered, cap raised.
+     | sum and combine reported a column that was null every week as a measured
+     | zero, so a receiver with no air-yards coverage was told he recorded none.
+     | Team defenses were unanswerable: the team vocabulary claims "ravens"
+     | before name spans are built, so every capability disqualified itself.
+     | Teams now count as subjects and become the name span.
+     | def_int and target_share were removed after checking production: the
+     | interceptions column is 0 on all 544 DEF rows and target_share is null on
+     | all 283k. A stat that can only answer zero is worse than not offering it.
+     | beam_search_players carried SET search_path, which blocks inlining, so it
+     | was planned per call: 5.4ms warm and 43-62ms cold against 1.3ms inlined.
+     | Dropped and schema-qualified instead. Also capped p_query at 80 chars: it
+     | is anon-executable and a 1MB query cost 750ms against 5ms for a real name.
+     | The ask route claimed its rate-limit slot AFTER building the request
+     | context, so a throttled caller still cost a Sleeper call and six reads.
+     | The learn route stored an unsalted sha256 of the IP next to a name and an
+     | email. The IPv4 space is enumerable, so that hash is reversible. It now
+     | stores the salted actor key, and it binds a queryId to the actor who
+     | actually asked it before adopting that question.
+     | cleanup_beam_queries existed but nothing called it; three comments claimed
+     | it was wired. Now in the nightly recalculate-derived prune, using the
+     | admin-configured retention window rather than the SQL default.
+     | Accessibility: disabling the textarea while busy unfocused it and dropped
+     | focus to body after EVERY turn, and the restore was a no-op because the
+     | control was still disabled when it ran. Errors were announced twice, once
+     | assertively. The answer was spoken twice, once as prose and again as the
+     | fact grid. Position codes read as "W R" and "Q B, S F". The matched-player
+     | line and the dead-end exits were announced zero times. Each turn now has
+     | an h2 so heading navigation reaches every answer.
+     | Resolution was re-run per candidate reading, up to 32 round trips for a
+     | two-player question; memoised per interpret call.
+     | verified: yes (tsc clean, 1691 tests across 120 files, next build clean,
+     |           all-ASCII scan clean across 62 files, RLS re-verified as anon,
+     |           30-question smoke run against production data)
+
+T593 | completed | compress the BEAM mascot artwork into the two panel assets
+     | files: scripts/optimize-beam-mascot.ts, package.json,
+     |        public/img/beam-mascot.webp, public/img/beam-avatar.webp
+     | depends on: T592
+     | The source art is a 1.28 MB transparent PNG. sharp trims the transparent
+     | margin and writes a 512px full mascot (95 kB) for the panel's empty state,
+     | plus a 192px square crop of the head (20 kB) for the avatar beside each
+     | answer. The avatar is a crop, not a downscale: at 32px the whole body
+     | renders the face about eight pixels tall.
+     | The crop box is stored as a fraction of the source, so re-exported art at
+     | a different resolution still lands on the head.
+     | Run: npm run img:beam-mascot -- --in "path/to/beam.png"
+     | verified: yes (both files serve 200 from /img, visually checked at size)
+
+T594 | completed | move Ask BEAM out of /tools into a site-wide header panel
+     | files: components/beam/{beam-launcher,beam-panel,beam-chat,beam-mark}.tsx,
+     |        components/beam/{beam-answer-card,beam-clarify,beam-unsupported,
+     |        beam-learn-form}.tsx, components/site-header.tsx, lib/site.ts,
+     |        app/tools/page.tsx, app/sitemap.ts, lib/guide/registry.ts,
+     |        lib/guide/registry.test.ts
+     | depends on: T593
+     | BEAM is a question box, not a destination, so it now rides in the header
+     | next to search on every breakpoint and opens a panel over whatever page
+     | you are on. /tools/ask-beam is deleted, along with its entries in the
+     | tools nav, the search palette, the footer, the tools hub, and the sitemap.
+     | The panel slides up from the bottom on mobile and in from the right on
+     | desktop, matching the Signal Guide panel: portal, focus trap, Esc,
+     | scroll lock, focus restored to the header button, reduced motion honored.
+     | It differs in one way on purpose: once opened it stays mounted and hides
+     | with display:none plus inert, so closing it to read a player page does not
+     | throw the conversation away.
+     | The conversation itself was rebuilt as a chat rather than a page section:
+     | the mascot greets you in the empty state, your question renders as your
+     | own message, answers sit under BEAM's avatar, the composer is a pinned
+     | rounded field with a circular send button, and the transcript follows the
+     | newest turn. Announcement, focus and clarification behaviour from T592
+     | are unchanged: one polite live region, the transcript itself never live.
+     | The BEAM glyph is now the mascot's face drawn in one colour, built from
+     | the logo's peak and arc so it sits next to the wordmark. Line art rather
+     | than shrunken artwork, because the header button is 20 CSS px.
+     | The ask-beam Signal Guide page key was removed with the route. Its nine
+     | published entries are still in the database, now unreachable, so they need
+     | either a new host or deleting.
+     | verified: yes (tsc clean, 1691 tests across 120 files, next build clean,
+     |           all-ASCII scan clean, /tools/ask-beam 404s, header button and
+     |           /api/beam/ask answer against production data)
+
+T595 | completed | add the missing close button to the Power Pulse mobile sheet
+     | files: components/power-pulse/pulse-rankings-table.tsx
+     | The team breakdown sheet on /leagues/[id]/power-pulse could only be closed
+     | with Esc or a backdrop tap. It only ever opens on a phone, where there is
+     | no Esc key and a backdrop tap is a guess. The close button is now the
+     | first focusable element in the sheet, so it is also where focus lands,
+     | and the sheet takes its accessible name from the team heading rather than
+     | a hidden span that said the same words twice.
+     | verified: yes (tsc clean, next build clean)
+
+T596 | completed | teach BEAM the draft question
+     | files: lib/beam/interpret/lexicon.ts, lib/beam/interpret/index.ts,
+     |        lib/beam/resolve/player.ts, lib/beam/stats/registry.ts,
+     |        lib/beam/capabilities/player-compare-verdict.ts,
+     |        lib/beam/interpret/interpret.test.ts
+     | "Who should I draft in a redraft league between Amon-Ra and James Cook"
+     | was answerable all along: it is the Beacon Breakdown verdict this
+     | capability already returns. Interpretation was what failed, in four
+     | separate places, and each one produced the same dead end.
+     | "draft" and "take" were in no vocabulary, so each became a one-word
+     | player name and the question arrived with four subjects. They are now
+     | question heads ("who should i draft", "who do i take", and six more) plus
+     | a compare-better concept, which routes them to the verdict.
+     | "and" was unclaimed, so "amon ra and james cook" merged into ONE name
+     | span and resolved as a single player called "ra and james cook". It is
+     | now filler, which breaks the token run and splits the two names. It stays
+     | out of the comparator list on purpose: "or" and "vs" announce a
+     | head-to-head, "and" often just joins two things.
+     | "league" was unclaimed and became another one-word name.
+     | The lens for an unstated league type was the constant "dynasty". It now
+     | follows the reader's own resolved format (redraft reads win-now), and the
+     | caveat says so, naming the format it followed.
+     | "my draft" was flatly out of scope, which is right for "who should I
+     | draft" and wrong for "who should I draft, Lamb or Nacua". Out-of-scope
+     | phrases now split in two: the roster-dependent ones (start, trade,
+     | waivers) still fire whatever else is in the question, and the
+     | draft-shaped ones stand down once the reader has named two players.
+     | Two resolver fixes fell out of testing it. A surname made of two words
+     | failed the fuzzy tier's edit-distance gate outright ("brown" is three
+     | edits from "st brown"), so the gate now measures against each word of the
+     | surname. And a name whose spacing the reader guessed differently
+     | ("amon ra st brown" against the stored "amonra st brown") now matches at
+     | the EXACT tier by comparing both with the spaces removed, which also
+     | fixes "ja marr chase" and "de von achane".
+     | Found while verifying: a bare "throw" with no "for" after it was
+     | unclaimed, so "how many interceptions did brock purdy throw in 2025"
+     | resolved a player named "brock purdy throw". The bare verb forms are now
+     | in the registry. "run" and "runs" are deliberately still absent: the lens
+     | phrase "long run" is claimed later and a verb would eat half of it.
+     | Also removed the singular "pick" as a phrasing for interceptions. Nobody
+     | asks "how many pick did he throw", plenty of people ask "who should I
+     | pick", and the stat vocabulary is claimed before question heads are.
+     | verified: yes (tsc clean, 1698 tests across 120 files including 7 new,
+     |           next build clean, npm run beam:smoke unchanged on all 30
+     |           questions, and the reader's exact question answered against
+     |           production data in both a redraft and a dynasty format)
+
+T597 | completed | give BEAM's prose answers room to be prose
+     | files: lib/beam/types.ts, lib/beam/answers/templates.ts,
+     |        lib/beam/capabilities/glossary-term.ts,
+     |        components/beam/beam-answer-card.tsx
+     | A glossary definition was being carried as a fact, and a fact renders as a
+     | label on the left and a value on the right, two pairs to a row. That put
+     | three sentences of "what is FAAB" into a column a few words wide, which
+     | read like a table cell that had overflowed.
+     | BeamAnswer now has a `body` for text meant to be read as sentences.
+     | glossary.term fills it and ships no facts at all; the card renders it as
+     | full-width paragraphs, split on blank lines. buildSpeech speaks it right
+     | after the headline, so the announcement is unchanged.
+     | The card also stopped treating every fact the same way. A value of more
+     | than seven words is laid out down the page (label above, sentence at full
+     | width) instead of across it. That fixes the same squeeze in the
+     | head-to-head verdict, whose three Beacon Breakdown takeaways are
+     | sentences: they were sharing a two-column grid with "Lens: Dynasty".
+     | Figures keep the compact grid, which is what it is good at. Word count
+     | rather than string length is the test, because "6 foot 1, 220 pounds" is
+     | a long string and still a figure.
+     | verified: yes (tsc clean, 1698 tests across 120 files, next build clean,
+     |           answers inspected against production for the glossary, the
+     |           verdict, bio, value and stat-line shapes)
+
+T598 | completed | answer the short glossary question
+     | files: lib/beam/interpret/normalize.ts, lib/beam/interpret/lexicon.ts,
+     |        lib/beam/capabilities/glossary-term.ts,
+     |        lib/beam/interpret/interpret.test.ts
+     | "whats ppr" failed on the apostrophe. The contraction map only knew
+     | "what's", so "whats" carried no question head and glued itself to the
+     | next word: BEAM searched the glossary for an entry called "whats ppr".
+     | The four question contractions people type without an apostrophe
+     | (whats, whos, hows, wheres) now expand. None of them is a name or a word
+     | in any other vocabulary.
+     | While testing it, two more: "whats tep" said we had never defined TEP,
+     | because the entry is headed "TE Premium" and only the body says "often
+     | shortened to TEP". The lookup now falls back to searching bodies when no
+     | heading matches, with a whole-word check in TypeScript because ilike
+     | '%tep%' also matches "step".
+     | And "hows gibbs do in 2025" answered what he is WORTH. With no head
+     | matched the question fell to whichever capability scores highest on
+     | nothing, which is the value one. "how is" and "how are" now read as the
+     | same head as "how did", so the present tense asks for the season line.
+     | Known and left alone: a bare term with no question around it ("ppr" on
+     | its own) still dead-ends. The glossary reading scores 0.50 against an
+     | accept threshold of 0.55, and moving either number affects every
+     | one-word question, so it wants its own change rather than a nudge here.
+     | verified: yes (tsc clean, 1700 tests across 120 files including 3 new,
+     |           next build clean, npm run beam:smoke unchanged on all 30
+     |           questions, phrasings checked against production)
+
+T599 | completed | answer questions about a stretch of weeks
+     | files: lib/beam/interpret/weeks.ts (new), lib/beam/interpret/normalize.ts,
+     |        lib/beam/interpret/entities.ts, lib/beam/interpret/lexicon.ts,
+     |        lib/beam/interpret/score.ts, lib/beam/interpret/index.ts,
+     |        lib/beam/capabilities/{shared,player-season-stat,
+     |        player-compare-stat,index}.ts, lib/beam/stats/query.ts,
+     |        lib/beam/answers/templates.ts, lib/beam/types.ts,
+     |        scripts/beam-smoke.ts, lib/beam/interpret/interpret.test.ts
+     | A week range is now a slot like a season or a stat, so the two existing
+     | stat capabilities answer "between weeks 2 and 8" without either of them
+     | learning a new question shape. The scanner reads "between weeks 2 and 8",
+     | "from week 2 to week 8", "weeks 2 through 9", "weeks 2-8" and "in week 5".
+     | Two ordering problems had to be solved for it to work at all. The season
+     | parser reads a bare two-digit number in the 15 to 49 range as a year, so
+     | the week pass runs BEFORE it: otherwise "between weeks 15 and 17" is a
+     | question about the 2015 and 2017 seasons. And normalization deletes
+     | hyphens, which turned "weeks 2-8" into "weeks 28"; a hyphen between two
+     | digits now becomes a space, which no player name can be affected by.
+     | The week filter goes into the query rather than being applied to the rows
+     | afterwards, so a five-week question reads five rows on the same index.
+     | Every sentence template now takes a worded period ("weeks 2 to 8 of 2025")
+     | instead of a season number. That is the guard that matters: a five-week
+     | total rendered as a season total is a wrong answer with a right number
+     | in it, and now the type system will not let a template omit the range.
+     | verified: yes (tsc clean, 1709 tests across 120 files, next build clean,
+     |           beam:smoke unchanged on all 30 old questions, 5 new added)
+
+T600 | completed | project a stretch of weeks across a full season
+     | files: lib/beam/capabilities/player-weeks-projection.ts (new),
+     |        lib/beam/capabilities/index.ts, lib/beam/types.ts,
+     |        lib/beam/interpret/{lexicon,score,index}.ts
+     | depends on: T599
+     | "Project the season total from weeks 2 through 4 of last year for Michael
+     | Wilson." Per game inside the window, times a full season (17 games since
+     | 2021, 16 before). Both halves stated, plus the in-window total and the
+     | games it came from.
+     | Games, not weeks, is the denominator: a five-week window with two games
+     | missed is three games of evidence, and dividing by five would punish a
+     | player for being hurt. When the two differ the answer shows both averages
+     | and says which one the projection used.
+     | For fantasy points it also reports where that projected total would have
+     | finished at the position that season, counted against
+     | player_positional_finishes so BEAM's "would have been WR82 of 337" is
+     | measured exactly like the finishes the profile page shows.
+     | A rate cannot be projected (yards per carry across 17 games is arithmetic
+     | with no meaning), so those report the rate and say why.
+     | "project" is a REQUIRED slot, not a scoring bonus. A week-range total and
+     | a week-range projection otherwise score identically and the projection
+     | would win on registry order, answering "how many yards in weeks 2 to 8"
+     | with a full-season extrapolation nobody asked for.
+     | Found while testing: "how many targets did X see" was broken, and it is
+     | one of the advertised examples. "see" was in no vocabulary, so it joined
+     | the name span and the resolver was handed "ceedee lamb see". It is now a
+     | verb on the targets stat.
+     | verified: yes (tsc clean, 1709 tests, next build clean, all three question
+     |           shapes answered against production data, including the
+     |           missed-games path where per-game and per-week disagree)
+
+T601 | completed | tolerate a typo in the word "weeks"
+     | files: lib/beam/interpret/weeks.ts, lib/beam/interpret/interpret.test.ts
+     | depends on: T599
+     | "between weks 10 and 17" came back as "BEAM can handle two players at a
+     | time", which is true and has nothing to do with what went wrong.
+     | One dropped letter cascaded three ways: the misspelled keyword matched no
+     | vocabulary so it became a name span, which made three subjects out of a
+     | two-player question; the range was never found; and the orphaned "17" was
+     | then read by the season parser as the 2017 season.
+     | The week keyword now accepts anything within one edit of "week" or
+     | "weeks". Guarded three ways so it cannot start eating real words: the
+     | token must begin with "w", must be within that one edit, and the scanner
+     | only claims it when a real week number follows.
+     | BEAM was already forgiving about a player's name and unforgiving about
+     | its own keywords. That asymmetry is invisible to the person typing, and
+     | the error message it produced pointed at the wrong thing entirely.
+     | Found by reading beam_queries rather than by asking: the question, its
+     | outcome, and its failure reason were all already logged.
+     | verified: yes (tsc clean, 1711 tests across 120 files including 2 new,
+     |           next build clean, the reader's exact question answered against
+     |           production data)
+
+T602 | completed | stop unknown words from counting as players
+     | files: lib/beam/interpret/index.ts, lib/beam/interpret/lexicon.ts,
+     |        lib/beam/interpret/interpret.test.ts, scripts/beam-smoke.ts
+     | depends on: T600
+     | "Project Tucker Kraft's season totals for last year by using his weeks 1
+     | through 5" came back as "BEAM can handle two players at a time".
+     | The parse was almost perfect: the week range, the season and the
+     | projection intent were all read correctly. But "totals" and "by using"
+     | were in no vocabulary, and a name span is just a run of words nothing
+     | else claimed, so the question arrived carrying three "players".
+     | Two fixes, one narrow and one structural.
+     | Narrow: totals, by, using, use, used, based on, off of and going by are
+     | now filler. That is the fourth time an unclaimed ordinary word has cost a
+     | question, after "and", "each", "league" and "draft".
+     | Structural, and the one that ends the pattern: the too-many-players rule
+     | no longer counts spans, it counts PEOPLE. When a question produces more
+     | candidate names than the capability takes, every candidate is resolved
+     | against the database and only the ones that are real players count.
+     | Three real players still declines, for the original and correct reason.
+     | A word we have never heard of now costs nothing.
+     | The extra lookups only happen on questions that carry extra spans, which
+     | is exactly the case that was failing, they run in parallel, and the
+     | resolution memo means a second reading of the same question is free.
+     | Verified against production that three genuine players still declines,
+     | both for the verdict ("bijan or gibbs or hall") and for the stat
+     | comparison ("purdy and lamb and gibbs").
+     | verified: yes (tsc clean, 1712 tests across 120 files, next build clean,
+     |           beam:smoke now 37 questions and all behave, the reader's exact
+     |           question answered against production data)
+
+T603 | completed | answer projection and beat-rate questions
+     | files: lib/beam/projections/load.ts (new),
+     |        lib/beam/interpret/season-span.ts (new),
+     |        lib/beam/capabilities/player-{reliability,compare-reliability,
+     |        projection,compare-projection}.ts (new),
+     |        lib/beam/capabilities/{shared,index}.ts, lib/beam/types.ts,
+     |        lib/beam/interpret/{entities,lexicon,score,index}.ts,
+     |        lib/beam/examples.ts, lib/beam/interpret/interpret.test.ts,
+     |        scripts/beam-smoke.ts
+     | Four capabilities over two tables BEAM already had access to and had never
+     | been taught to read: player_weekly_projections (what a player is projected
+     | to score) and player_projection_accuracy (how often he has beaten one).
+     | Single and two-player forms of each, because "who has the better beat
+     | rate, A or B" is the question people actually ask.
+     | A beat rate over several seasons is POOLED, sum(weeks beaten) over
+     | sum(weeks played), never the mean of per-season rates. Averaging a
+     | 14-week season against a 22-week one equally is how a cameo decides
+     | whether a player is reliable.
+     | New in the interpreter: a season SPAN ("over the last 3 years", "past two
+     | seasons", "since 2023"), scanned before the season lexicon so it cannot
+     | claim "last year" out of "last 3 years" and leave "3 years" behind as a
+     | player name. Spans resolve against the newest GRADED season, not the
+     | calendar: in August the current season has no results in it.
+     | The seasons asked for and the seasons we hold are different sets, and the
+     | answer names the second. We grade 2024 and 2025, so a three-year question
+     | says so rather than quietly answering with two thirds of the evidence.
+     | Registry order is now explicitly "most specific first", because scores
+     | clamp at 1.00 and a tie breaks on position: the beat-rate comparison had
+     | to sit above the head-to-head verdict, which fits the same words and
+     | answers a different question. Starter chips no longer follow that order,
+     | they follow their own list, so the panel still opens with the everyday
+     | questions.
+     | Four more unclaimed words claimed: against, often, higher, lower.
+     | verified: yes (tsc clean, 1718 tests across 120 files including 6 new,
+     |           next build clean, beam:smoke now 41 questions with only the 4
+     |           intended dead ends and 2 intended clarifications, all four new
+     |           shapes answered against production data)
+
+T604 | completed | put a ceiling on the Ask BEAM endpoint as a whole
+     | files: app/api/beam/ask/route.ts, lib/beam/default-settings.ts,
+     |        lib/beam/settings.ts, lib/beam/context.ts,
+     |        components/admin/beam-settings-manager.tsx
+     | The per-actor limit (30 a minute) contains one abuser and does nothing
+     | about five hundred addresses each behaving reasonably. There is now a
+     | durable ceiling on the endpoint itself, 600 a minute by default, through
+     | the same try_claim_rate_limit ledger.
+     | Claimed AFTER the per-actor slot, never before. A request the caller's own
+     | limit has already rejected must not spend shared budget, or one person
+     | hammering the endpoint would push everyone else into a global rejection
+     | while being rejected themselves.
+     | Split into two pools, signed-in and guest, each with the configured
+     | budget. A single pool is a lever: at 30 per actor against 600 shared,
+     | twenty addresses can deny the endpoint to everybody. Splitting does not
+     | prevent that, it confines it to the cheap tier and keeps the two visible
+     | separately in the ledger.
+     | Fixed while implementing, both found by the review pass:
+     | Raising the ceiling from the admin was a no-op. The route claimed on the
+     | code default and re-claimed on a second bucket only when the configured
+     | value was TIGHTER, so an operator raising it for real growth saw it save,
+     | saw it persist, and got no change. Settings are now read BEFORE the
+     | limiters and both claim on the configured numbers, which also deletes the
+     | two conditional re-claims. No extra read: the settings are handed to
+     | buildBeamContext, which used to read the same row itself.
+     | The zod schema now enforces the invariant its own comment promised: the
+     | ceiling must allow at least as many questions per second as one visitor,
+     | compared as rates because the two windows are configured independently.
+     | Retry-After now carries the real window rather than a guess, and the
+     | rejection paths carry no-store.
+     | Reviewed and deliberately not done: sharding the ledger row (measured at
+     | 52 microseconds a claim, saturating around 1500 to 2000 req/s, which is
+     | 150x the ceiling, and sharding would make the admin number stop meaning
+     | what its label says); dropping the updated_at index so the row can take
+     | HOT updates (a property of migration 0137, worth doing when traffic
+     | justifies it); the content-length header being client-supplied and the
+     | duplicate auth.getUser per request (both pre-existing).
+     | verified: yes (tsc clean, 1718 tests, next build clean, limiter counting
+     |           and concurrency verified against prod on a throwaway bucket:
+     |           10 concurrent claims against a max of 5 allowed exactly 5;
+     |           stored settings row backfills the new fields; the invariant
+     |           rejects a ceiling below one visitor's rate and accepts a raise)

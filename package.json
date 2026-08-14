@@ -31,6 +31,8 @@
     "beacon:outage": "tsx --env-file=.env.local scripts/beacon-outage-sim.ts",
     "beacon:board": "tsx --env-file=.env.local scripts/beacon-board-audit.ts",
     "beacon:ai-smoke": "tsx --env-file=.env.local scripts/beacon-ai-smoke.ts",
+    "beam:smoke": "tsx --env-file=.env.local scripts/beam-smoke.ts",
+    "img:beam-mascot": "tsx scripts/optimize-beam-mascot.ts",
     "beacon-brief": "tsx --env-file=.env.local scripts/beacon-brief.ts",
     "beacon-brief:tests": "tsx scripts/beacon-brief-ingest-tests.ts",
     "audit:brief-merges": "tsx --env-file=.env.local scripts/audit-brief-merges.ts",

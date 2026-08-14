@@ -6,6 +6,7 @@ import { runSeedRankings } from "@/lib/seed-rankings";
 import { runCalculateTrends } from "@/lib/calculate-trends";
 import { recordCronRun } from "@/lib/cron-runs";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { loadBeamSettings } from "@/lib/beam/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,11 +69,27 @@ export async function GET(req: Request) {
         console.error("[cron/recalculate-derived] rate-limit ledger prune failed", pruneErr);
       }
 
+      // Bounded retention prune for the BEAM question log. Same reasoning as the
+      // ledgers above: global, deletion-only, and non-fatal. The window comes
+      // from beam_settings so the admin control over it is real rather than
+      // decorative; a settings read failure falls back to the code default.
+      let beamQueryRowsDeleted: number | null = null;
+      try {
+        const beamSettings = await loadBeamSettings(supabase);
+        const { data } = await supabase.rpc("cleanup_beam_queries" as never, {
+          p_max_age_days: beamSettings.logging.retentionDays,
+        } as never);
+        beamQueryRowsDeleted = typeof data === "number" ? data : null;
+      } catch (pruneErr) {
+        console.error("[cron/recalculate-derived] BEAM query log prune failed", pruneErr);
+      }
+
       return {
         ok: true as const,
         rankings,
         trends,
         rateLimitLedgerRowsDeleted,
+        beamQueryRowsDeleted,
         durationMs: Date.now() - started,
       };
     });

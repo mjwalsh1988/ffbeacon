@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { loadBeamSettings } from "@/lib/beam/settings";
+import { starterExamples } from "@/lib/beam/examples";
 import { PRIMARY_NAV, DEFAULT_FORMAT_SLUG } from "@/lib/site";
 import {
   readCookieSlug,
@@ -18,6 +20,7 @@ import { PreferencesMenu } from "@/components/preferences-menu";
 import { HeaderNavLink } from "@/components/header-nav-link";
 import { NavDropdown } from "@/components/nav-dropdown";
 import { HeaderShell } from "@/components/header-shell";
+import { BeamLauncher } from "@/components/beam/beam-launcher";
 
 async function loadHeaderData(): Promise<{
   formats: FormatOption[];
@@ -28,14 +31,20 @@ async function loadHeaderData(): Promise<{
   preferredFormatSlug: string | null;
   preferredSourceSlug: string | null;
   defaultSourceSlug: string | null;
+  beamStarters: string[];
 }> {
   try {
     const supabase = await createClient();
     // Cached helpers: page-level callers share these Promises with us.
-    const [formats, sources, { data: userData }] = await Promise.all([
+    // BEAM settings ride along in the same wave: the starter questions in the
+    // panel are generated from the capabilities that are actually switched on,
+    // so one an admin disables stops being advertised in the same request
+    // rather than at the next deploy.
+    const [formats, sources, { data: userData }, beamSettings] = await Promise.all([
       getActiveFormats(supabase),
       getAvailableSources(supabase),
       supabase.auth.getUser(),
+      loadBeamSettings(createAdminClient()),
     ]);
 
     let preferredFormatSlug: string | null = null;
@@ -94,6 +103,7 @@ async function loadHeaderData(): Promise<{
       preferredFormatSlug,
       preferredSourceSlug,
       defaultSourceSlug: pickDefaultSource(sources),
+      beamStarters: starterExamples(beamSettings.capabilities.disabled, 4),
     };
   } catch {
     return {
@@ -105,6 +115,7 @@ async function loadHeaderData(): Promise<{
       preferredFormatSlug: null,
       preferredSourceSlug: null,
       defaultSourceSlug: null,
+      beamStarters: starterExamples([], 4),
     };
   }
 }
@@ -119,6 +130,7 @@ export async function SiteHeader() {
     preferredFormatSlug,
     preferredSourceSlug,
     defaultSourceSlug,
+    beamStarters,
   } = await loadHeaderData();
   const initialFormatSlug = preferredFormatSlug ?? DEFAULT_FORMAT_SLUG;
   // Mirror lib/preferences.ts resolveSourceSlug: a saved preference wins, else
@@ -166,6 +178,9 @@ export async function SiteHeader() {
           {/* Site search: icon trigger visible on every breakpoint, opens the
               accessible search palette (players, articles, tools). */}
           <SiteSearch />
+          {/* Ask BEAM: the same reach as search, at every breakpoint, because
+              it answers the questions search cannot. Opens the slide-in panel. */}
+          <BeamLauncher starters={beamStarters} />
           {/* Desktop: source + format toggles are tucked into a single popover
               to save header space. Mobile keeps them inline in the slide-out
               menu below. */}

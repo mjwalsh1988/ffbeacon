@@ -1,0 +1,242 @@
+/**
+ * Projections and projection accuracy, for BEAM.
+ *
+ * Two different questions live here and they are routinely confused, so the
+ * split is deliberate:
+ *
+ *   OUTLOOK    what a player is projected to score from here on
+ *              (player_weekly_projections, summed)
+ *   RELIABILITY how often the projection has been too low
+ *              (player_projection_accuracy, pooled)
+ *
+ * Both read the same tables the Beacon Breakdown reliability tab reads, through
+ * the same scoring key, so BEAM's "beats his projection 76% of the time" and the
+ * number on the player profile are the same measurement rather than two
+ * plausible ones.
+ *
+ * POOLING, NOT AVERAGING. A beat rate over several seasons is
+ * sum(weeks beaten) / sum(weeks played), never the mean of the per-season rates.
+ * Averaging two seasons of 14 and 22 weeks equally would let a short season
+ * carry the same weight as a full one, which is how a four-week cameo ends up
+ * deciding whether a player is reliable.
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
+import type { ScoringKey } from "@/lib/player-profile";
+
+type Client = SupabaseClient<Database>;
+
+/** The projected-points column for a scoring base. A closed mapping. */
+const PROJECTION_COLUMN: Record<ScoringKey, "projected_pts_ppr" | "projected_pts_half_ppr" | "projected_pts_std"> = {
+  pts_ppr: "projected_pts_ppr",
+  pts_half_ppr: "projected_pts_half_ppr",
+  pts_std: "projected_pts_std",
+};
+
+export type ProjectionOutlook = {
+  playerId: string;
+  season: number;
+  /** First week counted. 1 in the preseason, the live week once games start. */
+  fromWeek: number;
+  /** Projected points from `fromWeek` to the end of the regular season. */
+  remainingPoints: number;
+  /** How many weeks carried a projection at or after `fromWeek`. */
+  remainingWeeks: number;
+  /** Every week of the season, whether or not it has been played. */
+  seasonPoints: number;
+  seasonWeeks: number;
+  /** The nearest projected week, for a "next up" line. */
+  next: { week: number; opponent: string | null; points: number } | null;
+};
+
+/**
+ * Weekly projections summed for one or two players.
+ *
+ * One read, paged the way lib/breakdown/load-extras.ts pages it, because a
+ * season is 18 rows per player and PostgREST's default cap is a trap rather
+ * than a limit.
+ */
+export async function loadProjectionOutlook(
+  db: Client,
+  playerIds: string[],
+  season: number,
+  fromWeek: number,
+  scoringKey: ScoringKey,
+): Promise<Map<string, ProjectionOutlook>> {
+  const out = new Map<string, ProjectionOutlook>();
+  if (playerIds.length === 0) return out;
+
+  const column = PROJECTION_COLUMN[scoringKey];
+  const { data, error } = await db
+    .from("player_weekly_projections")
+    .select(`player_id, week, opponent, ${column}`)
+    .eq("season", season)
+    .eq("season_type", "regular")
+    .in("player_id", playerIds)
+    .order("week", { ascending: true })
+    .limit(playerIds.length * 25);
+
+  if (error) {
+    console.error("[beam] projection read failed", error);
+    return out;
+  }
+
+  for (const playerId of playerIds) {
+    out.set(playerId, {
+      playerId,
+      season,
+      fromWeek,
+      remainingPoints: 0,
+      remainingWeeks: 0,
+      seasonPoints: 0,
+      seasonWeeks: 0,
+      next: null,
+    });
+  }
+
+  type Row = { player_id: string | null; week: number; opponent: string | null } & Record<
+    string,
+    unknown
+  >;
+
+  for (const raw of (data ?? []) as unknown as Row[]) {
+    if (!raw.player_id) continue;
+    const outlook = out.get(raw.player_id);
+    if (!outlook) continue;
+
+    const points = raw[column];
+    if (typeof points !== "number" || !Number.isFinite(points)) continue;
+    const week = Number(raw.week);
+
+    outlook.seasonPoints += points;
+    outlook.seasonWeeks += 1;
+
+    if (week >= fromWeek) {
+      outlook.remainingPoints += points;
+      outlook.remainingWeeks += 1;
+      if (!outlook.next || week < outlook.next.week) {
+        outlook.next = { week, opponent: raw.opponent, points };
+      }
+    }
+  }
+
+  return out;
+}
+
+export type Reliability = {
+  playerId: string;
+  /** Share of played weeks where he outscored his own projection. */
+  beatRate: number | null;
+  weeksBeat: number;
+  weeksPlayed: number;
+  weeksProjected: number;
+  /** Share of projected weeks he was available for. */
+  availabilityRate: number | null;
+  /** Points above or below projection per played week. */
+  meanDiff: number | null;
+  /** Week-to-week swing. Only meaningful from a single row, so null when pooled. */
+  ratioStdev: number | null;
+  /** Which seasons actually contributed. Never assume the ones asked for. */
+  seasons: number[];
+};
+
+/**
+ * Projection accuracy for one or two players.
+ *
+ * `seasons` null reads the career row (season is null), which is the table's own
+ * all-seasons aggregate. A list reads those seasons and pools them. The seasons
+ * that came back are returned, because the ones asked for and the ones we hold
+ * are different sets and the answer has to say which it used.
+ */
+export async function loadReliability(
+  db: Client,
+  playerIds: string[],
+  scoringKey: ScoringKey,
+  seasons: number[] | null,
+): Promise<Map<string, Reliability>> {
+  const out = new Map<string, Reliability>();
+  if (playerIds.length === 0) return out;
+
+  let query = db
+    .from("player_projection_accuracy")
+    .select(
+      "player_id, season, weeks_projected, weeks_played, weeks_beat, beat_rate, availability_rate, mean_diff, ratio_stdev",
+    )
+    .eq("scoring", scoringKey)
+    .in("player_id", playerIds);
+
+  query = seasons === null ? query.is("season", null) : query.in("season", seasons);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("[beam] projection accuracy read failed", error);
+    return out;
+  }
+
+  type Row = {
+    player_id: string;
+    season: number | null;
+    weeks_projected: number | null;
+    weeks_played: number | null;
+    weeks_beat: number | null;
+    beat_rate: number | string | null;
+    availability_rate: number | string | null;
+    mean_diff: number | string | null;
+    ratio_stdev: number | string | null;
+  };
+
+  const rowsByPlayer = new Map<string, Row[]>();
+  for (const row of (data ?? []) as unknown as Row[]) {
+    const list = rowsByPlayer.get(row.player_id) ?? [];
+    list.push(row);
+    rowsByPlayer.set(row.player_id, list);
+  }
+
+  for (const playerId of playerIds) {
+    const rows = rowsByPlayer.get(playerId) ?? [];
+    if (rows.length === 0) continue;
+
+    let weeksBeat = 0;
+    let weeksPlayed = 0;
+    let weeksProjected = 0;
+    let diffWeighted = 0;
+    const contributing: number[] = [];
+
+    for (const row of rows) {
+      const played = numeric(row.weeks_played) ?? 0;
+      weeksBeat += numeric(row.weeks_beat) ?? 0;
+      weeksPlayed += played;
+      weeksProjected += numeric(row.weeks_projected) ?? 0;
+      const diff = numeric(row.mean_diff);
+      if (diff !== null) diffWeighted += diff * played;
+      if (row.season !== null) contributing.push(row.season);
+    }
+
+    out.set(playerId, {
+      playerId,
+      beatRate: weeksPlayed > 0 ? weeksBeat / weeksPlayed : null,
+      weeksBeat,
+      weeksPlayed,
+      weeksProjected,
+      availabilityRate: weeksProjected > 0 ? weeksPlayed / weeksProjected : null,
+      meanDiff: weeksPlayed > 0 ? diffWeighted / weeksPlayed : null,
+      // Standard deviation does not pool by averaging, and the honest options
+      // are to recompute it from the weekly rows or not to claim it. One row in,
+      // one number out; otherwise nothing.
+      ratioStdev: rows.length === 1 ? numeric(rows[0].ratio_stdev) : null,
+      seasons: contributing.sort((a, b) => a - b),
+    });
+  }
+
+  return out;
+}
+
+function numeric(value: number | string | null): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}

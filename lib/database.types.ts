@@ -912,6 +912,178 @@ export type Database = {
         };
         Relationships: [];
       };
+      beam_learning_requests: {
+        Row: {
+          admin_note: string | null;
+          created_at: string;
+          email: string | null;
+          id: string;
+          ip_hash: string | null;
+          message: string | null;
+          name: string;
+          query_id: string | null;
+          question: string;
+          resolved_at: string | null;
+          status: string;
+          submitted_user_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          admin_note?: string | null;
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          ip_hash?: string | null;
+          message?: string | null;
+          name: string;
+          query_id?: string | null;
+          question: string;
+          resolved_at?: string | null;
+          status?: string;
+          submitted_user_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          admin_note?: string | null;
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          ip_hash?: string | null;
+          message?: string | null;
+          name?: string;
+          query_id?: string | null;
+          question?: string;
+          resolved_at?: string | null;
+          status?: string;
+          submitted_user_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "beam_learning_requests_query_id_fkey";
+            columns: ["query_id"];
+            isOneToOne: false;
+            referencedRelation: "beam_queries";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      beam_player_aliases: {
+        Row: {
+          alias: string;
+          alias_kind: string;
+          created_at: string;
+          id: string;
+          is_active: boolean;
+          note: string | null;
+          player_id: string;
+          source: string;
+          updated_at: string;
+        };
+        Insert: {
+          alias: string;
+          alias_kind?: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          note?: string | null;
+          player_id: string;
+          source?: string;
+          updated_at?: string;
+        };
+        Update: {
+          alias?: string;
+          alias_kind?: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          note?: string | null;
+          player_id?: string;
+          source?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "beam_player_aliases_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      beam_queries: {
+        Row: {
+          actor_hash: string | null;
+          capability_id: string | null;
+          confidence: number | null;
+          created_at: string;
+          failure_reason: string | null;
+          format_slug: string | null;
+          id: string;
+          latency_ms: number | null;
+          outcome: string;
+          player_ids: string[] | null;
+          question: string;
+          question_normalized: string;
+          source_slug: string | null;
+          user_id: string | null;
+        };
+        Insert: {
+          actor_hash?: string | null;
+          capability_id?: string | null;
+          confidence?: number | null;
+          created_at?: string;
+          failure_reason?: string | null;
+          format_slug?: string | null;
+          id?: string;
+          latency_ms?: number | null;
+          outcome: string;
+          player_ids?: string[] | null;
+          question: string;
+          question_normalized: string;
+          source_slug?: string | null;
+          user_id?: string | null;
+        };
+        Update: {
+          actor_hash?: string | null;
+          capability_id?: string | null;
+          confidence?: number | null;
+          created_at?: string;
+          failure_reason?: string | null;
+          format_slug?: string | null;
+          id?: string;
+          latency_ms?: number | null;
+          outcome?: string;
+          player_ids?: string[] | null;
+          question?: string;
+          question_normalized?: string;
+          source_slug?: string | null;
+          user_id?: string | null;
+        };
+        Relationships: [];
+      };
+      beam_settings: {
+        Row: {
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       cron_runs: {
         Row: {
           created_at: string;
@@ -3651,6 +3823,8 @@ export type Database = {
           last_name: string;
           metadata: Json;
           position: string;
+          search_last_name: string | null;
+          search_name: string | null;
           slug: string;
           source_synced_at: Json;
           status: string;
@@ -3675,6 +3849,8 @@ export type Database = {
           last_name: string;
           metadata?: Json;
           position: string;
+          search_last_name?: string | null;
+          search_name?: string | null;
           slug: string;
           source_synced_at?: Json;
           status?: string;
@@ -3699,6 +3875,8 @@ export type Database = {
           last_name?: string;
           metadata?: Json;
           position?: string;
+          search_last_name?: string | null;
+          search_name?: string | null;
           slug?: string;
           source_synced_at?: Json;
           status?: string;
@@ -5370,6 +5548,10 @@ export type Database = {
           last_synced_at: string;
           locked_by_other: boolean;
         }[];
+      };
+      cleanup_beam_queries: {
+        Args: { p_max_age_days?: number };
+        Returns: number;
       };
       cleanup_on_the_clock_cache: {
         Args: {
