@@ -76,6 +76,15 @@ const QUESTIONS = [
   "what is james cooks beat rate",
   "what is bijan robinson projected for",
   "who is projected higher bijan robinson or jahmyr gibbs",
+  // The menu question, and the draft guide's board.
+  "what type of questions can i ask",
+  "what can you do",
+  "who are the draft steals",
+  "which players should i avoid in my draft",
+  "draft steals at running back",
+  "late round swings",
+  // A named player next to a board word is a question about him, not the board.
+  "is bijan robinson a steal",
   // Dead ends.
   "who should i start this week in my league",
   "what is the weather in dallas",
@@ -86,7 +95,9 @@ async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!url || !key) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY are required.");
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY are required.",
+    );
   }
 
   const admin = createClient<Database>(url, key, {
@@ -136,25 +147,33 @@ async function main() {
 
     console.log("-".repeat(78));
     console.log(`Q: ${question}`);
-    console.log(`   [${ms}ms] top reading: ${trace[0]?.capability ?? "none"} (${trace[0]?.score.toFixed(2) ?? "-"})`);
+    console.log(
+      `   [${ms}ms] top reading: ${trace[0]?.capability ?? "none"} (${trace[0]?.score.toFixed(2) ?? "-"})`,
+    );
 
     if (outcome.kind === "answer") {
       console.log(`   ANSWER: ${outcome.answer.headline}`);
       if (outcome.matchedPlayers.length > 0) {
         console.log(
           `   matched: ${outcome.matchedPlayers
-            .map((p) => `${p.name} (${p.tier} ${p.confidence.toFixed(2)} from "${p.matchedOn}")`)
+            .map(
+              (p) =>
+                `${p.name} (${p.tier} ${p.confidence.toFixed(2)} from "${p.matchedOn}")`,
+            )
             .join("; ")}`,
         );
       }
       for (const fact of outcome.answer.facts.slice(0, 4)) {
         console.log(`   - ${fact.label}: ${fact.value}`);
       }
-      for (const caveat of outcome.answer.caveats) console.log(`   ! ${caveat}`);
+      for (const caveat of outcome.answer.caveats)
+        console.log(`   ! ${caveat}`);
     } else if (outcome.kind === "clarify") {
       console.log(`   CLARIFY: ${outcome.clarification.prompt}`);
       for (const option of outcome.clarification.options) {
-        console.log(`   - ${option.label}${option.detail ? ` (${option.detail})` : ""}`);
+        console.log(
+          `   - ${option.label}${option.detail ? ` (${option.detail})` : ""}`,
+        );
       }
     } else {
       console.log(`   UNSUPPORTED (${outcome.reason}): ${outcome.message}`);

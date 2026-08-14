@@ -34,6 +34,8 @@ import { playerValue } from "./player-value";
 import { playerRank } from "./player-rank";
 import { playerBio } from "./player-bio";
 import { glossaryTerm } from "./glossary-term";
+import { helpCapabilities } from "./help-capabilities";
+import { draftBoard } from "./draft-board";
 
 // MOST SPECIFIC FIRST. Scores clamp at 1.00, so two capabilities that both fit
 // a question routinely tie, and a tie is broken by position here. The ones that
@@ -46,7 +48,15 @@ import { glossaryTerm } from "./glossary-term";
 // both are viable when a question names two people, and the pair is the more
 // specific reading.
 export const CAPABILITIES: AnyBeamCapability[] = [
-  // First: it is the only capability that answers with no player named at all,
+  // "What can I ask" is first because it is about BEAM rather than about
+  // football: no player, no stat, no season, and nothing else can be confused
+  // with it.
+  helpCapabilities as unknown as AnyBeamCapability,
+  // The draft board names no player either, and its words ("steals", "avoid")
+  // sit close enough to a value question that the more specific reading has to
+  // win the tie.
+  draftBoard as unknown as AnyBeamCapability,
+  // Then: it is the only capability that answers with no player named at all,
   // so nothing else can be confused with it, and a bare "top 10 quarterbacks"
   // otherwise scores as a question about a player called Quarterbacks.
   rankingsTop as unknown as AnyBeamCapability,
@@ -74,13 +84,17 @@ export function getCapability(id: CapabilityId): AnyBeamCapability | null {
 }
 
 /** Capabilities the admin has not switched off. */
-export function enabledCapabilities(disabled: readonly CapabilityId[]): AnyBeamCapability[] {
+export function enabledCapabilities(
+  disabled: readonly CapabilityId[],
+): AnyBeamCapability[] {
   if (disabled.length === 0) return CAPABILITIES;
   const off = new Set(disabled);
   return CAPABILITIES.filter((c) => !off.has(c.id));
 }
 
 export {
+  helpCapabilities,
+  draftBoard,
   rankingsTop,
   playerWeeksProjection,
   playerProjection,

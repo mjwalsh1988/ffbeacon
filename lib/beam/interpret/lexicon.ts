@@ -24,7 +24,11 @@
  */
 
 import { NFL_TEAMS } from "@/lib/nfl-teams";
-import { BEAM_STATS, type BeamStat, type BeamStatId } from "@/lib/beam/stats/registry";
+import {
+  BEAM_STATS,
+  type BeamStat,
+  type BeamStatId,
+} from "@/lib/beam/stats/registry";
 import { normalizeText } from "./normalize";
 import { PhraseMatcher, type PhraseEntry } from "./trie";
 
@@ -218,7 +222,8 @@ for (const team of NFL_TEAMS) {
   // is n-gram based.
   const parts = team.name.split(" ");
   const nickname = normalizeText(parts[parts.length - 1]);
-  if (nickname.length > 2) teamPhrases.push({ phrase: nickname, value: team.code });
+  if (nickname.length > 2)
+    teamPhrases.push({ phrase: nickname, value: team.code });
 }
 export const TEAM_MATCHER = new PhraseMatcher<string>(teamPhrases);
 
@@ -311,9 +316,89 @@ export type ConceptTag =
   /** How often the projection has been beaten. */
   | "reliability"
   /** A ranked list rather than one player. */
-  | "leaderboard";
+  | "leaderboard"
+  /** "What can I ask?" The question about the questions. */
+  | "help"
+  /** The draft guide's board, with no side named. */
+  | "draft-board"
+  /** The steals side of that board. */
+  | "draft-steal"
+  /** The fades side: who the room drafts too early. */
+  | "draft-fade"
+  /** The late-round swings. */
+  | "draft-swing";
 
 const conceptPhrases: PhraseEntry<ConceptTag>[] = [
+  // "What can I ask?" The question about the questions, and the one a first-time
+  // reader has. Several of these overlap words the filler list also holds ("can
+  // you tell me", "do you know"), which is harmless: concepts are claimed before
+  // filler, and the matcher takes the longest phrase at each position, so the
+  // help reading wins the whole span rather than losing half of it.
+  { phrase: "what can i ask", value: "help" },
+  { phrase: "what can i ask you", value: "help" },
+  { phrase: "what can i ask beam", value: "help" },
+  { phrase: "what questions can i ask", value: "help" },
+  { phrase: "what can you do", value: "help" },
+  { phrase: "what can you answer", value: "help" },
+  { phrase: "what can you tell me", value: "help" },
+  { phrase: "what can beam do", value: "help" },
+  { phrase: "what do you know", value: "help" },
+  { phrase: "what should i ask", value: "help" },
+  { phrase: "what are you good at", value: "help" },
+  { phrase: "what type of questions", value: "help" },
+  { phrase: "what types of questions", value: "help" },
+  { phrase: "what kind of questions", value: "help" },
+  { phrase: "what kinds of questions", value: "help" },
+  { phrase: "what sort of questions", value: "help" },
+  { phrase: "type of questions", value: "help" },
+  { phrase: "types of questions", value: "help" },
+  { phrase: "kind of questions", value: "help" },
+  { phrase: "kinds of questions", value: "help" },
+  { phrase: "sort of questions", value: "help" },
+  { phrase: "what data do you have", value: "help" },
+  { phrase: "what information do you have", value: "help" },
+  { phrase: "how does this work", value: "help" },
+  { phrase: "how do i use you", value: "help" },
+  { phrase: "capabilities", value: "help" },
+  { phrase: "help", value: "help" },
+  // The draft guide's board. Both sides of it are named here rather than being
+  // inferred later, because "steals" and "fades" are opposite answers and
+  // guessing between them would be the worst kind of confident.
+  { phrase: "draft steals", value: "draft-steal" },
+  { phrase: "draft steal", value: "draft-steal" },
+  { phrase: "beacon steals", value: "draft-steal" },
+  { phrase: "late round steals", value: "draft-steal" },
+  { phrase: "steals", value: "draft-steal" },
+  { phrase: "steal", value: "draft-steal" },
+  { phrase: "value picks", value: "draft-steal" },
+  { phrase: "value pick", value: "draft-steal" },
+  { phrase: "draft sleepers", value: "draft-steal" },
+  { phrase: "sleepers", value: "draft-steal" },
+  { phrase: "undervalued", value: "draft-steal" },
+  { phrase: "bargains", value: "draft-steal" },
+  { phrase: "draft fades", value: "draft-fade" },
+  { phrase: "draft fade", value: "draft-fade" },
+  { phrase: "fades", value: "draft-fade" },
+  { phrase: "fade", value: "draft-fade" },
+  { phrase: "draft avoids", value: "draft-fade" },
+  { phrase: "players to avoid", value: "draft-fade" },
+  { phrase: "who to avoid", value: "draft-fade" },
+  { phrase: "avoids", value: "draft-fade" },
+  { phrase: "avoid", value: "draft-fade" },
+  { phrase: "overvalued", value: "draft-fade" },
+  { phrase: "overpriced", value: "draft-fade" },
+  { phrase: "draft busts", value: "draft-fade" },
+  { phrase: "busts", value: "draft-fade" },
+  { phrase: "bust", value: "draft-fade" },
+  { phrase: "late round swings", value: "draft-swing" },
+  { phrase: "draft swings", value: "draft-swing" },
+  { phrase: "swings", value: "draft-swing" },
+  { phrase: "lottery tickets", value: "draft-swing" },
+  { phrase: "dart throws", value: "draft-swing" },
+  // No side named. The board leads with steals, so these do too.
+  { phrase: "draft board", value: "draft-board" },
+  { phrase: "draft guide", value: "draft-board" },
+  { phrase: "draft day", value: "draft-board" },
   { phrase: "worth", value: "value" },
   { phrase: "value", value: "value" },
   { phrase: "valued", value: "value" },
@@ -454,15 +539,27 @@ const OUT_OF_SCOPE_PHRASES = [
  * BEAM answers those. The phrase is identical; the difference is whether two
  * subjects were named, so that is what decides it.
  */
-const OUT_OF_SCOPE_UNLESS_NARROWED = ["my draft", "my keeper", "my pick"] as const;
+const OUT_OF_SCOPE_UNLESS_NARROWED = [
+  "my draft",
+  "my keeper",
+  "my pick",
+] as const;
 
 export function looksOutOfScope(
   normalized: string,
-  options: { comparingNamedPlayers?: boolean } = {},
+  options: { comparingNamedPlayers?: boolean; askingDraftBoard?: boolean } = {},
 ): boolean {
-  if (OUT_OF_SCOPE_PHRASES.some((phrase) => normalized.includes(phrase))) return true;
+  if (OUT_OF_SCOPE_PHRASES.some((phrase) => normalized.includes(phrase)))
+    return true;
   if (options.comparingNamedPlayers) return false;
-  return OUT_OF_SCOPE_UNLESS_NARROWED.some((phrase) => normalized.includes(phrase));
+  // "Who should I avoid in my draft" mentions a draft BEAM cannot see, but the
+  // answer does not depend on seeing it: the guide's fade list is the same list
+  // whatever room the reader is sitting in. Same escape hatch as a named
+  // head-to-head, for the same reason.
+  if (options.askingDraftBoard) return false;
+  return OUT_OF_SCOPE_UNLESS_NARROWED.some((phrase) =>
+    normalized.includes(phrase),
+  );
 }
 
 /**
@@ -482,7 +579,9 @@ const comparatorPhrases: PhraseEntry<"compare">[] = [
   { phrase: "compared to", value: "compare" },
   { phrase: "compare", value: "compare" },
 ];
-export const COMPARATOR_MATCHER = new PhraseMatcher<"compare">(comparatorPhrases);
+export const COMPARATOR_MATCHER = new PhraseMatcher<"compare">(
+  comparatorPhrases,
+);
 
 /* ------------------------------------------------------------------ */
 /* Filler                                                              */
@@ -619,6 +718,39 @@ const fillerPhrases: PhraseEntry<true>[] = [
   "based on",
   "off of",
   "going by",
+  // Words that sit around a "what can I ask" or a draft-board question. Every
+  // one of these was becoming a one-word candidate player name: "show me the
+  // draft fades" was searching the roster for someone called Show.
+  "show",
+  "list",
+  "give",
+  "see",
+  "view",
+  "want",
+  "big",
+  "biggest",
+  "player",
+  "players",
+  "guys",
+  "can",
+  "ask",
+  "asking",
+  "question",
+  "questions",
+  "type",
+  "types",
+  "kind",
+  "kinds",
+  "sort",
+  "information",
+  "info",
+  "data",
+  "topics",
+  "you",
+  "your",
+  "we",
+  "our",
+  "us",
   // Bare question words. The real head PHRASES ("who is better", "how many")
   // are matched before filler and still win; a leftover bare "who" was becoming
   // a one-word name span and taking the whole question down with it.

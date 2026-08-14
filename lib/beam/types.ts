@@ -38,6 +38,8 @@ export type AnyBeamClient =
  * capability module, and its phrasings to the lexicon. Nothing else changes.
  */
 export const CAPABILITY_IDS = [
+  "help.capabilities",
+  "draft.board",
   "rankings.top",
   "player.season.stat",
   "player.stat.line",
@@ -58,7 +60,8 @@ export type CapabilityId = (typeof CAPABILITY_IDS)[number];
 
 export function isCapabilityId(value: unknown): value is CapabilityId {
   return (
-    typeof value === "string" && (CAPABILITY_IDS as readonly string[]).includes(value)
+    typeof value === "string" &&
+    (CAPABILITY_IDS as readonly string[]).includes(value)
   );
 }
 
@@ -127,7 +130,15 @@ export type BeamContext = {
 
 /** One thing the interpreter matched, kept for the log and the admin debug view. */
 export type BeamEvidence = {
-  kind: "stat" | "player" | "season" | "position" | "team" | "lens" | "head" | "comparator";
+  kind:
+    | "stat"
+    | "player"
+    | "season"
+    | "position"
+    | "team"
+    | "lens"
+    | "head"
+    | "comparator";
   /** The exact substring that matched. */
   text: string;
   /** What it resolved to (a stat id, a player id, a season number). */
@@ -321,6 +332,14 @@ export type BeamSlot =
   | "reliability"
   /** The reader asked for a ranked list rather than about one player. */
   | "leaderboard"
+  /**
+   * The reader asked what BEAM can answer at all. Its own slot rather than a
+   * head, because "what can I ask" names no subject of any kind and every other
+   * capability has to disqualify itself on it.
+   */
+  | "help"
+  /** The reader asked for the draft guide's steals, swings, or fades. */
+  | "draft-board"
   | "lens"
   | "term"
   | "position";
@@ -349,7 +368,9 @@ export interface BeamCapability<TParams, TResult> {
    */
   readonly declineMessage: string;
   /** Runtime parameter validation. A parse failure is unsupported, not a 500. */
-  parse(raw: unknown): { ok: true; params: TParams } | { ok: false; error: string };
+  parse(
+    raw: unknown,
+  ): { ok: true; params: TParams } | { ok: false; error: string };
   run(params: TParams, ctx: BeamContext): Promise<TResult | null>;
   present(result: TResult, params: TParams, ctx: BeamContext): BeamAnswer;
 }
@@ -371,7 +392,11 @@ export type BeamOutcome =
       matchedPlayers: BeamMatchedPlayer[];
       queryId: string | null;
     }
-  | { kind: "clarify"; clarification: BeamClarification; queryId: string | null }
+  | {
+      kind: "clarify";
+      clarification: BeamClarification;
+      queryId: string | null;
+    }
   | {
       kind: "unsupported";
       reason: BeamUnsupportedReason;

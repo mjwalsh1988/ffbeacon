@@ -90,7 +90,8 @@ function slotFilled(
       // both should reach it. The week range is what separates this from the
       // rest-of-season projection, not the wording.
       return (
-        entities.concepts.includes("project") || entities.concepts.includes("projection")
+        entities.concepts.includes("project") ||
+        entities.concepts.includes("projection")
       );
     case "projection":
       return entities.concepts.includes("projection");
@@ -99,7 +100,19 @@ function slotFilled(
     case "leaderboard":
       // Either the words ("the leaders", "top players") or the shape: "top 10
       // quarterbacks" names no concept at all, it is a count and a position.
-      return entities.concepts.includes("leaderboard") || entities.topN !== null;
+      return (
+        entities.concepts.includes("leaderboard") || entities.topN !== null
+      );
+    case "help":
+      return entities.concepts.includes("help");
+    case "draft-board":
+      return entities.concepts.some(
+        (c) =>
+          c === "draft-board" ||
+          c === "draft-steal" ||
+          c === "draft-fade" ||
+          c === "draft-swing",
+      );
     case "lens":
       return entities.lens !== null;
     case "position":
@@ -122,7 +135,9 @@ export function scoreCapabilities(
     const matcher = capability.matcher;
 
     // Disqualify on a missing requirement rather than scoring it down.
-    const missing = matcher.required.filter((s) => !slotFilled(s, entities, capability));
+    const missing = matcher.required.filter(
+      (s) => !slotFilled(s, entities, capability),
+    );
     if (missing.length > 0) return;
 
     const reasons: string[] = [];
@@ -130,12 +145,18 @@ export function scoreCapabilities(
     reasons.push(`base ${matcher.base.toFixed(2)}`);
 
     score += REQUIRED_SLOT_BONUS * matcher.required.length;
-    reasons.push(`required x${matcher.required.length} +${(REQUIRED_SLOT_BONUS * matcher.required.length).toFixed(2)}`);
+    reasons.push(
+      `required x${matcher.required.length} +${(REQUIRED_SLOT_BONUS * matcher.required.length).toFixed(2)}`,
+    );
 
-    const optionalFilled = matcher.optional.filter((s) => slotFilled(s, entities, capability));
+    const optionalFilled = matcher.optional.filter((s) =>
+      slotFilled(s, entities, capability),
+    );
     if (optionalFilled.length > 0) {
       score += OPTIONAL_SLOT_BONUS * optionalFilled.length;
-      reasons.push(`optional ${optionalFilled.join("+")} +${(OPTIONAL_SLOT_BONUS * optionalFilled.length).toFixed(2)}`);
+      reasons.push(
+        `optional ${optionalFilled.join("+")} +${(OPTIONAL_SLOT_BONUS * optionalFilled.length).toFixed(2)}`,
+      );
     }
 
     if (matcher.heads.some((h) => headSet.has(h))) {
@@ -161,7 +182,9 @@ export function scoreCapabilities(
       const extra = Math.max(0, subjectCount(entities) - wanted);
       if (extra > 0) {
         score -= EXTRA_SPAN_PENALTY * extra;
-        reasons.push(`extra names x${extra} -${(EXTRA_SPAN_PENALTY * extra).toFixed(2)}`);
+        reasons.push(
+          `extra names x${extra} -${(EXTRA_SPAN_PENALTY * extra).toFixed(2)}`,
+        );
       }
     }
 
@@ -186,7 +209,11 @@ export function scoreCapabilities(
     return a.index - b.index;
   });
 
-  return scored.map(({ capability, score, reasons }) => ({ capability, score, reasons }));
+  return scored.map(({ capability, score, reasons }) => ({
+    capability,
+    score,
+    reasons,
+  }));
 }
 
 /**
@@ -198,6 +225,8 @@ export function scoreCapabilities(
  * database.
  */
 const CAPABILITY_CONCEPTS: Record<string, ConceptTag[]> = {
+  "help.capabilities": ["help"],
+  "draft.board": ["draft-board", "draft-steal", "draft-fade", "draft-swing"],
   "player.value": ["value"],
   "player.rank": ["rank"],
   "player.compare.verdict": ["compare-better"],

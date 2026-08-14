@@ -37,6 +37,7 @@ import type {
   BeamUnsupportedReason,
 } from "@/lib/beam/types";
 import { enabledCapabilities } from "@/lib/beam/capabilities";
+import { DEFAULT_BOARD_COUNT } from "@/lib/beam/capabilities/draft-board";
 import {
   bareUnitCandidates,
   getStat,
@@ -51,7 +52,11 @@ import {
 } from "@/lib/beam/resolve/player";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { positionTeam } from "@/lib/beam/answers/format";
-import { extractEntities, type ExtractedEntities, type NameSpan } from "./entities";
+import {
+  extractEntities,
+  type ExtractedEntities,
+  type NameSpan,
+} from "./entities";
 import { seasonsForSpan, spanLabel } from "./season-span";
 import { DEFAULT_TOP_N } from "./top-n";
 import { normalizeText } from "./normalize";
@@ -88,7 +93,10 @@ export class DeterministicInterpreter implements BeamInterpreter {
     return full.interpretation;
   }
 
-  async interpretVerbose(text: string, ctx: BeamContext): Promise<BeamInterpretResult> {
+  async interpretVerbose(
+    text: string,
+    ctx: BeamContext,
+  ): Promise<BeamInterpretResult> {
     const entities = extractEntities(text);
     // One resolution per distinct name across every reading attempted.
     //
@@ -134,7 +142,19 @@ export class DeterministicInterpreter implements BeamInterpreter {
       (entities.hasComparator ||
         entities.heads.includes("who is better") ||
         entities.concepts.includes("compare-better"));
-    if (looksOutOfScope(entities.normalized, { comparingNamedPlayers })) {
+    const askingDraftBoard = entities.concepts.some(
+      (c) =>
+        c === "draft-board" ||
+        c === "draft-steal" ||
+        c === "draft-fade" ||
+        c === "draft-swing",
+    );
+    if (
+      looksOutOfScope(entities.normalized, {
+        comparingNamedPlayers,
+        askingDraftBoard,
+      })
+    ) {
       return {
         ...empty,
         interpretation: { kind: "unsupported", reason: "out-of-scope" },
@@ -142,7 +162,9 @@ export class DeterministicInterpreter implements BeamInterpreter {
       };
     }
 
-    const viable = candidates.filter((c) => c.score >= ctx.settings.intent.acceptScore);
+    const viable = candidates.filter(
+      (c) => c.score >= ctx.settings.intent.acceptScore,
+    );
     if (viable.length === 0) {
       return { ...empty, trace };
     }
@@ -179,7 +201,10 @@ export class DeterministicInterpreter implements BeamInterpreter {
         // Clarifications from weaker readings are kept only as a last resort.
         if (i === 0) {
           return {
-            interpretation: { kind: "clarify", clarification: attempt.clarification },
+            interpretation: {
+              kind: "clarify",
+              clarification: attempt.clarification,
+            },
             matchedPlayers: [],
             normalized: entities.normalized,
             trace,
@@ -219,22 +244,170 @@ export class DeterministicInterpreter implements BeamInterpreter {
     ctx: BeamContext,
     resolutionCache: Map<string, Promise<PlayerResolution>>,
   ): Promise<
-    | { kind: "request"; request: BeamRequest; matchedPlayers: BeamMatchedPlayer[] }
+    | {
+        kind: "request";
+        request: BeamRequest;
+        matchedPlayers: BeamMatchedPlayer[];
+      }
     | { kind: "clarify"; clarification: BeamClarification }
     | { kind: "unsupported"; reason: BeamUnsupportedReason }
   > {
     const evidence: BeamEvidence[] = [];
     for (const statId of entities.statIds) {
-      evidence.push({ kind: "stat", text: getStat(statId).label, value: statId });
+      evidence.push({
+        kind: "stat",
+        text: getStat(statId).label,
+        value: statId,
+      });
     }
     if (entities.lens) {
-      evidence.push({ kind: "lens", text: entities.lens, value: entities.lens });
+      evidence.push({
+        kind: "lens",
+        text: entities.lens,
+        value: entities.lens,
+      });
+    }
+
+    /* ---- how a leftover span becomes a player ----------------------- */
+
+    // Defined up here, above the readings that name nobody, because two of them
+    // need to ask whether a leftover word is a PERSON before they can claim the
+    // question. Resolutions are memoised across every reading, so hoisting this
+    // costs nothing when it goes unused.
+
+    // The statistic narrows WHO was meant. "How many yards did brock throw for"
+    // has four Brocks in the six fantasy positions and exactly one quarterback,
+    // and the verb already told us it is a quarterback question.
+    const statPositionHint =
+      entities.statIds.length > 0
+        ? (getStat(entities.statIds[0]).resolutionPositions ?? null)
+        : null;
+
+    const positionHint = entities.positions[0] ?? null;
+    // A synthesized team span IS the name, so the team must not also narrow it.
+    const teamHint =
+      entities.nameSpans.length === 0 ? null : (entities.teams[0] ?? null);
+
+    const resolveSpan = (span: NameSpan) => {
+      const key = [
+        span.text,
+        capability.playerScope,
+        positionHint ?? "",
+        (statPositionHint ?? []).join("/"),
+        teamHint ?? "",
+      ].join("|");
+      let pending = resolutionCache.get(key);
+      if (!pending) {
+        pending = resolvePlayer(ctx.supabase, span.text, {
+          scope: capability.playerScope,
+          settings: ctx.settings,
+          positionHint,
+          statPositionHint,
+          teamHint,
+          formatConfigId: ctx.formatConfigId,
+          sourceSlug: ctx.sourceSlug,
+        });
+        resolutionCache.set(key, pending);
+      }
+      return pending;
+    };
+
+    /**
+     * Does this question name a person?
+     *
+     * Asked of the database, not of the shape of the sentence. A leftover span
+     * is only a run of words nothing else claimed, so "the sneakiest draft
+     * steals" leaves one and names nobody, while "is Chase a steal" leaves one
+     * and names Ja'Marr Chase. Counting spans cannot tell those apart, and
+     * getting it wrong either way produces a confidently wrong answer: the
+     * board when the reader asked about a player, or a dead end when they asked
+     * about the board.
+     *
+     * Costs one query, only when a subject-less reading has a leftover span,
+     * and the result is shared with every other reading of the same question.
+     */
+    const namesAPlayer = async (): Promise<boolean> => {
+      if (entities.nameSpans.length === 0) return false;
+      const probe = pickSpans(
+        entities.nameSpans,
+        Math.min(entities.nameSpans.length, MAX_PROBE_SPANS),
+      );
+      const probed = await Promise.all(probe.map(resolveSpan));
+      return probed.some(
+        (r) => r.kind === "resolved" || r.kind === "ambiguous",
+      );
+    };
+
+    /* ---- "what can I ask" needs nothing at all --------------------- */
+
+    if (capability.id === "help.capabilities") {
+      // "Help me pick between Bijan and Gibbs" and "what can you tell me about
+      // Puka Nacua" both contain a help phrase and are both questions about
+      // football. A named player, two sides, or a statistic all mean the reader
+      // wants an answer rather than a menu, so this reading steps aside.
+      if (
+        entities.hasComparator ||
+        entities.statIds.length > 0 ||
+        (await namesAPlayer())
+      ) {
+        return { kind: "unsupported", reason: "no-intent" };
+      }
+      const parsed = capability.parse({} as never);
+      if (!parsed.ok) return { kind: "unsupported", reason: "no-intent" };
+      return {
+        kind: "request",
+        request: {
+          capability: capability.id,
+          params: parsed.params as Record<string, unknown>,
+          confidence: score,
+          evidence: [{ kind: "head", text: "help", value: "help" }],
+        },
+        matchedPlayers: [],
+      };
+    }
+
+    /* ---- the draft board names a side, not a player ----------------- */
+
+    if (capability.id === "draft.board") {
+      // A question that names a player is not a question about the board.
+      // "Is Bijan Robinson a steal" has a subject and deserves an answer about
+      // him, so it falls through to the value and comparison readings.
+      if (await namesAPlayer()) {
+        return { kind: "unsupported", reason: "no-intent" };
+      }
+      const bucket = entities.concepts.includes("draft-fade")
+        ? "fade"
+        : entities.concepts.includes("draft-swing")
+          ? "swing"
+          : "steal";
+      const parsed = capability.parse({
+        bucket,
+        position: entities.positions[0] ?? null,
+        count: entities.topN?.count ?? DEFAULT_BOARD_COUNT,
+      } as never);
+      if (!parsed.ok) return { kind: "unsupported", reason: "no-intent" };
+      return {
+        kind: "request",
+        request: {
+          capability: capability.id,
+          params: parsed.params as Record<string, unknown>,
+          confidence: score,
+          evidence: [
+            ...evidence,
+            { kind: "head", text: bucket, value: bucket },
+          ],
+        },
+        matchedPlayers: [],
+      };
     }
 
     /* ---- the glossary path needs no player at all ------------------ */
 
     if (capability.id === "glossary.term") {
-      const term = entities.nameSpans.map((s) => s.text).join(" ").trim();
+      const term = entities.nameSpans
+        .map((s) => s.text)
+        .join(" ")
+        .trim();
       if (term.length < 2) return { kind: "unsupported", reason: "no-intent" };
       const parsed = capability.parse({ term } as never);
       if (!parsed.ok) return { kind: "unsupported", reason: "no-intent" };
@@ -272,7 +445,14 @@ export class DeterministicInterpreter implements BeamInterpreter {
           params: parsed.params as Record<string, unknown>,
           confidence: score,
           evidence: entities.topN
-            ? [...evidence, { kind: "head", text: entities.topN.text, value: String(entities.topN.count) }]
+            ? [
+                ...evidence,
+                {
+                  kind: "head",
+                  text: entities.topN.text,
+                  value: String(entities.topN.count),
+                },
+              ]
             : evidence,
         },
         matchedPlayers: [],
@@ -287,49 +467,14 @@ export class DeterministicInterpreter implements BeamInterpreter {
     // vocabulary claims "ravens" before name spans are built, so a question
     // about a defense arrives with zero names and every capability disqualifies
     // itself. When nothing else is left to be the subject, the team becomes it.
-    const teamMode = entities.nameSpans.length === 0 && entities.teams.length > 0;
+    const teamMode =
+      entities.nameSpans.length === 0 && entities.teams.length > 0;
     const candidateSpans = teamMode
       ? teamSpans(entities.teams, wanted)
       : entities.nameSpans;
     if (candidateSpans.length < wanted) {
       return { kind: "unsupported", reason: "no-player" };
     }
-
-    // The statistic narrows WHO was meant. "How many yards did brock throw for"
-    // has four Brocks in the six fantasy positions and exactly one quarterback,
-    // and the verb already told us it is a quarterback question.
-    const statPositionHint =
-      entities.statIds.length > 0
-        ? (getStat(entities.statIds[0]).resolutionPositions ?? null)
-        : null;
-
-    const positionHint = entities.positions[0] ?? null;
-    // A synthesized team span IS the name, so the team must not also narrow it.
-    const teamHint = entities.nameSpans.length === 0 ? null : (entities.teams[0] ?? null);
-
-    const resolveSpan = (span: NameSpan) => {
-      const key = [
-        span.text,
-        capability.playerScope,
-        positionHint ?? "",
-        (statPositionHint ?? []).join("/"),
-        teamHint ?? "",
-      ].join("|");
-      let pending = resolutionCache.get(key);
-      if (!pending) {
-        pending = resolvePlayer(ctx.supabase, span.text, {
-          scope: capability.playerScope,
-          settings: ctx.settings,
-          positionHint,
-          statPositionHint,
-          teamHint,
-          formatConfigId: ctx.formatConfigId,
-          sourceSlug: ctx.sourceSlug,
-        });
-        resolutionCache.set(key, pending);
-      }
-      return pending;
-    };
 
     let spans = pickSpans(candidateSpans, wanted);
 
@@ -349,7 +494,10 @@ export class DeterministicInterpreter implements BeamInterpreter {
     // question has extra spans, which is exactly the case that was broken, and
     // resolutions are memoised across readings so a second attempt is free.
     if (!teamMode && candidateSpans.length > wanted) {
-      const probe = pickSpans(candidateSpans, Math.min(candidateSpans.length, MAX_PROBE_SPANS));
+      const probe = pickSpans(
+        candidateSpans,
+        Math.min(candidateSpans.length, MAX_PROBE_SPANS),
+      );
       const probed = await Promise.all(probe.map(resolveSpan));
       const real = probe.filter((_, i) => probed[i].kind === "resolved");
       if (real.length > wanted) {
@@ -377,7 +525,11 @@ export class DeterministicInterpreter implements BeamInterpreter {
       if (resolution.kind === "ambiguous") {
         return {
           kind: "clarify",
-          clarification: buildPlayerClarification(entities, spans[i], resolution.candidates),
+          clarification: buildPlayerClarification(
+            entities,
+            spans[i],
+            resolution.candidates,
+          ),
         };
       }
       if (resolution.kind === "not-current") {
@@ -498,7 +650,10 @@ export class DeterministicInterpreter implements BeamInterpreter {
         if (options.length > 1) {
           return {
             kind: "clarify",
-            clarification: buildStatClarification(entities, options.map((s) => s.id)),
+            clarification: buildStatClarification(
+              entities,
+              options.map((s) => s.id),
+            ),
           };
         }
         if (options.length === 1) statId = options[0].id;
@@ -521,7 +676,14 @@ export class DeterministicInterpreter implements BeamInterpreter {
 
     const raw: Record<string, unknown> =
       capability.matcher.playerCount === 2
-        ? { a: refs[0], b: refs[1], statId, season, weeks, window: seasonWindow }
+        ? {
+            a: refs[0],
+            b: refs[1],
+            statId,
+            season,
+            weeks,
+            window: seasonWindow,
+          }
         : { player: refs[0], statId, season, weeks, window: seasonWindow };
 
     const parsed = capability.parse(raw as never);
@@ -589,13 +751,21 @@ function resolveSeasonWindow(
       (s) => s >= ctx.clock.earliestStatSeason,
     );
     if (seasons.length > 0) {
-      return { kind: "seasons", seasons, label: spanLabel(entities.seasonSpan) };
+      return {
+        kind: "seasons",
+        seasons,
+        label: spanLabel(entities.seasonSpan),
+      };
     }
   }
 
   const explicit = entities.seasons.find((s) => s.kind === "explicit");
   if (explicit && explicit.kind === "explicit") {
-    return { kind: "seasons", seasons: [explicit.season], label: String(explicit.season) };
+    return {
+      kind: "seasons",
+      seasons: [explicit.season],
+      label: String(explicit.season),
+    };
   }
 
   const relative = entities.seasons.find((s) => s.kind === "relative");
@@ -633,10 +803,14 @@ function pickSpans(spans: NameSpan[], wanted: number): NameSpan[] {
 function resolveSeason(
   tokens: SeasonToken[],
   ctx: BeamContext,
-): { season: number; source: "explicit" | "relative" | "current" | "none" } | null {
+): {
+  season: number;
+  source: "explicit" | "relative" | "current" | "none";
+} | null {
   const clock = ctx.clock;
   for (const token of tokens) {
-    if (token.kind === "explicit") return { season: token.season, source: "explicit" };
+    if (token.kind === "explicit")
+      return { season: token.season, source: "explicit" };
     if (token.kind === "relative") {
       return { season: clock.currentSeason + token.offset, source: "relative" };
     }

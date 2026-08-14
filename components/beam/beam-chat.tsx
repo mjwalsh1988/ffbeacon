@@ -462,8 +462,8 @@ function Welcome({
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-muted">
         Ask a fantasy football question the way you would say it out loud. I
         answer from FF Beacon&apos;s own data: season stats back to 2020, values
-        and ranks in your format, and head-to-head verdicts. When I am not sure
-        who you mean, I ask.
+        and ranks in your format, head-to-head verdicts, and the draft
+        guide&apos;s steals and fades. When I am not sure who you mean, I ask.
       </p>
 
       {starters.length > 0 && (
