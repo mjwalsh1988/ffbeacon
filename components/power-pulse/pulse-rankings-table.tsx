@@ -16,8 +16,9 @@
  * data is lost at any breakpoint.
  */
 
-import { Fragment, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import Link from "next/link";
+import { X } from "lucide-react";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { TeamStatusBadge } from "@/components/team-status-badge";
@@ -81,6 +82,7 @@ export function PulseRankingsTable({
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sheetTeam, setSheetTeam] = useState<PulseTeam | null>(null);
+  const sheetHeadingId = useId();
   const teamCount = teams.length;
 
   // This table is the only component on the tab holding every team, so it is
@@ -248,6 +250,7 @@ export function PulseRankingsTable({
         open={sheetTeam !== null}
         onClose={() => setSheetTeam(null)}
         label={sheetTeam ? `${sheetTeam.teamName} Power Pulse breakdown` : "Team breakdown"}
+        labelledBy={sheetTeam ? sheetHeadingId : undefined}
       >
         {sheetTeam && (
           <div className="px-5 pb-6 pt-4">
@@ -259,7 +262,10 @@ export function PulseRankingsTable({
                 size={48}
               />
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-lg font-semibold tracking-tight text-ink">
+                <h2
+                  id={sheetHeadingId}
+                  className="truncate text-lg font-semibold tracking-tight text-ink"
+                >
                   {sheetTeam.teamName}
                 </h2>
                 <p className="mt-0.5 font-mono text-xs tabular-nums text-ink-muted">
@@ -280,6 +286,19 @@ export function PulseRankingsTable({
               >
                 {sheetTeam.powerPulse}
               </span>
+              {/* The first focusable element in the sheet, so it can be
+                  dismissed without tabbing through the whole breakdown. Esc and
+                  a backdrop tap already closed it; neither is discoverable, and
+                  this sheet only ever opens on a phone, where there is no Esc
+                  key to reach for. */}
+              <button
+                type="button"
+                onClick={() => setSheetTeam(null)}
+                aria-label={`Close the ${sheetTeam.teamName} breakdown`}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                <X aria-hidden="true" className="h-4 w-4" />
+              </button>
             </header>
             {sheetTeam.status && (
               <div className="mt-4 rounded-card border border-line bg-base px-4 py-3">
