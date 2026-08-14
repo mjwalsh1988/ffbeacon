@@ -43,6 +43,12 @@ export const RESERVED_ROUTE_SEGMENTS = [
   "players",
   "privacy",
   "rankings",
+  // app/sitemap.xml/route.ts and app/sitemaps/*/route.ts. The sitemap moved from
+  // Next's sitemap.ts convention (a file, and therefore not a segment) to an index
+  // plus four per-section files, because the convention cannot emit a sitemap index.
+  // Both are folders now, so both are reserved here for the same reason llms.txt is.
+  "sitemap.xml",
+  "sitemaps",
   "terms",
   "tools",
   "u",

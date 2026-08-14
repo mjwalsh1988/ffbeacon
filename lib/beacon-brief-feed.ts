@@ -14,6 +14,7 @@ import type {
   createCachedReadClient,
   createClient,
 } from "@/lib/supabase/server";
+import { RELEVANCE_WINDOW_DAYS } from "@/lib/player-search";
 
 /**
  * Either public read client is acceptable here.
@@ -89,6 +90,8 @@ export type BriefSidebarData = {
 };
 
 export type ArticlePlayerLink = {
+  /** Carried so callers can ask whether the subject is currently ranked. */
+  id: string;
   slug: string;
   name: string;
   position: string | null;
@@ -520,7 +523,9 @@ export async function loadArticle(
   const [apRes, atRes] = await Promise.all([
     supabase
       .from("article_players")
-      .select("players(slug, full_name, first_name, last_name, position, team)")
+      .select(
+        "players(id, slug, full_name, first_name, last_name, position, team)",
+      )
       .eq("article_id", data.id),
     supabase
       .from("article_teams")
@@ -531,6 +536,7 @@ export async function loadArticle(
   const players: ArticlePlayerLink[] = (
     (apRes.data ?? []) as {
       players: {
+        id: string;
         slug: string;
         full_name: string | null;
         first_name: string | null;
@@ -543,6 +549,7 @@ export async function loadArticle(
     .map((r) => r.players)
     .filter((p): p is NonNullable<typeof p> => Boolean(p?.slug))
     .map((p) => ({
+      id: p.id,
       slug: p.slug,
       name: p.full_name ?? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),
       position: p.position,
@@ -576,6 +583,41 @@ export async function loadArticle(
     players,
     teams,
   };
+}
+
+/**
+ * Is any of these players currently ranked?
+ *
+ * The one input the indexability rule needs that an article row does not carry (see
+ * lib/beacon-brief/index-quality.ts). Membership in `rankings` inside the relevance
+ * window is this codebase's single definition of "fantasy relevant", shared with the
+ * player autocomplete and the sitemap's player section, so this asks the same question
+ * they do rather than inventing a second answer.
+ *
+ * One row is enough, so the query stops at the first hit. An empty list skips the
+ * round trip: an article about a coaching change has no players on it.
+ */
+export async function anyPlayerCurrentlyRanked(
+  supabase: ReaderClient,
+  playerIds: string[],
+): Promise<boolean> {
+  if (playerIds.length === 0) return false;
+  const cutoff = new Date(
+    Date.now() - RELEVANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const { data, error } = await supabase
+    .from("rankings")
+    .select("player_id")
+    .in("player_id", playerIds)
+    .gte("generated_at", cutoff)
+    .limit(1);
+  // A failed lookup must not silently noindex a good article, so an error reads as
+  // "yes, ranked": the floor only ever removes a page when we are sure it applies.
+  if (error) {
+    console.error("[brief] ranked-player check failed", error);
+    return true;
+  }
+  return (data?.length ?? 0) > 0;
 }
 
 /** Recent published articles in the same category, excluding the current one. */

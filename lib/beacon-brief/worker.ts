@@ -47,6 +47,7 @@ import {
   type PostSubject,
 } from "./followup";
 import { postAddsNewInformation } from "./merge";
+import { slugify } from "./slug";
 import {
   researchPrecheck,
   verdictAllowsSkip,
@@ -126,16 +127,6 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function isDiscordJob(jobType: string): boolean {
   return jobType === "discord_post" || jobType === "discord_patch";
-}
-
-function slugify(input: string): string {
-  return (
-    input
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "beacon-brief"
-  );
 }
 
 /**

@@ -36,7 +36,7 @@ export interface FantasyPlayerRow {
 // window. `rankings` is already a rolling recent table (earliest rows are only a
 // few weeks old), so this window mainly future-proofs the filter against the
 // table accumulating history: it never lets a long-dropped player linger.
-const RELEVANCE_WINDOW_DAYS = 90;
+export const RELEVANCE_WINDOW_DAYS = 90;
 
 // Name matches are filtered down to ranked players AFTER the DB fetch, so we
 // over-fetch to leave enough ranked rows to fill the caller's limit even when

@@ -243,6 +243,40 @@ const nextConfig: NextConfig = {
         destination: "/brief/peter-skoronski-extension-titans",
         permanent: true,
       },
+      // The three pairs the 2026-08 cleanup left behind, merged by hand in
+      // migration 0203. Same shape as the block above: the survivor carries every
+      // fact from both articles, so each retired slug is a move, not a deletion.
+      {
+        source: "/brief/peter-skoronski-titans-extension",
+        destination: "/brief/peter-skoronski-extension-titans",
+        permanent: true,
+      },
+      {
+        source: "/brief/jedrick-wills-first-team-lt-bears",
+        destination: "/brief/jedrick-wills-first-team-lt-bears-camp",
+        permanent: true,
+      },
+      // Ja'Kobi Lane's two URLs were also spelled wrong. The writer returned a
+      // slug containing U+043E, the Cyrillic small letter o, which is drawn like a
+      // Latin o and is not one, so the old slugify split the name in half at it.
+      // lib/beacon-brief/slug.ts folds lookalikes now; these move the two URLs
+      // that were already published. The Michael Thomas article is a separate
+      // story and was renamed rather than merged.
+      {
+        source: "/brief/jak-bi-lane-ravens-training-camp",
+        destination: "/brief/jakobi-lane-ravens-training-camp",
+        permanent: true,
+      },
+      {
+        source: "/brief/jakob-lane-ravens-training-camp",
+        destination: "/brief/jakobi-lane-ravens-training-camp",
+        permanent: true,
+      },
+      {
+        source: "/brief/jak-bi-lane-michael-thomas-comparison-ravens",
+        destination: "/brief/jakobi-lane-michael-thomas-comparison-ravens",
+        permanent: true,
+      },
       // Signal Scout's leaderboards moved off their own route and into a
       // sidebar on the game page itself, so the standalone page is gone. Old
       // bookmarks and any indexed links land on the game page, which now

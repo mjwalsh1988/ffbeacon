@@ -8,10 +8,12 @@ import { createCachedReadClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
 import { formatEastern } from "@/lib/datetime";
 import {
+  anyPlayerCurrentlyRanked,
   loadArticle,
   loadRelatedArticles,
   publishedArticleSlugs,
 } from "@/lib/beacon-brief-feed";
+import { isArticleIndexable } from "@/lib/beacon-brief/index-quality";
 import { ArticleMarkdown } from "@/components/beacon-brief/article-markdown";
 import {
   ArticleCard,
@@ -64,6 +66,28 @@ const getArticle = cache(async (slug: string) => {
   return loadArticle(supabase, slug);
 });
 
+/**
+ * Should search engines be told about this article?
+ *
+ * The rule and the reasoning live in lib/beacon-brief/index-quality.ts. This resolves
+ * the one input the article row does not carry, and is memoised for the same reason
+ * getArticle is: generateMetadata and the page component are two calls for one render.
+ *
+ * The sitemap applies the identical rule from its own bulk scan, so a page that is
+ * noindex here is also absent there. Those two disagreeing is the failure worth
+ * designing out: a sitemap that advertises a noindex URL teaches Google the whole file
+ * is unreliable.
+ */
+const getIsIndexable = cache(async (slug: string) => {
+  const article = await getArticle(slug);
+  if (!article) return false;
+  const hasRankedPlayer = await anyPlayerCurrentlyRanked(
+    createCachedReadClient(),
+    article.players.map((p) => p.id),
+  );
+  return isArticleIndexable({ contentMd: article.contentMd, hasRankedPlayer });
+});
+
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
@@ -77,6 +101,7 @@ export async function generateMetadata({
     article.tlDr?.trim() ||
     `${article.title} - fantasy football news from The Beacon Brief.`;
   const ogImage = `${SITE.url}/api/og/brief/${slug}`;
+  const indexable = await getIsIndexable(slug);
 
   return {
     // `absolute` opts out of the root layout's "%s | FF Beacon" template. The
@@ -98,11 +123,16 @@ export async function generateMetadata({
     },
     // Google needs max-image-preview:large to show a full-size thumbnail in
     // Discover and news surfaces, and -1 removes the snippet length cap.
+    //
+    // index is conditional: a thin article about nobody currently ranked is
+    // published, readable, and deliberately not advertised. follow stays true
+    // either way, so a crawler that lands on one still walks out to the player
+    // profiles it links.
     robots: {
-      index: true,
+      index: indexable,
       follow: true,
       googleBot: {
-        index: true,
+        index: indexable,
         follow: true,
         "max-image-preview": "large",
         "max-snippet": -1,
