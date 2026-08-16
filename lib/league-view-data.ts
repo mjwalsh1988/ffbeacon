@@ -356,7 +356,9 @@ function asStringArray(value: Json | null | undefined): string[] {
   return value.filter((v): v is string => typeof v === "string");
 }
 
-async function resolvePlayers(
+/** Sleeper player id → our player row. Exported so the share-card loader can
+ * resolve one roster's players without paying for the whole league. */
+export async function resolvePlayers(
   supabase: AnySupabase,
   sleeperIds: string[],
 ): Promise<Map<string, ResolvedPlayer>> {
@@ -395,7 +397,9 @@ async function resolvePlayers(
   return map;
 }
 
-async function loadTrends(
+/** Current value + 7d movement per player for one (format, source). Exported
+ * for the same reason `resolvePlayers` is. */
+export async function loadTrends(
   supabase: AnySupabase,
   playerIds: string[],
   formatConfigId: string,

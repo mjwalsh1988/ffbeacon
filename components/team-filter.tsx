@@ -23,6 +23,8 @@ export type TeamFilterProps = {
   /** Competitor / Mid Tier / Rebuilder, keyed by roster row id.
    * Empty before Power Pulse has run for the league. */
   statusByRoster?: Record<string, TeamStatus>;
+  /** Resolved value source, forwarded to each card's share image link. */
+  sourceSlug?: string | null;
 };
 
 /**
@@ -39,6 +41,7 @@ export function TeamFilter({
   focusedRosterId,
   valueIsBeacon = false,
   statusByRoster = {},
+  sourceSlug = null,
 }: TeamFilterProps) {
   const ownerRosterId = useMemo(
     () => resolveOwnerRosterId(teams, searchedUsername, focusedRosterId),
@@ -176,6 +179,7 @@ export function TeamFilter({
                 searchedUsername={searchedUsername}
                 valueIsBeacon={valueIsBeacon}
                 teamStatus={statusByRoster[t.rosterRowId] ?? null}
+                sourceSlug={sourceSlug}
               />
             </li>
           ))}

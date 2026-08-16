@@ -63,6 +63,10 @@ export function TransactionRow({
   const typeLabel = formatTypeLabel(data.type);
   const isTrade = data.type === "trade";
   const isComplete = (data.status ?? "").toLowerCase() === "complete";
+  const tradeSource = data.analysis?.context.sourceSlug ?? null;
+  const tradeImageHref = `/api/og/trade/${data.sleeperTransactionId}${
+    tradeSource ? `?source=${encodeURIComponent(tradeSource)}` : ""
+  }`;
 
   // Type-coloured top edge + a lifted surface. In a stacked feed the eye needs
   // an unambiguous "this is where the next one starts", and a plain hairline
@@ -117,11 +121,23 @@ export function TransactionRow({
             </time>
           )}
           {showShareLink && isTrade && (
-            <CopyLinkButton
-              href={`/leagues/${sleeperLeagueId}/transactions#tx-${data.sleeperTransactionId}`}
-              ariaLabel={`Copy link to this trade`}
-              size="sm"
-            />
+            <>
+              <CopyLinkButton
+                href={`/leagues/${sleeperLeagueId}/transactions#tx-${data.sleeperTransactionId}`}
+                ariaLabel={`Copy link to this trade`}
+                size="sm"
+              />
+              {/* The share image is pinned to the same source the analysis
+                  below was priced with, so the picture and the row agree. */}
+              <CopyLinkButton
+                href={tradeImageHref}
+                prewarmHref={tradeImageHref}
+                icon="image"
+                noun="Image link"
+                ariaLabel="Copy shareable image link for this trade"
+                size="sm"
+              />
+            </>
           )}
         </div>
       </header>

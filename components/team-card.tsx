@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { BeaconValue } from "@/components/beacon-value-icon";
+import { CopyLinkButton } from "@/components/copy-link-button";
 import { formatValue } from "@/lib/format-value";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { TeamStatusBadge } from "@/components/team-status-badge";
@@ -37,6 +38,9 @@ type TeamCardProps = {
    * Power Pulse has run for the league, and on pre-draft leagues where there
    * is nothing to judge yet. */
   teamStatus?: TeamStatus | null;
+  /** Resolved value source for the league view, pinned onto the share image
+   * URL so the image someone else opens shows the same numbers this card does. */
+  sourceSlug?: string | null;
 };
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE"] as const;
@@ -83,6 +87,7 @@ export function TeamCard({
   searchedUsername = null,
   valueIsBeacon = false,
   teamStatus = null,
+  sourceSlug = null,
 }: TeamCardProps) {
   const HeadingTag = headingLevel;
   const collapsible = typeof onToggleExpand === "function";
@@ -127,21 +132,34 @@ export function TeamCard({
   const headingId = `team-${sleeperRosterId}-heading`;
   const regionId = useId();
 
+  // The share image renders this exact roster: same source, same picks
+  // decision, so the picture matches the card it was copied from.
+  const shareImageHref = (() => {
+    const qs = new URLSearchParams();
+    if (sourceSlug) qs.set("source", sourceSlug);
+    if (!includePicks) qs.set("picks", "off");
+    const suffix = qs.toString();
+    return `/api/og/team/${sleeperLeagueId}/${sleeperRosterId}${suffix ? `?${suffix}` : ""}`;
+  })();
+
   // Shared segmented-strip styling for the two stat panels: a brighter outline
   // and a soft beacon glow so they read as focused, elevated units. Full width
-  // on mobile, content-sized inline on desktop.
+  // stacked below the identity until lg, content-sized inline from there.
+  // The switch waits for lg because at sm the identity column had so little
+  // room left that team names and owner handles both truncated to three
+  // characters.
   const statStrip =
-    "flex w-full items-stretch divide-x divide-line/70 overflow-hidden rounded-card border border-line-accent bg-base/70 shadow-[0_0_22px_-10px_rgba(168,85,247,0.6)] sm:inline-flex sm:w-auto";
+    "flex w-full items-stretch divide-x divide-line/70 overflow-hidden rounded-card border border-line-accent bg-base/70 shadow-[0_0_22px_-10px_rgba(168,85,247,0.6)] lg:inline-flex lg:w-auto";
 
   const HeaderInner = (
     <div className="relative flex w-full items-center gap-3 text-left">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-3">
         {/* Left: power-rank badge + team identity, vertically centered together.
             flex-1 so it grows and pushes the stat panels to the right on desktop.
-            On mobile it reserves room for the absolutely-positioned toggle. */}
+            Below lg it reserves room for the absolutely-positioned toggle. */}
         <div
           className={`flex min-w-0 flex-1 items-center gap-3 ${
-            collapsible ? "pr-9 sm:pr-0" : ""
+            collapsible ? "pr-9 lg:pr-0" : ""
           }`}
         >
           {displayOverallRank != null && (
@@ -181,10 +199,10 @@ export function TeamCard({
           </div>
         </div>
 
-        {/* Right: the two stat panels. Full width and stacked on mobile (they
+        {/* Right: the two stat panels. Full width and stacked below lg (they
             span the whole card since the toggle is floated out of flow);
-            content-sized inline on desktop, pushed right by the flex-1 identity. */}
-        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto sm:flex-nowrap">
+            content-sized inline from lg, pushed right by the flex-1 identity. */}
+        <div className="flex w-full flex-wrap items-center gap-2.5 lg:w-auto lg:flex-nowrap">
           {/* Record & performance. */}
           <dl aria-label="Record and performance" className={statStrip}>
             <StatCell
@@ -214,11 +232,11 @@ export function TeamCard({
       </div>
 
       {collapsible && (
-        // Floated to the top-right on mobile so the full-width stat panels below
-        // aren't shortened by it; back in the flow (centered) on desktop.
+        // Floated to the top-right below lg so the full-width stat panels below
+        // aren't shortened by it; back in the flow (centered) from lg.
         <span
           aria-hidden="true"
-          className={`absolute right-0 top-0 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-base text-ink-muted transition-transform sm:static ${
+          className={`absolute right-0 top-0 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-base text-ink-muted transition-transform lg:static ${
             expanded ? "rotate-180" : ""
           }`}
         >
@@ -234,8 +252,14 @@ export function TeamCard({
       id={`team-${sleeperRosterId}`}
       className="rounded-card border border-line bg-surface"
     >
-      {/* Header, becomes an expand/collapse button when the parent supplies onToggleExpand */}
-      <header className={collapsible ? "" : "border-b border-line p-4 sm:p-5"}>
+      {/* Header. The identity block becomes an expand/collapse button when the
+          parent supplies onToggleExpand; the share control sits beside it
+          rather than inside it, since a button cannot nest in a button. */}
+      <header
+        className={`flex items-start gap-1 ${
+          !collapsible || expanded ? "border-b border-line" : ""
+        }`}
+      >
         {collapsible ? (
           <button
             type="button"
@@ -243,15 +267,23 @@ export function TeamCard({
             aria-expanded={expanded}
             aria-controls={regionId}
             aria-label={`${expanded ? "Collapse" : "Expand"} ${teamName} roster`}
-            className={`w-full p-4 text-left text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:p-5 ${
-              expanded ? "border-b border-line" : "rounded-card"
-            }`}
+            className="min-w-0 flex-1 p-4 text-left text-ink focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan sm:p-5"
           >
             {HeaderInner}
           </button>
         ) : (
-          HeaderInner
+          <div className="min-w-0 flex-1 p-4 sm:p-5">{HeaderInner}</div>
         )}
+        <div className="shrink-0 p-4 pl-0 sm:p-5 sm:pl-0">
+          <CopyLinkButton
+            href={shareImageHref}
+            prewarmHref={shareImageHref}
+            icon="image"
+            noun="Image link"
+            size="sm"
+            ariaLabel={`Copy shareable image link for ${teamName}`}
+          />
+        </div>
       </header>
 
       {/* Roster + picks, single horizontal grid of columns. Hidden when collapsed. */}
@@ -512,10 +544,10 @@ function PicksColumn({
 }
 
 /** One label/value cell of the Record & performance segmented panel. Stretches
- *  to fill on mobile (flex-1) and sizes to content inline on desktop. */
+ *  to fill below lg (flex-1) and sizes to content inline from lg. */
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 sm:flex-none">
+    <div className="flex flex-1 flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 lg:flex-none">
       <dt className="text-[9px] font-bold uppercase tracking-wider text-ink-subtle">{label}</dt>
       <dd className="font-mono text-sm font-bold leading-none tabular-nums text-ink">{value}</dd>
     </div>
@@ -565,7 +597,7 @@ function RankTile({
   return (
     <li
       style={cellStyle}
-      className="flex flex-1 flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 sm:flex-none"
+      className="flex flex-1 flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 lg:flex-none"
       aria-label={`${label} rank ${rankFull}${ariaTier}${count != null ? `, ${count} ${countLabel}` : ""}`}
     >
       <span className="text-[9px] font-bold uppercase tracking-wider text-ink-subtle">

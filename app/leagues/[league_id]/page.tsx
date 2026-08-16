@@ -637,6 +637,7 @@ async function TeamsPanel({
         focusedRosterId={focusedRosterId}
         valueIsBeacon={sourceSlug === "ffbeacon"}
         statusByRoster={statusByRoster}
+        sourceSlug={sourceSlug}
       />
     </section>
   );

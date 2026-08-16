@@ -258,6 +258,7 @@ export default async function TeamDetailPage({
           headingLevel="h1"
           valueIsBeacon={effectiveSourceSlug === "ffbeacon"}
           teamStatus={teamStatus}
+          sourceSlug={effectiveSourceSlug}
         />
 
         {/* Head-to-head, with this league already attached. The Breakdown reads

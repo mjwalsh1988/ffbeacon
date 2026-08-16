@@ -470,6 +470,7 @@ async function TransactionsFeed({
                             week={row.week}
                             createdAtSleeper={row.createdAtSleeper}
                             status={row.status}
+                            sourceSlug={coverageOk ? context.sourceSlug : null}
                           />
                         ) : (
                           <TransactionRow

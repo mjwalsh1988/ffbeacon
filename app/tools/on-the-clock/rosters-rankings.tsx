@@ -14,7 +14,16 @@
  */
 
 import { useId, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Trophy,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
 import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
@@ -215,6 +224,7 @@ export function RostersRankings({
           team={myTeam}
           pulse={pulseById.get(myTeam.rosterId) ?? null}
           status={statusFor(myTeam.rosterId)}
+          teamCount={teams.length}
         />
       ) : (
         <ol role="list" className="space-y-3">
@@ -224,6 +234,7 @@ export function RostersRankings({
                 team={t}
                 pulse={pulseById.get(t.rosterId) ?? null}
                 status={statusFor(t.rosterId)}
+                teamCount={teams.length}
               />
             </li>
           ))}
@@ -237,12 +248,16 @@ function TeamRosterCard({
   team,
   pulse,
   status,
+  teamCount,
 }: {
   team: TeamRollup;
   pulse: DraftPulseTeam | null;
   status: TeamStatus | null;
+  /** Teams in the draft, so a rank reads "1st of 12" rather than a bare "1st". */
+  teamCount: number;
 }) {
   const headingId = `otc-team-${team.rosterId}`;
+  const ofCount = teamCount > 0 ? ` of ${teamCount}` : "";
   return (
     // Labelled BY the heading rather than with a written-out summary. The old
     // aria-label repeated the rank, the owner, the value, the Pulse, and the
@@ -254,85 +269,136 @@ function TeamRosterCard({
         team.isYou ? "border-brand-purple/60 ring-1 ring-inset ring-brand-purple/40" : "border-line"
       }`}
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line p-4">
-        <span
-          aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-purple/15 font-mono text-sm font-bold text-brand-purple"
-        >
-          {team.rank}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3
-            id={headingId}
-            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-semibold text-ink"
+      {/* Stacked on phones, one row from lg up. The four numbers used to sit as
+          loose right-aligned text that wrapped under the name on a narrow
+          screen and read as unlabelled figures floating in the card; they are
+          bordered tiles now, each with its own icon and label at every width. */}
+      <header className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center lg:gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span
+            aria-hidden="true"
+            className="mt-0.5 flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-card border border-brand-purple/40 bg-brand-purple/10 font-mono text-sm font-bold text-brand-purple"
           >
-            <span className="sr-only">Rank {team.rank}, </span>
-            <span className="truncate">{team.ownerName}</span>
+            {team.rank}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3
+              id={headingId}
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-semibold text-ink"
+            >
+              <span className="sr-only">Rank {team.rank}, </span>
+              <span className="truncate">{team.ownerName}</span>
+              {team.isYou && (
+                <span className="shrink-0 rounded-full border border-brand-purple/50 bg-brand-purple/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-purple">
+                  You
+                </span>
+              )}
+            </h3>
             {team.teamName && (
-              <span className="truncate text-xs font-normal text-ink-subtle">{team.teamName}</span>
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-subtle">
+                <UserRound aria-hidden="true" className="h-3 w-3 shrink-0" />
+                <span className="truncate">{team.teamName}</span>
+              </p>
             )}
-            {team.isYou && (
-              <span className="shrink-0 rounded-full border border-brand-purple/50 bg-brand-purple/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-purple">
-                You
-              </span>
+            {/* The archetype sits with the name rather than in a column, so it
+                survives the mobile stack without hiding anything. */}
+            {status && (
+              <p className="mt-1.5">
+                <span
+                  title={status.reason}
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    status.key === "competitor"
+                      ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
+                      : status.key === "rebuilder"
+                        ? "border-sky-400/50 bg-sky-400/10 text-sky-300"
+                        : "border-zinc-400/40 bg-zinc-400/10 text-zinc-300"
+                  }`}
+                >
+                  {status.label}
+                </span>
+                {/* The reason lives in a title attribute, which most screen
+                    readers never surface. It is the useful half of the chip. */}
+                <span className="sr-only">, {status.reason}</span>
+              </p>
             )}
-          </h3>
-          <p className="mt-0.5 text-xs text-ink-subtle">
-            {team.playerCount} drafted, {team.futurePicks.length} future pick
-            {team.futurePicks.length === 1 ? "" : "s"}
-          </p>
-          {/* The archetype sits with the name rather than in a column, so it
-              survives the mobile stack without hiding anything. */}
-          {status && (
-            <p className="mt-1">
-              <span
-                title={status.reason}
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                  status.key === "competitor"
-                    ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
-                    : status.key === "rebuilder"
-                      ? "border-sky-400/50 bg-sky-400/10 text-sky-300"
-                      : "border-zinc-400/40 bg-zinc-400/10 text-zinc-300"
-                }`}
-              >
-                {status.label}
-              </span>
-              {/* The reason lives in a title attribute, which most screen
-                  readers never surface. It is the useful half of the chip. */}
-              <span className="sr-only">, {status.reason}</span>
-            </p>
-          )}
-        </div>
-        {/* Both numbers, always. Sorting by one never removes the other. */}
-        <div className="flex shrink-0 items-start gap-4 text-right">
-          {pulse && (
-            <div>
-              <p className="font-mono text-lg font-bold tabular-nums text-brand-cyan">
-                {pulse.score}
-              </p>
-              <p className="text-[10px] uppercase tracking-wide text-ink-subtle">
-                Draft Pulse, {ordinalRank(pulse.rank)}
-              </p>
-              <p className="text-[10px] tabular-nums text-ink-subtle">
-                {pulse.meanStartingPoints.toFixed(1)} pts/wk
-              </p>
-            </div>
-          )}
-          <div>
-            <p className="font-mono text-lg font-bold tabular-nums text-ink">
-              {fmt(team.totalValue)}
-            </p>
-            <p className="text-[10px] uppercase tracking-wide text-ink-subtle">
-              FF Beacon value, {ordinalRank(team.rank)}
-            </p>
           </div>
         </div>
+
+        {/* Both numbers, always. Sorting by one never removes the other. */}
+        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:flex lg:shrink-0 lg:flex-wrap lg:justify-end">
+          <StatTile
+            icon={Trophy}
+            label="FF Beacon value"
+            value={fmt(team.totalValue)}
+            sub={`${ordinalRank(team.rank)}${ofCount}`}
+          />
+          {pulse && (
+            <StatTile
+              icon={Activity}
+              label="Draft Pulse"
+              value={String(pulse.score)}
+              sub={`${ordinalRank(pulse.rank)}${ofCount}, ${pulse.meanStartingPoints.toFixed(1)} pts/wk`}
+              tone="cyan"
+            />
+          )}
+          <StatTile icon={Users} label="Drafted" value={String(team.playerCount)} />
+          <StatTile
+            icon={Layers}
+            label={`Future pick${team.futurePicks.length === 1 ? "" : "s"}`}
+            value={String(team.futurePicks.length)}
+          />
+        </dl>
       </header>
 
       <div className="p-4">
         <TeamPositionGrid team={team} />
       </div>
     </article>
+  );
+}
+
+/**
+ * One labelled figure from the roster card header: icon, what the number is,
+ * the number, and an optional qualifier under it. Sized so two sit side by side
+ * on a phone and all four line up in a row from lg.
+ */
+function StatTile({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone = "ink",
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "ink" | "cyan";
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-card border border-line bg-base/70 px-2.5 py-2 lg:min-w-[7rem]">
+      <Icon
+        aria-hidden="true"
+        className={`h-4 w-4 shrink-0 ${tone === "cyan" ? "text-brand-cyan" : "text-ink-subtle"}`}
+      />
+      <div className="min-w-0">
+        <dt className="truncate text-[9px] font-bold uppercase tracking-wider text-ink-subtle">
+          {label}
+        </dt>
+        <dd
+          className={`font-mono text-base font-bold leading-none tabular-nums ${
+            tone === "cyan" ? "text-brand-cyan" : "text-ink"
+          }`}
+        >
+          {value}
+          {sub && (
+            <span className="mt-1 block truncate font-sans text-[10px] font-normal leading-none tracking-wide text-ink-subtle">
+              {sub}
+            </span>
+          )}
+        </dd>
+      </div>
+    </div>
   );
 }
 

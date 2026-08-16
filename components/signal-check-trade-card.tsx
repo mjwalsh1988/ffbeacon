@@ -42,6 +42,7 @@ export function SignalCheckTradeCard({
   week,
   createdAtSleeper,
   status,
+  sourceSlug = null,
 }: {
   view: BuilderView;
   assetMeta: Record<SideKey, LeagueTradeAssetMeta[]>;
@@ -50,10 +51,16 @@ export function SignalCheckTradeCard({
   week: number | null;
   createdAtSleeper: string | null;
   status: string | null;
+  /** Resolved value source, pinned onto the share image so the picture is
+   * priced the same way this card is. */
+  sourceSlug?: string | null;
 }) {
   const totalA = view.sides.find((s) => s.side === "a")?.total ?? null;
   const totalB = view.sides.find((s) => s.side === "b")?.total ?? null;
   const isComplete = (status ?? "").toLowerCase() === "complete";
+  const tradeImageHref = `/api/og/trade/${sleeperTransactionId}${
+    sourceSlug ? `?source=${encodeURIComponent(sourceSlug)}` : ""
+  }`;
 
   return (
     <article
@@ -92,6 +99,14 @@ export function SignalCheckTradeCard({
             <CopyLinkButton
               href={`/leagues/${sleeperLeagueId}/transactions#tx-${sleeperTransactionId}`}
               ariaLabel="Copy link to this trade"
+              size="xs"
+            />
+            <CopyLinkButton
+              href={tradeImageHref}
+              prewarmHref={tradeImageHref}
+              icon="image"
+              noun="Image link"
+              ariaLabel="Copy shareable image link for this trade"
               size="xs"
             />
           </div>

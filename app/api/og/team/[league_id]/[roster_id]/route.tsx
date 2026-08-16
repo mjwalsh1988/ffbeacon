@@ -1,7 +1,11 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
-import { loadLeagueTeamCards } from "@/lib/league-view-data";
+import {
+  loadTeamShareCard,
+  type ShareCardPick,
+  type ShareCardPositionGroup,
+} from "@/lib/league-share-card";
 import type { SleeperLeague } from "@/lib/sleeper";
 
 export const runtime = "nodejs";
@@ -15,13 +19,44 @@ const INK_SUBTLE = "#6B6B7D";
 const PURPLE = "#A855F7";
 const CYAN = "#22D3EE";
 const LINE = "#1F1F33";
+const PANEL = "#0B0B14";
+
+/** Same hues the roster columns use on the site (tailwind.config.ts `position.*`). */
+const POSITION_COLOR: Record<string, string> = {
+  QB: "#F87171",
+  RB: "#34D399",
+  WR: "#60A5FA",
+  TE: "#FBBF24",
+};
+
+/**
+ * Lines a column has room for at 630px tall. A column that needs more than
+ * this spends its last line on "+N more" instead of a name, so nothing ever
+ * runs past the bottom edge of the image.
+ */
+const MAX_LINES = 12;
+
+/** Split a list into what fits and what gets counted in the "+N more" line. */
+function fitRows<T>(rows: T[]): { visible: T[]; hidden: number } {
+  if (rows.length <= MAX_LINES) return { visible: rows, hidden: 0 };
+  const visible = rows.slice(0, MAX_LINES - 1);
+  return { visible, hidden: rows.length - visible.length };
+}
 
 /**
  * GET /api/og/team/[league_id]/[roster_id]
  *
- * 1200x630 OG image for a team summary. Renders team name, owner record,
- * total roster value (using league-contextual format resolution), and
- * the top 5 most valuable players.
+ * 1200x630 share image for one team, laid out like the expanded roster card on
+ * the site: a header with the team's identity and value split, then horizontal
+ * position groups (QB / RB / WR / TE) plus a picks column. Starters carry the
+ * same ST marker the site uses, and picks keep their ownership attribution.
+ *
+ * Query params:
+ *   ?source=<slug>  override the value source (defaults to the league's own)
+ *   ?picks=off      price and rank the team on players only
+ *
+ * Format is always derived from the league's Sleeper settings, never from the
+ * viewer's global format toggle (CLAUDE.md, League Pulse Format Resolution).
  */
 export async function GET(
   request: Request,
@@ -30,6 +65,7 @@ export async function GET(
   const { league_id: sleeperLeagueId, roster_id } = await params;
   const url = new URL(request.url);
   const sourceParam = url.searchParams.get("source");
+  const picksParam = url.searchParams.get("picks");
   const sleeperRosterId = Number.parseInt(roster_id, 10);
 
   if (!sleeperLeagueId || sleeperLeagueId.length > 64 || !Number.isFinite(sleeperRosterId)) {
@@ -51,28 +87,27 @@ export async function GET(
     return notFoundImage("No value data available for this league");
   }
 
-  const teams = await loadLeagueTeamCards(
+  // Picks only carry value in dynasty, matching the toggle on the team page.
+  const includePicks =
+    context.derived.league_type === "dynasty" && picksParam !== "off";
+
+  const team = await loadTeamShareCard(
     supabase,
     league.id,
+    sleeperRosterId,
     context.formatConfigId,
     context.sourceSlug,
     league.season != null ? String(league.season) : null,
     league.status ?? null,
+    includePicks,
   );
-  const team = teams.find((t) => t.sleeperRosterId === sleeperRosterId);
   if (!team) return notFoundImage("Team not found");
 
-  const cacheRow = team.cacheRow;
-  const totalValue = cacheRow ? Number(cacheRow.total_value) : 0;
-  const starterValue = cacheRow ? Number(cacheRow.starter_value) : 0;
-  const benchValue = cacheRow ? Number(cacheRow.bench_value) : 0;
-  const picksValue = cacheRow ? Number(cacheRow.picks_value) : 0;
-
-  // Top 5 players by trend current_value
-  const playersWithValue = team.players
-    .map((p) => ({ ...p, value: team.trends[p.id]?.current_value ?? 0 }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 5);
+  const columnCount = includePicks ? 5 : 4;
+  const recordLabel = `${team.record.wins}-${team.record.losses}${
+    team.record.ties > 0 ? `-${team.record.ties}` : ""
+  }`;
+  const ofCount = team.teamCount > 0 ? ` of ${team.teamCount}` : "";
 
   return new ImageResponse(
     (
@@ -85,7 +120,7 @@ export async function GET(
           background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
           color: INK,
           fontFamily: "sans-serif",
-          padding: 64,
+          padding: "36px 40px 28px 40px",
           position: "relative",
         }}
       >
@@ -101,132 +136,131 @@ export async function GET(
           }}
         />
 
-        {/* Brand wordmark */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
-          />
-          <p style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>FF Beacon</p>
-        </div>
-
-        <p
-          style={{
-            fontSize: 18,
-            color: CYAN,
-            margin: 0,
-            textTransform: "uppercase",
-            letterSpacing: 3,
-            fontWeight: 600,
-          }}
-        >
-          {clip(league.name, 50)}
-        </p>
-        <h1
-          style={{
-            fontSize: 64,
-            fontWeight: 700,
-            letterSpacing: -1.5,
-            margin: "12px 0",
-            lineHeight: 1.05,
-          }}
-        >
-          {clip(team.teamName, 30)}
-        </h1>
-        <p style={{ fontSize: 22, color: INK_MUTED, margin: 0 }}>
-          {team.ownerSleeperUsername ? `@${team.ownerSleeperUsername}` : ""}
-          {team.ownerSleeperUsername ? ", " : ""}
-          {team.record.wins}-{team.record.losses}
-          {team.record.ties > 0 ? `-${team.record.ties}` : ""}, {context.formatDisplay}
-        </p>
-
-        {/* Value tiles */}
+        {/* Brand + league */}
         <div
           style={{
             display: "flex",
-            gap: 16,
-            marginTop: 32,
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 14,
           }}
         >
-          <ValueTile label="Total" value={totalValue} accent />
-          <ValueTile label="Starters" value={starterValue} />
-          <ValueTile label="Bench" value={benchValue} />
-          <ValueTile label="Picks" value={picksValue} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 8,
+                background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
+              }}
+            />
+            <p style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+          </div>
+          <p style={{ fontSize: 15, color: INK_MUTED, margin: 0 }}>
+            {clip(league.name, 42)}
+            {league.season != null ? `, ${league.season}` : ""}
+          </p>
         </div>
 
-        {/* Top 5 players */}
-        {playersWithValue.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 32 }}>
-            <p
-              style={{
-                fontSize: 16,
-                color: INK_SUBTLE,
-                margin: 0,
-                textTransform: "uppercase",
-                letterSpacing: 3,
-                fontWeight: 600,
-              }}
-            >
-              Top 5 by value
-            </p>
-            {playersWithValue.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  border: `1px solid ${LINE}`,
-                  background: "rgba(34, 211, 238, 0.05)",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 16,
-                    color: CYAN,
-                    margin: 0,
-                    fontWeight: 700,
-                    minWidth: 50,
-                  }}
-                >
-                  {p.position}
-                </p>
-                <p style={{ fontSize: 22, color: INK, margin: 0, flex: 1 }}>
-                  {clip(p.full_name, 30)}
-                </p>
-                <p
-                  style={{
-                    fontSize: 20,
-                    color: INK_MUTED,
-                    margin: 0,
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {formatNumber(p.value)}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <p
+        {/* Identity + value split */}
+        <div
           style={{
-            position: "absolute",
-            bottom: 32,
-            right: 64,
-            fontSize: 18,
-            color: INK_SUBTLE,
-            margin: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            paddingBottom: 16,
+            borderBottom: `1px solid ${LINE}`,
           }}
         >
-          ffbeacon.com
-        </p>
+          {team.overallRank != null && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 62,
+                height: 62,
+                borderRadius: 14,
+                border: `1px solid rgba(168, 85, 247, 0.45)`,
+                background: "rgba(168, 85, 247, 0.10)",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 9,
+                  margin: 0,
+                  letterSpacing: 2,
+                  color: "rgba(168, 85, 247, 0.75)",
+                  fontWeight: 700,
+                }}
+              >
+                RANK
+              </p>
+              <p
+                style={{
+                  fontSize: 28,
+                  margin: 0,
+                  fontWeight: 700,
+                  color: PURPLE,
+                  fontFamily: "monospace",
+                }}
+              >
+                {team.overallRank}
+              </p>
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 38, fontWeight: 700, letterSpacing: -0.8, margin: 0 }}>
+              {clip(team.teamName, 26)}
+            </p>
+            <p style={{ fontSize: 16, color: INK_MUTED, margin: "6px 0 0 0" }}>
+              {team.ownerHandle ? `@${clip(team.ownerHandle, 20)}, ` : ""}
+              {recordLabel}
+              {team.overallRank != null ? `, ${ordinal(team.overallRank)}${ofCount}` : ""}
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <ValueTile label="Total" value={team.totalValue} accent />
+            <ValueTile label="Starters" value={team.starterValue} />
+            <ValueTile label="Bench" value={team.benchValue} />
+            {includePicks && <ValueTile label="Picks" value={team.picksValue} />}
+          </div>
+        </div>
+
+        {/* Position groups, laid out the way the expanded roster card is */}
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flex: 1 }}>
+          {team.positions.map((group) => (
+            <PositionColumn
+              key={group.position}
+              group={group}
+              teamCount={team.teamCount}
+              width={`${100 / columnCount}%`}
+            />
+          ))}
+          {includePicks && (
+            <PicksColumn picks={team.picks} width={`${100 / columnCount}%`} />
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: 12,
+          }}
+        >
+          <p style={{ fontSize: 13, color: INK_SUBTLE, margin: 0 }}>
+            Values via {context.sourceDisplay}, {context.formatDisplay}
+            {context.pickSource && context.pickSource.slug !== context.sourceSlug
+              ? `, picks via ${context.pickSource.display}`
+              : ""}
+          </p>
+          <p style={{ fontSize: 15, color: INK_SUBTLE, margin: 0 }}>ffbeacon.com</p>
+        </div>
       </div>
     ),
     {
@@ -235,6 +269,249 @@ export async function GET(
         "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
       },
     },
+  );
+}
+
+function PositionColumn({
+  group,
+  teamCount,
+  width,
+}: {
+  group: ShareCardPositionGroup;
+  teamCount: number;
+  width: string;
+}) {
+  const color = POSITION_COLOR[group.position] ?? INK_MUTED;
+  const { visible, hidden } = fitRows(group.players);
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width,
+        borderRadius: 12,
+        border: `1px solid ${LINE}`,
+        borderTop: `2px solid ${color}`,
+        background: PANEL,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "7px 9px",
+          borderBottom: `1px solid ${LINE}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <p
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 1.4,
+              margin: 0,
+              color,
+              padding: "2px 5px",
+              borderRadius: 5,
+              background: `${color}26`,
+            }}
+          >
+            {group.position}
+          </p>
+          <p style={{ fontSize: 10, color: INK_SUBTLE, margin: 0, fontFamily: "monospace" }}>
+            {group.rank != null ? `${ordinal(group.rank)} of ${teamCount}` : "-"}
+          </p>
+        </div>
+        <p
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: INK,
+            margin: 0,
+            fontFamily: "monospace",
+          }}
+        >
+          {formatNumber(group.value)}
+        </p>
+      </div>
+
+      {visible.length === 0 ? (
+        <p style={{ fontSize: 11, color: INK_SUBTLE, margin: 0, padding: "9px" }}>
+          No {group.position}s
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {visible.map((p, i) => (
+            <div
+              key={`${group.position}-${i}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderTop: i === 0 ? "none" : `1px solid rgba(31, 31, 51, 0.6)`,
+              }}
+            >
+              {/* Starter marker, the same ST chip the roster card uses. */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 17,
+                  height: 13,
+                  borderRadius: 4,
+                  background: p.starter ? "rgba(34, 211, 238, 0.20)" : "transparent",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 700,
+                    letterSpacing: 0.6,
+                    margin: 0,
+                    color: p.starter ? CYAN : "transparent",
+                  }}
+                >
+                  ST
+                </p>
+              </div>
+              <p style={{ fontSize: 13, color: INK, margin: 0, flex: 1 }}>
+                {clip(p.name, 15)}
+              </p>
+              <p style={{ fontSize: 9, color: INK_SUBTLE, margin: 0 }}>
+                {p.team ?? "FA"}
+              </p>
+              <p
+                style={{
+                  fontSize: 11,
+                  color: INK_MUTED,
+                  margin: 0,
+                  fontFamily: "monospace",
+                }}
+              >
+                {formatNumber(p.value)}
+              </p>
+            </div>
+          ))}
+          {hidden > 0 && (
+            <p
+              style={{
+                fontSize: 10,
+                color: INK_SUBTLE,
+                margin: 0,
+                padding: "4px 9px",
+                borderTop: `1px solid rgba(31, 31, 51, 0.6)`,
+              }}
+            >
+              +{hidden} more
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PicksColumn({ picks, width }: { picks: ShareCardPick[]; width: string }) {
+  const { visible, hidden } = fitRows(picks);
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width,
+        borderRadius: 12,
+        border: `1px solid ${LINE}`,
+        borderTop: `2px solid ${INK_SUBTLE}`,
+        background: PANEL,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "7px 9px",
+          borderBottom: `1px solid ${LINE}`,
+        }}
+      >
+        <p
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: 1.4,
+            margin: 0,
+            color: INK,
+            padding: "2px 5px",
+            borderRadius: 5,
+            background: "rgba(244, 244, 248, 0.10)",
+          }}
+        >
+          PICKS
+        </p>
+        <p style={{ fontSize: 10, color: INK_SUBTLE, margin: 0, fontFamily: "monospace" }}>
+          {picks.length} pick{picks.length === 1 ? "" : "s"}
+        </p>
+      </div>
+
+      {visible.length === 0 ? (
+        <p style={{ fontSize: 11, color: INK_SUBTLE, margin: 0, padding: "9px" }}>No picks</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {visible.map((p, i) => (
+            <div
+              key={`pick-${i}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 9px",
+                borderTop: i === 0 ? "none" : `1px solid rgba(31, 31, 51, 0.6)`,
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 12,
+                  color: INK,
+                  margin: 0,
+                  fontFamily: "monospace",
+                  fontWeight: 600,
+                }}
+              >
+                {p.label}
+              </p>
+              <p
+                style={{
+                  fontSize: 9,
+                  color: p.isOwn ? INK_SUBTLE : CYAN,
+                  margin: 0,
+                  marginLeft: "auto",
+                }}
+              >
+                {clip(p.attribution, 16)}
+              </p>
+            </div>
+          ))}
+          {hidden > 0 && (
+            <p
+              style={{
+                fontSize: 10,
+                color: INK_SUBTLE,
+                margin: 0,
+                padding: "4px 9px",
+                borderTop: `1px solid rgba(31, 31, 51, 0.6)`,
+              }}
+            >
+              +{hidden} more
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -252,30 +529,30 @@ function ValueTile({
       style={{
         display: "flex",
         flexDirection: "column",
-        padding: "16px 20px",
-        borderRadius: 12,
+        padding: "8px 12px",
+        borderRadius: 10,
         border: `1px solid ${accent ? PURPLE : LINE}`,
         background: accent ? "rgba(168, 85, 247, 0.08)" : "rgba(255, 255, 255, 0.02)",
-        flex: 1,
+        minWidth: 96,
       }}
     >
       <p
         style={{
-          fontSize: 14,
+          fontSize: 10,
           color: INK_SUBTLE,
           margin: 0,
-          textTransform: "uppercase",
-          letterSpacing: 2,
+          letterSpacing: 1.6,
+          fontWeight: 700,
         }}
       >
-        {label}
+        {label.toUpperCase()}
       </p>
       <p
         style={{
-          fontSize: 36,
+          fontSize: 22,
           fontWeight: 700,
           color: INK,
-          margin: "4px 0 0 0",
+          margin: "5px 0 0 0",
           fontFamily: "monospace",
         }}
       >
@@ -316,4 +593,14 @@ function clip(s: string, n: number): string {
 
 function formatNumber(n: number): string {
   return Math.round(n).toLocaleString();
+}
+
+function ordinal(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  if (mod10 === 1) return `${n}st`;
+  if (mod10 === 2) return `${n}nd`;
+  if (mod10 === 3) return `${n}rd`;
+  return `${n}th`;
 }
