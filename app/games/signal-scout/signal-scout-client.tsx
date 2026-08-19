@@ -17,7 +17,7 @@
  * follow-up tasks that replace each remaining stub.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertTriangle, Crosshair, OctagonX, Radar } from "lucide-react";
 import type {
@@ -26,7 +26,6 @@ import type {
   CompletedStatus,
   SignalScoutStreaks,
 } from "@/lib/signal-scout/round-engine";
-import { MyStatsPanel } from "./my-stats-panel";
 import type { SignalTierKey } from "@/lib/signal-scout/scoring";
 import {
   startRound as requestStartRound,
@@ -39,6 +38,8 @@ import {
 import { applyRoundOutcomeToStreaks, currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { SignalScoutStatusBar } from "./status-bar";
 import { MysteryProfileCard } from "./mystery-profile-card";
+import { MissionHeader } from "./mission-header";
+import { ScoutSectionHead } from "./scout-section-head";
 import { ClueGrid, TIER_DISPLAY_NAMES } from "./clue-grid";
 import { HintControls } from "./hint-controls";
 import { GuessCombobox } from "./guess-combobox";
@@ -78,13 +79,18 @@ export interface MyScoutStats {
 }
 
 export interface SignalScoutClientProps {
+  /**
+   * The page masthead, rendered by the server and handed in as a slot.
+   *
+   * It shows before a round and while the game is unavailable, and it goes
+   * away the moment a round is live: mid-round, a headline explaining what
+   * Signal Scout is sits between the player and a running clock. Same call
+   * On The Clock makes with the draft room's hero.
+   */
+  masthead: ReactNode;
   initialRound: ActiveRoundDto | null;
   isAuthenticated: boolean;
   initialStreaks: SignalScoutStreaks | null;
-  // Server-resolved My Scout Record data. Null for guests and for logged-in
-  // users with no signal_scout_user_stats row yet (their first completed
-  // round seeds it). The idle-phase panel does not render at all when null.
-  myStats: MyScoutStats | null;
   guestRoundsRemaining: number | null;
   guestPlayEnabled: boolean;
   guestDailyLimit: number;
@@ -105,10 +111,10 @@ export interface SignalScoutClientProps {
 }
 
 export function SignalScoutClient({
+  masthead,
   initialRound,
   isAuthenticated,
   initialStreaks,
-  myStats,
   guestRoundsRemaining,
   guestPlayEnabled,
   guestDailyLimit,
@@ -482,11 +488,28 @@ export function SignalScoutClient({
     setGuessError(result.message);
   }, [activeRound, guessPending, skipPending, isAuthenticated, applyGuestStreakOutcome, announce]);
 
+  // Before a round, and when there is no round to be had. Once one is live the
+  // masthead steps aside, and it stays aside through the reveal so the result
+  // is what fills the screen.
+  const showMasthead =
+    phase === "idle" || phase === "guest_limit" || phase === "offline";
+
   return (
     <div className="space-y-6">
       <div aria-live="polite" role="status" className="sr-only">
         {announcement}
       </div>
+
+      {showMasthead && masthead}
+      {/* The masthead carries the page h1 before a round. Once it steps aside
+          the mission header takes both its place and its h1, so the page always
+          has exactly one, and the heading below names the game itself at both
+          times, which is what keeps the round's own headings from skipping a
+          level. */}
+      {!showMasthead && (
+        <MissionHeader variant={phase === "completed" ? "complete" : "active"} />
+      )}
+      <h2 className="sr-only">Play Signal Scout</h2>
 
       <SignalScoutStatusBar
         score={round ? round.score : null}
@@ -572,44 +595,19 @@ export function SignalScoutClient({
             </div>
           </div>
 
-          {myStats && <MyStatsPanel stats={myStats} />}
         </div>
       )}
 
+      {/* No panel around the round any more. Every section inside it now
+          carries its own bordered, toned surface with its own header, and
+          wrapping the set in one more bordered surface put a box inside a box
+          inside a box. It also means the guess combobox's listbox can no longer
+          be clipped by an ancestor's overflow-hidden. */}
       {phase === "active" && activeRound && (
-        <div
-          className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
-          style={{
-            backgroundImage:
-              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
-          }}
-        >
-          <span
-            aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-px"
-            style={{
-              backgroundImage:
-                "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-            }}
-          />
-          <div className="flex items-center gap-3">
-            <span
-              aria-hidden="true"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-base text-brand-cyan"
-            >
-              <Radar className="h-5 w-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-                Active round
-              </p>
-              <h3 className="text-lg font-semibold tracking-tight text-ink sm:text-xl">Scouting file</h3>
-            </div>
-          </div>
+        <div>
+          <h3 className="sr-only">Active round</h3>
 
-          <div className="mt-6">
-            <MysteryProfileCard />
-          </div>
+          <MysteryProfileCard />
 
           <ClueGrid clues={activeRound.revealedClues} newestClueKey={newestClueKey} highlight />
 
@@ -654,17 +652,13 @@ export function SignalScoutClient({
                 "radial-gradient(ellipse at 50% 118%, rgba(168, 85, 247, 0.30) 0%, rgba(168, 85, 247, 0.12) 42%, transparent 72%)",
             }}
           >
-            <div className="flex items-center gap-2.5">
-              <span
-                aria-hidden="true"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card border border-brand-purple/50 bg-base text-brand-purple"
-              >
-                <Crosshair className="h-4 w-4" />
-              </span>
-              <h4 id="signal-scout-answer-heading" className="text-sm font-semibold text-ink">
-                Make the call
-              </h4>
-            </div>
+            <ScoutSectionHead
+              icon={Crosshair}
+              eyebrow="Name them"
+              title="Make the call"
+              id="signal-scout-answer-heading"
+              tone="purple"
+            />
 
             {guessError && (
               <div

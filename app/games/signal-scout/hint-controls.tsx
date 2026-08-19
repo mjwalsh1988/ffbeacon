@@ -13,9 +13,10 @@
  * either raw count.
  */
 
-import { Flame } from "lucide-react";
+import { Flame, Zap } from "lucide-react";
 import type { SignalTierKey } from "@/lib/signal-scout/scoring";
 import { TIER_DISPLAY_NAMES } from "./clue-grid";
+import { ScoutSectionHead } from "./scout-section-head";
 
 const TIER_ORDER: SignalTierKey[] = ["weak", "clear", "ping", "scan"];
 
@@ -29,12 +30,53 @@ export interface HintControlsProps {
   onBuy: (tier: SignalTierKey) => void;
 }
 
+/**
+ * A tier button reads as a button rather than a bordered paragraph: the tier
+ * name is set in the same heavy uppercase the site uses for headings, the cost
+ * and the signals left sit under it as supporting text, and it is tall enough
+ * (5rem) to be an obvious target.
+ *
+ * It is FILLED rather than outlined. The beacon gradient runs across the face,
+ * lit from the top-left, with a soft inner highlight and a drop shadow so it
+ * sits above the panel instead of being a hole cut in it. The label is black on
+ * that fill, the same call the site's primary buttons make (bg-beacon, black
+ * text), which is also what keeps the contrast comfortable on the cyan end.
+ *
+ * The rim runs the SAME gradient BACKWARDS, cyan where the face is purple and
+ * purple where the face is cyan. Two gradients agreeing would have read as one
+ * flat shape; two disagreeing give the edge somewhere to be, which is what makes
+ * the button look raised. It is drawn as a two-layer background rather than a
+ * border-color, because a border cannot take a gradient on its own: the face is
+ * clipped to the padding box, the rim to the border box, and the transparent
+ * 2px border is the gap between them.
+ *
+ * The burn-warning state keeps its own amber fill: it is a warning first, and
+ * the gradient would have made the most dangerous button on the screen look
+ * like every other one.
+ */
+const TIER_BUTTON_BASE =
+  "relative flex min-h-[5rem] w-full flex-col justify-between gap-2 overflow-hidden rounded-card border-2 px-3 py-3 text-left shadow-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-60 motion-safe:transition-transform enabled:motion-safe:hover:-translate-y-0.5";
+
 function tierButtonClasses(warning: boolean) {
-  const base =
-    "flex min-h-11 w-full flex-col items-start gap-1 rounded-card border px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-60";
   return warning
-    ? `${base} border-signal-warning/60 text-signal-warning hover:border-signal-warning`
-    : `${base} border-line bg-surface text-ink hover:border-brand-cyan/60 hover:text-brand-cyan`;
+    ? `${TIER_BUTTON_BASE} border-signal-warning/70 bg-signal-warning/15 text-signal-warning shadow-signal-warning/10 hover:border-signal-warning hover:bg-signal-warning/25`
+    : `${TIER_BUTTON_BASE} border-transparent text-black shadow-brand-purple/30 enabled:hover:brightness-110`;
+}
+
+/** The filled face plus the reversed rim. Omitted on the warning state, which
+ *  paints its own flat amber. */
+function tierButtonStyle(warning: boolean): React.CSSProperties | undefined {
+  if (warning) return undefined;
+  return {
+    backgroundImage: [
+      // Face, clipped to the padding box.
+      "linear-gradient(135deg, #A855F7 0%, #8B5CF6 38%, #22D3EE 100%)",
+      // Rim, clipped to the border box, running the other way.
+      "linear-gradient(135deg, #22D3EE 0%, #67E8F9 32%, #C084FC 72%, #A855F7 100%)",
+    ].join(", "),
+    backgroundOrigin: "border-box",
+    backgroundClip: "padding-box, border-box",
+  };
 }
 
 export function HintControls({
@@ -47,11 +89,30 @@ export function HintControls({
   onBuy,
 }: HintControlsProps) {
   return (
-    <section aria-labelledby="hint-controls-heading" className="mt-6">
-      <h4 id="hint-controls-heading" className="text-sm font-semibold text-ink">
-        Buy a hint
-      </h4>
-      <ul role="list" className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    <section
+      aria-labelledby="hint-controls-heading"
+      className="relative mt-6 overflow-hidden rounded-modal border border-brand-purple/40 p-4 shadow-[0_0_70px_-38px_rgba(168,85,247,0.95)] sm:p-5"
+      style={{
+        backgroundImage:
+          "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.16) 0%, transparent 58%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px"
+        style={{
+          backgroundImage:
+            "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+        }}
+      />
+      <ScoutSectionHead
+        icon={Zap}
+        eyebrow="Spend score"
+        title="Buy a hint"
+        id="hint-controls-heading"
+        tone="purple"
+      />
+      <ul role="list" className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
         {TIER_ORDER.map((tier) => {
           const tierName = TIER_DISPLAY_NAMES[tier];
           const cost = tierCosts[tier];
@@ -121,27 +182,61 @@ export function HintControls({
                 aria-busy={isPending}
                 aria-label={ariaLabel}
                 className={tierButtonClasses(isBurnWarning)}
+                style={tierButtonStyle(isBurnWarning)}
               >
-                <span className="flex w-full items-center justify-between gap-2">
-                  <span className="text-sm font-semibold">{tierName}</span>
-                  {isBurnWarning && <Flame aria-hidden="true" className="h-4 w-4 shrink-0" />}
+                {/* Inner highlight along the top edge, so the face reads as
+                    raised rather than flat. Decorative. */}
+                {!isBurnWarning && (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 top-0 h-1/2"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, transparent 100%)",
+                    }}
+                  />
+                )}
+                <span className="relative flex w-full items-start justify-between gap-2">
+                  {/* The tier name is the button's label, set the way the site
+                      sets a heading: heavy, uppercase, tracked out. */}
+                  <span className="text-sm font-extrabold uppercase leading-tight tracking-[0.08em] sm:text-base">
+                    {tierName}
+                  </span>
+                  {isBurnWarning && <Flame aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />}
                 </span>
-                {/* Wraps rather than squeezing: at the 4-across desktop
-                    layout these two barely share a line, so they drop to
-                    stacked lines instead of colliding. */}
-                <span className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                  <span className="font-mono text-xs tabular-nums text-ink-subtle">{cost} pts</span>
-                  <span className="text-[10px] text-ink-subtle">{signalsLeftText}</span>
+                {/* Cost and what is left, as supporting text under the label.
+                    Wraps rather than squeezing: at the four-across layout these
+                    two barely share a line. */}
+                <span className="relative flex w-full flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                  <span className="font-mono text-sm font-bold tabular-nums">
+                    {cost}
+                    <span
+                      className={`ml-1 font-sans text-[10px] font-semibold uppercase tracking-wide ${
+                        isBurnWarning ? "text-ink-subtle" : "text-black/70"
+                      }`}
+                    >
+                      pts
+                    </span>
+                  </span>
+                  <span
+                    className={`text-[11px] ${
+                      isBurnWarning ? "text-ink-subtle" : "text-black/70"
+                    }`}
+                  >
+                    {signalsLeftText}
+                  </span>
                 </span>
                 {statusLine && (
-                  <span className="text-xs font-semibold uppercase tracking-wide">{statusLine}</span>
+                  <span className="relative text-[11px] font-semibold uppercase tracking-wide">
+                    {statusLine}
+                  </span>
                 )}
               </button>
             </li>
           );
         })}
       </ul>
-      <p className="mt-2 text-xs text-ink-subtle">
+      <p className="mt-3 text-xs text-ink-subtle">
         Every hint costs score. Overreach and the signal burns out.
       </p>
     </section>

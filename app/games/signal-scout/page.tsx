@@ -25,6 +25,7 @@ import {
 import { currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { SignalScoutClient, type MyScoutStats } from "./signal-scout-client";
 import { HowItWorks } from "./how-it-works";
+import { MyStatsPanel } from "./my-stats-panel";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 
@@ -207,17 +208,21 @@ export default async function SignalScoutPage() {
     }
   }
 
+  // No section wrapper and no heading here any more. The masthead carries this
+  // page's h1 and the client owns whether it is on screen, so both the h1 and
+  // the "Play Signal Scout" heading under it are rendered in there, in that
+  // order. A heading declared out here would have preceded the h1 it belongs
+  // under.
   const gameSection = (
-    <section aria-labelledby="signal-scout-app-heading">
-      <h2 id="signal-scout-app-heading" className="sr-only">
-        Play Signal Scout
-      </h2>
+    <>
       {settings.game_enabled ? (
         <SignalScoutClient
+          // The masthead is handed to the client so it can take it away once a
+          // round is live. See the prop's note in signal-scout-client.tsx.
+          masthead={<Masthead />}
           initialRound={initialRound}
           isAuthenticated={isAuthenticated}
           initialStreaks={initialStreaks}
-          myStats={myStats}
           guestRoundsRemaining={guestRoundsRemaining}
           guestPlayEnabled={settings.guest_play_enabled}
           guestDailyLimit={settings.guest_daily_round_limit}
@@ -227,9 +232,15 @@ export default async function SignalScoutPage() {
           showPlayerImages={settings.reveal.show_player_images}
         />
       ) : (
-        <SignalOfflineNotice />
+        <>
+          <Masthead />
+          <h2 className="sr-only">Play Signal Scout</h2>
+          <div className="mt-6">
+            <SignalOfflineNotice />
+          </div>
+        </>
       )}
-    </section>
+    </>
   );
 
   // How It Works rides along in the rail's secondary column, under the boards
@@ -250,47 +261,68 @@ export default async function SignalScoutPage() {
 
   return (
     <main id="main">
+      {/* The masthead is rendered INSIDE the game column rather than above the
+          whole page, because the game takes it away once a round is live and a
+          page-level masthead could not be removed from in here. */}
       <PageBody>
-        <Masthead />
-        <div className="mt-6">
-          {railEnabled ? (
-            <LeaderboardRail
-              boards={enabledBoards}
-              initialBoard={initialBoard}
-              initialView={initialView}
-              requireLogin={leaderboards.require_login}
-              viewerSignedIn={isAuthenticated}
-              howItWorksRail={
-                <HowItWorks
-                  {...howItWorksProps}
-                  headingId="signal-scout-how-it-works-rail"
+        {railEnabled ? (
+          <LeaderboardRail
+            boards={enabledBoards}
+            initialBoard={initialBoard}
+            initialView={initialView}
+            requireLogin={leaderboards.require_login}
+            viewerSignedIn={isAuthenticated}
+            howItWorksRail={
+              <HowItWorks
+                {...howItWorksProps}
+                headingId="signal-scout-how-it-works-rail"
+              />
+            }
+            howItWorksSheet={
+              <HowItWorks
+                {...howItWorksProps}
+                headingId="signal-scout-how-it-works-sheet"
+              />
+            }
+            myStatsRail={
+              myStats ? (
+                <MyStatsPanel
+                  stats={myStats}
+                  headingId="signal-scout-my-stats-rail"
                 />
-              }
-              howItWorksSheet={
-                <HowItWorks
-                  {...howItWorksProps}
-                  headingId="signal-scout-how-it-works-sheet"
+              ) : null
+            }
+            myStatsSheet={
+              myStats ? (
+                <MyStatsPanel
+                  stats={myStats}
+                  headingId="signal-scout-my-stats-sheet"
                 />
-              }
-            >
-              {gameSection}
-            </LeaderboardRail>
-          ) : (
-            // Leaderboards off entirely: no sidebar and no mobile button, so the
-            // game gets the full width back and How It Works, which normally
-            // rides in the rail, has to be placed here or it would vanish with
-            // the rail that carries it.
-            <>
-              {gameSection}
+              ) : null
+            }
+          >
+            {gameSection}
+          </LeaderboardRail>
+        ) : (
+          // Leaderboards off entirely: no rail and no button, so the game gets
+          // the full width back, and How It Works, which normally rides in the
+          // rail, has to be placed here or it would vanish with the rail that
+          // carries it.
+          <>
+            {gameSection}
+            {myStats && (
               <div className="mt-6">
-                <HowItWorks
-                  {...howItWorksProps}
-                  headingId="signal-scout-how-it-works"
-                />
+                <MyStatsPanel stats={myStats} headingId="signal-scout-my-stats" />
               </div>
-            </>
-          )}
-        </div>
+            )}
+            <div className="mt-6">
+              <HowItWorks
+                {...howItWorksProps}
+                headingId="signal-scout-how-it-works"
+              />
+            </div>
+          </>
+        )}
       </PageBody>
     </main>
   );

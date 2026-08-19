@@ -5,8 +5,9 @@
  * show an empty section heading before the first wrong guess.
  */
 
-import { X } from "lucide-react";
+import { X, OctagonX } from "lucide-react";
 import type { BadRead } from "@/lib/signal-scout/round-engine";
+import { ScoutSectionHead } from "./scout-section-head";
 
 export interface BadReadsProps {
   badReads: BadRead[];
@@ -17,10 +18,14 @@ export function BadReads({ badReads }: BadReadsProps) {
 
   return (
     <section aria-labelledby="bad-reads-heading" className="mt-6">
-      <h4 id="bad-reads-heading" className="text-sm font-semibold text-ink">
-        Bad Reads
-      </h4>
-      <ul role="list" className="mt-3 flex flex-wrap gap-2">
+      <ScoutSectionHead
+        icon={OctagonX}
+        eyebrow="Ruled out"
+        title="Bad Reads"
+        id="bad-reads-heading"
+        tone="danger"
+      />
+      <ul role="list" className="mt-4 flex flex-wrap gap-2">
         {badReads.map((br) => (
           <li
             key={br.playerId}

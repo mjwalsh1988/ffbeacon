@@ -5888,3 +5888,73 @@ T623 | completed | My Beacon gets the rail, and the Signal card moves into it
      | rail on the site behaves the same way.
      | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
      |           no browser check, at the owner's request)
+
+T624 | completed | Games and Signal Scout join the full-width scheme
+     | files: app/games/page.tsx, app/games/signal-scout/page.tsx,
+     |        app/games/signal-scout/leaderboard-rail.tsx,
+     |        app/games/signal-scout/clue-grid.tsx
+     | depends on: T623
+     | Signal Scout's leaderboards sat in a 20rem column on the LEFT from lg,
+     | which put a board of other people's scores between the reader and the
+     | game. They are on the right now, from xl, in the same 340px track and with
+     | the same sticky behaviour as every other rail: pinned under the header,
+     | capped at the viewport, scrolling inside itself, focusable so that scroll
+     | reaches the keyboard.
+     | Moving it also simplified the markup. The old layout rendered the game
+     | first in DOM and then placed the sidebar into column one with explicit
+     | grid placement, purely so a keyboard reached "Start scouting" before the
+     | boards. With the rail on the right, plain markup order does that on its
+     | own, and content-then-complementary is still a meaningful sequence.
+     | The breakpoint moved from lg to xl, matching the Brief and the profile, so
+     | between 1024 and 1280 the boards ride in the same slide-up sheet a phone
+     | gets rather than squeezing the game into two thirds of a narrow column.
+     | The clue grid goes three across at 2xl. The game column runs to about a
+     | thousand pixels now, and two columns at that width left each clue cell
+     | mostly whitespace.
+     | The games index got the same treatment as the other story pages: masthead
+     | across the shell with two live stats, the cards in a panel rather than
+     | under a text-4xl heading that competed with the h1, and a rail carrying
+     | what a player wants to know before starting (built on the same data as the
+     | rankings, no account needed, keyboard and screen reader throughout) plus
+     | three links out.
+     | The rail then earned three more changes. How It Works keeps its collapsed
+     | default (it is reference material), but its six rules are bordered cards
+     | now, each with its own icon and heading, and the four hint tiers are rows
+     | carrying the tier chip and its live cost rather than a run-on list. My
+     | Scout Record moved into the rail above the boards, because your record and
+     | everyone else's are the same kind of thing and the game column should hold
+     | the game. The board tabs went to 36px with a tighter frame in the rail,
+     | where a pointer is the input; the sheet copy keeps its 44px targets.
+     | The masthead is handed to the game client as a slot and disappears the
+     | moment a round is live, the same call On The Clock makes with the draft
+     | room's hero. That cost two headings: with the masthead gone mid-round the
+     | page would have carried no h1, so the client renders a visually hidden one
+     | and the "Play Signal Scout" heading moved in with it, in that order. It
+     | used to be declared a level up, where it preceded the h1 it belongs under.
+     | Trade-off worth knowing: the masthead now sits inside the game column, so
+     | at xl it is as wide as the game rather than as wide as the page. It has to
+     | live there for the game to be able to take it away.
+     | The round itself was then rebuilt to look like a game rather than a stack
+     | of bordered paragraphs.
+     | A mission header stands where the masthead was and carries the page's h1
+     | while a round runs, so the visually hidden h1 that was holding that slot
+     | is gone. It has two states, one for a live round and one for the reveal.
+     | The scouting file is an actual file now: a header strip with a CLASSIFIED
+     | stamp, the silhouette under its scanline, and three labelled fields whose
+     | values are blacked out, with the redactions aria-hidden and one plain line
+     | carrying the same meaning to a screen reader.
+     | The hint buttons read as buttons: the tier name in the heavy uppercase the
+     | site uses for headings, the cost and the signals left as supporting text
+     | under it, 5rem tall, two-up until 2xl. The whole Buy a hint section sits on
+     | its own purple-lit panel, because spending score is the decision the round
+     | turns on.
+     | ScoutSectionHead gives every section of the round the same header shape
+     | (icon chip, eyebrow, title) with a tone that says what kind of section it
+     | is: cyan to read, purple to act, danger for what went wrong. Buy a hint,
+     | Make the call, Bad Reads, and the clue grid all use it.
+     | The panel that wrapped the whole round is gone. Every section inside it
+     | now carries its own surface, so the wrapper was a box around boxes, and
+     | removing it also means the guess combobox's listbox can no longer be
+     | clipped by an ancestor's overflow-hidden.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)

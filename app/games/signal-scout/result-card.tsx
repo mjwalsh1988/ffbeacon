@@ -184,6 +184,7 @@ export function ResultCard({ round, showPlayerImages, streaks }: ResultCardProps
           <ClueGrid
             clues={round.allClues}
             heading="Full clue sheet"
+            eyebrow="Declassified"
             headingId="signal-scout-full-clue-sheet-heading"
             unseenKeys={unseenKeys}
           />

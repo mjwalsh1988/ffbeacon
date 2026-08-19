@@ -9,31 +9,36 @@ import { LeaderboardPanel, boardLabel } from "./leaderboard-panel";
 
 /**
  * Two-column shell for the Signal Scout game page: the game itself plus the
- * secondary column, which holds the leaderboards (previously their own route
- * at /games/signal-scout/leaderboards, now a permanent redirect back here)
- * with the How It Works explainer beneath them. Desktop gets a sticky sidebar
- * on the left; mobile gets a full-width "View Leaderboards & Info" button that
- * opens the same two things in the house slide-up modal
+ * rail, which holds the player's own record, the leaderboards (previously their
+ * own route at /games/signal-scout/leaderboards, now a permanent redirect back
+ * here), and the How It Works explainer beneath them.
+ *
+ * The rail is on the RIGHT from xl, in the same 340px track and with the same
+ * sticky behaviour as every other rail on the site: pinned under the header,
+ * capped at the viewport, scrolling inside itself, focusable so that scroll is
+ * reachable from the keyboard. It used to sit on the left in a 20rem column
+ * from lg, which put a board of other people's scores between the reader and
+ * the game.
+ *
+ * Below xl it collapses behind a full-width "View Leaderboards & Info" button
+ * that opens the same two things in the house slide-up modal
  * (components/slide-up-dialog.tsx).
  *
- * DOM ORDER: the game column is rendered FIRST and the sidebar is placed into
- * the left column on `lg` via explicit grid placement, rather than the
- * simpler markup-order approach in components/beacon-brief/brief-shell.tsx.
- * This page's whole point is the game, so a keyboard or screen reader user
- * should reach "Start scouting" without tabbing through a board of scouts
- * first. The sidebar is an <aside> (a complementary landmark) either way, so
- * it stays easy to jump to, and content-then-complementary is a meaningful
+ * DOM ORDER: the game comes first, which the layout now matches without any
+ * explicit grid placement. This page's whole point is the game, so a keyboard
+ * or screen reader user reaches "Start scouting" without tabbing through a
+ * board of scouts first, and content-then-complementary is a meaningful
  * sequence for 1.3.2.
  *
- * ONE STATE, TWO RENDERS: LeaderboardPanel is rendered twice, once in the
- * sidebar and once in the modal, mirroring how BriefShell renders its
- * `sidebar` node in both places. Unlike BriefShell's sidebar these boards are
- * stateful, so every piece of that state lives here and is passed down, which
- * keeps the two copies identical and means opening the modal on mobile shows
- * whatever board you last looked at. The panel derives its element ids from
- * useId(), so the two copies never collide. The sidebar copy is display:none
- * below `lg` and its avatars are loading="lazy", so the copy a mobile visitor
- * never sees costs no image requests.
+ * ONE STATE, TWO RENDERS: LeaderboardPanel is rendered twice, once in the rail
+ * and once in the modal, mirroring how BriefShell renders its `sidebar` node in
+ * both places. Unlike BriefShell's sidebar these boards are stateful, so every
+ * piece of that state lives here and is passed down, which keeps the two copies
+ * identical and means opening the modal on a phone shows whatever board you
+ * last looked at. The panel derives its element ids from useId(), so the two
+ * copies never collide. The rail copy is display:none below xl and its avatars
+ * are loading="lazy", so the copy a small-screen visitor never sees costs no
+ * image requests.
  */
 export function LeaderboardRail({
   boards,
@@ -43,6 +48,8 @@ export function LeaderboardRail({
   viewerSignedIn,
   howItWorksRail,
   howItWorksSheet,
+  myStatsRail,
+  myStatsSheet,
   children,
 }: {
   /** Boards enabled in admin settings, in display order. */
@@ -60,6 +67,12 @@ export function LeaderboardRail({
    * arrive as rendered nodes; this client component cannot build them itself. */
   howItWorksRail: ReactNode;
   howItWorksSheet: ReactNode;
+  /** The player's own record, above the boards. Null for a guest and for a
+   *  signed-in player with no completed rounds yet. Two nodes for the same
+   *  reason the explainer takes two: both copies are in the DOM while the sheet
+   *  is open, so they cannot share a heading id. */
+  myStatsRail?: ReactNode;
+  myStatsSheet?: ReactNode;
   /** The game itself, server-rendered and passed through untouched. */
   children: ReactNode;
 }) {
@@ -185,15 +198,15 @@ export function LeaderboardRail({
   };
 
   return (
-    <div className="lg:grid lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
       {/* Rendered once, outside both panel copies, so a board switch is
           announced a single time no matter which copy is on screen. */}
       <div aria-live="polite" role="status" className="sr-only">
         {announcement}
       </div>
 
-      <div className="min-w-0 lg:col-start-2 lg:row-start-1">
-        <div className="mb-6 lg:hidden">
+      <div className="min-w-0">
+        <div className="mb-6 xl:hidden">
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -211,12 +224,13 @@ export function LeaderboardRail({
 
       <aside
         aria-label="Signal Scout leaderboards and info"
-        className="hidden lg:col-start-1 lg:row-start-1 lg:block"
+        // Focusable so the scroll inside it is reachable from the keyboard.
+        tabIndex={0}
+        className="beacon-scroll hidden min-w-0 xl:sticky xl:top-[5.5rem] xl:block xl:max-h-[calc(100dvh-7rem)] xl:self-start xl:overflow-y-auto xl:pr-1"
       >
-        <div className="beacon-scroll sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pb-8 pr-1">
-          <LeaderboardPanel variant="rail" {...panelProps} />
-          <div className="mt-6">{howItWorksRail}</div>
-        </div>
+        {myStatsRail && <div className="mb-6">{myStatsRail}</div>}
+        <LeaderboardPanel variant="rail" {...panelProps} />
+        <div className="mt-6">{howItWorksRail}</div>
       </aside>
 
       <SlideUpDialog
@@ -249,6 +263,7 @@ export function LeaderboardRail({
             </button>
           </div>
           <div className="px-5 py-4">
+            {myStatsSheet && <div className="mb-6">{myStatsSheet}</div>}
             <LeaderboardPanel variant="sheet" {...panelProps} />
             <div className="mt-6">{howItWorksSheet}</div>
           </div>

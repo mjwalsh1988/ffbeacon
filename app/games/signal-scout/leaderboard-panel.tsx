@@ -213,14 +213,20 @@ export function LeaderboardPanel({
     tabRefs.current[next]?.focus();
   };
 
+  // The rail copy is xl and up, where a pointer is the input and CLAUDE.md's
+  // 44px floor (which is about the compact mobile layout) does not apply. It
+  // gets 36px tall tabs and a tighter frame so three boards cost less of a
+  // 340px column. The sheet copy is the one a thumb uses, so it keeps 44px.
+  const compactTabs = variant === "rail";
+  const tabListClass = compactTabs
+    ? "grid grid-cols-3 gap-0.5 rounded-card border border-line-accent bg-base/50 p-0.5"
+    : "grid grid-cols-3 gap-1 rounded-card border border-line-accent bg-base/50 p-1";
+  const tabHeightClass = compactTabs ? "min-h-9" : "min-h-11";
+
   const body = (
     <>
       {tabbed && (
-        <div
-          role="tablist"
-          aria-label="Leaderboard boards"
-          className="grid grid-cols-3 gap-1 rounded-card border border-line-accent bg-base/50 p-1"
-        >
+        <div role="tablist" aria-label="Leaderboard boards" className={tabListClass}>
           {tabs.map((tab, index) => {
             const selected = tab.id === activeBoard;
             const Icon = tab.icon;
@@ -239,7 +245,7 @@ export function LeaderboardPanel({
                 tabIndex={selected ? 0 : -1}
                 onClick={() => onSelectBoard(tab.id)}
                 onKeyDown={(event) => onTabKeyDown(event, index)}
-                className={`flex min-h-11 items-center justify-center gap-1.5 rounded-card border px-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+                className={`flex ${tabHeightClass} items-center justify-center gap-1.5 rounded-card border px-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
                   selected
                     ? "border-brand-cyan/70 bg-brand-cyan/15 text-brand-cyan shadow-[0_0_22px_-8px_rgba(34,211,238,0.85)]"
                     : "border-transparent text-ink-muted hover:bg-surface hover:text-ink"

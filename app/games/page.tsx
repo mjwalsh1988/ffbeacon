@@ -1,7 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Radar, Vote, Clock, ArrowRight, type LucideIcon } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Clock,
+  Newspaper,
+  Radar,
+  Vote,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import { LinkTile } from "@/components/link-tile";
+import { Panel } from "@/components/dashboard-panel";
 import { PageBody } from "@/components/app-shell/page-body";
+import { PageColumns } from "@/components/app-shell/page-columns";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
@@ -47,23 +59,80 @@ const GAMES: Game[] = [
 ];
 
 export default function GamesPage() {
+  const playable = GAMES.filter((game) => game.href).length;
+
   return (
     <main id="main">
-      <PageBody>
+      <PageBody flush>
         <PageMasthead
           eyebrow="Games"
           title="Play the data you already trust."
           description="Free games built on the same real player data that powers our rankings and tools. Every round works the same by eye or by ear, no paywall, ever."
+          stats={[
+            {
+              label: "Playable now",
+              value: String(playable),
+              detail: playable === 1 ? "More being built" : "More on the way",
+              accent: "cyan",
+            },
+            { label: "Cost", value: "$0", detail: "No account needed", accent: "purple" },
+          ]}
         />
+      </PageBody>
 
-        <section aria-labelledby="games-heading" className="mt-8">
-          <h2
-            id="games-heading"
-            className="text-3xl font-semibold tracking-tight sm:text-4xl"
-          >
-            Choose a game to play.
-          </h2>
-          <ul className="mt-10 grid gap-5 md:grid-cols-2" role="list">
+      <PageColumns
+        railLabel="About the games and where to go next"
+        rail={
+          <>
+            <Panel eyebrow="Before you play" title="How these work" headingLevel={2}>
+              <ul role="list" className="space-y-2.5 text-sm leading-relaxed text-ink-muted">
+                <li>
+                  Every round is built from the same player data behind the rankings
+                  board, so what you learn playing carries straight into a draft.
+                </li>
+                <li>
+                  Nothing here needs an account. Sign in only if you want your streak
+                  and your place on a leaderboard kept.
+                </li>
+                <li>
+                  Each game is playable by keyboard, and every clue is text, so a round
+                  reads the same by ear as by eye.
+                </li>
+              </ul>
+            </Panel>
+
+            <Panel eyebrow="Elsewhere" title="Where to go next" headingLevel={2}>
+              <div className="grid gap-2">
+                <LinkTile
+                  href="/rankings"
+                  icon={BarChart3}
+                  title="Rankings board"
+                  body="The data the games are built on, for every format we carry."
+                />
+                <LinkTile
+                  href="/brief"
+                  icon={Newspaper}
+                  title="The Beacon Brief"
+                  body="What broke today, and what it does to your roster."
+                  accent="purple"
+                />
+                <LinkTile
+                  href="/tools"
+                  icon={Wrench}
+                  title="Every free tool"
+                  body="League Pulse, On The Clock, Signal Check, and the rest."
+                />
+              </div>
+            </Panel>
+          </>
+        }
+      >
+        <Panel
+          eyebrow="The lineup"
+          title="Choose a game to play"
+          helper="Playable games first. The rest arrive here as they are finished."
+        >
+          <ul className="grid gap-4 lg:grid-cols-2" role="list">
             {GAMES.map((game) => (
               // Keyed by title, not href: an unbuilt game has no href yet.
               <li key={game.title}>
@@ -71,8 +140,8 @@ export default function GamesPage() {
               </li>
             ))}
           </ul>
-        </section>
-      </PageBody>
+        </Panel>
+      </PageColumns>
     </main>
   );
 }

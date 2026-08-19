@@ -6,7 +6,9 @@
  * always printed alongside its tone).
  */
 
+import { ScanLine } from "lucide-react";
 import type { RevealedClueOut } from "@/lib/signal-scout/round-engine";
+import { ScoutSectionHead } from "./scout-section-head";
 
 export type ClueTierChipKey = "starter" | "weak" | "clear" | "ping" | "scan";
 
@@ -36,6 +38,8 @@ export interface ClueGridProps {
   newestClueKey?: string | null;
   /** Section heading text. Defaults to "Revealed clues" (active-round usage). */
   heading?: string;
+  /** The small line above the heading. */
+  eyebrow?: string;
   /** id applied to the heading and referenced by aria-labelledby. Defaults to "clue-grid-heading". */
   headingId?: string;
   /**
@@ -60,6 +64,7 @@ export function ClueGrid({
   clues,
   newestClueKey,
   heading = "Revealed clues",
+  eyebrow = "Intel so far",
   headingId = "clue-grid-heading",
   unseenKeys,
   highlight = false,
@@ -97,13 +102,19 @@ export function ClueGrid({
           }}
         />
       )}
-      <h4 id={headingId} className="text-sm font-semibold text-ink">
-        {heading}
-      </h4>
+      <ScoutSectionHead
+        icon={ScanLine}
+        eyebrow={eyebrow}
+        title={heading}
+        id={headingId}
+      />
       {sorted.length === 0 ? (
-        <p className="mt-2 text-sm text-ink-muted">No clues revealed yet.</p>
+        <p className="mt-3 text-sm text-ink-muted">No clues revealed yet.</p>
       ) : (
-        <ul role="list" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        // Three across on a wide screen. The game column runs to roughly a
+        // thousand pixels now the rail sits on the right, and two columns at
+        // that width left each clue cell mostly whitespace.
+        <ul role="list" className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
           {sorted.map((clue) => {
             const tierKey = isClueTierChipKey(clue.tier) ? clue.tier : "starter";
             const isNewest = clue.clueKey === newestClueKey;
