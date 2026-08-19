@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Newspaper, Tag, Users, Shield, LayoutGrid } from "lucide-react";
+import { Tag, Users, Shield, LayoutGrid } from "lucide-react";
 import type { BriefSidebarData } from "@/lib/beacon-brief-feed";
 
 export type BriefActiveFilter =
@@ -45,18 +45,16 @@ function SectionHeading({
   );
 }
 
-function CountPill({ count }: { count: number }) {
-  return (
-    <span className="shrink-0 rounded-full bg-base px-2 py-0.5 text-[11px] tabular-nums text-ink-subtle">
-      {count}
-    </span>
-  );
-}
-
 /**
- * The Beacon Brief filter rail: browse all, or narrow by category, tag, player,
- * or team. Pure presentational and used verbatim in both the desktop rail and
- * the mobile full-screen drawer.
+ * The Beacon Brief filter rail: browse all, or narrow by player, team, or tag.
+ * Pure presentational, and used verbatim in both the right-hand rail and the
+ * full-screen drawer below xl.
+ *
+ * Categories are NOT here. They are the Brief's structure rather than one filter
+ * among four, so they live in the site navigation rail as the Brief's second
+ * level; see components/beacon-brief/brief-rail-sections.tsx. `active` still
+ * carries a category, because it is what keeps "All articles" from claiming to
+ * be the current page while you are inside one.
  */
 export function BriefSidebar({
   data,
@@ -65,7 +63,7 @@ export function BriefSidebar({
   data: BriefSidebarData;
   active: BriefActiveFilter;
 }) {
-  const { categories, tags, players, teams } = data;
+  const { tags, players, teams } = data;
 
   return (
     <nav aria-label="Filter The Beacon Brief" className="space-y-7">
@@ -81,28 +79,6 @@ export function BriefSidebar({
           </span>
         </Link>
       </div>
-
-      {categories.length > 0 && (
-        <div>
-          <SectionHeading icon={Newspaper} id="brief-cats">
-            Categories
-          </SectionHeading>
-          <ul aria-labelledby="brief-cats" className="space-y-0.5">
-            {categories.map((c) => (
-              <li key={c.slug}>
-                <Link
-                  href={`/brief/category/${c.slug}`}
-                  aria-current={isActive(active, "category", c.slug) ? "page" : undefined}
-                  className={`${linkBase} ${isActive(active, "category", c.slug) ? linkActive : linkIdle}`}
-                >
-                  <span className="truncate">{c.name}</span>
-                  <CountPill count={c.count} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {players.length > 0 && (
         <div>

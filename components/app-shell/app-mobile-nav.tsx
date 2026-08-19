@@ -31,7 +31,7 @@ import {
 } from "@/components/info-tooltip";
 import { NavLevels } from "./nav-levels";
 import { useSidebar } from "./sidebar-state";
-import { useRailSections } from "./rail-sections";
+import { mergeRailSections, useRailSections } from "./rail-sections";
 
 export function AppMobileNav({
   sections,
@@ -61,7 +61,7 @@ export function AppMobileNav({
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const { extra, openId, active } = useRailSections();
-  const tree = [...extra, ...sections];
+  const tree = mergeRailSections(extra, sections);
   const trail = findActiveTrail(tree, pathname);
 
   // SSR-safe portal: there is no `document` until hydration.

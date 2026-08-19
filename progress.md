@@ -5660,3 +5660,86 @@ T615 | completed | player profile takes the dashboard width, rails move right
      | stacks under the content it belongs to, exactly as before.
      | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
      |           no browser check, at the owner's request)
+
+T616 | completed | a contributed rail section can replace a site one
+     | files: components/app-shell/rail-sections.tsx,
+     |        components/app-shell/app-rail.tsx,
+     |        components/app-shell/app-mobile-nav.tsx
+     | depends on: T615
+     | Contributed sections were prepended to the site tree, which is right when
+     | the id is new (a league, a draft room, a player). The Beacon Brief needs
+     | to contribute the section the site tree ALREADY carries, with its
+     | categories added underneath, and prepending that would have listed
+     | "The Beacon Brief" twice and handed React two children with one key.
+     | mergeRailSections drops a site section whose id a contributed one already
+     | claims. Both the rail and the drawer read it, so they cannot disagree.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T617 | completed | Beacon Brief categories move into the navigation rail
+     | files: components/beacon-brief/brief-rail-sections.tsx,
+     |        components/beacon-brief/brief-sidebar.tsx,
+     |        components/beacon-brief/brief-feed.tsx,
+     |        app/brief/[slug]/page.tsx
+     | depends on: T616
+     | Categories were one of four blocks in the Brief's own filter rail, which
+     | undersold them: they are the Brief's structure, not one filter among
+     | several. They are the Brief's second level in the site rail now, so the
+     | Brief opens onto its nine categories while you are inside it and every
+     | site section stays one Back press away.
+     | Categories are DB rows, so they arrive from the page rather than from
+     | lib/nav-tree.ts, which every route loads and which should not have to
+     | query for a list only the Brief uses.
+     | Nothing was lost in the move. Each row carries its category's article
+     | count and the first line of its description in the hint, which is painted
+     | under the label in the drawer and read out in the rail, so the count the
+     | filter rail showed in a pill is still there.
+     | Rows are icon-coded per category rather than nine identical glyphs.
+     | aria-current is exact: the index row is the current page only on /brief
+     | itself, a category row only on that category, and nothing is marked on a
+     | tag, player, team, or article view, which a pathname match alone could
+     | not express.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T618 | completed | Beacon Brief filter rail moves right and follows you
+     | files: components/beacon-brief/brief-shell.tsx
+     | depends on: T617
+     | The rail sat on the left in a 16rem column, which put a stack of filters
+     | between the reader and the thing they came for, and left the Brief the
+     | only surface still leading with a sidebar.
+     | It is on the right now, from xl, in the same 340px track League Pulse and
+     | the player profile use, and it follows you down the page: capped at the
+     | viewport, scrolling inside itself, focusable so that scroll works from
+     | the keyboard.
+     | Below xl it still collapses behind the "Browse and filter" button into
+     | the full-screen drawer, and the button now DOCKS: once you scroll past
+     | it, it re-attaches under the site header, and it lets go again when you
+     | scroll back. Same IntersectionObserver the draft room's Quick info bar
+     | uses, including the inset that keeps it lined up with the flow and off
+     | the navigation rail between lg and xl.
+     | Two things the draft room learned the hard way are handled here too. The
+     | slot keeps the bar's height whether the bar is in it or docked, so the
+     | page never jumps. And scroll-padding-top is set for exactly as long as
+     | the bar is docked, so a link tabbed into never lands underneath it
+     | (WCAG 2.2 AA, 2.4.11). The observer also requires a laid-out box, because
+     | from xl the slot is display:none and a hidden element reports a zero box
+     | that otherwise reads as "scrolled past".
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T619 | completed | Beacon Brief articles take the dashboard width
+     | files: app/brief/[slug]/page.tsx
+     | depends on: T618
+     | An article ran in a centered max-w-4xl column with nothing beside it,
+     | which read as a different site from the listing page it was reached from.
+     | It renders in the same shell now, filter rail included, so the Brief is
+     | one surface from the index through to a story.
+     | The prose does not take the new width. A column that wide is unreadable
+     | at body size, so the article, the related grid, and the back link keep the
+     | measure they had and sit centred in the space the rail leaves.
+     | The rail's data comes from the same loadSidebar the listing pages call.
+     | It is a published-content read like the rest of the page, so the route is
+     | still prerendered and still revalidates on its 5-minute timer.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)

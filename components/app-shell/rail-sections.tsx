@@ -84,6 +84,22 @@ export function RailSectionsProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The tree the rail paints: the route's own sections first, then the site's.
+ *
+ * A contributed section REPLACES a site section with the same id rather than
+ * sitting beside it. The Beacon Brief is why: it contributes the same section
+ * the site tree already carries, with its categories added as a second level, so
+ * without this the rail would list "The Beacon Brief" twice and React would see
+ * two children with one key. A league or a draft room contributes an id the site
+ * tree does not have, so for those this is a no-op.
+ */
+export function mergeRailSections(extra: NavNode[], sections: NavNode[]): NavNode[] {
+  if (extra.length === 0) return sections;
+  const contributed = new Set(extra.map((section) => section.id));
+  return [...extra, ...sections.filter((section) => !contributed.has(section.id))];
+}
+
 export function useRailSections(): RailSectionsState {
   return (
     useContext(RailSectionsContext) ?? {

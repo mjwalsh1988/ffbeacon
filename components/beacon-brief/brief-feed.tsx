@@ -7,6 +7,7 @@ import type { BriefSidebarData, FeedArticle } from "@/lib/beacon-brief-feed";
 import { ArticleCard } from "@/components/beacon-brief/article-card";
 import { BriefSidebar, type BriefActiveFilter } from "@/components/beacon-brief/brief-sidebar";
 import { BriefShell } from "@/components/beacon-brief/brief-shell";
+import { BriefRailSections } from "@/components/beacon-brief/brief-rail-sections";
 import { BriefPagination } from "@/components/beacon-brief/brief-pagination";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { PageBody } from "@/components/app-shell/page-body";
@@ -119,6 +120,13 @@ export async function BriefFeed({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
       />
       {currentCrumbLabel && <SetBreadcrumbLabel value={currentCrumbLabel} />}
+      {/* The Brief's categories go into the site rail, under the Brief's own
+          row, rather than into the filter rail beside the articles. */}
+      <BriefRailSections
+        categories={sidebarData.categories}
+        isIndex={active.type === "all"}
+        activeCategorySlug={active.type === "category" ? active.value : null}
+      />
 
       <PageBody flush>
         <PageMasthead

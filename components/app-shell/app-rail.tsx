@@ -24,13 +24,13 @@ import { usePathname } from "next/navigation";
 import { findActiveTrail, type NavNode } from "@/lib/nav-types";
 import { NavLevels } from "./nav-levels";
 import { useSidebar } from "./sidebar-state";
-import { useRailSections } from "./rail-sections";
+import { mergeRailSections, useRailSections } from "./rail-sections";
 
 export function AppRail({ sections }: { sections: NavNode[] }) {
   const pathname = usePathname() ?? "/";
   const { open } = useSidebar();
   const { extra, openId, active } = useRailSections();
-  const tree = [...extra, ...sections];
+  const tree = mergeRailSections(extra, sections);
   // Both trails are passed down. A route that contributed sections states
   // which of its rows is current, because those rows can differ only by a query
   // string or by which view is showing and a pathname cannot tell them apart.

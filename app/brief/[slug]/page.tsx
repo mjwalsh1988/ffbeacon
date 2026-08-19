@@ -11,6 +11,7 @@ import {
   anyPlayerCurrentlyRanked,
   loadArticle,
   loadRelatedArticles,
+  loadSidebar,
   publishedArticleSlugs,
 } from "@/lib/beacon-brief-feed";
 import { isArticleIndexable } from "@/lib/beacon-brief/index-quality";
@@ -19,8 +20,10 @@ import {
   ArticleCard,
   articleTypeLabel,
 } from "@/components/beacon-brief/article-card";
+import { BriefShell } from "@/components/beacon-brief/brief-shell";
+import { BriefSidebar } from "@/components/beacon-brief/brief-sidebar";
+import { BriefRailSections } from "@/components/beacon-brief/brief-rail-sections";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { PageBody } from "@/components/app-shell/page-body";
 import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 
 type PageProps = { params: Promise<{ slug: string }> };
@@ -169,7 +172,13 @@ export default async function BriefArticlePage({ params }: PageProps) {
   if (!article) notFound();
 
   const supabase = createCachedReadClient();
-  const related = await loadRelatedArticles(supabase, article);
+  // The filter rail and the categories in the site rail come from the same load
+  // the listing pages use. It is a published-content read like the rest of this
+  // page, so it revalidates on the same 5-minute timer.
+  const [related, sidebarData] = await Promise.all([
+    loadRelatedArticles(supabase, article),
+    loadSidebar(supabase),
+  ]);
   const canonical = article.canonicalUrl?.trim() || `${SITE.url}/brief/${slug}`;
   const categoryLabel =
     article.category?.name ?? articleTypeLabel(article.articleType);
@@ -290,9 +299,30 @@ export default async function BriefArticlePage({ params }: PageProps) {
       />
       {/* The shared breadcrumb bar would otherwise show the slug. */}
       <SetBreadcrumbLabel value={article.title} />
+      {/* The Brief's categories open in the site rail while you are reading, the
+          same as on the listing pages. No row is marked current: an article is
+          not its category's page. */}
+      <BriefRailSections categories={sidebarData.categories} isIndex={false} />
 
-      <PageBody width="reading">
-        <article>
+      <BriefShell
+        sidebar={
+          <BriefSidebar
+            data={sidebarData}
+            // Carries the article's category so "All articles" does not claim to
+            // be the page you are on. Categories themselves are in the site rail.
+            active={
+              article.category
+                ? { type: "category", value: article.category.slug }
+                : { type: "category", value: "" }
+            }
+          />
+        }
+      >
+        {/* The page runs the full width the rail leaves; the prose does not. A
+            column that wide is unreadable at body size, so the article, what
+            follows it, and the divider rules between them all keep a measure and
+            sit centred in the space. */}
+        <article className="mx-auto max-w-4xl">
           {/* The article header is the page masthead: same card, same beacon
               hairline, same gradient title treatment the rest of the site uses.
               It keeps its own markup rather than calling PageMasthead because the
@@ -511,7 +541,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
         {related.length > 0 && (
           <section
             aria-labelledby="related-heading"
-            className="mt-12 border-t border-line pt-8"
+            className="mx-auto mt-12 max-w-4xl border-t border-line pt-8"
           >
             <h2
               id="related-heading"
@@ -529,7 +559,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
           </section>
         )}
 
-        <div className="mt-12">
+        <div className="mx-auto mt-12 max-w-4xl">
           <Link
             href="/brief"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -538,7 +568,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
             All Beacon Brief articles
           </Link>
         </div>
-      </PageBody>
+      </BriefShell>
 
       {/* No isMember prop on purpose. Checking Discord membership reads the request,
           which would make this page dynamic and lose the static render. The invite
