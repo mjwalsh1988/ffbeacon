@@ -5783,3 +5783,65 @@ T620 | completed | published guides take the shell width
      | data still matches the page.
      | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
      |           no browser check, at the owner's request)
+
+T621 | completed | About and the author page take the shell width
+     | files: app/about/page.tsx, app/author/michael/page.tsx
+     | depends on: T620
+     | Both pages ran every section in a centred 80rem column, masthead
+     | included, so on a wide screen they sat in the middle of a shell the tools
+     | beside them fill. The mastheads span the shell now, and each section uses
+     | the shell's own gutters, so the banded backgrounds and their content line
+     | up with the rest of the site. The two pages also disagreed on vertical
+     | rhythm (py-16 / sm:py-20 against py-14 / sm:py-16); they are both on the
+     | tighter one now.
+     | Width is spent where there is something to spend it on. The card grids
+     | (four principles, three features, four facts, three tools) take it and
+     | get roomier. The blocks that are one panel or one column of prose do not:
+     | the founder panel, the Connect panel, the two long-form story columns,
+     | the two gap cards, and the placeholder pair all keep a measure, because
+     | stretching three sentences across a dashboard is not using the width, it
+     | is just a longer line.
+     | Left alone on purpose: DiscordCtaSection still caps at 80rem, and it
+     | closes both of these pages. It is shared with the guides, the Brief, and
+     | the tools, so changing it is a site-wide visual change rather than a
+     | change to these two pages.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T622 | completed | About and the author page rebuilt as dashboard surfaces
+     | files: app/about/page.tsx, app/author/michael/page.tsx,
+     |        components/app-shell/page-columns.tsx,
+     |        components/contact-panel.tsx, components/link-tile.tsx
+     | depends on: T621
+     | T621 widened these two pages. That was the wrong fix: they were written
+     | as landing pages for the old chrome, so widening them stretched a landing
+     | page instead of making a dashboard. Both are rebuilt on the shape the
+     | rest of the site uses, a masthead over a main column of panels with a
+     | rail on the right that follows you down the page.
+     | PageColumns is that body, shared by both and matching the League Pulse,
+     | player-profile, and Brief rails: 340px, sticky from xl, capped at the
+     | viewport, scrolling inside itself, focusable so that scroll reaches the
+     | keyboard. The rail is second in DOM order because everything in it is
+     | supplementary to the page beside it.
+     | The rail leads with a contact form. It posts to /api/guide/submit, the
+     | Signal Guide's existing intake, with this page's guide_pages key ("about"
+     | and "author" both already exist). That route already carries a same-origin
+     | check, a honeypot, server-side validation, a per-IP rate limit, and the
+     | email to the team plus a confirmation to the sender. A second endpoint
+     | would have been a second copy of all of it to keep hardened, and messages
+     | would have landed in two inboxes instead of one queue.
+     | ABOUT: the masthead's counts are read from the database rather than typed
+     | in, so the tool count, the active format count, and the source count
+     | cannot go stale, and each falls back to omitting the stat rather than
+     | showing a guess. New content: every tool, guide, game, and account feature
+     | as a linked tile, which is also where this page earns its internal links;
+     | an accessibility section stating the six rules that actually decide
+     | whether something is finished; and a data section naming the live sources,
+     | the nightly rebuild, and the rule that a league grades in its own scoring
+     | settings rather than the global toggle.
+     | AUTHOR: the story and the reasons stay, moved into panels. New content:
+     | what he has built, as six links into the work, so the byline page carries
+     | real evidence for the Person schema it publishes rather than a portrait
+     | and three paragraphs.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)

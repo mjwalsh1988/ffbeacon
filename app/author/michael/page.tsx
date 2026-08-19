@@ -2,22 +2,34 @@ import type { Metadata } from "next";
 import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import {
-  Trophy,
-  Layers,
-  Calendar,
+  BarChart3,
   Briefcase,
-  Sparkles,
+  Calendar,
   Headphones,
+  Info,
+  Layers,
   Mic,
+  Newspaper,
   PenLine,
+  Radar,
+  Scale,
+  Sparkles,
+  Timer,
+  Trophy,
+  Users,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { AuthorPortrait } from "@/components/author-portrait";
+import { ContactPanel } from "@/components/contact-panel";
 import { EmailReveal } from "@/components/email-reveal";
+import { LinkTile } from "@/components/link-tile";
 import { MemberHeroCta } from "@/components/member-hero-cta";
+import { Panel } from "@/components/dashboard-panel";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { PageBody } from "@/components/app-shell/page-body";
+import { PageColumns } from "@/components/app-shell/page-columns";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
@@ -26,6 +38,18 @@ export const metadata: Metadata = {
   description:
     "Michael founded FF Beacon to bring accessibility-first fantasy football tools and analytics to everyone, especially players using screen readers.",
 };
+
+/**
+ * /author/michael
+ *
+ * The byline page every article and guide on the site points at, which makes it
+ * the page Google reads to decide whether the author behind them is a real
+ * person with real standing. It carries the Person schema, the visible
+ * biography that schema claims, and links to the work itself.
+ *
+ * Laid out as a dashboard rather than a marketing page: a masthead, panels down
+ * the main column, and a rail holding a message form and the ways to reach him.
+ */
 
 const personSchema = {
   "@context": "https://schema.org",
@@ -51,9 +75,10 @@ const personSchema = {
 };
 
 export default async function AuthorMichaelPage() {
-  // Confirmed Discord members already have the community; the Connect section's
-  // primary button points them at the toolkit instead of the invite.
+  // Confirmed Discord members already have the community; the rail's primary
+  // button points them at the toolkit instead of the invite.
   const isMember = await isDiscordMember();
+
   return (
     <main id="main">
       <script
@@ -61,192 +86,290 @@ export default async function AuthorMichaelPage() {
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(personSchema) }}
       />
-      <Hero />
-      <StorySection />
-      <WhySection />
-      <AtAGlanceSection />
-      <ToolsSection />
-      <SpeakingSection />
-      <ConnectSection isMember={isMember} />
+
+      <PageBody flush>
+        <PageMasthead
+          eyebrow="Author"
+          title="Michael"
+          description="Founder of FF Beacon. Twenty seasons in fantasy, an active dynasty manager who plays the game stats-first, and the reason this site is built the way it is."
+          stats={[
+            { label: "Seasons", value: "20+", detail: "Since 2006", accent: "purple" },
+            { label: "Format focus", value: "Dynasty", detail: "Superflex and TEP", accent: "cyan" },
+            { label: "Reads by", value: "Ear", detail: "Screen reader, daily", accent: "purple" },
+          ]}
+        >
+          <span
+            aria-hidden="true"
+            className="block w-fit rounded-full p-[2px]"
+            style={{
+              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
+            }}
+          >
+            <span className="block rounded-full bg-surface p-1">
+              <AuthorPortrait size={112} />
+            </span>
+          </span>
+        </PageMasthead>
+      </PageBody>
+
+      <PageColumns
+        railLabel="Contact Michael and related links"
+        rail={
+          <>
+            <ContactPanel
+              pageKey="author"
+              eyebrow="Contact"
+              title="Message Michael"
+              helper="Questions about the site, the data, or accessibility. It reaches the same inbox he reads every day."
+              promptLabel="Your message"
+              placeholder="What would you like to ask?"
+            />
+
+            <Panel eyebrow="Connect" title="Other ways to reach me" headingLevel={2}>
+              <p className="text-sm leading-relaxed text-ink-muted">
+                {isMember
+                  ? "You are already in the Discord, so you know where to find the community and me in it. Email works for anything longer."
+                  : "The Discord is the fastest way to reach the whole community, me included. Email works for anything longer."}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <MemberHeroCta
+                  isMember={isMember}
+                  size="md"
+                  memberMode="link"
+                  memberHref="/tools"
+                  memberLabel="Explore the tools"
+                  memberIcon="tools"
+                />
+                <EmailReveal variant="secondary" />
+              </div>
+            </Panel>
+
+            <Panel eyebrow="Read next" title="Where to go from here" headingLevel={2}>
+              <div className="grid gap-2">
+                <LinkTile
+                  href="/about"
+                  icon={Info}
+                  title="About FF Beacon"
+                  body="What the site is, how it is built, and where the numbers come from."
+                />
+                <LinkTile
+                  href="/guides/fantasy-football-terms"
+                  icon={Newspaper}
+                  title="The glossary"
+                  body="Every fantasy term that does real work, defined in one sentence each."
+                  accent="purple"
+                />
+              </div>
+            </Panel>
+          </>
+        }
+      >
+        <Panel
+          eyebrow="Story"
+          title="How I learned to play fantasy stats-first"
+          glow
+        >
+          <div className="space-y-4 text-sm leading-relaxed text-ink-muted sm:text-base">
+            <p>
+              I have been playing fantasy football since 2006, twenty seasons. For most
+              of those years I ran one or two leagues. In 2023 I jumped into dynasty,
+              and within a year I was managing more rosters than I could keep in my
+              head. The unlock was not free time. It was finally learning how to
+              actually use the data.
+            </p>
+            <p>
+              I am blind. That cuts both ways in fantasy. Every app I tried had friction
+              sighted users never notice: stats trapped inside an unlabeled chart,
+              filters you can only reach with a mouse, player news that updates
+              silently. So I leaned on what does work for me. Stat lines, target shares,
+              snap counts, analyst tape breakdowns on audio, and advanced metrics that
+              travel well as text.
+            </p>
+            <p>
+              That accidentally made me a better fantasy player. I was already
+              evaluating players the way successful managers do, numbers and tape first,
+              vibes last.
+            </p>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Why FF Beacon" title="The product I wish existed when I started">
+          <div className="space-y-4 text-sm leading-relaxed text-ink-muted sm:text-base">
+            <p>
+              Two things were obvious. There is a large gap in fantasy resources for
+              people who do not already speak analytics, and almost nothing was built
+              for fantasy players who use a screen reader.
+            </p>
+            <p>
+              FF Beacon closes both at once. Every component is checked against keyboard
+              navigation, semantic HTML, and screen reader announcements before it
+              ships. Every guide explains the analytic before it asks you to use it. No
+              column is hidden on a phone to make a table easier to lay out, because the
+              data you can reach on a laptop is the data you should be able to reach in
+              a draft.
+            </p>
+            <p>
+              If you have ever felt locked out of fantasy football by the jargon or the
+              interface, this site is for you. Read it by ear or by eye. It works both
+              ways.
+            </p>
+          </div>
+        </Panel>
+
+        <Panel
+          eyebrow="The work"
+          title="What I have built here"
+          helper="Every one of these is free, and every one started as something I needed for my own leagues."
+        >
+          <div className="grid gap-2 lg:grid-cols-2">
+            <LinkTile
+              href="/rankings"
+              icon={BarChart3}
+              title="Rankings board"
+              body="Values, tiers, and seven-day movement for every format, from a source you choose."
+            />
+            <LinkTile
+              href="/tools/league-pulse"
+              icon={Workflow}
+              title="Sleeper League Pulse"
+              body="Sync a Sleeper league and read every roster, trade, and waiver move in it."
+              accent="purple"
+            />
+            <LinkTile
+              href="/tools/on-the-clock"
+              icon={Timer}
+              title="On The Clock"
+              body="A live draft room that says who is falling while the clock is still running."
+            />
+            <LinkTile
+              href="/tools/signal-check"
+              icon={Scale}
+              title="Signal Check"
+              body="Trade grades that state the margin and the confidence rather than a letter."
+              accent="purple"
+            />
+            <LinkTile
+              href="/brief"
+              icon={Newspaper}
+              title="The Beacon Brief"
+              body="The news desk, written so the roster impact is in the first line."
+            />
+            <LinkTile
+              href="/games/signal-scout"
+              icon={Radar}
+              title="Signal Scout"
+              body="A guessing game built on real player profiles, and the one thing here that is purely for fun."
+              accent="purple"
+            />
+          </div>
+        </Panel>
+
+        <Panel eyebrow="At a glance" title="The short version">
+          <ul role="list" className="grid gap-2 sm:grid-cols-2">
+            <FactCard
+              icon={Trophy}
+              accent="cyan"
+              value="20 seasons"
+              label="Of fantasy football, starting in 2006"
+            />
+            <FactCard
+              icon={Layers}
+              accent="purple"
+              value="Multi-format"
+              label="Redraft, dynasty, best ball, guillotine, and auction leagues"
+            />
+            <FactCard
+              icon={Calendar}
+              accent="cyan"
+              value="Dial-up era"
+              label="Drafted the first team on it. Still chasing the edge"
+            />
+            <FactCard
+              icon={Briefcase}
+              accent="purple"
+              value="Marketing and dev"
+              label="The day-job background powering the build"
+            />
+          </ul>
+        </Panel>
+
+        <Panel
+          eyebrow="Tools I rely on"
+          title="The stack behind every roster decision"
+          helper="What I lean on each week to stay sharp."
+        >
+          <ul role="list" className="grid gap-2 lg:grid-cols-3">
+            <ToolCard
+              icon={Sparkles}
+              accent="purple"
+              title="Sleeper"
+              body="Where my leagues live. Public APIs make it the only host worth syncing against."
+            />
+            <ToolCard
+              icon={Headphones}
+              accent="cyan"
+              title="NVDA"
+              body="My daily driver across every interface. Free, open source, and built by the people who depend on it."
+            />
+            <ToolCard
+              icon={Mic}
+              accent="purple"
+              title="Podcasts and tape shows"
+              body="A daily rotation of redraft, dynasty, and best ball shows, because tape travels better by ear than by chart."
+            />
+          </ul>
+        </Panel>
+
+        <Panel
+          eyebrow="Elsewhere"
+          title="Speaking and writing"
+          helper="Guest spots and articles will be listed here as they happen."
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            <PlaceholderCard
+              icon={Mic}
+              title="Podcast appearances"
+              body="Nothing to list yet. Running a show and want this story on it? The message form in the rail reaches me."
+            />
+            <PlaceholderCard
+              icon={PenLine}
+              title="Written pieces"
+              body="Nothing to list yet. Pieces on accessibility-first fantasy and analytics-first roster building will land here as they ship."
+            />
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Connect" title="Want to talk about accessibility, fantasy, or analytics?">
+          <p className="text-sm leading-relaxed text-ink-muted">
+            The message form in the rail lands in the same queue I read every day. If
+            you would rather talk it through with more than one person, the Discord is
+            full of fantasy players who will help you turn a question into a lineup
+            decision, free.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <MemberHeroCta
+              isMember={isMember}
+              size="md"
+              memberMode="link"
+              memberHref="/tools"
+              memberLabel="Explore our fantasy tools"
+              memberIcon="tools"
+            />
+            <Link
+              href="/about"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <Users aria-hidden="true" className="h-4 w-4" />
+              Read about FF Beacon
+            </Link>
+          </div>
+        </Panel>
+      </PageColumns>
     </main>
   );
 }
 
-/* ---------- Hero ---------- */
-
-function Hero() {
-  return (
-    <PageBody flush className="mx-auto max-w-7xl">
-      <PageMasthead
-        eyebrow="Author"
-        title="Michael"
-        description="Founder of FF Beacon. Twenty seasons in fantasy. An active dynasty manager who plays the game stats-first, and finally got tired of fantasy tools that weren't built for him."
-        stats={[
-          { value: "20+", label: "Seasons", accent: "purple" },
-          { value: "Dynasty", label: "Format focus", accent: "cyan" },
-          { value: "2006", label: "Started", accent: "purple" },
-        ]}
-      >
-        {/* Beacon gradient ring around the portrait. */}
-        <span
-          aria-hidden="true"
-          className="block w-fit rounded-full p-[2px]"
-          style={{
-            backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-          }}
-        >
-          <span className="block rounded-full bg-surface p-1">
-            <AuthorPortrait size={128} />
-          </span>
-        </span>
-      </PageMasthead>
-    </PageBody>
-  );
-}
-
-/* ---------- Story ---------- */
-
-function StorySection() {
-  return (
-    <section
-      aria-labelledby="story-heading"
-      className="border-b border-line"
-    >
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
-          <div>
-            <SectionEyebrow>Story</SectionEyebrow>
-            <h2
-              id="story-heading"
-              className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-            >
-              How I learned to play fantasy stats-first.
-            </h2>
-          </div>
-          <div className="relative space-y-5 text-lg leading-relaxed text-ink-muted md:pl-8">
-            <ProseRule />
-            <p>
-              I&apos;ve been playing fantasy football since 2006, twenty
-              seasons. For most of those years I ran one or two leagues. In 2023
-              I jumped into dynasty, and within a year I was managing more
-              rosters than I could keep in my head. The unlock wasn&apos;t free
-              time. It was finally learning how to actually use the data.
-            </p>
-            <p>
-              I&apos;m blind. That cuts both ways in fantasy. Every app I tried
-              had friction sighted users never notice, stats trapped inside an
-              unlabeled chart, filters you can only reach with a mouse, player
-              news that updates silently. So I leaned on what does work for me:
-              stat lines, target shares, snap counts, analyst tape breakdowns on
-              audio, and advanced metrics that travel well as text.
-            </p>
-            <p>
-              That accidentally made me a better fantasy player. I was already
-              evaluating players the way successful managers do, numbers and
-              tape first, vibes last.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- Why ---------- */
-
-function WhySection() {
-  return (
-    <section
-      aria-labelledby="why-heading"
-      className="relative border-b border-line bg-surface/30"
-    >
-      <BeaconHairline />
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
-          <div>
-            <SectionEyebrow>Why FF Beacon</SectionEyebrow>
-            <h2
-              id="why-heading"
-              className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-            >
-              The product I wish existed when I started.
-            </h2>
-          </div>
-          <div className="relative space-y-5 text-lg leading-relaxed text-ink-muted md:pl-8">
-            <ProseRule />
-            <p>
-              Two things were obvious. First, there&apos;s a massive gap in
-              fantasy resources for people who don&apos;t already speak
-              analytics. Second, almost nothing was built for fantasy players
-              who use a screen reader.
-            </p>
-            <p>
-              FF Beacon is my attempt to close both at once. Every component is
-              checked against keyboard navigation, semantic HTML, and screen
-              reader announcements before it ships. Every guide explains the
-              analytic before it asks you to use it.
-            </p>
-            <p>
-              If you&apos;ve ever felt locked out of fantasy football by the
-              jargon or the interface, this site is for you. Read it by ear or
-              by eye. It works both ways.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- At a glance ---------- */
-
-function AtAGlanceSection() {
-  return (
-    <section
-      aria-labelledby="ataglance-heading"
-      className="border-b border-line"
-    >
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <SectionEyebrow>At a glance</SectionEyebrow>
-        <h2
-          id="ataglance-heading"
-          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          The short version.
-        </h2>
-        <ul
-          className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-          role="list"
-        >
-          <FactCard
-            icon={Trophy}
-            accent="cyan"
-            value="20 seasons"
-            label="Of fantasy football, starting 2006"
-          />
-          <FactCard
-            icon={Layers}
-            accent="purple"
-            value="Multi-format"
-            label="Redraft, dynasty, best ball, chop/guillotine, auction/contract, and exploring more on the daily."
-          />
-          <FactCard
-            icon={Calendar}
-            accent="cyan"
-            value="20+ seasons in fantasy"
-            label="Drafted my first team on dial-up. Still chasing the edge."
-          />
-          <FactCard
-            icon={Briefcase}
-            accent="purple"
-            value="Marketing + dev"
-            label="Day-job background powering the build"
-          />
-        </ul>
-      </div>
-    </section>
-  );
-}
+/* ---------- Pieces ---------- */
 
 function FactCard({
   icon: Icon,
@@ -259,65 +382,20 @@ function FactCard({
   label: string;
   accent: "purple" | "cyan";
 }) {
+  const color = accent === "purple" ? "#A855F7" : "#22D3EE";
   return (
-    <li
-      className="group relative overflow-hidden rounded-card border border-line bg-surface p-4 transition-colors hover:border-line-accent motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
-      style={{ boxShadow: "0 0 48px -42px rgba(168, 85, 247, 0.6)" }}
-    >
-      <AccentStrip />
-      <IconBadge icon={Icon} accent={accent} size="md" />
+    <li className="relative overflow-hidden rounded-card border border-line bg-base/50 p-4">
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-px"
+        style={{
+          backgroundImage: `linear-gradient(180deg, transparent 0%, ${color} 30%, ${color}66 70%, transparent 100%)`,
+        }}
+      />
+      <IconChip icon={Icon} color={color} />
       <p className="mt-3 text-base font-semibold text-ink">{value}</p>
       <p className="mt-1 text-xs leading-relaxed text-ink-muted">{label}</p>
     </li>
-  );
-}
-
-/* ---------- Tools I rely on ---------- */
-
-function ToolsSection() {
-  return (
-    <section
-      aria-labelledby="tools-heading"
-      className="relative border-b border-line bg-surface/30"
-    >
-      <BeaconHairline />
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <SectionEyebrow>Tools I rely on</SectionEyebrow>
-        <h2
-          id="tools-heading"
-          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          The stack behind every roster decision.
-        </h2>
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-          The apps, assistive tech, and audio I lean on every week to stay sharp.
-        </p>
-
-        <ul
-          className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          role="list"
-        >
-          <ToolCard
-            icon={Sparkles}
-            accent="purple"
-            title="Sleeper"
-            body="Where my leagues live. Public APIs make it the only host worth syncing against."
-          />
-          <ToolCard
-            icon={Headphones}
-            accent="cyan"
-            title="NVDA"
-            body="My daily driver across every interface. Free, open-source, and built by the community that actually depends on it."
-          />
-          <ToolCard
-            icon={Mic}
-            accent="purple"
-            title="Podcasts & tape shows"
-            body="A daily rotation of redraft, dynasty, and best ball shows because tape breakdowns travel better by ear than by chart."
-          />
-        </ul>
-      </div>
-    </section>
   );
 }
 
@@ -332,64 +410,16 @@ function ToolCard({
   body: string;
   accent: "purple" | "cyan";
 }) {
-  const accentColor = accent === "purple" ? "#A855F7" : "#22D3EE";
+  const color = accent === "purple" ? "#A855F7" : "#22D3EE";
   return (
     <li
-      className="group relative flex flex-col overflow-hidden rounded-modal border border-line bg-surface p-5 transition-colors hover:border-line-accent motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
-      style={{ boxShadow: `0 0 64px -46px ${accentColor}99` }}
+      className="relative overflow-hidden rounded-card border border-line bg-base/50 p-4"
+      style={{ boxShadow: `0 0 64px -48px ${color}99` }}
     >
-      {/* Corner glow tinted to the card accent. */}
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full"
-        style={{
-          background: `radial-gradient(circle, ${accentColor}24 0%, transparent 70%)`,
-        }}
-      />
-      <div className="relative flex flex-1 flex-col">
-        <IconBadge icon={Icon} accent={accent} size="md" />
-        <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{body}</p>
-      </div>
+      <IconChip icon={Icon} color={color} />
+      <h3 className="mt-3 text-sm font-semibold text-ink">{title}</h3>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
     </li>
-  );
-}
-
-/* ---------- Speaking & Writing ---------- */
-
-function SpeakingSection() {
-  return (
-    <section
-      aria-labelledby="speaking-heading"
-      className="border-b border-line"
-    >
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <SectionEyebrow>Speaking & Writing</SectionEyebrow>
-        <h2
-          id="speaking-heading"
-          className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          Conversations, articles, appearances.
-        </h2>
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-          As guest spots, podcasts, and pieces accumulate, they&apos;ll live
-          here. Replace this placeholder with a list as it fills out.
-        </p>
-
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          <PlaceholderCard
-            icon={Mic}
-            title="Podcast appearances"
-            body="Coming soon. Want to feature this story on your show? Reach out via the contact link below."
-          />
-          <PlaceholderCard
-            icon={PenLine}
-            title="Written pieces"
-            body="Coming soon. Articles on accessibility-first fantasy and analytics-first roster building will land here as they ship."
-          />
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -403,162 +433,32 @@ function PlaceholderCard({
   body: string;
 }) {
   return (
-    <article className="group relative overflow-hidden rounded-card border border-dashed border-line bg-base/40 p-5 transition-colors hover:border-line-accent">
+    <article className="rounded-card border border-dashed border-line bg-base/40 p-4">
       <span
         aria-hidden="true"
-        className="flex h-10 w-10 items-center justify-center rounded-card border border-dashed border-line bg-surface text-ink-muted transition-colors group-hover:text-brand-cyan"
+        className="flex h-9 w-9 items-center justify-center rounded-card border border-dashed border-line bg-surface text-ink-muted"
       >
         <Icon className="h-4 w-4" />
       </span>
-      <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
-      <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{body}</p>
+      <h3 className="mt-3 text-sm font-semibold text-ink">{title}</h3>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
     </article>
   );
 }
 
-/* ---------- Connect / CTA ---------- */
-
-function ConnectSection({ isMember }: { isMember: boolean }) {
-  return (
-    <section aria-labelledby="connect-heading">
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div
-          className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
-          style={{
-            backgroundImage:
-              "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 55%)",
-          }}
-        >
-          {/* Top hairline so the closing panel feels like a lit beacon. */}
-          <span
-            aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-px"
-            style={{
-              backgroundImage:
-                "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-            }}
-          />
-          <div className="relative">
-            <SectionEyebrow>Connect</SectionEyebrow>
-            <h2
-              id="connect-heading"
-              className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-            >
-              Want to talk about accessibility, fantasy, or analytics?
-            </h2>
-            <p className="mt-3 max-w-xl text-base leading-relaxed text-ink-muted">
-              {isMember
-                ? "You're already in the Discord, so you know where to find the community, myself included. Prefer a direct line? Email works too, and everything I've built is free to use whenever you want to dig in."
-                : "Our Discord is the fastest way to reach the whole community, myself included. Prefer a direct line? Email works too, and the social accounts in the footer will start posting as the site grows."}
-            </p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <MemberHeroCta
-                isMember={isMember}
-                size="md"
-                memberMode="link"
-                memberHref="/tools"
-                memberLabel="Explore our fantasy tools"
-                memberIcon="tools"
-              />
-              <EmailReveal variant="secondary" />
-              <Link
-                href="/about"
-                className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-ink-muted hover:text-ink"
-              >
-                Read about FF Beacon
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- Shared ---------- */
-
-function SectionEyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-      {children}
-    </p>
-  );
-}
-
-/* Beacon gradient hairline pinned to the top edge of a section, used to set
-   the tinted-background panels apart from their neighbours. */
-function BeaconHairline() {
-  return (
-    <div
-      aria-hidden="true"
-      className="absolute inset-x-0 top-0 h-px"
-      style={{
-        backgroundImage:
-          "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-      }}
-    />
-  );
-}
-
-/* Left-edge vertical gradient accent strip, the shared card motif used across
-   the rankings status tiles and Signal Check. */
-function AccentStrip() {
+/** Tinted icon chip. Decorative: the heading beside it carries the name. */
+function IconChip({ icon: Icon, color }: { icon: LucideIcon; color: string }) {
   return (
     <span
       aria-hidden="true"
-      className="absolute inset-y-0 left-0 w-px"
+      className="flex h-9 w-9 items-center justify-center rounded-card border"
       style={{
-        backgroundImage:
-          "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-      }}
-    />
-  );
-}
-
-/* Vertical gradient rule that runs alongside a prose column on desktop. Adds
-   the beacon accent to the long-form sections without altering the copy. */
-function ProseRule() {
-  return (
-    <span
-      aria-hidden="true"
-      className="absolute inset-y-1 left-0 hidden w-px md:block"
-      style={{
-        backgroundImage:
-          "linear-gradient(180deg, transparent 0%, #A855F7 20%, #22D3EE 80%, transparent 100%)",
-      }}
-    />
-  );
-}
-
-/* Tinted icon chip. Decorative: the icon is aria-hidden and the surrounding
-   heading carries the accessible name. */
-function IconBadge({
-  icon: Icon,
-  accent,
-  size = "md",
-  rounded = false,
-}: {
-  icon: LucideIcon;
-  accent: "purple" | "cyan";
-  size?: "md" | "lg";
-  rounded?: boolean;
-}) {
-  const c = accent === "purple" ? "#A855F7" : "#22D3EE";
-  const box = size === "lg" ? "h-11 w-11" : "h-10 w-10";
-  const glyph = size === "lg" ? "h-5 w-5" : "h-4 w-4";
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex ${box} items-center justify-center border ${
-        rounded ? "rounded-full" : "rounded-card"
-      }`}
-      style={{
-        backgroundImage: `linear-gradient(135deg, ${c}26 0%, ${c}0D 100%)`,
-        borderColor: `${c}59`,
-        color: c,
+        backgroundImage: `linear-gradient(135deg, ${color}26 0%, ${color}0D 100%)`,
+        borderColor: `${color}59`,
+        color,
       }}
     >
-      <Icon className={glyph} />
+      <Icon className="h-4 w-4" />
     </span>
   );
 }
