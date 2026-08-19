@@ -109,7 +109,7 @@ export default async function SignalShowcasePage() {
       title="Showcase"
       description="Point visitors to your other channels, call out your favorite team and player, and feature the Sleeper leagues you play in. Everything here is optional."
     >
-      <div className="space-y-12">
+      <div className="space-y-6">
         <section aria-labelledby="signal-links-heading">
           <h3
             id="signal-links-heading"

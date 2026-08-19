@@ -32,7 +32,7 @@ export default async function SignalIdentityPage() {
       title="Identity"
       description="Tell visitors who you are. Your display name, headline, and bio appear at the top of your profile; your accent color, avatar, and banner set the look."
     >
-      <div className="space-y-12">
+      <div className="space-y-6">
         <section aria-labelledby="signal-identity-heading">
           <h3
             id="signal-identity-heading"

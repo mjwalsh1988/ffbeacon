@@ -5845,3 +5845,46 @@ T622 | completed | About and the author page rebuilt as dashboard surfaces
      | and three paragraphs.
      | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
      |           no browser check, at the owner's request)
+
+T623 | completed | My Beacon gets the rail, and the Signal card moves into it
+     | files: app/my-beacon/layout.tsx, app/my-beacon/beacon-rail.tsx,
+     |        app/my-beacon/page.tsx, components/signal/signal-status-card.tsx,
+     |        app/my-beacon/account/page.tsx, app/my-beacon/profile/page.tsx,
+     |        app/my-beacon/rankings/page.tsx,
+     |        app/my-beacon/rankings/profile-boards-manager.tsx,
+     |        app/my-beacon/signal/page.tsx,
+     |        app/my-beacon/signal/identity/page.tsx,
+     |        app/my-beacon/signal/showcase/page.tsx,
+     |        app/my-beacon/sleeper-leagues/page.tsx,
+     |        app/my-beacon/sleeper-leagues/sleeper-connection.tsx
+     | depends on: T622
+     | The Signal card rode inside the masthead, where it squeezed the page title
+     | on a laptop and pushed the actual page down on anything narrower. It now
+     | heads a rail that follows you down every My Beacon page, the same
+     | PageColumns the About and author pages use.
+     | The rail also took the dashboard's opening row of four tiles. Those facts
+     | (format, source, leagues on profile, member since) were true of the
+     | ACCOUNT rather than of the dashboard, so showing them on one page out of
+     | six was the wrong place for them. They are joined by two more the rail had
+     | room for: how many custom boards exist, and whether a Sleeper handle is
+     | connected, with the link changing to match. An admin sees the panel that
+     | used to be a callout at the top of the dashboard.
+     | The layout loads all of it in one pass. The registry reads and the
+     | preference resolvers are React.cache'd, so a page that needs the same
+     | values shares the layout's Promises rather than running them again.
+     | The Signal card's frame changed from an aside to a section. It sits inside
+     | the rail now, which is itself the complementary landmark, and a
+     | complementary nested in a complementary reads as two of the same thing in
+     | a landmark list.
+     | The dashboard is panels now rather than banded marketing sections, and its
+     | links are split into what is yours (leagues, boards, Signal) and what the
+     | rest of the system offers. Across the other five surfaces, section stacks
+     | went from space-y-12 to space-y-6 and section headings dropped a step to
+     | text-xl / sm:text-2xl, because in a column beside a rail the old sizes read
+     | as a second page title under the masthead's h1.
+     | Known and left alone: below xl the rail stacks under the content, so the
+     | Signal summary that used to sit at the top of a phone screen is now at the
+     | bottom of one. That is what moving it into the rail means, and every other
+     | rail on the site behaves the same way.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)

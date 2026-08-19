@@ -29,15 +29,14 @@ export type SignalStatus = {
 } | null;
 
 /**
- * Hero companion card for the My Beacon space, in two states (claimed vs not)
+ * The Signal card that heads the My Beacon rail, in two states (claimed or not)
  * and two layouts:
- *   - Desktop (lg+): the full card inline in the hero's right column.
+ *   - Desktop (lg+): the full card.
  *   - Mobile/tablet (below lg): a compact trigger that says "My Signal" with a
  *     status glyph; tapping it slides the full card up from the bottom as a
- *     modal, so the hero stays light on small screens.
+ *     modal, so a phone gets the summary and the detail on request.
  *
- * Rendered inside the hero <header> (which owns the page H1), so the card's own
- * heading is an H2.
+ * The page H1 belongs to the masthead above, so the card's own heading is an H2.
  */
 /** Id of the claim-handle section on /my-beacon/signal (set in that page). */
 const CLAIM_ANCHOR_ID = "claim-handle";
@@ -98,12 +97,15 @@ function CardFrame({
   ariaLabel,
 }: {
   children: React.ReactNode;
-  /** Names the complementary landmark so a screen reader announces its purpose
-   * (the visible heading inside stays as the card's title text). */
+  /** Names the region so a screen reader announces its purpose (the visible
+   * heading inside stays as the card's title text). */
   ariaLabel: string;
 }) {
   return (
-    <aside
+    // A section rather than an aside. This card sits inside the My Beacon rail,
+    // which is itself the complementary landmark, and a complementary nested in
+    // a complementary reads as two of the same thing in a landmark list.
+    <section
       aria-label={ariaLabel}
       className="relative overflow-hidden rounded-modal border border-line bg-surface/70 p-5 shadow-lg shadow-black/30 backdrop-blur sm:p-6"
     >
@@ -126,7 +128,7 @@ function CardFrame({
         }}
       />
       <div className="relative">{children}</div>
-    </aside>
+    </section>
   );
 }
 

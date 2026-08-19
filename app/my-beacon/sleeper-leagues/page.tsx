@@ -104,7 +104,7 @@ export default async function SleeperLeaguesPage() {
   });
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-6">
       <section aria-labelledby="connect-heading">
         {/* Collapses to one row once a handle is saved. Everything the expanded
             form does is still here, one press away; it just stops being the
@@ -131,7 +131,7 @@ export default async function SleeperLeaguesPage() {
             <SectionEyebrow>Active leagues</SectionEyebrow>
             <h2
               id="leagues-heading"
-              className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+              className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
             >
               Your {season} season
             </h2>

@@ -86,7 +86,7 @@ export default async function AccountSettingsPage() {
   const createdAt = user.created_at ?? null;
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-6">
       <AccountOverviewSection
         email={user.email ?? null}
         emailConfirmedAt={emailConfirmedAt}
@@ -214,7 +214,7 @@ function AccountOverviewSection({
           <SectionEyebrow>Account</SectionEyebrow>
           <h2
             id="account-overview-heading"
-            className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+            className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
           >
             Account at a glance.
           </h2>

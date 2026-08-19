@@ -54,7 +54,7 @@ export function SleeperConnection({
           </p>
           <h2
             id="connect-heading"
-            className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+            className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
           >
             Link your Sleeper username.
           </h2>

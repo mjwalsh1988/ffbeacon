@@ -78,14 +78,14 @@ export default async function MyRankingsPage() {
   }));
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-6">
       <section aria-labelledby="rankings-intro-heading">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="max-w-2xl">
             <SectionEyebrow>Your boards</SectionEyebrow>
             <h2
               id="rankings-intro-heading"
-              className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+              className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
             >
               Rank players your way.
             </h2>
@@ -107,7 +107,7 @@ export default async function MyRankingsPage() {
         <SectionEyebrow>Saved boards</SectionEyebrow>
         <h2
           id="board-list-heading"
-          className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+          className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
         >
           {boards.length === 0
             ? "No boards yet."

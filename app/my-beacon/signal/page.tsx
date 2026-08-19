@@ -89,7 +89,7 @@ function ClaimView() {
           </div>
           <h2
             id="signal-claim-intro"
-            className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl"
+            className="mt-4 text-xl font-semibold tracking-tight sm:text-2xl"
           >
             Ready to boost your signal?
           </h2>
@@ -273,7 +273,7 @@ function WizardView({ steps }: { steps: StepCompletion }) {
 
       <header>
         <SectionEyebrow>Setup</SectionEyebrow>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
           Build your Signal, step by step.
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
@@ -394,7 +394,7 @@ function HubGrid({
           <Sparkles aria-hidden="true" className="h-4 w-4 text-brand-purple" />
           <SectionEyebrow>Your Signal</SectionEyebrow>
         </div>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
           Manage your profile.
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">

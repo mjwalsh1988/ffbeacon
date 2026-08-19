@@ -272,7 +272,7 @@ export function ProfileBoardsManager({
       <SectionEyebrow>Public profile</SectionEyebrow>
       <h2
         id={headingId}
-        className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+        className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
       >
         Feature boards on your profile.
       </h2>

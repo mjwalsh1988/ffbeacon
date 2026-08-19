@@ -41,12 +41,12 @@ export default async function ProfilePage() {
   }
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-6">
       <section aria-labelledby="profile-intro-heading">
         <SectionEyebrow>Your profile</SectionEyebrow>
         <h2
           id="profile-intro-heading"
-          className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+          className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
         >
           Make it yours.
         </h2>
@@ -65,7 +65,7 @@ export default async function ProfilePage() {
         <SectionEyebrow>Details</SectionEyebrow>
         <h2
           id="profile-details-heading"
-          className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+          className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
         >
           Name, handle, and bio.
         </h2>
