@@ -15,6 +15,7 @@
 
 import { ArrowLeftRight, AlertTriangle } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
+import { PageBody } from "@/components/app-shell/page-body";
 import { Panel } from "@/components/dashboard-panel";
 import { SignalCheckTradeCard } from "@/components/signal-check-trade-card";
 import { MiniTrade } from "@/components/player-profile/mini-trade";
@@ -26,7 +27,7 @@ import { formatEastern } from "@/lib/datetime";
 import type { PlayerContext, PlayerRow } from "@/lib/player-profile";
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{children}</div>;
+  return <PageBody>{children}</PageBody>;
 }
 
 export async function TradesTab({

@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { Newspaper } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { PageBody } from "@/components/app-shell/page-body";
 import { Panel } from "@/components/dashboard-panel";
 import { formatEastern } from "@/lib/datetime";
 import type { PlayerRow } from "@/lib/player-profile";
@@ -51,7 +52,7 @@ export async function BeaconBriefTab({
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <PageBody>
       <Panel
         eyebrow="News"
         title="The Beacon Brief"
@@ -123,6 +124,6 @@ export async function BeaconBriefTab({
         </div>
       )}
       </Panel>
-    </div>
+    </PageBody>
   );
 }

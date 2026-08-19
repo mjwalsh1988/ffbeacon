@@ -1,12 +1,20 @@
 /**
- * Overview tab (default). Two-column layout: the main column carries the latest
- * headline and the full player overview grid; the sidebar (overview-only) stacks
- * the value trend chart, last-three positional finishes, and the latest trades.
+ * Overview section (the profile's default). The news, bio, and depth chart take
+ * the main column across the full width the rail leaves; the supplementary
+ * panels (value trend, last three positional finishes, projected points, recent
+ * trades) sit in a right rail that drops below the content under xl.
+ *
+ * The rail is on the right and second in DOM order because the profile masthead
+ * already carries the player's identity, so what is left in it is genuinely
+ * secondary and belongs after the main column on a phone. Same arrangement as
+ * the League Pulse overview.
+ *
  * Loads its own value / trend / trade / article data; positional finishes are
- * passed down from the page so the RPC runs once for both hero and sidebar.
+ * passed down from the page so the RPC runs once for both hero and rail.
  * Async server component.
  */
 
+import { PageBody } from "@/components/app-shell/page-body";
 import { QuickNews } from "@/components/player-profile/quick-news";
 import { InjuryStatus } from "@/components/player-profile/injury-status";
 import { PlayerBioOverview } from "@/components/player-profile/player-bio-overview";
@@ -67,9 +75,9 @@ export async function OverviewTab({
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+    <PageBody>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-6">
           <QuickNews article={article} playerName={playerName} />
           <InjuryStatus player={player} playerName={playerName} />
           <PlayerBioOverview player={player} />
@@ -82,7 +90,16 @@ export async function OverviewTab({
             />
           )}
         </div>
-        <aside aria-label="Player highlights" className="lg:col-span-1">
+        <aside
+          aria-label="Player highlights"
+          // Follows you down the page from xl, the way the League Pulse and
+          // draft-room rails do. It runs taller than a viewport on most
+          // players, so it scrolls inside itself rather than sticking with
+          // its lower panels parked off screen, and it takes focus so that
+          // scroll is reachable from the keyboard.
+          tabIndex={0}
+          className="min-w-0 xl:sticky xl:top-[5.5rem] xl:max-h-[calc(100dvh-7rem)] xl:self-start xl:overflow-y-auto xl:pr-1 beacon-scroll"
+        >
           <OverviewSidebar
             valuePoints={valueSeries.points}
             windowed={valueSeries.windowed}
@@ -101,6 +118,6 @@ export async function OverviewTab({
           />
         </aside>
       </div>
-    </div>
+    </PageBody>
   );
 }

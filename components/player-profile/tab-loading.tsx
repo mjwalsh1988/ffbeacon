@@ -1,13 +1,15 @@
 /**
- * Streaming fallback for the profile tabs (#3 performance). Rendered by the
- * page-level <Suspense> boundary so the hero and tab bar paint immediately while
- * the active tab's data loads and streams in. Announced to assistive tech as a
+ * Streaming fallback for the profile sections (#3 performance). Rendered by the
+ * page-level <Suspense> boundary so the masthead paints immediately while the
+ * active section's data loads and streams in. Announced to assistive tech as a
  * busy status region rather than a silent blank area.
  */
 
+import { PageBody } from "@/components/app-shell/page-body";
+
 export function TabLoading() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <PageBody>
       <div
         role="status"
         aria-live="polite"
@@ -24,6 +26,6 @@ export function TabLoading() {
           <div className="h-40 animate-pulse rounded-card bg-line/30" />
         </div>
       </div>
-    </div>
+    </PageBody>
   );
 }

@@ -48,6 +48,7 @@ import {
   Gauge,
   Trophy,
   GraduationCap,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -88,6 +89,7 @@ export const NAV_ICONS = {
   gauge: Gauge,
   trophy: Trophy,
   graduationCap: GraduationCap,
+  barChart: BarChart3,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

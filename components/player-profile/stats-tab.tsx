@@ -1,12 +1,20 @@
 /**
- * Statistics tab (server). A two-column layout: a left sidebar carries the
- * condensed positional finishes (season cards, one per year, each stacking the
- * three scoring finishes), and the main column carries the weekly projections,
- * career totals by season, and the weekly game log with a season picker. Points
- * are read on the server from the metadata jsonb and passed down as plain
+ * Statistics section (server). The weekly projections, career totals by season,
+ * and the weekly game log take the main column across the full width the rail
+ * leaves; the condensed positional finishes (season cards, one per year, each
+ * stacking the three scoring finishes) sit in a right rail that drops below the
+ * tables under xl.
+ *
+ * The finishes used to lead the layout from the left. They are context for the
+ * tables rather than the point of the section, so they now follow them in DOM
+ * order too, which is also what a phone should read first. Same arrangement as
+ * the League Pulse overview.
+ *
+ * Points are read on the server from the metadata jsonb and passed down as plain
  * GameRows so the client table needs no server imports.
  */
 
+import { PageBody } from "@/components/app-shell/page-body";
 import { Panel } from "@/components/dashboard-panel";
 import { SeasonFinishesRail } from "@/components/player-profile/positional-finishes";
 import { WeeklyStats } from "@/components/player-profile/weekly-stats";
@@ -191,24 +199,13 @@ export async function StatsTab({
     currentSeason != null ? (statAccuracyBySeason[currentSeason] ?? []) : [];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <PageBody>
       {/* grid-cols-1 caps the mobile track at the viewport; min-w-0 on each column
           lets it shrink below its content so inner tables/charts stay contained
           (scroll within) instead of forcing the whole page horizontally wide. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        {/* Left sidebar: condensed positional finishes */}
-        <aside aria-label="Positional finishes by season" className="min-w-0 lg:col-span-1">
-          <Panel
-            eyebrow="Production"
-            title="Positional finishes"
-            helper="Season-end rank within position, per scoring format."
-          >
-            <SeasonFinishesRail position={player.position} finishes={finishes} />
-          </Panel>
-        </aside>
-
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         {/* Main column: projections, career, weekly game log */}
-        <div className="min-w-0 space-y-6 lg:col-span-3">
+        <div className="min-w-0 space-y-6">
           {/* Weekly projections: distinct card-based outlook, not a stat table. */}
           {hasProjections && (
             <WeeklyProjections
@@ -319,8 +316,26 @@ export async function StatsTab({
             )}
           </Panel>
         </div>
+
+        {/* Right rail: condensed positional finishes */}
+        <aside
+          aria-label="Positional finishes by season"
+          // Sticky from xl, scrolling inside itself: a long career puts one
+          // card per season in here and that outgrows a viewport. See the
+          // matching rail on the overview section.
+          tabIndex={0}
+          className="min-w-0 xl:sticky xl:top-[5.5rem] xl:max-h-[calc(100dvh-7rem)] xl:self-start xl:overflow-y-auto xl:pr-1 beacon-scroll"
+        >
+          <Panel
+            eyebrow="Production"
+            title="Positional finishes"
+            helper="Season-end rank within position, per scoring format."
+          >
+            <SeasonFinishesRail position={player.position} finishes={finishes} />
+          </Panel>
+        </aside>
       </div>
-    </div>
+    </PageBody>
   );
 }
 

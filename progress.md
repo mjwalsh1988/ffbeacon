@@ -5587,3 +5587,76 @@ T612 | completed | FAAB full width for real, and open the rail by default
      | ever has to flip it the other way.
      | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
      |           no browser check, at the owner's request)
+
+T613 | completed | quieter rail highlight, purple left edge
+     | files: components/app-shell/nav-levels.tsx
+     | depends on: T612
+     | The current row in the rail was a cyan ring, a cyan fill, and cyan text,
+     | which read louder than the page it was pointing at. It is a 2px purple
+     | left edge and a 7% white background now, and hover lightens to 5% instead
+     | of darkening toward the page color.
+     | The edge is a border on the row rather than a bar laid over it, so it
+     | follows the corner radius. It sits on the shared row base at 2px in
+     | transparent, so no row shifts sideways as the current one moves. That
+     | retired ActiveBar, which the border replaces.
+     | The drawer's icon chip and label follow the same switch off cyan, so a
+     | row is not half one accent and half the other. aria-current still carries
+     | the state, so the color is decoration rather than the only signal, and the
+     | focus ring stays cyan and distinct from selection.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T614 | completed | player profile sections move into the navigation rail
+     | files: components/player-profile/nav-items.ts,
+     |        components/player-profile/player-rail-sections.tsx,
+     |        components/player-profile/player-tabs.tsx,
+     |        components/app-shell/nav-icons.ts, app/players/[slug]/page.tsx
+     | depends on: T613
+     | The profile carried a full-width bar of four tabs under its masthead,
+     | which was the last surface still navigating itself instead of using the
+     | rail. The four sections now register into the rail the way a league's five
+     | do, as a section named for the player, opened to its second level.
+     | The section has no href: Overview is the profile's own page and is already
+     | the first child, so an index row above it would be the same link twice.
+     | Which row is current cannot be read from the pathname here, because all
+     | four are the same path and differ only by ?tab=, so the profile states it
+     | on the registration.
+     | The list lives in nav-items.ts, mirroring components/league-shell, and
+     | both the rail and the small-screen strip read it, so a section cannot
+     | appear in one and go missing from the other. VALID_TABS is derived from
+     | the same list rather than restating it.
+     | The rail only exists from lg up, so below that the profile keeps a strip
+     | of the same four links where the old bar was, matching what the draft room
+     | does with its views. Every row keeps its one-line hint in the accessible
+     | name, so it announces the same thing in the strip, the rail, and the
+     | drawer, and the chips hold a 44px tap target at every width.
+     | nav-icons gained barChart, so the Statistics row keeps the icon it had.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T615 | completed | player profile takes the dashboard width, rails move right
+     | files: components/player-profile/overview-tab.tsx,
+     |        components/player-profile/stats-tab.tsx,
+     |        components/player-profile/trades-tab.tsx,
+     |        components/player-profile/beacon-brief-tab.tsx,
+     |        components/player-profile/tab-loading.tsx,
+     |        app/players/[slug]/page.tsx
+     | depends on: T614
+     | Every part of the profile ran in its own max-w-7xl column, so a profile
+     | sat centered in the shell while every tool beside it went edge to edge.
+     | All five surfaces use PageBody now, which is the same gutters League
+     | Pulse and the tools use, and the masthead lost its cap too.
+     | Overview and Statistics both use the League Pulse split,
+     | xl:grid-cols-[minmax(0,1fr)_340px]. Overview's panels were already on the
+     | right; Statistics' positional finishes led from the left and now follow
+     | the tables, which is also the order a phone should read them in.
+     | Both rails follow you down the page from xl, the way the draft room's and
+     | League Pulse's do. Neither fits a viewport (the overview stacks four
+     | panels; a long career puts one card per season in the other), so they cap
+     | at the viewport height and scroll inside themselves rather than sticking
+     | with their lower panels parked off screen. Each takes focus so that scroll
+     | is reachable from the keyboard.
+     | No panel was dropped or gated behind a breakpoint. Under xl each rail
+     | stacks under the content it belongs to, exactly as before.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)

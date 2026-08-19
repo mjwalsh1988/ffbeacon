@@ -15,10 +15,12 @@ import { loadPositionalFinishesCached } from "@/lib/player-profile-cache";
 import { PageBody } from "@/components/app-shell/page-body";
 import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 import { PlayerHero } from "@/components/player-profile/player-hero";
+import { PlayerTabs } from "@/components/player-profile/player-tabs";
+import { PlayerRailSections } from "@/components/player-profile/player-rail-sections";
 import {
-  PlayerTabs,
+  PLAYER_NAV_ITEMS,
   type PlayerTabId,
-} from "@/components/player-profile/player-tabs";
+} from "@/components/player-profile/nav-items";
 import { OverviewTab } from "@/components/player-profile/overview-tab";
 import { StatsTab } from "@/components/player-profile/stats-tab";
 import { TradesTab } from "@/components/player-profile/trades-tab";
@@ -27,12 +29,9 @@ import { TabLoading } from "@/components/player-profile/tab-loading";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TABS: PlayerTabId[] = [
-  "overview",
-  "statistics",
-  "trades",
-  "beacon-brief",
-];
+/** Read from the section list itself, so a new section cannot be reachable in
+ *  the rail and rejected here. */
+const VALID_TABS: PlayerTabId[] = PLAYER_NAV_ITEMS.map((item) => item.id);
 
 type PlayerPageProps = {
   params: Promise<{ slug: string }>;
@@ -180,10 +179,20 @@ export default async function PlayerPage({
       />
       {/* An apostrophe cannot survive a slug, so name the page for the bar. */}
       <SetBreadcrumbLabel value={fullName} />
+      {/* The profile's four sections go into the site rail, opened, rather than
+          into a bar of their own above the content. */}
+      <PlayerRailSections
+        slug={player.slug}
+        playerName={fullName}
+        activeTab={activeTab}
+        source={source}
+        format={format}
+      />
       <article>
-        {/* Only the masthead sits in the shared page column. The tab bar and
-            each tab body carry their own full-width wrappers already. */}
-        <PageBody flush className="mx-auto max-w-7xl">
+        {/* The masthead sits in the shared page column; each section body brings
+            its own. Both run the full width the rail leaves, the way every other
+            dashboard surface does. */}
+        <PageBody flush>
           <PlayerHero
             player={player}
             sleeperId={sleeperId}
@@ -206,6 +215,8 @@ export default async function PlayerPage({
           )}
         </PageBody>
 
+        {/* Below lg there is no rail, so the sections keep a strip of their
+            own here. See player-tabs.tsx. */}
         <PlayerTabs
           slug={player.slug}
           activeTab={activeTab}
@@ -213,8 +224,8 @@ export default async function PlayerPage({
           format={format}
         />
 
-        {/* Stream each tab behind a skeleton so the hero + tab bar paint
-            immediately instead of blocking on the active tab's data. */}
+        {/* Stream each section behind a skeleton so the masthead paints
+            immediately instead of blocking on that section's data. */}
         <Suspense key={activeTab} fallback={<TabLoading />}>
           {activeTab === "overview" && (
             <OverviewTab
