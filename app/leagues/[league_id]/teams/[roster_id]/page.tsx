@@ -14,8 +14,12 @@ import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { TeamCard } from "@/components/team-card";
 import { PicksToggle } from "@/components/picks-toggle";
-import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
-import { LeagueHeaderActions } from "@/components/league-header-actions";
+import { LeagueShell } from "@/components/league-shell";
+import {
+  buildLeagueFormatTags,
+  buildLeagueScoringTags,
+} from "@/lib/league-format-tags";
+import { formatRelative } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +96,9 @@ export default async function TeamDetailPage({
 
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, season, status, metadata")
+    .select(
+      "id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
+    )
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
   if (!league) notFound();
@@ -182,70 +188,54 @@ export default async function TeamDetailPage({
     ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}#team-${sleeperRosterId}`
     : `/leagues/${sleeperLeagueId}?tab=teams#team-${sleeperRosterId}`;
 
-  return (
-    <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
-        {/* Beacon-gradient accent bar, matching the On The Clock command strip. */}
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-          }}
-        />
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6">
-            <LeagueBreadcrumb
-              homeHref={homeHref}
-              crumbs={[
-                { label: league.name, href: leagueHref },
-                { label: team.teamName },
-              ]}
-              className="sm:col-start-1 sm:row-start-1"
-            />
-            <LeagueHeaderActions
-              sleeperLeagueId={sleeperLeagueId}
-              copyHref={`/leagues/${sleeperLeagueId}/teams/${roster_id}`}
-              copyAriaLabel="Copy link to this team"
-              otherLeagues={otherLeagues}
-              searchedUsername={searchedUsername}
-              className="sm:col-start-2 sm:row-start-1"
-            />
-            <p className="text-xs uppercase tracking-wider text-brand-cyan sm:col-start-1 sm:row-start-2">
-              Team detail, {formatDisplay}, {sourceDisplay}
-            </p>
-          </div>
-          {context.coverage === "fallback" && context.fallback && (
-            <p
-              role="status"
-              className="mt-3 rounded-card border border-brand-cyan/30 bg-brand-cyan/5 p-3 text-xs text-ink-muted"
-            >
-              Showing values for {context.formatDisplay} because{" "}
-              {context.sourceDisplay} doesn't publish data for{" "}
-              {context.fallback.derivedDisplay}.
-            </p>
-          )}
-          {context.coverage === "none" && (
-            <p
-              role="status"
-              className="mt-3 rounded-card border border-signal-warning/40 bg-signal-warning/10 p-3 text-xs text-signal-warning"
-            >
-              No data source covers {describeDerived(context.derived)} yet. Values are
-              unavailable for this team.
-            </p>
-          )}
-          {context.coverage !== "none" &&
-            context.pickSource &&
-            context.pickSource.slug !== context.sourceSlug && (
-              <p role="note" className="mt-2 text-xs text-ink-subtle">
-                Draft pick values powered by {context.pickSource.display}.
-              </p>
-            )}
-        </div>
-      </header>
+  // The same masthead every other League Pulse section carries. A team page is
+  // still a view of one league, so it opens on the league's identity and the
+  // team's own card follows underneath as an h2. The coverage and pick-source
+  // notes that used to sit in this page's header are part of the masthead now,
+  // so they read identically here and on every other section.
+  const coverageOk = context.coverage !== "none";
+  const mastheadProps = {
+    leagueName: league.name,
+    season: league.season ?? null,
+    teamCount: league.total_rosters ?? null,
+    status: league.status ?? null,
+    formatTags: buildLeagueFormatTags({
+      rosterPositions: league.roster_positions,
+      scoringSettings: league.scoring_settings,
+      teamCount: league.total_rosters,
+    }),
+    scoringTags: buildLeagueScoringTags(league.scoring_settings),
+    lastUpdatedLabel: league.last_pulsed_at
+      ? formatRelative(league.last_pulsed_at)
+      : "never",
+    // This page reads the already-synced rows rather than pulsing the league
+    // itself, so whatever it shows came from the cache by definition.
+    cached: true,
+    coverage: context.coverage,
+    sourceDisplay,
+    formatDisplay,
+    derivedLabel: describeDerived(context.derived),
+    fallbackDisplay:
+      context.coverage === "fallback" ? (context.fallback?.derivedDisplay ?? null) : null,
+    pickSourceDisplay:
+      coverageOk && context.pickSource && context.pickSource.slug !== context.sourceSlug
+        ? context.pickSource.display
+        : null,
+  };
 
-      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+  return (
+    <LeagueShell
+      sleeperLeagueId={sleeperLeagueId}
+      activeTab="teams"
+      searchedUsername={searchedUsername}
+      homeHref={homeHref}
+      crumbs={[{ label: league.name, href: leagueHref }, { label: team.teamName }]}
+      copyHref={`/leagues/${sleeperLeagueId}/teams/${roster_id}`}
+      copyAriaLabel="Copy link to this team"
+      otherLeagues={otherLeagues}
+      masthead={mastheadProps}
+    >
+      <div className="space-y-6">
         {showPicksToggle && (
           <div className="flex justify-start">
             <PicksToggle includePicks={includePicks} />
@@ -255,7 +245,7 @@ export default async function TeamDetailPage({
           data={team}
           sleeperLeagueId={sleeperLeagueId}
           showViewTeamPageLink={false}
-          headingLevel="h1"
+          headingLevel="h2"
           valueIsBeacon={effectiveSourceSlug === "ffbeacon"}
           teamStatus={teamStatus}
           sourceSlug={effectiveSourceSlug}
@@ -292,6 +282,6 @@ export default async function TeamDetailPage({
           </p>
         </div>
       </div>
-    </main>
+    </LeagueShell>
   );
 }

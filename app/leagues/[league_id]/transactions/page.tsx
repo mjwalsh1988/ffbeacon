@@ -27,11 +27,8 @@ import type { SleeperLeague } from "@/lib/sleeper";
 import { TransactionRow } from "@/components/transaction-row";
 import { SignalCheckTradeCard } from "@/components/signal-check-trade-card";
 import { TransactionFilters } from "@/components/transaction-filters";
-import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
-import { LeagueHeaderActions } from "@/components/league-header-actions";
-import { LeagueTabs } from "@/components/league-tabs";
+import { LeagueShell } from "@/components/league-shell";
 import { Panel, StatReadout } from "@/components/dashboard-panel";
-import { LeagueInfoPanel } from "@/components/league-info-panel";
 import {
   buildLeagueFormatTags,
   buildLeagueScoringTags,
@@ -147,10 +144,10 @@ export default async function LeagueTransactionsPage({
 
   const filter = parseFiltersFromSearchParams(sp);
 
-  // League identity + context for the highlighted sidebar card, mirroring the
-  // overview page so every deep-view surface reads as one dashboard. Format is
-  // derived from the league's Sleeper settings; only the value source respects
-  // the user's pick (CLAUDE.md: League Pulse Format Resolution).
+  // League identity + context for the masthead the shell renders above this
+  // section, mirroring every other deep-view surface. Format is derived from
+  // the league's Sleeper settings; only the value source respects the user's
+  // pick (CLAUDE.md: League Pulse Format Resolution).
   const formatTags = buildLeagueFormatTags({
     rosterPositions: league.roster_positions,
     scoringSettings: league.scoring_settings,
@@ -170,7 +167,7 @@ export default async function LeagueTransactionsPage({
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
   const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";
 
-  const infoPanelProps = {
+  const mastheadProps = {
     leagueName: league.name,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
@@ -195,114 +192,74 @@ export default async function LeagueTransactionsPage({
     : `/leagues/${sleeperLeagueId}?tab=teams`;
 
   return (
-    <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
-        {/* Beacon-gradient accent bar, matching the On The Clock command strip. */}
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-          }}
-        />
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* Slim header: breadcrumb + actions only. League identity and context
-              live in the highlighted LeagueInfoPanel in the sidebar, matching
-              the overview page. */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <LeagueBreadcrumb
-              homeHref={homeHref}
-              crumbs={[
-                { label: league.name, href: leagueHref },
-                { label: "Transactions" },
-              ]}
-            />
-            <LeagueHeaderActions
+    <LeagueShell
+      sleeperLeagueId={sleeperLeagueId}
+      activeTab="transactions"
+      searchedUsername={searchedUsername}
+      homeHref={homeHref}
+      crumbs={[{ label: league.name, href: leagueHref }, { label: "Transactions" }]}
+      copyHref={copyHref}
+      copyAriaLabel="Copy link to this league's transactions"
+      otherLeagues={otherLeagues}
+      masthead={mastheadProps}
+    >
+      {/* The filter bar and the feed take the main column; the tally and the
+          cross-links sit in a right rail. Below xl the grid collapses to one
+          column, and the rail lands after the feed rather than in front of it,
+          which is why these panels no longer need to be hidden on mobile. */}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-6">
+          <Suspense fallback={<FeedSkeleton />}>
+            <TransactionsFeed
+              leagueRowId={league.id}
               sleeperLeagueId={sleeperLeagueId}
-              copyHref={copyHref}
-              copyAriaLabel="Copy link to this league's transactions"
-              otherLeagues={otherLeagues}
-              searchedUsername={searchedUsername}
+              sleeperLeague={league.metadata as unknown as SleeperLeague}
+              context={context}
+              filter={filter}
+              sp={sp}
+              resynced={!pulseResult.cached}
             />
-          </div>
+          </Suspense>
         </div>
-      </header>
 
-      <LeagueTabs
-        sleeperLeagueId={sleeperLeagueId}
-        activeTab="transactions"
-        searchedUsername={searchedUsername}
-      />
+        <aside
+          aria-label="Activity summary and links"
+          className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
+        >
+          <Panel eyebrow="At a glance" title="Activity">
+            <dl className="grid grid-cols-3 gap-2">
+              <Suspense fallback={<ActivityGlanceSkeleton />}>
+                <ActivityGlance
+                  leagueRowId={league.id}
+                  resynced={!pulseResult.cached}
+                />
+              </Suspense>
+            </dl>
+          </Panel>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Transactions: league info + quick panels in a LEFT rail, the filter
-            bar and activity feed on the RIGHT. The rail stacks above the feed
-            below xl, mirroring the overview page. */}
-        <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <aside
-            aria-label="League information and links"
-            className="space-y-6 xl:sticky xl:top-8 xl:self-start"
-          >
-            <LeagueInfoPanel layout="sidebar" {...infoPanelProps} />
-
-            {/* Supplementary rail panels are hidden below the sidebar
-                breakpoint. `hidden` sets display:none, so they leave the
-                accessibility tree entirely and screen readers skip them on
-                mobile rather than reading a stack of secondary links. */}
-            <Panel eyebrow="At a glance" title="Activity" className="hidden xl:block">
-              <dl className="grid grid-cols-3 gap-2">
-                <Suspense fallback={<ActivityGlanceSkeleton />}>
-                  <ActivityGlance
-                    leagueRowId={league.id}
-                    resynced={!pulseResult.cached}
-                  />
-                </Suspense>
-              </dl>
-            </Panel>
-
-            <Panel
-              eyebrow="Go deeper"
-              title="Explore this league"
-              className="hidden xl:block"
-            >
-              <ul className="space-y-2">
-                <li>
-                  <ExploreLink
-                    href={overviewHref}
-                    icon={LayoutDashboard}
-                    label="League overview"
-                    hint="Power rankings and league snapshot"
-                  />
-                </li>
-                <li>
-                  <ExploreLink
-                    href={teamsHref}
-                    icon={Users}
-                    label="Teams and rosters"
-                    hint="Compare every roster side by side"
-                  />
-                </li>
-              </ul>
-            </Panel>
-          </aside>
-
-          <div className="min-w-0 space-y-6">
-            <Suspense fallback={<FeedSkeleton />}>
-              <TransactionsFeed
-                leagueRowId={league.id}
-                sleeperLeagueId={sleeperLeagueId}
-                sleeperLeague={league.metadata as unknown as SleeperLeague}
-                context={context}
-                filter={filter}
-                sp={sp}
-                resynced={!pulseResult.cached}
-              />
-            </Suspense>
-          </div>
-        </div>
+          <Panel eyebrow="Go deeper" title="Explore this league">
+            <ul className="space-y-2">
+              <li>
+                <ExploreLink
+                  href={overviewHref}
+                  icon={LayoutDashboard}
+                  label="League overview"
+                  hint="Power rankings and league snapshot"
+                />
+              </li>
+              <li>
+                <ExploreLink
+                  href={teamsHref}
+                  icon={Users}
+                  label="Teams and rosters"
+                  hint="Compare every roster side by side"
+                />
+              </li>
+            </ul>
+          </Panel>
+        </aside>
       </div>
-    </main>
+    </LeagueShell>
   );
 }
 

@@ -17,14 +17,11 @@ import { type SleeperLeague } from "@/lib/sleeper";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { TeamFilter } from "@/components/team-filter";
 import { LeagueLoadError } from "@/components/league-load-error";
-import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
-import { LeagueHeaderActions } from "@/components/league-header-actions";
-import { LeagueTabs } from "@/components/league-tabs";
+import { LeagueShell } from "@/components/league-shell";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import { PicksToggle } from "@/components/picks-toggle";
 import { RankModeToggle, type RankMode } from "@/components/power-pulse/rank-mode-toggle";
 import { Panel, StatReadout } from "@/components/dashboard-panel";
-import { LeagueInfoPanel, LeagueMetaLine } from "@/components/league-info-panel";
 import {
   buildLeagueFormatTags,
   buildLeagueScoringTags,
@@ -248,9 +245,10 @@ export default async function LeagueDeepViewPage({
     ? `/leagues/${sleeperLeagueId}/trade-finder?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/trade-finder`;
 
-  // Shared props for the league info card, rendered as a left rail on Overview
-  // and as a full-width horizontal band on Teams (so the rosters get full width).
-  const infoPanelProps = {
+  // The masthead is identical on every League Pulse section, so its inputs are
+  // assembled once here and handed to the shell, which renders it above
+  // whatever this section shows.
+  const mastheadProps = {
     leagueName: league.name,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
@@ -268,183 +266,132 @@ export default async function LeagueDeepViewPage({
   };
 
   return (
-    <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
-        {/* Beacon-gradient accent bar, matching the On The Clock command strip. */}
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-          }}
-        />
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* Slim header: breadcrumb + actions only. The league name (page h1)
-              and all league context now live in the highlighted LeagueInfoPanel
-              in the sidebar. */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <LeagueBreadcrumb
-              homeHref={backHref}
-              crumbs={[{ label: league.name }]}
-            />
-            <LeagueHeaderActions
-              sleeperLeagueId={sleeperLeagueId}
-              copyHref={`/leagues/${sleeperLeagueId}`}
-              copyAriaLabel="Copy link to this league"
-              otherLeagues={otherLeagues}
-              searchedUsername={searchedUsername}
-            />
-          </div>
-
-          {/* League identity + context now lives in the left sidebar
-              (LeagueInfoPanel) to keep the header compact. Only a true refresh
-              error stays here, surfaced prominently as a page-level alert. */}
-          {league.pulse_status === "error" && league.pulse_error && (
-            <p
-              role="alert"
-              className="mt-4 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-3 text-sm text-signal-danger"
-            >
-              Last refresh failed: {league.pulse_error}
-            </p>
-          )}
-        </div>
-      </header>
-
-      <LeagueTabs
-        sleeperLeagueId={sleeperLeagueId}
-        activeTab={activeTab}
-        searchedUsername={searchedUsername}
-      />
-
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {activeTab === "overview" ? (
-          // Overview: league info + quick panels in a LEFT rail, power rankings
-          // on the RIGHT. The rail stacks above the content below xl.
-          <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-            <aside
-              aria-label="League information and links"
-              className="space-y-6 xl:sticky xl:top-8 xl:self-start"
-            >
-              <LeagueInfoPanel layout="sidebar" {...infoPanelProps} />
-
-              <Panel eyebrow="At a glance" title="Snapshot">
-                <dl className="grid grid-cols-3 gap-2">
-                  <StatReadout
-                    label="Rosters"
-                    value={String(pulseResult.counts.rosters)}
-                    accent="cyan"
-                  />
-                  <StatReadout
-                    label="Members"
-                    value={String(pulseResult.counts.users)}
-                    accent="purple"
-                  />
-                  <Suspense
-                    fallback={<StatReadout label="Transactions" value="Loading" accent="ink" />}
-                  >
-                    <TransactionCount
-                      leagueRowId={league.id}
-                      resynced={!pulseResult.cached}
-                    />
-                  </Suspense>
-                </dl>
-              </Panel>
-
-              <Panel eyebrow="Go deeper" title="Explore this league">
-                <ul className="space-y-2">
-                  <li>
-                    <ExploreLink
-                      href={teamsHref}
-                      icon={Users}
-                      label="Teams and rosters"
-                      hint="Compare every roster side by side"
-                    />
-                  </li>
-                  <li>
-                    <ExploreLink
-                      href={tradeFinderHref}
-                      icon={Handshake}
-                      label="Trade Finder"
-                      hint="One trade worth offering, at a time"
-                    />
-                  </li>
-                  <li>
-                    <ExploreLink
-                      href={transactionsHref}
-                      icon={ArrowLeftRight}
-                      label="Transactions"
-                      hint="Trades, waivers, and FAAB moves"
-                    />
-                  </li>
-                </ul>
-              </Panel>
-            </aside>
-
-            <div className="min-w-0 space-y-6">
-              <Suspense fallback={<RankingsSkeleton />}>
-                <PowerRankingsSection
-                  leagueRowId={league.id}
-                  sleeperLeagueId={sleeperLeagueId}
-                  formatSlug={formatSlug}
-                  sourceSlug={sourceSlug}
-                  formatDisplay={formatDisplay}
-                  sourceDisplay={sourceDisplay}
-                  leagueSeason={league.season != null ? String(league.season) : null}
-                  leagueStatus={league.status ?? null}
-                  searchedUsername={searchedUsername}
-                  includePicks={includePicks}
-                  showPicksToggle={showPicksToggle}
-                  rankMode={rankMode}
-                  powerPulseHref={powerPulseHref}
-                  resynced={!pulseResult.cached}
-                />
-              </Suspense>
-            </div>
-          </div>
-        ) : (
-          // Teams: the league info becomes a full-width horizontal band on top,
-          // so the rosters below can use the full page width. The last-updated /
-          // value meta drops out of the band and renders as one discreet line.
-          <div className="space-y-6">
-            <div>
-              <LeagueInfoPanel
-                layout="horizontal"
-                showFooter={false}
-                {...infoPanelProps}
-              />
-              <div className="mt-2 px-1">
-                <LeagueMetaLine
-                  lastUpdatedLabel={lastPulsedLabel}
-                  cached={pulseResult.cached}
-                  coverage={context.coverage}
-                  sourceDisplay={sourceDisplay}
-                  formatDisplay={formatDisplay}
-                  derivedLabel={derivedLabel}
-                  fallbackDisplay={fallbackDisplay}
-                  pickSourceDisplay={pickSourceDisplay}
-                />
-              </div>
-            </div>
+    <LeagueShell
+      sleeperLeagueId={sleeperLeagueId}
+      activeTab={activeTab}
+      searchedUsername={searchedUsername}
+      homeHref={backHref}
+      crumbs={[{ label: league.name }]}
+      copyHref={`/leagues/${sleeperLeagueId}`}
+      copyAriaLabel="Copy link to this league"
+      otherLeagues={otherLeagues}
+      masthead={mastheadProps}
+      alert={
+        league.pulse_status === "error" && league.pulse_error ? (
+          <p
+            role="alert"
+            className="mb-4 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-3 text-sm text-signal-danger"
+          >
+            Last refresh failed: {league.pulse_error}
+          </p>
+        ) : null
+      }
+    >
+      {activeTab === "overview" ? (
+        // Overview: rankings take the main column, the secondary panels sit in
+        // a right rail. The rail used to be on the left so the league identity
+        // landed above the rankings on a phone; the masthead does that job for
+        // every section now, so what is left in the rail is genuinely
+        // supplementary and belongs after the table in DOM order.
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-6">
             <Suspense fallback={<RankingsSkeleton />}>
-              <TeamsPanel
+              <PowerRankingsSection
                 leagueRowId={league.id}
                 sleeperLeagueId={sleeperLeagueId}
                 formatSlug={formatSlug}
                 sourceSlug={sourceSlug}
-                searchedUsername={searchedUsername}
-                focusedRosterId={focusedRosterId}
+                formatDisplay={formatDisplay}
+                sourceDisplay={sourceDisplay}
                 leagueSeason={league.season != null ? String(league.season) : null}
                 leagueStatus={league.status ?? null}
+                searchedUsername={searchedUsername}
                 includePicks={includePicks}
                 showPicksToggle={showPicksToggle}
+                rankMode={rankMode}
+                powerPulseHref={powerPulseHref}
                 resynced={!pulseResult.cached}
               />
             </Suspense>
           </div>
-        )}
-      </div>
-    </main>
+
+          <aside
+            aria-label="League snapshot and links"
+            className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
+          >
+            <Panel eyebrow="At a glance" title="Snapshot">
+              <dl className="grid grid-cols-3 gap-2">
+                <StatReadout
+                  label="Rosters"
+                  value={String(pulseResult.counts.rosters)}
+                  accent="cyan"
+                />
+                <StatReadout
+                  label="Members"
+                  value={String(pulseResult.counts.users)}
+                  accent="purple"
+                />
+                <Suspense
+                  fallback={<StatReadout label="Transactions" value="Loading" accent="ink" />}
+                >
+                  <TransactionCount
+                    leagueRowId={league.id}
+                    resynced={!pulseResult.cached}
+                  />
+                </Suspense>
+              </dl>
+            </Panel>
+
+            <Panel eyebrow="Go deeper" title="Explore this league">
+              <ul className="space-y-2">
+                <li>
+                  <ExploreLink
+                    href={teamsHref}
+                    icon={Users}
+                    label="Teams and rosters"
+                    hint="Compare every roster side by side"
+                  />
+                </li>
+                <li>
+                  <ExploreLink
+                    href={tradeFinderHref}
+                    icon={Handshake}
+                    label="Trade Finder"
+                    hint="One trade worth offering, at a time"
+                  />
+                </li>
+                <li>
+                  <ExploreLink
+                    href={transactionsHref}
+                    icon={ArrowLeftRight}
+                    label="Transactions"
+                    hint="Trades, waivers, and FAAB moves"
+                  />
+                </li>
+              </ul>
+            </Panel>
+          </aside>
+        </div>
+      ) : (
+        // Teams: no rail at all. The masthead already carries the league
+        // identity, so the rosters get the full dashboard width.
+        <Suspense fallback={<RankingsSkeleton />}>
+          <TeamsPanel
+            leagueRowId={league.id}
+            sleeperLeagueId={sleeperLeagueId}
+            formatSlug={formatSlug}
+            sourceSlug={sourceSlug}
+            searchedUsername={searchedUsername}
+            focusedRosterId={focusedRosterId}
+            leagueSeason={league.season != null ? String(league.season) : null}
+            leagueStatus={league.status ?? null}
+            includePicks={includePicks}
+            showPicksToggle={showPicksToggle}
+            resynced={!pulseResult.cached}
+          />
+        </Suspense>
+      )}
+    </LeagueShell>
   );
 }
 

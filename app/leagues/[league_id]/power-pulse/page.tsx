@@ -15,10 +15,8 @@ import {
   buildLeagueFormatTags,
   buildLeagueScoringTags,
 } from "@/lib/league-format-tags";
-import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
-import { LeagueHeaderActions } from "@/components/league-header-actions";
-import { LeagueTabs } from "@/components/league-tabs";
-import { LeagueInfoPanel } from "@/components/league-info-panel";
+import { LeagueShell } from "@/components/league-shell";
+import type { LeagueMastheadProps } from "@/components/league-shell";
 import { Panel, StatReadout } from "@/components/dashboard-panel";
 import { PulseRankingsTable } from "@/components/power-pulse/pulse-rankings-table";
 import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
@@ -124,7 +122,8 @@ export default async function LeaguePowerPulsePage({
     (league.scoring_settings ?? {}) as ScoringSettings,
   );
 
-  // Shared league identity card, matching every other deep-view surface.
+  // Shared league identity, rendered by the shell as the masthead above
+  // whatever this section shows.
   const formatTags = buildLeagueFormatTags({
     rosterPositions: league.roster_positions,
     scoringSettings: league.scoring_settings,
@@ -132,7 +131,7 @@ export default async function LeaguePowerPulsePage({
   });
   const scoringTags = buildLeagueScoringTags(league.scoring_settings);
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
-  const infoPanelProps = {
+  const mastheadProps: LeagueMastheadProps = {
     leagueName: league.name,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
@@ -158,42 +157,21 @@ export default async function LeaguePowerPulsePage({
     : null;
 
   return (
-    <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-          }}
-        />
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <LeagueBreadcrumb
-              homeHref={homeHref}
-              crumbs={[{ label: league.name, href: leagueHref }, { label: "Power Pulse" }]}
-            />
-            <LeagueHeaderActions
-              sleeperLeagueId={sleeperLeagueId}
-              copyHref={`/leagues/${sleeperLeagueId}/power-pulse`}
-              copyAriaLabel="Copy link to this league's Power Pulse"
-              otherLeagues={otherLeagues}
-              searchedUsername={searchedUsername}
-            />
-          </div>
-        </div>
-      </header>
-
-      <LeagueTabs
-        sleeperLeagueId={sleeperLeagueId}
-        activeTab="power-pulse"
-        searchedUsername={searchedUsername}
-      />
-
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <LeagueShell
+      sleeperLeagueId={sleeperLeagueId}
+      activeTab="power-pulse"
+      searchedUsername={searchedUsername}
+      homeHref={homeHref}
+      crumbs={[{ label: league.name, href: leagueHref }, { label: "Power Pulse" }]}
+      copyHref={`/leagues/${sleeperLeagueId}/power-pulse`}
+      copyAriaLabel="Copy link to this league's Power Pulse"
+      otherLeagues={otherLeagues}
+      masthead={mastheadProps}
+    >
+      <>
         {/* Feature intro strip. Sets expectations before any number appears,
-            and states the one thing Power Pulse ignores. */}
+            and states the one thing Power Pulse ignores. The heading is an h2:
+            the masthead above owns this page's h1 (the league name). */}
         <section
           aria-labelledby="pp-intro"
           className="relative overflow-hidden rounded-modal border border-line-accent p-5 sm:p-6"
@@ -210,15 +188,17 @@ export default async function LeaguePowerPulsePage({
                 "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
             }}
           />
+          {/* The masthead above already says League Pulse, so this eyebrow
+              names what the section measures instead of repeating the brand. */}
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-cyan">
-            League Pulse
+            Expected performance
           </p>
-          <h1
+          <h2
             id="pp-intro"
             className="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-3xl"
           >
             Power Pulse
-          </h1>
+          </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
             Other rankings add up what your roster is worth. This one projects
             what it will do: your best lineup each week, under your league's
@@ -251,11 +231,10 @@ export default async function LeaguePowerPulsePage({
             scoringDescription={scoringDescription}
             playoffTeams={playoffTeams}
             valueLabel={valueLabel}
-            infoPanelProps={infoPanelProps}
           />
         </Suspense>
-      </div>
-    </main>
+      </>
+    </LeagueShell>
   );
 }
 
@@ -323,7 +302,6 @@ async function PowerPulseBody({
   scoringDescription,
   playoffTeams,
   valueLabel,
-  infoPanelProps,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -337,7 +315,6 @@ async function PowerPulseBody({
   scoringDescription: string;
   playoffTeams: number;
   valueLabel: string | null;
-  infoPanelProps: Parameters<typeof LeagueInfoPanel>[0];
 }) {
   const { readiness, view } = await getPulseData(
     leagueRowId,
@@ -381,7 +358,6 @@ async function PowerPulseBody({
               teams={preDraftTeams}
               season={seasonLabel}
             />
-            <LeagueInfoPanel layout="horizontal" headingLevel={2} {...infoPanelProps} />
           </div>
         ) : !view ? (
           <div className="mt-6">
@@ -397,48 +373,11 @@ async function PowerPulseBody({
             </Panel>
           </div>
         ) : (
-          // Rail on the LEFT, matching the overview tab. Below xl the grid
-          // collapses to one column in DOM order, so a left rail puts "This
-          // league" above the rankings instead of far below them: on a phone
-          // the page used to open on a table of team names with nothing saying
-          // which league they belonged to.
-          <div className="mt-6 grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-              {/* Left rail: which league this is, then context and methodology. */}
-              <aside
-                aria-label="League information and methodology"
-                className="space-y-6 xl:sticky xl:top-8 xl:self-start"
-              >
-                {/* headingLevel 2: this page's h1 is "Power Pulse" in the intro
-                    strip above, so the league name here steps down a level
-                    rather than giving the page a second h1. */}
-                <LeagueInfoPanel layout="sidebar" headingLevel={2} {...infoPanelProps} />
-
-                <Panel eyebrow="At a glance" title="League snapshot">
-                  <dl className="grid grid-cols-3 gap-2">
-                    <StatReadout
-                      label="Teams"
-                      value={String(view.teams.length)}
-                      accent="cyan"
-                    />
-                    <StatReadout
-                      label="Playoff spots"
-                      value={String(playoffTeams)}
-                      accent="purple"
-                    />
-                    <StatReadout
-                      label="Weeks left"
-                      value={String(view.teams[0]?.weekly.length ?? 0)}
-                      accent="ink"
-                    />
-                  </dl>
-                </Panel>
-
-                <HowPowerPulseWorks
-                  scoringDescription={scoringDescription}
-                  preseason={view.preseason}
-                />
-              </aside>
-
+          // Rail on the RIGHT, matching the overview tab. The masthead above
+          // already names the league on every section, so what is left in the
+          // rail is supplementary and reads better after the rankings when the
+          // grid collapses to one column on a phone.
+          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
               {/* Main column: the rankings, then who those rankings say wins,
                   then the standings and the awards. The champion sits between
                   the ranking and the projected finish because it is the bridge
@@ -490,6 +429,38 @@ async function PowerPulseBody({
                   <PulseLeaders leaders={buildPulseLeaders(view.teams)} />
                 </Panel>
               </div>
+
+              {/* Right rail: the numbers behind the numbers, and how they were
+                  reached. */}
+              <aside
+                aria-label="League snapshot and methodology"
+                className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
+              >
+                <Panel eyebrow="At a glance" title="League snapshot">
+                  <dl className="grid grid-cols-3 gap-2">
+                    <StatReadout
+                      label="Teams"
+                      value={String(view.teams.length)}
+                      accent="cyan"
+                    />
+                    <StatReadout
+                      label="Playoff spots"
+                      value={String(playoffTeams)}
+                      accent="purple"
+                    />
+                    <StatReadout
+                      label="Weeks left"
+                      value={String(view.teams[0]?.weekly.length ?? 0)}
+                      accent="ink"
+                    />
+                  </dl>
+                </Panel>
+
+                <HowPowerPulseWorks
+                  scoringDescription={scoringDescription}
+                  preseason={view.preseason}
+                />
+              </aside>
             </div>
         )}
     </>

@@ -11,10 +11,7 @@ import {
   buildLeagueFormatTags,
   buildLeagueScoringTags,
 } from "@/lib/league-format-tags";
-import { LeagueBreadcrumb } from "@/components/league-breadcrumb";
-import { LeagueHeaderActions } from "@/components/league-header-actions";
-import { LeagueTabs } from "@/components/league-tabs";
-import { LeagueInfoPanel } from "@/components/league-info-panel";
+import { LeagueShell } from "@/components/league-shell";
 import { Panel } from "@/components/dashboard-panel";
 import { TradeFinder, type PlayerOption } from "@/components/trade-finder";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
@@ -130,7 +127,7 @@ export default async function LeagueTradeFinderPage({
   const coverageOk = context.coverage !== "none";
 
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
-  const infoPanelProps = {
+  const mastheadProps = {
     leagueName: league.name,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
@@ -156,40 +153,18 @@ export default async function LeagueTradeFinderPage({
   };
 
   return (
-    <main id="main">
-      <header className="relative overflow-hidden border-b border-line">
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-          }}
-        />
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <LeagueBreadcrumb
-              homeHref={homeHref}
-              crumbs={[{ label: league.name, href: leagueHref }, { label: "Trade Finder" }]}
-            />
-            <LeagueHeaderActions
-              sleeperLeagueId={sleeperLeagueId}
-              copyHref={`/leagues/${sleeperLeagueId}/trade-finder`}
-              copyAriaLabel="Copy link to this league's Trade Finder"
-              otherLeagues={otherLeagues}
-              searchedUsername={searchedUsername}
-            />
-          </div>
-        </div>
-      </header>
-
-      <LeagueTabs
-        sleeperLeagueId={sleeperLeagueId}
-        activeTab="trade-finder"
-        searchedUsername={searchedUsername}
-      />
-
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <LeagueShell
+      sleeperLeagueId={sleeperLeagueId}
+      activeTab="trade-finder"
+      searchedUsername={searchedUsername}
+      homeHref={homeHref}
+      crumbs={[{ label: league.name, href: leagueHref }, { label: "Trade Finder" }]}
+      copyHref={`/leagues/${sleeperLeagueId}/trade-finder`}
+      copyAriaLabel="Copy link to this league's Trade Finder"
+      otherLeagues={otherLeagues}
+      masthead={mastheadProps}
+    >
+      <>
         <section
           aria-labelledby="tf-intro"
           className="relative overflow-hidden rounded-modal border border-line-accent p-5 sm:p-6"
@@ -206,60 +181,28 @@ export default async function LeagueTradeFinderPage({
                 "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
             }}
           />
+          {/* The masthead above already says League Pulse, so this eyebrow
+              names what the section does instead of repeating the brand. */}
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-cyan">
-            League Pulse
+            Offer builder
           </p>
-          <h1
+          {/* An h2: the masthead above owns this page's h1 (the league name). */}
+          <h2
             id="tf-intro"
             className="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-3xl"
           >
             Trade Finder
-          </h1>
+          </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
             One trade at a time, built from what every roster in this league
             needs.
           </p>
         </section>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <aside
-            aria-label="League information"
-            className="space-y-6 xl:sticky xl:top-8 xl:self-start"
-          >
-            <LeagueInfoPanel layout="sidebar" headingLevel={2} {...infoPanelProps} />
-            {/* Sources, not a lesson. Each line names one input and stops; the
-                reasoning behind them belongs in the docs, not in a rail the
-                reader passes every time they open the tab. */}
-            <Panel eyebrow="How this works" title="Where the numbers come from">
-              <dl className="space-y-2 text-sm text-ink-muted">
-                <SourceLine
-                  term="Standings"
-                  detail="Power Pulse, same as the rankings table"
-                />
-                <SourceLine
-                  term="Lineup impact"
-                  detail="your optimal lineup under this league's scoring"
-                />
-                <SourceLine
-                  term="Values"
-                  detail={`${infoPanelProps.formatDisplay} via ${infoPanelProps.sourceDisplay}${
-                    infoPanelProps.pickSourceDisplay
-                      ? `, picks via ${infoPanelProps.pickSourceDisplay}`
-                      : ""
-                  }`}
-                />
-              </dl>
-              <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-muted">
-                We cannot see what another manager is attached to. These are
-                offers, not predictions.
-              </p>
-            </Panel>
-          </aside>
-
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0">
-            {/* The h1 is "Trade Finder" in the strip above and the sidebar owns
-                an h2, so the working area needs one of its own rather than
-                opening on an h3 inside the card. */}
+            {/* The intro strip above owns an h2, so the working area needs one
+                of its own rather than opening on an h3 inside the card. */}
             <h2 className="sr-only">Suggested trade</h2>
             {/* Streamed. Reading a league is a couple of seconds of rosters,
                 values, and projections, and holding the whole page on it would
@@ -278,9 +221,42 @@ export default async function LeagueTradeFinderPage({
               />
             </Suspense>
           </div>
+
+          {/* Sources, not a lesson. Each line names one input and stops; the
+              reasoning behind them belongs in the docs, not in a rail the
+              reader passes every time they open the tab. */}
+          <aside
+            aria-label="Where the numbers come from"
+            className="xl:sticky xl:top-[5.5rem] xl:self-start"
+          >
+            <Panel eyebrow="How this works" title="Where the numbers come from">
+              <dl className="space-y-2 text-sm text-ink-muted">
+                <SourceLine
+                  term="Standings"
+                  detail="Power Pulse, same as the rankings table"
+                />
+                <SourceLine
+                  term="Lineup impact"
+                  detail="your optimal lineup under this league's scoring"
+                />
+                <SourceLine
+                  term="Values"
+                  detail={`${mastheadProps.formatDisplay} via ${mastheadProps.sourceDisplay}${
+                    mastheadProps.pickSourceDisplay
+                      ? `, picks via ${mastheadProps.pickSourceDisplay}`
+                      : ""
+                  }`}
+                />
+              </dl>
+              <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-muted">
+                We cannot see what another manager is attached to. These are
+                offers, not predictions.
+              </p>
+            </Panel>
+          </aside>
         </div>
-      </div>
-    </main>
+      </>
+    </LeagueShell>
   );
 }
 

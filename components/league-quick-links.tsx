@@ -29,8 +29,9 @@ import type { ProjectionInput } from "@/lib/league-projections";
  * WHY IT LOOKS DIFFERENT FROM EVERY OTHER PANEL HERE
  *   The Sync all bar and the filter bar are both plain surface cards. If this
  *   were a third one, three unrelated controls would read as one settings strip.
- *   It borrows the cockpit treatment from components/league-tabs.tsx instead, an
- *   elevated card with a beacon hairline and a corner glow, which is the visual
+ *   It borrows the cockpit treatment from the League Pulse masthead instead
+ *   (components/league-shell/), a card with a beacon hairline and a corner
+ *   glow, which is the visual
  *   language this site already uses for "this is a place you go", not "this is a
  *   toggle you flip".
  *
