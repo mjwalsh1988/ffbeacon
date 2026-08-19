@@ -1,19 +1,24 @@
 import { LeagueSwitcher, type SwitcherLeague } from "@/components/league-switcher";
 import { CopyLinkButton } from "@/components/copy-link-button";
-import { RefreshButton } from "@/components/refresh-button";
 
 /**
  * Shared header action cluster for every League Pulse deep-view surface
- * (overview, teams, transactions feed, team detail). Renders, in order:
- * the in-view League Switcher (only when the searched user has other
- * leagues), a Copy link button, and the public Refresh button.
+ * (overview, teams, transactions feed, team detail): the in-view League
+ * Switcher, shown only when the searched user has other leagues, and a Copy
+ * link button.
  *
- * Layout matches the league overview header: on mobile the switcher and
- * copy link share a row (50/50 when both present, full width when the
- * switcher is absent) and Refresh drops to a full-width line below; at sm+
- * the inner wrapper dissolves via `display:contents` so every control sits
- * inline, right aligned. Pass `className` to position the cluster inside a
- * parent grid (e.g. the overview header's `sm:col-start-2 sm:row-start-1`).
+ * ONE ROW ON A PHONE. The switcher takes the width and Copy link is a square
+ * glyph on the right, because switching leagues is the control people reach for
+ * and copying a link is the one they occasionally do. Both were 50/50 before,
+ * which gave a button that says one word the same room as a picker naming a
+ * league. From sm up the wrapper dissolves via `display:contents`, the copy
+ * button grows its label back, and both sit inline and right aligned.
+ *
+ * Refresh used to live here and is now a row in the league's section of the
+ * navigation rail (components/league-shell/league-rail-sections.tsx). It is an
+ * occasional maintenance action rather than something you reach for while
+ * reading a league, and it was the only control here that could push the row
+ * onto a second line.
  *
  * `w-full` on mobile is load-bearing. Most deep-view headers put this cluster
  * in a `flex flex-wrap` row beside the breadcrumb, where a flex item sizes to
@@ -21,14 +26,12 @@ import { RefreshButton } from "@/components/refresh-button";
  * the right edge instead of spanning the container.
  */
 export function LeagueHeaderActions({
-  sleeperLeagueId,
   copyHref,
   copyAriaLabel,
   otherLeagues,
   searchedUsername,
   className,
 }: {
-  sleeperLeagueId: string;
   copyHref: string;
   copyAriaLabel: string;
   otherLeagues: SwitcherLeague[];
@@ -41,7 +44,9 @@ export function LeagueHeaderActions({
     >
       <div
         className={`grid gap-2 sm:contents ${
-          otherLeagues.length > 0 ? "grid-cols-2" : "grid-cols-1"
+          otherLeagues.length > 0
+            ? "grid-cols-[minmax(0,1fr)_auto]"
+            : "grid-cols-1"
         }`}
       >
         {otherLeagues.length > 0 && (
@@ -50,9 +55,12 @@ export function LeagueHeaderActions({
             searchedUsername={searchedUsername}
           />
         )}
-        <CopyLinkButton href={copyHref} ariaLabel={copyAriaLabel} />
+        <CopyLinkButton
+          href={copyHref}
+          ariaLabel={copyAriaLabel}
+          compactBelowSm={otherLeagues.length > 0}
+        />
       </div>
-      <RefreshButton sleeperLeagueId={sleeperLeagueId} mobileFullWidth />
     </div>
   );
 }

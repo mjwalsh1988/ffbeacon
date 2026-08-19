@@ -5958,3 +5958,43 @@ T624 | completed | Games and Signal Scout join the full-width scheme
      | clipped by an ancestor's overflow-hidden.
      | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
      |           no browser check, at the owner's request)
+
+T625 | completed | League header down to one row, refresh into the rail
+     | files: components/league-header-actions.tsx,
+     |        components/copy-link-button.tsx,
+     |        components/league-shell/league-rail-sections.tsx,
+     |        components/league-shell/league-shell.tsx,
+     |        components/app-shell/nav-icons.ts, lib/use-league-refresh.ts,
+     |        components/refresh-button.tsx (deleted)
+     | depends on: T624
+     | The deep view's header cluster held three controls and needed two rows on
+     | a phone: the switcher and Copy link split 50/50, with Refresh below them.
+     | It is one row now. The switcher takes the width and Copy link is a square
+     | glyph beside it, because switching leagues is what people reach for and
+     | copying a link is what they occasionally do. The copy button keeps its
+     | label from sm up through a new `compactBelowSm`, so nothing is lost on the
+     | layout that has room, it keeps a 44x44 target where the label is gone, and
+     | the glyph turns into a checkmark to confirm a copy the label can no longer
+     | announce.
+     | Refresh moved into the league's section of the navigation rail as a row
+     | that acts in place (`onSelect`), which also puts it in the mobile drawer,
+     | where the header cluster never reached. Its fetch moved to
+     | lib/use-league-refresh.ts so the control could live somewhere other than
+     | where the code was written, and components/refresh-button.tsx is deleted
+     | rather than left behind unused. The row's hint carries the outcome of the
+     | last attempt, since a rail row has nowhere to put an error, and a live
+     | region beside the registration carries the same thing by ear.
+     | NOT GATED, deliberately, and worth writing down because the request
+     | described it as admin-only: force refresh was reclassified as public under
+     | FFB-SEC-004 / FFB-SEC-007. The route has no auth check, it is protected by
+     | a shared per-league cooldown, and lib/security/league-refresh-public.test.ts
+     | fails CI if a commissioner or admin gate is reintroduced. Nothing here
+     | changed who can press it. CLAUDE.md still describes the older admin-gated
+     | design and is stale on this point.
+     | Also: the league section rendered "League overview" and "Overview" as two
+     | rows pointing at the same page. The section carried an href, which draws an
+     | index row above the children, and Overview is already the first child. The
+     | href is gone, the way the player profile's section and the draft room's
+     | already do it, so the section opens straight onto its five rows.
+     | verified: yes (tsc clean, 1747 tests across 122 files; no build and no
+     |           browser check, at the owner's request)

@@ -25,6 +25,11 @@ type CopyLinkButtonProps = {
   /** When set, requesting this URL on first hover / focus warms the CDN so the
    * generated image is already rendered by the time anyone opens the link. */
   prewarmHref?: string;
+  /** Drop the visible label below sm, keeping the glyph and a square tap
+   * target. For rows that are tight on a phone and roomy above it, such as the
+   * League Pulse header, where the league switcher wants the width. The button
+   * keeps its aria-label either way, so nothing is lost by ear. */
+  compactBelowSm?: boolean;
 };
 
 /**
@@ -50,6 +55,7 @@ export function CopyLinkButton({
   icon = "link",
   noun = "Link",
   prewarmHref,
+  compactBelowSm = false,
 }: CopyLinkButtonProps) {
   const [status, setStatus] = useState<"idle" | "copied" | "manual">("idle");
   const [resolvedUrl, setResolvedUrl] = useState<string>("");
@@ -118,15 +124,20 @@ export function CopyLinkButton({
         : size === "lg"
           ? "min-h-11 px-4 text-sm"
           : "min-h-11 px-3 text-sm";
-
   const iconOnly = size === "xs" || size === "sm";
+  // Label hidden below sm, present above it. The glyph has to confirm the copy
+  // on its own at the small size, since the "Link copied" text is not there to.
+  const labelHiddenBelowSm = compactBelowSm && !iconOnly;
+  // Square below sm when the label is gone, so the target never drops under
+  // 44x44 on the layout that needs it most.
+  const compactClasses = labelHiddenBelowSm ? "min-w-11 sm:min-w-0" : "";
   // An icon-only button confirms with a checkmark and the confirmed color
   // rather than growing a "copied" label. These sit inline in roster and trade
   // headers, where a button that widens mid-row pushes the stats beside it out
   // of the card. Sighted users get the check; the live region below says the
   // rest.
-  const confirmInPlace = iconOnly && status === "copied";
-  const visibleLabel = confirmInPlace
+  const confirmInPlace = (iconOnly || labelHiddenBelowSm) && status === "copied";
+  const visibleLabel = (iconOnly && status === "copied")
     ? ""
     : status === "copied"
       ? `${noun} copied`
@@ -156,7 +167,7 @@ export function CopyLinkButton({
           confirmInPlace
             ? "border-brand-cyan/70 text-brand-cyan"
             : "border-line text-ink-muted"
-        } ${sizeClasses}`}
+        } ${sizeClasses} ${compactClasses}`}
       >
         {confirmInPlace ? (
           <CheckIcon size={glyphSize} />
@@ -165,7 +176,11 @@ export function CopyLinkButton({
         ) : (
           <LinkIcon size={glyphSize} />
         )}
-        {visibleLabel && <span>{visibleLabel}</span>}
+        {visibleLabel && (
+          <span className={labelHiddenBelowSm ? "hidden sm:inline" : undefined}>
+            {visibleLabel}
+          </span>
+        )}
       </button>
       <span className="sr-only" aria-live="polite" role="status">
         {announcement}

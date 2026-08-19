@@ -79,7 +79,6 @@ export function LeagueShell({
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
               <LeagueBreadcrumb homeHref={homeHref} crumbs={crumbs} />
               <LeagueHeaderActions
-                sleeperLeagueId={sleeperLeagueId}
                 copyHref={copyHref}
                 copyAriaLabel={copyAriaLabel}
                 otherLeagues={otherLeagues}
