@@ -7,6 +7,12 @@ import { serializeJsonLd } from "@/lib/json-ld";
 import { formatEastern, formatEasternDate } from "@/lib/datetime";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { GuideShell } from "@/components/guides/guide-shell";
+import { GuideToc } from "@/components/guides/guide-toc";
+import {
+  GuideSectionHeader,
+  GuideSubheading,
+} from "@/components/guides/guide-section-header";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { findPublishedGuide } from "@/lib/guides/published";
@@ -97,6 +103,20 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The rail's contents list. The ids are the section headings' own, so a link
+ * lands on the heading rather than somewhere near it.
+ */
+const TOC_ITEMS = [
+  { id: "how-this-works", label: "How the gap is worked out" },
+  { id: "steals-heading", label: "Steals" },
+  { id: "swings-heading", label: "Late-round swings" },
+  { id: "fades-heading", label: "Fades" },
+  { id: "tiers-heading", label: "Tier-based drafting" },
+  { id: "strategy-heading", label: "What to do on draft day" },
+  { id: "closing-heading", label: "Where the numbers come from" },
+];
+
 export default async function DraftGuidePage({
   searchParams,
 }: {
@@ -172,47 +192,57 @@ export default async function DraftGuidePage({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
-      <PageBody width="reading">
+      {/* The masthead spans the shell, the way every other page's does. */}
+      <PageBody flush>
+        {/* The headline is a single text node now rather than two
+            gradient-split spans, so the aria-label that used to collapse them
+            is gone: the announced name and the visible text are the same. */}
+        <PageMasthead
+          eyebrow="Guides"
+          title="The draft guide: who the room is late on"
+          chips={[
+            { label: "Guide", tone: "cyan" },
+            { label: activeFormat?.display ?? activeSlug, tone: "purple" },
+          ]}
+          stats={[
+            { label: "Steals", value: String(board.steals.length), accent: "cyan" },
+            { label: "Swings", value: String(board.swings.length), accent: "purple" },
+            { label: "Fades", value: String(board.fades.length) },
+          ]}
+        >
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-subtle">
+            <time dateTime={PUBLISHED_AT}>{formatEasternDate(PUBLISHED_AT)}</time>
+            {board.computedAt ? (
+              <time dateTime={board.computedAt}>
+                Board rebuilt {formatEastern(board.computedAt)}
+              </time>
+            ) : null}
+            <span>
+              By{" "}
+              <Link
+                rel="author"
+                href={SITE.author.bylineHref}
+                className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                {SITE.author.name}
+              </Link>
+            </span>
+          </p>
+        </PageMasthead>
+      </PageBody>
+
+      <GuideShell
+        toc={
+          <>
+            {/* The format is what the whole board answers to, so it leads the
+                rail rather than sitting in the flow where scrolling loses it. */}
+            <FormatSwitcher formats={formats} activeSlug={activeSlug} fellBack={fellBack} />
+            <GuideToc items={TOC_ITEMS} />
+          </>
+        }
+      >
         <article>
-          {/* The headline is a single text node now rather than two
-              gradient-split spans, so the aria-label that used to collapse them
-              is gone: the announced name and the visible text are the same. */}
-          <PageMasthead
-            eyebrow="Guides"
-            title="The draft guide: who the room is late on"
-            chips={[
-              { label: "Guide", tone: "cyan" },
-              { label: activeFormat?.display ?? activeSlug, tone: "purple" },
-            ]}
-            stats={[
-              { label: "Steals", value: String(board.steals.length), accent: "cyan" },
-              { label: "Swings", value: String(board.swings.length), accent: "purple" },
-              { label: "Fades", value: String(board.fades.length) },
-            ]}
-          >
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-subtle">
-              <time dateTime={PUBLISHED_AT}>{formatEasternDate(PUBLISHED_AT)}</time>
-              {board.computedAt ? (
-                <time dateTime={board.computedAt}>
-                  Board rebuilt {formatEastern(board.computedAt)}
-                </time>
-              ) : null}
-              <span>
-                By{" "}
-                <Link
-                  rel="author"
-                  href={SITE.author.bylineHref}
-                  className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                >
-                  {SITE.author.name}
-                </Link>
-              </span>
-            </p>
-          </PageMasthead>
-
           <TheShortVersion market={market} format={activeFormat?.display ?? activeSlug} />
-
-          <FormatSwitcher formats={formats} activeSlug={activeSlug} fellBack={fellBack} />
 
           <div className="text-[15px] sm:text-base">
             <HowThisWorks market={market} />
@@ -249,7 +279,7 @@ export default async function DraftGuidePage({
             <Closing />
           </div>
         </article>
-      </PageBody>
+      </GuideShell>
 
       <DiscordCtaSection
         eyebrow="Drafting this week?"
@@ -281,7 +311,8 @@ function TheShortVersion({ market, format }: { market: string; format: string })
   return (
     <section
       aria-labelledby="short-version"
-      className="mt-8 rounded-card p-px"
+      // No top margin: the shell's own padding is the gap under the masthead.
+      className="rounded-card p-px"
       style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
     >
       <div className="rounded-card p-4 sm:p-5" style={{ background: "#16162A" }}>
@@ -319,15 +350,18 @@ function FormatSwitcher({
 }) {
   if (formats.length === 0) return null;
   return (
-    <nav aria-labelledby="format-switcher-heading" className="mt-8">
+    <nav
+      aria-labelledby="format-switcher-heading"
+      className="rounded-card border border-line bg-surface/60 p-3 sm:p-4"
+    >
       <h2
         id="format-switcher-heading"
-        className="text-sm font-semibold uppercase tracking-[0.12em] text-ink-muted"
+        className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted"
       >
         Pick your format
       </h2>
       {fellBack ? (
-        <p className="mt-2 text-sm text-ink-muted">
+        <p className="mt-2 px-1 text-sm text-ink-muted">
           Your saved format has no draft market we can grade against, so this is showing{" "}
           {formats[0]?.display}. Your saved preference has not been changed.
         </p>
@@ -360,8 +394,8 @@ function FormatSwitcher({
 
 function HowThisWorks({ market }: { market: string }) {
   return (
-    <section aria-labelledby="how-this-works" className="mt-14">
-      <SectionHeader
+    <section aria-labelledby="how-this-works" className="mt-12">
+      <GuideSectionHeader
         id="how-this-works"
         eyebrow="The method"
         heading="How the gap is worked out"
@@ -394,54 +428,6 @@ function HowThisWorks({ market }: { market: string }) {
   );
 }
 
-/* ---------- Section header ---------- */
-
-/**
- * The divider that starts every major section.
- *
- * A full-bleed beacon rule, a small colored eyebrow naming what kind of section
- * it is, then the heading at a size that actually separates it from body copy.
- * The rule and the eyebrow are decorative; the heading carries the meaning and
- * is what the section's aria-labelledby points at.
- */
-function SectionHeader({
-  id,
-  eyebrow,
-  heading,
-  tone = "cyan",
-}: {
-  id: string;
-  eyebrow: string;
-  heading: string;
-  tone?: "cyan" | "purple";
-}) {
-  const color = tone === "purple" ? "#A855F7" : "#22D3EE";
-  return (
-    <>
-      <div
-        aria-hidden="true"
-        className="h-px w-full"
-        style={{
-          backgroundImage: `linear-gradient(90deg, ${color} 0%, ${color}33 45%, transparent 100%)`,
-        }}
-      />
-      <p
-        aria-hidden="true"
-        className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em]"
-        style={{ color }}
-      >
-        {eyebrow}
-      </p>
-      <h2
-        id={id}
-        className="mt-1.5 text-3xl font-semibold tracking-tight text-ink sm:text-4xl"
-      >
-        {heading}
-      </h2>
-    </>
-  );
-}
-
 /* ---------- Board sections ---------- */
 
 function BoardSection({
@@ -460,8 +446,8 @@ function BoardSection({
   emptyText: string;
 }) {
   return (
-    <section aria-labelledby={`${id}-heading`} className="mt-14">
-      <SectionHeader id={`${id}-heading`} eyebrow={eyebrow} heading={heading} />
+    <section aria-labelledby={`${id}-heading`} className="mt-12">
+      <GuideSectionHeader id={`${id}-heading`} eyebrow={eyebrow} heading={heading} />
       <p className="mt-3 leading-relaxed text-ink-muted">{blurb}</p>
 
       {entries.length === 0 ? (
@@ -498,8 +484,8 @@ function BoardSection({
  */
 function Tiers() {
   return (
-    <section aria-labelledby="tiers-heading" className="mt-14">
-      <SectionHeader
+    <section aria-labelledby="tiers-heading" className="mt-12">
+      <GuideSectionHeader
         id="tiers-heading"
         eyebrow="Draft strategy"
         heading="Tier-based drafting, explained properly"
@@ -518,7 +504,7 @@ function Tiers() {
         lot. That single change is what turns a ranking into something you can actually draft off.
       </p>
 
-      <h3 className="mt-8 text-lg font-semibold text-ink">The cliff is the whole point</h3>
+      <GuideSubheading className="mt-8">The cliff is the whole point</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         The gap between the last player in one tier and the first player in the next is called a
         tier break, and people also call it a cliff, which is the more useful word. Inside a tier
@@ -532,7 +518,7 @@ function Tiers() {
         flat list a two-spot difference looks the same everywhere.
       </p>
 
-      <h3 className="mt-8 text-lg font-semibold text-ink">Counting is the skill</h3>
+      <GuideSubheading className="mt-8">Counting is the skill</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         Here is the habit that makes tiers pay off, and it takes about four seconds per pick. When
         you are on the clock, look at the tier you want a player from and count how many names are
@@ -549,7 +535,7 @@ function Tiers() {
         becomes which cliff you are about to fall off, and which one you can still walk back from.
       </p>
 
-      <h3 className="mt-8 text-lg font-semibold text-ink">Where it saves you: the positional run</h3>
+      <GuideSubheading className="mt-8">Where it saves you: the positional run</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         Four running backs go in five picks and the room tenses up. Everyone feels behind, and the
         next three drafters take a running back they had not planned on. This is the single most
@@ -563,7 +549,7 @@ function Tiers() {
         you see it while everyone else is panicking.
       </p>
 
-      <h3 className="mt-8 text-lg font-semibold text-ink">Scarcity is not a reason to reach</h3>
+      <GuideSubheading className="mt-8">Scarcity is not a reason to reach</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         Positional scarcity gets misused constantly. It does not mean "draft this position early".
         It means the drop-off at that position arrives sooner, so the cost of waiting is higher
@@ -577,7 +563,7 @@ function Tiers() {
         bad group at full price.
       </p>
 
-      <h3 className="mt-8 text-lg font-semibold text-ink">Tiers do not transfer across positions</h3>
+      <GuideSubheading className="mt-8">Tiers do not transfer across positions</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         A tier 1 quarterback and a tier 1 running back are not worth the same thing, and tier 2
         receivers can be worth more than tier 2 backs. The number labels a group within its own
@@ -585,7 +571,7 @@ function Tiers() {
         you are avoiding, not the tier numbers.
       </p>
 
-      <h3 className="mt-8 text-lg font-semibold text-ink">How this page fits</h3>
+      <GuideSubheading className="mt-8">How this page fits</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         The lists above are the tier idea aimed at one specific question. A steal is a player whose
         cliff sits well below where the room is drafting him, which is another way of saying you
@@ -619,15 +605,15 @@ function Tiers() {
 
 function Strategy() {
   return (
-    <section aria-labelledby="strategy-heading" className="mt-14">
-      <SectionHeader
+    <section aria-labelledby="strategy-heading" className="mt-12">
+      <GuideSectionHeader
         id="strategy-heading"
         eyebrow="Draft day"
         heading="What to do with this on draft day"
         tone="purple"
       />
 
-      <h3 className="mt-6 text-lg font-semibold text-ink">Do not reach for a steal</h3>
+      <GuideSubheading className="mt-6">Do not reach for a steal</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         A player on the steals list is worth having because he lasts. Taking him two rounds before
         his ADP throws away the entire reason he is on the list. Note the pick he usually goes at,
@@ -635,14 +621,14 @@ function Strategy() {
         value already agree.
       </p>
 
-      <h3 className="mt-6 text-lg font-semibold text-ink">Swings are supposed to fail</h3>
+      <GuideSubheading className="mt-6">Swings are supposed to fail</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         The late-round swings have thinner evidence than the steals, and that is the point of a late
         pick. One of them hitting pays for the rest missing. Take two or three of them at the end of
         a draft; do not build a starting lineup out of them.
       </p>
 
-      <h3 className="mt-6 text-lg font-semibold text-ink">A fade is not a warning about the player</h3>
+      <GuideSubheading className="mt-6">A fade is not a warning about the player</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         Nobody on the fades list is bad. Each of them is priced ahead of what our board says he is
         worth, which usually means the room is paying for last season, for name recognition, or for
@@ -650,7 +636,7 @@ function Strategy() {
         a fade and becomes a fine pick.
       </p>
 
-      <h3 className="mt-6 text-lg font-semibold text-ink">Format changes the answer more than people expect</h3>
+      <GuideSubheading className="mt-6">Format changes the answer more than people expect</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         Switching between the formats above is not cosmetic. A superflex league needs twice as many
         starting quarterbacks, which moves every quarterback and, because the picks have to come
@@ -658,7 +644,7 @@ function Strategy() {
         ends. Read the list for the league you are actually in.
       </p>
 
-      <h3 className="mt-6 text-lg font-semibold text-ink">When your board falls apart</h3>
+      <GuideSubheading className="mt-6">When your board falls apart</GuideSubheading>
       <p className="mt-3 leading-relaxed text-ink-muted">
         Runs happen. Three teams take a quarterback in four picks and the plan you wrote down stops
         applying. The useful habit is to stop thinking about the position you meant to fill and go
@@ -671,11 +657,13 @@ function Strategy() {
 
 function Closing() {
   return (
-    <section aria-labelledby="closing-heading" className="mt-12 border-t border-white/10 pt-8">
-      <h2 id="closing-heading" className="text-lg font-semibold text-ink">
-        Where these numbers come from
-      </h2>
-      <p className="mt-3 leading-relaxed text-ink-muted">
+    <section aria-labelledby="closing-heading" className="mt-12">
+      <GuideSectionHeader
+        id="closing-heading"
+        eyebrow="Sources"
+        heading="Where these numbers come from"
+      />
+      <p className="mt-4 leading-relaxed text-ink-muted">
         Values are FF Beacon&apos;s own, rebuilt daily. Projections are Sleeper&apos;s weekly
         numbers, rescored under each format&apos;s rules rather than read off a generic column, so a
         tight end premium actually counts. Reliability comes from how often each player has beaten

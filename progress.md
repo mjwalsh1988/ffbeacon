@@ -5743,3 +5743,43 @@ T619 | completed | Beacon Brief articles take the dashboard width
      | still prerendered and still revalidates on its 5-minute timer.
      | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
      |           no browser check, at the owner's request)
+
+T620 | completed | published guides take the shell width
+     | files: components/guides/guide-shell.tsx,
+     |        components/guides/guide-toc.tsx,
+     |        components/guides/guide-section-header.tsx,
+     |        app/guides/fantasy-football-draft-guide/page.tsx,
+     |        app/guides/fantasy-football-terms/page.tsx
+     | depends on: T619
+     | Both guides ran in a centred reading column, masthead included, which
+     | left a guide narrower than its own index page and narrower than every
+     | tool beside it. The masthead spans the shell now, like every other page's.
+     | The prose does not take that width, because a line of body copy across a
+     | dashboard is unreadable. The body sits in a two-column shell: the text
+     | keeps a 56rem measure and a rail beside it holds the contents list, on the
+     | right from xl, following you down the page, capped at the viewport and
+     | scrolling inside itself. Below xl the rail leads the content, which is
+     | where a contents list belongs on a phone and where the glossary's jump
+     | list already sat. One copy of it either way, so no anchor id is ever in
+     | the document twice. Past 56rem the pair centres as a unit rather than
+     | leaving the rail stranded at the far edge of a very wide screen.
+     | The draft guide's format switcher moves into that rail. It is what the
+     | whole board answers to, and in the flow it scrolled away on the first
+     | screen.
+     | The headers were the other half of it, and they were three sizes of wrong.
+     | The draft guide set its section h2s at text-4xl, nearly the size of the
+     | page title and two steps above their own h3s, so every section opened like
+     | a second page. Its closing section then used an h2 at text-lg, the same
+     | size as those h3s and with no rule above it, so the last section read as a
+     | subsection of the one before it. The glossary meanwhile had no eyebrows,
+     | no rules above its headings, and a beacon hairline UNDER each section
+     | intro, which put the divider inside the group it was meant to separate.
+     | One GuideSectionHeader now opens every section of both guides (rule,
+     | optional eyebrow, h2 at text-2xl / sm:text-3xl) and one GuideSubheading
+     | sets every h3, so the step from section to subsection is the same
+     | everywhere and neither competes with the masthead.
+     | Heading levels, ids, and scroll-mt are unchanged, so every deep link into
+     | a glossary term still lands where it did and the DefinedTerm structured
+     | data still matches the page.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)

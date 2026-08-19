@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ListTree } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { formatEasternDate } from "@/lib/datetime";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { GuideShell } from "@/components/guides/guide-shell";
+import { GuideToc, type GuideTocItem } from "@/components/guides/guide-toc";
+import {
+  GuideSectionHeader,
+  GuideSubheading,
+} from "@/components/guides/guide-section-header";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
 import {
@@ -116,6 +122,20 @@ function termDescription(term: GlossaryTerm): string {
   return term.body.join(" ");
 }
 
+/**
+ * The rail's contents list, built from the sections themselves, so a section
+ * added to the glossary data appears here without anyone remembering to add it.
+ */
+const TOC_ITEMS: GuideTocItem[] = [
+  ...GLOSSARY_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.navLabel,
+    count: section.terms.length,
+  })),
+  { id: "faq", label: "Common questions", count: GLOSSARY_FAQS.length },
+  { id: "closing", label: "Where to put this to work" },
+];
+
 export default async function FantasyFootballTermsGuide() {
   const isMember = await isDiscordMember();
 
@@ -207,12 +227,15 @@ export default async function FantasyFootballTermsGuide() {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
-      <PageBody width="reading">
+      {/* The masthead spans the shell, the way every other page's does. */}
+      <PageBody flush>
+        <GuideHeader />
+      </PageBody>
+
+      <GuideShell toc={<GuideToc items={TOC_ITEMS} />}>
         <article>
-          <GuideHeader />
           <TheShortVersion />
           <Intro />
-          <JumpNav />
 
           <div className="text-[15px] sm:text-base">
             {GLOSSARY_SECTIONS.map((section) => (
@@ -222,7 +245,7 @@ export default async function FantasyFootballTermsGuide() {
             <Closing />
           </div>
         </article>
-      </PageBody>
+      </GuideShell>
 
       <DiscordCtaSection
         eyebrow="Still stuck on a word?"
@@ -279,7 +302,8 @@ function TheShortVersion() {
   return (
     <aside
       aria-label="Summary"
-      className="mt-6 rounded-card p-px"
+      // No top margin: the shell's own padding is the gap under the masthead.
+      className="rounded-card p-px"
       style={{
         backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
       }}
@@ -314,13 +338,13 @@ function TheShortVersion() {
 
 function Intro() {
   return (
-    <section aria-labelledby="intro-heading" className="mt-8">
-      <h2
+    <section aria-labelledby="intro-heading" className="mt-12">
+      <GuideSectionHeader
         id="intro-heading"
-        className="scroll-mt-24 text-2xl font-semibold tracking-tight text-ink"
-      >
-        Why a glossary is the first guide we published
-      </h2>
+        eyebrow="Why this exists"
+        heading="Why a glossary is the first guide we published"
+        tone="purple"
+      />
       <div className="text-[15px] sm:text-base">
         <p className="my-4 leading-relaxed text-ink-muted">
           I have played fantasy football since 2006, and in those first couple
@@ -349,85 +373,16 @@ function Intro() {
   );
 }
 
-/* ---------- Jump navigation ---------- */
-
-function JumpNav() {
-  return (
-    <nav
-      aria-labelledby="toc-heading"
-      className="mt-8 rounded-card border border-line bg-surface p-4 sm:p-5"
-    >
-      <h2
-        id="toc-heading"
-        className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-ink"
-      >
-        <ListTree aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-        Jump to a section
-      </h2>
-      <ol role="list" className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-        {GLOSSARY_SECTIONS.map((section, i) => (
-          <li key={section.id}>
-            <a
-              href={`#${section.id}`}
-              className="flex min-h-11 items-center gap-2 text-[15px] text-ink-muted underline-offset-2 hover:text-brand-cyan hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <span
-                aria-hidden="true"
-                className="font-mono text-xs tabular-nums text-ink-subtle"
-              >
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span>{section.navLabel}</span>
-              <span className="text-xs text-ink-subtle">
-                ({section.terms.length})
-              </span>
-            </a>
-          </li>
-        ))}
-        <li>
-          <a
-            href="#faq"
-            className="flex min-h-11 items-center gap-2 text-[15px] text-ink-muted underline-offset-2 hover:text-brand-cyan hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <span
-              aria-hidden="true"
-              className="font-mono text-xs tabular-nums text-ink-subtle"
-            >
-              {String(GLOSSARY_SECTIONS.length + 1).padStart(2, "0")}
-            </span>
-            <span>Common questions</span>
-            <span className="text-xs text-ink-subtle">
-              ({GLOSSARY_FAQS.length})
-            </span>
-          </a>
-        </li>
-      </ol>
-    </nav>
-  );
-}
-
 /* ---------- Sections and terms ---------- */
 
 function TermSection({ section }: { section: GlossarySection }) {
   return (
-    <section aria-labelledby={section.id} className="mt-12 first:mt-10">
-      <h2
-        id={section.id}
-        className="scroll-mt-24 text-2xl font-semibold tracking-tight text-ink"
-      >
-        {section.title}
-      </h2>
-      <p className="mt-2 leading-relaxed text-ink-muted">{section.intro}</p>
-      {/* A hairline under the section intro, so the eye (and a magnified view)
-          can tell where one group of terms ends and the next begins. */}
-      <span
-        aria-hidden="true"
-        className="mt-4 block h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, #A855F7 0%, #22D3EE 45%, transparent 100%)",
-        }}
-      />
+    <section aria-labelledby={section.id} className="mt-12">
+      {/* The beacon rule marks where a group of terms STARTS. It used to sit
+          under the section intro, which put it inside the group it was meant to
+          separate. */}
+      <GuideSectionHeader id={section.id} eyebrow="Glossary" heading={section.title} />
+      <p className="mt-3 leading-relaxed text-ink-muted">{section.intro}</p>
       {section.terms.map((term) => (
         <TermEntry key={term.id} term={term} />
       ))}
@@ -438,17 +393,14 @@ function TermSection({ section }: { section: GlossarySection }) {
 function TermEntry({ term }: { term: GlossaryTerm }) {
   return (
     <div className="mt-6">
-      <h3
-        id={term.id}
-        className="scroll-mt-24 text-xl font-semibold tracking-tight text-ink"
-      >
+      <GuideSubheading id={term.id}>
         {term.term}
         {term.aka && (
           <span className="ml-2 text-sm font-normal text-ink-subtle">
             ({term.aka})
           </span>
         )}
-      </h3>
+      </GuideSubheading>
       {term.body.map((paragraph, i) => (
         <p key={i} className="my-3 leading-relaxed text-ink-muted">
           {paragraph}
@@ -474,20 +426,18 @@ function TermEntry({ term }: { term: GlossaryTerm }) {
 function FaqSection() {
   return (
     <section aria-labelledby="faq" className="mt-12">
-      <h2
+      <GuideSectionHeader
         id="faq"
-        className="scroll-mt-24 text-2xl font-semibold tracking-tight text-ink"
-      >
-        Common questions
-      </h2>
-      <p className="mt-2 leading-relaxed text-ink-muted">
+        eyebrow="Questions"
+        heading="Common questions"
+        tone="purple"
+      />
+      <p className="mt-3 leading-relaxed text-ink-muted">
         The questions that come up most often in our Discord, answered in full.
       </p>
       {GLOSSARY_FAQS.map((faq) => (
         <div key={faq.question} className="mt-6">
-          <h3 className="scroll-mt-24 text-xl font-semibold tracking-tight text-ink">
-            {faq.question}
-          </h3>
+          <GuideSubheading>{faq.question}</GuideSubheading>
           <p className="my-3 leading-relaxed text-ink-muted">{faq.answer}</p>
         </div>
       ))}
@@ -500,13 +450,12 @@ function FaqSection() {
 function Closing() {
   return (
     <section aria-labelledby="closing" className="mt-12">
-      <h2
+      <GuideSectionHeader
         id="closing"
-        className="scroll-mt-24 text-2xl font-semibold tracking-tight text-ink"
-      >
-        Where to put this to work
-      </h2>
-      <p className="my-4 leading-relaxed text-ink-muted">
+        eyebrow="Next"
+        heading="Where to put this to work"
+      />
+      <p className="mt-4 leading-relaxed text-ink-muted">
         A glossary is only useful when you go use the words. The rankings board
         shows tiers, positional ranks, and seven-day movement for whichever
         format you play. Signal Check grades a trade and tells you its
