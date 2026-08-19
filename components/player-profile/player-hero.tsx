@@ -1,18 +1,26 @@
 /**
- * Player hero header. A large headshot floats on a glow (no border, soft
- * drop-shadow) so it reads as a profile rather than a stock photo, beside the
- * player identity (name, position, team, status) and their last three
- * positional finishes for the active format's scoring. A full-width Team Anthem
- * band closes the hero with the team's colors and crowd chant. Server component.
+ * Player masthead. Same card as PageMasthead (rounded-modal, line-accent
+ * border, beacon radial wash, top hairline, .beacon-page-title h1), with one
+ * addition the shared props cannot express: a large headshot floating on a glow
+ * to the left of the identity column. Beside it sit the position, team, status,
+ * and depth-role badges, then the player's last three positional finishes for
+ * the active format's scoring. A Team Anthem band in the team's colors closes
+ * the card. Server component.
  */
 
-import { SiteBreadcrumb } from "@/components/site-breadcrumb";
+import {
+  MastheadCard,
+  MASTHEAD_TITLE_SIZE,
+} from "@/components/app-shell/masthead-card";
 import { PlayerPortrait } from "@/components/player-profile/player-portrait";
 import { TeamAnthem } from "@/components/player-profile/team-anthem";
 import { LastThreeFinishes } from "@/components/player-profile/positional-finishes";
 import { RoleBadge } from "@/components/player-profile/role-badge";
-import { HeroLavaField } from "@/components/hero-lava-field";
-import type { NflTeamRow, PlayerRow, PositionalFinish } from "@/lib/player-profile";
+import type {
+  NflTeamRow,
+  PlayerRow,
+  PositionalFinish,
+} from "@/lib/player-profile";
 
 function positionAccent(position: string): string {
   const pos = (position ?? "").toUpperCase();
@@ -40,7 +48,9 @@ export function PlayerHero({
   team: NflTeamRow | null;
   role: string | null;
 }) {
-  const fullName = player.full_name ?? `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
+  const fullName =
+    player.full_name ??
+    `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
   const accent = positionAccent(player.position);
   // The team's primary color pools behind the photo; fall back to the position
   // accent for free agents / unmapped teams.
@@ -56,18 +66,19 @@ export function PlayerHero({
         </span>
       </p>
       <div>
-        <LastThreeFinishes position={player.position} finishes={finishes} compact />
+        <LastThreeFinishes
+          position={player.position}
+          finishes={finishes}
+          compact
+        />
       </div>
     </div>
   );
 
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      {/* Beacon hairline. z-10 keeps it above the lava field's base layer. */}
-      <div aria-hidden="true" className="absolute inset-x-0 top-0 z-10 h-px bg-beacon" />
-      <HeroLavaField copy="wide" />
-      {/* Position-tinted corner wash, over the field so the team color still
-          reads on a player's page. */}
+    <MastheadCard labelledBy="player-masthead-title">
+      {/* Position-tinted corner wash, so the team color still reads on a
+          player's card. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -top-24 right-0 h-[380px] w-[680px]"
@@ -76,23 +87,17 @@ export function PlayerHero({
         }}
       />
 
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <SiteBreadcrumb
-          homeHref="/"
-          homeLabel="FF Beacon"
-          crumbs={[
-            { label: player.position, href: `/rankings?position=${player.position}` },
-            { label: fullName },
-          ]}
-          className="mb-6"
-        />
+      <div className="relative p-5 sm:p-6 lg:p-7">
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-cyan">
+          Players
+        </p>
 
-        {/* Player photo beside the identity; the full-width Team Anthem banner
-            sits below with breathing room. The headshot is a rounded photo shown
-            in full (object-contain, no crop) with no border. On mobile the name
-            and badges sit to the RIGHT of a slightly smaller photo to save
-            vertical space, with the last-3 finishes dropping below the photo. */}
-        <div className="flex items-center gap-4 sm:gap-7">
+        {/* Player photo beside the identity; the Team Anthem banner sits below
+            with breathing room. The headshot is a rounded photo shown in full
+            (object-contain, no crop) with no border. On mobile the name and
+            badges sit to the RIGHT of a slightly smaller photo to save vertical
+            space. */}
+        <div className="mt-3 flex items-center gap-4 sm:gap-7">
           <PlayerPortrait
             sleeperId={sleeperId}
             name=""
@@ -121,7 +126,10 @@ export function PlayerHero({
               {role && <RoleBadge role={role} />}
             </div>
 
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
+            <h1
+              id="player-masthead-title"
+              className={`beacon-page-title ${MASTHEAD_TITLE_SIZE}`}
+            >
               {fullName}
             </h1>
 
@@ -131,13 +139,13 @@ export function PlayerHero({
           </div>
         </div>
 
-        {/* Full-width Team Anthem banner with spacing above it. */}
+        {/* Team Anthem banner with spacing above it. */}
         {team && (
-          <div className="mt-7">
+          <div className="mt-6">
             <TeamAnthem team={team} />
           </div>
         )}
       </div>
-    </header>
+    </MastheadCard>
   );
 }

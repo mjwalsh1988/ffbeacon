@@ -228,7 +228,10 @@ export function LeaguePanel({
 
       <div className="mt-5 space-y-5">
         {/* Step 1: who are you */}
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        {/* Capped on purpose. The panel spans whatever the page gives it, but
+            a username box and a season select have a natural size and the extra
+            width would all land in the text field. */}
+        <div className="grid max-w-3xl gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <div>
             <label htmlFor={`${ids}-username`} className="block text-sm font-medium text-ink">
               Sleeper username

@@ -170,7 +170,7 @@ export function SiteSearch() {
   // back/forward while the palette is open, a navigation started elsewhere).
   // Without it the palette can outlive the page it was opened on, and because
   // the open state also holds body scroll locked, that reads as a frozen page
-  // that only a refresh clears. The mobile menu and the Beacon Brief drawer
+  // that only a refresh clears. The navigation drawer and the Beacon Brief drawer
   // already do this; the palette was the one overlay that did not.
   const lastPathname = useRef(pathname);
   useEffect(() => {

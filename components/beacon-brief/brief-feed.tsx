@@ -1,24 +1,44 @@
 import Link from "next/link";
 import { serializeJsonLd } from "@/lib/json-ld";
-import { Newspaper } from "lucide-react";
+import { FolderOpen, Newspaper, Shield, Tag, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { SITE } from "@/lib/site";
 import type { BriefSidebarData, FeedArticle } from "@/lib/beacon-brief-feed";
 import { ArticleCard } from "@/components/beacon-brief/article-card";
 import { BriefSidebar, type BriefActiveFilter } from "@/components/beacon-brief/brief-sidebar";
 import { BriefShell } from "@/components/beacon-brief/brief-shell";
-import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
 import { BriefPagination } from "@/components/beacon-brief/brief-pagination";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import {
+  PageMasthead,
+  type MastheadChip,
+  type MastheadStat,
+} from "@/components/app-shell/page-masthead";
+import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export type Breadcrumb = { label: string; href?: string };
 
+/** The icon that names each filter view in the masthead chip row. */
+const FILTER_ICONS: Record<BriefActiveFilter["type"], LucideIcon | undefined> = {
+  all: undefined,
+  category: FolderOpen,
+  tag: Tag,
+  player: User,
+  team: Shield,
+};
+
 /**
  * Shared renderer for every Beacon Brief listing page (the index and the
  * category / tag / player / team filter views). Routes resolve their filter and
- * data, then hand it here so the header, breadcrumb, sidebar, card grid, and
- * pagination stay identical across all of them.
+ * data, then hand it here so the masthead, sidebar, card grid, and pagination
+ * stay identical across all of them.
+ *
+ * The visible breadcrumb comes from the app shell's shared bar, which derives it
+ * from the pathname. The `breadcrumb` prop is still read here because these
+ * routes publish their own BreadcrumbList structured data and the shared bar
+ * stands down on them (see OWN_JSON_LD in lib/breadcrumbs.ts).
  */
 export async function BriefFeed({
   eyebrow,
@@ -51,9 +71,28 @@ export async function BriefFeed({
   // at the tools instead of the invite.
   const isMember = await isDiscordMember();
 
-  // BreadcrumbList structured data. The visible trail leads with the FF Beacon
-  // logo (the Beacon Brief home); the structured data prepends the site Home so
-  // the full path is expressed for search engines.
+  // The masthead states which view you are in and how much is in it. On the
+  // unfiltered index the eyebrow already says "The Beacon Brief", so the chip
+  // would repeat it; every filtered view gets one naming the filter.
+  const chips: MastheadChip[] =
+    active.type === "all"
+      ? []
+      : [{ label: eyebrow, icon: FILTER_ICONS[active.type], tone: "cyan" }];
+
+  const stats: MastheadStat[] = [
+    { label: "Articles", value: String(total), accent: "cyan" },
+  ];
+  if (totalPages > 1) {
+    stats.push({
+      label: "Page",
+      value: `${currentPage} of ${totalPages}`,
+      accent: "purple",
+    });
+  }
+
+  // BreadcrumbList structured data. The shared bar draws Home as the FF Beacon
+  // logo; the structured data spells it out as a first item so the full path is
+  // expressed for search engines.
   const breadcrumbTrail: Breadcrumb[] = [{ label: "Home", href: "/" }, ...breadcrumb];
   const breadcrumbLd = {
     "@context": "https://schema.org",
@@ -66,6 +105,12 @@ export async function BriefFeed({
     })),
   };
 
+  // The shared breadcrumb bar derives its trail from the pathname, which turns
+  // "kc" into "KC" and "ja-marr-chase" into "Ja Marr Chase". The written label
+  // for this view is already sitting in the trail we build for the JSON-LD, so
+  // hand the last node of it to the bar.
+  const currentCrumbLabel = breadcrumb[breadcrumb.length - 1]?.label ?? null;
+
   return (
     <main id="main">
       <script
@@ -73,32 +118,17 @@ export async function BriefFeed({
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
       />
+      {currentCrumbLabel && <SetBreadcrumbLabel value={currentCrumbLabel} />}
 
-      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-        {/* z-10 keeps the beacon hairline above the lava field's base layer. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 z-10 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-          }}
+      <PageBody flush>
+        <PageMasthead
+          eyebrow="The Beacon Brief"
+          title={heading}
+          description={description}
+          chips={chips}
+          stats={stats}
         />
-        <HeroLavaField copy="left" />
-        <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-          <BriefBreadcrumb crumbs={breadcrumb} className="mb-4" />
-
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            {eyebrow}
-          </p>
-          <h1 className="max-w-3xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl md:text-5xl">
-            {heading}
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-            {description}
-          </p>
-        </div>
-      </header>
+      </PageBody>
 
       <BriefShell sidebar={<BriefSidebar data={sidebarData} active={active} />}>
         <div className="mb-5 flex items-center justify-between gap-3">

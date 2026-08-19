@@ -228,7 +228,7 @@ export const VALUE_TONE = {
 
 export type ValueTone = keyof typeof VALUE_TONE;
 
-// Centralized tooltip copy so the desktop header and mobile menu stay
+// Centralized tooltip copy so the desktop header and the navigation drawer stay
 // in sync. Keep these layperson-friendly and one short sentence each.
 export const SOURCE_INFO_TOOLTIP =
   "Pick which fantasy ranking site we should pull player values from across the app.";

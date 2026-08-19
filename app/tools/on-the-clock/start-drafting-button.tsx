@@ -22,7 +22,7 @@ export function StartDraftingButton() {
     <button
       type="button"
       onClick={scrollToForm}
-      className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:hidden"
+      className="inline-flex w-full items-center justify-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:hidden"
     >
       Start drafting
       <ArrowDown aria-hidden="true" className="h-4 w-4" />

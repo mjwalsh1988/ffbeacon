@@ -137,7 +137,7 @@ export function RostersRankings({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          {/* h2, matching every other tab panel. This one opened at h3 with no
+          {/* h2, matching every other view. This one opened at h3 with no
               h2 above it, so the outline skipped a level here and nowhere else. */}
           <h2 id="otc-rosters-title" className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
             Rosters and rankings

@@ -98,7 +98,7 @@ export function NotStartedCard({
   headingLevel?: HeadingLevel;
 }) {
   // A real heading, for the same reason as EmptyCard above: this card is often
-  // the entire contents of a tab panel.
+  // the entire contents of a view.
   const Heading = (`h${headingLevel}` as const) as "h2" | "h3" | "h4";
   return (
     <div

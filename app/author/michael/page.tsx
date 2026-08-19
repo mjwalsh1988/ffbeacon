@@ -17,7 +17,8 @@ import { AuthorPortrait } from "@/components/author-portrait";
 import { EmailReveal } from "@/components/email-reveal";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/author/michael" },
@@ -75,72 +76,31 @@ export default async function AuthorMichaelPage() {
 
 function Hero() {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="wide" />
-      <div className="relative mt-[4.5rem] mx-auto flex max-w-7xl flex-col items-start gap-8 px-4 py-8 sm:flex-row sm:items-center sm:gap-10 sm:px-6 sm:py-20 lg:px-8">
+    <PageBody flush className="mx-auto max-w-7xl">
+      <PageMasthead
+        eyebrow="Author"
+        title="Michael"
+        description="Founder of FF Beacon. Twenty seasons in fantasy. An active dynasty manager who plays the game stats-first, and finally got tired of fantasy tools that weren't built for him."
+        stats={[
+          { value: "20+", label: "Seasons", accent: "purple" },
+          { value: "Dynasty", label: "Format focus", accent: "cyan" },
+          { value: "2006", label: "Started", accent: "purple" },
+        ]}
+      >
         {/* Beacon gradient ring around the portrait. */}
         <span
           aria-hidden="true"
-          className="block shrink-0 rounded-full p-[2px]"
+          className="block w-fit rounded-full p-[2px]"
           style={{
             backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
           }}
         >
           <span className="block rounded-full bg-surface p-1">
-            <AuthorPortrait size={176} />
+            <AuthorPortrait size={128} />
           </span>
         </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-            Michael
-          </h1>
-          <p className="mt-3 text-lg leading-relaxed text-ink-muted">
-            Founder of FF Beacon. Twenty seasons in fantasy. An active dynasty
-            manager who plays the game stats-first, and finally got tired of
-            fantasy tools that weren&apos;t built for him.
-          </p>
-          <ul
-            className="mt-6 grid grid-cols-3 gap-2 sm:gap-3"
-            role="list"
-            aria-label="Quick facts"
-          >
-            <HeroStat value="20+" label="Seasons" />
-            <HeroStat value="Dynasty" label="Format focus" />
-            <HeroStat value="2006" label="Started" />
-          </ul>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function HeroStat({ value, label }: { value: string; label: string }) {
-  return (
-    <li
-      className="group relative overflow-hidden rounded-card border border-line bg-surface/60 px-3 py-2 transition-colors hover:border-line-accent"
-      style={{ boxShadow: "0 0 40px -36px rgba(168, 85, 247, 0.6)" }}
-    >
-      <AccentStrip />
-      <p
-        className="bg-clip-text font-mono text-xl font-bold tabular-nums text-transparent sm:text-2xl"
-        style={{
-          backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-        }}
-      >
-        {value}
-      </p>
-      <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-        {label}
-      </p>
-    </li>
+      </PageMasthead>
+    </PageBody>
   );
 }
 

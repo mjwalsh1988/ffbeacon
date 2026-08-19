@@ -17,7 +17,8 @@
  * reduced-motion-safe.
  */
 
-import { Users, Baby, Lock } from "lucide-react";
+import { Users, Baby, Lock, Eye } from "lucide-react";
+import { MASTHEAD_TITLE_SIZE } from "@/components/app-shell/masthead-card";
 import type { ShapedDraftCache, PlayerPool } from "@/lib/on-the-clock/types";
 import { SyncButton } from "./sync-button";
 
@@ -36,6 +37,7 @@ function Chip({ label, value, accent = false }: { label: string; value: string; 
 
 export function CommandHeader({
   leagueName,
+  viewLabel,
   draft,
   formatLabel,
   formatIsClosest,
@@ -48,6 +50,13 @@ export function CommandHeader({
   snapshotNotice = null,
 }: {
   leagueName: string;
+  /**
+   * The view showing right now. It is named here because the switcher moved to
+   * the site rail, which is collapsed to icons by default and hidden entirely
+   * below lg, so without this there is nothing on the page that says which of
+   * the eight views you are looking at.
+   */
+  viewLabel: string;
   draft: ShapedDraftCache["draft"];
   /** Auto-detected FF Beacon format label (locked; no selector). */
   formatLabel: string;
@@ -97,19 +106,33 @@ export function CommandHeader({
         {isYourTurn ? "You are now on the clock." : ""}
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+      {/* Gutters match the room's body below (px-4 sm:px-6) rather than capping
+          at max-w-7xl. The room is the widest column on the site, and the page
+          title sitting in here has to line up with the content under it. */}
+      <div className="px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-cyan">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-cyan">
               On The Clock
             </p>
-            <h2 className="mt-0.5 truncate text-lg font-bold tracking-tight text-ink sm:text-xl">
+            {/* The page title, once you are inside a room. The hero above this
+                is not rendered here (see app/tools/on-the-clock/page.tsx), so
+                the league name is the h1 and takes the same treatment every
+                other page title on the site gets. */}
+            <h1
+              className={`beacon-page-title mt-2 ${MASTHEAD_TITLE_SIZE}`}
+            >
               {leagueName}
-            </h2>
-            <p className="mt-0.5 text-xs text-ink-muted">
+            </h1>
+            <p className="mt-2 text-xs text-ink-muted">
               <span className="font-semibold text-ink">{statusWord}</span>
               <span className="mr-1.5 text-ink-subtle">,</span>
               <span>{yourSeatLabel}</span>
+            </p>
+            <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2.5 py-1 text-xs font-semibold text-brand-cyan">
+              <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+              <span className="sr-only">Showing view: </span>
+              {viewLabel}
             </p>
           </div>
 

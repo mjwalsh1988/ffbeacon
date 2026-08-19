@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { MyBeaconNav } from "@/components/my-beacon-nav";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 import {
   SignalStatusCard,
   type SignalStatus,
@@ -85,72 +85,22 @@ export default async function MyBeaconLayout({
   const displayName =
     metaDisplayName || firstName || emailLocalPart || "fantasy player";
 
+  // The masthead carries this space's H1, so every child page starts at H2.
   return (
     <main id="main">
-      <MyBeaconHero displayName={displayName} signal={signal} />
-      <MyBeaconNav />
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-        {children}
-      </div>
-    </main>
-  );
-}
-
-function MyBeaconHero({
-  displayName,
-  signal,
-}: {
-  displayName: string;
-  signal: SignalStatus;
-}) {
-  return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      {/* Beacon-gradient accent bar pinned to the very top. z-10 keeps it above
-          the lava field's own base layer. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="left" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
-          <div className="min-w-0 flex-1">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-              My Beacon
-            </p>
-            {/* aria-label keeps the announced heading clean even though the
-                gradient is achieved via a nested span. */}
-            <h1
-              aria-label={`Welcome back, ${displayName}.`}
-              className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
-            >
-              Welcome back,{" "}
-              <span
-                className="bg-clip-text text-transparent"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-                }}
-              >
-                {displayName}
-              </span>
-              .
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-              My Beacon is your fantasy cockpit: one place to run your leagues,
-              rankings, custom boards, and every tool in the system, with more
-              landing here as we build it. Same clarity, by eye or by ear.
-            </p>
-          </div>
-          <div className="w-full shrink-0 lg:max-w-sm">
+      <PageBody>
+        <PageMasthead
+          eyebrow="My Beacon"
+          headingLevel="h1"
+          title={`Welcome back, ${displayName}.`}
+          description="My Beacon is your fantasy cockpit: one place to run your leagues, rankings, custom boards, and every tool in the system, with more landing here as we build it. Same clarity, by eye or by ear."
+        >
+          <div className="lg:max-w-sm">
             <SignalStatusCard signal={signal} />
           </div>
-        </div>
-      </div>
-    </header>
+        </PageMasthead>
+        <div className="mt-8">{children}</div>
+      </PageBody>
+    </main>
   );
 }

@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import {
-  createCachedReadClient,
-  createClient,
-} from "@/lib/supabase/server";
+import { createCachedReadClient, createClient } from "@/lib/supabase/server";
 import { readPosition } from "@/lib/format";
 import { getActiveFormats } from "@/lib/source";
 import { resolveSourceSlug } from "@/lib/preferences";
@@ -34,7 +31,11 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ format: string }>;
-  searchParams: Promise<{ position?: string; source?: string; format?: string }>;
+  searchParams: Promise<{
+    position?: string;
+    source?: string;
+    format?: string;
+  }>;
 };
 
 /**
@@ -120,20 +121,7 @@ export default async function FormatRankingsPage({
       basePath={`/rankings/${format.slug}`}
       hasActiveFilter={Boolean(query.position || query.source)}
       eyebrow="Rankings"
-      headline={
-        <>
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
-          >
-            {copy.headline}
-          </span>
-        </>
-      }
-      headlineLabel={copy.headline}
+      title={copy.headline}
       intro={copy.intro}
     />
   );

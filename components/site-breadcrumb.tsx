@@ -41,7 +41,7 @@ export function SiteBreadcrumb({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/img/ff-beacon-logo.png"
+              src="/img/ff-beacon-mark-96.png"
               alt=""
               width={20}
               height={20}

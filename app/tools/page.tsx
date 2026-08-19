@@ -15,7 +15,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { MemberHeroCta } from "@/components/member-hero-cta";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -32,56 +33,29 @@ export default async function ToolsPage() {
   const isMember = await isDiscordMember();
   return (
     <main id="main">
-      <Hero isMember={isMember} />
-      {TOOLS.map((tool, i) => (
-        <ToolSection key={tool.href} tool={tool} tinted={i % 2 === 1} />
-      ))}
-      <PrinciplesSection />
-      <CtaSection isMember={isMember} />
+      <PageBody>
+        <Masthead isMember={isMember} />
+        {TOOLS.map((tool, i) => (
+          <ToolSection key={tool.href} tool={tool} tinted={i % 2 === 1} />
+        ))}
+        <PrinciplesSection />
+        <CtaSection isMember={isMember} />
+      </PageBody>
     </main>
   );
 }
 
-/* ---------- Hero ---------- */
+/* ---------- Masthead ---------- */
 
-function Hero({ isMember }: { isMember: boolean }) {
+function Masthead({ isMember }: { isMember: boolean }) {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      {/* Beacon-gradient accent bar pinned to the very top. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="left" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        {/* aria-label collapses the gradient-split headline into one
-            accessible name for screen-reader navigation. The visible
-            content keeps its visual gradient. */}
-        <h1
-          aria-label="Every tool you need, none of the noise."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl"
-        >
-          Every tool you need,{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
-          >
-            none of the noise
-          </span>
-          .
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-          Real Sleeper league sync, live draft help, trade grades, and
-          confident waiver bids in one place. All built to work the same by
-          eye or by ear.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
+    <PageMasthead
+      eyebrow="Tools"
+      title="Every tool you need, none of the noise."
+      description="Real Sleeper league sync, live draft help, trade grades, and confident waiver bids in one place. All built to work the same by eye or by ear."
+      stats={[{ label: "Tools", value: String(TOOLS.length), accent: "cyan" }]}
+      actions={
+        <>
           <MemberHeroCta
             isMember={isMember}
             size="lg"
@@ -97,9 +71,9 @@ function Hero({ isMember }: { isMember: boolean }) {
             View player rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
-        </div>
-      </div>
-    </header>
+        </>
+      }
+    />
   );
 }
 
@@ -207,9 +181,11 @@ function ToolSection({ tool, tinted }: { tool: Tool; tinted: boolean }) {
   return (
     <section
       aria-labelledby={headingId}
-      className={`border-b border-line ${tinted ? "bg-surface/30" : ""}`}
+      className={`-mx-4 border-b border-line px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 ${
+        tinted ? "bg-surface/30" : ""
+      }`}
     >
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="py-12 sm:py-16">
         <div className="grid gap-8 md:grid-cols-[1fr_2fr] md:gap-12 lg:gap-16">
           <div>
             <span
@@ -264,9 +240,9 @@ function PrinciplesSection() {
   return (
     <section
       aria-labelledby="principles-heading"
-      className="border-b border-line"
+      className="-mx-4 border-b border-line px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
     >
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="py-12 sm:py-16">
         <SectionEyebrow>What every tool gets right</SectionEyebrow>
         <h2
           id="principles-heading"
@@ -328,7 +304,7 @@ function PrincipleCard({
 function CtaSection({ isMember }: { isMember: boolean }) {
   return (
     <section aria-labelledby="cta-heading">
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div className="py-12 sm:py-16">
         <div
           className="relative overflow-hidden rounded-modal border border-line bg-surface p-8 sm:p-10"
           style={{

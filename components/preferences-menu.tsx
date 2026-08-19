@@ -15,7 +15,8 @@ import {
  * Desktop-only popover that houses the data-source and league-format toggles
  * behind a single icon button, freeing up horizontal space in the header for
  * the primary navigation. Mobile keeps both toggles inline in the slide-out
- * menu (see MobileMenu), so this component renders nothing there.
+ * drawer (see components/app-shell/app-mobile-nav.tsx), so this component
+ * renders nothing there.
  *
  * The two controls inside are the exact same SourceToggle / FormatToggle used
  * everywhere else, so selection behavior, the format-fallback warnings, and the

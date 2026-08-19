@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { loadBeamSettings } from "@/lib/beam/settings";
 import { starterExamples } from "@/lib/beam/examples";
-import { PRIMARY_NAV, DEFAULT_FORMAT_SLUG } from "@/lib/site";
+import { DEFAULT_FORMAT_SLUG } from "@/lib/site";
 import {
   readCookieSlug,
   SOURCE_COOKIE,
@@ -11,15 +11,16 @@ import {
 } from "@/lib/preferences";
 import type { FormatLike } from "@/lib/format-fallback";
 import { getActiveFormats, getAvailableSources, pickDefaultSource } from "@/lib/source";
-import { BeaconMark } from "@/components/beacon-mark";
+
 import { type FormatOption } from "@/components/format-toggle";
 import { type SourceOption } from "@/components/source-toggle";
-import { MobileMenu } from "@/components/mobile-menu";
 import { SiteSearch } from "@/components/site-search";
 import { PreferencesMenu } from "@/components/preferences-menu";
-import { HeaderNavLink } from "@/components/header-nav-link";
-import { NavDropdown } from "@/components/nav-dropdown";
 import { HeaderShell } from "@/components/header-shell";
+import { AppMobileNav } from "@/components/app-shell/app-mobile-nav";
+import { RailToggle } from "@/components/app-shell/rail-toggle";
+import { buildNavTree } from "@/lib/nav-tree";
+import { getNavViewer } from "@/lib/nav-viewer";
 import { BeamLauncher } from "@/components/beam/beam-launcher";
 
 async function loadHeaderData(): Promise<{
@@ -40,29 +41,27 @@ async function loadHeaderData(): Promise<{
     // panel are generated from the capabilities that are actually switched on,
     // so one an admin disables stops being advertised in the same request
     // rather than at the next deploy.
-    const [formats, sources, { data: userData }, beamSettings] = await Promise.all([
+    // The session and the saved defaults come from getNavViewer, which the root
+    // layout also calls. It is React-cached, so the two of us share one auth
+    // round trip and one user_preferences read per render rather than each
+    // making our own.
+    const [formats, sources, viewer, beamSettings] = await Promise.all([
       getActiveFormats(supabase),
       getAvailableSources(supabase),
-      supabase.auth.getUser(),
+      getNavViewer(),
       loadBeamSettings(createAdminClient()),
     ]);
 
     let preferredFormatSlug: string | null = null;
     let preferredSourceSlug: string | null = null;
-    let isAdmin = false;
-    if (userData?.user) {
-      const { data: prefs } = await supabase
-        .from("user_preferences")
-        .select("default_format_config_id, default_source_slug, is_admin")
-        .eq("user_id", userData.user.id)
-        .maybeSingle();
-      isAdmin = Boolean(prefs?.is_admin);
-      if (prefs?.default_format_config_id) {
-        const match = formats.find((f) => f.id === prefs.default_format_config_id);
+    const isAdmin = viewer.isAdmin;
+    if (viewer.isAuthenticated) {
+      if (viewer.defaultFormatConfigId) {
+        const match = formats.find((f) => f.id === viewer.defaultFormatConfigId);
         if (match) preferredFormatSlug = match.slug;
       }
-      if (prefs?.default_source_slug) {
-        const match = sources.find((s) => s.slug === prefs.default_source_slug);
+      if (viewer.defaultSourceSlug) {
+        const match = sources.find((s) => s.slug === viewer.defaultSourceSlug);
         if (match) preferredSourceSlug = match.slug;
       }
     }
@@ -98,7 +97,7 @@ async function loadHeaderData(): Promise<{
       })) as FormatOption[],
       allFormats,
       sources: sources as SourceOption[],
-      isAuthenticated: !!userData?.user,
+      isAuthenticated: viewer.isAuthenticated,
       isAdmin,
       preferredFormatSlug,
       preferredSourceSlug,
@@ -145,35 +144,65 @@ export async function SiteHeader() {
       ];
 
   // What does the resolved source support? Used to gate the Format dropdown.
+  // Filtered on the server for the same reason the rail's is: the tree names
+  // every admin route, and the drawer is a client component. Built from the
+  // cached viewer object so this is the same array the rail gets and Flight
+  // serialises it once rather than twice.
+  const navSections = buildNavTree(await getNavViewer());
+
   const activeSource = sources.find((s) => s.slug === initialSourceSlug) ?? null;
   const supportedFormatSlugs = activeSource?.supported_format_slugs ?? null;
 
   return (
     <HeaderShell>
-      <Link href="/" className="flex shrink-0 items-center text-lg" aria-label="FF Beacon home">
-        <BeaconMark />
-      </Link>
-      <nav
-        aria-label="Primary"
-        className="hidden flex-1 items-center justify-center gap-1 md:flex"
-      >
-          {PRIMARY_NAV.map((item) =>
-            item.children && item.children.length > 0 ? (
-              <NavDropdown
-                key={item.href}
-                label={item.label}
-                href={item.href}
-                items={item.children}
-                overviewLabel={item.overviewLabel}
-                overviewDescription={item.overviewDescription}
-              />
-            ) : (
-              <HeaderNavLink key={item.href} href={item.href}>
-                {item.label}
-              </HeaderNavLink>
-            ),
-          )}
-        </nav>
+      {/* Brand cell. Its width tracks the navigation rail below it, so the logo
+          and the rail read as one piece of chrome: narrow the rail and only the
+          mark is left, widen it and the wordmark comes back. */}
+      <div className="app-header-brand flex h-full shrink-0 items-center justify-center border-r border-line px-3">
+        <Link
+          href="/"
+          aria-label="FF Beacon home"
+          className="flex min-w-0 items-center gap-2.5 rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/img/ff-beacon-mark-96.png"
+            alt=""
+            width={34}
+            height={34}
+            style={{ width: 34, height: 34 }}
+            className="shrink-0"
+          />
+          <span
+            aria-hidden="true"
+            className="app-header-wordmark truncate bg-clip-text text-lg font-semibold text-transparent"
+            style={{
+              backgroundImage:
+                "linear-gradient(90deg, #FFFFFF 0%, #FFFFFF 55%, #EDE6FF 85%, #DDD0FF 100%)",
+            }}
+          >
+            FF Beacon
+          </span>
+        </Link>
+      </div>
+
+      <div className="flex min-w-0 flex-1 items-center gap-2 px-3 sm:px-4 lg:px-6">
+        {/* Rail width on desktop, navigation drawer on a phone. Only ever one
+            of the two is rendered at a given width. */}
+        <RailToggle />
+        <Suspense fallback={<NavTriggerSkeleton />}>
+          <AppMobileNav
+            sections={navSections}
+            viewer={{ isAuthenticated, isAdmin }}
+            formats={fallbackFormats}
+            initialFormatSlug={initialFormatSlug}
+            sources={sources}
+            initialSourceSlug={initialSourceSlug}
+            allFormats={allFormats}
+            supportedFormatSlugs={supportedFormatSlugs}
+          />
+        </Suspense>
+
         <div className="ml-auto flex items-center gap-2">
           {/* Site search: icon trigger visible on every breakpoint, opens the
               accessible search palette (players, articles, tools). */}
@@ -182,8 +211,8 @@ export async function SiteHeader() {
               it answers the questions search cannot. Opens the slide-in panel. */}
           <BeamLauncher starters={beamStarters} />
           {/* Desktop: source + format toggles are tucked into a single popover
-              to save header space. Mobile keeps them inline in the slide-out
-              menu below. */}
+              to save header space. The navigation drawer carries the same two
+              controls at smaller widths. */}
           <div className="hidden md:block">
             <Suspense fallback={<TogglePillSkeleton />}>
               <PreferencesMenu
@@ -198,75 +227,52 @@ export async function SiteHeader() {
           </div>
           {isAuthenticated ? (
             <>
-              {/* Desktop: Admin link, only for admins. Sits before the My
-                  Beacon shortcut so the operational entry point is grouped
-                  with the other authenticated actions. */}
               {isAdmin && (
                 <Link
                   href="/admin"
-                  className="hidden md:inline-flex h-9 items-center rounded-card border border-brand-purple/50 bg-brand-purple/10 px-3 text-sm font-semibold text-ink hover:border-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  className="hidden lg:inline-flex h-9 items-center rounded-card border border-brand-purple/50 bg-brand-purple/10 px-3 text-sm font-semibold text-ink hover:border-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
                   Admin
                 </Link>
               )}
-              {/* Desktop: accent icon shortcut to My Beacon. Sits to the
-                  left of Sign out so the primary user-space action stays
-                  visually distinct from the destructive one. */}
+              {/* Accent icon shortcut to My Beacon, at every width. */}
               <Link
                 href="/my-beacon"
                 aria-label="Go to your My Beacon dashboard"
-                className="hidden md:inline-flex h-9 w-9 aspect-square shrink-0 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="inline-flex h-11 w-11 aspect-square shrink-0 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <UserIcon />
               </Link>
-              {/* Last control in the desktop row, so it carries
-                  `header-edge-right`: when the header condenses into its pill,
-                  its right side rounds to match the pill's curve. */}
-              <form action="/auth/signout" method="post" className="hidden md:block">
+              <form action="/auth/signout" method="post" className="hidden lg:block">
                 <button
                   type="submit"
-                  className="header-edge-right inline-flex h-9 items-center rounded-card border border-line bg-surface px-3 text-sm font-medium hover:border-line-accent"
+                  className="inline-flex h-9 items-center rounded-card border border-line bg-surface px-3 text-sm font-medium hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
                   Sign out
                 </button>
               </form>
             </>
           ) : (
-            /* Signed out, this is the last control in the desktop row, so it
-               takes the pill-matching right edge instead. */
             <Link
               href="/login"
-              className="header-edge-right hidden md:inline-flex h-9 items-center rounded-card bg-beacon px-3 text-sm font-semibold text-black"
+              className="hidden lg:inline-flex h-9 items-center rounded-card bg-beacon px-3 text-sm font-semibold text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
               Sign in
             </Link>
           )}
-          {/* Mobile: same accent My Beacon shortcut, sits to the left of
-              the hamburger so authenticated users can jump to their space
-              in one tap. Only rendered when signed in. */}
-          {isAuthenticated && (
-            <Link
-              href="/my-beacon"
-              aria-label="Go to your My Beacon dashboard"
-              className="md:hidden inline-flex h-9 w-9 aspect-square shrink-0 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <UserIcon />
-            </Link>
-          )}
-          <Suspense fallback={null}>
-            <MobileMenu
-              formats={fallbackFormats}
-              initialFormatSlug={initialFormatSlug}
-              sources={sources}
-              initialSourceSlug={initialSourceSlug}
-              isAuthenticated={isAuthenticated}
-              isAdmin={isAdmin}
-              allFormats={allFormats}
-              supportedFormatSlugs={supportedFormatSlugs}
-            />
-          </Suspense>
         </div>
+      </div>
     </HeaderShell>
+  );
+}
+
+/** Holds the drawer trigger's box while its toggles resolve. */
+function NavTriggerSkeleton() {
+  return (
+    <div
+      aria-hidden="true"
+      className="h-11 w-11 shrink-0 rounded-card border border-line bg-base/60 lg:hidden"
+    />
   );
 }
 

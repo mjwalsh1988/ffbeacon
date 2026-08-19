@@ -6,8 +6,8 @@
  * Below xl there is no second column to put the rail in, so it used to stack
  * underneath the whole page: four panels a drafter has to scroll past the entire
  * board to reach, which in a live draft is the same as not having them. Here it
- * becomes a bottom sheet behind one full-width bar that sits directly under the
- * view tabs.
+ * becomes a bottom sheet behind one full-width bar that leads the content
+ * column.
  *
  * THE BAR FOLLOWS YOU DOWN. Once you have scrolled past it, it re-attaches
  * itself under the site header so the rail is always one tap away, and it lets
@@ -30,7 +30,7 @@ import { BottomSheet } from "@/components/bottom-sheet";
 /**
  * Where the docked bar parks: the site header is 4.5rem tall (sticky, z-30),
  * and the extra 1rem is the breathing room that keeps the bar from looking
- * welded to the header pill.
+ * welded to the header.
  */
 const HEADER_HEIGHT_REM = 4.5;
 const DOCK_GAP_REM = 1;
@@ -51,16 +51,23 @@ function dockTopPx(): number {
 
 /**
  * Horizontal inset that lines the docked bar up with where it sits in the flow.
- * Two containers pad it there: the page shell (px-4 / sm:px-6 / lg:px-8) and the
- * draft room's own body (px-4 / sm:px-6), plus the room's 1px border. Without
- * this the bar would jump 17px left and grow 34px wider the instant it detached.
+ * Three things pad it there: the navigation rail (from lg up, and its width is
+ * whatever the reader last set it to), the page shell (px-4 / sm:px-6 /
+ * lg:px-8), and the draft room's own body (px-4 / sm:px-6), plus the room's 1px
+ * border. Without this the bar would jump left and grow wider the instant it
+ * detached, and from lg up it would land on top of the rail.
+ *
+ * This wrapper is xl:hidden and the rail is lg:flex, so the two overlap in the
+ * 1024px to 1279px band. That band is the only reason the rail term exists.
  * Keep in step with app/tools/on-the-clock/page.tsx and the room's body padding.
  */
-const DOCK_INSET = "px-[2.0625rem] sm:px-[3.0625rem] lg:px-[3.5625rem]";
+const DOCK_INSET =
+  "px-[2.0625rem] sm:px-[3.0625rem] lg:pr-[3.5625rem] lg:pl-[calc(var(--app-rail-w)+3.5625rem)]";
 
 export function SidebarSheet({
   label,
   summary,
+  leading,
   children,
 }: {
   /** Short visible label on the bar, also the sheet's heading. */
@@ -70,6 +77,16 @@ export function SidebarSheet({
    * opening it gets you rather than just "Quick info, button".
    */
   summary: string;
+  /**
+   * A control that rides in the same docking bar, to the left of this one.
+   *
+   * The draft-view switcher uses it below lg. Two independently docking bars
+   * would park at the same offset and cover each other, and stacking them
+   * would push the room down by two bar heights, so there is one bar and the
+   * pair share it. Above the width where the leading control hides itself,
+   * this sheet's own button simply takes the whole row back.
+   */
+  leading?: ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -136,6 +153,8 @@ export function SidebarSheet({
           className={docked ? `fixed inset-x-0 z-20 ${DOCK_INSET}` : "relative"}
           style={docked ? { top: `${DOCK_TOP_REM}rem` } : undefined}
         >
+          <div className="flex items-stretch gap-2">
+          {leading}
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -146,7 +165,7 @@ export function SidebarSheet({
             // layout that this button does not keep.
             aria-haspopup="dialog"
             aria-label={`${label}. ${summary}`}
-            className="relative flex h-12 w-full items-center gap-2.5 overflow-hidden rounded-card border border-line-accent bg-surface-elevated px-4 text-left shadow-lg shadow-black/40 transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            className="relative flex h-12 min-w-0 flex-1 items-center gap-2.5 overflow-hidden rounded-card border border-line-accent bg-surface-elevated px-4 text-left shadow-lg shadow-black/40 transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             style={{
               backgroundImage:
                 "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.14) 0%, transparent 60%), radial-gradient(ellipse at 100% 100%, rgba(34, 211, 238, 0.12) 0%, transparent 60%)",
@@ -162,11 +181,12 @@ export function SidebarSheet({
               }}
             />
             <PanelRight aria-hidden="true" className="h-4 w-4 shrink-0 text-brand-cyan" />
-            <span aria-hidden="true" className="flex-1 text-sm font-semibold text-ink">
+            <span aria-hidden="true" className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
               {label}
             </span>
             <ChevronUp aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-muted" />
           </button>
+          </div>
         </div>
       </div>
 

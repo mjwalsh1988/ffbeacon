@@ -5,7 +5,8 @@ import { resolveFormatSlug } from "@/lib/preferences";
 import { SITE } from "@/lib/site";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { formatEastern, formatEasternDate } from "@/lib/datetime";
-import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { findPublishedGuide } from "@/lib/guides/published";
@@ -171,59 +172,43 @@ export default async function DraftGuidePage({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        <BriefBreadcrumb
-          crumbs={[
-            { label: "FF Beacon", href: "/" },
-            { label: "Guides", href: "/guides" },
-            { label: "Draft guide" },
-          ]}
-          className="mb-6"
-        />
-
+      <PageBody width="reading">
         <article>
-          <header>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <span className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
-                Guide
-              </span>
-              <time dateTime={PUBLISHED_AT} className="text-xs text-ink-muted">
-                {formatEasternDate(PUBLISHED_AT)}
-              </time>
+          {/* The headline is a single text node now rather than two
+              gradient-split spans, so the aria-label that used to collapse them
+              is gone: the announced name and the visible text are the same. */}
+          <PageMasthead
+            eyebrow="Guides"
+            title="The draft guide: who the room is late on"
+            chips={[
+              { label: "Guide", tone: "cyan" },
+              { label: activeFormat?.display ?? activeSlug, tone: "purple" },
+            ]}
+            stats={[
+              { label: "Steals", value: String(board.steals.length), accent: "cyan" },
+              { label: "Swings", value: String(board.swings.length), accent: "purple" },
+              { label: "Fades", value: String(board.fades.length) },
+            ]}
+          >
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-subtle">
+              <time dateTime={PUBLISHED_AT}>{formatEasternDate(PUBLISHED_AT)}</time>
               {board.computedAt ? (
-                <time dateTime={board.computedAt} className="text-xs text-ink-muted">
+                <time dateTime={board.computedAt}>
                   Board rebuilt {formatEastern(board.computedAt)}
                 </time>
               ) : null}
-            </div>
-
-            {/* The aria-label collapses the gradient-split headline into one
-                accessible name and is byte-identical to the visible text, so a
-                screen reader and a sighted reader get the same title. */}
-            <h1
-              aria-label="The draft guide: who the room is late on"
-              className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl"
-            >
-              <span
-                className="bg-clip-text text-transparent"
-                style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-              >
-                The draft guide
+              <span>
+                By{" "}
+                <Link
+                  rel="author"
+                  href={SITE.author.bylineHref}
+                  className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  {SITE.author.name}
+                </Link>
               </span>
-              : who the room is late on
-            </h1>
-
-            <p className="mt-3 text-xs text-ink-subtle">
-              By{" "}
-              <Link
-                rel="author"
-                href={SITE.author.bylineHref}
-                className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                {SITE.author.name}
-              </Link>
             </p>
-          </header>
+          </PageMasthead>
 
           <TheShortVersion market={market} format={activeFormat?.display ?? activeSlug} />
 
@@ -264,7 +249,7 @@ export default async function DraftGuidePage({
             <Closing />
           </div>
         </article>
-      </div>
+      </PageBody>
 
       <DiscordCtaSection
         eyebrow="Drafting this week?"

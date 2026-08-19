@@ -4,7 +4,8 @@ import { ArrowRight, ListTree } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { formatEasternDate } from "@/lib/datetime";
-import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
 import {
@@ -206,16 +207,7 @@ export default async function FantasyFootballTermsGuide() {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        <BriefBreadcrumb
-          crumbs={[
-            { label: "FF Beacon", href: "/" },
-            { label: "Guides", href: "/guides" },
-            { label: "Fantasy football terms" },
-          ]}
-          className="mb-6"
-        />
-
+      <PageBody width="reading">
         <article>
           <GuideHeader />
           <TheShortVersion />
@@ -230,7 +222,7 @@ export default async function FantasyFootballTermsGuide() {
             <Closing />
           </div>
         </article>
-      </div>
+      </PageBody>
 
       <DiscordCtaSection
         eyebrow="Still stuck on a word?"
@@ -248,49 +240,35 @@ export default async function FantasyFootballTermsGuide() {
 
 /* ---------- Header ---------- */
 
+/**
+ * The headline is a single text node now rather than two gradient-split spans,
+ * so the aria-label that used to collapse them is gone: the announced name and
+ * the visible text are the same string.
+ */
 function GuideHeader() {
   return (
-    <header>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="inline-flex items-center rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-cyan">
-          Guide
+    <PageMasthead
+      eyebrow="Guides"
+      title="Fantasy football terms, explained in plain English"
+      chips={[{ label: "Guide", tone: "cyan" }]}
+      stats={[
+        { label: "Terms defined", value: String(TERM_COUNT), accent: "cyan" },
+      ]}
+    >
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-subtle">
+        <time dateTime={PUBLISHED_AT}>{formatEasternDate(PUBLISHED_AT)}</time>
+        <span>
+          By{" "}
+          <Link
+            rel="author"
+            href={SITE.author.bylineHref}
+            className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            {SITE.author.name}
+          </Link>
         </span>
-        <time dateTime={PUBLISHED_AT} className="text-xs text-ink-subtle">
-          {formatEasternDate(PUBLISHED_AT)}
-        </time>
-        <span className="text-xs text-ink-subtle">
-          {TERM_COUNT} terms defined
-        </span>
-      </div>
-
-      {/* aria-label collapses the gradient-split headline into one accessible
-          name, matching the pattern used on the other hero headings. */}
-      <h1
-        aria-label="Fantasy football terms, explained in plain English"
-        className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl"
-      >
-        <span
-          className="bg-clip-text text-transparent"
-          style={{
-            backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-          }}
-        >
-          Fantasy football terms
-        </span>
-        , explained in plain English
-      </h1>
-
-      <p className="mt-3 text-xs text-ink-subtle">
-        By{" "}
-        <Link
-          rel="author"
-          href={SITE.author.bylineHref}
-          className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-        >
-          {SITE.author.name}
-        </Link>
       </p>
-    </header>
+    </PageMasthead>
   );
 }
 

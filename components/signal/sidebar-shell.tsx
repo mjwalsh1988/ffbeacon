@@ -20,7 +20,7 @@ import { Menu, X } from "lucide-react";
  * column), the sidebar collapses into a labeled, focus-trapped drawer reachable
  * from a top-bar trigger. Desktop (lg and up) is unchanged.
  *
- * The drawer reuses the proven mobile-menu focus model: portal to document.body
+ * The drawer reuses the navigation drawer's focus model: portal to document.body
  * (so it escapes the page stacking context), role="dialog" + aria-modal, a Tab
  * focus trap, Escape to close, body scroll lock, and focus return to the
  * trigger on close. Read-only public page: announcement is carried by the
@@ -75,7 +75,7 @@ export function SidebarShell({
     return () => window.cancelAnimationFrame(raf);
   }, [open]);
 
-  // Focus trap, Escape, scroll lock, focus return (mobile-menu model). Focus is
+  // Focus trap, Escape, scroll lock, focus return (navigation drawer model). Focus is
   // deferred until the panel is on screen so a screen reader does not land on an
   // off-screen tree.
   useEffect(() => {

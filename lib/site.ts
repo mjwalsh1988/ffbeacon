@@ -42,8 +42,8 @@ export type NavItem = {
 };
 
 /** Every tool on the site, in display order. Single source of truth shared
- * by the header dropdown, the mobile menu, and (conceptually) the footer
- * Tools column. Keep descriptions short and jargon-free. */
+ * by the navigation rail (via lib/nav-tree.ts) and the footer Tools column.
+ * Keep descriptions short and jargon-free. */
 // Ordered by how much of a manager's season the tool covers, widest first:
 // a whole league, then a draft, then a single trade, then two players, then one
 // waiver bid. The footer Tools column follows the same order. Rankings Board is
@@ -77,8 +77,8 @@ export const TOOLS_NAV: NavChild[] = [
 ];
 
 /** Every game on the site, in display order. Single source of truth shared
- * by the header dropdown, the mobile menu, and (conceptually) the footer
- * Games column. Keep descriptions short and jargon-free. */
+ * by the navigation rail (via lib/nav-tree.ts) and the footer Games column.
+ * Keep descriptions short and jargon-free. */
 export const GAMES_NAV: NavChild[] = [
   {
     label: "Signal Scout",

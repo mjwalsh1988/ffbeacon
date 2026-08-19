@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 const DISCORD_INVITE_URL = "https://discord.gg/scrhgHNWfe";
 const PAGE_URL = "https://ffbeacon.com/join";
@@ -78,38 +80,27 @@ export default function JoinDiscordPage() {
         }}
       />
 
-      <main
-        id="main"
-        className="flex min-h-[60vh] items-center justify-center px-4 py-16"
-      >
-        <div className="max-w-xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand-cyan">
-            Discord Invite
-          </p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink sm:text-4xl">
-            Redirecting you to the{" "}
-            <span className="bg-gradient-to-br from-brand-purple to-brand-cyan bg-clip-text text-transparent">
-              FF Beacon Discord
-            </span>
-            ...
-          </h1>
-          <p className="mt-4 text-base leading-relaxed text-ink-muted">
-            If your browser doesn&apos;t redirect automatically, open the
-            invite below.
-          </p>
-          <div className="mt-8 flex flex-col items-center gap-3">
-            <Link
-              href={DISCORD_INVITE_URL}
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center rounded-md bg-gradient-to-br from-brand-purple to-brand-cyan px-5 py-3 text-sm font-semibold text-bg shadow-sm transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              Open Discord invite
-            </Link>
+      <main id="main">
+        <PageBody width="reading">
+          <PageMasthead
+            eyebrow="Discord Invite"
+            title="Redirecting you to the FF Beacon Discord..."
+            description="If your browser doesn't redirect automatically, open the invite below."
+            actions={
+              <Link
+                href={DISCORD_INVITE_URL}
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center justify-center rounded-md bg-gradient-to-br from-brand-purple to-brand-cyan px-5 py-3 text-sm font-semibold text-bg shadow-sm transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Open Discord invite
+              </Link>
+            }
+          >
             <p className="text-xs text-ink-subtle">
               <code className="font-mono">{DISCORD_INVITE_URL}</code>
             </p>
-          </div>
-        </div>
+          </PageMasthead>
+        </PageBody>
       </main>
     </>
   );

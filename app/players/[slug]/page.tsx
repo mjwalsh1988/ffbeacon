@@ -12,8 +12,13 @@ import {
   SCORING_KEYS,
 } from "@/lib/player-profile";
 import { loadPositionalFinishesCached } from "@/lib/player-profile-cache";
+import { PageBody } from "@/components/app-shell/page-body";
+import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 import { PlayerHero } from "@/components/player-profile/player-hero";
-import { PlayerTabs, type PlayerTabId } from "@/components/player-profile/player-tabs";
+import {
+  PlayerTabs,
+  type PlayerTabId,
+} from "@/components/player-profile/player-tabs";
 import { OverviewTab } from "@/components/player-profile/overview-tab";
 import { StatsTab } from "@/components/player-profile/stats-tab";
 import { TradesTab } from "@/components/player-profile/trades-tab";
@@ -22,14 +27,21 @@ import { TabLoading } from "@/components/player-profile/tab-loading";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TABS: PlayerTabId[] = ["overview", "statistics", "trades", "beacon-brief"];
+const VALID_TABS: PlayerTabId[] = [
+  "overview",
+  "statistics",
+  "trades",
+  "beacon-brief",
+];
 
 type PlayerPageProps = {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ format?: string; source?: string; tab?: string }>;
 };
 
-export async function generateMetadata({ params }: PlayerPageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PlayerPageProps): Promise<Metadata> {
   const { slug } = await params;
   const supabase = await createClient();
   const { data: player } = await supabase
@@ -56,7 +68,14 @@ export async function generateMetadata({ params }: PlayerPageProps): Promise<Met
       url: canonical,
       siteName: SITE.name,
       type: "profile",
-      images: [{ url: ogImage, width: 1200, height: 630, alt: `${name} fantasy profile card` }],
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 630,
+          alt: `${name} fantasy profile card`,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
@@ -67,7 +86,10 @@ export async function generateMetadata({ params }: PlayerPageProps): Promise<Met
   };
 }
 
-export default async function PlayerPage({ params, searchParams }: PlayerPageProps) {
+export default async function PlayerPage({
+  params,
+  searchParams,
+}: PlayerPageProps) {
   const { slug } = await params;
   const { format, source, tab } = await searchParams;
   const supabase = await createClient();
@@ -92,11 +114,13 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     loadPositionalFinishesCached(player.id),
   ]);
   const last3 = recentFinishesForScoring(allFinishes, context.scoringKey, 3);
-  const scoringLabel = SCORING_KEYS.find((s) => s.key === context.scoringKey)?.label ?? "PPR";
+  const scoringLabel =
+    SCORING_KEYS.find((s) => s.key === context.scoringKey)?.label ?? "PPR";
   const depthRole = depthRoleForPlayer(player);
 
   const fullName =
-    player.full_name ?? `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
+    player.full_name ??
+    `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim();
   const canonical = `${SITE.url}/players/${slug}`;
   const jsonLd = [
     {
@@ -105,14 +129,30 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       name: fullName,
       url: canonical,
       jobTitle: `${player.position}${player.team ? `, ${player.team}` : ""} (NFL)`,
-      ...(player.team ? { memberOf: { "@type": "SportsTeam", name: player.team } } : {}),
-      ...(player.college ? { alumniOf: { "@type": "CollegeOrUniversity", name: player.college } } : {}),
+      ...(player.team
+        ? { memberOf: { "@type": "SportsTeam", name: player.team } }
+        : {}),
+      ...(player.college
+        ? { alumniOf: { "@type": "CollegeOrUniversity", name: player.college } }
+        : {}),
       ...(player.birth_date ? { birthDate: player.birth_date } : {}),
       ...(player.height_inches
-        ? { height: { "@type": "QuantitativeValue", value: player.height_inches, unitCode: "INH" } }
+        ? {
+            height: {
+              "@type": "QuantitativeValue",
+              value: player.height_inches,
+              unitCode: "INH",
+            },
+          }
         : {}),
       ...(player.weight_lbs
-        ? { weight: { "@type": "QuantitativeValue", value: player.weight_lbs, unitCode: "LBR" } }
+        ? {
+            weight: {
+              "@type": "QuantitativeValue",
+              value: player.weight_lbs,
+              unitCode: "LBR",
+            },
+          }
         : {}),
     },
     {
@@ -138,31 +178,40 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
+      {/* An apostrophe cannot survive a slug, so name the page for the bar. */}
+      <SetBreadcrumbLabel value={fullName} />
       <article>
-        <PlayerHero
-          player={player}
-          sleeperId={sleeperId}
-          scoringLabel={scoringLabel}
-          finishes={last3}
-          team={team}
-          role={depthRole}
-        />
+        {/* Only the masthead sits in the shared page column. The tab bar and
+            each tab body carry their own full-width wrappers already. */}
+        <PageBody flush className="mx-auto max-w-7xl">
+          <PlayerHero
+            player={player}
+            sleeperId={sleeperId}
+            scoringLabel={scoringLabel}
+            finishes={last3}
+            team={team}
+            role={depthRole}
+          />
 
-        {context.fallbackBanner && (
-          <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+          {context.fallbackBanner && (
             <p
               role="status"
-              className="rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
+              className="mt-4 rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
             >
               <span className="font-medium text-ink">Heads up:</span> No{" "}
               {context.fallbackBanner.requested} data available for{" "}
-              {context.fallbackBanner.formatDisplay}. Showing {context.fallbackBanner.actual} values
-              instead.
+              {context.fallbackBanner.formatDisplay}. Showing{" "}
+              {context.fallbackBanner.actual} values instead.
             </p>
-          </div>
-        )}
+          )}
+        </PageBody>
 
-        <PlayerTabs slug={player.slug} activeTab={activeTab} source={source} format={format} />
+        <PlayerTabs
+          slug={player.slug}
+          activeTab={activeTab}
+          source={source}
+          format={format}
+        />
 
         {/* Stream each tab behind a skeleton so the hero + tab bar paint
             immediately instead of blocking on the active tab's data. */}
@@ -180,13 +229,21 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
               player={player}
               scoringKey={context.scoringKey}
               scoringLabel={scoringLabel}
-              tePremiumBonus={player.position === "TE" ? context.tePremiumBonus : 0}
+              tePremiumBonus={
+                player.position === "TE" ? context.tePremiumBonus : 0
+              }
             />
           )}
           {activeTab === "trades" && (
-            <TradesTab player={player} sleeperId={sleeperId} context={context} />
+            <TradesTab
+              player={player}
+              sleeperId={sleeperId}
+              context={context}
+            />
           )}
-          {activeTab === "beacon-brief" && <BeaconBriefTab player={player} playerName={fullName} />}
+          {activeTab === "beacon-brief" && (
+            <BeaconBriefTab player={player} playerName={fullName} />
+          )}
         </Suspense>
       </article>
     </main>

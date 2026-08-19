@@ -14,7 +14,7 @@ export default function LeagueNotFound() {
         </p>
         <Link
           href="/tools/league-pulse"
-          className="mt-6 inline-block min-h-11 rounded-card bg-brand-purple px-5 py-3 text-sm font-semibold text-base hover:bg-brand-purple/90"
+          className="mt-6 inline-block min-h-11 rounded-card bg-brand-purple px-5 py-3 text-sm font-semibold text-[#07070D] hover:bg-brand-purple/90"
         >
           Back to League Pulse
         </Link>

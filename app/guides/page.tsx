@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { SITE } from "@/lib/site";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
@@ -72,8 +73,10 @@ export default async function GuidesPage() {
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
-      <Hero />
-      <GuidesSection />
+      <PageBody>
+        <Masthead published={published.length} />
+        <GuidesSection />
+      </PageBody>
       <DiscordCtaSection
         eyebrow="While you wait"
         heading="Waiting on a guide? Ask a real person right now."
@@ -86,45 +89,29 @@ export default async function GuidesPage() {
   );
 }
 
-/* ---------- Hero ---------- */
+/* ---------- Masthead ---------- */
 
-function Hero() {
+/**
+ * The headline is one text node now rather than two gradient-split spans, so it
+ * needs no aria-label: what a screen reader announces and what the page shows
+ * are the same string.
+ */
+function Masthead({ published }: { published: number }) {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      {/* Beacon-gradient accent bar pinned to the very top. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="left" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        {/* aria-label collapses the gradient-split headline into one
-            accessible name for screen-reader navigation. */}
-        <h1
-          aria-label="Fantasy football explained, in plain English."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl"
-        >
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
-          >
-            Fantasy football explained
-          </span>
-          , in plain English.
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-          Long-form explainers that make analytics readable, define every
-          term the first time it shows up, and read the same by eye or by
-          ear.
-        </p>
-      </div>
-    </header>
+    <PageMasthead
+      eyebrow="Guides"
+      title="Fantasy football explained, in plain English."
+      description="Long-form explainers that make analytics readable, define every term the first time it shows up, and read the same by eye or by ear."
+      stats={[
+        { label: "Live now", value: String(published), accent: "cyan" },
+        {
+          label: "Being written",
+          value: String(GUIDES.length - published),
+          accent: "purple",
+        },
+        { label: "Terms defined", value: String(TERM_COUNT) },
+      ]}
+    />
   );
 }
 
@@ -180,35 +167,30 @@ const GUIDES: Guide[] = [
 
 function GuidesSection() {
   return (
-    <section
-      aria-labelledby="guides-heading"
-      className="border-b border-line bg-surface/30"
-    >
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          The guides shelf
-        </p>
-        <h2
-          id="guides-heading"
-          className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          Start with the vocabulary, then go draft.
-        </h2>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
-          The glossary and the draft guide are live and free to read right now.
-          The last one is being written while we focus on the rest of the
-          platform, and it&apos;ll land here when it&apos;s ready.
-        </p>
+    <section aria-labelledby="guides-heading" className="mt-10">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+        The guides shelf
+      </p>
+      <h2
+        id="guides-heading"
+        className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
+      >
+        Start with the vocabulary, then go draft.
+      </h2>
+      <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
+        The glossary and the draft guide are live and free to read right now.
+        The last one is being written while we focus on the rest of the
+        platform, and it&apos;ll land here when it&apos;s ready.
+      </p>
 
-        <ul
-          className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3"
-          role="list"
-        >
-          {GUIDES.map((guide) => (
-            <GuideCard key={guide.title} guide={guide} />
-          ))}
-        </ul>
-      </div>
+      <ul
+        className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3"
+        role="list"
+      >
+        {GUIDES.map((guide) => (
+          <GuideCard key={guide.title} guide={guide} />
+        ))}
+      </ul>
     </section>
   );
 }

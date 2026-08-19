@@ -14,7 +14,7 @@ import { PulseLoader } from "@/components/PulseLoader";
 export default function Loading() {
   return (
     <main id="main">
-      <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center px-4 sm:px-6 lg:px-8">
+      <div className="flex min-h-[60vh] items-center justify-center px-4 sm:px-6 lg:px-8">
         <PulseLoader size={96} fullScreen label="Loading Signal Scout" />
       </div>
     </main>

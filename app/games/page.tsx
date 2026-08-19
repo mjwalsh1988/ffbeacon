@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Radar, Vote, Clock, ArrowRight, type LucideIcon } from "lucide-react";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/games" },
@@ -48,66 +49,31 @@ const GAMES: Game[] = [
 export default function GamesPage() {
   return (
     <main id="main">
-      <Hero />
-      <section
-        aria-labelledby="games-heading"
-        className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
-      >
-        <h2 id="games-heading" className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Choose a game to play.
-        </h2>
-        <ul className="mt-10 grid gap-5 md:grid-cols-2" role="list">
-          {GAMES.map((game) => (
-            // Keyed by title, not href: an unbuilt game has no href yet.
-            <li key={game.title}>
-              <GameCard game={game} />
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
-  );
-}
+      <PageBody>
+        <PageMasthead
+          eyebrow="Games"
+          title="Play the data you already trust."
+          description="Free games built on the same real player data that powers our rankings and tools. Every round works the same by eye or by ear, no paywall, ever."
+        />
 
-/* ---------- Hero ---------- */
-
-function Hero() {
-  return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="left" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        {/* aria-label collapses the gradient-split headline into one
-            accessible name for screen-reader navigation, matching the
-            pattern on the homepage and tools hero. */}
-        <h1
-          aria-label="Play the data you already trust."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl"
-        >
-          Play the data{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
+        <section aria-labelledby="games-heading" className="mt-8">
+          <h2
+            id="games-heading"
+            className="text-3xl font-semibold tracking-tight sm:text-4xl"
           >
-            you already trust
-          </span>
-          .
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-          Free games built on the same real player data that powers our rankings and
-          tools. Every round works the same by eye or by ear, no paywall, ever.
-        </p>
-      </div>
-    </header>
+            Choose a game to play.
+          </h2>
+          <ul className="mt-10 grid gap-5 md:grid-cols-2" role="list">
+            {GAMES.map((game) => (
+              // Keyed by title, not href: an unbuilt game has no href yet.
+              <li key={game.title}>
+                <GameCard game={game} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      </PageBody>
+    </main>
   );
 }
 
@@ -167,7 +133,9 @@ function GameCard({ game }: { game: Game }) {
       </div>
       <h3 className="mt-5 text-xl font-semibold text-ink">{title}</h3>
       <p className="mt-1 text-sm font-medium text-brand-cyan">{tagline}</p>
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">{description}</p>
+      <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-muted">
+        {description}
+      </p>
       <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-card border border-brand-cyan/40 bg-brand-cyan/10 px-3.5 py-2 text-sm font-semibold text-brand-cyan transition-colors group-hover:border-brand-cyan group-hover:bg-brand-cyan/20 group-hover:text-ink">
         {cta}
         <ArrowRight
@@ -178,4 +146,3 @@ function GameCard({ game }: { game: Game }) {
     </Link>
   );
 }
-

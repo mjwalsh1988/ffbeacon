@@ -64,7 +64,12 @@ export function SignalGuideMount() {
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-start px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+      {/* Fixed to the viewport and pinned bottom-left, which from lg up is
+          where the navigation rail is. The extra left padding clears it, and
+          it tracks the rail's width so collapsing the rail moves the trigger
+          with it. The Discord bubble needs no equivalent: it sits bottom-right,
+          away from the rail. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-start px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 lg:pl-[calc(var(--app-rail-w)+2rem)]">
         <button
           ref={triggerRef}
           type="button"

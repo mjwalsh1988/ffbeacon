@@ -9,7 +9,8 @@ import type { PublicSharePayload, SideKey } from "@/lib/signal-check/types";
 import { TradeMarginGraph } from "../../trade-margin-graph";
 import { AssetAvatar } from "../../asset-avatar";
 import { ValueAdjustmentRow } from "@/components/value-adjustment-row";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead, type MastheadChip } from "@/components/app-shell/page-masthead";
 
 export const dynamic = "force-dynamic";
 
@@ -73,168 +74,145 @@ export default async function SignalCheckSharePage({
   const labelFor = (side: SideKey) =>
     payload.sides.find((s) => s.side === side)?.teamLabel || `Side ${side.toUpperCase()}`;
 
+  // The chips the old hero carried, in the masthead's own chip row. Same three
+  // readouts, same order, with the label folded into the chip text.
+  const chips: MastheadChip[] = [{ label: `Format: ${payload.formatDisplay}`, tone: "cyan" }];
+  if (payload.tradeShapeLabel) {
+    chips.push({ label: `Trade shape: ${payload.tradeShapeLabel}` });
+  }
+  if (payload.confidenceLabel) {
+    chips.push({ label: `Confidence: ${payload.confidenceLabel}` });
+  }
+
   return (
     <main id="main">
-      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-        {/* z-10 keeps the beacon hairline above the lava field's base layer. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 z-10 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-          }}
+      <PageBody>
+        <PageMasthead
+          eyebrow={`${payload.featureLabel}, ${payload.resultLabel}`}
+          title={payload.verdictLabel}
+          chips={chips}
+          stats={
+            payload.marginPct !== null
+              ? [
+                  {
+                    label: payload.winnerSide ? "Value margin" : "Value spread",
+                    value: `${payload.marginPct}%`,
+                    accent: "cyan",
+                  },
+                ]
+              : []
+          }
         />
-        <HeroLavaField copy="center" />
-        <div className="relative mt-[4.5rem] mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            {payload.featureLabel}, {payload.resultLabel}
-          </p>
 
-          <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <h1 className="max-w-xl text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
-              {payload.verdictLabel}
-            </h1>
+        <section aria-labelledby="verdict-detail">
+          <div className="mx-auto mt-8 max-w-3xl">
+            <h2 id="verdict-detail" className="sr-only">
+              Verdict detail
+            </h2>
+
             {payload.marginPct !== null && (
-              <div className="shrink-0 sm:text-right">
-                <p
-                  className="bg-clip-text text-4xl font-bold tabular-nums text-transparent sm:text-5xl"
-                  style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-                >
-                  {payload.marginPct}%
-                </p>
-                <p className="text-xs text-ink-subtle">
-                  {payload.winnerSide ? "value margin" : "value spread"}
-                </p>
-              </div>
+              <TradeMarginGraph
+                marginPct={payload.marginPct}
+                winnerSide={payload.winnerSide}
+                isNeutral={payload.winnerSide === null}
+                sideALabel={labelFor("a")}
+                sideBLabel={labelFor("b")}
+                totalA={payload.sides.find((s) => s.side === "a")?.total ?? null}
+                totalB={payload.sides.find((s) => s.side === "b")?.total ?? null}
+              />
             )}
-          </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Chip label="Format" value={payload.formatDisplay} />
-            {payload.tradeShapeLabel && <Chip label="Trade shape" value={payload.tradeShapeLabel} />}
-            {payload.confidenceLabel && <Chip label="Confidence" value={payload.confidenceLabel} />}
-          </div>
-        </div>
-      </header>
+            <div className="mt-6 rounded-card border border-line bg-surface/40 p-4 sm:p-5">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <ScrollText aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
+                What this means
+              </p>
+              <p className="mt-2 text-base leading-relaxed text-ink-muted">{payload.explanation}</p>
+            </div>
 
-      <section aria-labelledby="verdict-detail" className="border-b border-line">
-        <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-          <h2 id="verdict-detail" className="sr-only">
-            Verdict detail
-          </h2>
-
-          {payload.marginPct !== null && (
-            <TradeMarginGraph
-              marginPct={payload.marginPct}
-              winnerSide={payload.winnerSide}
-              isNeutral={payload.winnerSide === null}
-              sideALabel={labelFor("a")}
-              sideBLabel={labelFor("b")}
-              totalA={payload.sides.find((s) => s.side === "a")?.total ?? null}
-              totalB={payload.sides.find((s) => s.side === "b")?.total ?? null}
-            />
-          )}
-
-          <div className="mt-6 rounded-card border border-line bg-surface/40 p-4 sm:p-5">
-            <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <ScrollText aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-              What this means
-            </p>
-            <p className="mt-2 text-base leading-relaxed text-ink-muted">{payload.explanation}</p>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {payload.sides.map((s) => {
-              const isWinner = payload.winnerSide === s.side;
-              return (
-                <div
-                  key={s.side}
-                  className={`rounded-card border p-4 ${
-                    isWinner ? "border-brand-cyan/50 bg-brand-cyan/[0.04]" : "border-line bg-surface/40"
-                  }`}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
-                      {sideName(s)}
-                      {isWinner && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-brand-cyan/15 px-2 py-0.5 text-xs font-medium text-brand-cyan">
-                          <Trophy aria-hidden="true" className="h-3 w-3" />
-                          Winner
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {payload.sides.map((s) => {
+                const isWinner = payload.winnerSide === s.side;
+                return (
+                  <div
+                    key={s.side}
+                    className={`rounded-card border p-4 ${
+                      isWinner ? "border-brand-cyan/50 bg-brand-cyan/[0.04]" : "border-line bg-surface/40"
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                        {sideName(s)}
+                        {isWinner && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-cyan/15 px-2 py-0.5 text-xs font-medium text-brand-cyan">
+                            <Trophy aria-hidden="true" className="h-3 w-3" />
+                            Winner
+                          </span>
+                        )}
+                      </h3>
+                      {s.total !== null && (
+                        <span className="text-sm font-semibold tabular-nums text-ink-muted">
+                          {s.total.toLocaleString()}
                         </span>
                       )}
-                    </h3>
-                    {s.total !== null && (
-                      <span className="text-sm font-semibold tabular-nums text-ink-muted">
-                        {s.total.toLocaleString()}
-                      </span>
-                    )}
-                  </div>
+                    </div>
 
-                  <ul role="list" className="mt-3 space-y-2">
-                    {s.assets.map((a, i) => {
-                      const kind: "player" | "pick" =
-                        a.kind ??
-                        (a.detail?.toLowerCase().startsWith("draft pick") ? "pick" : "player");
-                      return (
-                        <li key={i} className="flex items-center gap-2.5">
-                          <AssetAvatar
-                            kind={kind}
-                            sleeperId={a.sleeperId ?? null}
-                            round={a.round ?? null}
-                            name={a.name}
-                            size={36}
-                            decorative
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium text-ink">
-                              {a.name}
+                    <ul role="list" className="mt-3 space-y-2">
+                      {s.assets.map((a, i) => {
+                        const kind: "player" | "pick" =
+                          a.kind ??
+                          (a.detail?.toLowerCase().startsWith("draft pick") ? "pick" : "player");
+                        return (
+                          <li key={i} className="flex items-center gap-2.5">
+                            <AssetAvatar
+                              kind={kind}
+                              sleeperId={a.sleeperId ?? null}
+                              round={a.round ?? null}
+                              name={a.name}
+                              size={36}
+                              decorative
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-ink">
+                                {a.name}
+                              </span>
+                              {a.detail && (
+                                <span className="block truncate text-xs text-ink-subtle">{a.detail}</span>
+                              )}
                             </span>
-                            {a.detail && (
-                              <span className="block truncate text-xs text-ink-subtle">{a.detail}</span>
-                            )}
-                          </span>
-                        </li>
-                      );
-                    })}
-                    {payload.adjustmentLabel && (
-                      <ValueAdjustmentRow
-                        label={payload.adjustmentLabel}
-                        points={s.adjustment}
-                        pct={s.adjustmentPct}
-                      />
-                    )}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
+                          </li>
+                        );
+                      })}
+                      {payload.adjustmentLabel && (
+                        <ValueAdjustmentRow
+                          label={payload.adjustmentLabel}
+                          points={s.adjustment}
+                          pct={s.adjustmentPct}
+                        />
+                      )}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
 
-          <p className="mt-6 text-xs text-ink-subtle">
-            {payload.valueSnapshotLabel ? `${payload.valueSnapshotLabel}. ` : ""}
-            Created {formatEastern(payload.createdAtIso)}.
-          </p>
+            <p className="mt-6 text-xs text-ink-subtle">
+              {payload.valueSnapshotLabel ? `${payload.valueSnapshotLabel}. ` : ""}
+              Created {formatEastern(payload.createdAtIso)}.
+            </p>
 
-          <div className="mt-8">
-            <Link
-              href="/tools/signal-check"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              Analyze your own trade
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
+            <div className="mt-8">
+              <Link
+                href="/tools/signal-check"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Analyze your own trade
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </PageBody>
     </main>
-  );
-}
-
-function Chip({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-base px-3 py-1 text-xs">
-      <span className="text-ink-subtle">{label}:</span>
-      <span className="font-medium text-ink">{value}</span>
-    </span>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Human and search-facing naming for a ranking format.
  *
- * `format_configs.display_name` is written for the header dropdown, where space is
+ * `format_configs.display_name` is written for the header popover, where space is
  * tight ("Dynasty PPR SF", "Redraft 1QB Half PPR"). Those abbreviations are wrong for
  * a page title and an h1, which need the words people actually type: "superflex", not
  * "SF"; "TE Premium", not "TEP". This module derives that phrasing from the format's

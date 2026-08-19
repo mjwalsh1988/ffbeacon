@@ -9,14 +9,7 @@
  * the in-view switcher and the Teams-tab owner default survive every hop.
  */
 
-import {
-  LayoutDashboard,
-  Users,
-  Activity,
-  Handshake,
-  ArrowLeftRight,
-  type LucideIcon,
-} from "lucide-react";
+import type { NavIconName } from "@/components/app-shell/nav-icons";
 
 export type LeagueTabId =
   | "overview"
@@ -28,11 +21,14 @@ export type LeagueTabId =
 export type LeagueNavItem = {
   id: LeagueTabId;
   label: string;
-  /** One line of plain description. Shown in the mobile sheet, where there is
-   *  room for it, and used as the rail link's title tooltip. */
+  /** One line of plain description. Painted under the label in the navigation
+   *  drawer, and carried in the accessible name of the rail link at both
+   *  sizes. */
   hint: string;
-  icon: LucideIcon;
-  isNew?: boolean;
+  /** Name of the icon, resolved by components/app-shell/nav-icons.ts. The rail
+   *  takes its tree across the server-to-client boundary, where a component
+   *  reference cannot travel. */
+  icon: NavIconName;
 };
 
 export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
@@ -40,32 +36,31 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     id: "overview",
     label: "Overview",
     hint: "Rankings and league snapshot",
-    icon: LayoutDashboard,
+    icon: "dashboard",
   },
   {
     id: "teams",
     label: "Teams",
     hint: "Every roster side by side",
-    icon: Users,
+    icon: "users",
   },
   {
     id: "power-pulse",
     label: "Power Pulse",
     hint: "What each roster should win from here",
-    icon: Activity,
+    icon: "activity",
   },
   {
     id: "trade-finder",
     label: "Trade Finder",
     hint: "One trade worth offering, at a time",
-    icon: Handshake,
-    isNew: true,
+    icon: "handshake",
   },
   {
     id: "transactions",
     label: "Transactions",
     hint: "Trades, waivers, and FAAB moves",
-    icon: ArrowLeftRight,
+    icon: "swap",
   },
 ];
 
@@ -85,9 +80,4 @@ export function leagueTabHref(
 
   qs.set("tab", tabId);
   return `/leagues/${sleeperLeagueId}?${qs.toString()}`;
-}
-
-/** The display label for a section id, for the mobile bar's "you are here". */
-export function leagueTabLabel(tabId: LeagueTabId): string {
-  return LEAGUE_NAV_ITEMS.find((i) => i.id === tabId)?.label ?? "Overview";
 }

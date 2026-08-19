@@ -5,15 +5,14 @@ export function BeaconMark({
 }: {
   className?: string;
   showSubtitle?: boolean;
-  /** Pixel size of the square logo on the left. Defaults to 36 for the
-   * site header (which is h-16). */
+  /** Pixel size of the square mark on the left. */
   logoSize?: number;
 }) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/img/ff-beacon-logo.png"
+        src="/img/ff-beacon-mark-96.png"
         alt=""
         width={logoSize}
         height={logoSize}

@@ -78,7 +78,7 @@ export function DraftGrades({
   return (
     <div className="space-y-4">
       <div>
-        {/* h2, matching every other tab panel; this one opened at h3 with no h2
+        {/* h2, matching every other view; this one opened at h3 with no h2
             above it, so the outline skipped a level here and nowhere else. */}
         <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
           {inProgress ? "Draft grades so far" : "Draft grades"}

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
  * Site-wide floating CTA that nudges visitors into the FF Beacon Discord.
  *
  * Why a floating element instead of a header/footer link:
- *   - The header is already crowded (Source/Format toggles, auth, mobile menu).
+ *   - The header is already crowded (source and format, search, BEAM, auth).
  *   - The footer is below the fold on most pages and easy to miss.
  *   - A persistent floating CTA stays visible across every route without
  *     blocking primary content.

@@ -3,7 +3,10 @@ import { cookies, headers } from "next/headers";
 import { Radar, Zap, Target, type LucideIcon } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalScoutSettings } from "@/lib/signal-scout/settings";
-import { loadLeaderboardView, type Board } from "@/lib/signal-scout/leaderboards";
+import {
+  loadLeaderboardView,
+  type Board,
+} from "@/lib/signal-scout/leaderboards";
 import type { LeaderboardViewDto } from "@/lib/signal-scout/client";
 import { LeaderboardRail } from "./leaderboard-rail";
 import {
@@ -14,11 +17,16 @@ import {
   type RoundIdentity,
   type SignalScoutStreaks,
 } from "@/lib/signal-scout/round-engine";
-import { SCOUT_GUEST_COOKIE, uuidSchema, hashGuestIp } from "@/lib/signal-scout/route-helpers";
+import {
+  SCOUT_GUEST_COOKIE,
+  uuidSchema,
+  hashGuestIp,
+} from "@/lib/signal-scout/route-helpers";
 import { currentEasternGameDate } from "@/lib/signal-scout/streaks";
 import { SignalScoutClient, type MyScoutStats } from "./signal-scout-client";
 import { HowItWorks } from "./how-it-works";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/games/signal-scout" },
@@ -32,7 +40,9 @@ export const dynamic = "force-dynamic";
 /** Display order of the leaderboard boards; filtered by admin settings below. */
 const BOARD_ORDER: Board[] = ["daily", "all_time", "streak"];
 
-function isCompletedRound(round: ActiveRoundDto | CompletedRoundDto): round is CompletedRoundDto {
+function isCompletedRound(
+  round: ActiveRoundDto | CompletedRoundDto,
+): round is CompletedRoundDto {
   return "status" in round;
 }
 
@@ -70,7 +80,9 @@ export default async function SignalScoutPage() {
     const cookieGuestId = cookieStore.get(SCOUT_GUEST_COOKIE)?.value ?? null;
     const headerStore = await headers();
     const xff = headerStore.get("x-forwarded-for");
-    const rawIp = xff ? (xff.split(",")[0]?.trim() ?? "unknown") : headerStore.get("x-real-ip")?.trim() || "unknown";
+    const rawIp = xff
+      ? (xff.split(",")[0]?.trim() ?? "unknown")
+      : headerStore.get("x-real-ip")?.trim() || "unknown";
     ipHash = hashGuestIp(rawIp);
     if (cookieGuestId && uuidSchema.safeParse(cookieGuestId).success) {
       guestId = cookieGuestId;
@@ -139,11 +151,15 @@ export default async function SignalScoutPage() {
         .eq("action", "guest_round_start")
         .eq("game_date", gameDate);
       for (const row of counterRows ?? []) {
-        if (guestId && row.identity_key === `guest:${guestId}`) guestCount = row.count;
+        if (guestId && row.identity_key === `guest:${guestId}`)
+          guestCount = row.count;
         if (ipHash && row.identity_key === `ip:${ipHash}`) ipCount = row.count;
       }
     }
-    guestRoundsRemaining = Math.max(0, settings.guest_daily_round_limit - Math.max(guestCount, ipCount, 0));
+    guestRoundsRemaining = Math.max(
+      0,
+      settings.guest_daily_round_limit - Math.max(guestCount, ipCount, 0),
+    );
   }
 
   // Leaderboard rail (plan sections 3, 8, 21). The boards live in a sidebar
@@ -156,7 +172,8 @@ export default async function SignalScoutPage() {
     streak: leaderboards.streak_enabled,
   };
   const enabledBoards = BOARD_ORDER.filter((b) => perBoardEnabled[b]);
-  const railEnabled = leaderboards.leaderboard_enabled && enabledBoards.length > 0;
+  const railEnabled =
+    leaderboards.leaderboard_enabled && enabledBoards.length > 0;
   const initialBoard = enabledBoards[0] ?? "daily";
 
   // LeaderboardRail is a client component, so any prop passed to it is
@@ -233,37 +250,48 @@ export default async function SignalScoutPage() {
 
   return (
     <main id="main">
-      <Hero />
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        {railEnabled ? (
-          <LeaderboardRail
-            boards={enabledBoards}
-            initialBoard={initialBoard}
-            initialView={initialView}
-            requireLogin={leaderboards.require_login}
-            viewerSignedIn={isAuthenticated}
-            howItWorksRail={
-              <HowItWorks {...howItWorksProps} headingId="signal-scout-how-it-works-rail" />
-            }
-            howItWorksSheet={
-              <HowItWorks {...howItWorksProps} headingId="signal-scout-how-it-works-sheet" />
-            }
-          >
-            {gameSection}
-          </LeaderboardRail>
-        ) : (
-          // Leaderboards off entirely: no sidebar and no mobile button, so the
-          // game gets the full width back and How It Works, which normally
-          // rides in the rail, has to be placed here or it would vanish with
-          // the rail that carries it.
-          <>
-            {gameSection}
-            <div className="mt-6">
-              <HowItWorks {...howItWorksProps} headingId="signal-scout-how-it-works" />
-            </div>
-          </>
-        )}
-      </div>
+      <PageBody>
+        <Masthead />
+        <div className="mt-6">
+          {railEnabled ? (
+            <LeaderboardRail
+              boards={enabledBoards}
+              initialBoard={initialBoard}
+              initialView={initialView}
+              requireLogin={leaderboards.require_login}
+              viewerSignedIn={isAuthenticated}
+              howItWorksRail={
+                <HowItWorks
+                  {...howItWorksProps}
+                  headingId="signal-scout-how-it-works-rail"
+                />
+              }
+              howItWorksSheet={
+                <HowItWorks
+                  {...howItWorksProps}
+                  headingId="signal-scout-how-it-works-sheet"
+                />
+              }
+            >
+              {gameSection}
+            </LeaderboardRail>
+          ) : (
+            // Leaderboards off entirely: no sidebar and no mobile button, so the
+            // game gets the full width back and How It Works, which normally
+            // rides in the rail, has to be placed here or it would vanish with
+            // the rail that carries it.
+            <>
+              {gameSection}
+              <div className="mt-6">
+                <HowItWorks
+                  {...howItWorksProps}
+                  headingId="signal-scout-how-it-works"
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </PageBody>
     </main>
   );
 }
@@ -274,8 +302,12 @@ function SignalOfflineNotice() {
       role="status"
       className="mx-auto max-w-2xl rounded-modal border border-line bg-surface/50 p-6 text-center sm:p-8"
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">Signal Scout</p>
-      <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink">Signal offline</h2>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+        Signal Scout
+      </p>
+      <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink">
+        Signal offline
+      </h2>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">
         Signal Scout is taking a breather. Check back soon.
       </p>
@@ -284,58 +316,52 @@ function SignalOfflineNotice() {
 }
 
 const HERO_BULLETS: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: Radar, title: "A hidden player", body: "One real NFL player, revealed only through clues." },
-  { icon: Zap, title: "Hints burn signal", body: "Every clue you buy costs score. Spend it wisely." },
-  { icon: Target, title: "Name them in time", body: "Guess the player before the signal burns out." },
+  {
+    icon: Radar,
+    title: "A hidden player",
+    body: "One real NFL player, revealed only through clues.",
+  },
+  {
+    icon: Zap,
+    title: "Hints burn signal",
+    body: "Every clue you buy costs score. Spend it wisely.",
+  },
+  {
+    icon: Target,
+    title: "Name them in time",
+    body: "Guess the player before the signal burns out.",
+  },
 ];
 
-function Hero() {
+function Masthead() {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="center" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <h1
-          aria-label="Signal Scout: decode the profile. Find the player."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
-        >
-          Signal Scout:{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-          >
-            decode the profile. Find the player.
-          </span>
-        </h1>
-        <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          Every round hides a real NFL player behind a handful of starter clues. Buy
-          hints across four signal tiers to reveal more, but each one burns your
-          score, so read fast, guess smart, and name the player before the signal
-          burns out.
-        </p>
-
-        <ul
-          role="list"
-          aria-label="How Signal Scout works"
-          className="mt-6 grid grid-cols-3 gap-2 sm:mt-8 sm:gap-4"
-        >
-          {HERO_BULLETS.map((bullet) => (
-            <HeroBullet key={bullet.title} {...bullet} />
-          ))}
-        </ul>
-      </div>
-    </header>
+    <PageMasthead
+      eyebrow="Games"
+      title="Signal Scout: decode the profile. Find the player."
+      description="Every round hides a real NFL player behind a handful of starter clues. Buy hints across four signal tiers to reveal more, but each one burns your score, so read fast, guess smart, and name the player before the signal burns out."
+    >
+      <ul
+        role="list"
+        aria-label="How Signal Scout works"
+        className="grid grid-cols-3 gap-2 sm:gap-4"
+      >
+        {HERO_BULLETS.map((bullet) => (
+          <HeroBullet key={bullet.title} {...bullet} />
+        ))}
+      </ul>
+    </PageMasthead>
   );
 }
 
-function HeroBullet({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
+function HeroBullet({
+  icon: Icon,
+  title,
+  body,
+}: {
+  icon: LucideIcon;
+  title: string;
+  body: string;
+}) {
   return (
     <li className="flex flex-col items-center rounded-card border border-line bg-surface/60 p-2.5 text-center sm:items-start sm:p-4 sm:text-left">
       <span
@@ -344,8 +370,12 @@ function HeroBullet({ icon: Icon, title, body }: { icon: LucideIcon; title: stri
       >
         <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
       </span>
-      <p className="mt-2 text-xs font-semibold leading-tight text-ink sm:mt-3 sm:text-sm">{title}</p>
-      <p className="mt-1 text-[11px] leading-snug text-ink-muted sm:text-xs sm:leading-relaxed">{body}</p>
+      <p className="mt-2 text-xs font-semibold leading-tight text-ink sm:mt-3 sm:text-sm">
+        {title}
+      </p>
+      <p className="mt-1 text-[11px] leading-snug text-ink-muted sm:text-xs sm:leading-relaxed">
+        {body}
+      </p>
     </li>
   );
 }

@@ -21,7 +21,7 @@ export function BeaconValueIcon({ className = "" }: { className?: string }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/img/ff-beacon-logo.png"
+      src="/img/ff-beacon-mark-96.png"
       alt=""
       aria-hidden="true"
       className={`inline-block h-[1em] w-[1em] shrink-0 select-none object-contain align-[-0.15em] ${className}`}

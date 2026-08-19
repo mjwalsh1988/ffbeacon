@@ -203,13 +203,11 @@ function Hero({
   discordStats: DiscordGuildStats | null;
 }) {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      {/* The negative top margin pulls the hero up behind the transparent site
-          header so this animated backdrop shows through it and the nav floats
-          in the hero. It matches the header's height exactly (py-2 + h-14 =
-          4.5rem), which HeaderShell holds constant in both of its states. The
-          content wrapper below adds top padding to clear the nav. */}
-      {/* Beacon-gradient accent bar pinned to the very top of the page. */}
+    <header className="relative overflow-hidden border-b border-line">
+      {/* The site header is opaque and sits above this block, so the hero
+          starts directly under it. The animated backdrop fills the hero
+          itself rather than bleeding up behind the nav. */}
+      {/* Beacon-gradient accent bar pinned to the top of the hero. */}
       <div
         aria-hidden="true"
         className="absolute inset-x-0 top-0 z-10 h-px"
@@ -220,7 +218,7 @@ function Hero({
       />
       <HeroLavaField copy="left" />
 
-      <div className="relative mx-auto max-w-7xl px-4 pb-14 pt-24 sm:px-6 sm:pb-20 sm:pt-28 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-center lg:gap-12 lg:px-8 lg:pb-28 lg:pt-36 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
+      <div className="relative mx-auto max-w-7xl px-4 pb-14 pt-12 sm:px-6 sm:pb-20 sm:pt-14 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-center lg:gap-12 lg:px-8 lg:pb-24 lg:pt-20 xl:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
         {/* Left column: headline, copy, CTAs, feature pills. */}
         <div className="max-w-2xl">
           {/* aria-label gives the h1 a single accessible name covering the

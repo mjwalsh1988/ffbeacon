@@ -33,8 +33,8 @@ import { PlayerHeadshot } from "@/components/player-headshot";
 import { Panel } from "./panel";
 
 /**
- * The room's one alert announcer. Mounted in the room shell, above the tabs, so
- * it survives every tab change and the `seen` set survives with it.
+ * The room's one alert announcer. Mounted in the room shell, outside the views,
+ * so it survives every view change and the `seen` set survives with it.
  *
  * "Your turn" is deliberately NOT spoken here. The command bar already announces
  * it assertively the moment it becomes true, and an assertive interruption

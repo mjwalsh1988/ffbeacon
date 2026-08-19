@@ -5258,3 +5258,332 @@ T604 | completed | put a ceiling on the Ask BEAM endpoint as a whole
      |           10 concurrent claims against a max of 5 allowed exactly 5;
      |           stored settings row backfills the new fields; the invariant
      |           rejects a ceiling below one visitor's rate and accepts a raise)
+
+T605 | completed | give the whole site the League Pulse dashboard chrome
+     | files: lib/nav-tree.ts, lib/breadcrumbs.ts, lib/nav-viewer.ts,
+     |        components/app-shell/sidebar-state.tsx,
+     |        components/app-shell/nav-levels.tsx,
+     |        components/app-shell/app-rail.tsx,
+     |        components/app-shell/app-mobile-nav.tsx,
+     |        components/app-shell/rail-toggle.tsx,
+     |        components/app-shell/rail-sections.tsx,
+     |        components/app-shell/breadcrumb-bar.tsx,
+     |        components/app-shell/app-shell.tsx,
+     |        components/app-shell/page-masthead.tsx,
+     |        components/app-shell/page-body.tsx,
+     |        components/app-shell/index.ts,
+     |        components/league-shell/league-rail-sections.tsx,
+     |        components/league-shell/league-shell.tsx,
+     |        components/league-shell/index.ts,
+     |        components/header-shell.tsx, components/site-header.tsx,
+     |        app/layout.tsx, app/globals.css
+     | depends on: T604
+     | The dashboard League Pulse got in b87ca43 is now the site's chrome, not
+     | one feature's. Every page renders inside a rail plus a breadcrumb bar.
+     | The rail is the site nav: sections down the left, collapsed to icons by
+     | default, widened by a toggle in the header that remembers the choice.
+     | A section with sub-pages opens a second level in place, level one sliding
+     | out left while level two comes in from the right. The parked level is
+     | inert, so a reader can never tab to a link that is off screen.
+     | Rail width is driven by data-sidebar on <html>, set by a blocking script
+     | before first paint. React state mirrors it only for aria-expanded. A
+     | React-driven width would paint collapsed and snap open on every load for
+     | anyone who had expanded it.
+     | Header and rail are merged: the header's left cell is the width of the
+     | rail, so collapsing the rail leaves the mark alone and expanding it
+     | brings the wordmark back. The rest of the header (search, BEAM, format
+     | and source, account) is always there and always sticky. The floating
+     | pill and the transparent-at-top state are both gone; a pill cannot sit
+     | on top of a rail. Height stays 72px, which everything sticky depends on.
+     | The horizontal primary nav is deleted along with nav-dropdown.tsx,
+     | header-nav-link.tsx, and mobile-menu.tsx. The mobile drawer replaces the
+     | last of those and carries the same tree, the same two levels, and the
+     | same format and source controls.
+     | Breadcrumbs are derived from the pathname (lib/breadcrumbs.ts) rather
+     | than passed from each page, so a new route gets one the moment it
+     | exists. The bar emits BreadcrumbList JSON-LD except on the routes that
+     | already publish their own.
+     | League Pulse no longer has a rail of its own. It registers its five
+     | sections into the site rail through rail-sections.tsx, opened on
+     | arrival, so every site section is one Back press away. Deletes
+     | league-side-nav.tsx and league-mobile-nav.tsx.
+     | Caught while checking the result in a browser: the palette names a colour
+     | `base`, and Tailwind turns every colour into a `text-*` utility, so there
+     | were two rules called `.text-base` and the colour one won inside a
+     | breakpoint. Anything written `text-sm sm:text-base` therefore went from
+     | readable grey to #07070D against a #07070D page at the sm breakpoint:
+     | invisible text, above one screen width only. `textColor` is now redefined
+     | outside `extend` to drop that one entry, so `text-base` means a font size
+     | and nothing else. Every other colour still has its `text-*` utility, and
+     | `bg-base` and `border-base` are untouched.
+     | Also caught in the browser: the blocking script writes data-sidebar on
+     | <html>, which React reported as a hydration mismatch on every load. The
+     | server now renders the collapsed value and <html> carries
+     | suppressHydrationWarning, which is what that attribute is for.
+     | Four review passes ran (implementation, security, performance,
+     | accessibility). Everything confirmed is fixed. The ones that mattered:
+     | The rail's Escape listener was on the document, so closing the search
+     | palette on any route with a level open also collapsed the rail and
+     | dragged focus onto a section button. It is bound to the nav now.
+     | The site had no navigation landmark at all. The rail was an <aside>
+     | (complementary) and the drawer had no <nav> inside it, so the primary
+     | navigation was not findable by landmark on any page. NavLevels is a
+     | <nav> now, and the rail box around it is a plain div.
+     | lib/nav-tree.ts names every admin route, and it was imported by two
+     | client components, so `curl` on the layout chunk handed an anonymous
+     | visitor the full admin map. The tree is server-only now, built and cut
+     | down on the server, and nodes name their icon instead of carrying it so
+     | they can cross the boundary. Verified against a clean build: the layout
+     | chunk has no /admin path in it.
+     | The root layout awaited the session before returning, which blocked
+     | React from descending into the page and put one auth round trip in front
+     | of every page's own fetching. The rail is an async child behind Suspense
+     | now and the layout is synchronous again.
+     | The header and the layout each read the session and user_preferences
+     | separately: two round trips per page to learn one thing. Both go through
+     | getNavViewer, which is React-cached, and buildNavTree is cached on the
+     | same object so the tree is serialised once rather than twice.
+     | ink-subtle measured about 3.8:1 and carried real 10px and 11px text
+     | (stat-tile labels, drawer hints, the source and format labels). Raised
+     | to #8A8A9C, about 5.4:1.
+     | The breadcrumb bar hand-rolled its JSON-LD escaping; it goes through
+     | serializeJsonLd now, per FFB-SEC-006.
+     | The bar was suppressed wholesale on league routes, taking the
+     | BreadcrumbList with it, and nothing under /leagues publishes one. The
+     | visible trail and the structured data are separate decisions now.
+     | Two buttons used `text-base` for its colour meaning and lost their dark
+     | text when the collision was fixed; both now name the hex.
+     | The Signal Guide trigger and the On The Clock docked bar are both fixed
+     | to the viewport at bottom-left, which from lg up is where the rail is.
+     | Both clear it, and both track its width.
+     | The 1.3 MB logo PNG was painted at 34px in the header and 20px in the
+     | breadcrumb bar on every page. A 96px mark at 4.9 KB replaces it in all
+     | five in-page renders; the full-size file stays for OG and email.
+     | AdminNav and MyBeaconNav only asked the rail to open a section it
+     | already opens from the pathname, so both are deleted.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean
+     |           on a fresh .next, and the rail, the submenu slide, the league
+     |           sections, the breadcrumb labels, and the admin tree all
+     |           checked in a browser)
+
+T606 | completed | move the draft room's view switcher into the site rail
+     | files: app/tools/on-the-clock/draft-room-rail.tsx,
+     |        app/tools/on-the-clock/on-the-clock-client.tsx,
+     |        app/tools/on-the-clock/sidebar-sheet.tsx,
+     |        app/tools/on-the-clock/command-header.tsx,
+     |        app/tools/on-the-clock/draft-radar.tsx,
+     |        app/tools/on-the-clock/dashboard-panels.tsx,
+     |        app/tools/on-the-clock/rosters-rankings.tsx,
+     |        app/tools/on-the-clock/draft-grades.tsx,
+     |        app/tools/on-the-clock/states.tsx,
+     |        lib/nav-types.ts, lib/nav-tree.ts,
+     |        components/app-shell/nav-levels.tsx,
+     |        components/app-shell/nav-icons.ts,
+     |        components/app-shell/rail-sections.tsx,
+     |        components/app-shell/app-rail.tsx,
+     |        components/app-shell/app-mobile-nav.tsx
+     | depends on: T605
+     | On The Clock kept its own horizontal strip when the rest of the site
+     | moved into the rail. Its eight views are now rail rows, under a section
+     | named for the draft you are in, opened on arrival, the same shape League
+     | Pulse uses.
+     | The one difference is what a row does. League Pulse sections are routes,
+     | so those rows are links. Draft views are eight states of one live page:
+     | the room holds a websocket, a synced board, a loaded player pool, and
+     | whatever is half-built in the trade builder. Navigating to change view
+     | would throw all of that away, so a node can now carry `onSelect` and no
+     | `href` and switch in place instead. Only a client registrar sets that, so
+     | no function is ever asked to cross the server boundary.
+     | A section with no `href` gets no index row, because a draft room has no
+     | page of its own to link back to.
+     | The strip sat directly above the panel it switched, which is what let it
+     | be a real tablist: the tab-to-panel relationship carried the
+     | announcement, and the panel appeared where the reader was already
+     | looking. The rail is nowhere near the content, so pressing a row now
+     | focuses the view's region and scrolls it under the header. Without that a
+     | reader gets no feedback at all beyond aria-current, and a drafter is left
+     | looking at the page masthead.
+     | Panels become `role="region"` with their own `aria-label` rather than
+     | `role="tabpanel"` labelled by the pressed control: the rail is
+     | display:none below lg, and an aria-labelledby pointing into it would
+     | resolve to nothing on a phone.
+     | Registration happens inside the draft room return, after the connect and
+     | league-picker steps have returned, so the rail only grows the section
+     | once a draft is actually open and drops it again on the way out.
+     | Three review passes ran (implementation, accessibility, and one covering
+     | security and performance). Everything confirmed is fixed:
+     | The level-two row count announced one too many for a section with no
+     | index row, which the same change had just made possible.
+     | The pathname trail was being replaced by the contributed one, so while a
+     | draft was open nothing in the site tree carried aria-current: you were on
+     | the Grades view AND on /tools/on-the-clock, and only the first was said.
+     | Both trails are passed down now.
+     | The regions carried scroll-mt-36 while SidebarSheet sets a root
+     | scrollPaddingTop of 8.5rem for its whole lifetime, which is every width
+     | below xl. Scroll-margin and scroll-padding add, so the target landed
+     | about 144px too low. The old tabs carried the same margin and never
+     | scrolled, so it had never fired.
+     | Nothing on the page named the view any more. The rail is collapsed to
+     | icons by default and hidden below lg, so the name is now a chip in the
+     | command header, and each region is labelled by a visually hidden heading
+     | rather than an aria-label, which puts it back in heading navigation.
+     | The focus-and-scroll ran in a frame scheduled beside setView, which
+     | assumed the commit landed first. A hidden element takes no focus and
+     | cannot be scrolled to, and both calls fail silently. It is an effect
+     | keyed on the view now.
+     | The registration signature hashed only ids and hrefs, and every draft node
+     | has no href, so it was a constant: renaming a section in place would
+     | never have re-registered. Labels are in it now.
+     | NavNode became a union, so a row carries an href or an onSelect and never
+     | neither, and the server tree is typed as SiteNavNode, which has no
+     | onSelect at all and so cannot grow a function that Next would refuse to
+     | serialise.
+     | register and clear were one effect, so every re-registration blanked the
+     | rail and restored it, correct only because React batches. Split.
+     | The drawer restored focus on every dismissal path except a row press.
+     | Deliberately not done, for the owner to decide: on a phone, switching view
+     | is now three taps through the drawer rather than one. Nothing is hidden,
+     | so the mobile-first rule holds, but a live draft is the one surface where
+     | that tempo cost is real. The fix, if wanted, is a room-level bottom sheet
+     | below lg reusing the SidebarSheet pattern already in that spot.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean on
+     |           a fresh .next, and the section appearing on entry, disappearing
+     |           on exit, switching views, and marking the active row all checked
+     |           in a browser against a live Sleeper draft)
+
+T607 | completed | drop the hero once a draft room is open
+     | files: app/tools/on-the-clock/page.tsx,
+     |        app/tools/on-the-clock/on-the-clock-client.tsx,
+     |        app/tools/on-the-clock/command-header.tsx
+     | depends on: T606
+     | Inside a room the first thing under the breadcrumbs is the room, and the
+     | league name is the page title. Marketing copy above a live draft is in
+     | the way, and the room already names itself.
+     | The page cannot make that call: whether a draft is open is client state.
+     | So the hero is rendered on the server and handed to the client as a prop,
+     | and every step before the room (connect, league picker, and the loading
+     | and error gates between them) renders it through one `beforeRoom`
+     | wrapper. The room does not.
+     | That moves the page h1. It was the hero's; in a room it is the league
+     | name in the command header, which now carries `.beacon-page-title` at the
+     | shared masthead size. Exactly one h1 either way.
+     | Deletes the sr-only "Connect a draft" h2 that wrapped the whole tool. It
+     | sat above the room's own h1 in document order, so a heading list read h2
+     | then h1, and it described the connect step while a draft was open.
+     | The command header's gutters now match the room body (px-4 sm:px-6)
+     | instead of capping at max-w-7xl. The room is the widest column on the
+     | site and the page title has to line up with the content under it.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T608 | completed | drop the Your team row from the draft board
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx
+     | depends on: T607
+     | The Board view opened on room status, best remaining, then the connected
+     | user's roster, then the board itself. The roster row is gone; the board
+     | now follows the first row directly.
+     | Board only. The same panel in the side rail (and in the Quick info sheet
+     | below xl) is untouched, and so is the Rosters view, which is where a
+     | roster laid out by position belongs.
+     | The board view was also the only reason `teamRollups` was built outside
+     | the four views that read them. Nothing on the board reads a rollup now,
+     | so that work was thrown away on every realtime pick. It is off the board
+     | path, which makes the busiest view in the room cheaper per pick.
+     | Removes `myBoardRollup` and the `TeamPositionGrid` import, both of which
+     | had no other consumer.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T609 | completed | give the draft room its own view switcher on a phone
+     | files: app/tools/on-the-clock/draft-view-sheet.tsx,
+     |        app/tools/on-the-clock/sidebar-sheet.tsx,
+     |        app/tools/on-the-clock/on-the-clock-client.tsx
+     | depends on: T606
+     | The eight views live in the site rail, and the rail only exists from lg
+     | up. Below that they were reachable only through the site drawer: open a
+     | modal from the header, find the section, press a row. Fine for browsing
+     | the site, wrong with a clock running.
+     | Below lg the room now carries one control naming the view you are on,
+     | opening a sheet of all eight. The rail rows stay canonical; this is the
+     | same eight actions reached a shorter way, so nothing is exclusive to the
+     | small layout.
+     | It rides in the Quick info bar rather than getting its own. Two bars that
+     | both dock would park at the same offset and cover each other, and
+     | stacking them would push the room down by two bar heights. SidebarSheet
+     | takes a `leading` slot and its own button drops from w-full to flex-1, so
+     | between lg and xl, where the switcher hides itself, the bar looks exactly
+     | as it did.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T610 | completed | widen the Signal Check builder
+     | files: app/tools/signal-check/page.tsx
+     | The content below the hero was capped at max-w-5xl, which left the trade
+     | builder in a narrow column on a wide screen while the masthead above it
+     | ran the full width. It is 90rem now.
+     | Still capped rather than edge to edge: the builder is two rosters side by
+     | side with a verdict between them, and past about 90rem the two sides
+     | drift far enough apart that comparing them means moving your head.
+     | verified: yes (tsc clean, 1747 tests, next build clean; no browser check,
+     |           at the owner's request)
+
+T611 | completed | let Beacon Breakdown and FAAB use the full width
+     | files: app/tools/beacon-breakdown/page.tsx, app/tools/faab/page.tsx,
+     |        app/tools/faab/faab-form.tsx
+     | depends on: T610
+     | Both tools ran their content in a narrow column under a full-width hero,
+     | which read as two different pages stacked.
+     | Beacon Breakdown: the hero is gone once both players are picked, so the
+     | comparison follows the breadcrumb directly, and the column goes from
+     | max-w-5xl to 90rem. The selector on its own keeps the narrower measure it
+     | was designed for. `hasBoth` is a searchParams read, so the server already
+     | knew; no state had to move.
+     | The results use the width rather than just having it: the edge meter and
+     | the contribution chart sit side by side from xl, and so do the takeaways
+     | and the verdict. They answer the same question from two angles and are
+     | easier to read as a pair. Below xl they stack exactly as before.
+     | FAAB: same idea, but whether a bid is on screen is client state, so the
+     | hero is handed to FaabForm the way the draft room's is handed to its
+     | client, and the form decides. The column widens to 88rem once a player is
+     | picked and stays at max-w-3xl before that.
+     | Widening alone did nothing for it, because the content was one stacked
+     | column either way and the extra space just went to the margins. The form
+     | now splits: league setup on the left, the bid on the right, from lg up
+     | and only once there is a bid to show. The right column is sticky, so the
+     | recommendation stays on screen while the setup below it is adjusted,
+     | which is the loop the tool exists for. The left column carries z-10 so
+     | the player combobox's listbox still paints over the sticky column beside
+     | it; a sticky element makes its own stacking context and would otherwise
+     | win.
+     | Capped the two controls that had no reason to grow with it: the budget
+     | box (max-w-xs) and the need options (max-w-md). A 950px-wide number input
+     | is what widening a form gets you if nobody looks.
+     | Both pages keep exactly one h1. The hero owned it; where the hero is gone
+     | it is a visually hidden heading, because the matchup header and the
+     | selected-player card already name the subject directly below and a second
+     | title would just repeat them.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)
+
+T612 | completed | FAAB full width for real, and open the rail by default
+     | files: app/tools/faab/faab-form.tsx,
+     |        components/app-shell/sidebar-state.tsx, app/layout.tsx,
+     |        app/globals.css
+     | depends on: T611
+     | T611 widened FAAB only once a player was picked, so the page people
+     | actually land on still sat in a 48rem column under a full-width hero,
+     | and the layout jumped the moment they picked someone. One width now,
+     | 88rem, always, matching the other tools.
+     | The two-column split is unconditional too. The right column already had
+     | something to show before a player is picked: ManualResult renders an
+     | empty state explaining what will appear there, which is a better use of
+     | the space than centring the form and leaving half the page blank.
+     | The container's top margin is the gap under the hero, so it goes when the
+     | hero does and the tool sits directly under the breadcrumb bar.
+     | Rail default flipped from collapsed to expanded. Only an explicit "0" in
+     | storage collapses it now, so someone who has never touched the toggle
+     | reads section names instead of a column of repeated icons. The server
+     | renders `data-sidebar="expanded"` to match, so the blocking script only
+     | ever has to flip it the other way.
+     | verified: yes (tsc clean, 1747 tests across 122 files, next build clean;
+     |           no browser check, at the owner's request)

@@ -19,8 +19,9 @@ import {
   ArticleCard,
   articleTypeLabel,
 } from "@/components/beacon-brief/article-card";
-import { BriefBreadcrumb } from "@/components/beacon-brief/brief-breadcrumb";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { PageBody } from "@/components/app-shell/page-body";
+import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -287,27 +288,31 @@ export default async function BriefArticlePage({ params }: PageProps) {
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
+      {/* The shared breadcrumb bar would otherwise show the slug. */}
+      <SetBreadcrumbLabel value={article.title} />
 
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        {/* Breadcrumb: FF Beacon logo (Beacon Brief home), category, article. */}
-        <BriefBreadcrumb
-          crumbs={[
-            { label: "The Beacon Brief", href: "/brief" },
-            ...(article.category
-              ? [
-                  {
-                    label: article.category.name,
-                    href: `/brief/category/${article.category.slug}`,
-                  },
-                ]
-              : []),
-            { label: article.title },
-          ]}
-          className="mb-6"
-        />
-
+      <PageBody width="reading">
         <article>
-          <header>
+          {/* The article header is the page masthead: same card, same beacon
+              hairline, same gradient title treatment the rest of the site uses.
+              It keeps its own markup rather than calling PageMasthead because the
+              category chip is a link and the byline carries rel="author". */}
+          <header
+            className="relative overflow-hidden rounded-modal border border-line-accent bg-surface/40 p-5 sm:p-6 lg:p-7"
+            style={{
+              backgroundImage:
+                "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.14) 0%, transparent 58%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.10) 0%, transparent 60%)",
+            }}
+          >
+            {/* Top-edge beacon hairline, decorative. */}
+            <span
+              aria-hidden="true"
+              className="absolute inset-x-0 top-0 h-px"
+              style={{
+                backgroundImage:
+                  "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+              }}
+            />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               {article.category ? (
                 <Link
@@ -331,7 +336,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
               )}
             </div>
 
-            <h1 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
+            <h1 className="beacon-page-title beacon-page-title-sentence mt-4 text-[clamp(1.75rem,4.6vw,3.1rem)]">
               {article.title}
             </h1>
 
@@ -533,7 +538,7 @@ export default async function BriefArticlePage({ params }: PageProps) {
             All Beacon Brief articles
           </Link>
         </div>
-      </div>
+      </PageBody>
 
       {/* No isMember prop on purpose. Checking Discord membership reads the request,
           which would make this page dynamic and lose the static render. The invite

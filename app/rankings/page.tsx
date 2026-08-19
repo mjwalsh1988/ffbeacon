@@ -33,7 +33,11 @@ export const dynamic = "force-dynamic";
 export default async function RankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ format?: string; position?: string; source?: string }>;
+  searchParams: Promise<{
+    format?: string;
+    position?: string;
+    source?: string;
+  }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -53,22 +57,7 @@ export default async function RankingsPage({
       hasActiveFilter={Boolean(
         params.position || params.format || params.source,
       )}
-      headline={
-        <>
-          Fantasy football{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
-          >
-            player rankings
-          </span>{" "}
-          for every format.
-        </>
-      }
-      headlineLabel="Fantasy football player rankings for every format."
+      title="Fantasy football player rankings for every format."
       intro="Every player worth knowing, every major league type, in plain English. Sort, filter, and switch your data source on the fly without losing your place."
       footerSlot={
         <FormatDirectory
@@ -102,35 +91,33 @@ function FormatDirectory({
   return (
     <section
       aria-labelledby="format-directory-heading"
-      className="border-b border-line"
+      className="mt-10 border-t border-line pt-10"
     >
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-          Every format
-        </p>
-        <h2
-          id="format-directory-heading"
-          className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          Rankings built for your exact league.
-        </h2>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
-          Quarterback rules and scoring move the board more than anything else.
-          Each format below has its own page, with values priced for those rules.
-        </p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+        Every format
+      </p>
+      <h2
+        id="format-directory-heading"
+        className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl"
+      >
+        Rankings built for your exact league.
+      </h2>
+      <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted">
+        Quarterback rules and scoring move the board more than anything else.
+        Each format below has its own page, with values priced for those rules.
+      </p>
 
-        <div className="mt-10 grid gap-8 lg:grid-cols-2">
-          <FormatGroup
-            title="Dynasty and keeper"
-            formats={dynasty}
-            currentSlug={currentSlug}
-          />
-          <FormatGroup
-            title="Redraft and best ball"
-            formats={redraft}
-            currentSlug={currentSlug}
-          />
-        </div>
+      <div className="mt-10 grid gap-8 lg:grid-cols-2">
+        <FormatGroup
+          title="Dynasty and keeper"
+          formats={dynasty}
+          currentSlug={currentSlug}
+        />
+        <FormatGroup
+          title="Redraft and best ball"
+          formats={redraft}
+          currentSlug={currentSlug}
+        />
       </div>
     </section>
   );

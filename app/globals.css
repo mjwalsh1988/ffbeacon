@@ -430,37 +430,6 @@
   }
 }
 
-/**
- * Site header: the right-most control shares the pill's curve.
- *
- * When the header condenses into its rounded pill on scroll, the last control
- * in the row (the hamburger on small screens, Sign in / Sign out on desktop)
- * would otherwise sit as a rounded square right beside a circular edge. Rounding
- * its right side only, to the same full radius, makes the two curves read as one
- * shape. The left side keeps the standard card radius so it still matches the
- * controls beside it.
- *
- * Inside a league view the header spans the full screen and condenses into a
- * squared edge-to-edge bar, so there is no curve for the control to share. The
- * `data-header-width` guard leaves it as a plain rounded square there.
- *
- * `data-header-state` and `data-header-width` are set by
- * components/header-shell.tsx.
- */
-.header-edge-right {
-  transition: border-radius 300ms;
-}
-
-[data-header-state="condensed"]:not([data-header-width="full"]) .header-edge-right {
-  border-top-right-radius: 9999px;
-  border-bottom-right-radius: 9999px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .header-edge-right {
-    transition: none;
-  }
-}
 
 /**
  * Homepage hero backdrop: a lava lamp in the FF Beacon palette.
@@ -1090,23 +1059,235 @@
   }
 }
 
-/* The mobile section sheet rising from the bottom edge. Held still for anyone
-   who has asked for reduced motion; it simply appears in place instead. */
-@keyframes lp-sheet-in {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
+
+/* ---------------------------------------------------------------------------
+ * App shell: the site-wide dashboard chrome
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Rail width. The rail is open by default and narrows to an icon strip when the
+ * reader closes it. That choice is remembered per browser and re-applied by a
+ * blocking script in app/layout.tsx, which stamps `data-sidebar` on <html>
+ * before the first paint.
+ *
+ * The width lives in CSS rather than in React state on purpose. React cannot
+ * know the remembered value until it has hydrated, so a React-driven width
+ * would paint the rail collapsed and then visibly snap open on every page load
+ * for anyone who had expanded it. Driving it from an attribute set before paint
+ * means the rail is simply the right width from the first frame, and the React
+ * state that mirrors it is only ever used for `aria-expanded`.
+ */
+:root {
+  --app-rail-w: 4.5rem;
+}
+
+[data-sidebar="expanded"] {
+  --app-rail-w: 16rem;
+}
+
+.app-rail {
+  width: var(--app-rail-w);
+  transition: width 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* Width is a layout property, and the rail is a flex sibling of the content
+     column, so the 200ms it animates would otherwise re-solve the whole page.
+     Containment keeps that work inside the rail. It only ever runs on an
+     explicit press, never on scroll or a route change. */
+  contain: layout paint;
+}
+
+/**
+ * The header's left cell tracks the rail, so the logo sits directly above it
+ * and the two read as one piece of chrome. Below lg there is no rail, so the
+ * cell is only as wide as the mark and the wordmark beside it.
+ */
+.app-header-brand {
+  width: auto;
+}
+
+@media (min-width: 1024px) {
+  .app-header-brand {
+    width: var(--app-rail-w);
+    transition: width 200ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
 
-.lp-sheet {
-  animation: lp-sheet-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+/**
+ * "FF Beacon" beside the mark in the header. It follows the rail: gone when the
+ * rail is a strip of icons, back when the rail is open. Below lg there is no
+ * rail to follow, so it always shows.
+ *
+ * Hidden with the sr-only recipe rather than `display: none`, so the logo link
+ * keeps "FF Beacon home" as its accessible name either way.
+ */
+@media (min-width: 1024px) {
+  [data-sidebar="collapsed"] .app-header-wordmark {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
+/**
+ * Text that only exists when the rail is open: nav labels, the wordmark beside
+ * the logo, section headings. Hidden with the sr-only recipe rather than
+ * `display: none`, so the accessible name of every rail link is still the full
+ * section name when the rail is a strip of icons.
+ */
+[data-sidebar="collapsed"] .app-rail-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Decoration that has nothing to say when the rail is a strip of icons: the
+   submenu chevrons. `display: none` is right for these because they are
+   already `aria-hidden`; nothing is lost by removing them outright. */
+[data-sidebar="collapsed"] .app-rail-when-open {
+  display: none;
+}
+
+/**
+ * The section heading inside the rail's second level. It has no room to paint
+ * when the rail is a strip of icons, but it is what names that level for a
+ * screen reader, so it is clipped rather than removed. A reader arriving on an
+ * admin page with the rail collapsed still hears which section they are in.
+ */
+[data-sidebar="collapsed"] .app-rail-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-sheet {
+  .app-rail,
+  .app-header-brand {
+    transition: none;
+  }
+}
+
+/**
+ * The two-level rail. Both levels are stacked in the same box and slide as a
+ * pair: the level you are leaving goes out to the left while the one you are
+ * entering comes in from the right, so moving in and out of a section reads as
+ * one motion rather than a swap.
+ *
+ * The level that is off-screen is `inert` in the markup, so it is out of the
+ * tab order and invisible to a screen reader for as long as it is parked.
+ */
+.app-nav-levels {
+  position: relative;
+  overflow: hidden;
+}
+
+.app-nav-level {
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms ease;
+}
+
+.app-nav-level[data-state="parked-left"] {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.app-nav-level[data-state="parked-right"] {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.app-nav-level[data-state="current"] {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-nav-level {
+    transition: none;
+  }
+}
+
+/**
+ * Page titles in the dashboard mastheads. The same treatment the League Pulse
+ * league name carries: Geist Sans at its heaviest, uppercase, tracked in, with
+ * the beacon gradient washing through the tail of the line.
+ *
+ * Shrink-wrapped, because a clipped background paints across the whole element
+ * box and a full-width block would run the gradient out past the end of a short
+ * title and leave every letter white. Windows High Contrast drops the gradient
+ * and paints solid system text, since there is nothing to clip there.
+ */
+.beacon-page-title {
+  display: inline-block;
+  max-width: 100%;
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  background-image: linear-gradient(
+    100deg,
+    #f4f4f8 0%,
+    #f4f4f8 42%,
+    #d8b4fe 74%,
+    #67e8f9 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/**
+ * The same treatment without the shout. A news headline runs sixty characters
+ * and set in caps it stops being scannable, so an article title takes this
+ * variant and keeps its own casing. Everything else about it is identical.
+ */
+.beacon-page-title-sentence {
+  text-transform: none;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+@media (forced-colors: active) {
+  .beacon-page-title {
+    background-image: none;
+    color: CanvasText;
+  }
+}
+
+/* The mobile navigation drawer sliding in from the left edge. Held still for
+   anyone who has asked for reduced motion; it appears in place instead. */
+@keyframes app-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.app-drawer {
+  animation: app-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-drawer {
     animation: none;
   }
 }

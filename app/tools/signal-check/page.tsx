@@ -11,7 +11,8 @@ import { SleeperImportPanel } from "./sleeper-import-panel";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const dynamic = "force-dynamic";
 
@@ -83,46 +84,54 @@ export default async function SignalCheckPage({
 
   return (
     <main id="main">
-      <Hero
-        featureLabel={settings.publicLabel}
-        resultLabel={settings.resultLabel}
-        isMember={isMember}
-      />
+      <PageBody>
+        <Masthead
+          featureLabel={settings.publicLabel}
+          resultLabel={settings.resultLabel}
+          isMember={isMember}
+          formatCount={formats.length}
+        />
 
-      <section
-        id="signal-check-builder-section"
-        aria-labelledby="builder-heading"
-        className="scroll-mt-24 border-b border-line"
-      >
-        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-          <h2 id="builder-heading" className="sr-only">
-            Build a trade
-          </h2>
+        <section
+          id="signal-check-builder-section"
+          aria-labelledby="builder-heading"
+          className="mt-8 scroll-mt-24"
+        >
+          {/* The builder is two rosters side by side and a verdict between
+              them, so it reads better with room than centred in a narrow
+              column. Still capped rather than edge to edge: past about 90rem
+              the two sides drift far enough apart that comparing them means
+              moving your head. */}
+          <div className="mx-auto max-w-[90rem]">
+            <h2 id="builder-heading" className="sr-only">
+              Build a trade
+            </h2>
 
-          {!settings.enabled || formats.length === 0 ? (
-            <p
-              role="status"
-              className="rounded-card border border-line bg-surface/40 p-6 text-sm text-ink-muted"
-            >
-              {settings.publicLabel} is not available right now. Please check back soon.
-            </p>
-          ) : (
-            <div className="space-y-8">
-              {showImport && (
-                <>
-                  <SleeperImportPanel signedIn={signedIn} initialUsername={savedUsername} />
-                  <OrDivider />
-                </>
-              )}
-              <SignalCheckBuilder
-                formats={formats}
-                minLength={settings.autocompleteMinLength}
-                initialFormatSlug={initialFormatSlug}
-              />
-            </div>
-          )}
-        </div>
-      </section>
+            {!settings.enabled || formats.length === 0 ? (
+              <p
+                role="status"
+                className="rounded-card border border-line bg-surface/40 p-6 text-sm text-ink-muted"
+              >
+                {settings.publicLabel} is not available right now. Please check back soon.
+              </p>
+            ) : (
+              <div className="space-y-8">
+                {showImport && (
+                  <>
+                    <SleeperImportPanel signedIn={signedIn} initialUsername={savedUsername} />
+                    <OrDivider />
+                  </>
+                )}
+                <SignalCheckBuilder
+                  formats={formats}
+                  minLength={settings.autocompleteMinLength}
+                  initialFormatSlug={initialFormatSlug}
+                />
+              </div>
+            )}
+          </div>
+        </section>
+      </PageBody>
       <DiscordCtaSection
         eyebrow="Not sure about the verdict?"
         heading="Get a second opinion before you hit send."
@@ -135,46 +144,29 @@ export default async function SignalCheckPage({
   );
 }
 
-function Hero({
+function Masthead({
   featureLabel,
   resultLabel,
   isMember,
+  formatCount,
 }: {
   featureLabel: string;
   resultLabel: string;
   isMember: boolean;
+  formatCount: number;
 }) {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="center" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <h1
-          aria-label={`${featureLabel}: the FF Beacon trade analyzer`}
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
-        >
-          {featureLabel}:{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-          >
-            the {resultLabel}, explained.
-          </span>
-        </h1>
-        <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          Add players and draft picks to each side. {featureLabel} weighs them with FF Beacon
-          Values for your league format and returns the {resultLabel}: who wins, the margin, and a
-          plain-language reason, with no guesswork.
-        </p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
+    <PageMasthead
+      eyebrow="Tools"
+      title={`${featureLabel}: the ${resultLabel}, explained.`}
+      description={`Add players and draft picks to each side. ${featureLabel} weighs them with FF Beacon Values for your league format and returns the ${resultLabel}: who wins, the margin, and a plain-language reason, with no guesswork.`}
+      stats={
+        formatCount > 0
+          ? [{ label: "Formats", value: String(formatCount), accent: "cyan" }]
+          : []
+      }
+      actions={
+        <>
           <MemberHeroCta
             isMember={isMember}
             size="lg"
@@ -190,16 +182,15 @@ function Hero({
             View player rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
-        </div>
-
-        <ul role="list" aria-label="How Signal Check works" className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-          <HeroBullet icon={Scale} title="FF Beacon Values" body="One trusted value scale, weighted for your format." />
-          <HeroBullet icon={ListTree} title="Transparent reasons" body="Every adjustment is traced, not hand-waved." />
-          <HeroBullet icon={ShieldCheck} title="Shareable verdicts" body="Freeze a result and share a clean public link." />
-        </ul>
-
-      </div>
-    </header>
+        </>
+      }
+    >
+      <ul role="list" aria-label="How Signal Check works" className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        <HeroBullet icon={Scale} title="FF Beacon Values" body="One trusted value scale, weighted for your format." />
+        <HeroBullet icon={ListTree} title="Transparent reasons" body="Every adjustment is traced, not hand-waved." />
+        <HeroBullet icon={ShieldCheck} title="Shareable verdicts" body="Freeze a result and share a clean public link." />
+      </ul>
+    </PageMasthead>
   );
 }
 

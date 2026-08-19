@@ -545,15 +545,9 @@ export function HeroLavaLamp({
         ))}
       </div>
 
-      {/* Nav scrim. The header sits transparent over the top of this at the top
-          of the page, so its links need a settled surface underneath. */}
-      <div
-        className="absolute inset-x-0 top-0 h-28"
-        style={{
-          background:
-            "linear-gradient(to bottom, rgba(15, 6, 30, 0.70) 0%, rgba(15, 6, 30, 0.32) 55%, transparent 100%)",
-        }}
-      />
+      {/* The scrim that used to sit under the transparent header is gone. The
+          header is an opaque bar now, and the field no longer runs behind it,
+          so darkening the top of the hero only made the hero darker. */}
 
       {/* Copy scrim, shaped to wherever this page's hero text sits. Tinted deep
           purple rather than black so it reads as part of the field. */}

@@ -434,7 +434,7 @@ export function LayoutBuilder({
           ref={saveRef}
           onClick={save}
           disabled={saving}
-          className="inline-flex min-h-11 items-center rounded-card bg-brand-cyan px-4 py-2 text-sm font-semibold text-base transition-colors hover:bg-brand-cyan/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60"
+          className="inline-flex min-h-11 items-center rounded-card bg-brand-cyan px-4 py-2 text-sm font-semibold text-[#07070D] transition-colors hover:bg-brand-cyan/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60"
         >
           {saving ? "Saving..." : "Save layout"}
         </button>

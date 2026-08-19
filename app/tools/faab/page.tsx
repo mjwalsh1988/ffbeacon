@@ -15,7 +15,12 @@ import { loadFaabPlayerListCached } from "@/lib/faab/player-list";
 import { FaabForm, type FaabPlayer } from "./faab-form";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import {
+  PageMasthead,
+  type MastheadChip,
+  type MastheadStat,
+} from "@/components/app-shell/page-masthead";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -147,72 +152,62 @@ export default async function FaabPage({
     }
   }
 
+  // Masthead context, all of it resolved above: the format these bids are
+  // priced in, the value source behind them, and the size of the player pool.
+  const mastheadChips: MastheadChip[] = [];
+  if (format?.display_name) {
+    mastheadChips.push({ label: format.display_name, tone: "cyan" });
+  }
+  if (valueSourceName) {
+    mastheadChips.push({ label: `Values via ${valueSourceName}`, tone: "purple" });
+  }
+  const mastheadStats: MastheadStat[] =
+    players.length > 0
+      ? [{ label: "Players", value: players.length.toLocaleString(), accent: "cyan" }]
+      : [];
+
   return (
     <main id="main">
-      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-        {/* Beacon gradient accent bar pinned to the very top. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 z-10 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-          }}
-        />
-        <HeroLavaField copy="left" />
-        <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-          {fallbackBanner && (
-            <p
-              role="status"
-              className="mb-6 rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
-            >
-              <span className="font-medium text-ink">Heads up:</span> No{" "}
-              {fallbackBanner.requested} data available for{" "}
-              {format?.display_name ?? "this format"}. Showing {fallbackBanner.actual} data instead.
-            </p>
-          )}
-          <h1
-            aria-label="FAAB Calculator"
-            className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
+      <PageBody>
+        {fallbackBanner && (
+          <p
+            role="status"
+            className="mb-4 rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
           >
-            FAAB{" "}
-            <span
-              className="bg-clip-text text-transparent forced-colors:text-ink"
-              style={{
-                backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-              }}
-            >
-              Calculator
-            </span>
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-            What to bid, and when to walk away. Connect your Sleeper league and we price the
-            claim against your real roster, or enter your setup by hand.
+            <span className="font-medium text-ink">Heads up:</span> No{" "}
+            {fallbackBanner.requested} data available for{" "}
+            {format?.display_name ?? "this format"}. Showing {fallbackBanner.actual} data instead.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <MemberHeroCta
-              isMember={isMember}
-              size="lg"
-              memberMode="scroll"
-              memberScrollTargetId="faab-form-section"
-              memberLabel="Calculate a bid"
-              memberIcon="arrow-down"
-            />
-            <Link
-              href="/rankings"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              View player rankings
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        </div>
-      </header>
-      <div
-        id="faab-form-section"
-        className="mx-auto max-w-3xl scroll-mt-24 px-4 py-10 sm:px-6 lg:px-8"
-      >
+        )}
         <FaabForm
+          masthead={
+          <PageMasthead
+            eyebrow="Tools"
+            title="FAAB Calculator"
+            description="What to bid, and when to walk away. Connect your Sleeper league and we price the claim against your real roster, or enter your setup by hand."
+            chips={mastheadChips}
+            stats={mastheadStats}
+            actions={
+              <>
+                <MemberHeroCta
+                  isMember={isMember}
+                  size="lg"
+                  memberMode="scroll"
+                  memberScrollTargetId="faab-form-section"
+                  memberLabel="Calculate a bid"
+                  memberIcon="arrow-down"
+                />
+                <Link
+                  href="/rankings"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  View player rankings
+                  <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+                </Link>
+              </>
+            }
+          />
+          }
           players={players}
           formatName={format?.display_name ?? "default format"}
           rankingsSourceName={rankingsSourceName}
@@ -224,7 +219,7 @@ export default async function FaabPage({
           rankingsSourceSlug={rankingsSourceSlug}
           initialSleeperUsername={savedSleeperUsername}
         />
-      </div>
+      </PageBody>
       <DiscordCtaSection
         eyebrow="Waivers are stressful"
         heading="Bidding blind? Ask before you spend your FAAB."

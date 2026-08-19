@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/admin-auth";
-import { AdminNav } from "@/components/admin-nav";
+import { PageBody } from "@/components/app-shell/page-body";
 
 export const metadata: Metadata = {
   title: {
@@ -28,10 +28,7 @@ export default async function AdminLayout({
   // every admin sub-page owns its own unique H1 for screen-reader navigation.
   return (
     <main id="main">
-      <AdminNav />
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-        {children}
-      </div>
+      <PageBody>{children}</PageBody>
     </main>
   );
 }

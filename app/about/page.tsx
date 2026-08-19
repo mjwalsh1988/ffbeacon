@@ -14,7 +14,8 @@ import {
 import { AuthorPortrait } from "@/components/author-portrait";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/about" },
@@ -54,80 +55,19 @@ export default async function AboutPage() {
 
 function Hero() {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      {/* Beacon gradient accent bar pinned to the very top. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
+    <PageBody flush className="mx-auto max-w-7xl">
+      <PageMasthead
+        eyebrow="About"
+        title="Fantasy football that finally works for everyone."
+        description="Accessibility-first rankings, calculators, and league insights, built so a casual fan, a 20-year veteran, and a screen-reader user can all walk away with the same information."
+        stats={[
+          { value: "20+", label: "Seasons of fantasy", accent: "purple" },
+          { value: "100%", label: "Keyboard navigable", accent: "cyan" },
+          { value: "AAA", label: "WCAG contrast target", accent: "purple" },
+          { value: "Multi", label: "Source-agnostic data", accent: "cyan" },
+        ]}
       />
-      <HeroLavaField copy="left" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-24 lg:px-8">
-        {/* aria-label gives the h1 a single accessible name covering the
-            entire headline, so heading navigation announces it as one piece
-            even though the gradient is achieved via a nested span. We
-            intentionally do NOT aria-hide the inner content, that would
-            remove the text from the accessibility tree and break
-            mouse-hover-to-read features. */}
-        <h1
-          aria-label="Fantasy football that finally works for everyone."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl"
-        >
-          Fantasy football that{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
-          >
-            finally works
-          </span>{" "}
-          for everyone.
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-          Accessibility-first rankings, calculators, and league insights, built so a
-          casual fan, a 20-year veteran, and a screen-reader user can all walk away with
-          the same information.
-        </p>
-        <StatStrip />
-      </div>
-    </header>
-  );
-}
-
-function StatStrip() {
-  return (
-    <ul className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4" role="list">
-      <Stat value="20+" label="Seasons of fantasy" />
-      <Stat value="100%" label="Keyboard navigable" />
-      <Stat value="AAA" label="WCAG contrast target" />
-      <Stat value="Multi" label="Source-agnostic data" />
-    </ul>
-  );
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <li
-      className="group relative overflow-hidden rounded-card border border-line bg-surface/60 p-4 transition-colors hover:border-line-accent"
-      style={{ boxShadow: "0 0 48px -40px rgba(168, 85, 247, 0.6)" }}
-    >
-      <AccentStrip />
-      <p
-        className="bg-clip-text font-mono text-3xl font-bold tabular-nums text-transparent sm:text-4xl"
-        style={{
-          backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-        }}
-      >
-        {value}
-      </p>
-      <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-        {label}
-      </p>
-    </li>
+    </PageBody>
   );
 }
 

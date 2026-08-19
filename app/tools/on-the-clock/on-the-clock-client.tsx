@@ -20,21 +20,8 @@
  * board and flagged estimated). No mock panels remain.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Gauge,
-  Target,
-  ListChecks,
-  LayoutGrid,
-  List,
-  ArrowLeftRight,
-  History,
-  Users,
-  Trophy,
-  GraduationCap,
-  WifiOff,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Gauge, LayoutGrid, List, WifiOff } from "lucide-react";
 import type {
   BuildMode,
   LeagueCard,
@@ -114,6 +101,8 @@ import {
   resolveCurrentDraftPicks,
   resolveTradedFuturePicks,
 } from "@/lib/on-the-clock/pick-ownership";
+import { DraftRoomRail, type DraftRailView } from "./draft-room-rail";
+import { DraftViewSheet } from "./draft-view-sheet";
 import { UsernameGate } from "./username-gate";
 import { LeaguePicker } from "./league-picker";
 import { PoolNotice, markPoolNoticeSeen, poolNoticeSeen } from "./pool-notice";
@@ -129,7 +118,7 @@ import { DraftBoard } from "./draft-board";
 import { PickList } from "./pick-list";
 import { MyDraft } from "./my-draft";
 import { TradeAnalyzer } from "./trade-analyzer";
-import { RostersRankings, TeamPositionGrid } from "./rosters-rankings";
+import { RostersRankings } from "./rosters-rankings";
 import { RankingsAwards } from "./rankings-awards";
 import { DraftPulseBoard } from "./draft-pulse-board";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
@@ -165,16 +154,31 @@ type View =
 type DraftedMode = "board" | "list";
 type LiveStatus = "off" | "connecting" | "live" | "unavailable";
 
-const VIEWS: Array<{ id: View; label: string; icon: typeof Target }> = [
-  { id: "pick", label: "Who to pick", icon: Target },
-  { id: "drafted", label: "Board", icon: ListChecks },
-  { id: "rosters", label: "Rosters", icon: Users },
-  { id: "pulse", label: "Draft Pulse", icon: Gauge },
-  { id: "history", label: "Trades", icon: History },
-  { id: "trade", label: "Trade Builder", icon: ArrowLeftRight },
-  { id: "rankings", label: "Awards", icon: Trophy },
-  { id: "grades", label: "Grades", icon: GraduationCap },
+/**
+ * The eight views of the draft room, in rail order. They live in the site
+ * navigation rail rather than in a strip across the room; see draft-room-rail.tsx
+ * for why they switch in place instead of navigating.
+ *
+ * The hint is what the navigation drawer paints under each label and what every
+ * rail row carries in its accessible name, so each one says what the view
+ * answers rather than restating its title.
+ */
+const VIEWS: ReadonlyArray<DraftRailView<View>> = [
+  { id: "pick", label: "Who to pick", hint: "Your next pick, and why", icon: "target" },
+  { id: "drafted", label: "Board", hint: "Every pick so far", icon: "listChecks" },
+  { id: "rosters", label: "Rosters", hint: "What each team has taken", icon: "users" },
+  { id: "pulse", label: "Draft Pulse", hint: "How each roster is shaping up", icon: "gauge" },
+  { id: "history", label: "Trades", hint: "Picks and players that changed hands", icon: "history" },
+  { id: "trade", label: "Trade Builder", hint: "Price a deal before you offer it", icon: "swap" },
+  { id: "rankings", label: "Awards", hint: "Standouts of the draft so far", icon: "trophy" },
+  { id: "grades", label: "Grades", hint: "How every team drafted", icon: "graduationCap" },
 ];
+
+/** Label for one view, for the heading that names the region it renders into. */
+const VIEW_LABELS = Object.fromEntries(VIEWS.map((v) => [v.id, v.label])) as Record<
+  View,
+  string
+>;
 
 // Frozen empties, shared by reference. A fresh [] or new Map() every render is
 // what defeats a child's useMemo, which is the whole point of the block below.
@@ -184,6 +188,9 @@ const VIEWS: Array<{ id: View; label: string; icon: typeof Target }> = [
  * the `xl:hidden` classes on the sheet can never drift apart.
  */
 const RAIL_QUERY = "(min-width: 1280px)";
+
+/** Whether the reader has asked for less motion, for the view-switch scroll. */
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 const NO_PLAYERS: RankedPlayer[] = [];
 const NO_PICKS: ShapedPick[] = [];
@@ -208,12 +215,20 @@ function coercePosition(pos: string | null): DraftPosition | null {
 }
 
 export function OnTheClockClient({
+  masthead,
   defaultSeason,
   defaultUsername = "",
   realtimeEnabled = true,
   cooldownSeconds = 30,
   settings,
 }: {
+  /**
+   * The page hero, rendered on the server and handed in so this component can
+   * decide when it belongs. Every step before a draft is open shows it; the
+   * room does not, because a drafter reading the board under a clock does not
+   * need marketing copy above it, and the room already names itself.
+   */
+  masthead: ReactNode;
   defaultSeason: string;
   defaultUsername?: string;
   realtimeEnabled?: boolean;
@@ -305,8 +320,46 @@ export function OnTheClockClient({
   // ----- view -----
   // (the player pool is DERIVED, not state: see inferPlayerPool below)
   const [view, setView] = useState<View>("pick");
+
+  /**
+   * Switch view from the navigation rail.
+   *
+   * The rail sits a long way from the room, so a press has to take the reader
+   * with it. The view's region gets focus, which is what tells a screen reader
+   * that something changed and gives it a labelled place to start reading, and
+   * it is scrolled to the top of the room so a sighted drafter is not left
+   * looking at the page header. The old strip needed neither: it sat directly
+   * above the panel it switched, and the tab-to-panel relationship carried the
+   * announcement.
+   *
+   * The move runs in an effect keyed on the view rather than in a frame
+   * scheduled beside `setView`, so it cannot run against a DOM where the target
+   * region is still `hidden`. A `hidden` element cannot take focus and cannot
+   * be scrolled to, and both calls would fail silently.
+   *
+   * `preventScroll` on the focus call, then an explicit scroll, so the region's
+   * scroll-margin is honoured and the site header does not cover what we just
+   * moved to.
+   */
+  const pendingViewFocus = useRef<View | null>(null);
+
+  const selectView = useCallback((id: View) => {
+    pendingViewFocus.current = id;
+    setView(id);
+  }, []);
+
+  useEffect(() => {
+    if (pendingViewFocus.current !== view) return;
+    pendingViewFocus.current = null;
+    const region = document.getElementById(`otc-view-${view}`);
+    if (!region) return;
+    region.focus({ preventScroll: true });
+    region.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia(REDUCED_MOTION_QUERY).matches ? "auto" : "smooth",
+    });
+  }, [view]);
   const [draftedMode, setDraftedMode] = useState<DraftedMode>("board");
-  const viewTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // ---------------------------------------------------------------------------
   // Derived room state.
@@ -328,7 +381,7 @@ export function OnTheClockClient({
 
   /**
    * Below xl the layout has no second column, so the side rail moves into a
-   * bottom sheet behind a bar under the view tabs.
+   * bottom sheet behind a bar at the top of the content column.
    *
    * This is a real media query rather than a `hidden xl:block` class because
    * the panels have to be rendered in exactly ONE place: several of them carry
@@ -1206,24 +1259,17 @@ export function OnTheClockClient({
     writeWatchlist(league.draftId, watchlist);
   }, [league, watchlist]);
 
-  const onViewKeyDown = (e: React.KeyboardEvent, index: number) => {
-    const last = VIEWS.length - 1;
-    let next = -1;
-    if (e.key === "ArrowRight") next = index === last ? 0 : index + 1;
-    else if (e.key === "ArrowLeft") next = index === 0 ? last : index - 1;
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = last;
-    if (next >= 0) {
-      e.preventDefault();
-      const id = VIEWS[next].id;
-      setView(id);
-      viewTabRefs.current[id]?.focus();
-    }
-  };
+  /** The hero, then the step. Used by every return that is not the room. */
+  const beforeRoom = (children: ReactNode) => (
+    <>
+      {masthead}
+      <div className="mt-8">{children}</div>
+    </>
+  );
 
   // ----- Step 1: Connect -----
   if (step === "connect") {
-    return (
+    return beforeRoom(
       <div className="mx-auto max-w-3xl">
         <div
           className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
@@ -1281,7 +1327,7 @@ export function OnTheClockClient({
 
   // ----- Step 2: Choose draft -----
   if (step === "pick-league") {
-    return (
+    return beforeRoom(
       <div className="mx-auto max-w-4xl">
         <div
           className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
@@ -1350,7 +1396,7 @@ export function OnTheClockClient({
   // ----- Step 3/4: Draft room (dashboard) -----
   // Loading / error gates before the room renders.
   if (draftLoading && !cache) {
-    return (
+    return beforeRoom(
       <div className="mx-auto max-w-3xl">
         <BackToLeagues onClick={() => setStep("pick-league")} />
         <div className="mt-4">
@@ -1362,7 +1408,7 @@ export function OnTheClockClient({
   // `derivedState` and `rec` are non-null exactly when `cache` is, so this one
   // guard narrows all three for the room below.
   if (!cache || !derivedState || !rec) {
-    return (
+    return beforeRoom(
       <div className="mx-auto max-w-3xl">
         <BackToLeagues onClick={() => setStep("pick-league")} />
         <div className="mt-4 space-y-3">
@@ -1439,7 +1485,7 @@ export function OnTheClockClient({
   //
   // Only while the Trade Builder is open. The catalog walks every pick in the
   // draft plus the future buckets, and it was being rebuilt on every realtime
-  // pick for viewers who were looking at a different tab entirely.
+  // pick for viewers who were looking at a different view entirely.
   const tradeGroups =
     tradeReady && view === "trade"
       ? buildTradeCatalog({
@@ -1464,9 +1510,12 @@ export function OnTheClockClient({
   const boardFull = view === "drafted" && draftedMode === "board";
 
   // Rosters & Rankings rollups: per-team drafted-player value + future-pick value,
-  // ranked by total. Computed while a tab that reads them is open, or in the full
-  // board view (whose "Your draft" row reuses this roster layout), and only when
-  // the board is ready, so the realtime re-render on every pick stays cheap.
+  // ranked by total. Computed only while a view that reads them is open and the
+  // board is ready, so the realtime re-render on every pick stays cheap.
+  //
+  // The board view is not in that list. It was, for the "Your draft" row that
+  // used to sit above the board and has been removed; nothing on the board reads
+  // a rollup now, so building them there was work thrown away on every pick.
   //
   // GRADES BELONGS IN THIS LIST. It was missing, and computeDraftGrades returns
   // an empty array for empty rollups, so every LIVE draft showed no grades at
@@ -1478,8 +1527,7 @@ export function OnTheClockClient({
     (view === "rosters" ||
       view === "rankings" ||
       view === "grades" ||
-      view === "pulse" ||
-      boardFull) &&
+      view === "pulse") &&
     tradeReady
       ? buildTeamRollups({
           rosters: draftCache.rosters,
@@ -1494,10 +1542,6 @@ export function OnTheClockClient({
           draftSeason: tradeSeason,
         })
       : NO_ROLLUPS;
-
-  // The connected user's rollup, for the board view's "Your draft" row (same roster
-  // layout as the Rosters tab). Null when their team is not detected.
-  const myBoardRollup = boardFull ? (teamRollups.find((t) => t.isYou) ?? null) : null;
 
   // Trade History context: values every trade against the FULL board (independent of
   // the room's pool toggle, since a trade can involve any player or pick). Made picks
@@ -1702,7 +1746,7 @@ export function OnTheClockClient({
   // container with four panels inside it.
   const renderSidebarPanels = (headingLevel: 2 | 3) => (
     <>
-      {/* Who is on the clock leads the rail, on every tab. It is the one thing a
+      {/* Who is on the clock leads the rail, on every view. It is the one thing a
           drafter checks constantly, so it goes first by eye and first by tab
           order; the radar's "what is happening" is the follow-up question. */}
       <DraftRoomStatus
@@ -1745,8 +1789,19 @@ export function OnTheClockClient({
         boardFull ? "" : "overflow-hidden"
       }`}
     >
+      {/* The room's views go into the site rail, opened, rather than into a
+          strip across the top of the room. Registered here rather than higher
+          up so it only exists once a draft is actually open: the connect and
+          league-picker steps return before this and have no views. */}
+      <DraftRoomRail
+        views={VIEWS}
+        activeView={view}
+        onSelect={selectView}
+        leagueName={league?.name ?? null}
+      />
       <CommandHeader
         leagueName={league?.name ?? "League"}
+        viewLabel={VIEW_LABELS[view]}
         draft={draftCache.draft}
         formatLabel={formatLabel}
         formatIsClosest={formatIsClosest}
@@ -1858,72 +1913,21 @@ export function OnTheClockClient({
         >
           {/* ---- Main content area: switches between views ---- */}
           <div className="min-w-0 space-y-5">
-            {/* View switcher: a standout control bar that reads as the cockpit's
-                primary navigation (elevated surface, beacon hairline, soft glow). */}
-            <div
-              className="relative overflow-hidden rounded-modal border border-line-accent bg-surface/70 p-1.5 shadow-[0_0_70px_-50px_rgba(168,85,247,0.7)] sm:p-2"
-              style={{
-                backgroundImage:
-                  "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
-              }}
-            >
-              {/* Top-edge beacon hairline, decorative (matches the cockpit panels). */}
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 top-0 h-px"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-                }}
-              />
-              <div role="tablist" aria-label="Draft views" className="flex flex-wrap gap-1.5">
-                {VIEWS.map((v, i) => {
-                  const active = view === v.id;
-                  const Icon = v.icon;
-                  return (
-                    <button
-                      key={v.id}
-                      ref={(el) => {
-                        viewTabRefs.current[v.id] = el;
-                      }}
-                      type="button"
-                      role="tab"
-                      id={`otc-tab-${v.id}`}
-                      aria-selected={active}
-                      aria-controls={`otc-view-${v.id}`}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => setView(v.id)}
-                      onKeyDown={(e) => onViewKeyDown(e, i)}
-                      // min-h-11 at EVERY width. The tap-target floor is not a
-                      // mobile rule; a trackpad in a fast draft room needs the
-                      // target as much as a thumb does.
-                      //
-                      // scroll-mt-36 clears both fixed things that can sit over
-                      // a tab the browser has just scrolled to: the 4.5rem site
-                      // header and the docked Quick info bar below it. At xl the
-                      // bar does not exist, so only the header needs clearing.
-                      className={`flex min-h-11 scroll-mt-36 items-center gap-1.5 rounded-card border px-3.5 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan xl:scroll-mt-24 ${
-                        active
-                          ? "border-brand-cyan/70 bg-brand-cyan/15 text-brand-cyan shadow-[0_0_22px_-8px_rgba(34,211,238,0.85)]"
-                          : "border-transparent bg-base/50 text-ink-muted hover:bg-surface hover:text-ink"
-                      }`}
-                    >
-                      <Icon aria-hidden="true" className="h-4 w-4" />
-                      {v.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* The side rail, on anything narrower than xl. It sits directly
-                under the view tabs on EVERY tab, including the two that hide
-                the desktop rail, because "who is on the clock" is worth the
-                same on the rosters tab as it is anywhere else. */}
+            {/* The side rail, on anything narrower than xl. It leads the
+                content column on EVERY view, including the two that hide the
+                desktop rail, because "who is on the clock" is worth the same on
+                the rosters view as it is anywhere else. */}
             {railInSheet && (
               <SidebarSheet
                 label="Quick info"
                 summary="Who is on the clock, the draft radar, best remaining by position, and your draft."
+                // Below lg there is no navigation rail, so the room carries its
+                // own view switcher rather than sending a drafter through the
+                // site drawer mid-clock. It rides in this bar so the two share
+                // one docked position instead of covering each other.
+                leading={
+                  <DraftViewSheet views={VIEWS} activeView={view} onSelect={selectView} />
+                }
               >
                 {renderSidebarPanels(3)}
               </SidebarSheet>
@@ -1931,13 +1935,16 @@ export function OnTheClockClient({
 
             {/* View: Who to pick */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-pick"
-              aria-labelledby="otc-tab-pick"
+              aria-labelledby="otc-view-pick-title"
               tabIndex={0}
               hidden={view !== "pick"}
-              className="space-y-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 space-y-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              <h2 id="otc-view-pick-title" className="sr-only">
+                {VIEW_LABELS.pick}
+              </h2>
               <section aria-labelledby="draft-signal-title">
                 <div className="mb-3">
                   <h2
@@ -2040,16 +2047,19 @@ export function OnTheClockClient({
 
             {/* View: Drafted players (LIVE from the synced cache) */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-drafted"
-              aria-labelledby="otc-tab-drafted"
+              aria-labelledby="otc-view-drafted-title"
               tabIndex={0}
               hidden={view !== "drafted"}
-              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
-              {/* The ONLY tab whose body is gated on being open.
-                  The tabpanel element itself stays mounted, because the tablist
-                  relationship breaks without it.
+              <h2 id="otc-view-drafted-title" className="sr-only">
+                {VIEW_LABELS.drafted}
+              </h2>
+              {/* The ONLY view whose body is gated on being open. The region
+                  element itself stays mounted, because it is what the rail row
+                  points at and what the reader is returned to.
                   A hidden panel is not painted but is still reconciled, and this
                   one is 400-odd cells with a headshot in each, on every realtime
                   pick, for every viewer who is looking at something else. It is
@@ -2101,7 +2111,7 @@ export function OnTheClockClient({
 
               {draftedMode === "board" ? (
                 <>
-                  {/* Rows 1 and 2 stay within the container; only the board (Row 3)
+                  {/* Row 1 stays within the container; only the board (Row 2)
                       breaks out to the full viewport width. */}
                   {/* Row 1: room status (1/3) beside best remaining (2/3, two-column). */}
                   <div className="mb-5 grid gap-5 lg:grid-cols-3">
@@ -2129,30 +2139,7 @@ export function OnTheClockClient({
                     </div>
                   </div>
 
-                  {/* Row 2: the connected user's roster, same layout as the Rosters tab
-                      (every position shown even when empty; future picks with show-more). */}
-                  <div className="mb-5">
-                    <Panel eyebrow="Your team" title="Your draft">
-                      {myBoardRollup ? (
-                        <TeamPositionGrid team={myBoardRollup} />
-                      ) : (
-                        <EmptyCard
-                          title={
-                            tradeReady
-                              ? "We could not detect your team yet."
-                              : "FF Beacon values are loading."
-                          }
-                          body={
-                            tradeReady
-                              ? "Make a pick or check your Sleeper username, and your roster will appear here by position with your future picks."
-                              : "Your roster will appear here once this format's FF Beacon values load."
-                          }
-                        />
-                      )}
-                    </Panel>
-                  </div>
-
-                  {/* Row 3: the board, broken out to the full viewport width. */}
+                  {/* Row 2: the board, broken out to the full viewport width. */}
                   <div className="relative left-1/2 w-screen -translate-x-1/2 px-6 sm:px-8 lg:px-10">
                     <Panel
                       eyebrow="Every seat"
@@ -2197,13 +2184,16 @@ export function OnTheClockClient({
 
             {/* View: Rosters & Rankings (full width; right rail hidden) */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-rosters"
-              aria-labelledby="otc-tab-rosters"
+              aria-labelledby="otc-view-rosters-title"
               tabIndex={0}
               hidden={view !== "rosters"}
-              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              <h2 id="otc-view-rosters-title" className="sr-only">
+                {VIEW_LABELS.rosters}
+              </h2>
               <RostersRankings
                 teams={teamRollups}
                 myRosterId={derived.myRosterId}
@@ -2217,13 +2207,16 @@ export function OnTheClockClient({
 
             {/* View: Draft Pulse (points ranking beside the value ranking) */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-pulse"
-              aria-labelledby="otc-tab-pulse"
+              aria-labelledby="otc-view-pulse-title"
               tabIndex={0}
               hidden={view !== "pulse"}
-              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              <h2 id="otc-view-pulse-title" className="sr-only">
+                {VIEW_LABELS.pulse}
+              </h2>
               <DraftPulseBoard
                 teams={teamRollups}
                 pulseTeams={pulseTeams}
@@ -2249,13 +2242,16 @@ export function OnTheClockClient({
 
             {/* View: Trade History (mini Signal Check per trade; keeps the right rail) */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-history"
-              aria-labelledby="otc-tab-history"
+              aria-labelledby="otc-view-history-title"
               tabIndex={0}
               hidden={view !== "history"}
-              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              <h2 id="otc-view-history-title" className="sr-only">
+                {VIEW_LABELS.history}
+              </h2>
               <TradeHistory
                 transactions={tradeHistory ?? []}
                 context={tradeHistoryContext}
@@ -2273,13 +2269,16 @@ export function OnTheClockClient({
 
             {/* View: Trade Builder (LIVE Phase 6C; pool-aware value check) */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-trade"
-              aria-labelledby="otc-tab-trade"
+              aria-labelledby="otc-view-trade-title"
               tabIndex={0}
               hidden={view !== "trade"}
-              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              <h2 id="otc-view-trade-title" className="sr-only">
+                {VIEW_LABELS.trade}
+              </h2>
               {/* Keyed on draft + pool so switching leagues OR Everyone <-> Rookies
                   remounts the builder and clears both sides (no carryover).
                   Deliberately NOT gated on the active tab: unmounting it would
@@ -2307,13 +2306,16 @@ export function OnTheClockClient({
 
             {/* View: Rankings & Awards (live awards + condensed power rankings table) */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-rankings"
-              aria-labelledby="otc-tab-rankings"
+              aria-labelledby="otc-view-rankings-title"
               tabIndex={0}
               hidden={view !== "rankings"}
-              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              <h2 id="otc-view-rankings-title" className="sr-only">
+                {VIEW_LABELS.rankings}
+              </h2>
               <RankingsAwards
                 awards={awards}
                 boardReady={tradeReady}
@@ -2328,13 +2330,16 @@ export function OnTheClockClient({
 
             {/* View: Draft grades */}
             <div
-              role="tabpanel"
+              role="region"
               id="otc-view-grades"
-              aria-labelledby="otc-tab-grades"
+              aria-labelledby="otc-view-grades-title"
               tabIndex={0}
               hidden={view !== "grades"}
-              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="xl:scroll-mt-24 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              <h2 id="otc-view-grades-title" className="sr-only">
+                {VIEW_LABELS.grades}
+              </h2>
               {snapshotMode && snapshot.snapshotVersion < 2 ? (
                 <EmptyCard
                   title="This draft was locked before grades existed."

@@ -44,7 +44,7 @@ export function DraftRoomStatus({
   /**
    * Unique per mounted copy. The room renders this panel TWICE (the sticky rail
    * and the full-width board view), and both copies are in the DOM at once
-   * because inactive tab panels are hidden rather than unmounted. With one
+   * because inactive views are hidden rather than unmounted. With one
    * hardcoded id, both sections pointed `aria-labelledby` at the same heading,
    * and the hidden copy owns it: content inside `hidden` is out of the
    * accessibility tree, so the VISIBLE panel could resolve to no name at all.

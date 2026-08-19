@@ -14,7 +14,7 @@ import {
  * (anon viewers never get the trigger; they see only the public count). The list
  * is fetched on open and on tab change via the loadFollowList server action,
  * which returns only users with a live public Signal, so private/draft handles
- * are never exposed. The dialog reuses the proven mobile-menu focus model:
+ * are never exposed. The dialog reuses the navigation drawer's focus model:
  * portal to document.body, role=dialog + aria-modal, Tab focus trap (both
  * directions), Escape to close, body scroll lock, and focus return to the
  * trigger on close.
@@ -64,7 +64,7 @@ export function FollowListModal({
     if (open) setKind(initialKind);
   }, [open, initialKind]);
 
-  // Focus trap + scroll lock + focus return (mobile-menu pattern).
+  // Focus trap + scroll lock + focus return (navigation drawer pattern).
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;

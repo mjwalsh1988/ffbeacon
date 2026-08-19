@@ -1,14 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Database,
-  Layers,
-  Users,
-  Filter,
-  Info,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ArrowRight, Database, Layers, Filter, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
   resolveSourceForFormat,
@@ -23,7 +15,13 @@ import { POSITIONS } from "@/lib/site";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import {
+  PageMasthead,
+  type MastheadChip,
+  type MastheadStat,
+} from "@/components/app-shell/page-masthead";
+import { formatEasternShortDate } from "@/lib/datetime";
 
 /**
  * The rankings board, shared by /rankings and /rankings/[format].
@@ -59,11 +57,10 @@ export interface RankingsViewProps {
   basePath: string;
   /** True when any filter param is present, so the page scrolls to the board. */
   hasActiveFilter: boolean;
+  /** Area label above the title. Defaults to "Rankings". */
   eyebrow?: string;
-  /** Styled headline. Rendered inside the h1. */
-  headline: ReactNode;
-  /** Plain-text equivalent of `headline` for the accessible name. */
-  headlineLabel: string;
+  /** The board's name. Rendered as the page's h1 by PageMasthead. */
+  title: string;
   intro: string;
   /** Optional "browse every format" grid, rendered by the hub only. */
   footerSlot?: ReactNode;
@@ -75,9 +72,8 @@ export async function RankingsView({
   position,
   basePath,
   hasActiveFilter,
-  eyebrow,
-  headline,
-  headlineLabel,
+  eyebrow = "Rankings",
+  title,
   intro,
   footerSlot,
 }: RankingsViewProps) {
@@ -110,9 +106,14 @@ export async function RankingsView({
 
   if (!format) {
     return (
-      <main id="main" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <h1 className="text-3xl font-semibold">Rankings</h1>
-        <p className="mt-4 text-ink-muted">Format not found.</p>
+      <main id="main">
+        <PageBody>
+          <PageMasthead
+            eyebrow="Rankings"
+            title="Rankings"
+            description="Format not found."
+          />
+        </PageBody>
       </main>
     );
   }
@@ -260,125 +261,113 @@ export async function RankingsView({
   const positionHref = (pos?: string) =>
     pos ? `${basePath}?position=${pos}` : basePath;
 
+  // The source label always comes from source_registry.display_name via
+  // describeSource, never the raw slug.
+  //
+  // It names the VALUE source, not the rankings source. resolveSourceForFormat
+  // runs once per table, so `rankings` and `player_value_history` can fall
+  // through to different sources for the same format. The chip reads "Values
+  // via X" and the "Updated" stat beside it is the freshest value snapshot, so
+  // both have to describe the same table or the pair contradicts itself.
+  const sourceLabel = valueHistoryResolution.source
+    ? describeSource(registry, valueHistoryResolution.source)
+    : "Not available";
+
+  // Freshest snapshot in this pull. The value query is ordered by captured_at
+  // descending, so the first row is the newest one we have.
+  const lastCapturedAt = valuesResult.data?.[0]?.captured_at ?? null;
+
+  const chips: MastheadChip[] = [
+    // The source chip says what it is ("Values via ..."); the format chip is
+    // just a name, so it says which kind of name it is.
+    { label: `Format: ${format.display_name}`, icon: Layers, tone: "cyan" },
+    { label: `Values via ${sourceLabel}`, icon: Database, tone: "purple" },
+  ];
+
+  const stats: MastheadStat[] = [
+    {
+      label: "Players ranked",
+      value: rows.length.toLocaleString(),
+      accent: "cyan",
+    },
+  ];
+  if (lastCapturedAt) {
+    stats.push({
+      label: "Updated",
+      value: formatEasternShortDate(lastCapturedAt),
+      accent: "purple",
+    });
+  }
+
   return (
     <main id="main">
-      <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-        {/* Beacon-gradient accent bar pinned to the very top. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 z-10 h-px"
-          style={{
-            backgroundImage:
-              "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-          }}
-        />
-        <HeroLavaField copy="left" />
-        <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
-          {reconciled.fallback && (
-            <p
-              role="status"
-              aria-live="polite"
-              className="mb-6 rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
-            >
-              <span className="font-medium text-ink">
-                Switched to {reconciled.fallback.toName}
-              </span>{" "}
-              because {reconciled.fallback.sourceName} doesn{"'"}t provide
-              values for {reconciled.fallback.fromName}.
-            </p>
-          )}
-          {rankingsResolution.fellBack && rankingsResolution.source && (
-            <p
-              role="status"
-              className="mb-6 rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
-            >
-              <span className="font-medium text-ink">Heads up:</span> No{" "}
-              {describeSource(registry, rankingsResolution.requested)} data
-              available for {format.display_name}. Showing{" "}
-              {describeSource(registry, rankingsResolution.source)} data
-              instead.
-            </p>
-          )}
-          {eyebrow && (
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-              {eyebrow}
-            </p>
-          )}
-          <h1
-            aria-label={headlineLabel}
-            className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl md:text-6xl"
+      <PageBody>
+        {reconciled.fallback && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="mb-4 rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
           >
-            {headline}
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
-            {intro}
+            <span className="font-medium text-ink">
+              Switched to {reconciled.fallback.toName}
+            </span>{" "}
+            because {reconciled.fallback.sourceName} doesn{"'"}t provide values
+            for {reconciled.fallback.fromName}.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <MemberHeroCta
-              isMember={isMember}
-              size="lg"
-              memberMode="scroll"
-              memberScrollTargetId="rankings-board"
-              memberLabel="Jump to the rankings"
-              memberIcon="arrow-down"
-            />
-            <Link
-              href="/tools"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              See every free tool
-              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <div className="mt-10">
-            <p
-              id="currently-viewing-label"
-              className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle"
-            >
-              Currently viewing
-            </p>
-            <dl
-              aria-labelledby="currently-viewing-label"
-              className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-            >
-              <StatusTile
-                icon={Database}
-                label="Data source"
-                value={
-                  rankingsResolution.source
-                    ? describeSource(registry, rankingsResolution.source)
-                    : "Not available"
-                }
-              />
-              <StatusTile
-                icon={Layers}
-                label="Scoring format"
-                value={format.display_name}
-              />
-              <StatusTile
-                icon={Users}
-                label="Players ranked"
-                value={rows.length.toLocaleString()}
-              />
-            </dl>
-            <SwitchFormatHint />
-          </div>
-        </div>
-      </header>
-
-      <section
-        id="rankings-board"
-        aria-labelledby="rankings-board-heading"
-        className="border-b border-line bg-surface/30 scroll-mt-4"
-      >
-        {hasActiveFilter && (
-          <ScrollToRankings
-            key={`${formatSlug}-${position ?? "all"}-${rankingsResolution.source ?? "none"}`}
-            targetId="rankings-board"
-            headingId="rankings-board-heading"
-          />
         )}
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+        {rankingsResolution.fellBack && rankingsResolution.source && (
+          <p
+            role="status"
+            className="mb-4 rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
+          >
+            <span className="font-medium text-ink">Heads up:</span> No{" "}
+            {describeSource(registry, rankingsResolution.requested)} data
+            available for {format.display_name}. Showing{" "}
+            {describeSource(registry, rankingsResolution.source)} data instead.
+          </p>
+        )}
+
+        <PageMasthead
+          eyebrow={eyebrow}
+          title={title}
+          description={intro}
+          chips={chips}
+          stats={stats}
+          actions={
+            <>
+              <MemberHeroCta
+                isMember={isMember}
+                size="lg"
+                memberMode="scroll"
+                memberScrollTargetId="rankings-board"
+                memberLabel="Jump to the rankings"
+                memberIcon="arrow-down"
+              />
+              <Link
+                href="/tools"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                See every free tool
+                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+              </Link>
+            </>
+          }
+        >
+          <SwitchFormatHint />
+        </PageMasthead>
+
+        <section
+          id="rankings-board"
+          aria-labelledby="rankings-board-heading"
+          className="mt-6 scroll-mt-4"
+        >
+          {hasActiveFilter && (
+            <ScrollToRankings
+              key={`${formatSlug}-${position ?? "all"}-${rankingsResolution.source ?? "none"}`}
+              targetId="rankings-board"
+              headingId="rankings-board-heading"
+            />
+          )}
           <div className="mb-8">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
               The board
@@ -396,9 +385,9 @@ export async function RankingsView({
             </p>
           </div>
 
-          {/* Filter card. Matches the StatusTile visual language (icon chip +
-              label) and stacks gracefully on mobile: icon + label on top, chips
-              wrap below, every chip is 44px tall for touch. */}
+          {/* Filter card. Icon chip plus label, stacking gracefully on mobile:
+              icon + label on top, chips wrap below, every chip is 44px tall for
+              touch. */}
           <div
             className="relative mb-5 overflow-hidden rounded-card border border-line bg-surface p-4 sm:p-5"
             style={{ boxShadow: "0 0 48px -40px rgba(168, 85, 247, 0.55)" }}
@@ -461,10 +450,10 @@ export async function RankingsView({
               />
             )}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {footerSlot}
+        {footerSlot}
+      </PageBody>
 
       <DiscordCtaSection
         eyebrow="Need help reading the board?"
@@ -506,13 +495,14 @@ function FilterLink({
 }
 
 /**
- * Sits under the "Currently viewing" tiles and answers the question readers keep
+ * Sits inside the masthead and answers the question readers keep
  * asking: how do I see another format, and do you even publish them? Both are
  * already true and already shipped, they just live in a header control people
  * miss, especially on a phone where it hides behind the hamburger.
  *
  * The instructions differ by device because the control does. The breakpoint
- * matches site-header.tsx exactly: below md the toggles live in MobileMenu,
+ * matches site-header.tsx exactly: below md the toggles live in the navigation
+ * drawer (components/app-shell/app-mobile-nav.tsx),
  * at md and up they live in the PreferencesMenu popover labelled "Values".
  * Only one sentence is in the DOM's accessibility tree at a time (Tailwind's
  * `hidden` sets display:none, which removes it from the tree as well as the
@@ -523,7 +513,7 @@ function FilterLink({
 function SwitchFormatHint() {
   return (
     <div
-      className="mt-3 flex items-start gap-3 rounded-card border border-dashed border-line bg-surface px-4 py-3.5"
+      className="flex items-start gap-3 rounded-card border border-dashed border-line bg-surface px-4 py-3.5"
       style={{ boxShadow: "0 0 48px -40px rgba(34, 211, 238, 0.55)" }}
     >
       <span
@@ -537,56 +527,14 @@ function SwitchFormatHint() {
         Redraft, dynasty, superflex, and TE premium are all ranked already,
         updated daily.{" "}
         <span className="md:hidden">
-          To switch, tap the menu button at the top right, scroll to the bottom
-          of the menu, and choose a Format.
+          To switch, tap the menu button at the top left of the header, then
+          choose a Format near the bottom of the menu.
         </span>
         <span className="hidden md:inline">
           To switch, open the Values button in the header, then choose a League
           format.
         </span>
       </p>
-    </div>
-  );
-}
-
-function StatusTile({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div
-      className="group relative flex items-center gap-3 overflow-hidden rounded-card border border-line bg-surface px-4 py-3.5 transition-colors hover:border-line-accent"
-      style={{ boxShadow: "0 0 48px -40px rgba(168, 85, 247, 0.55)" }}
-    >
-      {/* Subtle gradient accent strip on the left edge so the tile reads as a
-          deliberate "status" card, not a floating box. */}
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-0 left-0 w-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(180deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-        }}
-      />
-      <span
-        aria-hidden="true"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-          {label}
-        </dt>
-        <dd className="mt-0.5 truncate text-base font-semibold text-ink">
-          {value}
-        </dd>
-      </div>
     </div>
   );
 }

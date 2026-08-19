@@ -22,7 +22,8 @@ import { StartDraftingButton } from "./start-drafting-button";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/on-the-clock" },
@@ -78,36 +79,41 @@ export default async function OnTheClockPage() {
 
   return (
     <main id="main">
-      <Hero isMember={isMember} />
-      <section
-        id="otc-connect"
-        aria-labelledby="otc-app-heading"
-        className="scroll-mt-24 border-b border-line"
-      >
-        {/* Wider than the site's usual max-w-7xl. The draft room is the one
-            screen on the site that is genuinely column-starved: the available
-            players table carries seven or eight columns at once and a drafter is
-            reading it under time pressure. Every step BEFORE the room constrains
-            itself with its own max-w-3xl / max-w-4xl wrapper inside this one, so
-            the connect flow stays narrow and centered and only the room spreads
-            out. */}
-        <div className="mx-auto max-w-[96rem] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-          <h2 id="otc-app-heading" className="sr-only">
-            Connect a draft
-          </h2>
-          {settings.feature.enabled ? (
-            <OnTheClockClient
-              defaultSeason={season}
-              defaultUsername={savedUsername}
-              realtimeEnabled={settings.sync.realtimeEnabled}
-              cooldownSeconds={settings.sync.cooldownSeconds}
-              settings={settings}
-            />
-          ) : (
-            <FeatureOffNotice />
-          )}
+      <PageBody>
+        {/* The hero belongs to the steps before a draft is open, so it is handed
+            to the client rather than rendered here. Once you are inside a room,
+            the first thing under the breadcrumbs is the room itself, with the
+            league name as the page title. Marketing copy above a live draft is
+            in the way. */}
+        <div id="otc-connect" className="scroll-mt-24">
+          {/* The draft room is the one screen on the site that is genuinely
+              column-starved: the available players table carries seven or eight
+              columns at once and a drafter is reading it under time pressure, so
+              it gets the widest measure we allow. Every step BEFORE the room
+              constrains itself with its own max-w-3xl / max-w-4xl wrapper inside
+              this one, so the connect flow stays narrow and centered and only
+              the room spreads out. */}
+          <div className="mx-auto max-w-[96rem]">
+            {settings.feature.enabled ? (
+              <OnTheClockClient
+                masthead={<Masthead isMember={isMember} season={season} />}
+                defaultSeason={season}
+                defaultUsername={savedUsername}
+                realtimeEnabled={settings.sync.realtimeEnabled}
+                cooldownSeconds={settings.sync.cooldownSeconds}
+                settings={settings}
+              />
+            ) : (
+              <>
+                <Masthead isMember={isMember} season={season} />
+                <div className="mt-8">
+                  <FeatureOffNotice />
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </section>
+      </PageBody>
       <DiscordCtaSection
         eyebrow="Need a hand mid-draft?"
         heading="Stuck on a pick? Real people are watching the clock too."
@@ -157,46 +163,21 @@ const OTC_FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   { icon: Accessibility, title: "Screen-reader native", body: "Read it or hear it" },
 ];
 
-function Hero({ isMember }: { isMember: boolean }) {
+function Masthead({ isMember, season }: { isMember: boolean; season: string }) {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="left" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
-        <h1
-          aria-label="Your signal on the clock, live draft help by eye or by ear."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
-        >
-          Your signal on the clock,{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-          >
-            live draft help by eye or by ear.
-          </span>
-        </h1>
-        <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          Drafting right now? Connect your live Sleeper draft and FF Beacon calls out
-          exactly where your team needs help, runs trade offers through a built-in
-          calculator and a trade builder for startup and rookie drafts, and opens every team
-          roster, the full trade history, live power rankings, and startup draft grades
-          and awards. Every view works the same whether you read it or hear it.
-        </p>
+    <PageMasthead
+      eyebrow="Tools"
+      title="Your signal on the clock, live draft help by eye or by ear."
+      description="Drafting right now? Connect your live Sleeper draft and FF Beacon calls out exactly where your team needs help, runs trade offers through a built-in calculator and a trade builder for startup and rookie drafts, and opens every team roster, the full trade history, live power rankings, and startup draft grades and awards. Every view works the same whether you read it or hear it."
+      stats={[{ label: "Season", value: season, accent: "cyan" }]}
+      actions={
+        <>
+          {/* Mobile-only skip-to-form shortcut for anyone still seeing the
+              Discord invite. Members get the same scroll behavior from the
+              primary button below (on every breakpoint), so hide it for them
+              to avoid a duplicate "Start drafting". */}
+          {!isMember && <StartDraftingButton />}
 
-        {/* Mobile-only skip-to-form shortcut for anyone still seeing the
-            Discord invite. Members get the same scroll behavior from the
-            primary button below (on every breakpoint), so hide it for them
-            to avoid a duplicate "Start drafting". */}
-        {!isMember && <StartDraftingButton />}
-
-        <div className="mt-6 flex flex-wrap gap-3">
           <MemberHeroCta
             isMember={isMember}
             size="lg"
@@ -212,38 +193,37 @@ function Hero({ isMember }: { isMember: boolean }) {
             View player rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
+        </>
+      }
+    >
+      {/* Continuous horizontal marquee: one always-moving row that fits every
+          card without stacking. The track holds the real list plus an
+          aria-hidden duplicate so the loop is seamless; screen readers only see
+          the real list once. Edges fade via a mask. Pauses on hover/focus and
+          falls back to a scrollable row under reduced-motion (see globals.css). */}
+      <div
+        className="otc-marquee"
+        style={{
+          maskImage:
+            "linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%)",
+        }}
+      >
+        <div className="otc-marquee-track flex w-max">
+          <ul role="list" aria-label="What this tool does" className="flex shrink-0">
+            {OTC_FEATURES.map((f) => (
+              <HeroBullet key={f.title} icon={f.icon} title={f.title} body={f.body} />
+            ))}
+          </ul>
+          <ul aria-hidden="true" className="flex shrink-0">
+            {OTC_FEATURES.map((f) => (
+              <HeroBullet key={f.title} icon={f.icon} title={f.title} body={f.body} />
+            ))}
+          </ul>
         </div>
-
-        {/* Continuous horizontal marquee: one always-moving row that fits every
-            card without stacking. The track holds the real list plus an
-            aria-hidden duplicate so the loop is seamless; screen readers only see
-            the real list once. Edges fade via a mask. Pauses on hover/focus and
-            falls back to a scrollable row under reduced-motion (see globals.css). */}
-        <div
-          className="otc-marquee mt-8"
-          style={{
-            maskImage:
-              "linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%)",
-          }}
-        >
-          <div className="otc-marquee-track flex w-max">
-            <ul role="list" aria-label="What this tool does" className="flex shrink-0">
-              {OTC_FEATURES.map((f) => (
-                <HeroBullet key={f.title} icon={f.icon} title={f.title} body={f.body} />
-              ))}
-            </ul>
-            <ul aria-hidden="true" className="flex shrink-0">
-              {OTC_FEATURES.map((f) => (
-                <HeroBullet key={f.title} icon={f.icon} title={f.title} body={f.body} />
-              ))}
-            </ul>
-          </div>
-        </div>
-
       </div>
-    </header>
+    </PageMasthead>
   );
 }
 

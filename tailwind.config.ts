@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import type { RecursiveKeyValuePair } from "tailwindcss/types/config";
 
 const config: Config = {
   darkMode: "class",
@@ -8,6 +9,29 @@ const config: Config = {
     "./lib/**/*.{ts,tsx}",
   ],
   theme: {
+    /**
+     * `text-base` means one size of type and nothing else.
+     *
+     * The palette below names a colour `base` (the page background), and
+     * Tailwind turns every colour into a `text-*` utility. That produced two
+     * different rules called `.text-base`, and the colour one won inside a
+     * breakpoint, so anything written `text-sm sm:text-base` went from readable
+     * grey to #07070D against a #07070D page at the sm breakpoint: invisible
+     * text, and only above one screen width, which is exactly the kind of bug
+     * that survives review.
+     *
+     * Redefining `textColor` (outside `extend`, so it replaces rather than
+     * merges) drops that one entry. Every other colour is still available as
+     * `text-*`, and `bg-base` and `border-base` are untouched, because only the
+     * text scale has a `base` of its own to collide with.
+     */
+    textColor: ({ theme }) => {
+      const { base: _base, ...colors } = theme("colors") as Record<
+        string,
+        RecursiveKeyValuePair<string, string> | string
+      >;
+      return colors;
+    },
     extend: {
       colors: {
         base: "#07070D",
@@ -22,7 +46,13 @@ const config: Config = {
         ink: {
           DEFAULT: "#F4F4F8",
           muted: "#A8A8B8",
-          subtle: "#6B6B7D",
+          // Raised from #6B6B7D, which measured about 3.8:1 against the page
+          // and failed AA everywhere it carried real text: the stat-tile labels
+          // in the masthead, the one-line hints in the navigation drawer, and
+          // the labels above the source and format controls. None of those are
+          // large enough to qualify for the 3:1 allowance. #8A8A9C is about
+          // 5.4:1 and still reads as the quietest tier of the three.
+          subtle: "#8A8A9C",
         },
         brand: {
           purple: "#A855F7",

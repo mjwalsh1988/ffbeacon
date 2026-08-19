@@ -1,12 +1,25 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
+import { SITE } from "@/lib/site";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { DiscordCta } from "@/components/discord-cta";
 import { SignalGuideMount } from "@/components/signal-guide/signal-guide-mount";
 import { RouteScrollReset } from "@/components/route-scroll-reset";
+import { AppShell } from "@/components/app-shell/app-shell";
+import {
+  AppRailSections,
+  AppRailFallback,
+} from "@/components/app-shell/app-rail-sections";
+import { RailSectionsProvider } from "@/components/app-shell/rail-sections";
+import { BreadcrumbLabelProvider } from "@/components/app-shell/breadcrumb-label";
+import {
+  SidebarProvider,
+  SIDEBAR_INIT_SCRIPT,
+} from "@/components/app-shell/sidebar-state";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,6 +44,12 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Deliberately synchronous. An `await` in this function body would block React
+ * from descending into `children`, which puts the session read in front of
+ * every page's own data fetching instead of alongside it. Both async pieces of
+ * chrome, the header and the rail, are children for that reason.
+ */
 export default function RootLayout({
   children,
 }: {
@@ -39,8 +58,21 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      // The server always says expanded, which is the default, and the
+      // blocking script below flips it to collapsed before paint for anyone who
+      // closed the rail. That is a deliberate server/client difference on this
+      // one attribute, which is what `suppressHydrationWarning` is for; without
+      // it React reports the script's own work as a mismatch on every load.
+      data-sidebar="expanded"
+      suppressHydrationWarning
       className={`dark ${GeistSans.variable} ${GeistMono.variable}`}
     >
+      <head>
+        {/* Re-applies the remembered rail width before the first paint, so the
+            rail is simply the right width from the first frame instead of
+            painting collapsed and snapping open once React hydrates. */}
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased">
         <a
           href="#main"
@@ -52,11 +84,26 @@ export default function RootLayout({
             components/route-scroll-reset.tsx for why the App Router does not
             reliably do this on its own. */}
         <RouteScrollReset />
-        <div className="flex min-h-screen flex-col">
-          <SiteHeader />
-          <div className="flex-1">{children}</div>
-          <SiteFooter />
-        </div>
+        <SidebarProvider>
+          <RailSectionsProvider>
+            <BreadcrumbLabelProvider>
+            <div className="flex min-h-screen flex-col">
+              <SiteHeader />
+              <AppShell
+                siteUrl={SITE.url}
+                rail={
+                  <Suspense fallback={<AppRailFallback />}>
+                    <AppRailSections />
+                  </Suspense>
+                }
+              >
+                {children}
+              </AppShell>
+              <SiteFooter />
+            </div>
+            </BreadcrumbLabelProvider>
+          </RailSectionsProvider>
+        </SidebarProvider>
         <DiscordCta />
         <SignalGuideMount />
         <Analytics />

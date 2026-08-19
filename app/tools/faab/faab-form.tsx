@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import {
   Armchair,
   BarChart3,
@@ -42,6 +42,7 @@ const NEED_META: Record<
 };
 
 export function FaabForm({
+  masthead,
   players,
   formatName,
   rankingsSourceName,
@@ -53,6 +54,13 @@ export function FaabForm({
   rankingsSourceSlug = null,
   initialSleeperUsername = null,
 }: {
+  /**
+   * The page hero, rendered on the server and handed in so this component can
+   * decide when it belongs. It is for people deciding whether to use the
+   * calculator; once a player is picked they have decided, so the tool leads
+   * and the marketing copy above it steps aside.
+   */
+  masthead: ReactNode;
   players: FaabPlayer[];
   formatName: string;
   /** Resolved format slug, so the manual read picks the right scoring base. */
@@ -117,7 +125,23 @@ export function FaabForm({
     // after the first at a higher specificity than a utility class, which
     // silently flattened the separator's own margin. The separator owns its
     // spacing instead.
-    <div>
+    <>
+      {!selectedPlayer && masthead}
+      {/* One width, always, matching the other tools. An earlier version only
+          widened once a player was picked, which left the page people actually
+          land on sitting in a 48rem column under a full-width hero, and made
+          the layout jump the moment they picked someone. */}
+      <div
+        id="faab-form-section"
+        // The top margin belongs to the gap under the hero, so it goes when the
+        // hero does and the tool sits directly under the breadcrumb bar.
+        className={`mx-auto max-w-[88rem] scroll-mt-24 ${selectedPlayer ? "" : "mt-8"}`}
+      >
+      {/* The page h1 while the hero is not rendering one. Not painted: the
+          selected player's card names him directly below. */}
+      {selectedPlayer && (
+        <h1 className="sr-only">FAAB bid for {selectedPlayer.name}</h1>
+      )}
       {/* The better answer leads. Connecting a league measures the bid against a
           real roster instead of a generic one, so it is offered first rather
           than tucked under the form where nobody found it. */}
@@ -151,6 +175,18 @@ export function FaabForm({
             "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
         }}
       />
+      {/* Setup on the left, the bid on the right, from lg up. Both columns are
+          there before a player is picked too: the right one holds the empty
+          state that explains what it will show, which is a better use of the
+          space than centring the form and leaving half the page blank.
+          `items-start` plus a sticky right column keeps the recommendation on
+          screen while the league setup below it is adjusted, which is the loop
+          this tool exists for.
+          The left column carries `relative z-10` so the player combobox's
+          listbox still paints over the sticky column beside it: a sticky
+          element makes its own stacking context and would otherwise win. */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-start lg:gap-8">
+      <div className="relative z-10 space-y-6">
       <div>
         <h2 id="faab-form-heading" className="text-lg font-semibold tracking-tight text-ink">
           No league? Enter your setup instead
@@ -231,7 +267,7 @@ export function FaabForm({
             onChange={(event) =>
               setBudget(Number.parseInt(event.target.value || "0", 10))
             }
-            className="mt-2 w-full rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+            className="mt-2 w-full max-w-xs rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink caret-brand-purple focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
           />
           {!budgetValid && (
             <p id="faab-budget-error" role="alert" className="mt-1.5 text-xs text-signal-danger">
@@ -243,7 +279,7 @@ export function FaabForm({
           <legend className="block text-sm font-medium text-ink">
             How badly do you need this position?
           </legend>
-          <div className="mt-2 flex flex-col gap-2">
+          <div className="mt-2 flex max-w-md flex-col gap-2">
             {(["low", "medium", "high"] as NeedLevel[]).map((level) => (
               <NeedOption
                 key={level}
@@ -256,6 +292,9 @@ export function FaabForm({
         </fieldset>
       </div>
 
+      </div>
+
+      <div className="lg:sticky lg:top-24">
       <ManualResult
         player={selectedPlayer}
         formatSlug={formatSlug}
@@ -268,8 +307,11 @@ export function FaabForm({
         settings={settings}
         fallbackResult={result}
       />
+      </div>
+      </div>
       </form>
-    </div>
+      </div>
+    </>
   );
 }
 

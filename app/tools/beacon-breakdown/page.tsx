@@ -53,7 +53,8 @@ import { loadBreakdownStats } from "./load-stats";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead, type MastheadChip } from "@/components/app-shell/page-masthead";
 
 export const dynamic = "force-dynamic";
 
@@ -185,35 +186,58 @@ export default async function BeaconBreakdownPage({
 
   return (
     <main id="main">
-      <Hero isMember={isMember} />
+      <PageBody>
+        {/* The hero is for people deciding whether to use the tool. Once two
+            players are picked they have decided, so the comparison leads and
+            the marketing copy that used to sit above it is gone. */}
+        {!hasBoth && (
+          <Masthead
+            isMember={isMember}
+            formatDisplay={formatDisplay}
+            sourceDisplay={sourceDisplay}
+          />
+        )}
 
-      <section
-        id="beacon-breakdown-section"
-        aria-labelledby="breakdown-heading"
-        className="scroll-mt-24 border-b border-line"
-      >
-        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-          <h2 id="breakdown-heading" className="sr-only">
-            Run a Beacon Breakdown
-          </h2>
+        <section
+          id="beacon-breakdown-section"
+          aria-labelledby="breakdown-heading"
+          className={hasBoth ? "scroll-mt-24" : "mt-8 scroll-mt-24"}
+        >
+          {/* A comparison is two rosters of numbers side by side and wants the
+              width. The selector on its own does not, so it keeps the narrower
+              measure it was designed for. */}
+          <div className={`mx-auto ${hasBoth ? "max-w-[90rem]" : "max-w-5xl"}`}>
+            {/* The page h1 when the hero is not rendering one. Not painted:
+                the selector and the matchup header below already name both
+                players, loudly, and a second title would repeat them. */}
+            {hasBoth ? (
+              <h1 id="breakdown-heading" className="sr-only">
+                Beacon Breakdown comparison
+              </h1>
+            ) : (
+              <h2 id="breakdown-heading" className="sr-only">
+                Run a Beacon Breakdown
+              </h2>
+            )}
 
-          {hasBoth ? (
-            <Suspense fallback={<ResultSkeleton />}>
-              <BreakdownShell
-                params={params}
-                formatDisplayFallback={formatDisplay}
-                sourceDisplayFallback={sourceDisplay}
+            {hasBoth ? (
+              <Suspense fallback={<ResultSkeleton />}>
+                <BreakdownShell
+                  params={params}
+                  formatDisplayFallback={formatDisplay}
+                  sourceDisplayFallback={sourceDisplay}
+                />
+              </Suspense>
+            ) : (
+              <EmptyState
+                formatDisplay={formatDisplay}
+                sourceDisplay={sourceDisplay}
+                leagueAttached={Boolean(params.league && params.roster)}
               />
-            </Suspense>
-          ) : (
-            <EmptyState
-              formatDisplay={formatDisplay}
-              sourceDisplay={sourceDisplay}
-              leagueAttached={Boolean(params.league && params.roster)}
-            />
-          )}
-        </div>
-      </section>
+            )}
+          </div>
+        </section>
+      </PageBody>
       <DiscordCtaSection
         eyebrow="Torn on the verdict?"
         heading="Still can't decide? Talk it out with real people."
@@ -411,9 +435,14 @@ async function BreakdownAnalysis({
 
   const breakdownTab = (
     <div className="space-y-6">
-      <BeaconEdgeMeter a={a} b={b} edge={edge} />
-
-      <EdgeContributionChart a={a} b={b} edge={edge} />
+      {/* The meter and the contribution chart answer the same question from two
+          angles, so on a wide screen they sit beside each other and are read as
+          one thing. Below xl they stack, which is what they did everywhere
+          before the column got wider. */}
+      <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+        <BeaconEdgeMeter a={a} b={b} edge={edge} />
+        <EdgeContributionChart a={a} b={b} edge={edge} />
+      </div>
 
       <div className="rounded-modal border border-line bg-surface/40 p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
@@ -428,9 +457,13 @@ async function BreakdownAnalysis({
         <BreakdownTable a={a} b={b} rows={rows} />
       </div>
 
-      <QuickTakeaways a={a} b={b} takeaways={takeaways} />
-
-      <VerdictCard verdict={verdict} shareHref={shareHref} />
+      {/* Same idea at the bottom: the takeaways are the reasoning and the
+          verdict is the conclusion, so they belong on one line when there is
+          room for one. */}
+      <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+        <QuickTakeaways a={a} b={b} takeaways={takeaways} />
+        <VerdictCard verdict={verdict} shareHref={shareHref} />
+      </div>
     </div>
   );
 
@@ -678,38 +711,41 @@ function AnalysisSkeleton() {
   );
 }
 
-function Hero({ isMember }: { isMember: boolean }) {
+function Masthead({
+  isMember,
+  formatDisplay,
+  sourceDisplay,
+}: {
+  isMember: boolean;
+  formatDisplay: string;
+  sourceDisplay: string | null;
+}) {
+  // Both labels are already resolved for the selector below, so the masthead
+  // can say which scale the comparison runs on before anyone is picked.
+  const chips: MastheadChip[] = [{ label: formatDisplay, tone: "cyan" }];
+  if (sourceDisplay) {
+    chips.push({ label: `Values via ${sourceDisplay}`, tone: "purple" });
+  }
+
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="center" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <h1
-          aria-label="Beacon Breakdown. Two players. One verdict."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
-        >
-          Beacon{" "}
-          <span
-            className="bg-clip-text text-transparent forced-colors:text-ink"
-            style={{ backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)" }}
-          >
-            Breakdown
+    <PageMasthead
+      eyebrow="Tools"
+      title="Beacon Breakdown"
+      chips={chips}
+      description={
+        <>
+          <span className="block text-xl font-semibold text-ink sm:text-2xl">
+            Two players. One verdict.
           </span>
-        </h1>
-        <p className="mt-4 text-xl font-semibold text-ink sm:text-2xl">Two players. One verdict.</p>
-        <p className="mt-4 max-w-2xl text-[1rem] leading-relaxed text-ink-muted sm:text-lg">
-          Compare players head-to-head on value, rankings, rest-of-season projections, and how
-          often each one actually hits his number. Connect a league and we&apos;ll tell you what
-          each is worth to your starting lineup.
-        </p>
-        <div className="mt-6 flex flex-wrap gap-3">
+          <span className="mt-3 block">
+            Compare players head-to-head on value, rankings, rest-of-season projections, and how
+            often each one actually hits his number. Connect a league and we&apos;ll tell you what
+            each is worth to your starting lineup.
+          </span>
+        </>
+      }
+      actions={
+        <>
           <MemberHeroCta
             isMember={isMember}
             size="lg"
@@ -725,8 +761,8 @@ function Hero({ isMember }: { isMember: boolean }) {
             View player rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
-        </div>
-      </div>
-    </header>
+        </>
+      }
+    />
   );
 }

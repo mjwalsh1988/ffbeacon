@@ -15,7 +15,8 @@ import {
 } from "@/lib/league-team-status-data";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
-import { HeroLavaField } from "@/components/hero-lava-field";
+import { PageBody } from "@/components/app-shell/page-body";
+import { PageMasthead, type MastheadStat } from "@/components/app-shell/page-masthead";
 import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
@@ -109,15 +110,28 @@ export default async function LeaguePulsePage({
   // down to the lookup form, and the bottom CTA points at the rest of the tools.
   const isMember = await isDiscordMember();
 
+  // Numbers the masthead can show without inventing any: the season we are
+  // looking at, and how many leagues the current lookup actually returned.
+  const mastheadStats: MastheadStat[] = [
+    { label: "Season", value: season, accent: "cyan" },
+  ];
+  if (user) {
+    mastheadStats.push({
+      label: "Leagues",
+      value: String(leagues.length),
+      accent: "purple",
+    });
+  }
+
   return (
     <main id="main">
-      <Hero isMember={isMember} />
-      <section
-        id="league-pulse-connect"
-        aria-labelledby="sync-heading"
-        className="scroll-mt-24 border-b border-line bg-surface/30"
-      >
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
+      <PageBody>
+        <Masthead isMember={isMember} stats={mastheadStats} />
+        <section
+          id="league-pulse-connect"
+          aria-labelledby="sync-heading"
+          className="mt-8 scroll-mt-24"
+        >
           {/* Contained lookup shell: the form lives inside a centered cockpit
               card (icon badge, step rail, glow wash) so the entry experience
               reads as a guided wizard, matching On The Clock. */}
@@ -183,72 +197,72 @@ export default async function LeaguePulsePage({
               )}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {user && (
-        <section
-          id="league-results"
-          aria-labelledby="results-heading"
-          className="border-b border-line scroll-mt-4"
-        >
-          {searchWasRequested && (
-            <ScrollToResults
-              key={`${user.user_id}-${season}`}
-              targetId="league-results"
-              headingId="results-heading"
-            />
-          )}
-          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <SectionEyebrow>Your leagues</SectionEyebrow>
-                <h2
-                  id="results-heading"
-                  className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
-                >
-                  {leagues.length}{" "}
-                  {leagues.length === 1 ? "league" : "leagues"} for{" "}
-                  <span className="text-brand-cyan">{user.display_name}</span>
-                </h2>
-                <p className="mt-2 text-sm text-ink-muted">
-                  {season} season. Sourced live from Sleeper.
-                </p>
-              </div>
-            </div>
-
-            {leagues.length === 0 ? (
-              <div className="mt-6 flex items-start gap-4 rounded-card border border-dashed border-line bg-base/40 p-6">
-                <span
-                  aria-hidden="true"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
-                >
-                  <Workflow className="h-5 w-5" />
-                </span>
+        {user && (
+          <section
+            id="league-results"
+            aria-labelledby="results-heading"
+            className="scroll-mt-4"
+          >
+            {searchWasRequested && (
+              <ScrollToResults
+                key={`${user.user_id}-${season}`}
+                targetId="league-results"
+                headingId="results-heading"
+              />
+            )}
+            <div className="pt-10 sm:pt-12">
+              <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <p className="text-base font-semibold text-ink">
-                    No active leagues for {season}.
-                  </p>
-                  <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-                    Double-check the season above, or try the previous year if
-                    you&apos;re looking at off-season state.
+                  <SectionEyebrow>Your leagues</SectionEyebrow>
+                  <h2
+                    id="results-heading"
+                    className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+                  >
+                    {leagues.length}{" "}
+                    {leagues.length === 1 ? "league" : "leagues"} for{" "}
+                    <span className="text-brand-cyan">{user.display_name}</span>
+                  </h2>
+                  <p className="mt-2 text-sm text-ink-muted">
+                    {season} season. Sourced live from Sleeper.
                   </p>
                 </div>
               </div>
-            ) : (
-              <LeagueResults
-                leagues={leagues}
-                season={season}
-                sleeperUsername={user.display_name ?? lookupUsername ?? null}
-                teamStatuses={teamStatuses}
-                sourceSlug={resolvedSource.slug}
-              />
-            )}
-          </div>
-        </section>
-      )}
 
-      {!isLoggedIn && <CtaSection />}
+              {leagues.length === 0 ? (
+                <div className="mt-6 flex items-start gap-4 rounded-card border border-dashed border-line bg-base/40 p-6">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+                  >
+                    <Workflow className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-base font-semibold text-ink">
+                      No active leagues for {season}.
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                      Double-check the season above, or try the previous year if
+                      you&apos;re looking at off-season state.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <LeagueResults
+                  leagues={leagues}
+                  season={season}
+                  sleeperUsername={user.display_name ?? lookupUsername ?? null}
+                  teamStatuses={teamStatuses}
+                  sourceSlug={resolvedSource.slug}
+                />
+              )}
+            </div>
+          </section>
+        )}
+
+        {!isLoggedIn && <CtaSection />}
+      </PageBody>
       <DiscordCtaSection
         eyebrow="Need a hand with your league?"
         heading="Questions about your league? Ask a real person."
@@ -261,40 +275,22 @@ export default async function LeaguePulsePage({
   );
 }
 
-/* ---------- Hero ---------- */
+/* ---------- Masthead ---------- */
 
-function Hero({ isMember }: { isMember: boolean }) {
+function Masthead({
+  isMember,
+  stats,
+}: {
+  isMember: boolean;
+  stats: MastheadStat[];
+}) {
   return (
-    <header className="relative -mt-[4.5rem] overflow-hidden border-b border-line">
-      {/* Beacon-gradient accent bar, matches home/about/author/my-beacon. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 z-10 h-px"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
-        }}
-      />
-      <HeroLavaField copy="left" />
-      <div className="relative mt-[4.5rem] mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-20 lg:px-8">
-        {/* aria-label gives the h1 a clean accessible name covering the
-            entire headline even though the gradient is achieved via a
-            nested span. */}
-        <h1
-          aria-label="Every Sleeper league you own, in one accessible table."
-          className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl"
-        >
-          Every Sleeper league you own,{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #A855F7 0%, #22D3EE 100%)",
-            }}
-          >
-            in one accessible table.
-          </span>
-        </h1>
-        <p className="mt-5 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
+    <PageMasthead
+      eyebrow="Tools"
+      title="Every Sleeper league you own, in one accessible table."
+      stats={stats}
+      description={
+        <>
           Drop in your Sleeper username and we&apos;ll pull every active
           league (roster shape, season, status) right from the source. No
           account required for this view.{" "}
@@ -305,9 +301,10 @@ function Hero({ isMember }: { isMember: boolean }) {
             Sign in to save your username
           </Link>{" "}
           and load it instantly each visit.
-        </p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
+        </>
+      }
+      actions={
+        <>
           <MemberHeroCta
             isMember={isMember}
             size="lg"
@@ -323,31 +320,31 @@ function Hero({ isMember }: { isMember: boolean }) {
             View player rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
-        </div>
-
-        <ul
-          role="list"
-          aria-label="What this tool does"
-          className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"
-        >
-          <HeroBullet
-            icon={Sparkles}
-            title="Live data"
-            body="Hits Sleeper on every search, no stale cache."
-          />
-          <HeroBullet
-            icon={Workflow}
-            title="One click open"
-            body="Open any league for rosters, transactions, and power rankings."
-          />
-          <HeroBullet
-            icon={Lock}
-            title="No tracking"
-            body="Your username is never stored unless you sign in to save it."
-          />
-        </ul>
-      </div>
-    </header>
+        </>
+      }
+    >
+      <ul
+        role="list"
+        aria-label="What this tool does"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"
+      >
+        <HeroBullet
+          icon={Sparkles}
+          title="Live data"
+          body="Hits Sleeper on every search, no stale cache."
+        />
+        <HeroBullet
+          icon={Workflow}
+          title="One click open"
+          body="Open any league for rosters, transactions, and power rankings."
+        />
+        <HeroBullet
+          icon={Lock}
+          title="No tracking"
+          body="Your username is never stored unless you sign in to save it."
+        />
+      </ul>
+    </PageMasthead>
   );
 }
 
@@ -379,7 +376,7 @@ function HeroBullet({
 function CtaSection() {
   return (
     <section aria-labelledby="cta-heading">
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+      <div className="pt-12 sm:pt-16">
         <div
           className="relative overflow-hidden rounded-modal border border-line bg-surface p-6 sm:p-8"
           style={{
