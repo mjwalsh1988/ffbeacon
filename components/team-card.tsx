@@ -142,6 +142,12 @@ export function TeamCard({
     return `/api/og/team/${sleeperLeagueId}/${sleeperRosterId}${suffix ? `?${suffix}` : ""}`;
   })();
 
+  // The plain page link, deliberately without the `?username=` the in-view
+  // league switcher carries: that parameter is the searcher's own context, not
+  // something to hand to whoever opens the link. Source stays off it too, so
+  // the recipient sees the roster priced their way.
+  const rosterPageHref = `/leagues/${sleeperLeagueId}/teams/${sleeperRosterId}`;
+
   // Shared segmented-strip styling for the two stat panels: a brighter outline
   // and a soft beacon glow so they read as focused, elevated units. Full width
   // stacked below the identity until lg, content-sized inline from there.
@@ -253,10 +259,10 @@ export function TeamCard({
       className="rounded-card border border-line bg-surface"
     >
       {/* Header. The identity block becomes an expand/collapse button when the
-          parent supplies onToggleExpand; the share control sits beside it
+          parent supplies onToggleExpand; the share control sits outside it
           rather than inside it, since a button cannot nest in a button. */}
       <header
-        className={`flex items-start gap-1 ${
+        className={`flex flex-wrap items-start ${
           !collapsible || expanded ? "border-b border-line" : ""
         }`}
       >
@@ -267,22 +273,45 @@ export function TeamCard({
             aria-expanded={expanded}
             aria-controls={regionId}
             aria-label={`${expanded ? "Collapse" : "Expand"} ${teamName} roster`}
-            className="min-w-0 flex-1 p-4 text-left text-ink focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan sm:p-5"
+            className="w-full min-w-0 px-4 pb-3 pt-4 text-left text-ink focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan sm:px-5 sm:pt-5 lg:w-auto lg:flex-1 lg:pb-5"
           >
             {HeaderInner}
           </button>
         ) : (
-          <div className="min-w-0 flex-1 p-4 sm:p-5">{HeaderInner}</div>
+          <div className="w-full min-w-0 px-4 pb-3 pt-4 sm:px-5 sm:pt-5 lg:w-auto lg:flex-1 lg:pb-5">
+            {HeaderInner}
+          </div>
         )}
-        <div className="shrink-0 p-4 pl-0 sm:p-5 sm:pl-0">
-          <CopyLinkButton
-            href={shareImageHref}
-            prewarmHref={shareImageHref}
-            icon="image"
-            noun="Image link"
-            size="sm"
-            ariaLabel={`Copy shareable image link for ${teamName}`}
-          />
+        {/* Share controls: the generated image, then the roster page itself.
+            Below lg they get their own labelled strip across the bottom of the
+            header, so the team name row and the stat panels above keep the
+            card's full width instead of stopping short of the buttons. From lg
+            the strip sits inline at the header's right edge, where the identity
+            column has room to spare. */}
+        <div className="flex w-full shrink-0 items-center justify-between gap-2 border-t border-line/60 bg-base/40 px-4 py-2 sm:px-5 lg:w-auto lg:justify-end lg:border-t-0 lg:bg-transparent lg:px-5 lg:py-5 lg:pl-0">
+          <span
+            aria-hidden="true"
+            className="text-[10px] font-bold uppercase tracking-wider text-ink-subtle"
+          >
+            Share
+          </span>
+          <span className="flex items-center gap-2">
+            <CopyLinkButton
+              href={shareImageHref}
+              prewarmHref={shareImageHref}
+              icon="image"
+              noun="Image link"
+              size="sm"
+              ariaLabel={`Copy shareable image link for ${teamName}`}
+            />
+            <CopyLinkButton
+              href={rosterPageHref}
+              icon="link"
+              noun="Roster link"
+              size="sm"
+              ariaLabel={`Copy link to the ${teamName} roster page`}
+            />
+          </span>
         </div>
       </header>
 
