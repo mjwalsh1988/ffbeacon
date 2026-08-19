@@ -165,14 +165,21 @@ export function NavLevels({
   );
 
   const isRail = variant === "rail";
+  // The left edge is 2px on every row, coloured only on the current one, so the
+  // rows never shift sideways as the current row moves. It is a border rather
+  // than a bar laid over the row, so it follows the corner radius.
   const rowBase = isRail
-    ? "group relative flex min-h-11 w-full items-center gap-3 rounded-card border px-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-    : "group relative flex min-h-[3.25rem] w-full items-center gap-3 rounded-card border px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
+    ? "group relative flex min-h-11 w-full items-center gap-3 rounded-card border border-l-2 px-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    : "group relative flex min-h-[3.25rem] w-full items-center gap-3 rounded-card border border-l-2 px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
-  const activeRow = "border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan";
+  // Current and hovered rows both lift off the background by a few percent of
+  // white. The purple edge is what says which one you are on.
+  const activeRow = isRail
+    ? "border-transparent border-l-brand-purple bg-ink/[0.07] text-ink"
+    : "border-line border-l-brand-purple bg-ink/[0.07] text-ink";
   const idleRow = isRail
-    ? "border-transparent text-ink-muted hover:bg-base/70 hover:text-ink"
-    : "border-line bg-base/60 text-ink hover:border-line-accent";
+    ? "border-transparent text-ink-muted hover:bg-ink/[0.05] hover:text-ink"
+    : "border-line bg-base/60 text-ink hover:border-line-accent hover:bg-ink/[0.05]";
 
   /** `page` only for the page you are actually on; `true` for its ancestors. */
   const current = (exact: boolean, ancestor = false) =>
@@ -245,13 +252,11 @@ export function NavLevels({
                   title={section.label}
                   className={`${rowBase} ${inSection ? activeRow : idleRow}`}
                 >
-                  {inSection && <ActiveBar />}
                   <RowIcon icon={section.icon} variant={variant} active={inSection} />
                   <RowText
                     variant={variant}
                     label={section.label}
                     hint={section.hint}
-                    active={inSection}
                   />
                   <ChevronRight
                     aria-hidden="true"
@@ -397,14 +402,8 @@ function NavRow({
 }) {
   const inner = (
     <>
-      {active && <ActiveBar />}
       <RowIcon icon={node.icon} variant={variant} active={active} />
-      <RowText
-        variant={variant}
-        label={node.label}
-        hint={node.hint}
-        active={active}
-      />
+      <RowText variant={variant} label={node.label} hint={node.hint} />
     </>
   );
 
@@ -438,17 +437,6 @@ function NavRow({
   );
 }
 
-/** The bar down the left edge of the current row. Decorative: the state is
- *  already carried by aria-current and by the label. */
-function ActiveBar() {
-  return (
-    <span
-      aria-hidden="true"
-      className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-brand-cyan"
-    />
-  );
-}
-
 function RowIcon({
   icon,
   variant,
@@ -466,7 +454,7 @@ function RowIcon({
     <span
       aria-hidden="true"
       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-card border ${
-        active ? "border-brand-cyan/40 text-brand-cyan" : "border-line text-ink-muted"
+        active ? "border-brand-purple/40 text-brand-purple" : "border-line text-ink-muted"
       }`}
     >
       <Icon className="h-[18px] w-[18px]" />
@@ -478,12 +466,10 @@ function RowText({
   variant,
   label,
   hint,
-  active,
 }: {
   variant: "rail" | "drawer";
   label: string;
   hint: string;
-  active: boolean;
 }) {
   if (variant === "rail") {
     return (
@@ -499,11 +485,7 @@ function RowText({
   }
   return (
     <span className="min-w-0 flex-1">
-      <span
-        className={`block text-sm font-semibold ${active ? "text-brand-cyan" : "text-ink"}`}
-      >
-        {label}
-      </span>
+      <span className="block text-sm font-semibold text-ink">{label}</span>
       <span className="block text-xs text-ink-muted">{hint}</span>
     </span>
   );
