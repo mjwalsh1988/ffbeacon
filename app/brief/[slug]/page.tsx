@@ -305,6 +305,10 @@ export default async function BriefArticlePage({ params }: PageProps) {
       <BriefRailSections categories={sidebarData.categories} isIndex={false} />
 
       <BriefShell
+        categories={sidebarData.categories}
+        // An article is not its category's page, so no row is marked current,
+        // but the bar still names the category you are reading inside.
+        activeCategorySlug={article.category?.slug ?? null}
         sidebar={
           <BriefSidebar
             data={sidebarData}

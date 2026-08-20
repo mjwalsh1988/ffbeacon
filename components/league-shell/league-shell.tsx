@@ -24,6 +24,7 @@ import { LeagueBreadcrumb, type LeagueCrumb } from "@/components/league-breadcru
 import { LeagueHeaderActions } from "@/components/league-header-actions";
 import type { SwitcherLeague } from "@/components/league-switcher";
 import { LeagueRailSections } from "./league-rail-sections";
+import { LeagueMobileNav } from "./league-mobile-nav";
 import { LeagueMasthead, type LeagueMastheadProps } from "./league-masthead";
 import type { LeagueTabId } from "./nav-items";
 
@@ -90,6 +91,15 @@ export function LeagueShell({
           <div className="px-4 pb-12 pt-4 sm:px-6 lg:px-8 lg:pt-6">
             {alert}
             <LeagueMasthead {...masthead} />
+            {/* Below lg there is no rail, so the sections keep a docking bar of
+                their own between the masthead and the section body. It carries
+                its own margins, and renders nothing at lg, so the desktop
+                spacing below is untouched. */}
+            <LeagueMobileNav
+              sleeperLeagueId={sleeperLeagueId}
+              activeTab={activeTab}
+              searchedUsername={searchedUsername}
+            />
             <div className="mt-6">{children}</div>
           </div>
         </div>

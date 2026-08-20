@@ -23,6 +23,7 @@ import type { NavNode } from "@/lib/nav-types";
 import type { NavIconName } from "@/components/app-shell/nav-icons";
 import { RegisterRailSections } from "@/components/app-shell/rail-sections";
 import type { SidebarCategory } from "@/lib/beacon-brief-feed";
+import { CATEGORY_ICONS } from "./category-icons";
 
 /** Matches the `brief` section in lib/nav-tree.ts, which this replaces. */
 export const BRIEF_RAIL_SECTION_ID = "brief";
@@ -35,18 +36,7 @@ export const BRIEF_RAIL_SECTION_ID = "brief";
  */
 const NO_CURRENT_ROW = "brief-no-current-row";
 
-/** One icon per category, so the rail is not nine identical glyphs. */
-const CATEGORY_ICONS: Record<string, NavIconName> = {
-  injuries: "activity",
-  transactions: "swap",
-  "depth-chart-usage": "layers",
-  "suspensions-legal": "flag",
-  "performance-game-notes": "gauge",
-  "coaching-scheme": "workflow",
-  "roster-moves": "users",
-  "draft-rookies": "graduationCap",
-  general: "newspaper",
-};
+
 
 /**
  * The row's one-line hint: how many articles are in the category, then the first

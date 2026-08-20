@@ -138,7 +138,20 @@ export async function BriefFeed({
         />
       </PageBody>
 
-      <BriefShell sidebar={<BriefSidebar data={sidebarData} active={active} />}>
+      <BriefShell
+        sidebar={<BriefSidebar data={sidebarData} active={active} />}
+        categories={sidebarData.categories}
+        isIndex={active.type === "all"}
+        activeCategorySlug={active.type === "category" ? active.value : null}
+        // `heading` is the written name of the view ("Ja'Marr Chase", "Kansas
+        // City Chiefs"), which is what the Filter control should read on a
+        // player, team, or tag page.
+        activeFilterLabel={
+          active.type === "player" || active.type === "team" || active.type === "tag"
+            ? heading
+            : null
+        }
+      >
         <div className="mb-5 flex items-center justify-between gap-3">
           <p className="text-sm text-ink-muted" role="status">
             {total === 0

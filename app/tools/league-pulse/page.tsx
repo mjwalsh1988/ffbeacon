@@ -326,7 +326,12 @@ function Masthead({
       <ul
         role="list"
         aria-label="What this tool does"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"
+        // Three across at every width. On a phone they stack down as three
+        // full cards, which is a screen of marketing between the hero and the
+        // search box, so there they compress to icon and title on one line and
+        // the supporting line goes screen-reader-only. It is still announced,
+        // and it comes back into view from sm up.
+        className="grid grid-cols-3 gap-2 sm:gap-4"
       >
         <HeroBullet
           icon={Sparkles}
@@ -358,15 +363,22 @@ function HeroBullet({
   body: string;
 }) {
   return (
-    <li className="rounded-card border border-line bg-surface/60 p-4">
+    <li className="rounded-card border border-line bg-surface/60 p-2.5 text-center sm:p-4 sm:text-left">
       <span
         aria-hidden="true"
-        className="flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        className="mx-auto flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan sm:mx-0"
       >
         <Icon className="h-4 w-4" />
       </span>
-      <p className="mt-3 text-sm font-semibold text-ink">{title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
+      <p className="mt-2 text-[11px] font-semibold leading-tight text-ink sm:mt-3 sm:text-sm">
+        {title}
+      </p>
+      {/* sr-only rather than hidden. The line is not worth a third of a phone
+          screen, but it is still the sentence that explains the title, so a
+          screen reader hears it at every width and it reappears from sm up. */}
+      <p className="sr-only sm:not-sr-only sm:mt-1 sm:text-xs sm:leading-relaxed sm:text-ink-muted">
+        {body}
+      </p>
     </li>
   );
 }
