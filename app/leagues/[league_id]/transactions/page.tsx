@@ -28,7 +28,7 @@ import { TransactionRow } from "@/components/transaction-row";
 import { SignalCheckTradeCard } from "@/components/signal-check-trade-card";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { LeagueShell } from "@/components/league-shell";
-import { Panel, StatReadout } from "@/components/dashboard-panel";
+import { Panel } from "@/components/dashboard-panel";
 import {
   buildLeagueFormatTags,
   buildLeagueScoringTags,
@@ -226,17 +226,6 @@ export default async function LeagueTransactionsPage({
           aria-label="Activity summary and links"
           className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
         >
-          <Panel eyebrow="At a glance" title="Activity">
-            <dl className="grid grid-cols-3 gap-2">
-              <Suspense fallback={<ActivityGlanceSkeleton />}>
-                <ActivityGlance
-                  leagueRowId={league.id}
-                  resynced={!pulseResult.cached}
-                />
-              </Suspense>
-            </dl>
-          </Panel>
-
           <Panel eyebrow="Go deeper" title="Explore this league">
             <ul className="space-y-2">
               <li>
@@ -467,53 +456,6 @@ async function TransactionsFeed({
                 </nav>
               )}
       </Panel>
-    </>
-  );
-}
-
-/**
- * The Activity tally. Its own boundary because the counts are only known once
- * the history sync has run, and that must not hold up the league identity card
- * sitting above them.
- */
-async function ActivityGlance({
-  leagueRowId,
-  resynced,
-}: {
-  leagueRowId: string;
-  resynced: boolean;
-}) {
-  await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("league_transactions")
-    .select("type")
-    .eq("league_id", leagueRowId);
-
-  let total = 0;
-  let trades = 0;
-  let waivers = 0;
-  for (const row of data ?? []) {
-    total += 1;
-    if (row.type === "trade") trades += 1;
-    else if (row.type === "waiver" || row.type === "free_agent") waivers += 1;
-  }
-
-  return (
-    <>
-      <StatReadout label="Total" value={String(total)} accent="ink" />
-      <StatReadout label="Trades" value={String(trades)} accent="purple" />
-      <StatReadout label="Waivers" value={String(waivers)} accent="cyan" />
-    </>
-  );
-}
-
-function ActivityGlanceSkeleton() {
-  return (
-    <>
-      <StatReadout label="Total" value="..." accent="ink" />
-      <StatReadout label="Trades" value="..." accent="purple" />
-      <StatReadout label="Waivers" value="..." accent="cyan" />
     </>
   );
 }

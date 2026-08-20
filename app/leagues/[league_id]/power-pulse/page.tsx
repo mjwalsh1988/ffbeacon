@@ -17,7 +17,7 @@ import {
 } from "@/lib/league-format-tags";
 import { LeagueShell } from "@/components/league-shell";
 import type { LeagueMastheadProps } from "@/components/league-shell";
-import { Panel, StatReadout } from "@/components/dashboard-panel";
+import { Panel } from "@/components/dashboard-panel";
 import { PulseRankingsTable } from "@/components/power-pulse/pulse-rankings-table";
 import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
 import { ProjectedStandings } from "@/components/power-pulse/projected-standings";
@@ -444,26 +444,6 @@ async function PowerPulseBody({
                 aria-label="League snapshot and methodology"
                 className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
               >
-                <Panel eyebrow="At a glance" title="League snapshot">
-                  <dl className="grid grid-cols-3 gap-2">
-                    <StatReadout
-                      label="Teams"
-                      value={String(view.teams.length)}
-                      accent="cyan"
-                    />
-                    <StatReadout
-                      label="Playoff spots"
-                      value={String(playoffTeams)}
-                      accent="purple"
-                    />
-                    <StatReadout
-                      label="Weeks left"
-                      value={String(view.teams[0]?.weekly.length ?? 0)}
-                      accent="ink"
-                    />
-                  </dl>
-                </Panel>
-
                 <HowPowerPulseWorks
                   scoringDescription={scoringDescription}
                   preseason={view.preseason}

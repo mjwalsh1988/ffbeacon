@@ -4,14 +4,18 @@
  * are on Overview, Teams, Power Pulse, Trade Finder, or Transactions.
  *
  * It carries the page's h1 (the league name, set large and uppercase against a
- * beacon gradient), the at-a-glance chips beside it, a strip of stat readouts,
- * the roster and scoring makeup, and the provenance line saying when the data
- * last synced and which source and format the values came from.
+ * beacon gradient), the at-a-glance chips beside it, the roster and scoring
+ * makeup, and the provenance line saying when the data last synced and which
+ * source and format the values came from.
+ *
+ * It used to carry a strip of four stat tiles as well: Teams, Season, Starters,
+ * and Status. Every one of them said what something else in this same card
+ * already said, the chips row for the first two and the last, the Roster tags
+ * for Starters, so the strip was a second copy of the header inside the header.
+ * It is gone rather than hidden, and nothing was lost with it.
  *
  * Presentational server component. Every colored element is paired with text,
- * so nothing here is color-only, and the stat strip keeps all four readouts at
- * every width (two columns on a phone, four from sm up) rather than dropping
- * any of them on the small layout.
+ * so nothing here is color-only.
  */
 
 import { CalendarDays, Users, Trophy, LayoutGrid, Calculator } from "lucide-react";
@@ -62,8 +66,6 @@ export function LeagueMasthead({
   const positionTags = formatTags.filter((t) => t.key.startsWith("pos-"));
   const rosterTags = startTag ? [startTag, ...positionTags] : positionTags;
 
-  const starterValue = startTag ? startTag.label.replace(/^Start\s+/i, "") : null;
-
   return (
     <section
       aria-labelledby="league-masthead-title"
@@ -84,57 +86,34 @@ export function LeagueMasthead({
       />
 
       <div className="p-5 sm:p-6 lg:p-7">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-8">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-cyan">
-              League Pulse
-            </p>
-            <h1
-              id="league-masthead-title"
-              className="lp-league-name mt-2 text-[clamp(1.9rem,5.2vw,3.5rem)]"
-            >
-              {leagueName}
-            </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <StatusPill status={status} />
-              {season != null && (
-                <MetaChip icon={CalendarDays}>{season} season</MetaChip>
-              )}
-              {teamCount != null && (
-                <MetaChip icon={Users}>
-                  {teamCount} {teamCount === 1 ? "team" : "teams"}
-                </MetaChip>
-              )}
-            </div>
-            <p className="mt-3 flex items-start gap-1.5 text-sm leading-snug sm:text-base">
-              <Trophy
-                aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan"
-              />
-              <span className="font-medium text-ink">{derivedLabel}</span>
-            </p>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-cyan">
+            League Pulse
+          </p>
+          <h1
+            id="league-masthead-title"
+            className="lp-league-name mt-2 text-[clamp(1.9rem,5.2vw,3.5rem)]"
+          >
+            {leagueName}
+          </h1>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatusPill status={status} />
+            {season != null && (
+              <MetaChip icon={CalendarDays}>{season} season</MetaChip>
+            )}
+            {teamCount != null && (
+              <MetaChip icon={Users}>
+                {teamCount} {teamCount === 1 ? "team" : "teams"}
+              </MetaChip>
+            )}
           </div>
-
-          {/* Stat strip. Two columns on a phone, four from sm up: the same four
-              readouts either way. */}
-          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-auto">
-            <StatTile
-              label="Teams"
-              value={teamCount != null ? String(teamCount) : "N/A"}
-              accent="cyan"
+          <p className="mt-3 flex items-start gap-1.5 text-sm leading-snug sm:text-base">
+            <Trophy
+              aria-hidden="true"
+              className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan"
             />
-            <StatTile
-              label="Season"
-              value={season != null ? String(season) : "N/A"}
-              accent="purple"
-            />
-            <StatTile label="Starters" value={starterValue ?? "N/A"} accent="cyan" />
-            <StatTile
-              label="Status"
-              value={humanizeLeagueStatus(status)}
-              accent="ink"
-            />
-          </dl>
+            <span className="font-medium text-ink">{derivedLabel}</span>
+          </p>
         </div>
 
         <div className="mt-5 grid gap-5 border-t border-line/70 pt-5 md:grid-cols-2 md:gap-6">
@@ -166,34 +145,6 @@ export function LeagueMasthead({
         />
       </div>
     </section>
-  );
-}
-
-/** One bordered readout in the masthead's stat strip. */
-function StatTile({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent: "cyan" | "purple" | "ink";
-}) {
-  const color =
-    accent === "purple"
-      ? "text-brand-purple"
-      : accent === "ink"
-        ? "text-ink"
-        : "text-brand-cyan";
-  return (
-    <div className="rounded-card border border-line bg-base/60 px-3 py-2.5 lg:min-w-[7rem]">
-      <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-ink-subtle">
-        {label}
-      </dt>
-      <dd className={`mt-1 font-mono text-lg font-bold leading-none tabular-nums ${color}`}>
-        {value}
-      </dd>
-    </div>
   );
 }
 

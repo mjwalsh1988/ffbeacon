@@ -44,7 +44,9 @@ export function PicksToggle({ includePicks }: { includePicks: boolean }) {
           ? "Include draft picks in power rankings is on. Team totals and rankings count draft pick values. Activate to rank by players only, excluding draft picks."
           : "Include draft picks in power rankings is off. Team totals and rankings count players only. Activate to include draft pick values."
       }
-      className="inline-flex min-h-11 items-center gap-2.5 rounded-card border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-70"
+      // Fills its half of the row on a phone, where it sits beside the rank
+      // toggle. Back to its own width from sm up.
+      className="flex min-h-11 w-full items-center justify-center gap-2 rounded-card border border-line bg-surface px-2 py-2 text-xs font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-70 sm:inline-flex sm:w-auto sm:justify-start sm:gap-2.5 sm:px-3 sm:text-sm"
     >
       <span
         aria-hidden="true"
@@ -58,7 +60,12 @@ export function PicksToggle({ includePicks }: { includePicks: boolean }) {
           }`}
         />
       </span>
-      <span>Include draft picks</span>
+      {/* Short on a phone, where this shares the row with the rank toggle and
+          the full sentence would not fit in half of it. The button's aria-label
+          carries the whole meaning either way, so nothing is lost by the
+          shorter visible label. */}
+      <span className="truncate sm:hidden">Draft picks</span>
+      <span className="hidden sm:inline">Include draft picks</span>
     </button>
   );
 }

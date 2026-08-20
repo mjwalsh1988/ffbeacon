@@ -21,7 +21,7 @@ import { LeagueShell } from "@/components/league-shell";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import { PicksToggle } from "@/components/picks-toggle";
 import { RankModeToggle, type RankMode } from "@/components/power-pulse/rank-mode-toggle";
-import { Panel, StatReadout } from "@/components/dashboard-panel";
+import { Panel } from "@/components/dashboard-panel";
 import {
   buildLeagueFormatTags,
   buildLeagueScoringTags,
@@ -319,29 +319,6 @@ export default async function LeagueDeepViewPage({
             aria-label="League snapshot and links"
             className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
           >
-            <Panel eyebrow="At a glance" title="Snapshot">
-              <dl className="grid grid-cols-3 gap-2">
-                <StatReadout
-                  label="Rosters"
-                  value={String(pulseResult.counts.rosters)}
-                  accent="cyan"
-                />
-                <StatReadout
-                  label="Members"
-                  value={String(pulseResult.counts.users)}
-                  accent="purple"
-                />
-                <Suspense
-                  fallback={<StatReadout label="Transactions" value="Loading" accent="ink" />}
-                >
-                  <TransactionCount
-                    leagueRowId={league.id}
-                    resynced={!pulseResult.cached}
-                  />
-                </Suspense>
-              </dl>
-            </Panel>
-
             <Panel eyebrow="Go deeper" title="Explore this league">
               <ul className="space-y-2">
                 <li>
@@ -415,26 +392,6 @@ function RankingsSkeleton() {
       </div>
     </div>
   );
-}
-
-/**
- * The Snapshot panel's transaction tally. Its own component because the count
- * is only known once the history sync has run, and that must not hold up the
- * two counts beside it.
- */
-async function TransactionCount({
-  leagueRowId,
-  resynced,
-}: {
-  leagueRowId: string;
-  resynced: boolean;
-}) {
-  // Same call the rankings section makes. pulseLeagueDerived coalesces on the
-  // league, so the two boundaries share one sync rather than racing for it.
-  const { transactions } = await pulseLeagueDerived(createAdminClient(), leagueRowId, {
-    resynced,
-  });
-  return <StatReadout label="Transactions" value={String(transactions)} accent="ink" />;
 }
 
 function ExploreLink({
@@ -746,10 +703,13 @@ async function PowerRankingsSection({
       .map((t, i) => [t.rosterRowId, i + 1]),
   );
 
+  // Short on purpose. The table's own columns and the sr-only caption below
+  // carry the detail; this line only has to say what the order means and where
+  // the numbers came from.
   const helper =
     effectiveMode === "pulse"
-      ? `Ranked by Power Pulse: expected performance from here, in this league's own scoring. Team value (${includePicks ? "including" : "excluding"} draft picks) shown alongside via ${sourceDisplay}.`
-      : `Ranked by ${includePicks ? "total team value" : "player value, draft picks excluded"}. ${formatDisplay} and ${sourceDisplay}.`;
+      ? `Expected performance from here, in this league's scoring. Team value ${includePicks ? "with" : "without"} picks, via ${sourceDisplay}.`
+      : `Ranked by team value${includePicks ? "" : ", picks excluded"}. ${formatDisplay}, ${sourceDisplay}.`;
 
   return (
     <Panel
@@ -760,9 +720,17 @@ async function PowerRankingsSection({
       bodyClassName="p-0"
       action={
         pulseAvailable ? (
+          // Small on purpose, and sitting across from the heading rather than
+          // under it. A 44px-tall pill here was the widest thing in the panel
+          // header on a phone and pushed the table down for it.
+          //
+          // The visible pill is about 24px tall; the transparent ::after
+          // stretches the tap target back to 44 without adding any bulk to the
+          // layout. The header padding above and below is empty, so the larger
+          // target has nothing to steal a tap from.
           <Link
             href={powerPulseHref}
-            className="inline-flex min-h-11 items-center gap-1 rounded-card border border-brand-cyan/45 bg-brand-cyan/10 px-3 py-1.5 text-xs font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-0"
+            className="relative inline-flex items-center gap-1 rounded-card border border-brand-cyan/45 bg-brand-cyan/10 px-2 py-1 text-[11px] font-semibold text-brand-cyan transition-colors after:absolute after:inset-x-0 after:-inset-y-3 after:content-[''] hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:px-3 sm:py-1.5 sm:text-xs sm:after:hidden"
           >
             Full Power Pulse
             <span aria-hidden="true">→</span>
@@ -770,9 +738,19 @@ async function PowerRankingsSection({
         ) : undefined
       }
     >
-      <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
+      {/* One row, never two. The rank toggle takes the full width on its own,
+          and splits it in half with the draft picks switch when that is on
+          screen.
+
+          Draft picks only matter to the value ordering. Power Pulse is a
+          competitive score that never counts a pick, so the switch would be a
+          control with nothing to do while that mode is selected. It appears
+          when the reader switches to team value. */}
+      <div className="flex items-stretch gap-2 border-b border-line px-4 py-3 sm:flex-wrap sm:items-center sm:gap-3 sm:px-5">
         <RankModeToggle mode={effectiveMode} pulseAvailable={pulseAvailable} />
-        {showPicksToggle && <PicksToggle includePicks={includePicks} />}
+        {showPicksToggle && effectiveMode === "value" && (
+          <PicksToggle includePicks={includePicks} />
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

@@ -63,7 +63,10 @@ export function RankModeToggle({
     <div
       role="radiogroup"
       aria-label="Rank teams by"
-      className="inline-flex items-center gap-1 rounded-card border border-line bg-base/60 p-1"
+      // Fills its share of the row on a phone, where it sits beside the draft
+      // picks switch (or alone, at full width, when Power Pulse is selected and
+      // that switch is not on screen). Back to its own width from sm up.
+      className="flex w-full items-center gap-1 rounded-card border border-line bg-base/60 p-1 sm:inline-flex sm:w-auto"
     >
       {options.map((option) => {
         const active = option.id === mode;
@@ -77,7 +80,7 @@ export function RankModeToggle({
             aria-label={`Rank by ${option.label}. ${option.hint}${disabled ? " Not available yet for this league." : ""}`}
             disabled={pending || disabled}
             onClick={() => select(option.id)}
-            className={`min-h-11 rounded-card px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:min-h-0 ${
+            className={`min-h-11 flex-1 truncate rounded-card px-2 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:min-h-0 sm:flex-none sm:px-3 sm:text-xs ${
               active
                 ? "bg-brand-cyan/15 text-brand-cyan shadow-[0_0_20px_-10px_rgba(34,211,238,0.9)]"
                 : "text-ink-muted hover:bg-surface hover:text-ink"
