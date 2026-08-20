@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useStepScroll } from "@/lib/use-step-scroll";
 import {
   mergeSleeperLeagueSettings,
   parseSleeperLeagueSettings,
@@ -27,6 +28,9 @@ import {
   type ImportTrade,
   type ImportTradeTeam,
 } from "./import-actions";
+
+/** The trade list, named so choosing a league can land the reader on it. */
+const TRADE_LIST_ID = "sc-import-trades";
 
 function teamAssetsText(t: ImportTradeTeam): string {
   const parts: string[] = [];
@@ -79,6 +83,11 @@ export function SleeperImportPanel({
   const [analyzing, startAnalyze] = useTransition();
 
   const resultRef = useRef<HTMLDivElement>(null);
+
+  // Choosing a league is a question being answered, so land on the trades it
+  // found rather than leaving the reader on the select they have finished
+  // with. Clearing the league back to none moves nobody.
+  useStepScroll(leagueId || null, { id: TRADE_LIST_ID });
 
   function loadLeagues() {
     setLeaguesError(null);
@@ -254,7 +263,7 @@ export function SleeperImportPanel({
 
         {/* Trade cards */}
         {leagueId && (
-          <div>
+          <div id={TRADE_LIST_ID} className="scroll-mt-24">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-ink">Pick a trade to analyze</p>
               {trades.length > 0 && (

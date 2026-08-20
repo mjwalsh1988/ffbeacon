@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
+import { useStepScroll } from "@/lib/use-step-scroll";
 import { SignalCheckBuilder, type FormatOption } from "./signal-check-builder";
 import { SleeperImportPanel } from "./sleeper-import-panel";
 
@@ -39,6 +40,15 @@ export function SignalCheckWorkspace({
   const [importMounted, setImportMounted] = useState(false);
   const [notice, setNotice] = useState("");
 
+  // The swap replaces everything under the hero without changing the URL, so
+  // nothing moves the scroll position on its own. Opening the import from
+  // partway down a built trade would otherwise drop the reader into the middle
+  // of the league picker. Both directions open something the reader has not
+  // seen in this state, so both read from the top. "top" moves no focus,
+  // because the effect below already places it, and it has to wait for the
+  // panel to mount before it can.
+  useStepScroll(mode, "top");
+
   const importButtonRef = useRef<HTMLButtonElement>(null);
   const importRegionRef = useRef<HTMLDivElement>(null);
   const pendingFocus = useRef<Mode | null>(null);
@@ -64,7 +74,9 @@ export function SignalCheckWorkspace({
     const el = target === "import" ? importRegionRef.current : importButtonRef.current;
     if (!el) return;
     pendingFocus.current = null;
-    el.focus();
+    // preventScroll because the swap has just put the page back at the top and
+    // a plain focus() would drag it down again to whatever it landed on.
+    el.focus({ preventScroll: true });
   }, [mode, importMounted]);
 
   function openImport() {

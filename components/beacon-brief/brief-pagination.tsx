@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ScrollTopLink } from "@/components/scroll-top-link";
 
 /** Build the href for a given page. Page 1 drops the ?page param so the base
  * URL stays canonical. */
@@ -102,14 +102,14 @@ export function BriefPagination({
     >
       <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-between">
         {hasPrev ? (
-          <Link
+          <ScrollTopLink
             href={pageHref(basePath, currentPage - 1)}
             rel="prev"
             className={arrow}
           >
             <ChevronLeft aria-hidden="true" className="h-4 w-4" />
             Previous
-          </Link>
+          </ScrollTopLink>
         ) : (
           <span className={arrowDisabled} aria-hidden="true">
             <ChevronLeft className="h-4 w-4" />
@@ -132,28 +132,28 @@ export function BriefPagination({
               </li>
             ) : (
               <li key={item}>
-                <Link
+                <ScrollTopLink
                   href={pageHref(basePath, item)}
                   aria-label={`Page ${item} of ${totalPages}`}
                   aria-current={item === currentPage ? "page" : undefined}
                   className={`${numberBase} ${item === currentPage ? numberActive : numberIdle}`}
                 >
                   {item}
-                </Link>
+                </ScrollTopLink>
               </li>
             ),
           )}
         </ol>
 
         {hasNext ? (
-          <Link
+          <ScrollTopLink
             href={pageHref(basePath, currentPage + 1)}
             rel="next"
             className={arrow}
           >
             Next
             <ChevronRight aria-hidden="true" className="h-4 w-4" />
-          </Link>
+          </ScrollTopLink>
         ) : (
           <span className={arrowDisabled} aria-hidden="true">
             Next

@@ -9,6 +9,7 @@ import {
   runLeagueBid,
   type ConnectedLeague,
 } from "./actions";
+import { useStepScroll } from "@/lib/use-step-scroll";
 import { BidResult, viewFromLeagueReport } from "./bid-result";
 import { PlayerCombobox, type FaabPlayer } from "./player-combobox";
 import type { LeagueFaabReport, MultiLeagueRow, NeedLevel } from "@/lib/faab/types";
@@ -91,6 +92,15 @@ export function LeaguePanel({
   const connected = leagues.length > 0;
   const selected = leagues.find((l) => l.sleeperLeagueId === selectedLeagueId) ?? null;
   const priceable = leagues.filter((l) => l.synced && l.rosterId !== null);
+
+  // Both of these answer a question the reader just asked, so both land on the
+  // answer rather than the top of the page. The lookup reveals the league and
+  // player step below the username form; a bid reveals the number underneath
+  // that. Neither changes the URL, so nothing moves the page on its own, and
+  // on a phone the new block can open entirely below the fold. Going back to
+  // disconnected or clearing a result passes null and moves nobody.
+  useStepScroll(connected ? "connected" : null, { id: `${ids}-league-step` });
+  useStepScroll(report ? report.headline : null, { id: `${ids}-result` });
 
   // A new player invalidates every answer on screen. A stale bid sitting under a
   // different name is the one failure here that could cost somebody money.
@@ -289,7 +299,10 @@ export function LeaguePanel({
 
         {/* Step 2: which league, which player */}
         {connected && (
-          <div className="space-y-4 rounded-card border border-line bg-base/50 p-4">
+          <div
+            id={`${ids}-league-step`}
+            className="scroll-mt-24 space-y-4 rounded-card border border-line bg-base/50 p-4"
+          >
             <div>
               <label htmlFor={`${ids}-league`} className="block text-sm font-medium text-ink">
                 Your league
@@ -413,7 +426,7 @@ export function LeaguePanel({
         )}
 
         {report && (
-          <div className="space-y-3">
+          <div id={`${ids}-result`} className="scroll-mt-24 space-y-3">
             <p className="rounded-card border border-dashed border-line bg-base/40 px-4 py-3 text-sm leading-relaxed text-ink-muted">
               {leagueModeNotice}
             </p>

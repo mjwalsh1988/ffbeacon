@@ -36,6 +36,7 @@ import {
   type SearchPlayerResult,
 } from "@/lib/signal-scout/client";
 import { applyRoundOutcomeToStreaks, currentEasternGameDate } from "@/lib/signal-scout/streaks";
+import { useStepScroll } from "@/lib/use-step-scroll";
 import { SignalScoutStatusBar } from "./status-bar";
 import { MysteryProfileCard } from "./mystery-profile-card";
 import { MissionHeader } from "./mission-header";
@@ -51,6 +52,13 @@ import { BurnedBanner } from "./burned-banner";
 import { ResultCard } from "./result-card";
 
 type GamePhase = "idle" | "active" | "completed" | "guest_limit" | "offline";
+
+/**
+ * The game area. A new phase opens at the top of the page, but focus has to
+ * land on the game itself: the page top is the site header, and a screen
+ * reader left there hears nothing about the round that just started.
+ */
+const STAGE_ID = "signal-scout-stage";
 
 const EMPTY_STREAKS: SignalScoutStreaks = {
   currentSignalStreak: 0,
@@ -228,6 +236,15 @@ export function SignalScoutClient({
   // moment the phase transitions INTO "completed", not on every render while
   // it stays completed. The double rAF lets the completed-phase markup paint
   // first so the heading actually exists in the DOM when focus() runs.
+  // Each phase replaces the whole screen, but the URL never changes, so nothing
+  // moves the scroll position on its own. Starting the next round from the
+  // button at the bottom of a result used to leave the reader down there,
+  // staring at the middle of a round they had not seen the top of. A round is
+  // a new place rather than an answer to a question, so it opens at the top.
+  // "completed" opts out: the focus move below already puts them on the result
+  // heading, and two scrolls in one frame is worse than one.
+  useStepScroll(phase === "completed" ? null : phase, { focusId: STAGE_ID });
+
   const previousPhaseRef = useRef<GamePhase>(phase);
   useEffect(() => {
     if (phase === "completed" && previousPhaseRef.current !== "completed") {
@@ -495,7 +512,7 @@ export function SignalScoutClient({
     phase === "idle" || phase === "guest_limit" || phase === "offline";
 
   return (
-    <div className="space-y-6">
+    <div id={STAGE_ID} className="space-y-6 scroll-mt-24">
       <div aria-live="polite" role="status" className="sr-only">
         {announcement}
       </div>

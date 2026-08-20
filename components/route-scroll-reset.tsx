@@ -39,16 +39,23 @@ export function RouteScrollReset() {
   const pathname = usePathname();
   const isFirstRender = useRef(true);
   const cameFromHistory = useRef(false);
+  // The pathname the effect below last acted on. `popstate` reads it to work
+  // out whether the step it is announcing will reach that effect at all.
+  const lastPathname = useRef(pathname);
 
   useEffect(() => {
     const onPopState = () => {
-      cameFromHistory.current = true;
-      // A popstate that lands on the same pathname (a query-only back step)
-      // never runs the effect below, so nothing would clear this flag and it
-      // would swallow the next real navigation. Drop it after a beat instead.
-      window.setTimeout(() => {
-        cameFromHistory.current = false;
-      }, 1500);
+      // Only flag a back or forward step that actually changes the pathname,
+      // because only that kind runs the effect below and clears the flag
+      // again. A query-only back step (a filter, a tab) never reaches it, so
+      // flagging one used to leave the flag standing, and whatever the reader
+      // clicked next inherited it and skipped its scroll reset. That was the
+      // intermittent "it kept me scrolled down" nobody could reproduce on
+      // demand: it only happened right after a back step. The old guard was a
+      // 1.5 second timer, which is an eternity in click terms.
+      if (window.location.pathname !== lastPathname.current) {
+        cameFromHistory.current = true;
+      }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -57,6 +64,7 @@ export function RouteScrollReset() {
   useEffect(() => {
     const fromHistory = cameFromHistory.current;
     cameFromHistory.current = false;
+    lastPathname.current = pathname;
 
     if (isFirstRender.current) {
       isFirstRender.current = false;

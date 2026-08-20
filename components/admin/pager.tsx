@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ScrollTopLink } from "@/components/scroll-top-link";
 
 /** Build the href for a given page. Page 1 drops the page query param so the
  * base URL stays canonical. An optional hash re-anchors the scroll position
@@ -51,6 +52,11 @@ export function Pager({
 
   const hasPrev = currentPage > 1;
   const hasNext = currentPage < totalPages;
+  // A page link changes only the query string, which the site-wide scroll reset
+  // ignores on purpose, so Next at the bottom of a table would load page two
+  // with the reader still parked at its end. `hash` already answers that by
+  // anchoring back to the section; without one, go to the top of the page.
+  const PageLink = hash ? Link : ScrollTopLink;
 
   const btn =
     "inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
@@ -63,14 +69,14 @@ export function Pager({
       className="mt-6 flex items-center justify-between gap-3 border-t border-line pt-6"
     >
       {hasPrev ? (
-        <Link
+        <PageLink
           href={pageHref(basePath, paramName, currentPage - 1, hash, extraParams)}
           rel="prev"
           className={btn}
         >
           <ChevronLeft aria-hidden="true" className="h-4 w-4" />
           Previous
-        </Link>
+        </PageLink>
       ) : (
         <span className={disabled} aria-hidden="true">
           <ChevronLeft className="h-4 w-4" />
@@ -84,14 +90,14 @@ export function Pager({
       </p>
 
       {hasNext ? (
-        <Link
+        <PageLink
           href={pageHref(basePath, paramName, currentPage + 1, hash, extraParams)}
           rel="next"
           className={btn}
         >
           Next
           <ChevronRight aria-hidden="true" className="h-4 w-4" />
-        </Link>
+        </PageLink>
       ) : (
         <span className={disabled} aria-hidden="true">
           Next

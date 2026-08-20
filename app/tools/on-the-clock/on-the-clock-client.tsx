@@ -101,6 +101,7 @@ import {
   resolveCurrentDraftPicks,
   resolveTradedFuturePicks,
 } from "@/lib/on-the-clock/pick-ownership";
+import { useStepScroll } from "@/lib/use-step-scroll";
 import { DraftRoomRail, type DraftRailView } from "./draft-room-rail";
 import { DraftViewSheet } from "./draft-view-sheet";
 import { UsernameGate } from "./username-gate";
@@ -142,6 +143,20 @@ type ResolvedPulse = Omit<OtcPulsePayload, "players"> & {
 };
 
 type Step = "connect" | "pick-league" | "room";
+
+/**
+ * The cockpit shell that both pre-room steps render inside. Named so the step
+ * change can land the reader on the step itself rather than on the hero above
+ * it. Only one of the two is ever mounted, so the id stays unique.
+ */
+const STEP_PANEL_ID = "otc-step-panel";
+
+/**
+ * The draft room shell. The room opens at the top of the page, but focus has to
+ * land on the room itself: the page top is the site header, and a screen reader
+ * left there hears nothing about the draft that just opened.
+ */
+const ROOM_ID = "otc-draft-room";
 type View =
   | "pick"
   | "drafted"
@@ -238,6 +253,19 @@ export function OnTheClockClient({
 }) {
   // ----- flow -----
   const [step, setStep] = useState<Step>("connect");
+  // Each step replaces the whole page, but the URL never changes, so nothing
+  // moves the scroll position on its own. Picking a league from the bottom of
+  // a long list used to open the draft room already scrolled halfway down it.
+  //
+  // Where a step lands depends on what the step is. The draft room is a new
+  // place, so it opens at the top and is read downward. The two steps before
+  // it are the wizard answering a question: someone who just typed a Sleeper
+  // username wants their leagues, not the hero above the form they have
+  // finished with, so those land on the step panel itself.
+  useStepScroll(
+    step,
+    step === "room" ? { focusId: ROOM_ID } : { id: STEP_PANEL_ID },
+  );
 
   // ----- discovery (leagues) -----
   const [connecting, setConnecting] = useState(false);
@@ -1272,7 +1300,8 @@ export function OnTheClockClient({
     return beforeRoom(
       <div className="mx-auto max-w-3xl">
         <div
-          className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
+          id={STEP_PANEL_ID}
+          className="relative scroll-mt-24 overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
           style={{
             backgroundImage:
               "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
@@ -1330,7 +1359,8 @@ export function OnTheClockClient({
     return beforeRoom(
       <div className="mx-auto max-w-4xl">
         <div
-          className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
+          id={STEP_PANEL_ID}
+          className="relative scroll-mt-24 overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
           style={{
             backgroundImage:
               "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
@@ -1397,7 +1427,10 @@ export function OnTheClockClient({
   // Loading / error gates before the room renders.
   if (draftLoading && !cache) {
     return beforeRoom(
-      <div className="mx-auto max-w-3xl">
+      // Carries the room's id so the step change lands focus here while the
+      // draft loads, rather than finding nothing and leaving focus adrift.
+      // Only one of the three room branches renders, so the id stays unique.
+      <div id={ROOM_ID} className="mx-auto max-w-3xl scroll-mt-24">
         <BackToLeagues onClick={() => setStep("pick-league")} />
         <div className="mt-4">
           <LoadingCard label="Loading the draft room..." />
@@ -1409,7 +1442,7 @@ export function OnTheClockClient({
   // guard narrows all three for the room below.
   if (!cache || !derivedState || !rec) {
     return beforeRoom(
-      <div className="mx-auto max-w-3xl">
+      <div id={ROOM_ID} className="mx-auto max-w-3xl scroll-mt-24">
         <BackToLeagues onClick={() => setStep("pick-league")} />
         <div className="mt-4 space-y-3">
           <ErrorCard message={draftError ?? "We could not load that draft."} />
@@ -1785,7 +1818,8 @@ export function OnTheClockClient({
 
   return (
     <div
-      className={`rounded-modal border border-line bg-base/40 ${
+      id={ROOM_ID}
+      className={`scroll-mt-24 rounded-modal border border-line bg-base/40 ${
         boardFull ? "" : "overflow-hidden"
       }`}
     >
