@@ -35,6 +35,7 @@ import {
 } from "@/lib/source";
 import { currentNflSeason } from "@/lib/sleeper";
 import { SITE } from "@/lib/site";
+import { pageShareMetadata } from "@/lib/page-og";
 import { BreakdownSelector, type PickedPlayer } from "./breakdown-selector";
 import { MatchupHeader } from "./matchup-header";
 import { BeaconEdgeMeter } from "./beacon-edge-meter";
@@ -88,9 +89,9 @@ export async function generateMetadata({
   searchParams: Promise<SearchParams>;
 }): Promise<Metadata> {
   const { a, b, lens: lensParam, source } = await searchParams;
-  let title = "Beacon Breakdown: player comparison tool";
+  let title = "Compare Two Fantasy Football Players";
   let description =
-    "Compare any two players head-to-head with side-by-side values, rankings, projections, beat rates, and a plain-English verdict on who has the edge.";
+    "Stuck between two players? See them side by side on value, points, and role, then score them under your own league's rules for an answer that fits your team.";
 
   const lens = isLensId(lensParam) ? lensParam : DEFAULT_LENS;
 
@@ -108,8 +109,8 @@ export async function generateMetadata({
     const nameA = nameOf(a);
     const nameB = nameOf(b);
     if (nameA && nameB) {
-      title = `${nameA} vs ${nameB}: Beacon Breakdown`;
-      description = `${nameA} vs ${nameB} head-to-head: value, rankings, rest-of-season projections, beat rates, and the Beacon Verdict on who has the edge.`;
+      title = `${nameA} or ${nameB}? Compare them side by side`;
+      description = `${nameA} against ${nameB} on value, rest-of-season points, and role, with a plain-English answer on who to start, keep, or trade for.`;
 
       // The card is generated from the same loadBreakdown the page runs, so the
       // preview and the page can never disagree about the verdict.
@@ -143,10 +144,18 @@ export async function generateMetadata({
   // of ranked players, which is hundreds of thousands of URLs that are all the same
   // tool with different inputs. Pointing them at the bare page consolidates that
   // whole space into one indexable URL instead of inviting Google to crawl it.
+  // No pair picked yet, so there is no matchup card to render. The tool's own
+  // card stands in, which is what a link to the bare page should preview as.
   return {
     title,
     description,
     alternates: { canonical: "/tools/beacon-breakdown" },
+    ...pageShareMetadata({
+      key: "beacon-breakdown",
+      title,
+      description,
+      path: "/tools/beacon-breakdown",
+    }),
   };
 }
 

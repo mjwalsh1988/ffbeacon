@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import { serializeJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import {
@@ -36,7 +37,14 @@ export const metadata: Metadata = {
   alternates: { canonical: "/author/michael" },
   title: "Michael, founder of FF Beacon",
   description:
-    "Michael founded FF Beacon to bring accessibility-first fantasy football tools and analytics to everyone, especially players using screen readers.",
+    "The manager who got tired of fantasy tools he could not read, and built the ones he wanted instead. What FF Beacon is for, and who it is for.",
+  ...pageShareMetadata({
+    key: "author",
+    title: "Michael, founder of FF Beacon",
+    description:
+      "The manager who got tired of fantasy tools he could not read, and built the ones he wanted instead. What FF Beacon is for, and who it is for.",
+    path: "/author/michael",
+  }),
 };
 
 /**

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
@@ -37,8 +38,10 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, siteName: SITE.name, type: "website" },
-    twitter: { card: "summary_large_image", title, description },
+    // Filtered views of the Brief share the Brief's own card. The headline
+    // and the description below still name the filter, so the preview reads
+    // correctly even though the artwork is the section's.
+    ...pageShareMetadata({ key: "brief", title, description, path: "/brief" }),
   };
 }
 

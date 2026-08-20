@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -25,7 +26,14 @@ export const metadata: Metadata = {
   alternates: { canonical: "/rankings" },
   title: "Fantasy Football Rankings",
   description:
-    "Sortable, filterable fantasy football rankings across redraft, dynasty, superflex, and TE premium formats. Updated daily with 7-day value trends.",
+    "Every player ranked for your scoring, with the seven-day move beside each one so you can see who is climbing and who is falling. Redraft, dynasty, superflex, and TE premium, updated daily.",
+  ...pageShareMetadata({
+    key: "rankings",
+    title: "Fantasy Football Rankings",
+    description:
+      "Every player ranked for your scoring, with the seven-day move beside each one so you can see who is climbing and who is falling. Redraft, dynasty, superflex, and TE premium, updated daily.",
+    path: "/rankings",
+  }),
 };
 
 export const dynamic = "force-dynamic";

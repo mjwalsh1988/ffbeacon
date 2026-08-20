@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -18,9 +19,16 @@ import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/games" },
-  title: "Fantasy Football Games",
+  title: "Free Fantasy Football Games",
   description:
-    "Free, accessible fantasy football games built on real player data. Play Signal Scout, our hidden-player guessing game, with more games on the way.",
+    "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Start with Signal Scout. Free, and no signup to play.",
+  ...pageShareMetadata({
+    key: "games",
+    title: "Free Fantasy Football Games",
+    description:
+      "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Start with Signal Scout. Free, and no signup to play.",
+    path: "/games",
+  }),
 };
 
 type Game = {

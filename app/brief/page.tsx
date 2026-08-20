@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { pageShareMetadata } from "@/lib/page-og";
 import { SITE } from "@/lib/site";
 import { loadFeed, loadSidebar, BRIEF_PAGE_SIZE } from "@/lib/beacon-brief-feed";
 import { BriefFeed } from "@/components/beacon-brief/brief-feed";
 
-const TITLE = "The Beacon Brief: Fantasy Football News and Analysis";
+const TITLE = "The Beacon Brief: Fantasy Football News That Changes Your Lineup";
 const DESCRIPTION =
-  "The Beacon Brief is FF Beacon's fantasy football news desk: injuries, transactions, depth chart shifts, suspensions, and rookie news, written in plain English with the fantasy impact spelled out.";
+  "Injuries, trades, snap counts, and depth chart moves, written plainly and tied to the players you actually roster. Every story says what it means for your team, not just what happened.";
 
 type PageProps = { searchParams: Promise<{ page?: string }> };
 
@@ -32,14 +33,12 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
         ],
       },
     },
-    openGraph: {
+    ...pageShareMetadata({
+      key: "brief",
       title: TITLE,
       description: DESCRIPTION,
-      url: canonical,
-      siteName: SITE.name,
-      type: "website",
-    },
-    twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+      path: "/brief",
+    }),
   };
 }
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { Scale, ShieldCheck, ListTree, ArrowRight } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
@@ -18,9 +19,16 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/signal-check" },
-  title: "Signal Check Trade Analyzer",
+  title: "Trade Analyzer: Is This Trade Fair?",
   description:
-    "Build a fantasy football trade and get the Beacon Verdict: who wins, by how much, and why, powered by FF Beacon Values.",
+    "Put both sides of a fantasy football trade in and get a straight answer: who wins, by how much, and the reason why. Players and draft picks, redraft or dynasty, free to use.",
+  ...pageShareMetadata({
+    key: "signal-check",
+    title: "Trade Analyzer: Is This Trade Fair?",
+    description:
+      "Put both sides of a fantasy football trade in and get a straight answer: who wins, by how much, and the reason why. Players and draft picks, redraft or dynasty, free to use.",
+    path: "/tools/signal-check",
+  }),
 };
 
 export default async function SignalCheckPage({

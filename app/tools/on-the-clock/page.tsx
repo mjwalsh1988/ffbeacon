@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import {
   Target,
@@ -27,9 +28,16 @@ import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/on-the-clock" },
-  title: "On The Clock",
+  title: "Live Draft Helper for Sleeper Drafts",
   description:
-    "A Sleeper-connected live draft helper. Strip drafted players from the pool and surface the best remaining FF Beacon value for your league format, by eye or by ear.",
+    "Follows your Sleeper draft as it happens, clears out everyone already taken, and tells you who is worth your pick. Works on a phone, and reads out loud.",
+  ...pageShareMetadata({
+    key: "on-the-clock",
+    title: "Live Draft Helper for Sleeper Drafts",
+    description:
+      "Follows your Sleeper draft as it happens, clears out everyone already taken, and tells you who is worth your pick. Works on a phone, and reads out loud.",
+    path: "/tools/on-the-clock",
+  }),
 };
 
 export const dynamic = "force-dynamic";

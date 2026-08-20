@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import {
   Workflow,
@@ -21,9 +22,16 @@ import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools" },
-  title: "Fantasy Football Tools",
+  title: "Free Fantasy Football Tools",
   description:
-    "Sleeper league sync, live draft help, trade grades, player comparisons, and a FAAB calculator. Accessible fantasy football tools for redraft and dynasty managers.",
+    "Sync your Sleeper leagues, get help live in the draft, find out if a trade is fair, compare two players, and know what to bid on waivers. Free, no signup, redraft and dynasty.",
+  ...pageShareMetadata({
+    key: "tools",
+    title: "Free Fantasy Football Tools",
+    description:
+      "Sync your Sleeper leagues, get help live in the draft, find out if a trade is fair, compare two players, and know what to bid on waivers. Free, no signup, redraft and dynasty.",
+    path: "/tools",
+  }),
 };
 
 export default async function ToolsPage() {

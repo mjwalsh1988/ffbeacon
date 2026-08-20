@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { MemberHeroCta } from "@/components/member-hero-cta";
@@ -28,42 +29,29 @@ import {
 } from "lucide-react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
 
-// Homepage description, drawn from the hero subtitle below. Kept to ~150
-// characters so search engines and social cards show it without truncation.
+// What the homepage says about itself to a search engine and to anyone who
+// pastes the link into a group chat. Leads with what is free and what you get,
+// because that is the question a stranger is actually asking.
+const HOME_TITLE = "FF Beacon - Your signal through the fantasy noise.";
 const HOME_DESCRIPTION =
-  "FF Beacon is a community-first fantasy football home. Get free lineup, trade, and draft help in our Discord, plus rankings and tools with no paywall.";
+  "Free fantasy football rankings, trade grades, draft help, and league tools, with a Discord full of people happy to sanity-check your lineup. No paywall, and built to work by ear as well as by eye.";
 
 export const metadata: Metadata = {
   // `absolute` bypasses the root layout's "%s | FF Beacon" title template so
   // the homepage renders this exact string.
   title: {
-    absolute: "FF Beacon - Your signal through the fantasy noise.",
+    absolute: HOME_TITLE,
   },
   description: HOME_DESCRIPTION,
   alternates: {
     canonical: "/",
   },
-  openGraph: {
-    title: "FF Beacon - Your signal through the fantasy noise.",
+  ...pageShareMetadata({
+    key: "home",
+    title: HOME_TITLE,
     description: HOME_DESCRIPTION,
-    url: "/",
-    siteName: "FF Beacon",
-    type: "website",
-    images: [
-      {
-        url: "/img/ff-beacon-logo.png",
-        width: 782,
-        height: 749,
-        alt: "FF Beacon logo",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary",
-    title: "FF Beacon - Your signal through the fantasy noise.",
-    description: HOME_DESCRIPTION,
-    images: ["/img/ff-beacon-logo.png"],
-  },
+    path: "/",
+  }),
 };
 
 export const dynamic = "force-dynamic";

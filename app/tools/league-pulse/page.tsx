@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { Workflow, Sparkles, Lock, ArrowRight, Activity } from "lucide-react";
 import { LeaguePulseForm } from "./league-pulse-form";
@@ -21,8 +22,16 @@ import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/league-pulse" },
-  title: "Sleeper League Pulse",
-  description: "View every Sleeper league roster you own in one accessible place.",
+  title: "Sleeper League Pulse: All Your Leagues, One Page",
+  description:
+    "Type your Sleeper username and see every league you are in: real rosters, recent trades, and who is actually winning. No login needed to look around.",
+  ...pageShareMetadata({
+    key: "league-pulse",
+    title: "Sleeper League Pulse: All Your Leagues, One Page",
+    description:
+      "Type your Sleeper username and see every league you are in: real rosters, recent trades, and who is actually winning. No login needed to look around.",
+    path: "/tools/league-pulse",
+  }),
 };
 
 export const dynamic = "force-dynamic";

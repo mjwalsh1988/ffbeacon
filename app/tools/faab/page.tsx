@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
@@ -25,9 +26,16 @@ import { isDiscordMember } from "@/lib/discord-membership";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/faab" },
-  title: "FAAB Calculator",
+  title: "FAAB Calculator: What to Bid on Waivers",
   description:
-    "What to bid on any waiver claim, and when to walk away. Priced against your real roster, your rivals' budgets, and what your league actually pays.",
+    "How much to bid on any waiver claim, and when to walk away. Priced against your own roster, what your rivals can still spend, and what your league has been paying all season.",
+  ...pageShareMetadata({
+    key: "faab",
+    title: "FAAB Calculator: What to Bid on Waivers",
+    description:
+      "How much to bid on any waiver claim, and when to walk away. Priced against your own roster, what your rivals can still spend, and what your league has been paying all season.",
+    path: "/tools/faab",
+  }),
 };
 
 export const dynamic = "force-dynamic";

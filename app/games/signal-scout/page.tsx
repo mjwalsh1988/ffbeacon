@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import { cookies, headers } from "next/headers";
 import { Radar, Zap, Target, type LucideIcon } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
@@ -31,9 +32,16 @@ import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/games/signal-scout" },
-  title: "Signal Scout",
+  title: "Signal Scout: Guess the Hidden NFL Player",
   description:
-    "Decode the profile. Find the player. A daily fantasy football guessing game: burn hints to reveal clues about a hidden NFL player before the signal runs out.",
+    "A new hidden player every day. Clues cost you points and buying too many burns your signal out, so how few does it take you to name him? Free, with streaks to keep.",
+  ...pageShareMetadata({
+    key: "signal-scout",
+    title: "Signal Scout: Guess the Hidden NFL Player",
+    description:
+      "A new hidden player every day. Clues cost you points and buying too many burns your signal out, so how few does it take you to name him? Free, with streaks to keep.",
+    path: "/games/signal-scout",
+  }),
 };
 
 export const dynamic = "force-dynamic";

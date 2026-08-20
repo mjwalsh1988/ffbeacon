@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import {
   Accessibility,
@@ -19,8 +20,16 @@ import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/guides" },
-  title: "Fantasy Football Guides",
-  description: `Plain-English fantasy football guides. Start with the glossary: ${TERM_COUNT} terms defined, from PPR and superflex to target share and aDOT.`,
+  title: "Fantasy Football Guides in Plain English",
+  description:
+    "What the words actually mean and how to use them, with nothing assumed. Start with the glossary, then take the draft guide into your next draft.",
+  ...pageShareMetadata({
+    key: "guides",
+    title: "Fantasy Football Guides in Plain English",
+    description:
+      "What the words actually mean and how to use them, with nothing assumed. Start with the glossary, then take the draft guide into your next draft.",
+    path: "/guides",
+  }),
 };
 
 export default async function GuidesPage() {

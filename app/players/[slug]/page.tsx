@@ -54,8 +54,8 @@ export async function generateMetadata({
   const name = player.full_name ?? `${player.first_name} ${player.last_name}`;
   const posTeam = `${player.position}${player.team ? `, ${player.team}` : ""}`;
   const canonical = `${SITE.url}/players/${slug}`;
-  const title = `${name} fantasy outlook, stats & rankings`;
-  const description = `${name} (${posTeam}) fantasy football profile: dynasty and redraft rankings, market value trends, career and weekly stats, trades, and the latest news.`;
+  const title = `${name}: Is He Worth It? Value, Stats, and News`;
+  const description = `Everything on ${name} (${posTeam}) in one place: what he is worth in a trade right now and which way that is heading, how he has actually scored, and the news that changes it.`;
   const ogImage = `${SITE.url}/api/og/player/${slug}`;
   return {
     title,

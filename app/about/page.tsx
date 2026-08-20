@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import {
   Accessibility,
@@ -37,7 +38,14 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
   title: "About FF Beacon",
   description:
-    "FF Beacon is a free fantasy football site built accessibility-first: rankings, league tools, and news that read the same by ear as by eye.",
+    "Why a fantasy football site that works with a screen reader had to be built from scratch, and what it costs to use. Nothing.",
+  ...pageShareMetadata({
+    key: "about",
+    title: "About FF Beacon",
+    description:
+      "Why a fantasy football site that works with a screen reader had to be built from scratch, and what it costs to use. Nothing.",
+    path: "/about",
+  }),
 };
 
 /**
