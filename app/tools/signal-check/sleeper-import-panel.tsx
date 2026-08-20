@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
+  ArrowLeft,
   ArrowLeftRight,
   ChevronRight,
-  Download,
   Loader2,
   LogIn,
   RefreshCw,
   Sparkles,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -42,16 +41,22 @@ function teamAssetsText(t: ImportTradeTeam): string {
  *  - signed in, no saved username: a small inline form to save it
  *  - signed in with username: pick a league, then pick a trade card, which
  *    imports and analyzes it right here (no separate page).
+ *
+ * The panel is shown or hidden by the workspace around it, which swaps it in
+ * for the trade builder. Every state therefore carries the same way back:
+ * `onBack` returns the reader to the builder with the trade they were part way
+ * through still intact.
  */
 export function SleeperImportPanel({
   signedIn,
   initialUsername,
+  onBack,
 }: {
   signedIn: boolean;
   initialUsername: string | null;
+  onBack: () => void;
 }) {
   const [username, setUsername] = useState<string | null>(initialUsername);
-  const [open, setOpen] = useState(false);
 
   const [leagues, setLeagues] = useState<ImportLeague[]>([]);
   const [leaguesLoaded, setLeaguesLoaded] = useState(false);
@@ -91,11 +96,12 @@ export function SleeperImportPanel({
     });
   }
 
-  // When the picker opens and we have a username, load the league list once.
+  // The panel only mounts once the reader asks for it, so load the league list
+  // as soon as we have a username to load it with.
   useEffect(() => {
-    if (open && username && !leaguesLoaded && !loadingLeagues) loadLeagues();
+    if (username && !leaguesLoaded && !loadingLeagues) loadLeagues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, username, leaguesLoaded]);
+  }, [username, leaguesLoaded]);
 
   function resetResult() {
     setView(null);
@@ -158,14 +164,11 @@ export function SleeperImportPanel({
     }
   }
 
-  function closePanel() {
-    setOpen(false);
-  }
-
   // ---- Signed out -------------------------------------------------------
   if (!signedIn) {
     return (
       <PanelShell>
+        <BackBar onBack={onBack} />
         <PanelHeader
           title="Import a trade from Sleeper"
           description="Sign in and save your Sleeper username to pull completed trades straight into Signal Check, with your league format detected automatically."
@@ -183,40 +186,14 @@ export function SleeperImportPanel({
     );
   }
 
-  // ---- Signed in, collapsed --------------------------------------------
-  if (!open) {
-    return (
-      <PanelShell>
-        <PanelHeader
-          title="Import a completed trade"
-          description={
-            username
-              ? "Pull a finished trade from your Sleeper league and run it through Signal Check. We detect your league format automatically."
-              : "Save your Sleeper username, then pull completed trades from your league straight into Signal Check."
-          }
-        />
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <Download aria-hidden="true" className="h-4 w-4" />
-            Import a trade
-          </button>
-        </div>
-      </PanelShell>
-    );
-  }
-
   // ---- Signed in, no username: inline save form ------------------------
   if (!username) {
     return (
       <PanelShell>
-        <PanelHeaderWithClose
+        <BackBar onBack={onBack} />
+        <PanelHeader
           title="First, connect your Sleeper username"
           description="We use your saved handle to find your leagues. We never post anything to Sleeper, and your league details stay private."
-          onClose={closePanel}
         />
         <div className="mt-4">
           <UsernameSaveForm
@@ -233,10 +210,10 @@ export function SleeperImportPanel({
   // ---- Signed in, username present: league + trade picker --------------
   return (
     <PanelShell>
-      <PanelHeaderWithClose
+      <BackBar onBack={onBack} />
+      <PanelHeader
         title="Import a completed trade"
         description="Choose a league, then tap the trade you want to analyze. We detect the league format automatically."
-        onClose={closePanel}
       />
 
       <div className="mt-5 space-y-5">
@@ -433,6 +410,9 @@ export function SleeperImportPanel({
           Your league and team details stay private. They are only shared if you create a public
           link, and even then only the trade summary is shown.
         </p>
+
+        {/* Second way out, for anyone who has scrolled past the first. */}
+        <BackBar onBack={onBack} className="" />
       </div>
     </PanelShell>
   );
@@ -480,25 +460,21 @@ function PanelHeader({ title, description }: { title: string; description: strin
   );
 }
 
-function PanelHeaderWithClose({
-  title,
-  description,
-  onClose,
-}: {
-  title: string;
-  description: string;
-  onClose: () => void;
-}) {
+/**
+ * The way out. The import panel replaces the trade builder rather than sitting
+ * above it, so the route back has to be obvious from every state, not tucked
+ * into a corner as an X.
+ */
+function BackBar({ onBack, className = "mb-4" }: { onBack: () => void; className?: string }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <PanelHeader title={title} description={description} />
+    <div className={className}>
       <button
         type="button"
-        onClick={onClose}
-        aria-label="Close Sleeper import"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        onClick={onBack}
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-3 py-2 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
       >
-        <X aria-hidden="true" className="h-4 w-4" />
+        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+        Back to the trade builder
       </button>
     </div>
   );

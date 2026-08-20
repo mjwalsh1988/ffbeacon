@@ -3,11 +3,11 @@ import Link from "next/link";
 import { Scale, ShieldCheck, ListTree, ArrowRight } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
-import { FFBEACON_SOURCE_SLUG, supportedFormats } from "@/lib/signal-check/format";
-import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
+import { supportedFormats } from "@/lib/signal-check/format";
+import { resolveFormatSlug } from "@/lib/preferences";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
-import { SignalCheckBuilder, type FormatOption } from "./signal-check-builder";
-import { SleeperImportPanel } from "./sleeper-import-panel";
+import type { FormatOption } from "./signal-check-builder";
+import { SignalCheckWorkspace } from "./signal-check-workspace";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
@@ -58,23 +58,22 @@ export default async function SignalCheckPage({
     savedUsername = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
   }
 
-  // Preselect step 1 from the header when the reader is already on FF Beacon
-  // Values. Signal Check prices every trade with FF Beacon Values and nothing
-  // else, so in that case the header format IS the scale the builder would use
-  // and asking for it again is a question with one right answer. On any other
-  // source the header format is describing a different value scale and may not
-  // be one Signal Check can price at all, so the choice stays with the reader.
-  // A format the tool does not support (inactive, or admin-disabled) falls back
-  // to no selection rather than silently picking something else.
-  const [sourceResolution, formatResolution] = await Promise.all([
-    resolveSourceSlug(cookieClient, params.source),
-    resolveFormatSlug(cookieClient, params.format),
-  ]);
-  const initialFormatSlug =
-    sourceResolution.slug === FFBEACON_SOURCE_SLUG &&
-    formats.some((f) => f.slug === formatResolution.slug)
-      ? formatResolution.slug
-      : "";
+  // The builder opens on the format the reader already has selected in the
+  // site header, so the trade is priced on their own scale without them being
+  // asked a question they have answered elsewhere. The chip in the toolbar
+  // shows which one is in force and changes it in two clicks.
+  //
+  // A header format Signal Check cannot price (inactive, or admin-disabled)
+  // falls back to the first supported format rather than opening on nothing:
+  // the tool is unusable without one, and the chip makes the choice visible.
+  // `initialFormatFromHeader` is what separates the two cases for the copy.
+  const formatResolution = await resolveFormatSlug(cookieClient, params.format);
+  const headerFormatSupported = formats.some((f) => f.slug === formatResolution.slug);
+  const initialFormatSlug = headerFormatSupported
+    ? formatResolution.slug
+    : (formats[0]?.slug ?? "");
+
+  const initialFormatFromHeader = headerFormatSupported && formatResolution.origin !== "default";
 
   const showImport = settings.enabled && settings.sleeperImportsEnabled;
 
@@ -115,19 +114,15 @@ export default async function SignalCheckPage({
                 {settings.publicLabel} is not available right now. Please check back soon.
               </p>
             ) : (
-              <div className="space-y-8">
-                {showImport && (
-                  <>
-                    <SleeperImportPanel signedIn={signedIn} initialUsername={savedUsername} />
-                    <OrDivider />
-                  </>
-                )}
-                <SignalCheckBuilder
-                  formats={formats}
-                  minLength={settings.autocompleteMinLength}
-                  initialFormatSlug={initialFormatSlug}
-                />
-              </div>
+              <SignalCheckWorkspace
+                formats={formats}
+                minLength={settings.autocompleteMinLength}
+                initialFormatSlug={initialFormatSlug}
+                initialFormatFromHeader={initialFormatFromHeader}
+                showImport={showImport}
+                signedIn={signedIn}
+                initialUsername={savedUsername}
+              />
             )}
           </div>
         </section>
@@ -191,21 +186,6 @@ function Masthead({
         <HeroBullet icon={ShieldCheck} title="Shareable verdicts" body="Freeze a result and share a clean public link." />
       </ul>
     </PageMasthead>
-  );
-}
-
-function OrDivider() {
-  return (
-    <div className="flex items-center gap-4" role="separator" aria-label="or build your own trade below">
-      <span aria-hidden="true" className="h-px flex-1 bg-line" />
-      <span
-        aria-hidden="true"
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-xs font-semibold uppercase tracking-[0.12em] text-ink-muted"
-      >
-        or
-      </span>
-      <span aria-hidden="true" className="h-px flex-1 bg-line" />
-    </div>
   );
 }
 

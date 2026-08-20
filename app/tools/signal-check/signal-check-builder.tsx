@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { Scale, Trash2, RotateCcw, Loader2 } from "lucide-react";
 import { AssetAutocomplete, type SearchResult } from "./asset-autocomplete";
 import { AssetAvatar } from "./asset-avatar";
@@ -9,6 +9,35 @@ import { TradeResult, type ResultAssetMetaBySide } from "./trade-result";
 import { runSignalCheck } from "./actions";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
+
+/**
+ * Per-side colour. Side A is purple and Side B is cyan, matching the value
+ * balance bars in the result, so the side you built on the left is the side you
+ * read on the left. Colour is never the only cue: each panel keeps its "Side A"
+ * / "Side B" heading and a letter badge.
+ */
+const SIDE_ACCENT: Record<SideKey, {
+  border: string;
+  edge: string;
+  tint: string;
+  badge: string;
+  dashed: string;
+}> = {
+  a: {
+    border: "border-brand-purple/40",
+    edge: "border-l-brand-purple",
+    tint: "bg-brand-purple/[0.07]",
+    badge: "border-brand-purple/50 bg-brand-purple/20 text-brand-purple",
+    dashed: "border-brand-purple/30",
+  },
+  b: {
+    border: "border-brand-cyan/40",
+    edge: "border-l-brand-cyan",
+    tint: "bg-brand-cyan/[0.07]",
+    badge: "border-brand-cyan/50 bg-brand-cyan/20 text-brand-cyan",
+    dashed: "border-brand-cyan/30",
+  },
+};
 
 export interface FormatOption {
   slug: string;
@@ -82,21 +111,32 @@ export function SignalCheckBuilder({
   formats,
   minLength,
   initialFormatSlug = "",
+  initialFormatFromHeader = false,
+  toolbarLeading,
 }: {
   formats: FormatOption[];
   minLength: number;
-  /** Preselected format, supplied by the page only when the reader's header
-   * source is FF Beacon Values (the scale Signal Check prices with). Empty
-   * string means no preselection, which is the case for every other source. */
+  /** Format the builder opens on, resolved by the page from the reader's own
+   * header preference (falling back to the first format Signal Check can
+   * price). Empty string means no preselection. */
   initialFormatSlug?: string;
+  /** True when `initialFormatSlug` came from the reader's header choice rather
+   * than from the fallback, which is the only case worth explaining. */
+  initialFormatFromHeader?: boolean;
+  /** Rendered to the left of the format chip in the toolbar row above the
+   * trade. The page puts the Sleeper import button here. */
+  toolbarLeading?: ReactNode;
 }) {
-  // Format drives every value, so it is never guessed. It starts empty unless
-  // the page passed one down from the reader's own header preference.
+  // Format drives every value, so it is never guessed. It starts on whatever
+  // the page resolved from the reader's own header preference.
   const [formatSlug, setFormatSlug] = useState(initialFormatSlug);
   // Tracks whether the current selection is still the preselected one, so the
   // selector can explain where it came from. Cleared the moment the reader
   // picks for themselves, since the explanation stops being true.
-  const [preselected, setPreselected] = useState(initialFormatSlug !== "");
+  const [preselected, setPreselected] = useState(initialFormatFromHeader);
+  // The format list stays collapsed behind the chip unless there is nothing
+  // selected yet, in which case the choice is the first thing to make.
+  const [formatOpen, setFormatOpen] = useState(initialFormatSlug === "");
   const [sides, setSides] = useState<Record<SideKey, SelectedAsset[]>>({ a: [], b: [] });
   const [result, setResult] = useState<BuilderView | null>(null);
   const [resultMeta, setResultMeta] = useState<ResultAssetMetaBySide | null>(null);
@@ -129,6 +169,9 @@ export function SignalCheckBuilder({
     setFormatSlug(next);
     setPreselected(false);
     resetResult();
+    // The list collapses back behind the chip on selection, so say what the
+    // chip now reads rather than leaving the change silent.
+    if (nextFormat) setNotice(`Format set to ${nextFormat.display}.`);
     // Picks are dynasty-only: drop any picks when moving to a redraft format.
     if (nextFormat && !nextFormat.allowsPicks) {
       let removed = 0;
@@ -141,7 +184,9 @@ export function SignalCheckBuilder({
         return { a: filter(prev.a), b: filter(prev.b) };
       });
       if (removed > 0) {
-        setNotice(`Removed ${removed} draft pick${removed === 1 ? "" : "s"} not valid in a redraft format.`);
+        setNotice(
+          `Format set to ${nextFormat.display}. Removed ${removed} draft pick${removed === 1 ? "" : "s"} not valid in a redraft format.`,
+        );
       }
     }
   }
@@ -221,29 +266,28 @@ export function SignalCheckBuilder({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Live region for add/remove/format announcements. */}
       <p aria-live="polite" className="sr-only">
         {notice}
       </p>
 
-      {/* Step 1: format */}
+      {/* Toolbar: Sleeper import (supplied by the page) and the format chip.
+          Both are small on purpose so the trade itself is the first thing on
+          screen under the hero. */}
       <LeagueFormatSelector
         formats={formats}
         value={formatSlug}
         onChange={changeFormat}
         preselected={preselected}
+        open={formatOpen}
+        onOpenChange={setFormatOpen}
+        leading={toolbarLeading}
       />
 
-      {/* Step 2: build the trade */}
+      {/* Build the trade */}
       <section aria-labelledby="build-step-heading">
         <div className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-beacon text-xs font-bold text-black"
-          >
-            2
-          </span>
           <h2 id="build-step-heading" className="text-base font-semibold text-ink">
             Build the trade
           </h2>
@@ -260,89 +304,110 @@ export function SignalCheckBuilder({
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {(["a", "b"] as SideKey[]).map((side) => (
-            <section
-              key={side}
-              aria-labelledby={`side-${side}-heading`}
-              className="rounded-card border border-line bg-surface/40 p-4 sm:p-5"
-            >
-              <div className="flex items-center justify-between">
-                <h3 id={`side-${side}-heading`} className="text-lg font-semibold text-ink">
-                  Side {side.toUpperCase()}
-                </h3>
-                <span className="rounded-full border border-line bg-base px-2 py-0.5 text-xs text-ink-subtle">
-                  {sides[side].length} {sides[side].length === 1 ? "asset" : "assets"}
-                </span>
-              </div>
-              <div className="mt-3">
-                <AssetAutocomplete
-                  sideLabel={`Side ${side.toUpperCase()}`}
-                  formatSlug={formatSlug}
-                  allowsPicks={allowsPicks}
-                  minLength={minLength}
-                  onSelect={(r) => addAsset(side, r)}
-                />
-              </div>
-
-              <ul role="list" aria-label={`Assets on Side ${side.toUpperCase()}`} className="mt-4 space-y-2">
-                {sides[side].length === 0 ? (
-                  <li className="flex items-center gap-2 rounded-card border border-dashed border-line px-3 py-4 text-sm text-ink-subtle">
-                    {allowsPicks
-                      ? "Add players or draft picks to this side."
-                      : "Add players to this side."}
-                  </li>
-                ) : (
-                  sides[side].map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center gap-3 rounded-card border border-line bg-base px-3 py-2"
+          {(["a", "b"] as SideKey[]).map((side) => {
+            const accent = SIDE_ACCENT[side];
+            return (
+              <section
+                key={side}
+                aria-labelledby={`side-${side}-heading`}
+                className={`rounded-card border border-l-4 p-4 sm:p-5 ${accent.border} ${accent.edge} ${accent.tint}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3
+                    id={`side-${side}-heading`}
+                    className="flex items-center gap-2 text-lg font-semibold text-ink"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-card border text-sm font-bold ${accent.badge}`}
                     >
-                      <AssetAvatar
-                        kind={a.kind}
-                        sleeperId={a.sleeperId ?? null}
-                        round={a.round ?? null}
-                        name={a.name}
-                        size={44}
-                        decorative
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-ink">{a.name}</span>
-                        {a.detail && (
-                          <span className="block truncate text-xs text-ink-subtle">{a.detail}</span>
-                        )}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeAsset(side, a.id)}
-                        aria-label={`Remove ${a.name} from Side ${side.toUpperCase()}`}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                      >
-                        <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      </button>
+                      {side.toUpperCase()}
+                    </span>
+                    Side {side.toUpperCase()}
+                  </h3>
+                  <span
+                    className={`shrink-0 rounded-full border bg-base px-2 py-0.5 text-xs text-ink-subtle ${accent.border}`}
+                  >
+                    {sides[side].length} {sides[side].length === 1 ? "asset" : "assets"}
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <AssetAutocomplete
+                    sideLabel={`Side ${side.toUpperCase()}`}
+                    formatSlug={formatSlug}
+                    allowsPicks={allowsPicks}
+                    minLength={minLength}
+                    onSelect={(r) => addAsset(side, r)}
+                  />
+                </div>
+  
+                <ul role="list" aria-label={`Assets on Side ${side.toUpperCase()}`} className="mt-4 space-y-2">
+                  {sides[side].length === 0 ? (
+                    <li
+                      className={`flex items-center gap-2 rounded-card border border-dashed px-3 py-4 text-sm text-ink-subtle ${accent.dashed}`}
+                    >
+                      {allowsPicks
+                        ? "Add players or draft picks to this side."
+                        : "Add players to this side."}
                     </li>
-                  ))
-                )}
-              </ul>
-            </section>
-          ))}
+                  ) : (
+                    sides[side].map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-3 rounded-card border border-line bg-base px-3 py-2"
+                      >
+                        <AssetAvatar
+                          kind={a.kind}
+                          sleeperId={a.sleeperId ?? null}
+                          round={a.round ?? null}
+                          name={a.name}
+                          size={44}
+                          decorative
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-ink">{a.name}</span>
+                          {a.detail && (
+                            <span className="block truncate text-xs text-ink-subtle">{a.detail}</span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeAsset(side, a.id)}
+                          aria-label={`Remove ${a.name} from Side ${side.toUpperCase()}`}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-signal-danger/60 hover:text-signal-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                        >
+                          <Trash2 aria-hidden="true" className="h-4 w-4" />
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </section>
+            );
+          })}
         </div>
       </section>
 
-      {/* Run bar */}
-      <div className="flex flex-col gap-3 rounded-card border border-line bg-surface/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-ink-muted">
+      {/* Run bar. The hint stays first in the DOM so it is read before the
+          button on mobile, where it sits above it; `sm:flex-row-reverse` puts
+          the buttons on the left on desktop and the hint on the right. The
+          hint is also the button's description, so it is announced with the
+          button either way and the swap costs a screen-reader user nothing. */}
+      <div className="flex flex-col gap-3 rounded-card border border-line bg-surface/40 p-4 sm:flex-row-reverse sm:items-center sm:justify-between">
+        <p id="run-bar-hint" className="text-sm text-ink-muted sm:text-right">
           {canRun
             ? "Ready to check. We weigh both sides with FF Beacon Values for your format."
             : !hasFormat
-              ? "Select your league format above to run the check."
+              ? "Set your league format with the Format button above to run the check."
               : "Add at least one asset to each side to run the check."}
         </p>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
           <button
             type="button"
             onClick={() => analyze(false)}
             disabled={isPending || !canRun}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            aria-describedby="run-bar-hint"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card bg-beacon px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:w-auto"
           >
             {isPending ? (
               <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
@@ -356,7 +421,7 @@ export function SignalCheckBuilder({
               type="button"
               onClick={() => analyze(true)}
               disabled={isPending}
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:w-auto"
             >
               Create share link
             </button>

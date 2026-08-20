@@ -74,8 +74,9 @@ lib/signal-check/
 
 app/tools/signal-check/
   page.tsx                       Public builder page (server)
-  signal-check-builder.tsx       Builder client (steps, sides, run, empty/loading states)
-  league-format-selector.tsx     Prominent radiogroup format picker (cards)
+  signal-check-workspace.tsx     Swaps between the builder and the Sleeper import (one at a time)
+  signal-check-builder.tsx       Builder client (toolbar, sides, run, empty/loading states)
+  league-format-selector.tsx     Format chip + collapsible radiogroup, plus the toolbar row
   asset-avatar.tsx               Player headshot / pick-round badge avatar
   trade-margin-graph.tsx         Pure value-balance bars (client + server safe)
   trade-result.tsx               Shared TradeResult (hero, margin, sides, explainers, share)
@@ -472,6 +473,13 @@ leak that secret (or raw points) into `public_payload`.
 ## Sleeper import (logged-in)
 
 The Sleeper import lives INLINE on the main builder page, not a separate route.
+It is reached from the "Import a trade from Sleeper" button in the toolbar row
+above the trade, and it replaces the builder rather than sitting above it:
+`signal-check-workspace.tsx` shows one or the other, keeps the builder mounted
+(hidden) so a half-built trade survives the round trip, moves focus with the
+swap, and opens the import directly when the page is loaded on the
+`#sleeper-import` hash (linked from `/my-beacon/sleeper-leagues`). Every state
+of the panel carries a "Back to the trade builder" button.
 `sleeper-import-panel.tsx` (`#sleeper-import`) is an auth-aware client panel:
 signed-out users see a sign-in notice; signed-in users with no saved username get
 a small inline save-username form (writes `user_preferences.sleeper_league_settings`
