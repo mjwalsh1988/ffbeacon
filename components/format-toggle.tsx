@@ -28,10 +28,13 @@ export function FormatToggle({
   // every active format). An empty array means "the current source supports
   // nothing" and the dropdown collapses to a static label.
   supportedFormatSlugs?: string[] | null;
-  // Mobile drawer places this control near the bottom of a fixed-height
-  // panel, so the default downward-opening dropdown gets clipped. Callers
-  // there pass "above" to flip the menu upward.
-  placement?: "below" | "above";
+  // "below" floats the menu over the page from a trigger that has room around
+  // it, which is the header popover. "inline" expands the list in the flow of
+  // the page instead, for the mobile drawer: the drawer's footer is a scroll
+  // box, and a scroll box clips anything positioned outside it, so a floating
+  // menu there was cut off to a few rows no matter which way it opened. An
+  // in-flow list cannot be clipped, it just makes its container scroll.
+  placement?: "below" | "inline";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -65,7 +68,13 @@ export function FormatToggle({
     if (!open) return;
     const idx = Math.max(0, visibleOptions.findIndex((o) => o.slug === effectiveSlug));
     setActiveIndex(idx);
-    const raf = requestAnimationFrame(() => itemRefs.current[idx]?.focus());
+    const raf = requestAnimationFrame(() => {
+      itemRefs.current[idx]?.focus();
+      // An in-flow list can open below the fold of whatever is scrolling it
+      // (the drawer footer). Bring it into view rather than leaving the reader
+      // to work out that there is more list under the edge.
+      if (placement === "inline") menuRef.current?.scrollIntoView({ block: "nearest" });
+    });
 
     const onDocClick = (event: MouseEvent) => {
       if (
@@ -80,7 +89,7 @@ export function FormatToggle({
       cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", onDocClick);
     };
-  }, [open, visibleOptions, effectiveSlug]);
+  }, [open, visibleOptions, effectiveSlug, placement]);
 
   const selectFormat = (slug: string) => {
     if (typeof window !== "undefined") {
@@ -138,10 +147,25 @@ export function FormatToggle({
     "Redraft PPR";
   const currentLabelShort = shortFormatName(currentLabel);
 
+  const inline = placement === "inline";
+  // Inline is the touch layout: full width, and 44px tall so the trigger and
+  // every option clear the minimum tap target.
+  const triggerClass = inline
+    ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-50"
+    : "inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-50";
+  const menuClass = inline
+    ? "mt-2 w-full overflow-hidden rounded-card border border-line bg-surface-elevated"
+    : "absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl";
+  const itemClass = inline
+    ? "flex min-h-11 w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none"
+    : "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none";
+
   if (visibleOptions.length === 1) {
     return (
       <span
-        className="inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink"
+        className={`items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink ${
+          inline ? "flex min-h-11 w-full" : "inline-flex h-9"
+        }`}
         aria-label={`Scoring format: ${currentLabel}`}
       >
         <span aria-hidden="true" className="text-ink-muted">Format:</span>
@@ -160,10 +184,12 @@ export function FormatToggle({
         aria-label={`Scoring format: ${currentLabel}`}
         onClick={() => setOpen((prev) => !prev)}
         disabled={pending}
-        className="inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-50"
+        className={triggerClass}
       >
-        <span aria-hidden="true" className="text-ink-muted">Format:</span>
-        <span aria-hidden="true">{currentLabelShort}</span>
+        <span aria-hidden="true" className={inline ? "flex items-center gap-1.5" : "contents"}>
+          <span className="text-ink-muted">Format:</span>
+          <span>{currentLabelShort}</span>
+        </span>
         <span aria-hidden="true" className="text-ink-subtle">▾</span>
       </button>
       <span aria-live="polite" className="sr-only">
@@ -175,9 +201,7 @@ export function FormatToggle({
           role="menu"
           aria-label="Choose scoring format"
           onKeyDown={onMenuKeyDown}
-          className={`absolute right-0 z-40 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl ${
-            placement === "above" ? "bottom-full mb-2" : "mt-2"
-          }`}
+          className={menuClass}
         >
           {visibleOptions.map((option, index) => {
             const isSelected = option.slug === effectiveSlug;
@@ -198,9 +222,7 @@ export function FormatToggle({
                   // aria-label carries the unabbreviated name so screen
                   // readers hear "Dynasty PPR Superflex" instead of "SF".
                   aria-label={option.display_name}
-                  className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none ${
-                    isSelected ? "text-ink" : "text-ink-muted"
-                  }`}
+                  className={`${itemClass} ${isSelected ? "text-ink" : "text-ink-muted"}`}
                 >
                   <span aria-hidden="true">
                     {shortFormatName(option.display_name)}

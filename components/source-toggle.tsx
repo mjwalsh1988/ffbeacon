@@ -35,10 +35,13 @@ export function SourceToggle({
   // Full active format list, used by pickFallbackFormat when a source switch
   // forces a format substitution.
   allFormats: FormatLike[];
-  // Mobile drawer places this control near the bottom of a fixed-height
-  // panel, so the default downward-opening dropdown gets clipped. Callers
-  // there pass "above" to flip the menu upward.
-  placement?: "below" | "above";
+  // "below" floats the menu over the page from a trigger that has room around
+  // it, which is the header popover. "inline" expands the list in the flow of
+  // the page instead, for the mobile drawer: the drawer's footer is a scroll
+  // box, and a scroll box clips anything positioned outside it, so a floating
+  // menu there was cut off to a few rows no matter which way it opened. An
+  // in-flow list cannot be clipped, it just makes its container scroll.
+  placement?: "below" | "inline";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -88,7 +91,13 @@ export function SourceToggle({
     if (!open) return;
     const idx = Math.max(0, visibleOptions.findIndex((o) => o.slug === effectiveSlug));
     setActiveIndex(idx);
-    const raf = requestAnimationFrame(() => itemRefs.current[idx]?.focus());
+    const raf = requestAnimationFrame(() => {
+      itemRefs.current[idx]?.focus();
+      // An in-flow list can open below the fold of whatever is scrolling it
+      // (the drawer footer). Bring it into view rather than leaving the reader
+      // to work out that there is more list under the edge.
+      if (placement === "inline") menuRef.current?.scrollIntoView({ block: "nearest" });
+    });
 
     const onDocClick = (event: MouseEvent) => {
       if (
@@ -103,7 +112,7 @@ export function SourceToggle({
       cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", onDocClick);
     };
-  }, [open, visibleOptions, effectiveSlug]);
+  }, [open, visibleOptions, effectiveSlug, placement]);
 
   const selectSource = (slug: string) => {
     if (typeof window !== "undefined") {
@@ -195,13 +204,29 @@ export function SourceToggle({
     options[0]?.display_name ??
     "Unavailable";
 
+  const inline = placement === "inline";
+  // Inline is the touch layout: full width, and 44px tall so the trigger and
+  // every option clear the minimum tap target.
+  const staticClass = `items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium ${
+    inline ? "flex min-h-11 w-full" : "inline-flex h-9"
+  }`;
+  const triggerClass = inline
+    ? "flex min-h-11 w-full items-center justify-between gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-70"
+    : "inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-70";
+  const menuClass = inline
+    ? "mt-2 w-full overflow-hidden rounded-card border border-line bg-surface-elevated"
+    : "absolute right-0 z-40 mt-2 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl";
+  const itemClass = inline
+    ? "flex min-h-11 w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none"
+    : "flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none";
+
   // If no source supports the current format, keep the control visible as a
   // static label so screen-reader users know the affordance still exists and
   // why it's disabled. Same shell as the length-1 branch.
   if (visibleOptions.length === 0) {
     return (
       <span
-        className="inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink-muted"
+        className={`${staticClass} text-ink-muted`}
         aria-label="No data source available for the current format"
       >
         <span aria-hidden="true" className="text-ink-muted">Source:</span>
@@ -213,7 +238,7 @@ export function SourceToggle({
   if (visibleOptions.length === 1) {
     return (
       <span
-        className="inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink"
+        className={`${staticClass} text-ink`}
         aria-label={`Data source: ${currentLabel}`}
       >
         <span aria-hidden="true" className="text-ink-muted">Source:</span>
@@ -232,10 +257,12 @@ export function SourceToggle({
         aria-label={`Data source: ${currentLabel}`}
         onClick={() => setOpen((prev) => !prev)}
         disabled={pending}
-        className="inline-flex h-9 items-center gap-1.5 rounded-card border border-line bg-surface px-3 text-sm font-medium text-ink hover:border-line-accent disabled:opacity-70"
+        className={triggerClass}
       >
-        <span aria-hidden="true" className="text-ink-muted">Source:</span>
-        <span>{currentLabel}</span>
+        <span className={inline ? "flex items-center gap-1.5" : "contents"}>
+          <span aria-hidden="true" className="text-ink-muted">Source:</span>
+          <span>{currentLabel}</span>
+        </span>
         <span aria-hidden="true" className="text-ink-subtle">▾</span>
       </button>
       <span aria-live="polite" className="sr-only">
@@ -247,9 +274,7 @@ export function SourceToggle({
           role="menu"
           aria-labelledby={menuHeadingId}
           onKeyDown={onMenuKeyDown}
-          className={`absolute right-0 z-40 w-64 overflow-hidden rounded-card border border-line bg-surface-elevated shadow-2xl ${
-            placement === "above" ? "bottom-full mb-2" : "mt-2"
-          }`}
+          className={menuClass}
         >
           {/* Single, presentation-only header. The menu's aria-labelledby
               wires this up so screen readers announce it as the menu's
@@ -310,9 +335,7 @@ export function SourceToggle({
                         ? `${option.display_name} doesn't provide values for ${currentFormatLabel}.`
                         : undefined
                   }
-                  className={`flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface focus:bg-surface focus:outline-none ${
-                    isSelected ? "text-ink" : "text-ink-muted"
-                  }`}
+                  className={`${itemClass} ${isSelected ? "text-ink" : "text-ink-muted"}`}
                 >
                   <span className="flex items-center gap-1.5">
                     {/* FF Beacon is our proprietary source: mark its row with

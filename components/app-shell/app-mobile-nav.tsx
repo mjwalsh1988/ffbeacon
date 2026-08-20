@@ -191,7 +191,12 @@ export function AppMobileNav({
           />
         </div>
 
-        <div className="shrink-0 space-y-3 border-t border-line px-4 py-4 beacon-scroll max-h-[45vh] overflow-y-auto">
+        {/* Scrolls on its own so it can never push the section tree off the
+            bottom of the drawer. The cap is generous because the source and
+            format lists expand into this box: it only grows that tall when one
+            of them is open, and the section tree above shrinks and keeps its
+            own scrollbar. */}
+        <div className="shrink-0 space-y-3 border-t border-line px-4 py-4 beacon-scroll max-h-[60vh] overflow-y-auto">
           <div>
             <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-muted">
               Data source
@@ -202,7 +207,7 @@ export function AppMobileNav({
               initialSlug={initialSourceSlug}
               currentFormatSlug={initialFormatSlug}
               allFormats={allFormats}
-              placement="above"
+              placement="inline"
             />
           </div>
           <div>
@@ -214,7 +219,7 @@ export function AppMobileNav({
               options={formats}
               initialSlug={initialFormatSlug}
               supportedFormatSlugs={supportedFormatSlugs}
-              placement="above"
+              placement="inline"
             />
           </div>
           {viewer.isAuthenticated ? (
