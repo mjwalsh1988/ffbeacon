@@ -243,10 +243,15 @@ export async function loadPowerPulseView(
     };
   });
 
+  // The cache read is unordered, so a genuine tie needs a tiebreak that does
+  // not depend on row order, or the two teams swap places between reloads.
+  // Roster id is arbitrary but stable, which is the property that matters.
   teams.sort(
     (a, b) =>
       (a.pulseRank ?? Number.MAX_SAFE_INTEGER) - (b.pulseRank ?? Number.MAX_SAFE_INTEGER) ||
-      b.powerPulse - a.powerPulse,
+      b.powerPulse - a.powerPulse ||
+      (b.expectedPointsPerWeek ?? 0) - (a.expectedPointsPerWeek ?? 0) ||
+      a.sleeperRosterId - b.sleeperRosterId,
   );
 
   const first = pulseRows[0];

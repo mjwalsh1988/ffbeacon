@@ -20,6 +20,16 @@
 export type ProjectedFinishInput = {
   projectedWins: number | null | undefined;
   expectedPointsPerWeek: number | null | undefined;
+  /**
+   * Roster row id, used only to settle a tie both other fields agree on.
+   *
+   * Both surfaces sort rows that arrived from an unordered read, so without a
+   * final tiebreak two genuinely level teams take whichever order the database
+   * happened to return, and the league row and the league page can disagree
+   * about who is 4th. Optional so a caller with no id still compiles; those
+   * callers keep the old input-order behavior.
+   */
+  rosterId?: string | null;
 };
 
 /** Sort comparator: best projected finish first. */
@@ -27,8 +37,10 @@ export function compareProjectedFinish(
   a: ProjectedFinishInput,
   b: ProjectedFinishInput,
 ): number {
-  return (
-    (b.projectedWins ?? 0) - (a.projectedWins ?? 0) ||
-    (b.expectedPointsPerWeek ?? 0) - (a.expectedPointsPerWeek ?? 0)
-  );
+  const byWins = (b.projectedWins ?? 0) - (a.projectedWins ?? 0);
+  if (byWins !== 0) return byWins;
+  const byPoints = (b.expectedPointsPerWeek ?? 0) - (a.expectedPointsPerWeek ?? 0);
+  if (byPoints !== 0) return byPoints;
+  if (a.rosterId && b.rosterId) return a.rosterId.localeCompare(b.rosterId);
+  return 0;
 }

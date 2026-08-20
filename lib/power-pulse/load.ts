@@ -97,6 +97,22 @@ function intOrNull(v: unknown): number | null {
   return null;
 }
 
+/**
+ * A positive integer, or null.
+ *
+ * Sleeper writes `playoff_week_start: 0` and omits `playoff_teams` on leagues
+ * whose bracket has not been configured, and zero is a value `intOrNull`
+ * happily returns, so `?? default` never fired and the league inherited a
+ * playoff week of 0. Everything downstream reads that as "the regular season
+ * ended before week 1": no weeks get projected, the remaining slate comes back
+ * empty, and the league is written off as having no games left rather than
+ * scored. Anything at or below zero is an unset field, not a real week.
+ */
+function positiveIntOrNull(v: unknown): number | null {
+  const n = intOrNull(v);
+  return n !== null && n > 0 ? n : null;
+}
+
 function numOrNull(v: unknown): number | null {
   if (v === null || v === undefined) return null;
   const n = Number(v);
@@ -127,8 +143,8 @@ export async function loadLeague(
     rosterPositions: asStringArray(data.roster_positions),
     scoringSettings: (data.scoring_settings ?? {}) as ScoringSettings,
     // Sleeper defaults: a six-team field starting in week 15.
-    playoffTeams: intOrNull(settings.playoff_teams) ?? 6,
-    playoffWeekStart: intOrNull(settings.playoff_week_start) ?? 15,
+    playoffTeams: positiveIntOrNull(settings.playoff_teams) ?? 6,
+    playoffWeekStart: positiveIntOrNull(settings.playoff_week_start) ?? 15,
   };
 }
 
@@ -238,6 +254,14 @@ export async function loadPlayers(
 /**
  * Weekly projections for a player set from `fromWeek` forward. Paged, because a
  * full league easily exceeds the 1000-row default cap.
+ *
+ * Paging is keyset on the primary key. An offset walk over an unsorted query is
+ * not stable, because Postgres may return rows in a different order per
+ * request, so rows get skipped and others repeated. Here a skipped row is a
+ * player projected at zero for that week, which quietly drags down his team's
+ * score, its projected wins, and the playoff odds that follow from them. The
+ * count guard turns a short read into a failed run rather than a plausible
+ * looking wrong answer.
  */
 export async function loadProjections(
   supabase: ServiceClient,
@@ -251,17 +275,34 @@ export async function loadProjections(
   const CHUNK = 150;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
+
+    const { count: expected, error: countErr } = await supabase
+      .from("player_weekly_projections")
+      .select("id", { count: "exact", head: true })
+      .eq("season", season)
+      .eq("season_type", "regular")
+      .gte("week", fromWeek)
+      .in("player_id", chunk);
+    if (countErr) {
+      throw new Error(`power pulse projection count failed: ${countErr.message}`);
+    }
+
+    let loaded = 0;
+    let cursor: string | null = null;
+    for (;;) {
+      let q = supabase
         .from("player_weekly_projections")
         .select(
-          "player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
+          "id, player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
         )
         .eq("season", season)
         .eq("season_type", "regular")
         .gte("week", fromWeek)
         .in("player_id", chunk)
-        .range(from, from + PAGE - 1);
+        .order("id", { ascending: true })
+        .limit(PAGE);
+      if (cursor !== null) q = q.gt("id", cursor);
+      const { data, error } = await q;
       if (error) throw new Error(`power pulse projection load failed: ${error.message}`);
       if (!data || data.length === 0) break;
       for (const row of data) {
@@ -276,7 +317,15 @@ export async function loadProjections(
           std: numOrNull(row.projected_pts_std),
         });
       }
+      loaded += data.length;
+      cursor = data[data.length - 1].id;
       if (data.length < PAGE) break;
+    }
+
+    if (expected != null && loaded < expected) {
+      throw new Error(
+        `power pulse projection load incomplete: read ${loaded} of ${expected} rows for ${chunk.length} players`,
+      );
     }
   }
   return out;

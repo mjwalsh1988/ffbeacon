@@ -440,11 +440,21 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
 
   // ---------- pass 3: normalize into the four components ----------
 
+  // Rosters the simulation can actually resolve. A league that shrank keeps the
+  // wider schedule it was created with, so `league_matchups` can still pair a
+  // team against a roster that has since left. The simulation skips those games
+  // because there is nobody to score against, and counting them as games played
+  // anyway turned the missing opponent into a loss: every team's projected wins
+  // and losses stopped adding up to its own schedule. Count only the games that
+  // get played.
+  const scoredRosterIds = new Set(work.map((t) => t.roster.sleeperRosterId));
+
   const gamesTotal = (team: TeamWork): number => {
     const played = team.roster.wins + team.roster.losses + team.roster.ties;
-    const remaining = upcomingSchedule.filter((w) =>
-      w.opponents.has(team.roster.sleeperRosterId),
-    ).length;
+    const remaining = upcomingSchedule.filter((w) => {
+      const opponent = w.opponents.get(team.roster.sleeperRosterId);
+      return opponent !== undefined && scoredRosterIds.has(opponent);
+    }).length;
     return Math.max(1, played + remaining);
   };
 
@@ -488,7 +498,13 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
   const zComposite = zScores(composite);
 
   const pulseValues = zComposite.map((z) => zToDisplay(z, settings.display));
-  const pulseRanks = rankDescending(pulseValues);
+  // Ranked on the composite, not on the rounded display value. zToDisplay
+  // collapses the score onto 99 integers, so two teams the model separates
+  // clearly can land on the same number and tie, which left the table showing
+  // two thirds and no fourth and put the order between them at the mercy of
+  // whatever order the rows came back in. The visible number still rounds; the
+  // ordering behind it does not.
+  const pulseRanks = rankDescending(zComposite);
   const pointsRanks = rankDescending(rawPoints);
   const scheduleRanks = rankDescending(rawSchedule);
   const depthRanks = rankDescending(rawDepth);

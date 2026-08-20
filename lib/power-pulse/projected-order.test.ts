@@ -37,6 +37,16 @@ describe("compareProjectedFinish", () => {
     ]);
   });
 
+  it("settles a dead-level tie on roster id, not on the order the rows arrived in", () => {
+    // Both surfaces sort rows from an unordered read. Two teams level on wins
+    // and points must land the same way on the league row and the league page,
+    // so the comparator has to decide it rather than leave it to the database.
+    const a = { id: "a", projectedWins: 8, expectedPointsPerWeek: 120, rosterId: "aaa" };
+    const b = { id: "b", projectedWins: 8, expectedPointsPerWeek: 120, rosterId: "bbb" };
+    expect([a, b].sort(compareProjectedFinish).map((t) => t.id)).toEqual(["a", "b"]);
+    expect([b, a].sort(compareProjectedFinish).map((t) => t.id)).toEqual(["a", "b"]);
+  });
+
   it("does not reorder a strong roster above a team with more expected wins", () => {
     // The whole reason this order is not Power Pulse order: the roster with the
     // higher weekly ceiling can still finish below one with an easier schedule.

@@ -116,7 +116,15 @@ export default async function LeaguePowerPulsePage({
   const coverageOk = context.coverage !== "none";
 
   const settings = (league.metadata as { settings?: Record<string, number> } | null)?.settings ?? {};
-  const playoffTeams = Number(settings.playoff_teams ?? 6);
+  // Same rule the engine applies in lib/power-pulse/load.ts: Sleeper leaves this
+  // at zero on a league whose bracket is not set up, and a cut line drawn at
+  // seed zero would tell every team it misses the playoffs while the simulation
+  // behind the odds assumed a six-team field.
+  const configuredPlayoffTeams = Number(settings.playoff_teams);
+  const playoffTeams =
+    Number.isFinite(configuredPlayoffTeams) && configuredPlayoffTeams > 0
+      ? configuredPlayoffTeams
+      : 6;
 
   const scoringDescription = describeLeagueScoring(
     (league.scoring_settings ?? {}) as ScoringSettings,

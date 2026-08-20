@@ -144,10 +144,12 @@ export async function loadSearchedTeamStatuses(
           {
             projectedWins: a.projected_wins,
             expectedPointsPerWeek: a.expected_points_per_week,
+            rosterId: a.roster_id,
           },
           {
             projectedWins: b.projected_wins,
             expectedPointsPerWeek: b.expected_points_per_week,
+            rosterId: b.roster_id,
           },
         ),
       );

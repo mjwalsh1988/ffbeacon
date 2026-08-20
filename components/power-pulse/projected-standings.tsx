@@ -21,7 +21,21 @@ export function ProjectedStandings({
 }) {
   // Shared comparator, because the league list quotes this same finish on every
   // row and the two must not drift. See lib/power-pulse/projected-order.ts.
-  const ordered = [...teams].sort(compareProjectedFinish);
+  // The roster id goes in so a dead-level tie settles the same way on both.
+  const ordered = [...teams].sort((a, b) =>
+    compareProjectedFinish(
+      {
+        projectedWins: a.projectedWins,
+        expectedPointsPerWeek: a.expectedPointsPerWeek,
+        rosterId: a.rosterRowId,
+      },
+      {
+        projectedWins: b.projectedWins,
+        expectedPointsPerWeek: b.expectedPointsPerWeek,
+        rosterId: b.rosterRowId,
+      },
+    ),
+  );
 
   return (
     <div className="overflow-x-auto">
@@ -73,7 +87,7 @@ export function ProjectedStandings({
                     {seed}
                   </span>
                   <span className="sr-only">
-                    {inPlayoffs ? ", projected to make the playoffs" : " , projected to miss the playoffs"}
+                    {inPlayoffs ? ", projected to make the playoffs" : ", projected to miss the playoffs"}
                   </span>
                 </td>
                 <td className="px-3 py-2">

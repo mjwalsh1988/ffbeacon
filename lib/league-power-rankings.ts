@@ -293,8 +293,18 @@ function comboKey(combo: Combo): string {
  * Scoping to the league's own players is what makes a single pass affordable:
  * the whole trends table across every combo is far larger than the few hundred
  * players any one league can roster.
+ *
+ * Paging is keyset on the primary key, not offset. A few hundred rostered
+ * players carry a few thousand trend rows across two dozen combos, so this
+ * always spans several pages, and an offset page walk over an unsorted query
+ * is not stable: Postgres is free to return a different row order per request,
+ * which silently skips some rows and repeats others. A skipped row reads as a
+ * player worth zero, which is indistinguishable from a real zero by the time
+ * it reaches the ranking. That is how Bijan Robinson once counted for nothing
+ * in a league that rostered him. `id` is unique, so ordering by it makes the
+ * page boundaries exact.
  */
-async function loadPlayerValueMaps(
+export async function loadPlayerValueMaps(
   supabase: ServiceClient,
   playerIds: string[],
 ): Promise<Map<string, ValueMap>> {
@@ -305,12 +315,26 @@ async function loadPlayerValueMaps(
   const CHUNK = 200;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
+
+    // What the table says this chunk holds, so a short read is caught rather
+    // than quietly ranking the missing players at zero.
+    const { count: expected, error: countErr } = await supabase
+      .from("player_value_trends")
+      .select("id", { count: "exact", head: true })
+      .in("player_id", chunk);
+    if (countErr) throw new Error(`count player_value_trends failed: ${countErr.message}`);
+
+    let loaded = 0;
+    let cursor: string | null = null;
+    for (;;) {
+      let q = supabase
         .from("player_value_trends")
-        .select("player_id, current_value, format_config_id, source")
+        .select("id, player_id, current_value, format_config_id, source")
         .in("player_id", chunk)
-        .range(from, from + PAGE - 1);
+        .order("id", { ascending: true })
+        .limit(PAGE);
+      if (cursor !== null) q = q.gt("id", cursor);
+      const { data, error } = await q;
       if (error) throw new Error(`load player_value_trends failed: ${error.message}`);
       if (!data || data.length === 0) break;
       for (const row of data) {
@@ -320,7 +344,15 @@ async function loadPlayerValueMaps(
         map.set(row.player_id, Number(row.current_value));
         out.set(key, map);
       }
+      loaded += data.length;
+      cursor = data[data.length - 1].id;
       if (data.length < PAGE) break;
+    }
+
+    if (expected != null && loaded < expected) {
+      throw new Error(
+        `load player_value_trends incomplete: read ${loaded} of ${expected} rows for ${chunk.length} players`,
+      );
     }
   }
   return out;
@@ -328,8 +360,17 @@ async function loadPlayerValueMaps(
 
 /**
  * Pick prices for every combo in one pass. Newest capture wins per
- * (season, round, slot), same as the per-combo loader it replaces; the explicit
- * secondary ordering keeps that deterministic across pages.
+ * (season, round, slot).
+ *
+ * The walk pages on `id` alone, and newest-wins is decided in memory from the
+ * captured_at each row carries. The previous version leaned on a multi-column
+ * sort to put the newest row first and then kept whichever row it met first,
+ * which made correctness depend on page ordering twice over. That sort key was
+ * not unique either: every row in this table shares (captured_at, season,
+ * round, pick_position) with its siblings in the other format and source
+ * combos, so rows could shuffle across page boundaries and go missing. Sorting
+ * on the primary key removes both problems, and the rule that used to be
+ * implicit in the ORDER BY is now written down.
  */
 async function loadPickLookups(
   supabase: ServiceClient,
@@ -341,29 +382,71 @@ async function loadPickLookups(
   const formatIds = Array.from(new Set(combos.map((c) => c.format_config_id)));
   const sources = Array.from(new Set(combos.map((c) => c.source)));
 
+  // Winning row per combo and pick slot, so a later page can still displace an
+  // earlier one when it carries a newer capture. The combo and slot keys are
+  // carried on the value rather than parsed back out of the map key, so a
+  // source slug that ever contains the separator cannot corrupt the lookup.
+  const best = new Map<
+    string,
+    { comboKey: string; slotKey: string; capturedMs: number; id: string; value: number }
+  >();
+
   const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  let loaded = 0;
+  let cursor: string | null = null;
+  for (;;) {
+    let q = supabase
       .from("draft_pick_values")
-      .select("season, round, pick_position, value, captured_at, format_config_id, source")
+      .select("id, season, round, pick_position, value, captured_at, format_config_id, source")
       .in("format_config_id", formatIds)
       .in("source", sources)
-      .order("captured_at", { ascending: false })
-      .order("season", { ascending: true })
-      .order("round", { ascending: true })
-      .order("pick_position", { ascending: true })
-      .range(from, from + PAGE - 1);
+      .order("id", { ascending: true })
+      .limit(PAGE);
+    if (cursor !== null) q = q.gt("id", cursor);
+    const { data, error } = await q;
     if (error) throw new Error(`load draft_pick_values failed: ${error.message}`);
     if (!data || data.length === 0) break;
     for (const row of data) {
       if (!row.format_config_id || !row.source) continue;
       const comboK = `${row.format_config_id}|${row.source}`;
-      const lookup = out.get(comboK) ?? { values: new Map<string, number>() };
-      const key = `${row.season}|${row.round}|${row.pick_position}`;
-      if (!lookup.values.has(key)) lookup.values.set(key, Number(row.value));
-      out.set(comboK, lookup);
+      const slotKey = `${row.season}|${row.round}|${row.pick_position}`;
+      const key = `${comboK}|${slotKey}`;
+      const current = best.get(key);
+      // Parsed rather than string-compared: timestamptz comes back with a
+      // trimmed fractional part, so the text form is not reliably orderable.
+      const capturedMs = Date.parse(row.captured_at);
+      if (Number.isNaN(capturedMs)) continue;
+      // Newest capture wins; `id` breaks a tie so two runs over the same table
+      // always pick the same row.
+      const wins =
+        !current ||
+        capturedMs > current.capturedMs ||
+        (capturedMs === current.capturedMs && row.id > current.id);
+      if (wins) {
+        best.set(key, { comboKey: comboK, slotKey, capturedMs, id: row.id, value: Number(row.value) });
+      }
     }
+    loaded += data.length;
+    cursor = data[data.length - 1].id;
     if (data.length < PAGE) break;
+  }
+
+  const { count: expected, error: countErr } = await supabase
+    .from("draft_pick_values")
+    .select("id", { count: "exact", head: true })
+    .in("format_config_id", formatIds)
+    .in("source", sources);
+  if (countErr) throw new Error(`count draft_pick_values failed: ${countErr.message}`);
+  if (expected != null && loaded < expected) {
+    throw new Error(
+      `load draft_pick_values incomplete: read ${loaded} of ${expected} rows`,
+    );
+  }
+
+  for (const row of best.values()) {
+    const lookup = out.get(row.comboKey) ?? { values: new Map<string, number>() };
+    lookup.values.set(row.slotKey, row.value);
+    out.set(row.comboKey, lookup);
   }
   return out;
 }
