@@ -251,6 +251,7 @@ export function PulseRankingsTable({
         onClose={() => setSheetTeam(null)}
         label={sheetTeam ? `${sheetTeam.teamName} Power Pulse breakdown` : "Team breakdown"}
         labelledBy={sheetTeam ? sheetHeadingId : undefined}
+        showClose={false}
       >
         {sheetTeam && (
           <div className="px-5 pb-6 pt-4">

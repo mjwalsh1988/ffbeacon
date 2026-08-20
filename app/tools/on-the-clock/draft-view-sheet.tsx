@@ -85,6 +85,7 @@ export function DraftViewSheet<Id extends string>({
         label="Draft views"
         labelledBy={headingId}
         hideAboveClass="lg:hidden"
+        showClose={false}
       >
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
           <h2 id={headingId} className="text-lg font-semibold tracking-tight text-ink">

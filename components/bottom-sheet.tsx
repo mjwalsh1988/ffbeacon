@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 /**
  * What the focus trap counts as tabbable. Form fields are in the list because
@@ -16,6 +17,12 @@ const FOCUSABLE =
  * the page behind, traps focus, closes on Esc or backdrop tap. Designed to
  * match the FF Beacon palette: dark surface with a beacon-gradient drag
  * handle on top.
+ *
+ * A close button in the top-right corner comes as standard. Escape and a
+ * backdrop tap both close the sheet too, but neither is visible, and a drag
+ * handle is a hint rather than a control. Callers that draw their own close
+ * button inside a header of their own pass `showClose={false}` so there is
+ * exactly one.
  *
  * Render-time gated to a breakpoint so it never appears on desktop layouts,
  * desktop callers should provide a parallel UI (table cell, hover popover,
@@ -33,6 +40,8 @@ export function BottomSheet({
   label,
   labelledBy,
   hideAboveClass = "md:hidden",
+  showClose = true,
+  closeLabel = "Close",
   children,
 }: {
   open: boolean;
@@ -52,6 +61,14 @@ export function BottomSheet({
    * whose side rail only appears at xl.
    */
   hideAboveClass?: string;
+  /**
+   * Set false only when `children` already renders its own close button. The
+   * default is on, so a sheet that forgets to draw one still has a way out
+   * that is visible on the screen.
+   */
+  showClose?: boolean;
+  /** Accessible name for the built-in close button. */
+  closeLabel?: string;
   children: ReactNode;
 }) {
   const labelId = useId();
@@ -143,11 +160,27 @@ export function BottomSheet({
           paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
         }}
       >
-        <div className="flex shrink-0 justify-center pt-2">
+        {/* Top bar: drag handle centred, close button on the right. The
+            spacer on the left is what keeps the handle centred against the
+            button's width without absolute positioning. */}
+        <div
+          className={`flex shrink-0 items-center pt-2 ${showClose ? "gap-2 px-2 pb-1" : "justify-center"}`}
+        >
+          {showClose && <span aria-hidden="true" className="h-11 w-11 shrink-0" />}
           <span
             aria-hidden="true"
-            className="h-1.5 w-12 rounded-full bg-beacon opacity-60"
+            className={`h-1.5 w-12 rounded-full bg-beacon opacity-60 ${showClose ? "mx-auto" : ""}`}
           />
+          {showClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={closeLabel}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          )}
         </div>
         {/* Scroll the content if it outgrows the sheet so nothing is clipped
             below the viewport. The drag handle above stays pinned. */}

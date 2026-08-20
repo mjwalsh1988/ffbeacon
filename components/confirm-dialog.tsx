@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { LucideIcon } from "lucide-react";
+import { X, type LucideIcon } from "lucide-react";
 
 /**
  * Accessible confirmation dialog. On desktop it pops as a centered modal; on
@@ -142,6 +142,17 @@ export function ConfirmDialog({
               {description}
             </div>
           </div>
+          {/* Corner close, same as every other dialog on the site. It cancels,
+              which is what Escape and a backdrop tap already do; this is the
+              version of that you can see and tap. */}
+          <button
+            type="button"
+            onClick={() => close(onCancel)}
+            aria-label={`${cancelLabel}, close this dialog`}
+            className="-mr-2 -mt-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

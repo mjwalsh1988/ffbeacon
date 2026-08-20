@@ -394,7 +394,7 @@ function TeamRankSheet({
             type="button"
             onClick={onClose}
             aria-label="Close team details"
-            className="-mr-1 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink"
+            className="-mr-1 inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink"
           >
             <span aria-hidden="true">✕</span>
           </button>

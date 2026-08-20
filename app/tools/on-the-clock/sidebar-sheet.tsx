@@ -196,6 +196,7 @@ export function SidebarSheet({
         label={label}
         labelledBy={headingId}
         hideAboveClass="xl:hidden"
+        showClose={false}
       >
         <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
           <div className="min-w-0">

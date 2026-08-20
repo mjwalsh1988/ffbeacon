@@ -452,6 +452,7 @@ function CompactCard({ signal }: { signal: SignalStatus }) {
         open={open}
         onClose={() => setOpen(false)}
         label={claimed ? "Your Signal status" : "Start your Signal"}
+        closeLabel={claimed ? "Close your Signal status" : "Close"}
       >
         <div className="px-5 pb-2 pt-3">
           <CardBody signal={signal} onClaimClick={() => setOpen(false)} />

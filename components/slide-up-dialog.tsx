@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 /**
  * Responsive slide-up dialog. Mobile slides up from the viewport bottom
@@ -12,11 +13,19 @@ import { createPortal } from "react-dom";
  * Differs from {@link BottomSheet} only in viewport behavior, kept as a
  * separate component so existing mobile-only callers aren't accidentally
  * promoted to desktop. Wire your own header/content/footer inside.
+ *
+ * A close button in the top-right corner comes as standard. Escape and a
+ * backdrop tap both close the dialog too, but neither is visible, and a drag
+ * handle is a hint rather than a control. Callers that draw their own close
+ * button inside a header of their own pass `showClose={false}` so there is
+ * exactly one.
  */
 export function SlideUpDialog({
   open,
   onClose,
   label,
+  showClose = true,
+  closeLabel = "Close",
   children,
 }: {
   open: boolean;
@@ -24,6 +33,14 @@ export function SlideUpDialog({
   /** Accessible name for the dialog. Surfaced via an sr-only span +
    * aria-labelledby on the container. */
   label: string;
+  /**
+   * Set false only when `children` already renders its own close button. The
+   * default is on, so a dialog that forgets to draw one still has a way out
+   * that is visible on the screen.
+   */
+  showClose?: boolean;
+  /** Accessible name for the built-in close button. */
+  closeLabel?: string;
   children: ReactNode;
 }) {
   const labelId = useId();
@@ -120,12 +137,33 @@ export function SlideUpDialog({
           maxHeight: "min(90vh, 720px)",
         }}
       >
-        <div className="flex shrink-0 justify-center pt-2 sm:hidden">
-          <span
-            aria-hidden="true"
-            className="h-1.5 w-12 rounded-full bg-beacon opacity-60"
-          />
-        </div>
+        {/* Top bar: drag handle centred on mobile, close button on the right
+            at every width. The spacer on the left is what keeps the handle
+            centred against the button's width without absolute positioning. */}
+        {showClose ? (
+          <div className="flex shrink-0 items-center gap-2 px-2 pb-1 pt-2">
+            <span aria-hidden="true" className="h-11 w-11 shrink-0 sm:hidden" />
+            <span
+              aria-hidden="true"
+              className="mx-auto h-1.5 w-12 rounded-full bg-beacon opacity-60 sm:hidden"
+            />
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={closeLabel}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:ml-auto"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex shrink-0 justify-center pt-2 sm:hidden">
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-12 rounded-full bg-beacon opacity-60"
+            />
+          </div>
+        )}
         {/* Scroll content that outgrows the capped panel height. Callers that
             manage their own internal scroll (fixed header + scrollable body)
             still work: their region caps smaller, so this wrapper stays put. */}

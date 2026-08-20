@@ -11,9 +11,11 @@
  *
  * Mirrors burn-confirm-dialog.tsx, the game's other destructive confirmation,
  * including its focus rule: SlideUpDialog auto-focuses the FIRST focusable
- * element inside its sheet content, so "Keep scouting" is rendered before
- * "Skip this round" in the DOM specifically so the safe, non-destructive
- * choice receives initial focus. Do not reorder these two buttons.
+ * element inside its sheet, which is its own close button, and after that
+ * "Keep scouting" is rendered before "Skip this round" in the DOM
+ * specifically so the safe, non-destructive choice comes first. Both of the
+ * first two stops cancel; the destructive one is never what focus lands on.
+ * Do not reorder these two buttons.
  */
 
 import { OctagonX } from "lucide-react";
@@ -28,7 +30,12 @@ export interface SkipConfirmDialogProps {
 
 export function SkipConfirmDialog({ open, pending, onConfirm, onClose }: SkipConfirmDialogProps) {
   return (
-    <SlideUpDialog open={open} onClose={onClose} label="Confirm skipping this round">
+    <SlideUpDialog
+      open={open}
+      onClose={onClose}
+      label="Confirm skipping this round"
+      closeLabel="Close without skipping the round"
+    >
       <div className="p-5 sm:p-6">
         <h3 className="text-lg font-semibold tracking-tight text-ink">Skip this round?</h3>
         <p className="mt-2 text-sm text-ink-muted">

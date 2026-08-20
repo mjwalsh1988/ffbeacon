@@ -7,10 +7,12 @@
  * This sheet is the explicit confirmation step that produces that flag.
  *
  * Built on SlideUpDialog, whose auto-focus targets the FIRST focusable
- * element inside its own sheet content (its overlay close button lives
- * outside that scope, see components/slide-up-dialog.tsx). "Keep my signal"
- * is rendered before "Burn it and reveal the clue" in the DOM specifically
- * so the safe, non-destructive choice receives initial focus.
+ * element inside its sheet, which is its own close button (the full-screen
+ * backdrop button lives outside that scope, see
+ * components/slide-up-dialog.tsx). "Keep my signal" is rendered before "Burn
+ * it and reveal the clue" in the DOM specifically so the safe,
+ * non-destructive choice comes first. Both of the first two stops cancel; the
+ * destructive one is never what focus lands on.
  */
 
 import { Flame } from "lucide-react";
@@ -40,7 +42,12 @@ export function BurnConfirmDialog({
   const tierName = tier ? TIER_DISPLAY_NAMES[tier] : "";
 
   return (
-    <SlideUpDialog open={open} onClose={onClose} label="Confirm signal burnout">
+    <SlideUpDialog
+      open={open}
+      onClose={onClose}
+      label="Confirm signal burnout"
+      closeLabel="Close without burning your signal"
+    >
       <div className="p-5 sm:p-6">
         <h3 className="text-lg font-semibold tracking-tight text-ink">Burn out your signal?</h3>
         <p className="mt-2 text-sm text-ink-muted">

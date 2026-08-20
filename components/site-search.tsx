@@ -343,7 +343,7 @@ export function SiteSearch() {
                   type="button"
                   onClick={close}
                   aria-label="Close search"
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line text-ink-muted hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                 >
                   <X aria-hidden="true" className="h-4 w-4" />
                 </button>

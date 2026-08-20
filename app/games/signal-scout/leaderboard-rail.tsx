@@ -237,6 +237,7 @@ export function LeaderboardRail({
         open={open}
         onClose={() => setOpen(false)}
         label="Signal Scout leaderboards and info"
+        showClose={false}
       >
         <div className="flex h-full flex-col">
           {/* Close is the first focusable element so screen reader users can

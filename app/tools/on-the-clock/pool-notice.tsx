@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef } from "react";
-import { Users, Baby } from "lucide-react";
+import { Users, Baby, X } from "lucide-react";
 
 const STORAGE_PREFIX = "ffbeacon.otc.pool-notice.";
 
@@ -74,8 +74,9 @@ export function PoolNotice({
         onClose();
         return;
       }
-      // Focus trap: cycle Tab within the dialog's focusable elements (the confirm
-      // button plus the optional "report incorrect format" link).
+      // Focus trap: cycle Tab within the dialog's focusable elements (the
+      // corner close, the confirm button, and the optional "report incorrect
+      // format" link).
       if (e.key !== "Tab") return;
       const root = dialogRef.current;
       if (!root) return;
@@ -138,7 +139,7 @@ export function PoolNotice({
           >
             <Icon className="h-5 w-5" />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
               Player pool detected
             </p>
@@ -146,6 +147,16 @@ export function PoolNotice({
               {pool === "rookies" ? "Showing rookies only" : "Showing all players"}
             </h2>
           </div>
+          {/* Corner close, matching every other dialog. "Got it" below does the
+              same thing; this is the one you look for without reading. */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close this notice"
+            className="-mr-2 -mt-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card text-ink-muted transition-colors hover:bg-base hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
         </div>
         <div id="otc-pool-notice-body" className="mt-3 space-y-2 text-sm leading-relaxed text-ink-muted">
           <p>{message}</p>

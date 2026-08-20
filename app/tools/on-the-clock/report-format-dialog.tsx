@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { validateFormatReportInput } from "@/lib/on-the-clock/report-validate";
 
 export type FormatReportContext = {
@@ -202,7 +202,7 @@ export function ReportFormatDialog({
               >
                 <CheckCircle2 className="h-5 w-5" />
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-400">
                   Report sent
                 </p>
@@ -213,6 +213,7 @@ export function ReportFormatDialog({
                   Thanks for the heads up
                 </h2>
               </div>
+              <DialogClose onClose={onClose} label="Close this dialog" />
             </div>
             <p role="status" className="mt-3 text-sm leading-relaxed text-ink-muted">
               A developer will review this and fix it within a day or two. We apologize for the
@@ -238,7 +239,7 @@ export function ReportFormatDialog({
               >
                 <AlertTriangle className="h-5 w-5" />
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
                   Report a problem
                 </p>
@@ -249,6 +250,7 @@ export function ReportFormatDialog({
                   Report an incorrect format
                 </h2>
               </div>
+              <DialogClose onClose={onClose} label="Close without sending a report" />
             </div>
 
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">
@@ -363,5 +365,22 @@ export function ReportFormatDialog({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Corner close, shared by both states of the dialog. The footer buttons say
+ * what they do in words; this is the one people look for without reading.
+ */
+function DialogClose({ onClose, label }: { onClose: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={label}
+      className="-mr-2 -mt-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-card text-ink-muted transition-colors hover:bg-base hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+    >
+      <X aria-hidden="true" className="h-4 w-4" />
+    </button>
   );
 }
