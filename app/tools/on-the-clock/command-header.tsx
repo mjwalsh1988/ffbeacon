@@ -24,7 +24,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { Users, Baby, Lock, Eye } from "lucide-react";
+import { Users, Baby, Lock, Eye, ArrowLeft } from "lucide-react";
 import { MASTHEAD_TITLE_SIZE } from "@/components/app-shell/masthead-card";
 import type { ShapedDraftCache, PlayerPool } from "@/lib/on-the-clock/types";
 import { SyncPanel } from "./sync-panel";
@@ -53,6 +53,7 @@ export function CommandHeader({
   onTheClockPickLabel,
   isYourTurn,
   yourSeatLabel,
+  onBack,
   sync,
   snapshotNotice = null,
 }: {
@@ -75,6 +76,8 @@ export function CommandHeader({
   onTheClockPickLabel: string;
   isYourTurn: boolean;
   yourSeatLabel: string;
+  /** Leaves the room. Rendered above the title, where a way out belongs. */
+  onBack: () => void;
   /**
    * Controlled sync state, owned by the room. Null once the draft is over, in
    * either sense: complete but still locking its results, or fully in snapshot
@@ -162,7 +165,19 @@ export function CommandHeader({
           at max-w-7xl. The room is the widest column on the site, and the page
           title sitting in here has to line up with the content under it. */}
       <div className="px-4 py-4 sm:px-6 sm:py-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* The way out, above the title it leaves. A back control belongs before
+            the thing it backs out of, not below a header the reader has to
+            scroll past first. */}
+        <button
+          type="button"
+          onClick={onBack}
+          className="-ml-1 inline-flex min-h-11 items-center gap-1.5 rounded px-1 text-xs font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
+          Back to leagues
+        </button>
+
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-cyan">
               On The Clock
@@ -189,6 +204,7 @@ export function CommandHeader({
           </div>
 
           <div
+            className="w-full sm:w-auto"
             onFocus={() => {
               slotHadFocus.current = true;
             }}
@@ -216,9 +232,9 @@ export function CommandHeader({
                 ref={closingNoteRef}
                 tabIndex={-1}
                 role="status"
-                className="max-w-xs text-right text-xs text-ink-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="w-full rounded-card border border-line bg-surface/40 p-2.5 text-xs text-ink-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:w-56"
               >
-                Draft complete. Locking the final results, so there is nothing left to sync.
+                Draft complete. Locking final results.
               </p>
             ) : null}
           </div>
@@ -278,11 +294,11 @@ export function CommandHeader({
           </span>
         </div>
 
-        {/* Helper: where the locked format/values/pool come from. */}
+        {/* Helper: where the locked format/values/pool come from. The chips above
+            already name all three, so this only has to say who chose them. */}
         <p className="mt-1.5 text-[11px] text-ink-subtle">
-          Format and player pool detected from your Sleeper league. Values always come from FF
-          Beacon.
-          {formatIsClosest ? " Closest FF Beacon format used for this league." : ""}
+          Detected from your Sleeper league.
+          {formatIsClosest ? " Closest FF Beacon format used." : ""}
         </p>
       </div>
     </div>

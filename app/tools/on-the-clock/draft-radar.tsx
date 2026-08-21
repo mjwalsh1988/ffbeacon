@@ -96,7 +96,7 @@ export function DraftRadar({
     <Panel
       eyebrow="Draft radar"
       title="What is happening"
-      helper="Runs, tier cliffs, and who the market takes before your next pick."
+      helper="Runs, tier cliffs, and who goes before your next pick."
       headingLevel={headingLevel}
     >
       <div className="space-y-4">

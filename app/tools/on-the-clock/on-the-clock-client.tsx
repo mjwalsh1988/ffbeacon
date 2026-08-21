@@ -1083,7 +1083,7 @@ export function OnTheClockClient({
         if (quiet) return;
         setBoard(null);
         setBoardError(
-          "We could not match this league to an FF Beacon format, so the available board is unavailable.",
+          "No FF Beacon format matches this league, so there is no available board.",
         );
         setBoardLoading(false);
         return;
@@ -1138,11 +1138,11 @@ export function OnTheClockClient({
         // completed draft may drift until a snapshot can be locked, so say so.
         if (!result.ok) {
           setSnapshotWarning(
-            "We could not lock this draft's final results right now, so current values are shown temporarily. Reload later to lock them.",
+            "We could not lock the final results yet, so these are current values. Reload later to lock them.",
           );
         } else if (result.data.reason === "no-board") {
           setSnapshotWarning(
-            "No FF Beacon values exist for this league's format yet, so this draft cannot be graded.",
+            "No FF Beacon values for this format yet, so this draft cannot be graded.",
           );
         }
         void loadBoard(card, fallbackPool);
@@ -1782,7 +1782,7 @@ export function OnTheClockClient({
   const modeNotice = modeSelectable
     ? null
     : isDynasty
-      ? "This is a rookie draft, so the board is ordered on the blend of value and lineup impact."
+      ? "Rookie draft, so the board blends value and lineup impact."
       : "Redraft league: every recommendation here is win-now.";
 
   const bestCard = rec.best;
@@ -2128,6 +2128,7 @@ export function OnTheClockClient({
         onTheClockPickLabel={onTheClockPickLabel}
         isYourTurn={isYourTurn}
         yourSeatLabel={yourSeatLabel}
+        onBack={() => setStep("pick-league")}
         sync={
           // Gone the moment the draft reports complete, not merely dimmed. The
           // clock stops at the same instant, so a control left on screen here
@@ -2188,14 +2189,12 @@ export function OnTheClockClient({
       )}
 
       <div className="px-4 py-5 sm:px-6 sm:py-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <BackToLeagues onClick={() => setStep("pick-league")} />
-          {/* The whole state of the room in one keystroke. Mounted HERE, in the
-              room itself: every value it reads is declared below the loading
-              early-return, so a copy up there would throw the moment it ran and
-              would vanish the instant the room actually appeared. */}
-          <RoomSummary build={buildRoomSummary} />
-        </div>
+        {/* The whole state of the room in one keystroke. Mounted HERE, in the
+            room itself: every value it reads is declared below the loading
+            early-return, so a copy up there would throw the moment it ran and
+            would vanish the instant the room actually appeared. Back to leagues
+            used to share this row and now sits above the title, in the header. */}
+        <RoomSummary build={buildRoomSummary} />
 
         {/* The room's ONE alert announcer. It has to live out here, above the
             tabs: the draft radar panel that used to own it unmounts on the
@@ -2254,7 +2253,7 @@ export function OnTheClockClient({
             {railInSheet && (
               <SidebarSheet
                 label="Quick info"
-                summary="Who is on the clock, the draft radar, best remaining by position, and your draft."
+                summary="Who is on the clock, the radar, best remaining, and your draft."
                 // Below lg there is no navigation rail, so the room carries its
                 // own view switcher rather than sending a drafter through the
                 // site drawer mid-clock. It rides in this bar so the two share
@@ -2318,7 +2317,7 @@ export function OnTheClockClient({
                         }.`
                       : pulseLoading
                         ? "Loading weekly projections..."
-                        : "Weekly projections are unavailable, so these are value and scarcity only."}
+                        : "No weekly projections, so this is value and scarcity only."}
                   </p>
                 </div>
                 {recommendationsAlign && bestCard.player ? (
@@ -2339,7 +2338,7 @@ export function OnTheClockClient({
               <Panel
                 eyebrow="The pool"
                 title="Available players"
-                helper="Real undrafted players from FF Beacon, sorted by current value. Drafted players drop off automatically."
+                helper="Sorted by FF Beacon value. Drafted players drop off automatically."
               >
                 {activeBoardLoading ? (
                   <LoadingCard label="Loading the FF Beacon board..." />
@@ -2348,19 +2347,19 @@ export function OnTheClockClient({
                 ) : !activeBoard || activeBoard.status === "source-unavailable" ? (
                   <EmptyCard
                     title="FF Beacon values are not set up."
-                    body="Admin: the FF Beacon source row is missing from the source registry. On The Clock uses FF Beacon values for the available board."
+                    body="Admin: the FF Beacon source row is missing from the source registry."
                   />
                 ) : activeBoard.status !== "ok" ? (
                   <EmptyCard
                     title={`No FF Beacon rankings for ${activeBoard.formatLabel} yet.`}
-                    body="The draft board and picks still work. The available big board and values will appear once this format's FF Beacon rankings are published."
+                    body="The board and picks still work. Values appear once this format's FF Beacon rankings publish."
                   />
                 ) : available.length === 0 ? (
                   <EmptyCard
                     title={pool === "rookies" ? "No rookies available." : "No players available."}
                     body={
                       pool === "rookies"
-                        ? "We could not find ranked first-year players in FF Beacon for this format yet. Check back once rookie values are published."
+                        ? "No ranked first-year players for this format yet. Check back once rookie values publish."
                         : "Every ranked player in this pool has been drafted."
                     }
                   />
@@ -2478,7 +2477,7 @@ export function OnTheClockClient({
                     <Panel
                       eyebrow="Every seat"
                       title="Draft board"
-                      helper="Columns are seats, rows are rounds. Each cell shows the overall pick number and who was taken."
+                      helper="Seats across, rounds down. Each cell shows the pick and who was taken."
                       bodyClassName="px-0 sm:px-0"
                     >
                       <DraftBoard
@@ -2499,7 +2498,7 @@ export function OnTheClockClient({
                 <Panel
                   eyebrow="History"
                   title="All picks"
-                  helper="Every pick in order, a full readable peer of the board."
+                  helper="Every pick in order."
                 >
                   <PickList
                     picks={draftCache.picks}
@@ -2677,7 +2676,7 @@ export function OnTheClockClient({
               {snapshotMode && snapshot.snapshotVersion < 2 ? (
                 <EmptyCard
                   title="This draft was locked before grades existed."
-                  body="Its results are frozen exactly as they were computed, so we will not regrade it from today's data. Newly completed drafts are graded automatically."
+                  body="Its results are frozen as computed, so it will not be regraded. New drafts are graded automatically."
                 />
               ) : (
                 <div className="space-y-6">
@@ -2755,13 +2754,13 @@ function buildSnapshotNotice(s: DraftSnapshotPayload): string {
   }
   if (s.confidence === "low") {
     bits.push(
-      "Historical data was limited, so these results are estimated from the nearest available snapshots.",
+      "Limited history, so these are estimated from the nearest snapshots.",
     );
   } else if (
     s.valueSnapshotSource === "next_available" ||
     s.adpSnapshotSource === "next_available"
   ) {
-    bits.push("Some inputs use the nearest snapshot after the draft finished (estimated).");
+    bits.push("Some inputs use the nearest snapshot after the draft (estimated).");
   }
   return bits.join(" ");
 }

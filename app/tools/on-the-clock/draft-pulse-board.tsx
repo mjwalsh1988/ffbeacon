@@ -123,7 +123,7 @@ export function DraftPulseBoard({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="Draft Pulse ranks teams by projected starting points and by FF Beacon value. Both tables fill in once this format's rankings publish."
+        body="Both tables fill in once this format's FF Beacon rankings publish."
       />
     );
   }
@@ -148,13 +148,13 @@ export function DraftPulseBoard({
         title="Nobody has picked yet"
         body={
           isDynasty
-            ? "Draft Pulse scores each roster's best starting lineup for the rest of the season. Every team is level until the first pick lands."
-            : "Draft Pulse scores each roster's best starting lineup for the rest of the season. With nobody drafted, every lineup is empty."
+            ? "Every team is level until the first pick lands."
+            : "With nobody drafted, every lineup is empty."
         }
         points={[
-          "A points-per-week score for every team, ranked in your league.",
-          "The same teams ranked by FF Beacon value, so you can see who owns more than they can start.",
-          "Each team's points by position, and the starting slot they still need.",
+          "A points-per-week score for every team.",
+          "Who owns the most, next to who can start the most.",
+          "Points by position, and the slot each team still needs.",
         ]}
       />
     );
@@ -166,8 +166,8 @@ export function DraftPulseBoard({
         title={pulseLoading ? "Loading weekly projections." : "Projections are unavailable."}
         body={
           pulseLoading
-            ? "Draft Pulse is being computed for this league. It will replace this message when it lands."
-            : "No weekly projections exist for this season, so there is no lineup to score. Every value panel still works, and this fills in when projections publish."
+            ? "Being computed now. This fills in when it lands."
+            : "No weekly projections for this season, so there is no lineup to score. Every value panel still works."
         }
       />
     );
@@ -196,8 +196,8 @@ export function DraftPulseBoard({
         title={pulseLoading ? "Loading weekly projections." : "Projections are unavailable."}
         body={
           pulseLoading
-            ? "Draft Pulse is being computed for this league. The FF Beacon value ranking below does not need it."
-            : "We could not project this league's weekly scoring, so Draft Pulse has nothing to rank. Every value panel still works, and this fills in on the next sync."
+            ? "Being computed now. The value ranking below does not need it."
+            : "We could not project this league's scoring, so there is nothing to rank. Every value panel still works."
         }
       />
     );
@@ -239,8 +239,8 @@ export function DraftPulseBoard({
         {(slotsEstimated || scoringEstimated) && (
           <p className="mt-2 rounded-card border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
             {scoringEstimated
-              ? "We have not captured this league's scoring settings yet, so these points use a standard approximation. Press Sync draft to pull them."
-              : "We could not read this league's starting lineup, so the slots below are estimated from the draft settings."}
+              ? "This league's scoring settings are not captured yet, so these points use a standard approximation."
+              : "Starting lineup unknown, so these slots are estimated from the draft settings."}
           </p>
         )}
       </div>
@@ -385,7 +385,7 @@ function YourPulseCard({
       </div>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink">
         {isLeader
-          ? "You project the strongest starting lineup in the room right now."
+          ? "You project the strongest lineup in the room."
           : `You are ${behind.toFixed(1)} points a week behind ${leader.team.ownerName}, the current leader.`}
         {weakest ? ` Your thinnest starting spot is ${weakest}.` : ""}
         {mine.pulse.unprojectedCount > 0
@@ -672,7 +672,7 @@ function MoverCard({ row }: { row: PulseRow }) {
           field than on paper.{" "}
           {startsBetter
             ? "More of what they own can start."
-            : "Some of what they own cannot start yet, usually picks or bench depth."}
+            : "Some of what they own cannot start yet, usually picks or bench."}
         </p>
         {row.status && (
           <p className="mt-1.5">

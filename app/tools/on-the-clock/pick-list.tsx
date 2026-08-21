@@ -53,7 +53,7 @@ export function PickList({
     return (
       <EmptyCard
         title="No picks yet."
-        body="Picks will appear here as the draft happens. Press Sync draft to pull the latest."
+        body="Picks appear here as the draft happens."
       />
     );
   }

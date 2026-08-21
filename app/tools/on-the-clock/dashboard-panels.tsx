@@ -183,7 +183,7 @@ export function BestRemainingByPosition({
       id={instanceId}
       eyebrow="At a glance"
       title="Best remaining by position"
-      helper="The top value still available at each spot."
+      helper="Top value still available at each spot."
       headingLevel={headingLevel}
     >
       <ul

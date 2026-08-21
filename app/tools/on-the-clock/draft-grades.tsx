@@ -45,7 +45,7 @@ export function DraftGrades({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="Grades compare what each pick was worth against the market price of its slot. Every team gets one once this format's FF Beacon values load."
+        body="Every pick priced against its slot. Grades appear once this format's FF Beacon values load."
       />
     );
   }
@@ -57,11 +57,11 @@ export function DraftGrades({
         icon={GraduationCap}
         eyebrow="Draft grades"
         title="Nothing to grade yet"
-        body="A grade needs picks to argue about. These fill in from the first selection and move with every one after it."
+        body="Grades fill in from the first pick and move with every one after."
         points={[
-          "A letter and a 0 to 100 score for every team, curved against this room.",
-          "Every grade opens to the components behind it, each with its own number.",
-          "A written review that leads with whatever actually moved the letter.",
+          "A letter and a 0 to 100 score, curved against this room.",
+          "Every grade opens to the numbers behind it.",
+          "A written review of what moved the letter.",
         ]}
       />
     );
@@ -70,7 +70,7 @@ export function DraftGrades({
     return (
       <EmptyCard
         title="No grades yet."
-        body="Grades appear once teams have made picks we can price. Press Sync draft to pull the latest."
+        body="Grades appear once there are picks we can price."
       />
     );
   }

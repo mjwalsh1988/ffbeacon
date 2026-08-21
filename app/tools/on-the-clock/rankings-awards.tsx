@@ -165,7 +165,7 @@ export function RankingsAwards({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="The awards are decided by FF Beacon value. They fill in once this format's rankings publish."
+        body="Awards fill in once this format's FF Beacon rankings publish."
       />
     );
   }
@@ -178,11 +178,11 @@ export function RankingsAwards({
         icon={Trophy}
         eyebrow="Draft awards"
         title="No hardware handed out yet"
-        body="Every award is decided by what teams actually do in this draft, so they sit unclaimed until the first pick lands. None of it is a prediction."
+        body="Awards go on what teams actually do, so nothing is claimed until the first pick."
         points={[
           `${awards.length} awards, recalculated on every sync.`,
-          "Best and worst drafter, the steal and the reach, and the first full starting lineup.",
-          "Trade awards for the most active and the most successful dealer in the room.",
+          "Best and worst drafter, the steal, the reach, the first full lineup.",
+          "Trade awards for the busiest and the best dealer in the room.",
         ]}
       />
     );

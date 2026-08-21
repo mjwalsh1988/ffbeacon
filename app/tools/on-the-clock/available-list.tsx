@@ -157,9 +157,9 @@ function sortValue(
 }
 
 const MODE_BLURB: Record<BuildMode, string> = {
-  compete: "Ordered for a contender: what adds the most to your starting lineup this season.",
-  balanced: "Ordered by the blend of FF Beacon value and what your lineup needs.",
-  rebuild: "Ordered for a rebuild: long-term value, youth, and upside.",
+  compete: "For a contender: what adds most to this season's lineup.",
+  balanced: "A blend of FF Beacon value and lineup need.",
+  rebuild: "For a rebuild: long-term value, youth, upside.",
 };
 
 /**

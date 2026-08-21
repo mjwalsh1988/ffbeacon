@@ -143,12 +143,12 @@ export function TradeHistory({
       ) : !boardReady || !context ? (
         <EmptyCard
           title="Trade values are not available yet."
-          body="Trade History needs the FF Beacon board for this league's format. Once the board loads, each trade gets a value breakdown here."
+          body="Trade History needs this format's FF Beacon board. Each trade gets a value breakdown once it loads."
         />
       ) : total === 0 ? (
         <EmptyCard
           title="No trades yet."
-          body="When teams in this league swap players or picks, every trade will show up here with a full value check."
+          body="Every trade in this league shows up here with a value check."
         />
       ) : (
         <>

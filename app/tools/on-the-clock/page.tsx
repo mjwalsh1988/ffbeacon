@@ -126,10 +126,10 @@ export default async function OnTheClockPage() {
       <DiscordCtaSection
         eyebrow="Need a hand mid-draft?"
         heading="Stuck on a pick? Real people are watching the clock too."
-        body="Our Discord is full of drafters who will help you weigh a pick or a trade in real time, free, no matter how many rounds are left. Want to know what powers the recommendations? Read about FF Beacon."
+        body="Drafters in our Discord will help you weigh a pick or a trade while the clock runs, free."
         isMember={isMember}
         memberHeading="Draft handled. See what else FF Beacon can do."
-        memberBody="You're already part of the crew, so we'll skip the invite. Explore the rest of the free FF Beacon toolkit for the moves you make after the clock stops."
+        memberBody="Already in the crew, so no invite. The rest of the toolkit covers the moves after the clock stops."
       />
     </main>
   );
@@ -177,7 +177,7 @@ function Masthead({ isMember, season }: { isMember: boolean; season: string }) {
     <PageMasthead
       eyebrow="Tools"
       title="Your signal on the clock, live draft help by eye or by ear."
-      description="Drafting right now? Connect your live Sleeper draft and FF Beacon calls out exactly where your team needs help, runs trade offers through a built-in calculator and a trade builder for startup and rookie drafts, and opens every team roster, the full trade history, live power rankings, and startup draft grades and awards. Every view works the same whether you read it or hear it."
+      description="Connect your live Sleeper draft. FF Beacon clears out everyone already taken and tells you who is worth your pick."
       stats={[{ label: "Season", value: season, accent: "cyan" }]}
       actions={
         <>

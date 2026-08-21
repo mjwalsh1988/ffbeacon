@@ -47,7 +47,7 @@ const GROUPS: Array<{ stage: Stage; heading: string; hint: string }> = [
   {
     stage: "completed",
     heading: "Completed and in-season drafts",
-    hint: "Already finished. Open one to review results, grades, trades, and awards.",
+    hint: "Finished. Open one for results, grades, trades, and awards.",
   },
 ];
 
@@ -118,7 +118,7 @@ export function LeaguePicker({
         <div className="mt-5">
           <EmptyCard
             title="No leagues with a draft found."
-            body="We could not find any leagues with a draft for this username and season. Check the season picker, or try Refresh once your draft opens."
+            body="No leagues with a draft for this username and season. Check the season, or refresh once your draft opens."
           />
         </div>
       ) : (

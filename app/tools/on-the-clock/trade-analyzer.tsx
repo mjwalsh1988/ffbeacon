@@ -71,7 +71,7 @@ function modeFor(pool: PlayerPool): {
       modeIcon: Sparkles,
       addLabel: "Add a rookie or pick",
       blurb:
-        "Rookies carry their FF Beacon value. An unmade rookie pick is priced as the player Sleeper ADP says goes there. Future-year picks use FF Beacon pick values.",
+        "An unmade pick is priced as the player Sleeper ADP says goes there. Future-year picks use FF Beacon pick values.",
     };
   }
   return {
@@ -79,7 +79,7 @@ function modeFor(pool: PlayerPool): {
     modeIcon: Scale,
     addLabel: "Add a draft pick",
     blurb:
-      "A made pick is worth the player taken. An unmade pick is priced as the player Sleeper ADP says goes there. Future-year picks use FF Beacon pick values, since an unscouted class has no ADP.",
+      "A made pick is worth the player taken. An unmade one is priced by Sleeper ADP. Future-year picks use FF Beacon pick values, since an unscouted class has none.",
   };
 }
 
@@ -381,7 +381,7 @@ export function TradeAnalyzer({
       {!boardReady || groups.length === 0 || !resolveContext ? (
         <EmptyCard
           title="Trade values are not available yet."
-          body="The Trade Builder needs the FF Beacon board for this league's format. Once the board loads, you can build and compare both sides here."
+          body="The Trade Builder needs this format's FF Beacon board. Both sides price up once it loads."
         />
       ) : (
         <>

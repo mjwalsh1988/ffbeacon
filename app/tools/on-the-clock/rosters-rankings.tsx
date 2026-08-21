@@ -85,7 +85,7 @@ export function RostersRankings({
     return (
       <EmptyCard
         title="FF Beacon values are not available yet."
-        body="Rosters & Rankings ranks teams by FF Beacon value. Once this format's FF Beacon rankings are published, every team's drafted value and future picks will appear here."
+        body="Drafted value and future picks appear once this format's FF Beacon rankings publish."
       />
     );
   }
@@ -93,7 +93,7 @@ export function RostersRankings({
     return (
       <EmptyCard
         title="No teams to rank yet."
-        body="Teams appear here as soon as the draft has rosters. Press Sync draft to pull the latest."
+        body="Teams appear as soon as the draft has rosters."
       />
     );
   }

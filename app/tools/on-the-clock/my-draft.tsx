@@ -67,7 +67,7 @@ export function MyDraft({
     return (
       <EmptyCard
         title="You have not made a pick yet."
-        body="Once you draft a player, your roster shape and picks show up here. We will tailor Team Need to what you still need."
+        body="Your picks and roster shape show up here as you draft."
       />
     );
   }
