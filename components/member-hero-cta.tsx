@@ -55,6 +55,12 @@ type MemberHeroCtaProps = {
   /** Required when memberMode === "scroll": id of the element to scroll to. */
   memberScrollTargetId?: string;
   memberIcon?: IconName;
+  /**
+   * Label for the non-member invite. Shortened on pages whose hero has to keep
+   * two buttons on one line at phone width; everywhere else keeps the longer
+   * default.
+   */
+  joinLabel?: string;
 };
 
 export function MemberHeroCta({
@@ -65,6 +71,7 @@ export function MemberHeroCta({
   memberHref,
   memberScrollTargetId,
   memberIcon = "arrow-right",
+  joinLabel = "Join our Discord",
 }: MemberHeroCtaProps) {
   const className = `${PRIMARY_BASE} ${SIZE_PAD[size]}`;
 
@@ -76,11 +83,11 @@ export function MemberHeroCta({
         href="/join"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Join our Discord (opens in new tab)"
+        aria-label={`${joinLabel} (opens in new tab)`}
         className={className}
       >
         <DiscordGlyph className={size === "lg" ? "h-5 w-5" : "h-4 w-4"} />
-        Join our Discord
+        {joinLabel}
       </a>
     );
   }

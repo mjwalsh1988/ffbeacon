@@ -96,7 +96,6 @@ export default async function SignalCheckPage({
           featureLabel={settings.publicLabel}
           resultLabel={settings.resultLabel}
           isMember={isMember}
-          formatCount={formats.length}
         />
 
         <section
@@ -151,47 +150,64 @@ function Masthead({
   featureLabel,
   resultLabel,
   isMember,
-  formatCount,
 }: {
   featureLabel: string;
   resultLabel: string;
   isMember: boolean;
-  formatCount: number;
 }) {
   return (
     <PageMasthead
       eyebrow="Tools"
       title={`${featureLabel}: the ${resultLabel}, explained.`}
       description={`Add players and draft picks to each side. ${featureLabel} weighs them with FF Beacon Values for your league format and returns the ${resultLabel}: who wins, the margin, and a plain-language reason, with no guesswork.`}
-      stats={
-        formatCount > 0
-          ? [{ label: "Formats", value: String(formatCount), accent: "cyan" }]
-          : []
-      }
       actions={
         <>
+          {/* Short labels on purpose: the hero shows two of these three buttons
+              at once, and the longer wording pushed the pair onto two rows at
+              phone width. */}
           <MemberHeroCta
             isMember={isMember}
             size="lg"
             memberMode="scroll"
             memberScrollTargetId="signal-check-builder-section"
-            memberLabel="Build a trade"
+            memberLabel="Build Trade"
             memberIcon="arrow-down"
+            joinLabel="Join Discord"
           />
           <Link
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            View player rankings
+            Power Rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </>
       }
     >
-      <ul role="list" aria-label="How Signal Check works" className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-        <HeroBullet icon={Scale} title="FF Beacon Values" body="One trusted value scale, weighted for your format." />
-        <HeroBullet icon={ListTree} title="Transparent reasons" body="Every adjustment is traced, not hand-waved." />
-        <HeroBullet icon={ShieldCheck} title="Shareable verdicts" body="Freeze a result and share a clean public link." />
+      <ul
+        role="list"
+        aria-label="How Signal Check works"
+        // Three across at every width. On a phone they used to stack into three
+        // full cards, which is a screen of marketing between the hero and the
+        // builder, so there they compress to icon and title on one line and the
+        // supporting line goes screen-reader-only. Matches League Pulse.
+        className="grid grid-cols-3 gap-2 sm:gap-4"
+      >
+        <HeroBullet
+          icon={Scale}
+          title="FF Beacon Values"
+          body="One trusted value scale, weighted for your format."
+        />
+        <HeroBullet
+          icon={ListTree}
+          title="Transparent reasons"
+          body="Every adjustment is traced, not hand-waved."
+        />
+        <HeroBullet
+          icon={ShieldCheck}
+          title="Shareable verdicts"
+          body="Freeze a result and share a clean public link."
+        />
       </ul>
     </PageMasthead>
   );
@@ -199,15 +215,22 @@ function Masthead({
 
 function HeroBullet({ icon: Icon, title, body }: { icon: typeof Scale; title: string; body: string }) {
   return (
-    <li className="rounded-card border border-line bg-surface/60 p-4">
+    <li className="rounded-card border border-line bg-surface/60 p-2.5 text-center sm:p-4 sm:text-left">
       <span
         aria-hidden="true"
-        className="flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
+        className="mx-auto flex h-9 w-9 items-center justify-center rounded-card border border-line bg-base text-brand-cyan sm:mx-0"
       >
         <Icon className="h-4 w-4" />
       </span>
-      <p className="mt-3 text-sm font-semibold text-ink">{title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{body}</p>
+      <p className="mt-2 text-[11px] font-semibold leading-tight text-ink sm:mt-3 sm:text-sm">
+        {title}
+      </p>
+      {/* sr-only rather than hidden. The line is not worth a third of a phone
+          screen, but it is still the sentence that explains the title, so a
+          screen reader hears it at every width and it reappears from sm up. */}
+      <p className="sr-only sm:not-sr-only sm:mt-1 sm:text-xs sm:leading-relaxed sm:text-ink-muted">
+        {body}
+      </p>
     </li>
   );
 }
