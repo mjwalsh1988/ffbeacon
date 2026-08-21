@@ -35,11 +35,11 @@ function describeWeek(week: ScheduleWeekView): string {
   // Says what a card does before the reader has to guess. Every card carries
   // its own "View both starting lineups" line, and the helper is where somebody
   // scanning the panel heading finds out first.
-  const open = " Open any matchup for both starting lineups.";
-  const playoffs = week.isPlayoffWeek ? " This is a playoff week." : "";
+  const open = " Tap any matchup for both lineups.";
+  const playoffs = week.isPlayoffWeek ? " Playoff week." : "";
   // The glow on the panel is the only other thing saying which week is live,
   // and a glow is a colour. The sentence carries it too, always.
-  const live = week.isCurrent ? " This is the live week." : "";
+  const live = week.isCurrent ? " Live week." : "";
   const tail = `${open}${playoffs}${live}`;
 
   if (total === 0) return `No games scheduled.${playoffs}${live}`;

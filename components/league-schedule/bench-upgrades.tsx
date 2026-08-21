@@ -1,13 +1,32 @@
-import { Repeat } from "lucide-react";
+import { ArrowDown, ArrowUp, Repeat } from "lucide-react";
+import { PlayerHeadshot } from "@/components/player-headshot";
 import { Panel } from "@/components/dashboard-panel";
-import type { BenchUpgrade, MatchupSide } from "@/lib/league-schedule/types";
-import { BENCH_CHIP_THRESHOLD, CHIP, fmtPoints, fmtSigned } from "./format";
+import type { BenchUpgrade, MatchupSide, SchedulePlayer } from "@/lib/league-schedule/types";
+import {
+  BENCH_CHIP_THRESHOLD,
+  CHIP,
+  fmtPoints,
+  fmtSigned,
+  opponentLabel,
+  opponentWords,
+} from "./format";
 
 /**
  * What this lineup left behind.
  *
  * Server component. Everything on it is already computed on the MatchupSide;
- * this file decides only what words go around the numbers.
+ * this file decides only what words and what layout go around the numbers.
+ *
+ * TWO RENDERS OF ONE SWAP, AND WHY
+ *   A swap is a comparison of two players, and the fastest way to read a
+ *   comparison is to see both faces, both positions, both opponents, and both
+ *   projections side by side with the gain called out. The fastest way to HEAR
+ *   one is a sentence. Those are different shapes, and trying to make one serve
+ *   both is what produced the old version: a sentence with the names bolded,
+ *   which read fine and told a sighted reader nothing about who these players
+ *   are. So the card is drawn for the eye and marked aria-hidden, and an
+ *   sr-only sentence carries the identical facts for the ear. Every figure
+ *   appears in both. Neither is a summary of the other.
  *
  * WHY THE SWAPS AND THE TOTAL ARE LABELLED SEPARATELY
  *   Each swap is worth what it is worth on its own, against the lineup exactly
@@ -29,6 +48,18 @@ import { BENCH_CHIP_THRESHOLD, CHIP, fmtPoints, fmtSigned } from "./format";
  *   they have a perfect lineup when we simply could not check is worse than
  *   telling them we could not check.
  */
+
+/**
+ * The stand-in lib/league-schedule/matchup.ts uses for an unfilled slot.
+ *
+ * It is a SchedulePlayer with a synthetic id and every number null, so it has
+ * no photo to fetch and no projection to print. Detected on the two fields that
+ * cannot both be empty on a real player rather than on the id string, which is
+ * an implementation detail of the other module.
+ */
+function isEmptySlot(player: SchedulePlayer): boolean {
+  return player.playerId === null && player.position === "";
+}
 
 export function BenchUpgrades({
   side,
@@ -65,22 +96,22 @@ export function BenchUpgrades({
 
   const helper = (() => {
     if (gap === null) {
-      return "Projections are not available for this week, so there is nothing to compare against.";
+      return "No projections this week, so there is nothing to compare.";
     }
     if (!hasGap) {
       return isFinal
         ? "Nothing on the bench would have scored more."
-        : "Nothing on the bench beats the lineup as it stands.";
+        : "Nothing on the bench beats this lineup.";
     }
     return isFinal
       ? `${fmtPoints(gap)} points sat on the bench in ${weekPhrase}.`
-      : `${fmtPoints(gap)} projected points are sitting on the bench.`;
+      : `${fmtPoints(gap)} projected points are on the bench.`;
   })();
 
   return (
     <Panel
       eyebrow="Lineup check"
-      title={`${side.teamName} bench upgrades`}
+      title={`Better starts for ${side.teamName}`}
       helper={helper}
       headingLevel={headingLevel}
     >
@@ -99,17 +130,62 @@ export function BenchUpgrades({
         </p>
       ) : (
         <>
-          <ul role="list" className="space-y-2.5">
+          <ul role="list" className="space-y-3">
             {upgrades.map((upgrade, index) => (
               <li
                 key={`${upgrade.inPlayer.sleeperId}-${upgrade.outPlayer.sleeperId}-${index}`}
-                className="rounded-card border border-line bg-base/50 px-3 py-2.5"
+                className="rounded-card border border-line bg-base/50 p-2.5 sm:p-3"
               >
-                <UpgradeSentence
-                  upgrade={upgrade}
-                  isFinal={isFinal}
-                  isViewer={isViewer}
-                />
+                {/* For the ear. Identical facts, sentence shape. */}
+                <p className="sr-only">{spokenUpgrade(upgrade, isFinal, isViewer)}</p>
+
+                {/* For the eye. */}
+                <div aria-hidden="true">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className={`${CHIP} font-bold uppercase tracking-wide`}>
+                      {upgrade.slotLabel}
+                    </span>
+                    <span className="rounded-full border border-signal-success/50 bg-signal-success/10 px-2.5 py-1 font-mono text-xs font-bold tabular-nums text-signal-success">
+                      {fmtSigned(upgrade.gain)} pts
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 space-y-1.5">
+                    <PlayerLine
+                      player={upgrade.inPlayer}
+                      role="in"
+                      isFinal={isFinal}
+                      gain={upgrade.gain}
+                    />
+                    <PlayerLine
+                      player={upgrade.outPlayer}
+                      role="out"
+                      isFinal={isFinal}
+                      gain={null}
+                    />
+                  </div>
+
+                  {/* Inside the aria-hidden block on purpose: spokenUpgrade
+                      already carries this warning, and a second copy would have
+                      a screen reader read the roster-move caveat twice. */}
+                  {upgrade.requiresMove && (
+                    <>
+                      <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+                        {upgrade.inPlayer.name} is on injured reserve or the taxi squad,
+                        so starting him needs a roster move first. Sleeper will not let{" "}
+                        {isViewer ? "you" : "them"} slot him straight in.
+                      </p>
+                      <p className="mt-1.5">
+                        <span
+                          className={`${CHIP} border-signal-warning/50 text-signal-warning`}
+                        >
+                          <Repeat className="h-3.5 w-3.5" />
+                          Roster move
+                        </span>
+                      </p>
+                    </>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -134,64 +210,136 @@ export function BenchUpgrades({
 }
 
 /**
- * One swap, with the arithmetic on the page.
+ * One player in a swap, drawn.
  *
- * The names are the load-bearing part of the sentence, so they carry the weight
- * and the gain carries an explicit sign. A swap that needs a roster move first
- * says so on its own line and wears a chip with a word in it, because a manager
- * who acts on it and finds Sleeper will not let them has been misled by this
- * panel.
+ * The projection is the right-hand figure and the gain rides in brackets on the
+ * incoming half only, because the gain is a property of the swap and printing it
+ * against both players would make it look like each of them moved by that much.
+ * Green for the player coming in, muted for the one going out; the START and SIT
+ * words carry the same distinction, so the tint is reinforcement rather than the
+ * signal. This whole subtree is inside an aria-hidden block: the sentence above
+ * it is what a screen reader gets.
  */
-function UpgradeSentence({
-  upgrade,
+function PlayerLine({
+  player,
+  role,
   isFinal,
-  isViewer,
+  gain,
 }: {
-  upgrade: BenchUpgrade;
+  player: SchedulePlayer;
+  role: "in" | "out";
   isFinal: boolean;
-  isViewer: boolean;
+  /** Only ever set on the incoming half. */
+  gain: number | null;
 }) {
-  return (
-    <>
-      <p className="text-sm leading-relaxed text-ink">
-        {isFinal ? (
-          <>
-            <strong className="font-semibold">{upgrade.inPlayer.name}</strong> would have
-            outscored <strong className="font-semibold">{upgrade.outPlayer.name}</strong>{" "}
-            in {upgrade.slotLabel} by{" "}
-            <span className="font-mono font-bold tabular-nums">
-              {fmtPoints(upgrade.gain)}
-            </span>{" "}
-            points.
-          </>
-        ) : (
-          <>
-            Start <strong className="font-semibold">{upgrade.inPlayer.name}</strong> over{" "}
-            <strong className="font-semibold">{upgrade.outPlayer.name}</strong> in{" "}
-            {upgrade.slotLabel}.{" "}
-            <span className="font-mono font-bold tabular-nums">
-              {fmtSigned(upgrade.gain)}
-            </span>{" "}
-            projected points.
-          </>
-        )}
-      </p>
+  const incoming = role === "in";
+  const empty = isEmptySlot(player);
+  const points = isFinal ? player.actual : player.projected;
+  const Icon = incoming ? ArrowUp : ArrowDown;
 
-      {upgrade.requiresMove && (
-        <>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
-            {upgrade.inPlayer.name} is on injured reserve or the taxi squad, so starting
-            him needs a roster move first. Sleeper will not let{" "}
-            {isViewer ? "you" : "them"} slot him straight in.
-          </p>
-          <p className="mt-1.5">
-            <span className={`${CHIP} border-signal-warning/50 text-signal-warning`}>
-              <Repeat aria-hidden="true" className="h-3.5 w-3.5" />
-              Roster move
-            </span>
-          </p>
-        </>
+  return (
+    <div
+      className={`flex items-center gap-2.5 rounded-card border px-2.5 py-2 ${
+        incoming
+          ? "border-signal-success/35 bg-signal-success/[0.06]"
+          : "border-line bg-surface/60"
+      }`}
+    >
+      {empty ? (
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-line-accent text-[10px] font-bold text-ink-subtle">
+          --
+        </span>
+      ) : (
+        <PlayerHeadshot sleeperId={player.sleeperId} name="" size={36} className="shrink-0" />
       )}
-    </>
+
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span
+            className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide ${
+              incoming
+                ? "bg-signal-success/20 text-signal-success"
+                : "bg-line-accent text-ink-subtle"
+            }`}
+          >
+            <Icon className="h-2.5 w-2.5" />
+            {incoming ? "Start" : "Sit"}
+          </span>
+          <span className="min-w-0 truncate text-sm font-bold text-ink">
+            {empty ? "Empty slot" : player.name}
+          </span>
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
+          {empty
+            ? "Nobody is in this slot"
+            : `${player.position}${player.team ? `, ${player.team}` : ""} ${opponentLabel(
+                player.nflOpponent,
+                player.nflIsHome,
+              )}`}
+        </span>
+      </span>
+
+      <span className="shrink-0 text-right">
+        {points === null ? (
+          <span className="block text-[11px] text-ink-subtle">
+            {isFinal ? "No score" : "No proj"}
+          </span>
+        ) : (
+          <span className="block font-mono text-base font-extrabold tabular-nums text-ink">
+            {fmtPoints(points, 2)}
+            {gain !== null && (
+              <span className="ml-1 font-mono text-xs font-bold tabular-nums text-signal-success">
+                ({fmtSigned(gain)})
+              </span>
+            )}
+          </span>
+        )}
+      </span>
+    </div>
   );
+}
+
+/**
+ * One swap as a sentence, for a screen reader.
+ *
+ * Carries everything the drawn card carries: both names, both positions, both
+ * NFL opponents, both figures, and the gain. A final week says what was scored,
+ * an unplayed one says what is projected, because on a settled week the result
+ * is the fact and the forecast is the footnote.
+ */
+function spokenUpgrade(
+  upgrade: BenchUpgrade,
+  isFinal: boolean,
+  isViewer: boolean,
+): string {
+  const describe = (player: SchedulePlayer): string => {
+    if (isEmptySlot(player)) return "an empty slot, with no projection";
+    const parts: string[] = [player.name, player.position];
+    if (player.team) parts.push(player.team);
+    parts.push(opponentWords(player.nflOpponent, player.nflIsHome));
+    const value = isFinal ? player.actual : player.projected;
+    parts.push(
+      value === null
+        ? isFinal
+          ? "no score recorded"
+          : "no projection published"
+        : isFinal
+          ? `scored ${fmtPoints(value, 2)}`
+          : `projected ${fmtPoints(value, 2)}`,
+    );
+    return parts.join(", ");
+  };
+
+  const lead = isFinal
+    ? `In ${upgrade.slotLabel}, ${describe(upgrade.inPlayer)}, would have outscored ${describe(
+        upgrade.outPlayer,
+      )} by ${fmtPoints(upgrade.gain)} points.`
+    : `In ${upgrade.slotLabel}, start ${describe(upgrade.inPlayer)}, over ${describe(
+        upgrade.outPlayer,
+      )}. Worth ${fmtSigned(upgrade.gain)} projected points.`;
+
+  if (!upgrade.requiresMove) return lead;
+  return `${lead} ${upgrade.inPlayer.name} is on injured reserve or the taxi squad, so starting him needs a roster move first. Sleeper will not let ${
+    isViewer ? "you" : "them"
+  } slot him straight in.`;
 }

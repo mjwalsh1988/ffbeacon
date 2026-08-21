@@ -210,7 +210,11 @@ function SideRow({
           )}
           {leavingPoints !== null && (
             <span className={CHIP}>
-              {isFinal ? "Left" : "Leaving"} {fmtPoints(leavingPoints)} points on the bench
+              {fmtPoints(leavingPoints)}
+              {/* "pts" for the eye, "points" for the ear: a screen reader
+                  spells the abbreviation out letter by letter. */}
+              <span aria-hidden="true"> pts</span>
+              <span className="sr-only"> points</span> on the bench
             </span>
           )}
         </p>

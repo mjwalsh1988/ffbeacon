@@ -303,7 +303,7 @@ describe("buildTradeReasons: odds", () => {
       }),
     );
     expect(find(reasons, "odds")?.detail).toBe(
-      "Projected wins go from 6.4 to 7.1. Playoff odds go from 41 percent to 58 percent.",
+      "Projected wins go from 6.4 to 7.1. Playoff odds go from 41% to 58%.",
     );
   });
 
@@ -344,7 +344,7 @@ describe("buildTradeReasons: value, age, picks", () => {
       baseInput({ mine: team({ valueBefore: 20000, valueDelta: 1240 }) }),
     );
     expect(find(reasons, "value-gain")?.detail).toBe(
-      "You come out 1,240 points of trade value ahead, about 6 percent of your roster.",
+      "You come out 1,240 points of trade value ahead, about 6% of your roster.",
     );
   });
 

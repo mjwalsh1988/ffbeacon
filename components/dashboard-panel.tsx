@@ -56,16 +56,28 @@ export function Panel({
             "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
         }}
       />
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line/70 px-4 py-3 sm:px-5">
+      {/* THE HEADER IS A BAND, NOT A LINE OF TEXT.
+          A dozen of these stack down a page, and with the header sharing the
+          body's background the only thing separating one section from the next
+          was a one pixel rule the eye has to go looking for. A tinted band, a
+          full-weight border under it, and a short beacon bar beside the eyebrow
+          give every section a visible start. Nothing here carries meaning on
+          its own: the eyebrow and the heading are the labels, and the bar is
+          aria-hidden. */}
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line bg-surface-elevated/50 px-4 py-3.5 sm:px-5">
         <div className="min-w-0">
           {eyebrow && (
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+            <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+              <span
+                aria-hidden="true"
+                className="h-3 w-1 shrink-0 rounded-full bg-beacon"
+              />
               {eyebrow}
             </p>
           )}
           <Heading
             id={titleId}
-            className="mt-0.5 text-base font-semibold tracking-tight text-ink"
+            className="mt-1 text-[17px] font-bold leading-tight tracking-tight text-ink"
           >
             {title}
           </Heading>

@@ -307,7 +307,7 @@ export function TradeBuilder({
     <Panel
       eyebrow="Build"
       title="Build a trade"
-      helper="Put anything you like on either side. It is graded exactly like a suggestion."
+      helper="Put anything on either side. Graded the same as a suggestion."
     >
       {/* Every add, remove, and team change lands here. Polite, so it waits for
           whatever the reader was already hearing to finish. role="status" for
@@ -421,8 +421,8 @@ export function TradeBuilder({
         )}
         {evaluateHref && (
           <p className="text-xs text-ink-muted">
-            The result gets its own address, so you can send it to whoever you are trading
-            with.
+            The review appears below, at its own address, so you can send it to whoever
+            you are trading with.
           </p>
         )}
       </div>

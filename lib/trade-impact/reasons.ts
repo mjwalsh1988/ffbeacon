@@ -21,11 +21,12 @@
  * because that is how a reader scans, but nothing is dropped to make room, and
  * there is no cap on how many bad-tone reasons come back.
  *
- * Percentages are spelled "percent" rather than written with the symbol, because
- * these strings are read aloud and screen readers handle the word more reliably
- * than the glyph. Points carry one decimal; percentages and trade value are
- * whole numbers, because a tenth of a percentage point of playoff odds is below
- * what the simulation can actually resolve.
+ * Percentages use the "%" symbol. These strings are read aloud as well as read,
+ * and every screen reader in common use announces "%" as "percent"; spelling the
+ * word out cost a sighted reader four extra words per sentence to buy nothing.
+ * Points carry one decimal; percentages and trade value are whole numbers,
+ * because a tenth of a percentage point of playoff odds is below what the
+ * simulation can actually resolve.
  *
  * Pure. No database, no React, no clock.
  */
@@ -334,7 +335,7 @@ function oddsReason(input: ReasonInput): TradeReason | null {
     );
   }
   parts.push(
-    `Playoff odds go from ${percent(m.playoffOddsBefore)} percent to ${percent(m.playoffOddsAfter)} percent.`,
+    `Playoff odds go from ${percent(m.playoffOddsBefore)}% to ${percent(m.playoffOddsAfter)}%.`,
   );
   if (
     finite(m.titleOddsBefore) &&
@@ -342,7 +343,7 @@ function oddsReason(input: ReasonInput): TradeReason | null {
     percent(m.titleOddsBefore) !== percent(m.titleOddsAfter)
   ) {
     parts.push(
-      `Title odds go from ${percent(m.titleOddsBefore)} percent to ${percent(m.titleOddsAfter)} percent.`,
+      `Title odds go from ${percent(m.titleOddsBefore)}% to ${percent(m.titleOddsAfter)}%.`,
     );
   }
 
@@ -366,7 +367,7 @@ function valueReason(input: ReasonInput): TradeReason | null {
     return null;
   }
 
-  const shareClause = hasBase ? `, about ${percent(share)} percent of your roster` : "";
+  const shareClause = hasBase ? `, about ${percent(share)}% of your roster` : "";
   if (m.valueDelta > 0) {
     return {
       kind: "value-gain",

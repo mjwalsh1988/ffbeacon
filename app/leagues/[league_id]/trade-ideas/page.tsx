@@ -706,6 +706,32 @@ async function BuildSection({
 
   return (
     <div className="space-y-6">
+      {/* THE BUILDER SITS ABOVE THE ANSWER.
+          It is the thing a reader came here to use, and the deal they just
+          assembled is the context for everything under it. Below the evaluation
+          it also meant that pressing Evaluate moved the page UP, away from the
+          form, with the result somewhere off the bottom. Above it, the anchor
+          jump on Evaluate lands on the evaluation as a forward move, which is
+          what "show me the answer" should feel like.
+
+          Keyed on the trade in the address. Pressing Evaluate is a navigation
+          to the same route, which re-renders this server component but does NOT
+          remount the client one, so without a key the builder would keep the
+          state it had before the URL moved. The key makes the address the
+          authority; the state it rebuilds is identical, because the address was
+          written from it. */}
+      <TradeBuilder
+        key={`${decoded.proposal?.theirRosterId ?? "none"}|${proposalParams.in ?? ""}|${proposalParams.out ?? ""}`}
+        sleeperLeagueId={sleeperLeagueId}
+        searchedUsername={searchedUsername}
+        source={sourceSlug}
+        myRosterId={myRosterId}
+        teams={teams}
+        isDynasty={finderLeague.isDynasty}
+        allowPicks={finderLeague.allowPicks}
+        initialProposal={decoded.proposal}
+      />
+
       {/* Always rendered, and the shell of it renders OUTSIDE the Suspense
           boundary on purpose. `#trade-evaluation` has to be a real element at
           first paint: put inside the boundary it would not exist when the
@@ -753,24 +779,6 @@ async function BuildSection({
           </Suspense>
         )}
       </section>
-
-      {/* Keyed on the trade in the address. Pressing Evaluate is a navigation
-          to the same route, which re-renders this server component but does NOT
-          remount the client one, so without a key the builder would keep the
-          state it had before the URL moved. The key makes the address the
-          authority; the state it rebuilds is identical, because the address was
-          written from it. */}
-      <TradeBuilder
-        key={`${decoded.proposal?.theirRosterId ?? "none"}|${proposalParams.in ?? ""}|${proposalParams.out ?? ""}`}
-        sleeperLeagueId={sleeperLeagueId}
-        searchedUsername={searchedUsername}
-        source={sourceSlug}
-        myRosterId={myRosterId}
-        teams={teams}
-        isDynasty={finderLeague.isDynasty}
-        allowPicks={finderLeague.allowPicks}
-        initialProposal={decoded.proposal}
-      />
     </div>
   );
 }

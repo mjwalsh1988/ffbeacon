@@ -14,6 +14,14 @@ import type { TradeReason } from "@/lib/trade-impact/types";
  *   on. Anyone who "simplifies" this by hiding the bad rows behind a disclosure
  *   has changed what the feature is for.
  *
+ * TWO COLUMNS ON A DESKTOP, ONE ON A PHONE
+ *   A deal fires eight or nine of these, and in a single column that is most of
+ *   a screen of scrolling for a set of two-line notes. The grid is `md:` rather
+ *   than `sm:` because a reason detail runs to about twenty words and a tablet
+ *   half-column is where it starts wrapping to four lines. Reading order is
+ *   unchanged: a grid lays items out in DOM order, so the gains still come
+ *   before the notes and the costs however many columns there are.
+ *
  * WHY THE ORDER IS GAINS, THEN NOTES, THEN COSTS
  *   A stable partition by tone, so the answer to "is this good for me" arrives
  *   before the caveats to it. The sort is stable, so whatever ordering the
@@ -36,27 +44,37 @@ type Tone = TradeReason["tone"];
 
 const TONE: Record<
   Tone,
-  { word: string; Icon: typeof ArrowUpRight; text: string; border: string; rank: number }
+  {
+    word: string;
+    Icon: typeof ArrowUpRight;
+    text: string;
+    border: string;
+    card: string;
+    rank: number;
+  }
 > = {
   good: {
     word: "Helps",
     Icon: ArrowUpRight,
     text: "text-signal-success",
-    border: "border-signal-success/60",
+    border: "border-l-signal-success",
+    card: "border-signal-success/30 bg-signal-success/[0.05]",
     rank: 0,
   },
   neutral: {
     word: "Note",
     Icon: Minus,
     text: "text-ink-muted",
-    border: "border-line-accent",
+    border: "border-l-line-accent",
+    card: "border-line bg-base/50",
     rank: 1,
   },
   bad: {
     word: "Costs",
     Icon: ArrowDownRight,
     text: "text-signal-danger",
-    border: "border-signal-danger/60",
+    border: "border-l-signal-danger",
+    card: "border-signal-danger/30 bg-signal-danger/[0.05]",
     rank: 2,
   },
 };
@@ -86,18 +104,24 @@ export function ReasonList({
         // reads as an answer, which is what it is: the model looked and found
         // nothing that moves in either direction.
         <p className="text-sm leading-relaxed text-ink-muted">
-          Nothing about this trade moves your team far enough in either direction
-          to call out. The figures below are the whole story.
+          Nothing about this trade moves your team far enough either way to call
+          out. The figures below are the whole story.
         </p>
       ) : (
-        <ul aria-labelledby={headingId} className="space-y-3">
+        <ul
+          aria-labelledby={headingId}
+          className="grid gap-3 md:grid-cols-2"
+        >
           {ordered.map((reason) => {
             const tone = TONE[reason.tone];
             const Icon = tone.Icon;
             return (
               <li
                 key={reason.kind + reason.label}
-                className={`border-l-2 pl-3 ${tone.border}`}
+                // items-stretch by default in a grid, so two cards on one row
+                // share a height and the tinted edge runs the full depth of the
+                // taller one rather than stopping halfway down.
+                className={`h-full rounded-card border border-l-[3px] px-3 py-2.5 ${tone.card} ${tone.border}`}
               >
                 <p
                   className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] ${tone.text}`}

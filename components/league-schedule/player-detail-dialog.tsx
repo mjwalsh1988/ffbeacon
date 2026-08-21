@@ -57,8 +57,8 @@ function positionWords(position: string): string {
  * Above 1 means the defense has given up MORE than the league average to this
  * position, which is why "above average" attaches to what the opponent allowed
  * rather than to how the defense played. Exactly 1 is not rounded into one of
- * the other two, because "an average matchup" is a real finding and "0 percent
- * above average" is a sentence nobody says.
+ * the other two, because "an average matchup" is a real finding and "0% above
+ * average" is a sentence nobody says.
  */
 function describeMatchup(
   multiplier: number | null,
@@ -72,16 +72,16 @@ function describeMatchup(
     return `${team} is an average matchup for ${positionWords(position)}.`;
   }
   const direction = multiplier > 1 ? "above" : "below";
-  return `${team} has allowed ${percent} percent ${direction} average to ${positionWords(position)}.`;
+  return `${team} has allowed ${percent}% ${direction} average to ${positionWords(position)}.`;
 }
 
-/** "1.02, which lifts the projection by 2 percent." */
+/** "1.02, which lifts the projection by 2%." */
 function describeReliability(reliability: number | null): string {
   if (reliability === null) return "Not available";
   const percent = Math.round(Math.abs(reliability - 1) * 100);
   if (percent === 0) return `${reliability.toFixed(2)}, no adjustment either way.`;
   const verb = reliability > 1 ? "lifts" : "trims";
-  return `${reliability.toFixed(2)}, which ${verb} the projection by ${percent} percent.`;
+  return `${reliability.toFixed(2)}, which ${verb} the projection by ${percent}%.`;
 }
 
 export function PlayerDetailDialog({
@@ -148,24 +148,24 @@ export function PlayerDetailDialog({
             }
           />
           <Row
-            term="Weekly spread"
+            term="Week to week swing"
             value={
               player.sigma === null
                 ? "Not available"
-                : `plus or minus ${fmtPoints(player.sigma)} points in a typical week`
+                : `Give or take ${fmtPoints(player.sigma)} points in a typical week.`
             }
           />
           <Row term="NFL opponent" value={opponent} />
           <Row
-            term="Matchup strength"
+            term="This matchup"
             value={describeMatchup(player.opponentMultiplier, player.position, player.nflOpponent)}
           />
           <Row
-            term="Beats his projection"
+            term="Beats his number"
             value={
               player.beatRate === null
                 ? "Not available"
-                : `${Math.round(player.beatRate * 100)} percent of the weeks he was projected. Half is the coin flip.`
+                : `${Math.round(player.beatRate * 100)}% of the weeks he was projected. 50% is a coin flip.`
             }
           />
           <Row
@@ -173,7 +173,7 @@ export function PlayerDetailDialog({
             value={
               player.availability === null
                 ? "Not available"
-                : `Played ${Math.round(player.availability * 100)} percent of the weeks he was projected for.`
+                : `Played ${Math.round(player.availability * 100)}% of the weeks he was projected for.`
             }
           />
           <Row term="Reliability" value={describeReliability(player.reliability)} />

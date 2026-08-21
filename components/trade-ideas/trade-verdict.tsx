@@ -6,6 +6,7 @@ import { Panel } from "@/components/dashboard-panel";
 import { ordinal } from "@/components/league-schedule/format";
 import { ReasonList } from "@/components/trade-ideas/reason-list";
 import { ImpactWeeks } from "@/components/trade-ideas/impact-weeks";
+import { VerdictTabs } from "@/components/trade-ideas/verdict-tabs";
 import type {
   ImpactGaps,
   ResolvedAsset,
@@ -16,12 +17,15 @@ import type {
 /**
  * The whole evaluation of one trade, suggested or built.
  *
- * FOUR PANELS, FOUR HEADINGS, ONE ORDER
- *   Reasons, Performance, Value, For them. Each is a real <section> with its own
- *   eyebrow and heading, so a screen reader user can jump straight to the part
- *   they care about instead of arrowing through forty numbers to find it. The
- *   order is the order a manager actually asks the questions in: what does this
- *   do to me, does it win me games, is it fair, and can I expect a yes.
+ * TWO TABS, FOUR PANELS, ONE ORDER
+ *   "Your season" carries the reasons, the week by week lineup effect, and what
+ *   the deal does for the other team. "Value" carries what the assets are worth
+ *   and the Signal Check second opinion. The two answer questions that routinely
+ *   disagree, which is why they are two tabs rather than one long page: a deal
+ *   can add value and cost wins, and a reader needs to check each without
+ *   scrolling past the other. Inside a tab every panel is a real <section> with
+ *   its own eyebrow and heading, so a screen reader user can jump straight to
+ *   the part they care about.
  *
  * REASONS IS THE PRIMARY SURFACE
  *   Exactly one elevated panel per screen, and this is it: accent border, corner
@@ -44,16 +48,15 @@ import type {
  *   as much as on a desktop. The only thing mobile changes is where the numbers
  *   wrap.
  *
- * Server component: props in, markup out. It fetches nothing.
+ * Server component: props in, markup out. It fetches nothing. The tab switch is
+ * the one client component, and it receives these panels as children.
  */
 
 const UNAVAILABLE = "Not available";
 
 const GAP_COPY = {
-  lineup:
-    "This league has no weekly projections loaded, so lineup impact is unavailable.",
-  simulation:
-    "There are no regular season games left, so the odds figures are unavailable.",
+  lineup: "No weekly projections in this league, so lineup impact is unavailable.",
+  simulation: "No regular season games left, so the odds are unavailable.",
   picks: "This league has no published pick values.",
 } as const;
 
@@ -101,7 +104,7 @@ export function TradeVerdict({
 }) {
   const mine = impact.mine;
 
-  return (
+  const impactTab = (
     <div className="space-y-4">
       {/* 1. REASONS. The primary surface.
           The wash sits on a wrapper rather than on the Panel because Panel owns
@@ -121,7 +124,7 @@ export function TradeVerdict({
           id="trade-verdict-reasons"
           eyebrow="Reasons"
           title="What this trade does for you"
-          helper="Every gain and every cost, in one list."
+          helper="Every gain and every cost."
           headingLevel={3}
           className="!border-line-accent shadow-[0_0_70px_-45px_rgba(168,85,247,0.9)]"
         >
@@ -135,29 +138,19 @@ export function TradeVerdict({
 
       {/* 2. PERFORMANCE. */}
       <Panel
-        eyebrow="Performance"
-        title="Wins, before and after"
-        helper={`${myTeamLabel} across the remaining schedule.`}
+        eyebrow="Wins"
+        title="Before and after"
+        helper={`${myTeamLabel}, rest of season.`}
         headingLevel={3}
       >
         <PerformanceBody impact={impact} teamName={myTeamLabel} />
       </Panel>
 
-      {/* 3. VALUE. */}
+      {/* 3. FOR THEM. */}
       <Panel
-        eyebrow="Value"
-        title="What the assets are worth"
-        helper={`Priced in ${impact.formatDisplay} from ${impact.sourceDisplay}.`}
-        headingLevel={3}
-      >
-        <ValueBody impact={impact} />
-      </Panel>
-
-      {/* 4. FOR THEM. */}
-      <Panel
-        eyebrow="For them"
+        eyebrow="Their side"
         title={`What it does for ${theirTeamLabel}`}
-        helper="The acceptance band means nothing without their side of it."
+        helper="Why they might say yes."
         headingLevel={3}
       >
         {/* Two renders of the same content rather than one <details> that CSS
@@ -189,25 +182,42 @@ export function TradeVerdict({
       </Panel>
 
       <p className="px-1 text-[11px] leading-relaxed text-ink-subtle">
-        Values in {impact.formatDisplay} from {impact.sourceDisplay}
-        {impact.pickSourceDisplay
-          ? `, draft pick values from ${impact.pickSourceDisplay}`
-          : ""}
-        . Lineup and odds figures cover {impact.weeksConsidered}{" "}
-        {impact.weeksConsidered === 1 ? "remaining week" : "remaining weeks"}.
+        Lineup and odds cover {impact.weeksConsidered}{" "}
+        {impact.weeksConsidered === 1 ? "week" : "weeks"} left.
+        {/* The lineup model is the one thing above that a reader cannot see the
+            inputs for, so it says so once rather than per tile. */}
+        {mine.weeksImproved + mine.weeksWorsened > 0 && (
+          <>
+            {" "}
+            {mine.weeksImproved} get better, {mine.weeksWorsened} get worse.
+          </>
+        )}
       </p>
-
-      {/* The lineup model is the one thing above that a reader cannot see the
-          inputs for, so it says so once rather than per tile. */}
-      {mine.weeksImproved + mine.weeksWorsened > 0 && (
-        <p className="px-1 text-[11px] leading-relaxed text-ink-subtle">
-          {mine.weeksImproved} {mine.weeksImproved === 1 ? "week gets" : "weeks get"}{" "}
-          better, {mine.weeksWorsened}{" "}
-          {mine.weeksWorsened === 1 ? "week gets" : "weeks get"} worse.
-        </p>
-      )}
     </div>
   );
+
+  const valueTab = (
+    <div className="space-y-4">
+      <Panel
+        eyebrow="Value"
+        title="What the assets are worth"
+        helper={`${impact.formatDisplay} values from ${impact.sourceDisplay}.`}
+        headingLevel={3}
+      >
+        <ValueBody impact={impact} />
+      </Panel>
+
+      <p className="px-1 text-[11px] leading-relaxed text-ink-subtle">
+        {impact.formatDisplay} values from {impact.sourceDisplay}
+        {impact.pickSourceDisplay
+          ? `, pick values from ${impact.pickSourceDisplay}`
+          : ""}
+        .
+      </p>
+    </div>
+  );
+
+  return <VerdictTabs impact={impactTab} value={valueTab} />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,20 +238,20 @@ function PerformanceBody({
     <div>
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {noLineup ? (
-          <GapTile label="Points per week" reason={GAP_COPY.lineup} />
+          <GapTile label="Points a week" reason={GAP_COPY.lineup} />
         ) : (
           <BeforeAfterTile
-            label="Points per week"
+            label="Points a week"
             before={t.lineupBefore}
             after={t.lineupAfter}
             digits={1}
-            changeSuffix="per week"
+            changeSuffix="a week"
             accent="cyan"
           />
         )}
         {noSim ? (
           <>
-            <GapTile label="Projected wins" reason={GAP_COPY.simulation} />
+            <GapTile label="Wins" reason={GAP_COPY.simulation} />
             <GapTile label="Playoff odds" reason={GAP_COPY.simulation} />
             <GapTile label="Title odds" reason={GAP_COPY.simulation} />
           </>
@@ -251,7 +261,7 @@ function PerformanceBody({
                 nothing that would let us name the losses without inventing a
                 game count. */}
             <BeforeAfterTile
-              label="Projected wins"
+              label="Wins"
               before={t.projectedWinsBefore}
               after={t.projectedWinsAfter}
               digits={1}
@@ -308,7 +318,7 @@ function BeforeAfterTile({
   accent: "cyan" | "purple" | "ink";
 }) {
   if (before === null || after === null) {
-    return <GapTile label={label} reason="This figure has not been computed yet." />;
+    return <GapTile label={label} reason="Not computed yet." />;
   }
   const color =
     accent === "purple"
@@ -337,7 +347,14 @@ function BeforeAfterTile({
   );
 }
 
-/** Odds move in percentage points, and the change line says so. */
+/**
+ * Odds, before and after.
+ *
+ * The change line does NOT read "+17%". The two figures above it are already
+ * percentages, and a percentage under two percentages reads as "17% more
+ * likely", which is a different and larger claim than "up 17 points of chance".
+ * So the number keeps its sign and the words name what moved.
+ */
 function OddsTile({
   label,
   before,
@@ -367,8 +384,14 @@ function OddsTile({
       <dd className={`mt-0.5 font-mono text-base font-bold tabular-nums ${color}`}>
         {fmtOdds(before)} to {fmtOdds(after)}
         <span className="mt-0.5 block font-sans text-[10px] font-normal leading-tight text-ink-muted">
-          <span className="font-mono tabular-nums">{fmtSigned(points)}</span>{" "}
-          {Math.abs(points) === 1 ? "percentage point" : "percentage points"}
+          {points === 0 ? (
+            "no change"
+          ) : (
+            <>
+              <span className="font-mono tabular-nums">{fmtSigned(points)}</span> on the
+              odds
+            </>
+          )}
         </span>
       </dd>
     </div>
@@ -419,10 +442,10 @@ function ValueBody({ impact }: { impact: TradeImpact }) {
           value={`${gapPct}%`}
           sub={
             valueIn === valueOut
-              ? "The two sides price out level"
+              ? "Dead level"
               : valueIn > valueOut
-                ? "In your favour"
-                : "In their favour"
+                ? "Your way"
+                : "Their way"
           }
         />
         {impact.gaps.picks ? (
@@ -433,17 +456,17 @@ function ValueBody({ impact }: { impact: TradeImpact }) {
             value={fmtSigned(t.pickCountDelta)}
             sub={
               t.pickCountDelta === 0
-                ? "Same number either way"
+                ? "Same either way"
                 : t.pickCountDelta > 0
-                  ? "More picks than you had"
-                  : "Fewer picks than you had"
+                  ? "More than you had"
+                  : "Fewer than you had"
             }
           />
         )}
       </dl>
 
       <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-        Your roster moves from {fmtValue(t.valueBefore)} to {fmtValue(t.valueAfter)}, a
+        Your roster goes from {fmtValue(t.valueBefore)} to {fmtValue(t.valueAfter)}, a
         change of {fmtSigned(t.valueDelta)}.{" "}
         {/* ageDelta compares the two SIDES of the deal, not two states of the
             roster: it is the value-weighted age of what you receive against
@@ -452,10 +475,10 @@ function ValueBody({ impact }: { impact: TradeImpact }) {
             a thirty-man average by years, which a reader can check and
             disbelieve. Wording matches lib/trade-impact/reasons.ts. */}
         {t.ageDelta === null
-          ? "There is not enough birthdate data on these assets to compare the ages of the two sides."
+          ? "There are not enough birthdates here to compare the ages of the two sides."
           : Math.abs(t.ageDelta) < 0.05
             ? "The two sides are about the same age."
-            : `What you receive is ${Math.abs(t.ageDelta).toFixed(1)} years ${
+            : `What you get is ${Math.abs(t.ageDelta).toFixed(1)} years ${
                 t.ageDelta < 0 ? "younger" : "older"
               } than what you send, weighted by value.`}
       </p>
@@ -577,7 +600,7 @@ function AssetColumn({
         </ul>
       )}
       <p className="mt-2.5 border-t border-line pt-2 text-xs font-semibold text-ink-muted">
-        Total value {fmtValue(total)}
+        Total {fmtValue(total)}
       </p>
     </section>
   );
@@ -668,10 +691,10 @@ function TheirSide({ team, gaps }: { team: TeamImpact; gaps: ImpactGaps }) {
           value={fmtSigned(team.valueDelta)}
           sub={
             team.valueDelta === 0
-              ? "No change either way"
+              ? "No change"
               : team.valueDelta > 0
-                ? "They gain value"
-                : "They give up value"
+                ? "They gain"
+                : "They give up"
           }
           accent="purple"
         />
@@ -685,7 +708,7 @@ function TheirSide({ team, gaps }: { team: TeamImpact; gaps: ImpactGaps }) {
                 ? UNAVAILABLE
                 : `${fmtSigned(team.lineupDelta, 1)}/wk`
             }
-            sub="Points per remaining week"
+            sub="Points a week"
             accent="cyan"
           />
         )}

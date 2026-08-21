@@ -115,6 +115,39 @@ function pairSlots(home: MatchupSide, away: MatchupSide | null): PairedRow[] {
   }));
 }
 
+/**
+ * The tint on the winning half of a row.
+ *
+ * Deliberately faint. Twelve rows of it down a table is a lot of surface, and
+ * anything stronger turns the comparison into a striped block where the eye
+ * lands on the colour rather than on the numbers. It is a scanning aid and
+ * nothing else: both figures are already in the row, both cells carry a full
+ * accessible name, and the tint is applied to a `td` with no role of its own, so
+ * nothing announces it and nothing is lost without it.
+ */
+const WINNING_HALF = "bg-brand-cyan/[0.055]";
+
+/**
+ * Which half of a paired row is ahead, or neither.
+ *
+ * Graded on the same basis as the week: what was actually scored once the week
+ * is final, projections before then. A null on either side means there is no
+ * comparison to make, and a tie is not a win, so both come back null and no
+ * tint is drawn. Nothing here invents a zero to compare against.
+ */
+function slotLeader(row: PairedRow, isFinal: boolean): "home" | "away" | null {
+  const value = (entry: MatchupSlotEntry | null): number | null => {
+    const player = entry?.player;
+    if (!player) return null;
+    return isFinal ? player.actual : player.projected;
+  };
+  const home = value(row.home);
+  const away = value(row.away);
+  if (home === null || away === null) return null;
+  if (home === away) return null;
+  return home > away ? "home" : "away";
+}
+
 function groupRows(rows: PairedRow[]): { group: SlotGroup; rows: PairedRow[] }[] {
   const buckets = new Map<SlotGroup, PairedRow[]>();
   for (const row of rows) {
@@ -241,9 +274,13 @@ export function MatchupTable({
               </tr>
               {groupRowsList.map((row) => {
                 const slotId = `${tableId}-${row.key}`;
+                const lead = slotLeader(row, isFinal);
                 return (
                   <tr key={row.key} className="align-top">
-                    <td headers={`${homeColId} ${slotId}`} className="px-1 py-2 sm:px-2">
+                    <td
+                      headers={`${homeColId} ${slotId}`}
+                      className={`px-1 py-2 sm:px-2 ${lead === "home" ? WINNING_HALF : ""}`}
+                    >
                       <PlayerCell
                         entry={row.home}
                         isFinal={isFinal}
@@ -264,7 +301,7 @@ export function MatchupTable({
                     {away !== null && (
                       <td
                         headers={`${awayColId} ${slotId}`}
-                        className="px-1 py-2 sm:px-2"
+                        className={`px-1 py-2 sm:px-2 ${lead === "away" ? WINNING_HALF : ""}`}
                       >
                         <PlayerCell
                           entry={row.away}
@@ -280,7 +317,14 @@ export function MatchupTable({
             </tbody>
           ))}
 
-          <tfoot className="border-t-2 border-line-accent">
+          {/* THE TOTALS ARE THE ANSWER, so the footer is a box rather than four
+              more rows. A tinted surface, a thick top rule, and a heavy divide
+              above the two supporting figures: the headline total is what a
+              reader came down here for, and Best lineup and Difference are the
+              working behind it. They used to render at the same weight, which
+              made the block read as four equally important numbers and left the
+              eye to find the one that mattered. */}
+          <tfoot className="border-t-2 border-line-accent bg-surface-elevated/60">
             {isFinal && (
               <TotalRow
                 label="Final"
@@ -302,6 +346,9 @@ export function MatchupTable({
               awayValue={away?.projectedTotal ?? null}
               hasAway={away !== null}
               emphasis={!isFinal}
+              // On a final week the projection is the footnote, not the
+              // headline, so it drops to the supporting tier with the other two.
+              secondary={isFinal}
             />
             <TotalRow
               label="Best lineup"
@@ -311,6 +358,7 @@ export function MatchupTable({
               homeValue={home.optimalTotal}
               awayValue={away?.optimalTotal ?? null}
               hasAway={away !== null}
+              secondary
             />
             <TotalRow
               label="Difference"
@@ -321,6 +369,7 @@ export function MatchupTable({
               awayValue={away?.pointsLeftOnBench ?? null}
               hasAway={away !== null}
               signed
+              secondary
             />
             {view.hasUnprojectableSlots && unprojectableSlots > 0 && (
               <tr>
@@ -540,6 +589,7 @@ function TotalRow({
   awayValue,
   hasAway,
   emphasis = false,
+  secondary = false,
   signed = false,
 }: {
   label: string;
@@ -550,15 +600,30 @@ function TotalRow({
   homeValue: number | null;
   awayValue: number | null;
   hasAway: boolean;
+  /** The headline total. Exactly one row in the footer gets this. */
   emphasis?: boolean;
+  /**
+   * A supporting figure. Quieter type, and the first one carries the rule that
+   * separates the working from the headline above it.
+   */
+  secondary?: boolean;
   signed?: boolean;
 }) {
+  const figure = emphasis
+    ? "text-xl font-extrabold text-ink sm:text-2xl"
+    : "text-xs font-semibold text-ink-subtle";
+  const rowTone = emphasis
+    ? "bg-brand-cyan/[0.06]"
+    : secondary
+      ? "border-t border-line/60"
+      : "";
+
   const render = (value: number | null, align: "left" | "right") => (
     <td
       headers={`${align === "right" ? awayColId : homeColId} ${rowId}`}
-      className={`px-2 py-2 font-mono tabular-nums ${
+      className={`px-2 ${emphasis ? "py-2.5" : "py-1.5"} font-mono tabular-nums ${
         align === "right" ? "text-right" : "text-left"
-      } ${emphasis ? "text-base font-extrabold text-ink" : "text-xs font-semibold text-ink-muted"}`}
+      } ${figure}`}
     >
       {value === null ? (
         <span className="font-sans text-[11px] font-normal text-ink-subtle">
@@ -571,12 +636,16 @@ function TotalRow({
   );
 
   return (
-    <tr>
+    <tr className={rowTone}>
       {render(homeValue, "left")}
       <th
         id={rowId}
         scope="row"
-        className="w-14 px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-ink-subtle"
+        className={`w-14 px-1 text-center font-bold uppercase tracking-wide ${
+          emphasis
+            ? "py-2.5 text-[11px] text-brand-cyan"
+            : "py-1.5 text-[10px] text-ink-subtle"
+        }`}
       >
         {label}
       </th>

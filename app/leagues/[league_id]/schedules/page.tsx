@@ -681,7 +681,7 @@ function LuckPanel({
     <Panel
       eyebrow="Record against results"
       title="Luck index"
-      helper="Real record against the record a team would hold playing everyone every week."
+      helper="Real record against playing everyone every week."
     >
       {ranked.length === 0 ? (
         <p className="text-sm leading-relaxed text-ink-muted">
@@ -757,7 +757,7 @@ function SpotlightPanel({
       helper={
         week === null
           ? "No week on this slate to pick from."
-          : `Week ${week.week}, by projected win probability.`
+          : `Week ${week.week}, by projected win chance.`
       }
     >
       {spotlight === null ||
@@ -848,7 +848,7 @@ function SourcesPanel() {
     <Panel
       eyebrow="Provenance"
       title="How this is built"
-      helper="Four inputs, and one thing that is deliberately absent."
+      helper="Where each number comes from."
     >
       <dl className="space-y-3 text-xs leading-relaxed">
         <div>

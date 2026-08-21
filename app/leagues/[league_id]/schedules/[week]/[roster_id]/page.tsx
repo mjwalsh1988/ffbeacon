@@ -504,8 +504,8 @@ async function MatchupBody({
           title="Slot by slot"
           helper={
             view.isFinal
-              ? "What each slot actually scored, with the projection beside it. Open any player for the full numbers."
-              : "Projected points in this league's own scoring. Open any player for the full numbers."
+              ? "What each slot scored. Tap any player for the full numbers."
+              : "Projected points in this league's scoring. Tap any player for the full numbers."
           }
           glow={view.isCurrent}
         >
@@ -594,10 +594,29 @@ function MatchupHeader({ view }: { view: MatchupView }) {
         {away ? `${home.teamName} vs ${away.teamName}` : home.teamName}
       </h2>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <SideSummary side={home} total={homeTotal} isFinal={isFinal} />
+      {/* THE TWO CARDS ARE THE SCOREBOARD.
+          Each side gets its own tinted card, cyan on the left and purple on the
+          right, matching the two ends of the win-probability bar directly below
+          so the eye carries the same pairing from one to the other. The leading
+          side is called out in a word as well as a tint, because a tint is not a
+          label. `items-stretch` is the default in a grid, so two cards on one
+          row share a height however long a team name runs. */}
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <SideSummary
+          side={home}
+          total={homeTotal}
+          isFinal={isFinal}
+          tone="home"
+          leading={leadingSide(homeTotal, awayTotal) === "home"}
+        />
         {away ? (
-          <SideSummary side={away} total={awayTotal} isFinal={isFinal} />
+          <SideSummary
+            side={away}
+            total={awayTotal}
+            isFinal={isFinal}
+            tone="away"
+            leading={leadingSide(homeTotal, awayTotal) === "away"}
+          />
         ) : (
           <div className="rounded-card border border-line bg-base/40 px-3 py-3">
             <p className="text-sm font-semibold text-ink">No opponent</p>
@@ -612,7 +631,7 @@ function MatchupHeader({ view }: { view: MatchupView }) {
       {away && homeProb !== null && (
         <div className="mt-4 rounded-card border border-line bg-base/40 p-3 sm:p-4">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-            Win probability
+            Win chance
           </p>
           <div className="mt-2">
             <WinProbBar
@@ -626,7 +645,7 @@ function MatchupHeader({ view }: { view: MatchupView }) {
 
       {away && isFinal && (
         <p className="mt-3 text-sm text-ink-muted">
-          This week is final, so there is no win probability left to report. The
+          This week is final, so there is no win chance left to report. The
           scores above are what happened.
         </p>
       )}
@@ -634,52 +653,107 @@ function MatchupHeader({ view }: { view: MatchupView }) {
   );
 }
 
+/**
+ * Which side is ahead on the two totals, or neither.
+ *
+ * A missing total on either side is not a lead for the other one, and a tie is
+ * not a lead at all. Both come back null and no side is marked.
+ */
+function leadingSide(
+  home: number | null,
+  away: number | null,
+): "home" | "away" | null {
+  if (home === null || away === null) return null;
+  if (home === away) return null;
+  return home > away ? "home" : "away";
+}
+
+/**
+ * One team on the scoreboard.
+ *
+ * The number is the largest thing on the card and it sits under a word saying
+ * what it is, so "Projected" and "Scored" are on the screen rather than only in
+ * the accessible name. Record and Power Pulse rank ride along at every width,
+ * because the card is where a reader decides whether the projection is a
+ * surprise.
+ */
 function SideSummary({
   side,
   total,
   isFinal,
+  tone,
+  leading,
 }: {
   side: MatchupSide;
   total: number | null;
   isFinal: boolean;
+  /** Which end of the win-probability bar below this card belongs to. */
+  tone: "home" | "away";
+  /** True on the side with the higher total. Drives a word, not just a tint. */
+  leading: boolean;
 }) {
+  const isHome = tone === "home";
+  const accent = isHome ? "text-brand-cyan" : "text-brand-purple";
+  const frame = isHome
+    ? "border-brand-cyan/30 bg-brand-cyan/[0.05]"
+    : "border-brand-purple/30 bg-brand-purple/[0.05]";
+  const leadChip = isHome
+    ? "border-brand-cyan/60 bg-brand-cyan/15 text-brand-cyan"
+    : "border-brand-purple/60 bg-brand-purple/15 text-brand-purple";
+
   return (
-    <div className="flex items-start gap-3 rounded-card border border-line bg-base/40 px-3 py-3">
-      <SleeperAvatar
-        avatarId={side.ownerAvatarId}
-        title={side.teamName}
-        size={36}
-      />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-ink">
-          {side.teamName}
-        </p>
-        {side.ownerHandle && (
-          <p className="truncate text-[11px] text-ink-subtle">
-            @{side.ownerHandle}
+    <div
+      className={`relative flex h-full flex-col overflow-hidden rounded-card border p-3.5 sm:p-4 ${frame}`}
+    >
+      <div className="flex items-start gap-3">
+        <SleeperAvatar
+          avatarId={side.ownerAvatarId}
+          title={side.teamName}
+          size={44}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-bold leading-tight text-ink">
+            {side.teamName}
           </p>
-        )}
-        <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className={CHIP}>
-            <span className="sr-only">Record </span>
-            {recordLabel(side.record)}
-          </span>
-          {side.pulseRank !== null && (
-            <span className={CHIP}>Pulse #{side.pulseRank}</span>
+          {side.ownerHandle && (
+            <p className="truncate text-[11px] text-ink-subtle">
+              @{side.ownerHandle}
+            </p>
           )}
-        </p>
+        </div>
+        {leading && (
+          <span
+            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${leadChip}`}
+          >
+            {isFinal ? "Won" : "Ahead"}
+          </span>
+        )}
       </div>
-      <div className="shrink-0 text-right">
+
+      <p className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <span className={CHIP}>
+          <span className="sr-only">Record </span>
+          {recordLabel(side.record)}
+        </span>
+        {side.pulseRank !== null && (
+          <span className={CHIP}>Pulse #{side.pulseRank}</span>
+        )}
+      </p>
+
+      <div className="mt-auto pt-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+          {isFinal ? "Scored" : "Projected"}
+        </p>
         {total === null ? (
-          <p className="text-xs text-ink-subtle">
-            {isFinal ? "Score not available" : "No projection"}
+          <p className="mt-0.5 text-sm text-ink-subtle">
+            {isFinal ? "Not available" : "No projection"}
           </p>
         ) : (
-          <p className="font-mono text-2xl font-extrabold tabular-nums text-ink">
-            <span className="sr-only">
-              {isFinal ? "Scored " : "Projected "}
-            </span>
+          <p
+            className={`mt-0.5 font-mono text-4xl font-extrabold leading-none tabular-nums sm:text-5xl ${accent}`}
+          >
             {fmtPoints(total)}
+            <span className="sr-only"> points</span>
           </p>
         )}
       </div>
@@ -831,7 +905,7 @@ function RecentFormPanel({
     <Panel
       eyebrow="Form"
       title="Last three weeks"
-      helper="Settled weeks only, most recent first."
+      helper="Finished weeks, newest first."
     >
       {!anyFinal ? (
         <p className="text-sm leading-relaxed text-ink-muted">
@@ -940,7 +1014,7 @@ function SourcesPanel() {
     <Panel
       eyebrow="Provenance"
       title="How this is built"
-      helper="One player, one week, and where each number came from."
+      helper="Where each number comes from."
     >
       <dl className="space-y-3 text-xs leading-relaxed">
         <div>

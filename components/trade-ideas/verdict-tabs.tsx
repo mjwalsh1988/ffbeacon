@@ -1,0 +1,158 @@
+"use client";
+
+import { useCallback, useId, useRef, useState, type ReactNode } from "react";
+import { Scale, TrendingUp } from "lucide-react";
+
+/**
+ * The two halves of a trade evaluation, one at a time.
+ *
+ * WHY THIS IS A TAB SET AND NOT A LONGER PAGE
+ *   The evaluation answers two questions that routinely disagree: what the deal
+ *   does to your lineup and your season, and what the assets are worth. Stacked,
+ *   that is four panels and about three screens of scrolling on a phone, and the
+ *   value half, which is the half a reader checks second, is the half nobody
+ *   reaches. Two tabs put both answers one press apart and neither below the
+ *   fold.
+ *
+ * WHY IT IS CLIENT STATE AND NOT A URL
+ *   Every other switch in Trade Ideas is an address, because a suggested deal
+ *   and a built one are different things to look at and worth sending to a
+ *   leaguemate. This one is not: both tabs describe the SAME evaluation, both
+ *   are already computed and already in the markup, and putting it in the query
+ *   string would mean a full server round trip (and a fresh rate-limit claim on
+ *   the server-rendered build path) to move between two things that are on the
+ *   page. So the panels are rendered on the server, handed here as children, and
+ *   this component does nothing but decide which one is visible.
+ *
+ * ACCESSIBILITY. The WAI tabs pattern, manual activation: arrow keys move focus
+ * between tabs and Enter or Space selects, so a screen reader user can pass over
+ * a tab without the panel underneath changing out from under them. Home and End
+ * jump to the ends. The inactive panel is `hidden`, which takes it out of the
+ * accessibility tree as well as off the screen, so nothing is announced twice
+ * and nothing off-screen is reachable by Tab.
+ */
+
+type TabKey = "impact" | "value";
+
+const TABS: {
+  key: TabKey;
+  label: string;
+  sub: string;
+  Icon: typeof Scale;
+}[] = [
+  { key: "impact", label: "Your season", sub: "Lineup and wins", Icon: TrendingUp },
+  { key: "value", label: "Value", sub: "What it is worth", Icon: Scale },
+];
+
+export function VerdictTabs({
+  impact,
+  value,
+}: {
+  /** The lineup and season half, server rendered. */
+  impact: ReactNode;
+  /** The trade value half plus the Signal Check second opinion. */
+  value: ReactNode;
+}) {
+  const [active, setActive] = useState<TabKey>("impact");
+  const baseId = useId();
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const tabId = (key: TabKey) => `${baseId}-tab-${key}`;
+  const panelId = (key: TabKey) => `${baseId}-panel-${key}`;
+
+  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const order = TABS.map((t) => t.key);
+    const current = order.indexOf(
+      (document.activeElement?.getAttribute("data-tab-key") as TabKey) ?? "impact",
+    );
+    if (current < 0) return;
+    let next = -1;
+    if (event.key === "ArrowRight") next = (current + 1) % order.length;
+    else if (event.key === "ArrowLeft") next = (current - 1 + order.length) % order.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = order.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    refs.current[order[next]]?.focus();
+  }, []);
+
+  return (
+    <div>
+      <div
+        role="tablist"
+        aria-label="Trade evaluation"
+        onKeyDown={onKeyDown}
+        className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
+      >
+        {TABS.map(({ key, label, sub, Icon }) => {
+          const selected = key === active;
+          return (
+            <button
+              key={key}
+              ref={(node) => {
+                refs.current[key] = node;
+              }}
+              type="button"
+              role="tab"
+              id={tabId(key)}
+              data-tab-key={key}
+              aria-selected={selected}
+              aria-controls={panelId(key)}
+              // Roving tabindex: exactly one tab is in the tab order, and the
+              // arrow keys move between the rest. Leaving all of them tabbable
+              // makes a reader pass through every tab to reach the panel.
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setActive(key)}
+              className={`flex min-h-11 flex-col justify-center rounded-card border px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:px-4 ${
+                selected
+                  ? "border-line-accent bg-surface-elevated shadow-[0_0_40px_-30px_rgba(168,85,247,0.9)]"
+                  : "border-line bg-surface/40 hover:border-brand-cyan/50"
+              }`}
+            >
+              <span
+                className={`flex items-center gap-1.5 text-sm font-semibold ${
+                  selected ? "text-ink" : "text-ink-muted"
+                }`}
+              >
+                <Icon
+                  aria-hidden="true"
+                  className={`h-4 w-4 shrink-0 ${
+                    selected ? "text-brand-cyan" : "text-ink-subtle"
+                  }`}
+                />
+                {label}
+              </span>
+              <span className="mt-0.5 text-[11px] leading-tight text-ink-subtle">
+                {sub}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* tabIndex 0 on the panel, per the WAI pattern: the panel body is not
+          always focusable on its own, and without it a keyboard reader tabbing
+          off the tab list lands past the content it just chose. */}
+      <div
+        role="tabpanel"
+        id={panelId("impact")}
+        aria-labelledby={tabId("impact")}
+        tabIndex={0}
+        hidden={active !== "impact"}
+        className="mt-4 rounded-modal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        {impact}
+      </div>
+      <div
+        role="tabpanel"
+        id={panelId("value")}
+        aria-labelledby={tabId("value")}
+        tabIndex={0}
+        hidden={active !== "value"}
+        className="mt-4 rounded-modal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
