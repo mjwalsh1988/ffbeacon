@@ -54,6 +54,18 @@ export type SchedulePlayer = {
   /** NFL opponent that week, "SF". Null on a bye or when unpublished. */
   nflOpponent: string | null;
   /**
+   * True when this player's team is at HOME that week, false on the road, null
+   * when we could not find out.
+   *
+   * Null is a real third state and the UI has to respect it. Neither the weekly
+   * projections nor the weekly stats carry a venue marker (both give `opponent`
+   * as a bare code), so this comes from Sleeper's published season schedule, and
+   * a failed or missing schedule fetch leaves it null. Printing "vs" on a null
+   * would claim a home game for every road game, which is the reason the first
+   * version of this feature printed no venue at all.
+   */
+  nflIsHome: boolean | null;
+  /**
    * Opponent-strength multiplier applied, 1.0 when neutral. Null when the slot
    * is unprojectable or the player has no projection.
    */

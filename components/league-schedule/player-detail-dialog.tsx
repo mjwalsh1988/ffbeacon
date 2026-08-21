@@ -102,10 +102,10 @@ export function PlayerDetailDialog({
   if (!player) return null;
 
   const title = `${player.name}, week ${week}`;
-  const opponent = opponentLabel(player.nflOpponent);
+  const opponent = opponentLabel(player.nflOpponent, player.nflIsHome);
   // Read as a phrase in the identity line, where it sits in running text, and
   // as a bare code in the term list below, where the label supplies the noun.
-  const opponentPhrase = opponentWords(player.nflOpponent);
+  const opponentPhrase = opponentWords(player.nflOpponent, player.nflIsHome);
 
   return (
     <SlideUpDialog open onClose={onClose} label={title} closeLabel={`Close ${player.name}`}>

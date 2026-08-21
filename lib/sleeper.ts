@@ -1,5 +1,8 @@
 const BASE = "https://api.sleeper.app/v1";
 
+/** The schedule and projections host. Same origin, no /v1 prefix. */
+const SCHEDULE_BASE = "https://api.sleeper.com";
+
 const headers = { "user-agent": "ffbeacon/1.0" };
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -406,6 +409,80 @@ export async function getNflState(): Promise<SleeperNflState | null> {
       });
   }
   return nflStateInFlight;
+}
+
+/**
+ * One scheduled NFL game, from Sleeper's published season schedule.
+ *
+ * This is the ONLY place we can learn home and away. The weekly projections and
+ * the weekly stats both carry `opponent` as a bare team code with no venue
+ * marker, and `game_id` is an opaque numeric id shared by both sides of the
+ * game, so neither can answer "is this a road game". A schedule row names the
+ * two teams by role and carries the same `game_id`, which is what joins them.
+ */
+export type SleeperScheduleGame = {
+  game_id: string;
+  week: number;
+  date: string | null;
+  status: string | null;
+  home: string | null;
+  away: string | null;
+};
+
+/**
+ * Home and away for one season, keyed `${week}|${TEAM}` to true when that team
+ * is at home.
+ *
+ * WHY A DERIVED MAP RATHER THAN THE ROWS. Every caller asks the same question
+ * one player at a time ("is BUF home in week 4"), and a list scan per player per
+ * week is the shape that turns a lineup render into a few hundred array walks.
+ *
+ * Memoised for an hour. A season's schedule is fixed once published, and the
+ * only thing that moves is a flexed kickoff time, which this does not read.
+ * Failures are not cached, so a blip retries on the next call, and a null tells
+ * the caller to say nothing about venue rather than guess.
+ */
+const NFL_SCHEDULE_TTL_MS = 60 * 60 * 1000;
+const nflScheduleCache = new Map<number, { at: number; value: Map<string, boolean> }>();
+const nflScheduleInFlight = new Map<number, Promise<Map<string, boolean> | null>>();
+
+export async function getNflHomeAwayMap(
+  season: number,
+  seasonType: SleeperSeasonType = "regular",
+): Promise<Map<string, boolean> | null> {
+  const cached = nflScheduleCache.get(season);
+  if (cached && Date.now() - cached.at < NFL_SCHEDULE_TTL_MS) return cached.value;
+
+  const existing = nflScheduleInFlight.get(season);
+  if (existing) return existing;
+
+  const request = safeFetch<SleeperScheduleGame[]>(
+    `${SCHEDULE_BASE}/schedule/nfl/${encodeURIComponent(seasonType)}/${season}`,
+    20_000,
+  )
+    .then((games) => {
+      if (!Array.isArray(games) || games.length === 0) return null;
+      const map = new Map<string, boolean>();
+      for (const game of games) {
+        const week = Number(game?.week);
+        if (!Number.isFinite(week)) continue;
+        if (typeof game?.home === "string" && game.home) {
+          map.set(`${week}|${game.home.toUpperCase()}`, true);
+        }
+        if (typeof game?.away === "string" && game.away) {
+          map.set(`${week}|${game.away.toUpperCase()}`, false);
+        }
+      }
+      if (map.size === 0) return null;
+      nflScheduleCache.set(season, { at: Date.now(), value: map });
+      return map;
+    })
+    .finally(() => {
+      nflScheduleInFlight.delete(season);
+    });
+
+  nflScheduleInFlight.set(season, request);
+  return request;
 }
 
 export type SleeperSeasonType = "regular" | "post" | "pre";

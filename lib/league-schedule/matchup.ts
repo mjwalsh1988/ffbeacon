@@ -111,6 +111,11 @@ export type BuildMatchupInput = {
   defenseSeasons: number[];
   scoringSettings: ScoringSettings | null;
   settings: PowerPulseSettings;
+  /**
+   * Home and away for this season, keyed `${week}|${TEAM}`. Optional, and a
+   * missing map means every player's venue reads as unknown rather than as home.
+   */
+  homeAwayByTeamWeek?: Map<string, boolean> | null;
 };
 
 /** A proposed swap, before the greedy pass thins the list out. */
@@ -139,6 +144,7 @@ function emptySlotStandIn(slot: ScheduleSlot): SchedulePlayer {
     team: null,
     injuryStatus: null,
     nflOpponent: null,
+    nflIsHome: null,
     opponentMultiplier: null,
     beatRate: null,
     availability: null,
@@ -193,6 +199,7 @@ function buildSide(
         team: null,
         injuryStatus: null,
         nflOpponent: null,
+        nflIsHome: null,
         opponentMultiplier: null,
         beatRate: null,
         availability: null,
@@ -234,6 +241,11 @@ function buildSide(
       team: row.team,
       injuryStatus: row.injuryStatus,
       nflOpponent: projection?.opponent ?? null,
+      // Null unless the schedule map actually answered. See SchedulePlayer.
+      nflIsHome:
+        row.team && input.homeAwayByTeamWeek
+          ? input.homeAwayByTeamWeek.get(`${input.week}|${row.team.toUpperCase()}`) ?? null
+          : null,
       opponentMultiplier: projected ? projected.opponentMultiplier : null,
       beatRate: accuracy?.beatRate ?? null,
       availability: accuracy?.availabilityRate ?? null,

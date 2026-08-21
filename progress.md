@@ -6868,3 +6868,63 @@ T674 | completed | Schedules rename, readable win probability, tighter sticky ba
      | cue. All aria-hidden: the real link is the heading, and announcing a second
      | one would put two identical destinations in the reader's list.
      | verified: yes (tsc clean, next build clean, 135 files / 1980 tests green)
+
+T675 | completed | A coloured state edge on every matchup, both schedule views
+     | files: components/league-schedule/{format,matchup-row,week-board,
+     |        team-season}.tsx
+     | depends on: T674
+     | A list of matchup cards on a dark surface ran together: every card was the
+     | same background behind the same one pixel border, so the eye had to find
+     | the gap rather than the edge. `stateEdgeClass` puts a 4px rule down the
+     | left of each one and lets it carry the game's state: FF Beacon purple for
+     | a game still to play, cyan for the live week, and a flat grey for a
+     | finished one. Grey reads as settled precisely because it is the only one
+     | of the three that is not a brand colour.
+     | Applied to the week cards and to the week cell of each team-season row.
+     | On the row it sits on the cell rather than the <tr>, because a border on a
+     | table row is not painted under border-collapse in every engine. Card gap
+     | went from 12px to 16px so the edges have room to read as separators.
+     | ONE TRAP WORTH RECORDING: WeekBoard passed `isCurrent={false}` to every
+     | card on purpose, so that during the live week six cards do not all glow
+     | and cancel each other out. That would have meant the cyan edge never
+     | appeared. `isCurrent` now always carries the true week state and drives the
+     | edge, and a new `emphasise` prop controls the raised treatment separately.
+     | It defaults to `isCurrent`, so a future list mixing weeks needs no extra
+     | prop. Two decisions, two props.
+     | Colour is reinforcement only: every card already carries a Final / This
+     | week / Projected chip and every row already carries the outcome as a word.
+     | verified: yes (tsc clean, next build clean, 1980 tests green)
+
+T676 | completed | Home and away on every player, and a phone-first player cell
+     | files: lib/sleeper.ts, lib/league-schedule/{types,matchup,data}.ts,
+     |        components/league-schedule/{format,matchup-table,
+     |        player-detail-dialog}.tsx
+     | depends on: T639, T672
+     | The lineup showed a player's opponent as a bare code, which says nothing
+     | about whether it is a road game, and home and away is a real distinction to
+     | a manager setting a lineup.
+     | GETTING THE FACT, rather than inventing it. Neither `player_weekly_projections`
+     | nor `player_stats` carries a venue marker: both give `opponent` as a bare
+     | code. `game_id` looked promising and is not, it is an opaque number that
+     | both sides of a game share. Sleeper's published season schedule does carry
+     | `home` and `away`, keyed by the same `game_id`, so `getNflHomeAwayMap` in
+     | lib/sleeper.ts reads it and returns a `${week}|${TEAM}` to boolean map.
+     | Memoised for an hour and de-duplicated in flight, so it is one request per
+     | process per season rather than one per matchup view. All Sleeper endpoints
+     | live in lib/sleeper.ts, per CLAUDE.md.
+     | THREE STATES, NOT TWO. `SchedulePlayer.nflIsHome` is nullable and the label
+     | respects it: "(vs HOU)" at home, "(@ HOU)" away, "(HOU)" when the schedule
+     | fetch did not answer. Defaulting a null to "vs" would print a home game for
+     | every road game, which is exactly why the first version of this feature
+     | printed no venue at all. The parentheses are load bearing too: the line now
+     | reads "WR, BUF (@ HOU)" as one fact rather than running together.
+     | MOBILE. The portrait moved above the name below sm, beside it from sm up.
+     | At 360px the headshot, the name and the meta line were splitting about
+     | 140px between them, so names truncated to a few characters and the meta
+     | wrapped to three rows. Stacking the portrait returns the full cell width to
+     | the text, which is what lets position, team and opponent sit on one line as
+     | a single string rather than three spans in a wrapping row. The away side
+     | stacks right-aligned and reverses at sm, so portraits stay on the outer
+     | edges and the projected-points numbers stay on the inner edge against the
+     | slot column.
+     | verified: yes (tsc clean, next build clean, 1980 tests green)

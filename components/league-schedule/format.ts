@@ -92,38 +92,40 @@ export function pctWords(probability: number): string {
 }
 
 /**
- * The NFL opponent, compact.
+ * The NFL opponent, compact, in parentheses.
  *
- * NO VENUE IS CLAIMED, and that is the whole point of this function.
+ * "(vs HOU)" at home, "(@ HOU)" on the road, "(HOU)" when we do not know, and
+ * "(BYE)" when there is no game. The brackets are doing real work: this sits on
+ * the same line as the position and the team, and without them "WR, BUF vs HOU"
+ * runs together into one string a reader has to parse.
  *
- * The first draft rendered a bare code as "vs SF". Sleeper's weekly projections
- * carry `opponent` as a bare team code with no home or away marker (see
- * lib/sync-weekly-projections.ts, which stores the field verbatim), so "vs"
- * would have been printed on every away game too. Home and away is a real
- * distinction to a fantasy manager, and inventing it is worse than omitting it.
- *
- * So a bare code renders as itself. A leading "@" is still honoured, because
- * some sources do send one and the day `player_weekly_projections.game_id`
- * gets parsed into a venue this is where that lands.
- *
- * A null (a bye, or a week Sleeper has not published) renders BYE rather than
- * an empty cell that reads as an oversight.
+ * VENUE IS NEVER GUESSED. `isHome` comes from Sleeper's published season
+ * schedule (lib/sleeper.ts getNflHomeAwayMap), because neither the weekly
+ * projections nor the weekly stats carry a marker: both give `opponent` as a
+ * bare code. A null means the schedule fetch did not answer, and the label drops
+ * the preposition rather than defaulting to "vs", which would print a home game
+ * for every road game. That default is why the first version of this printed no
+ * venue at all.
  */
-export function opponentLabel(code: string | null): string {
-  if (!code) return "BYE";
+export function opponentLabel(code: string | null, isHome?: boolean | null): string {
+  if (!code) return "(BYE)";
   const trimmed = code.trim();
-  if (!trimmed) return "BYE";
-  // A leading "@" is honoured if a source ever sends one, but Sleeper does not.
-  if (trimmed.startsWith("@")) return `at ${trimmed.slice(1)}`;
-  return trimmed;
+  if (!trimmed) return "(BYE)";
+  // A leading "@" is honoured if a source ever sends one pre-marked.
+  if (trimmed.startsWith("@")) return `(@ ${trimmed.slice(1)})`;
+  if (isHome === true) return `(vs ${trimmed})`;
+  if (isHome === false) return `(@ ${trimmed})`;
+  return `(${trimmed})`;
 }
 
 /** The same fact as a phrase, for an accessible name. */
-export function opponentWords(code: string | null): string {
+export function opponentWords(code: string | null, isHome?: boolean | null): string {
   if (!code) return "on a bye";
   const trimmed = code.trim();
   if (!trimmed) return "on a bye";
   if (trimmed.startsWith("@")) return `away at ${trimmed.slice(1)}`;
+  if (isHome === true) return `at home against ${trimmed}`;
+  if (isHome === false) return `away at ${trimmed}`;
   return `against ${trimmed}`;
 }
 

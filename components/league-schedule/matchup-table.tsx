@@ -398,7 +398,7 @@ function PlayerCell({
   }
 
   const points = isFinal ? player.actual : player.projected;
-  const opponent = opponentLabel(player.nflOpponent);
+  const opponent = opponentLabel(player.nflOpponent, player.nflIsHome);
 
   return (
     <button
@@ -410,42 +410,52 @@ function PlayerCell({
         align === "end" ? "flex-row-reverse text-right" : ""
       }`}
     >
-      {/* Two elements rather than one responsive one: the size is an inline
-          width and height on the image, which a Tailwind class cannot override,
-          so the breakpoint has to pick between two renders. Both are
-          decorative, since the name is the text right beside them. */}
-      <span className="shrink-0 sm:hidden">
-        <PlayerHeadshot sleeperId={player.sleeperId} name="" size={24} />
-      </span>
-      <span className="hidden shrink-0 sm:block">
-        <PlayerHeadshot sleeperId={player.sleeperId} name="" size={32} />
-      </span>
-
-      <span aria-hidden="true" className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold text-ink sm:text-sm">
-          {player.name}
+      {/* PORTRAIT ABOVE THE NAME ON A PHONE, beside it from sm up.
+          At 360px the headshot, the name and the meta line were fighting over
+          about 140px of cell, so the name truncated to two or three characters
+          and the meta line wrapped to three rows. Stacking the portrait buys the
+          full cell width back for the text, which is what lets the position,
+          team and opponent sit on one line as one string. The away side stacks
+          right-aligned and reverses at sm, so the portrait stays on the outside
+          edge and the numbers stay on the inside one. */}
+      <span
+        className={`flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-start sm:gap-2 ${
+          align === "end" ? "items-end sm:flex-row-reverse" : "items-start"
+        }`}
+      >
+        {/* Two renders rather than one responsive element: the size is an inline
+            width and height on the image, which a Tailwind class cannot
+            override. Both are decorative, since the name is the text beside
+            them. */}
+        <span className="shrink-0 sm:hidden">
+          <PlayerHeadshot sleeperId={player.sleeperId} name="" size={28} />
         </span>
-        <span
-          className={`mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[11px] text-ink-muted ${
-            align === "end" ? "justify-end" : ""
-          }`}
-        >
-          <span>
-            {player.position}
-            {player.team ? `, ${player.team}` : ""}
+        <span className="hidden shrink-0 sm:block">
+          <PlayerHeadshot sleeperId={player.sleeperId} name="" size={32} />
+        </span>
+
+        <span aria-hidden="true" className="block min-w-0 max-w-full flex-1">
+          <span className="block truncate text-xs font-semibold text-ink sm:text-sm">
+            {player.name}
           </span>
-          <span>{opponent}</span>
+          {/* One string, not three spans in a wrapping row. Position, team and
+              opponent belong together and the parentheses around the opponent
+              are what keep "WR, BUF (@ HOU)" readable as one fact. */}
+          <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
+            {player.position}
+            {player.team ? `, ${player.team}` : ""} {opponent}
+          </span>
           {isFinal && player.projected !== null && (
-            <span className="text-ink-subtle">
+            <span className="mt-0.5 block truncate text-[11px] text-ink-subtle">
               {fmtPoints(player.projected)} proj
             </span>
           )}
+          {player.injuryStatus && (
+            <span className={`mt-1 ${CHIP} border-signal-warning/50 text-signal-warning`}>
+              {player.injuryStatus}
+            </span>
+          )}
         </span>
-        {player.injuryStatus && (
-          <span className={`mt-1 ${CHIP} border-signal-warning/50 text-signal-warning`}>
-            {player.injuryStatus}
-          </span>
-        )}
       </span>
 
       {/* THE SCORE, PUSHED TO THE INNER EDGE.
@@ -486,7 +496,7 @@ function PlayerCell({
 function spokenPlayer(player: SchedulePlayer, isFinal: boolean): string {
   const parts: string[] = [player.name, player.position];
   if (player.team) parts.push(player.team);
-  parts.push(opponentWords(player.nflOpponent));
+  parts.push(opponentWords(player.nflOpponent, player.nflIsHome));
 
   if (isFinal) {
     parts.push(

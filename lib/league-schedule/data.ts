@@ -14,7 +14,7 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { winProbability } from "@/lib/power-pulse/math";
 import { MAX_MATCHUP_WEEK, resolveCurrentWeek } from "@/lib/league-matchups";
-import { getNflState } from "@/lib/sleeper";
+import { getNflHomeAwayMap, getNflState } from "@/lib/sleeper";
 import { alignedStartingSlots } from "./slots";
 import {
   readRosteredPlayerPoints,
@@ -447,7 +447,7 @@ export async function loadMatchupDetail(
   const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = [season - 1, season - 2];
 
-  const [projectionRows, accuracy, defense] = await Promise.all([
+  const [projectionRows, accuracy, defense, homeAwayByTeamWeek] = await Promise.all([
     // One week only, and the ceiling belongs in the query rather than in a loop
     // underneath it. Both bounds are `week`, so Postgres returns the sixty rows
     // this page renders instead of the rest of the season for the same sixty
@@ -458,6 +458,11 @@ export async function loadMatchupDetail(
     loadProjections(admin, playerIds, season, week, week),
     loadAccuracy(admin, playerIds, scoringBase),
     loadDefenseSplits(admin, scoringBase, defenseSeasons),
+    // Home and away, which no stats or projection row carries. Memoised for an
+    // hour inside lib/sleeper.ts, so this is one request per process per season
+    // rather than one per matchup view. A null means the venue reads as unknown
+    // and the lineup says nothing about it, which is the honest fallback.
+    getNflHomeAwayMap(season),
   ]);
 
   const projections = new Map<string, ProjectionRow>();
@@ -518,6 +523,7 @@ export async function loadMatchupDetail(
       defenseSeasons,
       scoringSettings: league.scoringSettings,
       settings,
+      homeAwayByTeamWeek,
     }),
   };
 }
