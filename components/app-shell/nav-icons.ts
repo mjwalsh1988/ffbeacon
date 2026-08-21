@@ -50,6 +50,7 @@ import {
   GraduationCap,
   BarChart3,
   RefreshCw,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
 
@@ -92,6 +93,7 @@ export const NAV_ICONS = {
   graduationCap: GraduationCap,
   barChart: BarChart3,
   refresh: RefreshCw,
+  calendar: CalendarDays,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

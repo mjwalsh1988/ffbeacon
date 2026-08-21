@@ -5998,3 +5998,873 @@ T625 | completed | League header down to one row, refresh into the rail
      | already do it, so the section opens straight onto its five rows.
      | verified: yes (tsc clean, 1747 tests across 122 files; no build and no
      |           browser check, at the owner's request)
+
+T626 | completed | Stop filtering Sleeper starter placeholders at write time
+     | files: lib/league-matchups.ts
+     | depends on: none
+     | Sleeper's `starters` array is POSITIONAL: `starters[i]` is the player in
+     | the i-th startable slot of roster_positions, and an unfilled slot is the
+     | string "0". The sync filtered that placeholder out on the way in, which
+     | shifted every slot below it up by one. Nothing had noticed, because the
+     | only reader (lib/power-pulse/load.ts loadSchedule) treats the array as an
+     | unordered set and drops "0" itself. `starters_points` was never filtered,
+     | so the two arrays already disagreed with each other from the other end.
+     | The new Schedule page reads the array positionally and would have put
+     | players in the wrong slots for any league with an empty starting slot.
+     | Both arrays now go in verbatim through `normalizeIdList`, and readers
+     | filter. No migration: rows written before this keep the filtered array,
+     | and `metadata` holds the Sleeper object verbatim for the fallback, which
+     | is the backfill case the CLAUDE.md metadata rule exists for. A `force`
+     | pulse rewrites a league correctly.
+     | verified: no (test lands in T669)
+
+T633 | completed | Add Schedule to the league navigation, rename Trade Finder
+     | files: components/league-shell/nav-items.ts,
+     |        components/app-shell/nav-icons.ts
+     | depends on: none
+     | One edit rather than two, because both changes touch the same list and a
+     | half-renamed LeagueTabId does not compile. `schedule` is added between
+     | Teams and Power Pulse (Overview and Teams say who is in the league,
+     | Schedule says what happens to them, Power Pulse is the model built on the
+     | schedule). `trade-finder` becomes `trade-ideas` with the label "Trade
+     | Ideas" and a hint naming both halves of what it now does. Both new full
+     | routes join the `leagueTabHref` branch. `calendar` (lucide CalendarDays)
+     | added to the icon map. The desktop rail and the mobile drawer both read
+     | this one list, so neither needed touching.
+     | verified: yes (tsc clean)
+
+T653 | completed | Route rename plus permanent redirect
+     | files: app/leagues/[league_id]/trade-ideas/ (git mv from trade-finder/),
+     |        app/leagues/[league_id]/trade-ideas/page.tsx,
+     |        app/leagues/[league_id]/page.tsx, next.config.ts
+     | depends on: T633
+     | `git mv` so history follows. The page's activeTab, copyHref, copy aria
+     | label, breadcrumb, TeamChooser links, title and description all updated;
+     | the visible h2 is now "Trade Ideas". next.config.ts gains a permanent 308
+     | for `/leagues/:league_id/trade-finder`, in the routing layer so an old
+     | shared link never renders the dead path.
+     | DEVIATION from the plan, recorded there too: components/trade-finder.tsx
+     | and components/trade-finder-card.tsx keep their filenames. They are named
+     | after lib/trade-finder/, which is also keeping its name, and they are
+     | imported by the dashboard portfolio panel as well. Moving them changes
+     | nothing a reader sees and starts every future `git log --follow` on the
+     | most complicated client component in the feature with a rename.
+     | verified: yes (tsc clean after clearing stale .next/types)
+
+T667 | completed | Shared rate-limit claim helper
+     | files: lib/rate-limit-claim.ts, app/actions/trade-finder.ts
+     | depends on: none
+     | `claimSlot` inside app/actions/trade-finder.ts was about to be written a
+     | second time for a SERVER RENDERED path, and two copies of a limiter is how
+     | one of them ends up with the wrong window. The mechanism (derive the actor
+     | through resolveRateLimitActorKey, then the try_claim_rate_limit RPC on the
+     | admin client) now lives in one place and takes its bucket, ceiling and
+     | window from the caller. Fails closed, same as before. The trade-finder
+     | action keeps a thin local `claimSlot` so its two call sites are unchanged.
+     | verified: yes (tsc clean, 1780 tests green)
+
+T668 | completed | Trade evaluation rate limit, one bucket for all three paths
+     | files: lib/trade-impact/rate-limit.ts
+     | depends on: T667
+     | An evaluation is two Monte Carlo seasons plus 40 to 80 exact lineup fills,
+     | and it has three entry points: the server action, the server rendered page
+     | path (`?mode=build&in=...&out=...` is decoded and evaluated during render,
+     | so a loop over GET requests runs the same work without touching the
+     | action), and the streamed evaluation under the on-screen suggestion. All
+     | three claim from ONE bucket at 10 per minute per actor, below the finder's
+     | 12, because one evaluation costs more than one search. One bucket rather
+     | than three so a caller cannot alternate paths to spend three budgets.
+     | Callers validate BEFORE claiming, so a stale link cannot burn a reader's
+     | budget and garbage input gains an attacker nothing.
+     | verified: yes (tsc clean)
+
+T654 | completed | User-facing "Trade Ideas" copy, and Schedule in Explore
+     | files: components/trade-finder-panel.tsx, components/league-quick-links.tsx,
+     |        components/trade-finder.tsx, components/league-shell/league-masthead.tsx,
+     |        components/league-shell/league-mobile-nav.tsx,
+     |        app/leagues/[league_id]/page.tsx
+     | depends on: T653
+     | Every string a reader sees now says Trade Ideas: the cross-league panel
+     | title, the My Sleeper Leagues quick link and its aria-label, and the
+     | league overview's Explore list. The filenames and the lib directory keep
+     | the old name on purpose (see T653).
+     | The Explore rail on the league overview also gains a Schedule row, since
+     | that rail is the other way into a section and a new section missing from
+     | it would be reachable only from the nav.
+     | `grep -rn "Trade Finder" components/ app/ --include=*.tsx` returns nothing.
+     | verified: yes (tsc clean)
+
+T660 | completed | URL encoding for a built trade
+     | files: lib/trade-impact/proposal-url.ts, lib/trade-impact/proposal-url.test.ts
+     | depends on: T646
+     | The builder could have kept its state in React and posted it to an action.
+     | That would be less code, and it would make a trade you spent two minutes
+     | assembling unshareable, unbookmarkable, and destroyed by the back button.
+     | The proposal lives in the query string instead, so the page renders the
+     | evaluation server side from it.
+     | `myRosterId` is taken from the PAGE, never from the link. If the link could
+     | move it, one person could send another a link that quietly evaluates
+     | somebody else's team. There is a test for that specifically.
+     | Duplicates collapse before the six-per-side cap applies, so a link padded
+     | with repeats cannot push real assets out of the window (also tested).
+     | Unreadable tokens are counted and reported rather than silently dropped, so
+     | the reader is told the link is partial instead of being shown a quietly
+     | smaller trade than the one shared with them.
+     | The parser does shape validation ONLY. It cannot know a player is on the
+     | roster he is claimed to be on; that check needs the database and belongs in
+     | evaluate.ts. The split is deliberate: shape validation is cheap and runs
+     | BEFORE the rate-limit claim, so a stale link cannot burn a reader's budget.
+     | Separator note, worth recording because the first attempt was wrong: tilde
+     | is unreserved in RFC 3986, which sounds like it survives a URL round trip
+     | and does not. URLSearchParams serializes as application/x-www-form-urlencoded,
+     | whose safe set is alphanumerics plus * - . _ only, so a tilde came back as
+     | %7E. A test caught it. Underscore survives untouched.
+     | verified: yes (23 tests, tsc clean)
+
+T651 | completed | Grade any pair of asset lists, not only a TradeSuggestion
+     | files: lib/trade-finder-grade.ts
+     | depends on: none
+     | The builder produces a trade nobody suggested: no fingerprint, no
+     | acceptance band, no counterparty record, just two asset lists and the name
+     | of the team opposite. It still deserves the same Signal Check second
+     | opinion the engine's suggestions get, and a reader would rightly distrust a
+     | builder whose grade came from somewhere else.
+     | So the batching moved onto a new `GradeableTrade` shape and
+     | `gradeAssetPairs`, and `gradeSuggestions` became a two line adapter over
+     | it. Purely a widening: the batching, the format resolution, the shared
+     | resolver, the per-deal try/catch and the null-rather-than-guess contract
+     | are all untouched, so nothing about how a suggestion is graded changed.
+     | verified: yes (tsc clean, full suite green)
+
+T627 | completed | Slot alignment, labels, and display order for league lineups
+     | files: lib/league-schedule/slots.ts, lib/league-schedule/slots.test.ts
+     | depends on: T626
+     | `alignedStartingSlots` keeps EVERY token that is not BN/IR/TAXI/NA, in the
+     | league's own order. That is the alignment key for Sleeper's `starters`
+     | array. It deliberately differs from lib/power-pulse/lineup.ts
+     | `startingSlots`, which additionally drops tokens it cannot project (IDP).
+     | Both are correct for their own caller, and both carry a cross-reference
+     | comment so a future reader does not "unify" them and silently reintroduce
+     | the slot-shift bug T626 fixed.
+     | An unrecognised token is never dropped: it renders in the IDP group with
+     | its own label and projectable=false. Dropping it would break alignment.
+     | verified: yes
+
+T628 | completed | Read a set lineup from a matchup row, aligned to its slots
+     | files: lib/league-schedule/lineups.ts, lib/league-schedule/lineups.test.ts
+     | depends on: T627
+     | Prefers `metadata.starters` (verbatim Sleeper) over `starter_ids`, because
+     | rows written before T626 hold the filtered array. The points array follows
+     | the SAME choice, so a metadata id array is never paired with a column
+     | points array. Never throws on a short or long array: Sleeper is the source
+     | and does not owe us a length. A missing point value is null, not 0.
+     | verified: yes
+
+T629 | completed | Matchup view builder: both lineups, projections, totals
+T630 | completed | Bench and taxi upgrade calculation
+     | files: lib/league-schedule/matchup.ts, lib/league-schedule/matchup.test.ts
+     | depends on: T628
+     | Projects through lib/power-pulse/project.ts, so a schedule number and a
+     | Power Pulse number can never disagree. Unprojectable (IDP) slots render
+     | the player with a null projection and raise `unprojectedSlots`, which is
+     | what drives the "totals exclude N IDP slots" footnote. A null is never a
+     | zero: a zero looks like an answer.
+     | Bench upgrades include IR and taxi players tagged `requiresMove`, because
+     | Sleeper will not let you start them without a roster move. Each incoming
+     | player and each displaced starter appears at most once, so the list reads
+     | as independent moves rather than the same starter replaced four times.
+     | The single-swap gains deliberately do NOT sum to `pointsLeftOnBench`:
+     | taking one swap changes what the next is worth. The total comes from the
+     | optimal lineup and both are labelled.
+     | verified: yes
+
+T631 | completed | Schedule insights: SOS, all-play luck, stretches, spotlight
+     | files: lib/league-schedule/insights.ts, lib/league-schedule/insights.test.ts
+     | depends on: none
+     | Remaining SOS is read straight off the Power Pulse cache, never
+     | recomputed, so the Schedule page and the Power Pulse page cannot disagree.
+     | Played SOS is computed here because the cache only looks forward.
+     | All-play luck is scored against a hand-worked fixture in the test.
+     | Stretch windows require every week in the window to have an opponent
+     | projection: averaging 2 of 3 and ranking it against a full 3 would rank a
+     | partly-unknown stretch against a known one. "Consecutive" means
+     | consecutive among REMAINING weeks, so a bye does not split a stretch.
+     | verified: yes
+
+T669 | completed | Power Pulse regression guard: placeholders never reach setLineups
+     | files: lib/power-pulse/load.test.ts, lib/league-matchups.test.ts
+     | depends on: T626
+     | THE test for this whole build. T626 changed a table Power Pulse reads, and
+     | the safety argument was that `asStringArray` in lib/power-pulse/load.ts
+     | already drops "0" so the read side is unchanged. This checks it rather
+     | than trusting it: `loadSchedule` is driven through a fake client with two
+     | datasets, one carrying placeholders and one already filtered, and both must
+     | produce byte-identical `setLineups` and `weeks`.
+     | lib/league-matchups.test.ts guards the write side: a future "cleanup" that
+     | reintroduces the filter fails there with a message explaining why.
+     | verified: yes (FAAB's 72 tests also re-run green)
+
+T645 | completed | Extract the before/after season simulation out of FAAB
+     | files: lib/power-pulse/what-if.ts, lib/power-pulse/what-if.test.ts,
+     |        lib/faab/league-faab.ts
+     | depends on: none
+     | FAAB already built a SimTeam[] for the whole league, swapped one team's
+     | weekly distribution, and ran simulateSeason twice. Trade Ideas needs the
+     | identical thing with TWO teams changed. One copy now, in
+     | `simulateWithReplacements`, which overlays a replacement map onto a
+     | baseline without mutating it and returns null when there are no unplayed
+     | weeks (nothing to simulate is not the same as zero odds).
+     | THE CONTRACT HELD: all 7 lib/faab/*.test.ts files, 72 tests, pass
+     | UNCHANGED. No FAAB test was edited. `buildSimTeams` reproduces the deleted
+     | `simTeamsFrom` term for term. Net 16 insertions, 37 deletions in FAAB.
+     | verified: yes
+
+T647 | completed | Multi-asset roster swap, generalised from the FAAB marginal
+     | files: lib/trade-impact/roster-swap.ts, lib/trade-impact/roster-swap.test.ts
+     | depends on: T646
+     | computeLineupSwap generalised from "add one, drop one" to "add N, remove
+     | M", on the same exact-optimal machinery. An incoming player with no
+     | projection for a week is simply not a candidate that week, because a
+     | missing week is a bye and not a zero. An outgoing bench player costs
+     | nothing and the arithmetic shows it without a special case.
+     | `incomingStartWeeks` is keyed only by players who had a projection in at
+     | least one week: a zero there would read as "we checked and he never
+     | starts" when the truth is "we had nothing to check him with".
+     | verified: yes (9 tests)
+
+T649 | completed | Reason builder
+     | files: lib/trade-impact/reasons.ts, lib/trade-impact/reasons.test.ts
+     | depends on: T646
+     | Every one of the 20 reason kinds cites a figure present in the input.
+     | Nothing is generated, estimated, or rounded into a claim the input does not
+     | support; a null figure means the reason does not fire. Same contract
+     | lib/trade-finder/explain.ts already holds, and the reason it is templates
+     | rather than a language model: every sentence is checkable against the
+     | numbers on the same screen, and a plausible-but-wrong one would cost the
+     | feature its credibility the first time it was wrong about a real league.
+     | Costs are never omitted or truncated by the ordering.
+     | Deviations, all recorded by the agent with reasons: `schedule-timing`
+     | names the week and the gain but not opponent strength, because that figure
+     | is not in the input and inventing it would break the rule; `picks-in` and
+     | `picks-out` fire off the actual lists rather than the sign of the net, so a
+     | one-for-two pick swap does not hide the pick being sent; `younger`/`older`
+     | are gated on dynasty, where the figure means something.
+     | verified: yes (69 tests)
+
+T648 | completed | Trade impact read layer
+     | files: lib/trade-impact/load.ts
+     | depends on: T646
+     | THE performance decision in this feature. Turning "your lineup gains 4.3
+     | points a week" into "playoff odds go from 41 to 58 percent" needs a weekly
+     | distribution for EVERY team, not just the two trading. FAAB gets those by
+     | projecting every rostered player in the league: about 350 players and 216
+     | exact lineup fills before the trade is even considered.
+     | Power Pulse already computed exactly that and stored it in
+     | `league_power_pulse_cache.weekly`. So the ten uninvolved teams are READ,
+     | and only the two whose rosters change are projected. Roughly 60 players
+     | instead of 350, and 4 lineup fills per week instead of 12.
+     | The two involved teams use OUR freshly computed baseline on BOTH sides of
+     | the comparison, never the cached one. Mixing a cached baseline with a
+     | recomputed post-trade lineup would attribute every difference between the
+     | two computations to the trade, which is how a deal that changes nothing
+     | ends up reporting a swing in playoff odds.
+     | Values, ages, pick prices and format context come from
+     | `loadTradeFinderLeague`, the same read the suggestion engine uses, so a
+     | built trade and a suggested trade are priced identically by construction.
+     | verified: yes (tsc clean)
+
+T650 | completed | evaluateTrade orchestration
+     | files: lib/trade-impact/evaluate.ts
+     | depends on: T645, T647, T648, T649
+     | Split into `validateProposal` (cheap: one league read, no projection, no
+     | simulation) and `evaluateValidatedTrade` (expensive). The split exists so
+     | callers can validate BEFORE claiming a rate-limit slot.
+     | OWNERSHIP IS RE-DERIVED, NEVER TRUSTED. The caller says "player X from
+     | roster 4"; this checks `rosters.player_ids`. A forged input would otherwise
+     | produce a confident, fully reasoned evaluation of a trade that cannot
+     | happen, which reads as a correctness bug and behaves as a security one,
+     | because the numbers are what a reader acts on.
+     | Picks match on season and round only. The slot bucket is our estimate
+     | rather than the league's fact, so requiring it to match would reject real
+     | picks over a label we chose ourselves.
+     | Signal Check runs through the new `gradeAssetPairs` and a failure there
+     | costs the reader nothing else.
+     | verified: yes (tsc clean)
+
+T652 | completed | evaluateProposedTrade server action with validation and limits
+     | files: app/actions/trade-impact.ts
+     | depends on: T650, T651, T668
+     | Three gates, and their ORDER is the point: shape (zod, no database), then
+     | ownership (one league read), then the rate-limit claim, then the expensive
+     | half. Reversing the last two would be the obvious build and the wrong one:
+     | it charges the honest reader for the dishonest caller's traffic.
+     | Sleeper league ids are pattern-matched to digits because the value reaches
+     | a PostgREST filter, where an id carrying a comma rewrites the filter rather
+     | than being matched by it.
+     | Public, deliberately: every figure it returns is derived from league data
+     | any visitor already sees on Overview and Power Pulse. The protection is the
+     | per-actor limit and the ownership check, not an auth gate.
+     | verified: yes (tsc clean)
+
+T632 | completed | Schedule read layer
+     | files: lib/league-schedule/data.ts
+     | depends on: T629, T631
+     | Two functions with very different costs, kept apart on purpose.
+     | `loadScheduleBoard` is four queries and no arithmetic: every projected
+     | number comes from `league_power_pulse_cache.weekly`, so a twelve team
+     | season costs the same as one week and the Schedule page can never report a
+     | different projection than the Power Pulse page for the same team and week.
+     | `loadMatchupDetail` projects about 60 players for ONE week (the week is
+     | filtered on both the query floor and the row), which is a fraction of what
+     | pulseLeagueDerived already does on the same visit.
+     | verified: yes (tsc clean)
+
+T634 | completed | Schedule controls: view toggle, week stepper, team picker
+T635 | completed | Week board and matchup row
+T636 | completed | Team season view
+T639 | completed | Side-by-side starting lineup table
+T640 | completed | Player detail dialog
+T641 | completed | Bench upgrades panel
+T643 | completed | Empty, partial, and error states for the schedule
+     | files: components/league-schedule/{schedule-controls,week-board,matchup-row,
+     |        team-season,matchup-table,player-detail-dialog,bench-upgrades,
+     |        schedule-empty}.tsx, components/league-schedule/format.ts
+     | depends on: T627, T629, T630, T633
+     | format.ts is a ninth file nobody asked for and it earns its place: four
+     | components render a win-loss record and every one draws the same 120
+     | character gradient. Copying either is how "6-2" and "6-2-0" end up on the
+     | same page and one panel's purple quietly drifts.
+     | The lineup table is a real <table> with the slot as <th scope="row"> in the
+     | middle column, so a row reads as "QB, Josh Allen projected 22.4, Patrick
+     | Mahomes projected 21.8". Two stacked lists would ask a screen reader user
+     | to hold twelve names in their head to compare anything.
+     | The table stays a table at 360px: 56px centre column, two-line player
+     | cells, headshots 32 to 24. The only responsive hide in the set is
+     | TeamSeason's win-probability column, and the same value in the same words
+     | renders in the result cell below sm.
+     | CORRECTNESS FIX I made on top of the agent's work: `opponentLabel` rendered
+     | a bare team code as "vs SF". Sleeper's weekly projections carry `opponent`
+     | with no home or away marker (lib/sync-weekly-projections.ts stores the
+     | field verbatim), so "vs" would have been printed on every AWAY game too.
+     | Home and away is a real distinction to a fantasy manager and inventing it
+     | is worse than omitting it. A bare code now renders as itself; a leading "@"
+     | is still honoured for the day game_id gets parsed into a venue. Added
+     | `opponentWords` for accessible names ("against SF") so the phrasing reads
+     | as running text without claiming a venue either.
+     | Agent deviations accepted: no player-profile link in the dialog, because
+     | /players/[slug] is keyed on `slug` and SchedulePlayer carries a uuid and a
+     | Sleeper id; linking on either would 404 on every player. Recorded as a
+     | follow-up rather than shipped broken.
+     | verified: yes (tsc clean)
+
+T638 | completed | Schedule page
+     | files: app/leagues/[league_id]/schedule/page.tsx
+     | depends on: T634, T635, T636, T637
+     | Built on the Power Pulse page's structure: pulseLeagueCore awaited in the
+     | page so the masthead, the tabs and the intro paint, everything that needs
+     | pulseLeagueDerived behind a Suspense boundary. One React cache() wrapper
+     | holds the derived sync, the single getNflState call inside
+     | resolveScheduleWeek, and the board read, so the intro chips and the body
+     | share all three instead of racing to do each twice.
+     | An out-of-range `?week=` lands on the nearest real week rather than an
+     | empty page: a shared link naming week 20 is a link somebody will click.
+     | `?roster=` falls through to the searched Sleeper handle's own team, then
+     | to the first team, so the team view never opens on nothing.
+     | Projected wins is one narrow read for the one team on screen. TeamSeason
+     | renders "Power Pulse has not scored this league yet" on a null, and that
+     | sentence is false on a league it HAS scored, so a null was not an option.
+     | T637's three rail panels are rendered in this page rather than as three
+     | component files: each is a Panel plus one insights call, and none of them
+     | is reused anywhere else.
+     | verified: yes (tsc clean, next build clean, 1962 tests green)
+
+T642 | completed | Matchup detail page
+     | files: app/leagues/[league_id]/schedule/[week]/[roster_id]/page.tsx
+     | depends on: T639, T640, T641
+     | Week and roster are validated off the route segments before any query
+     | runs, so a typed URL is a 404 rather than a query carrying a NaN.
+     | `reason: "not-found"` gets a NAMED panel, not the generic 404 shell: the
+     | league is real and the week is real, so a reader who followed a shared
+     | link needs to be told which of the four parts did not line up, plus a way
+     | back to that week on the board.
+     | orderSlotsForDisplay is deliberately NOT called here. MatchupTable groups
+     | the paired rows by position block and sorts on the league's own slot order
+     | inside each block, which is the same ordering; applying it in both places
+     | buys nothing and creates a second answer to keep in sync.
+     | The rail's season series and recent form both come from one
+     | loadScheduleBoard call rather than two bespoke queries, so this page and
+     | the board can never disagree about how many times a pairing appears.
+     | verified: yes (tsc clean, next build clean)
+
+T644 | completed | OG card for a matchup
+     | files: app/api/og/matchup/[league_id]/[week]/[roster_id]/route.tsx
+     | depends on: T642
+     | FF Beacon palette only, following the team card: #07070D to #0F0F1A, the
+     | purple to cyan beacon gradient, the wordmark, the ffbeacon.com footer.
+     | resolveLeagueContext is NOT called, and the file says why: nothing on this
+     | card is a value, so the resolver would buy a source label for a card with
+     | no sourced number on it.
+     | It syncs nothing either. A crawler fetching an image is not a reason to
+     | hit Sleeper, and a share card that triggered a league sync would let
+     | anyone with a URL schedule work on our side.
+     | The win probability is printed as a percentage rather than drawn as a bar.
+     | A share image carries no alt text of its own, so anything it only draws is
+     | information it does not carry.
+     | verified: yes (tsc clean, next build clean)
+
+T666 | in_progress | Document the schedule feature and the impact model
+     | files: CLAUDE.md
+     | depends on: T644, T665
+     | CLAUDE.md updated ahead of the review pass, because the ABSOLUTE RULEs it
+     | now carries are exactly what a reviewer should be checking against.
+     | Added: the Schedule route pair and why the matchup detail is keyed on week
+     | plus roster rather than the nullable matchup_id; the positional-starters
+     | rule with the two tests that hold it; why alignedStartingSlots and
+     | startingSlots must not be unified; the null-is-not-zero rule for IDP; the
+     | no-venue-claim rule for Sleeper's bare opponent code; and for Trade Ideas
+     | the three rate-limited paths sharing one bucket, validate-before-claim,
+     | ownership re-derivation, reasons-are-templates, and the one copy of the
+     | before/after simulation.
+     | The docs/ implementation report is still to write.
+     | verified: partial (route sections done, report pending)
+
+T659 | completed | Trade builder
+     | files: components/trade-ideas/trade-builder.tsx
+     | depends on: T652, T658
+     | EVALUATE IS A LINK, NOT A FETCH. The obvious build calls the server action
+     | and drops the result into local state, which is fewer moving parts and
+     | leaves the answer living nowhere: unshareable, unbookmarkable, destroyed
+     | by the back button. The deal is encoded into the query string instead and
+     | the page renders the evaluation server side from it, which also means one
+     | code path turns a proposal into a verdict, and it is the one that runs the
+     | ownership check and the rate-limit claim in the right order.
+     | The link carries `#trade-evaluation`, whose target section is rendered
+     | OUTSIDE the evaluation's Suspense boundary so it exists at first paint
+     | rather than appearing when the result streams in.
+     | The running totals are addition over data already in the browser. Waiting
+     | on a round trip to learn you are 2,000 short would make the builder
+     | useless for the thing it is for.
+     | An asset in the URL that its claimed team no longer holds renders as a
+     | named row saying so and is left out of the totals, rather than vanishing
+     | or being counted at zero. The server rejects the same trade for the same
+     | reason; this is the client naming which piece went stale.
+     | Picker commits on its own Add button, not on the select's change event:
+     | committing on change would close the dialog on whichever name a keyboard
+     | user happened to arrow past.
+     | Cap of 6 per side (MAX_BUILD_ASSETS_PER_SIDE) is stated as a real
+     | paragraph in the panel, not only as a description on the Add button, since
+     | a disabled button leaves the tab order and takes its description with it.
+     | verified: yes (tsc clean, 1962 tests green)
+
+T661 | completed | Trade Ideas page, both modes, rate limited on the render path
+     | files: app/leagues/[league_id]/trade-ideas/page.tsx
+     | depends on: T654, T655, T659, T660, T668
+     | THE SERVER RENDERED EVALUATION RUNS THE SAME THREE GATES AS THE ACTION, IN
+     | THE SAME ORDER: decodeProposal (shape, free), validateProposal (ownership,
+     | one league read), claimTradeEvaluationSlot, then evaluateValidatedTrade.
+     | Validation before the claim so a stale link cannot burn a reader's budget
+     | and garbage gains an attacker nothing.
+     | DEGRADES, NEVER THROWS. A failed claim renders EvaluationState
+     | kind="rate-limited" in the evaluation slot and the league, tabs, builder,
+     | and rail render normally. A 429 for the whole document would punish a
+     | reader for using the feature correctly and take the navigation with it.
+     | `mode !== "build"` is byte-for-byte the previous behaviour: same streamed
+     | TradeFinderSection, same suggestion browser.
+     | Build mode's league read is wrapped in React.cache keyed on primitives, so
+     | the builder's asset lists, the rail's figures, and the identity resolution
+     | are one read rather than three.
+     | The evaluation section renders always, with kind="empty" when the URL
+     | carries no trade, so `#trade-evaluation` is a stable anchor and an empty
+     | builder still tells the reader where the answer will appear.
+     | Format stays the league's own through resolveLeagueContext; only the value
+     | source follows the reader. `?format=` is still ignored here.
+     | KNOWN COST, recorded rather than hidden: validateProposal calls
+     | loadTradeImpactWorld, which calls loadTradeFinderLeague again, so build
+     | mode reads the finder league twice per evaluated request. Fixing it means
+     | a React.cache inside lib/trade-finder-data.ts, which is a separate change.
+     | verified: yes (tsc clean, 1962 tests green)
+
+T663 | completed | Open a suggestion in the builder
+     | files: components/trade-finder-card.tsx, components/trade-finder.tsx
+     | depends on: T659
+     | `builderHref` is OPTIONAL on the card and that is load bearing: the same
+     | card renders on the cross-league portfolio panel, where a deal can come
+     | out of any league and there is no single league page to open it in.
+     | Omitted, the control is not drawn. The existing card contract is unchanged.
+     | A suggested pick becomes `{kind:"pick", season, round, pickPosition:"mid"}`.
+     | SuggestionAsset carries no slot bucket, evaluate.ts matches a proposed pick
+     | on season and round alone, and "mid" is what lib/league-pick-position.ts
+     | falls back to for an unknown slot, so the feature has one answer for it.
+     | The href is null unless the deal belongs to the league the surface is
+     | showing, which also covers a bookmark naming a league the reader has left.
+     | verified: yes (tsc clean, 1962 tests green)
+
+T664 | blocked | Save a built trade through the existing fingerprint
+     | files: lib/trade-finder-saves.ts, components/trade-ideas/trade-builder.tsx
+     | depends on: T659
+     | NOT DONE, and deliberately not done. `savedSuggestionSchema` is `.strict()`
+     | and requires `acceptance`, `qualityRatio`, `score`, `headline`, `whyYou`,
+     | `whyThem`, `pitch`, and `counterparty.direction`. A built trade produces
+     | none of them: they are outputs of the suggestion engine, which never ran.
+     | Filling them to satisfy the schema would put an invented acceptance band
+     | ("Likely" / "Long shot") on the card for a deal nothing graded that way.
+     | Two smaller mismatches on top: ResolvedAsset picks carry `pickPosition`,
+     | which the strict pick schema rejects, and both sides are `.min(1)` while a
+     | proposal is allowed to be one-sided.
+     | suggestionKey() would give a valid tf1- key; the key was never the problem.
+     | Widening the schema is the wrong trade: the bound is what stops that column
+     | becoming general storage, per the file's own header. A follow-up task
+     | should decide what a saved BUILT trade actually is, which is a stored
+     | TradeImpact rather than a stored TradeSuggestion.
+
+T637 | completed | Quick stat rail panels (folded into the schedule page)
+     | files: app/leagues/[league_id]/schedule/page.tsx
+     | depends on: T631
+     | Planned as three component files. Built as three Panels inside the page
+     | instead, because each is a `Panel` wrapping one `insights.ts` call with no
+     | second caller. Three files whose only job is to forward props are three
+     | more places for the rail to drift out of step with itself.
+     | verified: yes (next build clean)
+
+T655 | completed | Mode tabs
+T662 | completed | Stream the full evaluation under the on-screen suggestion
+T665 | completed | Your team right now rail panel
+     | files: components/trade-ideas/mode-tabs.tsx,
+     |        components/trade-ideas/your-team-panel.tsx,
+     |        app/leagues/[league_id]/trade-ideas/page.tsx
+     | depends on: T653, T661
+     | Mode tabs are real links carrying `?mode=`, never client state, so both
+     | modes are linkable and the server can render either without hydration.
+     | The evaluation streams behind its own Suspense boundary with the
+     | `#trade-evaluation` anchor rendered OUTSIDE it, so the anchor exists at
+     | first paint rather than appearing when the result arrives.
+     | verified: yes
+
+T648b | completed | Stop the build path reading the finder league twice
+     | files: lib/trade-impact/load.ts, lib/trade-impact/evaluate.ts,
+     |        app/leagues/[league_id]/trade-ideas/page.tsx
+     | depends on: T650, T661
+     | Found by the page agent and reported rather than papered over, which is
+     | why it got fixed. `validateProposal` called `loadTradeImpactWorld`, which
+     | re-read the whole finder league even though the page had already loaded it
+     | for the builder, the rail, and the identity resolution: same query, same
+     | answer, twice the work on the hot path.
+     | `loadTradeImpactWorld` and `validateProposal` now accept an optional
+     | preloaded `finder`. The page hands over the object its React-cached
+     | `loadBuilderLeague` already produced. The server action has nothing to hand
+     | over and passes nothing, which is the default.
+     | Chosen over adding React `cache` inside lib/trade-finder-data.ts, which
+     | would pull React into a module that unit tests import.
+     | verified: yes (tsc clean, next build clean, 1962 tests green)
+
+T670 | completed | Review fixes: trade impact correctness and metering
+     | files: lib/trade-impact/evaluate.ts, lib/trade-impact/roster-swap.ts,
+     |        lib/trade-impact/reasons.ts, lib/trade-impact/rate-limit.ts,
+     |        lib/trade-impact/proposal-url.ts, lib/trade-impact/evaluate-internals.test.ts,
+     |        lib/trade-impact/reasons.test.ts, app/actions/trade-impact.ts,
+     |        app/leagues/[league_id]/trade-ideas/page.tsx
+     | depends on: T650, T652, T661
+     | Four review agents (implementation, security, accessibility, performance)
+     | audited the build. These are the findings in the trade-impact cluster.
+     |
+     | CRITICAL 1, positionAfter never included the players you acquire.
+     | `buildRosterWeeks(world, myRosterId, outgoingSleeperIds)` is the roster
+     | MINUS what you send, and nothing was ever added back. Its only consumer is
+     | the depth-cost reason, which prints to the reader, so trading a receiver
+     | for a BETTER receiver reported that you had gutted your receiving corps.
+     | Now derived through `applySwap`, which filters out what leaves and
+     | concatenates what arrives.
+     |
+     | CRITICAL 2, the depth-cost figure was a season total printed as a per-week
+     | rate. `positionPoints` accumulated inside the week loop and never divided,
+     | while the sentence says "points a week". With ten weeks left the number was
+     | ten times too large, which also pushed it permanently past the 0.5 noise
+     | threshold meant to keep the reason quiet, so it fired on nearly every
+     | trade. `positionPointsFrom` now divides by the week count.
+     | Both bugs lived in the one file with no test. That is the actual lesson,
+     | and lib/trade-impact/evaluate-internals.test.ts is the answer to it.
+     |
+     | HIGH, valueBefore excluded draft picks while valueDelta included them, so
+     | `valueAfter = valueBefore + valueDelta` was inconsistent with itself and
+     | the percentage-of-roster threshold the value reasons fire on was skewed.
+     | In dynasty picks are a large share of what a rebuilding team owns, which is
+     | exactly the team the value figure is for. `teamValueOf` now counts them
+     | when the league prices them.
+     |
+     | HIGH (security + performance, found independently by both), the rate-limit
+     | claim sat behind the expensive database half. `validateProposal` called
+     | `loadTradeImpactWorld` (about twenty round trips plus a megabyte of
+     | projection rows) BEFORE the ownership comparison, and a proposal naming a
+     | player who is not on the roster failed validation and therefore never
+     | reached the claim. Garbage was the cheapest way to spend our database,
+     | because garbage was the one input that skipped the meter.
+     | Now: validation reads ONLY the finder league and the world load moved
+     | inside `evaluateValidatedTrade`, behind the claim. Plus a second, loose
+     | outer meter (`claimTradeEntrySlot`, 60/min) claimed before any read at all,
+     | so even shape-valid-but-wrong traffic is bounded. The stale-link property
+     | survives: a reader who clicks a dead link still spends no evaluation slot.
+     |
+     | HIGH (security), the suggestion engine ran on every GET with no limit while
+     | the identical work behind the Search button was capped at 12/min. `mode`
+     | defaults to suggested, so loading the page ran `findTrades` and graded the
+     | shortlist, and `force-dynamic` meant no CDN absorbed it. An attacker never
+     | pressed Search. `claimTradeSuggestionSlot` at 12/min now matches the
+     | action's own ceiling. Inherited from the old trade-finder page rather than
+     | introduced this week, but this is where it lives now.
+     |
+     | HIGH (performance), five projection passes where two suffice.
+     | `buildRosterWeeks` was called five times over overlapping player sets, two
+     | of them byte-identical repeats. At 30 startable players and 14 remaining
+     | weeks that is about 1260 redundant projectPlayerWeek calls per evaluation,
+     | each a stat-line dot product over ~30 keys. Each roster is now projected
+     | once and every after-state derived by filtering.
+     |
+     | HIGH (performance), weakestSlotOf rebuilt every weekly lineup a third time,
+     | 28 exact augmenting-path fills, to recover per-slot points that
+     | computeRosterSwap had already computed and discarded. `RosterSwapResult`
+     | now carries `slotPointsBefore` / `slotPointsAfter`, and weakestSlotOf is an
+     | argmin over an array. 84 lineup fills per evaluation down to 56.
+     | While testing that I found a genuine limit and documented it rather than
+     | papering over it: buildOptimalLineup guarantees the optimal TOTAL, not a
+     | canonical assignment across interchangeable slots, so a 19-point receiver
+     | can seat in FLEX and leave the WR slot's own figure unmoved. The
+     | `fills-hole` reason already gates on the weakest slot actually improving,
+     | so it stays silent rather than reporting a slot that did not change. That
+     | is the right failure and there is now a test pinning it.
+     |
+     | MEDIUM, raw Sleeper tokens reached the reader: "Your SUPER_FLEX goes
+     | from...". Routed through `slotLabel`.
+     |
+     | MEDIUM, a PACKAGE-level age delta was described as a ROSTER-level one
+     | ("It makes your roster 7.0 years younger"), which is arithmetic no single
+     | trade does to a thirty-man roster. Reworded to name what was measured. The
+     | test that asserted the old copy was updated, with a comment saying why
+     | editing it was correct: it was asserting the bug.
+     |
+     | LOW (security), the server-rendered evaluation could throw past its Suspense
+     | boundary and replace the whole document, which is exactly what that
+     | component exists to prevent. Wrapped in try/catch.
+     |
+     | MEDIUM (security), the comment in proposal-url.ts claimed a property the
+     | code does not have: `?roster=` really can name whose team is evaluated.
+     | Rewritten to say what is true and why it is acceptable (every figure is
+     | already public on Overview and Power Pulse) rather than asserting a
+     | guarantee someone would later rely on.
+     |
+     | MEDIUM (performance), TradeFinderSection bypassed the request-scoped cache
+     | and called loadTradeFinderLeague directly. Harmless today because the modes
+     | are mutually exclusive, and a loaded gun. Routed through loadBuilderLeague.
+     | verified: yes (tsc clean, 111 tests in lib/trade-impact)
+
+T671 | completed | Review fixes: accessibility
+     | files: components/slide-up-dialog.tsx,
+     |        components/trade-ideas/{trade-builder,trade-verdict,your-team-panel}.tsx,
+     |        components/league-schedule/{matchup-table,team-season,schedule-controls,
+     |        bench-upgrades}.tsx
+     | depends on: T639, T659
+     |
+     | CRITICAL, choosing an asset tore focus out of the Add dialog. The builder
+     | passed `onClose={() => setPicker(null)}`, an inline arrow whose identity
+     | changes every render, and SlideUpDialog listed `onClose` in its effect
+     | deps. Picking a name re-rendered the parent, which ran the effect cleanup,
+     | which restored focus to the button BEHIND the modal, and the effect then
+     | re-focused the Close button. The picker's "Moving to the list" announcement
+     | became a lie and the next Enter closed the dialog without adding anyone.
+     | Fixed at both ends: the caller memoizes, and SlideUpDialog holds onClose in
+     | a ref with deps reduced to [open], so no future caller can trip it. The
+     | matchup table had the identical pattern and escaped only because it held no
+     | other state; it got the same treatment. WCAG 2.4.3 and 3.2.2.
+     |
+     | HIGH, the lineup table's left column had no row header. A `th scope="row"`
+     | is assigned only to cells that FOLLOW it in the row, and the slot sits in
+     | the MIDDLE column, so the home side got nothing. The body survived on
+     | self-contained aria-labels; the footer did not, and a blind reader checking
+     | their own totals heard "118.2, 121.4, 125.7, +7.3" with no way to tell
+     | Final from Projected from Best lineup from Difference. Explicit `headers`
+     | now associate both data cells with both their column and their row. The
+     | file's header comment claimed the opposite and was rewritten. WCAG 1.3.1.
+     |
+     | Also fixed: the disabled "Add to the deal" button gave no reason and left
+     | the tab order taking its description with it (now a visible note, matching
+     | the precedent the same file already set for the six-asset cap); the running
+     | totals region was a bare aria-live without aria-atomic, so it could
+     | announce only the diffed words; two bare "N/A" strings that screen readers
+     | pronounce inconsistently; invalid <p> children of <dl> grouping divs; "3th"
+     | for a third-round pick; a <details> summary with no visual affordance;
+     | the unprojected-slots footnote reporting one side's count for both; and the
+     | week steppers hiding their disabled reason from the tab order.
+     |
+     | Confirmed correct and deliberately NOT changed: the md:hidden / hidden
+     | md:block duplication in trade-verdict (both resolve to display:none at the
+     | opposite breakpoint, so the subtree leaves the accessibility tree and
+     | nothing is announced twice), all six responsive-hide sites (every one
+     | paired with a mobile equivalent), and the scope="colgroup" group rows.
+     | verified: yes (tsc clean, 135 files / 1980 tests green)
+
+T662 | revised | Suggested mode and build mode converge, one press apart
+     | files: components/trade-finder-card.tsx
+     | depends on: T661, T663
+     | RECORDED HONESTLY, because the first entry for this task claimed more than
+     | shipped and an implementation review caught it. `TradeVerdict` has one call
+     | site and it is reachable only from build mode.
+     | What IS true: every suggestion card already carries the Signal Check
+     | verdict, the lineup change per week for both sides, the value delta, the
+     | value gap, the age, the acceptance band and the reasons. What lives one
+     | press away in the builder is the rest of the same evaluation: projected
+     | wins and playoff odds before and after, and the week by week strip against
+     | the real remaining schedule. The two modes render the IDENTICAL component
+     | from the IDENTICAL engine; they are one navigation apart, not two answers.
+     | Why not inline: the suggestion browser pages through the shortlist client
+     | side with no round trip, on purpose. A server-rendered verdict pinned under
+     | it would describe suggestion 1 while the card showed suggestion 3, which is
+     | worse than not having it. Putting the index in the URL would fix the
+     | correctness and cost a round trip per arrow press, which is the thing the
+     | browser was built to avoid.
+     | So the card's control now names the payoff rather than the destination:
+     | "Full impact and edit / Playoff odds, week by week, and change any piece",
+     | on the accent border. "Open in builder" made the rest of the evaluation
+     | sound like a detour to a different tool.
+     | Also fixed here: two bare "N/A" readouts, which screen readers pronounce
+     | inconsistently, now read "Not available".
+     | FOLLOW-UP if inline is wanted: put the shortlist cursor in the URL and
+     | accept the round trip, or evaluate the whole shortlist behind one claim and
+     | ship it with the suggestions. Both are real options; neither is free.
+     | verified: yes (tsc clean, 135 files / 1980 tests green)
+
+T672 | completed | Review fixes: schedule correctness and query cost
+     | files: lib/power-pulse/load.ts, lib/league-schedule/{data,matchup,types}.ts,
+     |        lib/league-matchups.ts (comment only),
+     |        app/leagues/[league_id]/schedule/page.tsx,
+     |        app/leagues/[league_id]/schedule/[week]/[roster_id]/page.tsx,
+     |        app/api/og/matchup/[league_id]/[week]/[roster_id]/route.tsx,
+     |        lib/league-schedule/matchup.test.ts
+     | depends on: T632, T638, T642
+     |
+     | HIGH (performance), the matchup detail read the REST OF THE SEASON's
+     | projections to render one week. `loadProjections` only ever applied
+     | `.gte("week", fromWeek)` and the ceiling was applied in JavaScript after
+     | the rows crossed the wire. Measured on the live database: 261ms and 306
+     | rows against 1.0ms and 16 rows with a real ceiling. At 60 players that is
+     | roughly 1 MB transferred to use 54 KB, and 1080 rows exceeds the internal
+     | 1000-row page size so it also paid a second keyset round trip and an
+     | oversized count guard. `loadProjections` now takes an optional `toWeek`.
+     | PURELY ADDITIVE: an omitted `toWeek` builds a byte-identical query, and the
+     | five other callers pass four arguments and are untouched.
+     |
+     | HIGH (implementation), the week board showed ONE bench-loss figure on every
+     | future week. `lineup_points_lost` is computed once per team, graded against
+     | the lineup set right now, and it was stamped onto weeks 8 through 14 for
+     | lineups that do not exist yet. Now non-null on the current week only.
+     |
+     | HIGH (implementation), the settled-week bench retrospective was computed
+     | from PROJECTIONS. The panel asserted "You left 12.4 points on the bench in
+     | week 3" about a week that had been played, from a projection-based
+     | comparison. Actual per-player points were already loaded and the lineups
+     | module's own doc said they existed for exactly this. A single `gradePoints`
+     | switch now drives the optimal fill, the gap AND every swap's gain, so the
+     | panel cannot report an actual-based total under projection-based sentences.
+     | Five new tests, including one where the projections say the lineup was
+     | perfect and the box score says 15 points sat on the bench.
+     |
+     | MEDIUM, bench upgrades could not recommend FILLING AN EMPTY SLOT. A manager
+     | who left a WR slot empty was told to displace their weakest occupied WR,
+     | and the hole was counted in the total but never explained, which is why the
+     | two numbers diverged most on the roster that needed the nudge most.
+     |
+     | MEDIUM (performance), generateMetadata duplicated four queries the page
+     | then made again. Both pages now share a React-cached `getSyncedLeague`.
+     | The agent found and avoided a trap worth recording: `pulseLeagueCore` had
+     | to move INSIDE the cache, because a league nobody has opened does not exist
+     | in our tables until that call writes it, so a cached read racing ahead of
+     | the sync would cache null and 404 a brand new league.
+     |
+     | MEDIUM (performance), `loadMatchupDetail` read `rosters` and `league_users`
+     | twice because `RosterRow` carried the team name but not the owner handle or
+     | avatar. Both added to the join `loadRosters` already does; two round trips
+     | removed per matchup render and per OG image.
+     |
+     | LOW (security), `roster_id` was unbounded on the matchup route and the OG
+     | route, which accepted negatives. Both bounded to 64 before any query. The
+     | cost per bogus id was flat, but the OG route sets s-maxage=3600, so an
+     | attacker could fill the CDN with distinct 404 images.
+     |
+     | MEDIUM (accessibility), bare "n/a" and "N/A", which screen readers
+     | pronounce inconsistently, replaced with words on both pages.
+     |
+     | Also: `player_ids` dropped from the matchup select (nothing read it), and
+     | the justification comment in lib/league-matchups.ts corrected, since it
+     | claimed the Schedule page reads the column positionally when it reads
+     | `metadata.starters` and the column is an unreachable legacy fallback.
+     | verified: yes (tsc clean, next build clean, 135 files / 1980 tests)
+
+T673 | completed | A bye week no longer renders as "Tied"
+     | files: components/league-schedule/team-season.tsx
+     | depends on: T636
+     | `won` is false for three different things: a loss, a tie, and a roster with
+     | no opponent. An odd-team league gives one manager a bye every week, and the
+     | outcome ladder had no branch for it, so a week nobody played read "Tied".
+     | The absence of an opponent is unambiguous in the data, so the fix is to ask
+     | that question before the other two. The schedule agent found this, could
+     | not fix it (the component was outside its file list) and reported it with
+     | the exact branch needed rather than leaving it or reaching across.
+     | verified: yes (tsc clean, 1980 tests green)
+
+T674 | completed | Schedules rename, readable win probability, tighter sticky bar
+     | files: app/leagues/[league_id]/schedules/** (renamed from schedule/),
+     |        components/league-schedule/{win-prob-bar,schedule-controls,matchup-row,
+     |        matchup-table,team-season,week-board}.tsx,
+     |        components/league-shell/{nav-items,league-masthead,league-mobile-nav}.tsx,
+     |        app/leagues/[league_id]/page.tsx, CLAUDE.md, docs/*.md
+     | depends on: T638, T642, T672
+     | Owner review pass. Seven changes, all cosmetic or navigational.
+     |
+     | 1. "Schedule" is "Schedules" everywhere: the route segment, the nav label,
+     | the breadcrumb, the page title and heading, and the docs. No redirect is
+     | needed because the old path was never committed.
+     |
+     | 2. Getting out of a matchup took a breadcrumb press. There is now a real
+     | control row above the header: back to the week you came from, plus a jump
+     | to either team's own season. Both carry the week and the roster so neither
+     | lands on a default the reader has to correct.
+     |
+     | 3. The sticky control bar was three or four rows tall and pinned to the
+     | viewport, so it spent that height on every screen of a long scroll. It is
+     | one row now. Every label went sr-only, because the options already read
+     | "Week 8 (this week)" and "Team name (6-2)" and a visible label above the
+     | control was repeating what the control says. The end-of-season notes moved
+     | inline in the same wrapping row, and the team filter went behind a toggle
+     | button (the native select already has typeahead, so the filter is the
+     | second way in rather than the only one). Below sm it wraps; nothing is
+     | dropped at any width.
+     |
+     | 4. Projected points are now the largest thing in each player cell, pushed
+     | to the INNER edge so both sides' numbers sit against the slot column. That
+     | falls out of the flex direction for free: the home cell runs left to right
+     | and the away cell is row-reverse, so appending the number puts it against
+     | the middle on both sides. Two names and two scores now read as one
+     | comparison down a single axis instead of four separate readings.
+     |
+     | 5. Win probability was unreadable and the reason is worth recording: a 6px
+     | track split cyan and purple, two saturated brand colours of similar
+     | lightness on a dark background, sit at nearly the same visual weight, so
+     | an 80/20 split and a 60/40 split looked about the same. The reader was
+     | doing arithmetic off the caption because the drawing told them nothing.
+     | components/league-schedule/win-prob-bar.tsx makes the NUMBERS the headline
+     | (large, tinted, above each team name), marks the favourite with a word so
+     | it survives greyscale, doubles the track height with inline labels, and
+     | draws a dashed centre line at 50 because a split reads far more precisely
+     | against a fixed reference than in isolation. Used on the matchup header
+     | and on every week card.
+     |
+     | 6. The team-season win probability column got the same treatment at row
+     | scale: a large tinted percentage over a filled meter with the same dashed
+     | centre mark, tinted by which side of even it falls on.
+     |
+     | 7. Nothing said the cards were clickable. The whole card was a link through
+     | a stretched anchor on the heading, which works and is invisible. Each card
+     | now carries a "View both starting lineups" line with a chevron that slides
+     | on hover, the card border lifts to cyan on hover, the week panel helper
+     | says it before the first card, and the team-season rows carry a "Lineups"
+     | cue. All aria-hidden: the real link is the heading, and announcing a second
+     | one would put two identical destinations in the reader's list.
+     | verified: yes (tsc clean, next build clean, 135 files / 1980 tests green)

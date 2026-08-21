@@ -54,7 +54,7 @@ export function LeagueQuickLinks({
   sleeperLeagueIds: string[];
   /** The reader's own Sleeper id, so their own roster reads as theirs. */
   sleeperUserId: string | null;
-  /** The reader's value source, so Trade Finder prices deals the same way. */
+  /** The reader's value source, so Trade Ideas prices deals the same way. */
   sourceSlug: string | null;
 }) {
   const [panel, setPanel] = useState<
@@ -149,13 +149,13 @@ export function LeagueQuickLinks({
           />
           <QuickLinkButton
             icon={<Handshake aria-hidden="true" className="h-4 w-4" />}
-            title="Trade Finder"
+            title="Trade Ideas"
             detail={
               exposure.totalLeagues > 0
                 ? `One trade at a time across ${exposure.totalLeagues} synced ${exposure.totalLeagues === 1 ? "league" : "leagues"}`
                 : "Nothing synced yet"
             }
-            ariaLabel={`Trade Finder. Open ${
+            ariaLabel={`Trade Ideas. Open ${
               exposure.totalLeagues > 0
                 ? `one suggested trade at a time, drawn from your ${exposure.totalLeagues} synced leagues, with what each one does to your starting lineup.`
                 : "the trade search. No leagues are synced yet, so there is nothing to search."

@@ -53,8 +53,32 @@ export type MatchupSyncResult = {
   error?: string;
 };
 
-function validPlayerId(id: string | null | undefined): id is string {
-  return typeof id === "string" && id.length > 0 && id !== "0";
+/**
+ * Sleeper's starters array is POSITIONAL, and it is stored that way.
+ *
+ * `starters[i]` is the player in the i-th startable slot of the league's
+ * `roster_positions`, and an unfilled slot is the string "0". This used to be
+ * filtered on the way in, which removed the placeholder and shifted every slot
+ * below it up by one.
+ *
+ * The reason that matters is `starters_points`, which was never filtered. The
+ * two arrays are only meaningful paired, and filtering one of them made them
+ * disagree with each other about which slot every entry after the first gap
+ * belongs to. Storing both verbatim is what puts them back in step.
+ *
+ * The Schedule page is NOT the reason. It reads `metadata.starters`, the
+ * verbatim Sleeper object, and falls back to this column only for rows written
+ * while the filter was live: see lib/league-schedule/lineups.ts, which explains
+ * why it prefers the metadata copy. On anything synced since, that fallback
+ * never fires.
+ *
+ * So both go in verbatim, and every reader filters. `asStringArray` in
+ * lib/power-pulse/load.ts already does, which is why this change moves no Power
+ * Pulse number; lib/power-pulse/load.test.ts holds that line.
+ */
+export function normalizeIdList(ids: unknown): string[] {
+  if (!Array.isArray(ids)) return [];
+  return ids.map((id) => (typeof id === "string" ? id : ""));
 }
 
 /**
@@ -164,9 +188,10 @@ export async function syncLeagueMatchups(
         matchup_id:
           m.matchup_id === null || m.matchup_id === undefined ? null : Number(m.matchup_id),
         points: Number.isFinite(points) ? points : 0,
-        starter_ids: (m.starters ?? []).filter(validPlayerId) as unknown as Json,
+        // Verbatim, placeholders included. See normalizeIdList above.
+        starter_ids: normalizeIdList(m.starters) as unknown as Json,
         starter_points: (m.starters_points ?? []) as unknown as Json,
-        player_ids: (m.players ?? []).filter(validPlayerId) as unknown as Json,
+        player_ids: normalizeIdList(m.players) as unknown as Json,
         player_points: (m.players_points ?? {}) as unknown as Json,
         // A past week with points on the board is settled. A past week with no
         // points is a league that has not started yet, which stays projectable.

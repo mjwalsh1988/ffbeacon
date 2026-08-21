@@ -37,7 +37,7 @@ import {
 } from "@/lib/power-pulse/load";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
-import { simulateSeason, type SimTeam } from "@/lib/power-pulse/simulate";
+import { simulateWithReplacements } from "@/lib/power-pulse/what-if";
 import {
   buildOptimalLineup,
   lineupSigma,
@@ -154,32 +154,6 @@ function buildRosterWeeks({
   }
 
   return { byWeek, meta };
-}
-
-function meanOf(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
-
-function simTeamsFrom(
-  rosters: RosterRow[],
-  weekly: Map<number, Map<number, { mean: number; sigma: number }>>,
-): SimTeam[] {
-  return rosters.map((roster) => {
-    const weeks = weekly.get(roster.sleeperRosterId) ?? new Map();
-    const means = [...weeks.values()].map((w) => w.mean);
-    const sigmas = [...weeks.values()].map((w) => w.sigma);
-    return {
-      sleeperRosterId: roster.sleeperRosterId,
-      wins: roster.wins,
-      losses: roster.losses,
-      ties: roster.ties,
-      pointsFor: roster.pointsFor,
-      weeks,
-      mean: meanOf(means),
-      sigma: meanOf(sigmas),
-    };
-  });
 }
 
 export async function calculateLeagueFaab(
@@ -339,9 +313,6 @@ export async function calculateLeagueFaab(
     weeklyBefore.set(roster.sleeperRosterId, weekMap);
   }
 
-  const weeklyAfter = new Map(weeklyBefore);
-  weeklyAfter.set(mine.sleeperRosterId, swap.weeklyAfter);
-
   const upcoming = schedule.weeks.filter(
     (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
   );
@@ -349,17 +320,25 @@ export async function calculateLeagueFaab(
   let oddsBefore: { playoff: number; title: number; wins: number } | null = null;
   let oddsAfter: { playoff: number; title: number; wins: number } | null = null;
 
-  if (upcoming.length > 0) {
-    const simOptions = {
+  // One roster changes: mine, with the signing made and the cut applied. The
+  // shared what-if runner returns null when there is nothing left to play, which
+  // is the same "no odds available" case the old inline guard covered.
+  const simulated = simulateWithReplacements({
+    rosters,
+    baseline: weeklyBefore,
+    replacements: new Map([[mine.sleeperRosterId, swap.weeklyAfter]]),
+    upcoming,
+    options: {
       runs: settings.marginal.simulationRuns,
       seed: pulseSettings.simulation.seed,
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
-    };
-    const before = simulateSeason(simTeamsFrom(rosters, weeklyBefore), upcoming, simOptions);
-    const after = simulateSeason(simTeamsFrom(rosters, weeklyAfter), upcoming, simOptions);
-    const b = before.get(mine.sleeperRosterId);
-    const a = after.get(mine.sleeperRosterId);
+    },
+  });
+
+  if (simulated) {
+    const b = simulated.before.get(mine.sleeperRosterId);
+    const a = simulated.after.get(mine.sleeperRosterId);
     if (b) oddsBefore = { playoff: b.playoffOdds, title: b.titleOdds, wins: b.expectedWins };
     if (a) oddsAfter = { playoff: a.playoffOdds, title: a.titleOdds, wins: a.expectedWins };
   }

@@ -374,11 +374,12 @@ League Pulse is ONE continuous user journey, not multiple features. The journey:
 1. `/tools/league-pulse` — entry point. User enters Sleeper username and season, sees their leagues. No DB writes happen here; data comes straight from Sleeper.
 2. `/dashboard` — logged-in users persist their Sleeper username on user_preferences and see the same league list cached for fast return visits.
 3. `/leagues/[sleeper_league_id]` — the deep view. Clicking "Open league" on any card from #1 or #2 is a plain `<Link>` navigation to the deep view, so the branded loading boundary shows immediately on click. The deep-view page calls `lib/league-pulse.ts pulseLeague` on every render (writes to `leagues`, `rosters`, `league_users`, `league_transactions` via service-role); the 60-minute cache inside `pulseLeague` short-circuits redundant Sleeper hits (power rankings recompute at most once per 24h on the cached path). A sync failure renders a branded retry state (`components/league-load-error.tsx`), not a redirect or 404.
-4. `/leagues/[sleeper_league_id]?tab=teams` plus the full routes `/leagues/[sleeper_league_id]/power-pulse` and `/leagues/[sleeper_league_id]/transactions` — the tabbed deep view. Overview and Teams render inline on the deep view; Power Pulse and Transactions are their own routes. Every tab renders from the synced rows; never re-derives from Sleeper.
+4. `/leagues/[sleeper_league_id]?tab=teams` plus the full routes `/leagues/[sleeper_league_id]/schedules`, `/leagues/[sleeper_league_id]/power-pulse`, `/leagues/[sleeper_league_id]/trade-ideas` and `/leagues/[sleeper_league_id]/transactions` (the tabbed deep view). Overview and Teams render inline on the deep view; the other four are their own routes. Every tab renders from the synced rows; never re-derives from Sleeper.
 
 Naming rules:
 - Feature name in copy/docs: "League Pulse".
-- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- `/leagues/[sleeper_league_id]/trade-finder` was renamed to `trade-ideas`. `next.config.ts` holds a permanent 308 for the old path; keep it forever, shared links use it.
 - Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
 - Tabs within `/leagues/[sleeper_league_id]` use plain functional labels.
 
@@ -440,6 +441,86 @@ Module map:
 Opponent strength is OURS, not Sleeper's. ABSOLUTE RULE: do not derive strength of schedule from Sleeper's weekly projections. They are effectively a season average repeated 18 times (measured spread across a 2026 player-season is only 2.6% to 5.4%), so any SOS built on them ranks every team identically. `nfl_defense_vs_position` is computed from `player_stats` (which carries `opponent` on every row back to 2020) and produces a real 0.80-1.25 spread.
 
 Model config lives in `league_power_pulse_settings` (single `id='global'` row, service-role only) with code fallbacks in `lib/power-pulse/default-settings.ts`, admin-edited at `/admin/power-pulse`, validated server-side by `lib/power-pulse/validate.ts`. Saving does NOT fan out recomputes; bump `modelVersion` to force every league to rescore on next view.
+
+## Schedules (League Pulse)
+
+`/leagues/[id]/schedules` is the week view and the team view, driven by
+`?view=week&week=N` or `?view=team&roster=N`, so both are linkable.
+`/leagues/[id]/schedules/[week]/[roster_id]` is one matchup with both starting
+lineups. Keyed on week plus roster rather than `matchup_id`, because that column
+is nullable when Sleeper leaves a roster unpaired.
+
+ABSOLUTE RULE: Sleeper's `starters` array is POSITIONAL. `starters[i]` is the
+player in the i-th startable slot of `roster_positions`, and an unfilled slot is
+the string `"0"`. `lib/league-matchups.ts` stores it VERBATIM, placeholders
+included, and every reader filters. Do not reintroduce a filter at write time:
+it shifts every slot below the gap up by one and puts players in the wrong slots.
+`lib/league-matchups.test.ts` and `lib/power-pulse/load.test.ts` both fail if it
+comes back.
+
+`lib/league-schedule/slots.ts alignedStartingSlots()` keeps every non-bench
+token, including IDP. It deliberately differs from `lib/power-pulse/lineup.ts
+startingSlots()`, which drops tokens it cannot project. Both are correct for
+their own caller. Do not unify them.
+
+ABSOLUTE RULE: a null projection is never a zero. Sleeper publishes projections
+for QB, RB, WR, TE, K and DEF only (`PROJECTION_POSITIONS` in `lib/sleeper.ts`),
+so IDP slots render the player with the words "No projection" and are excluded
+from totals with a footnote saying how many. A zero would sum into the total and
+be believed.
+
+The board reads every projected number from `league_power_pulse_cache.weekly`
+rather than recomputing, so the Schedule page and the Power Pulse page can never
+report different projections for the same team and week. The matchup detail
+projects about 60 players for ONE week. No new table, no cron.
+
+Venue is never claimed. Sleeper's `opponent` is a bare team code with no home or
+away marker, so `opponentLabel` renders the code as itself. A leading "@" is
+honoured for the day `player_weekly_projections.game_id` gets parsed.
+
+## Trade Ideas (League Pulse)
+
+`/leagues/[id]/trade-ideas`, two modes on one page: `mode=suggested` (the
+existing `lib/trade-finder/` engine, unchanged) and `mode=build` (any trade you
+propose). Both render the same `TradeVerdict`, so a suggested trade and a built
+one get the identical evaluation.
+
+`lib/trade-impact/` is the impact model. It answers two questions that routinely
+disagree and says both: VALUE (what the assets are worth) and WINS (the optimal
+lineup week by week against the real remaining schedule, through the same Monte
+Carlo season Power Pulse uses). A deal that adds value and costs wins is right
+for a rebuilder and wrong for a contender, and the reasons say so.
+
+ABSOLUTE RULE: rate limiting covers EVERY path that can run an evaluation, and
+there are three: the server action, the SERVER RENDERED page path (`?mode=build`
+decodes a trade from the URL and evaluates it during render, with no action id
+and no JavaScript involved), and the streamed evaluation under the on-screen
+suggestion. All three claim from ONE bucket via
+`lib/trade-impact/rate-limit.ts claimTradeEvaluationSlot()`, at 10 per minute per
+actor. One bucket, so alternating paths cannot buy a second budget.
+
+ABSOLUTE RULE: validate BEFORE claiming a slot. Shape check, then ownership,
+then the claim, then the expensive half. A stale link must not burn a reader's
+budget and garbage input must gain an attacker nothing.
+
+ABSOLUTE RULE: ownership is re-derived from `rosters.player_ids`, never trusted
+from the caller. A forged proposal would otherwise produce a confident, fully
+reasoned evaluation of a trade that cannot happen.
+
+ABSOLUTE RULE: reasons are deterministic templates, never a language model.
+Every sentence cites a figure present in the input, and a null figure means the
+reason does not fire. Every sentence is checkable against the numbers on the same
+screen, which a generated one would not be.
+
+`lib/power-pulse/what-if.ts simulateWithReplacements()` is the one copy of the
+before/after season simulation. FAAB and Trade Ideas both call it. If a change
+there breaks `lib/faab/*.test.ts`, revert it rather than editing a FAAB test.
+
+Only the two teams in a trade are projected. Every other team's weekly
+distribution is read from `league_power_pulse_cache.weekly`. The two involved
+teams use the freshly computed baseline on BOTH sides of the comparison, never
+the cached one, or every difference between the two computations gets attributed
+to the trade.
 
 ## League Pulse Format Resolution
 

@@ -36,9 +36,8 @@
  *   cacheable.
  */
 
-import { headers } from "next/headers";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
+import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { findTrades } from "@/lib/trade-finder/engine";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
@@ -196,35 +195,12 @@ function readPlayerId(value: unknown): string | null {
 /**
  * The durable per-actor limit.
  *
- * Fails CLOSED. A limit that cannot be evaluated is not a limit that passes, and
- * the work behind these actions is exactly what an unbounded caller would want
- * to spend our database on.
- *
- * `headers()` is wrapped in a Request because getTrustedClientIp reads a
- * Request's headers and nothing else. This keeps one derivation of the trusted
- * client IP in the codebase rather than a second copy that could drift from it.
+ * The mechanism lives in lib/rate-limit-claim.ts, because a server RENDERED path
+ * needs the identical guard and two copies of a limiter is how one of them ends
+ * up with the wrong window. It fails closed there, for the reason stated there.
  */
 async function claimSlot(bucket: string, max: number): Promise<boolean> {
-  try {
-    const requestHeaders = await headers();
-    const actorKey = await resolveRateLimitActorKey(
-      new Request("https://ffbeacon.internal/trade-finder", {
-        headers: requestHeaders,
-      }),
-    );
-    const admin = createAdminClient();
-    const { data, error } = await admin.rpc("try_claim_rate_limit" as never, {
-      p_bucket: bucket,
-      p_key: actorKey,
-      p_max_requests: max,
-      p_window_seconds: RATE_WINDOW_SECONDS,
-    } as never);
-    if (error) throw new Error(error.message);
-    return Boolean(data);
-  } catch (err) {
-    console.error("[trade-finder] rate-limit check failed", err);
-    return false;
-  }
+  return claimRateLimitSlot({ bucket, max, windowSeconds: RATE_WINDOW_SECONDS });
 }
 
 /**

@@ -115,8 +115,56 @@ export async function gradeSuggestions(
   sleeperLeague: SleeperLeague,
   suggestions: TradeSuggestion[],
 ): Promise<(SuggestionGrade | null)[]> {
-  const empty = suggestions.map(() => null);
-  if (suggestions.length === 0) return [];
+  return gradeAssetPairs(
+    admin,
+    sleeperLeague,
+    suggestions.map((s) => ({
+      incoming: s.incoming,
+      outgoing: s.outgoing,
+      counterpartyLabel: s.counterparty.teamName,
+    })),
+  );
+}
+
+/**
+ * One deal to grade, without requiring a TradeSuggestion around it.
+ *
+ * Trade Ideas' builder produces a trade nobody suggested: there is no
+ * fingerprint, no acceptance band, no counterparty record, just two lists of
+ * assets and the name of the team on the other side. It still deserves the same
+ * second opinion the engine's own suggestions get, and a reader would rightly
+ * distrust a builder whose grade came from somewhere else.
+ *
+ * So the batching below works on THIS, and `gradeSuggestions` became a two line
+ * adapter over it. Nothing about how a suggestion is graded changed.
+ */
+export type GradeableTrade = {
+  /** What the reader receives. Side "a" in the pipeline. */
+  incoming: SuggestionAsset[];
+  /** What the reader sends. Side "b". */
+  outgoing: SuggestionAsset[];
+  /** Rendered as the opposing side's label in the explanation. */
+  counterpartyLabel: string;
+};
+
+/**
+ * Grade any number of trades for the cost of grading one.
+ *
+ * The lookups are shared. A league's trades are drawn from the same rosters, so
+ * the union of their assets is barely larger than any single deal's: one
+ * resolver built over that union answers every one of them, and the pipeline
+ * itself is pure, so the runs after it touch no database at all.
+ *
+ * Returns an array aligned by index with `trades`, null wherever a grade would
+ * be a guess. Never throws.
+ */
+export async function gradeAssetPairs(
+  admin: Client,
+  sleeperLeague: SleeperLeague,
+  trades: GradeableTrade[],
+): Promise<(SuggestionGrade | null)[]> {
+  const empty = trades.map(() => null);
+  if (trades.length === 0) return [];
 
   try {
     const settings = await loadSignalCheckSettings(admin);
@@ -136,9 +184,9 @@ export async function gradeSuggestions(
     if (!format) return empty;
 
     const allowsPicks = format.allowsPicks;
-    const sidesFor = suggestions.map((s) => ({
-      a: toAssetInputs(s.incoming, allowsPicks),
-      b: toAssetInputs(s.outgoing, allowsPicks),
+    const sidesFor = trades.map((t) => ({
+      a: toAssetInputs(t.incoming, allowsPicks),
+      b: toAssetInputs(t.outgoing, allowsPicks),
     }));
 
     // One synthetic analysis holding every asset in the shortlist. It is never
@@ -155,7 +203,7 @@ export async function gradeSuggestions(
     const built = await buildValueResolver(admin, format, union);
     const ruleset = await loadActiveRuleset(admin);
 
-    return suggestions.map((suggestion, i) => {
+    return trades.map((trade, i) => {
       const sides = sidesFor[i];
       // Dropping picks in a redraft format can empty a side. A one-sided trade
       // is not a trade, and grading it would produce a confident verdict about
@@ -177,7 +225,7 @@ export async function gradeSuggestions(
         });
         const view = toBuilderView(analysis, settings, {
           a: "You",
-          b: suggestion.counterparty.teamName,
+          b: trade.counterpartyLabel,
         });
 
         return {
@@ -192,7 +240,7 @@ export async function gradeSuggestions(
         // Caught per suggestion, not per batch: one deal carrying an asset with
         // no value row must not cost the other eleven their grades.
         if (!(err instanceof SignalCheckError)) {
-          console.error("[trade-finder] signal check grade failed", err);
+          console.error("[trade-grade] signal check grade failed", err);
         }
         return null;
       }
@@ -202,7 +250,7 @@ export async function gradeSuggestions(
     // expected outcome here, not a fault. Anything else is worth a line in the
     // log, but never worth failing the suggestions over.
     if (!(err instanceof SignalCheckError)) {
-      console.error("[trade-finder] signal check batch grade failed", err);
+      console.error("[trade-grade] signal check batch grade failed", err);
     }
     return empty;
   }

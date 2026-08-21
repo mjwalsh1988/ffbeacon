@@ -32,6 +32,7 @@ import {
   ArrowLeftRight,
   ArrowRight,
   Handshake,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
 
@@ -241,9 +242,12 @@ export default async function LeagueDeepViewPage({
   const powerPulseHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/power-pulse?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/power-pulse`;
-  const tradeFinderHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}/trade-finder?username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}/trade-finder`;
+  const tradeIdeasHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}/trade-ideas?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}/trade-ideas`;
+  const scheduleHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}/schedules?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}/schedules`;
 
   // The masthead is identical on every League Pulse section, so its inputs are
   // assembled once here and handed to the shell, which renders it above
@@ -331,10 +335,18 @@ export default async function LeagueDeepViewPage({
                 </li>
                 <li>
                   <ExploreLink
-                    href={tradeFinderHref}
+                    href={scheduleHref}
+                    icon={CalendarDays}
+                    label="Schedules"
+                    hint="Every week, every matchup, both lineups"
+                  />
+                </li>
+                <li>
+                  <ExploreLink
+                    href={tradeIdeasHref}
                     icon={Handshake}
-                    label="Trade Finder"
-                    hint="One trade worth offering, at a time"
+                    label="Trade Ideas"
+                    hint="Deals worth offering, and any deal you want checked"
                   />
                 </li>
                 <li>

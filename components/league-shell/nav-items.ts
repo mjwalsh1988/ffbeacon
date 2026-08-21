@@ -3,8 +3,8 @@
  * (league-side-nav.tsx) and the mobile sheet (league-mobile-nav.tsx) read from
  * here, so a section can never appear in one and go missing from the other.
  *
- * Overview and Teams are inline views on `/leagues/[id]`; Power Pulse, Trade
- * Finder, and Transactions are full routes of their own. `leagueTabHref`
+ * Overview and Teams are inline views on `/leagues/[id]`; Schedules, Power Pulse,
+ * Trade Ideas, and Transactions are full routes of their own. `leagueTabHref`
  * knows which is which and forwards the searched Sleeper handle either way, so
  * the in-view switcher and the Teams-tab owner default survive every hop.
  */
@@ -14,8 +14,9 @@ import type { NavIconName } from "@/components/app-shell/nav-icons";
 export type LeagueTabId =
   | "overview"
   | "teams"
+  | "schedules"
   | "power-pulse"
-  | "trade-finder"
+  | "trade-ideas"
   | "transactions";
 
 export type LeagueNavItem = {
@@ -45,15 +46,21 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     icon: "users",
   },
   {
+    id: "schedules",
+    label: "Schedules",
+    hint: "Every week, every matchup, both lineups",
+    icon: "calendar",
+  },
+  {
     id: "power-pulse",
     label: "Power Pulse",
     hint: "What each roster should win from here",
     icon: "activity",
   },
   {
-    id: "trade-finder",
-    label: "Trade Finder",
-    hint: "One trade worth offering, at a time",
+    id: "trade-ideas",
+    label: "Trade Ideas",
+    hint: "Deals worth offering, and any deal you want checked",
     icon: "handshake",
   },
   {
@@ -73,7 +80,12 @@ export function leagueTabHref(
   const qs = new URLSearchParams();
   if (searchedUsername) qs.set("username", searchedUsername);
 
-  if (tabId === "transactions" || tabId === "power-pulse" || tabId === "trade-finder") {
+  if (
+    tabId === "transactions" ||
+    tabId === "power-pulse" ||
+    tabId === "trade-ideas" ||
+    tabId === "schedules"
+  ) {
     const s = qs.toString();
     return `/leagues/${sleeperLeagueId}/${tabId}${s ? `?${s}` : ""}`;
   }

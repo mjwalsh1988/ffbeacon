@@ -44,6 +44,16 @@ export type RosterRow = {
   ties: number;
   pointsFor: number;
   teamName: string;
+  /**
+   * The Sleeper user who owns this roster, and their avatar id. `teamName`
+   * alone used to be the whole identity here, which forced every caller that
+   * shows a face or an @handle (the Schedule matchup page, the matchup share
+   * card) to re-read `rosters` and `league_users` for two columns this query
+   * had already joined. Both are one extra column on reads that happen anyway.
+   */
+  ownerUserId: string | null;
+  ownerHandle: string | null;
+  ownerAvatarId: string | null;
 };
 
 export type PlayerRow = {
@@ -162,7 +172,7 @@ export async function loadRosters(
       .order("sleeper_roster_id", { ascending: true }),
     supabase
       .from("league_users")
-      .select("sleeper_user_id, display_name, team_name")
+      .select("sleeper_user_id, display_name, team_name, avatar")
       .eq("league_id", leagueRowId),
   ]);
 
@@ -182,6 +192,9 @@ export async function loadRosters(
       ties: Number(r.ties ?? 0),
       pointsFor: Number(r.points_for ?? 0),
       teamName: user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`,
+      ownerUserId: r.owner_user_id ?? null,
+      ownerHandle: user?.display_name ?? null,
+      ownerAvatarId: user?.avatar ?? null,
     };
   });
 }
@@ -252,8 +265,9 @@ export async function loadPlayers(
 }
 
 /**
- * Weekly projections for a player set from `fromWeek` forward. Paged, because a
- * full league easily exceeds the 1000-row default cap.
+ * Weekly projections for a player set from `fromWeek` forward, optionally
+ * stopping at `toWeek`. Paged, because a full league easily exceeds the 1000-row
+ * default cap.
  *
  * Paging is keyset on the primary key. An offset walk over an unsorted query is
  * not stable, because Postgres may return rows in a different order per
@@ -262,12 +276,22 @@ export async function loadPlayers(
  * score, its projected wins, and the playoff odds that follow from them. The
  * count guard turns a short read into a failed run rather than a plausible
  * looking wrong answer.
+ *
+ * `toWeek` exists for the callers that want ONE week, not the rest of the
+ * season. Filtering in JavaScript after the read looks equivalent and is not:
+ * the rows still cross the wire, and sixty players times eighteen weeks clears
+ * the PAGE cap, so a single-week question pays for a second keyset round trip
+ * plus a count over rows nobody will look at. Measured against the live database
+ * for one matchup: 306 rows and 261ms without the ceiling, 16 rows and 1.0ms
+ * with it. The parameter is optional and omitting it changes nothing about the
+ * query, so Power Pulse, FAAB and Trade Ideas keep the exact reads they had.
  */
 export async function loadProjections(
   supabase: ServiceClient,
   playerIds: string[],
   season: number,
   fromWeek: number,
+  toWeek?: number,
 ): Promise<ProjectionRow[]> {
   const out: ProjectionRow[] = [];
   if (playerIds.length === 0) return out;
@@ -276,13 +300,18 @@ export async function loadProjections(
   for (let i = 0; i < playerIds.length; i += CHUNK) {
     const chunk = playerIds.slice(i, i + CHUNK);
 
-    const { count: expected, error: countErr } = await supabase
+    let countQ = supabase
       .from("player_weekly_projections")
       .select("id", { count: "exact", head: true })
       .eq("season", season)
       .eq("season_type", "regular")
       .gte("week", fromWeek)
       .in("player_id", chunk);
+    // The ceiling has to sit on the count as well as the select. The count is
+    // what the completeness guard below compares against, so a count over
+    // eighteen weeks and a select over one would fail every run.
+    if (toWeek !== undefined) countQ = countQ.lte("week", toWeek);
+    const { count: expected, error: countErr } = await countQ;
     if (countErr) {
       throw new Error(`power pulse projection count failed: ${countErr.message}`);
     }
@@ -301,6 +330,7 @@ export async function loadProjections(
         .in("player_id", chunk)
         .order("id", { ascending: true })
         .limit(PAGE);
+      if (toWeek !== undefined) q = q.lte("week", toWeek);
       if (cursor !== null) q = q.gt("id", cursor);
       const { data, error } = await q;
       if (error) throw new Error(`power pulse projection load failed: ${error.message}`);

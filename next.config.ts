@@ -46,6 +46,16 @@ const nextConfig: NextConfig = {
         destination: "/tools/league-pulse",
         permanent: true,
       },
+      // Trade Finder inside a league became Trade Ideas: the same suggestion
+      // engine, plus a builder for a deal nobody suggested. Kept as a permanent
+      // 308 in the routing layer so shared links, the Copy link button's older
+      // output, and anything already pasted into a league chat keep working
+      // without ever rendering the old path.
+      {
+        source: "/leagues/:league_id/trade-finder",
+        destination: "/leagues/:league_id/trade-ideas",
+        permanent: true,
+      },
       // Signal profiles moved to the canonical root /{handle} (Phase 7). The
       // legacy /u/{handle} paths are kept forever as permanent redirects so old
       // shared links and OG cards keep working. These run in the routing layer

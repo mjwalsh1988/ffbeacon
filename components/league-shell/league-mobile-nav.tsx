@@ -6,7 +6,7 @@
  * exists from lg up. Below that the same rows are in the site navigation
  * drawer, and reaching them costs opening a modal from the header, finding the
  * league's section, and pressing a row. Until now that was the only way to move
- * between Overview, Teams, Power Pulse, Trade Finder, and Transactions on a
+ * between Overview, Teams, Schedules, Power Pulse, Trade Ideas, and Transactions on a
  * phone, which is a long way round for the thing you do most inside a league.
  *
  * So below lg the shell carries a docking bar naming the section you are on and

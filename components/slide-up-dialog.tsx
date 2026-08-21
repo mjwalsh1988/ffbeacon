@@ -19,6 +19,25 @@ import { X } from "lucide-react";
  * handle is a hint rather than a control. Callers that draw their own close
  * button inside a header of their own pass `showClose={false}` so there is
  * exactly one.
+ *
+ * WHY `onClose` LIVES IN A REF
+ *   The focus effect below moves focus in on mount and hands it back to the
+ *   opener on cleanup. If `onClose` were in its deps, every parent re-render
+ *   that produced a fresh handler identity would tear the effect down and set
+ *   it up again, and the cleanup would fire `previouslyFocused.focus()` while
+ *   the dialog was still open. Focus would land on the button BEHIND the modal
+ *   and then get dragged to the first focusable inside it 80ms later.
+ *
+ *   That is not hypothetical. Callers pass `onClose={() => setThing(null)}`,
+ *   an inline arrow, and any `useState` in the parent re-renders it: a select
+ *   inside the dialog updating the parent's pending choice was enough to yank
+ *   focus off that select mid-interaction, so the next Enter hit the close
+ *   button instead. WCAG 2.4.3 and 3.2.2 both.
+ *
+ *   Holding the handler in a ref means the deps are `[open]` alone and the
+ *   effect runs exactly twice per dialog, on open and on close, whatever the
+ *   parent does. Memoizing the caller's handler fixes one caller; this fixes
+ *   all of them. Do not put `onClose` back in the dep array.
  */
 export function SlideUpDialog({
   open,
@@ -47,6 +66,11 @@ export function SlideUpDialog({
   const sheetRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
+
+  // Read by the Escape handler and the backdrop, never by a dep array. See the
+  // note above the component for what putting it back in one costs.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -77,7 +101,7 @@ export function SlideUpDialog({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       } else if (event.key === "Tab" && sheetRef.current) {
         const focusables = sheetRef.current.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -103,7 +127,7 @@ export function SlideUpDialog({
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!mounted || !open) return null;
 

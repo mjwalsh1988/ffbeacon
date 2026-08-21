@@ -4,7 +4,7 @@ import { SidePanel } from "@/components/side-panel";
 import { TradeFinder } from "@/components/trade-finder";
 
 /**
- * Trade Finder across every league, as a panel on My Sleeper Leagues.
+ * Trade Ideas across every league, as a panel on My Sleeper Leagues.
  *
  * Same component, same engine, same one-at-a-time answer as the league tab. The
  * only difference is where a suggestion is allowed to come from, and the card
@@ -46,7 +46,7 @@ export function TradeFinderPanel({
     <SidePanel
       open={open}
       onClose={onClose}
-      title="Trade Finder"
+      title="Trade Ideas"
       subtitle={`One trade at a time, across ${syncedLeagueCount} synced ${syncedLeagueCount === 1 ? "league" : "leagues"}`}
       size="lg"
     >

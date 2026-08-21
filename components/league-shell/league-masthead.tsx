@@ -1,7 +1,7 @@
 /**
  * LeagueMasthead: the one header card that sits above every League Pulse
  * section, so the league you are looking at is named the same way whether you
- * are on Overview, Teams, Power Pulse, Trade Finder, or Transactions.
+ * are on Overview, Teams, Schedules, Power Pulse, Trade Ideas, or Transactions.
  *
  * It carries the page's h1 (the league name, set large and uppercase against a
  * beacon gradient), the at-a-glance chips beside it, the roster and scoring

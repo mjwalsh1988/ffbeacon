@@ -27,12 +27,20 @@ import {
   type TradeFinderMeta,
 } from "@/app/actions/trade-finder";
 import type { SavedTrade } from "@/lib/trade-finder-saves";
-import { TRADE_GOALS, type TradeGoal, type TradeSuggestion } from "@/lib/trade-finder/types";
+import { proposalHref } from "@/lib/trade-impact/proposal-url";
+import type { BuildAsset } from "@/lib/trade-impact/types";
+import {
+  TRADE_GOALS,
+  type SuggestionAsset,
+  type TradeGoal,
+  type TradeSuggestion,
+} from "@/lib/trade-finder/types";
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
 import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
 
 /**
- * Trade Finder, one deal at a time, with a way through the rest of them.
+ * The suggestion browser for Trade Ideas: one deal at a time, with a way
+ * through the rest of them.
  *
  * WHY ONE ON SCREEN
  *   A list of twenty trades is a spreadsheet, and a spreadsheet is what a
@@ -57,7 +65,7 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *   `league` mode searches the other teams in one room. `portfolio` mode walks
  *   every league the reader is in, a few at a time, and the card carries the
  *   league name because it is no longer implied by the page. Everything else is
- *   identical, which is the point: there is one Trade Finder.
+ *   identical, which is the point: there is one suggestion browser.
  *
  * ANNOUNCEMENTS
  *   Every move is a page change a sighted reader sees and a screen reader user
@@ -75,6 +83,26 @@ export type { PlayerOption };
 
 type AnySuggestion = TradeSuggestion | CrossLeagueSuggestion;
 
+/**
+ * One suggested asset, as the builder's URL wants it.
+ *
+ * A pick loses its slot bucket on the way through, and that is correct rather
+ * than lossy. `SuggestionAsset` carries no `pickPosition`, and the evaluator
+ * matches a proposed pick against a roster on season and round alone, because
+ * the bucket is our own estimate rather than the league's fact. "mid" is what
+ * lib/league-pick-position.ts falls back to when a slot is unknown, so using it
+ * here keeps one answer for an unknown slot across the whole feature.
+ */
+function toBuildAsset(asset: SuggestionAsset): BuildAsset {
+  if (asset.kind === "player") return { kind: "player", playerId: asset.playerId };
+  return {
+    kind: "pick",
+    season: asset.season,
+    round: asset.round,
+    pickPosition: "mid",
+  };
+}
+
 type Tab = "suggestions" | "saved";
 
 export function TradeFinder(props: {
@@ -87,6 +115,12 @@ export function TradeFinder(props: {
   myPlayers?: PlayerOption[];
   /** Players on every other roster, for the "get this player" picker. */
   theirPlayers?: PlayerOption[];
+  /**
+   * The reader's own Sleeper roster id in THIS league. Only the league page
+   * knows it, and without it a deal cannot be handed to the builder, because
+   * the builder has to be told which side of it belongs to the reader.
+   */
+  myRosterId?: number | null;
   /** Rendered on the server so the tab opens on a deal rather than a button. */
   initial?: {
     suggestions: TradeSuggestion[];
@@ -264,6 +298,38 @@ export function TradeFinder(props: {
     (s: AnySuggestion | null, fallbackName?: string | null) =>
       s && "league" in s ? s.league.name : (fallbackName ?? null),
     [],
+  );
+
+  /**
+   * Where this deal opens in the builder, or null when it cannot.
+   *
+   * Null in two cases that both matter. On the portfolio panel a deal can come
+   * out of any league the reader is in and there is no roster id held for any of
+   * them, so there is nothing to open. And a bookmark can name a league the
+   * reader has since left, whose page would ask "which team is yours?" all over
+   * again. Both drop the control rather than drawing a link that goes somewhere
+   * wrong.
+   */
+  const builderHrefOf = useCallback(
+    (s: AnySuggestion | null, leagueId: string): string | null => {
+      const myRosterId = props.myRosterId;
+      if (!s || myRosterId === null || myRosterId === undefined) return null;
+      if (!leagueId || leagueId !== props.sleeperLeagueId) return null;
+      return proposalHref(
+        leagueId,
+        {
+          myRosterId,
+          theirRosterId: s.counterparty.rosterId,
+          incoming: s.incoming.map(toBuildAsset),
+          outgoing: s.outgoing.map(toBuildAsset),
+        },
+        {
+          searchedUsername: props.searchedUsername ?? null,
+          source: props.source ?? null,
+        },
+      );
+    },
+    [props.myRosterId, props.searchedUsername, props.sleeperLeagueId, props.source],
   );
 
   /**
@@ -647,6 +713,10 @@ export function TradeFinder(props: {
               searchedUsername={props.searchedUsername ?? null}
               headingId={headingId}
               leagueLabel={leagueNameOf(shownSuggestion, currentSaved?.leagueName)}
+              builderHref={builderHrefOf(
+                shownSuggestion,
+                leagueIdOf(shownSuggestion, currentSaved?.sleeperLeagueId),
+              )}
             />
           </div>
 

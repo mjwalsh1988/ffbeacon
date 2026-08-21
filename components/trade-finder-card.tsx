@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, Info } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Info, Wrench } from "lucide-react";
 import { PLAYER_PHOTO_RADIUS, PlayerHeadshot } from "@/components/player-headshot";
 import {
   ACCEPTANCE_LABEL,
@@ -65,6 +65,7 @@ export function TradeFinderCard({
   searchedUsername,
   headingId,
   leagueLabel,
+  builderHref,
 }: {
   suggestion: TradeSuggestion;
   grade: SuggestionGrade | null;
@@ -74,6 +75,16 @@ export function TradeFinderCard({
   headingId: string;
   /** Shown in the cross-league panel, where the league is not implied. */
   leagueLabel?: string | null;
+  /**
+   * Where this exact deal opens in the trade builder.
+   *
+   * OPTIONAL, and it has to stay that way. The same card renders on the
+   * cross-league portfolio panel, where a deal can come out of any of the
+   * reader's leagues and there is no single league page to open it in. Omitted,
+   * the control is simply not drawn, rather than the card growing a link that
+   * goes somewhere wrong.
+   */
+  builderHref?: string | null;
 }) {
   const teamHref = (() => {
     const qs = new URLSearchParams();
@@ -163,6 +174,31 @@ export function TradeFinderCard({
         />
       </div>
 
+      {/* Straight under the pieces, because that is where the thought lands:
+          the deal is nearly right and one player wants swapping.
+
+          THE LABEL NAMES THE PAYOFF, not the destination. This card already
+          carries the Signal Check verdict, the lineup change, the value, the age
+          and the reasons. What is one press away is the rest of the same
+          evaluation the builder renders: projected wins and playoff odds before
+          and after, and the week by week strip against your real schedule. A
+          button that said only "Open in builder" made that sound like a detour
+          to a different tool rather than the way to finish reading this deal. */}
+      {builderHref && (
+        <Link
+          href={builderHref}
+          className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-card border border-line-accent bg-surface px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          <Wrench aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
+          <span>
+            Full impact and edit
+            <span className="block text-xs font-normal text-ink-muted">
+              Playoff odds, week by week, and change any piece
+            </span>
+          </span>
+        </Link>
+      )}
+
       <h4 className="mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
         What it does
       </h4>
@@ -171,7 +207,7 @@ export function TradeFinderCard({
           label="Your lineup"
           value={
             suggestion.mine.lineupDelta === null
-              ? "N/A"
+              ? "Not available"
               : `${fmtSigned(suggestion.mine.lineupDelta, 1)}/wk`
           }
           spoken={`Your starting lineup: ${describeLineup(suggestion.mine.lineupDelta)}`}
@@ -187,7 +223,7 @@ export function TradeFinderCard({
           label="Their lineup"
           value={
             suggestion.theirs.lineupDelta === null
-              ? "N/A"
+              ? "Not available"
               : `${fmtSigned(suggestion.theirs.lineupDelta, 1)}/wk`
           }
           spoken={`Their starting lineup: ${describeLineup(suggestion.theirs.lineupDelta)}`}
