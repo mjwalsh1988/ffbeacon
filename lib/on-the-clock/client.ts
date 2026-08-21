@@ -7,8 +7,10 @@
  * UI states so the cockpit can render clean loading / error / disabled / throttled
  * / no-leagues states instead of leaking raw responses.
  *
- * No Sleeper access, no service-role, no polling. Each function performs exactly
- * one fetch when called; nothing here schedules repeats.
+ * No Sleeper access and no service-role. Each function performs exactly one fetch
+ * when called; nothing here schedules repeats. The room's automatic refresh does
+ * the scheduling, in lib/on-the-clock/use-draft-sync.ts, and calls syncDraft with
+ * trigger "auto" so the server measures it against the longer shared window.
  */
 
 import type { LeagueCard, PlayerPool, ShapedDraftCache, SyncStatus } from "./types";
@@ -34,7 +36,18 @@ export type ApiErrorCode =
 
 export type ApiResult<T> =
   | { ok: true; data: T }
-  | { ok: false; status: number; code: ApiErrorCode; message: string };
+  | {
+      ok: false;
+      status: number;
+      code: ApiErrorCode;
+      message: string;
+      /**
+       * How long the server asked the caller to wait, when it said. Present on
+       * the throttled routes, which report their own window rather than leaving
+       * the caller to guess one.
+       */
+      retryAfterSeconds?: number;
+    };
 
 function codeForStatus(status: number): ApiErrorCode {
   switch (status) {
@@ -102,7 +115,14 @@ async function request<T>(
   if (!res.ok) {
     const code = codeForStatus(res.status);
     const message = typeof body.error === "string" && body.error ? body.error : defaultMessage(code);
-    return { ok: false, status: res.status, code, message };
+    const retry = Number(body.retryInSeconds);
+    return {
+      ok: false,
+      status: res.status,
+      code,
+      message,
+      ...(Number.isFinite(retry) && retry > 0 ? { retryAfterSeconds: retry } : {}),
+    };
   }
   return { ok: true, data: shape(body) };
 }
@@ -218,17 +238,39 @@ export function fetchTransactions(leagueId: string): Promise<ApiResult<Transacti
   }));
 }
 
+export interface DraftResponse {
+  cache: ShapedDraftCache;
+  /** The room's two shared countdowns, so both timers start on the draft's clock. */
+  cooldownRemainingSeconds: number;
+  autoRemainingSeconds: number;
+  autoRefreshEnabled: boolean;
+  autoRefreshSeconds: number;
+}
+
 /** GET /api/on-the-clock/draft?draft_id= (warm read; cold cache warms once server-side) */
-export function fetchDraft(draftId: string): Promise<ApiResult<{ cache: ShapedDraftCache }>> {
+export function fetchDraft(draftId: string): Promise<ApiResult<DraftResponse>> {
   const qs = new URLSearchParams({ draft_id: draftId }).toString();
   return request(`/api/on-the-clock/draft?${qs}`, { method: "GET" }, (body) => ({
     cache: body.cache as ShapedDraftCache,
+    cooldownRemainingSeconds: Number(body.cooldownRemainingSeconds ?? 0),
+    autoRemainingSeconds: Number(body.autoRemainingSeconds ?? 0),
+    // Absent only from a response older than this field; treating that as "on"
+    // matches the shipped default and keeps the room refreshing itself.
+    autoRefreshEnabled: body.autoRefreshEnabled !== false,
+    autoRefreshSeconds: Number(body.autoRefreshSeconds ?? 60),
   }));
 }
 
 export interface SyncResponse {
   status: SyncStatus;
+  /** Seconds until the manual Sync button is allowed again (shared per draft). */
   cooldownRemainingSeconds: number;
+  /** Seconds until the room's shared automatic refresh is due. */
+  autoRemainingSeconds: number;
+  /** False when the owner switched automatic refresh off; the room stops its loop. */
+  autoRefreshEnabled: boolean;
+  /** The interval in force right now, so an open room follows an admin change. */
+  autoRefreshSeconds: number;
   lastSyncedAt: string | null;
   cache: ShapedDraftCache | null;
   error?: string;
@@ -244,10 +286,21 @@ export function syncDraft(params: {
   draftId: string;
   leagueId?: string;
   season?: string;
+  /** Which shared window this attempt spends. Defaults to a manual press. */
+  trigger?: "auto" | "manual";
+  /**
+   * The last_synced_at of the draft snapshot already on screen. When the server
+   * finds nothing has been fetched since, it answers without the cache at all and
+   * the caller keeps what it has, which is what most automatic refreshes of a
+   * quiet draft come back as.
+   */
+  knownLastSyncedAt?: string | null;
 }): Promise<ApiResult<SyncResponse>> {
   const payload: Record<string, string> = { draft_id: params.draftId };
   if (params.leagueId) payload.league_id = params.leagueId;
   if (params.season) payload.season = params.season;
+  if (params.trigger) payload.trigger = params.trigger;
+  if (params.knownLastSyncedAt) payload.known_last_synced_at = params.knownLastSyncedAt;
   return request(
     `/api/on-the-clock/draft/sync`,
     {
@@ -258,6 +311,9 @@ export function syncDraft(params: {
     (body) => ({
       status: (typeof body.status === "string" ? body.status : "error") as SyncStatus,
       cooldownRemainingSeconds: Number(body.cooldownRemainingSeconds ?? 0),
+      autoRemainingSeconds: Number(body.autoRemainingSeconds ?? 0),
+      autoRefreshEnabled: body.autoRefreshEnabled !== false,
+      autoRefreshSeconds: Number(body.autoRefreshSeconds ?? 0),
       lastSyncedAt: typeof body.lastSyncedAt === "string" ? body.lastSyncedAt : null,
       cache: (body.cache as ShapedDraftCache | null) ?? null,
       ...(typeof body.error === "string" ? { error: body.error } : {}),

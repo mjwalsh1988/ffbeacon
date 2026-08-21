@@ -62,16 +62,26 @@ export const onTheClockSettingsSchema = z.object({
       cooldownSeconds: positiveInt.default(d.sync.cooldownSeconds),
       lockSeconds: positiveInt.default(d.sync.lockSeconds),
       realtimeEnabled: z.boolean().default(d.sync.realtimeEnabled),
+      autoRefreshEnabled: z.boolean().default(d.sync.autoRefreshEnabled),
+      autoRefreshSeconds: positiveInt.default(d.sync.autoRefreshSeconds),
     })
     .default(d.sync)
     .refine((s) => s.lockSeconds <= s.cooldownSeconds, {
       message: "lockSeconds must be <= cooldownSeconds",
-    }),
+    })
+    // Normalized, not refused. autoRefreshSeconds arrives absent on every row
+    // stored before it existed, and a refusal here would fail the WHOLE settings
+    // parse for a league whose admin had raised the cooldown past 60, which
+    // falls the tool back to defaults and switches it off. Flooring it is the
+    // same answer clampOnTheClockSettings gives on the admin save path.
+    .transform((s) => ({
+      ...s,
+      autoRefreshSeconds: Math.max(s.autoRefreshSeconds, s.cooldownSeconds),
+    })),
 
   cache: z
     .object({
-      activeTtlHours: positiveInt.default(d.cache.activeTtlHours),
-      completedRetentionHours: positiveInt.default(d.cache.completedRetentionHours),
+      projectionRetentionHours: positiveInt.default(d.cache.projectionRetentionHours),
     })
     .default(d.cache),
 
@@ -246,6 +256,13 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
     cooldownSeconds,
     clampInt(raw.sync?.lockSeconds, 1, 120, dd.sync.lockSeconds),
   );
+  // Floored at the manual cooldown so the automatic refresh can never be the
+  // more aggressive of the two: a shorter auto window would be refused by the
+  // manual claim in Postgres and would spend requests to be told so.
+  const autoRefreshSeconds = Math.max(
+    cooldownSeconds,
+    clampInt(raw.sync?.autoRefreshSeconds, 15, 1800, dd.sync.autoRefreshSeconds),
+  );
   return {
     ...raw,
     sync: {
@@ -253,15 +270,22 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
       cooldownSeconds,
       lockSeconds,
       realtimeEnabled: Boolean(raw.sync?.realtimeEnabled),
+      // Absent means "not stated", which for a feature that ships ON has to fall
+      // back to the default rather than to false. A payload written before this
+      // key existed would otherwise switch every open room's refresh off on the
+      // next admin save of anything at all.
+      autoRefreshEnabled: raw.sync?.autoRefreshEnabled ?? dd.sync.autoRefreshEnabled,
+      autoRefreshSeconds,
     },
     cache: {
       ...raw.cache,
-      activeTtlHours: clampInt(raw.cache?.activeTtlHours, 1, 8760, dd.cache.activeTtlHours),
-      completedRetentionHours: clampInt(
-        raw.cache?.completedRetentionHours,
-        1,
+      // Floored at the freshness TTL so the prune can never delete a sweep that is
+      // still being served, which would spend a rebuild for nothing.
+      projectionRetentionHours: clampInt(
+        raw.cache?.projectionRetentionHours,
+        24,
         8760,
-        dd.cache.completedRetentionHours,
+        dd.cache.projectionRetentionHours,
       ),
     },
     limits: {
@@ -432,11 +456,41 @@ export function validateOnTheClockSettings(raw: unknown): ValidateResult {
 }
 
 /**
+ * How long a loaded settings object is reused inside one server instance.
+ *
+ * Every On The Clock route opens by reading this single row, and an open draft
+ * room now asks a route to do that once a minute per viewer on its own. The row
+ * changes only when the owner saves the admin form, so re-reading it per request
+ * buys nothing and costs a Supabase round trip on the busiest path in the tool.
+ *
+ * The window is short on purpose: a save reaches every server within it, which is
+ * the right latency for a cooldown knob or a kill switch. Nothing depends on the
+ * cache existing, so a cold instance simply reads.
+ */
+const SETTINGS_CACHE_TTL_MS = 30_000;
+
+let settingsCache: { loadedAtMs: number; settings: OnTheClockSettings } | null = null;
+
+/** Drop the memo, so the next read goes to the database. Used after a save. */
+export function invalidateOnTheClockSettingsCache(): void {
+  settingsCache = null;
+}
+
+/**
  * Load settings for the tool. Always returns a complete, valid object: the stored
  * row is merged onto defaults via the schema's per-field defaults, and any failure
  * falls back to DEFAULT_ON_THE_CLOCK_SETTINGS.
+ *
+ * Memoized per server instance for SETTINGS_CACHE_TTL_MS. Only a successful read
+ * is cached; a failed one falls back to defaults for that request alone rather
+ * than pinning the tool to its defaults for the next half minute.
  */
 export async function loadOnTheClockSettings(supabase: Client): Promise<OnTheClockSettings> {
+  const now = Date.now();
+  if (settingsCache && now - settingsCache.loadedAtMs < SETTINGS_CACHE_TTL_MS) {
+    return settingsCache.settings;
+  }
+
   const { data, error } = await supabase
     .from("on_the_clock_settings")
     .select("settings")
@@ -450,5 +504,7 @@ export async function loadOnTheClockSettings(supabase: Client): Promise<OnTheClo
     console.error("[on-the-clock] stored settings invalid, using defaults", parsed.error.issues);
     return { ...DEFAULT_ON_THE_CLOCK_SETTINGS };
   }
-  return parsed.data as OnTheClockSettings;
+  const settings = parsed.data as OnTheClockSettings;
+  settingsCache = { loadedAtMs: now, settings };
+  return settings;
 }

@@ -4,6 +4,7 @@ import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { readDraftCache } from "@/lib/on-the-clock/cache";
 import { performDraftSync } from "@/lib/on-the-clock/sleeper-sync";
 import { isValidDraftId } from "@/lib/on-the-clock/validation";
+import { syncWindows } from "@/lib/on-the-clock/sync-windows";
 import { getTrustedClientIp } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,11 @@ export const dynamic = "force-dynamic";
  *
  * We read the existing cache first so the auto-resync can claim the lock with the
  * known league_id/season (no Sleeper pre-fetch on the warm-and-fresh path).
+ *
+ * The response also carries the room's two shared countdowns (the manual Sync
+ * cooldown and the automatic refresh interval), so a room seeds both timers from
+ * the draft's own last_synced_at on the load that opens it, rather than starting
+ * a fresh minute for whoever arrived last.
  *
  * Response: private, no-store.
  */
@@ -87,5 +93,18 @@ export async function GET(req: Request) {
     return json({ error: "We could not load that draft." }, 404);
   }
 
-  return json({ ok: true, cache });
+  const windows = syncWindows(cache.draft.lastSyncedAt, {
+    manualCooldownSeconds: settings.sync.cooldownSeconds,
+    autoRefreshSeconds: settings.sync.autoRefreshSeconds,
+    nowMs: Date.now(),
+  });
+
+  return json({
+    ok: true,
+    cache,
+    cooldownRemainingSeconds: windows.manualRemainingSeconds,
+    autoRemainingSeconds: windows.autoRemainingSeconds,
+    autoRefreshEnabled: settings.sync.autoRefreshEnabled,
+    autoRefreshSeconds: settings.sync.autoRefreshSeconds,
+  });
 }

@@ -54,6 +54,17 @@ export interface PerformSyncParams {
    * (FFB-SEC-002). Checked only after the per-draft claim is won, so cache hits and
    * cooldown denials never consume budget. Omit to skip (e.g. server-internal syncs). */
   ipKey?: string;
+  /**
+   * The last_synced_at of the snapshot the caller already holds, if any.
+   *
+   * A room that refreshes itself every minute spends most of its attempts being
+   * told the cooldown has not elapsed. When the caller's stamp matches the one the
+   * claim just read, nothing has been fetched from Sleeper since it last looked, so
+   * there is nothing to send: the read is skipped and `cache` comes back null,
+   * which the caller reads as "keep what you have". Compared as an opaque string,
+   * and only ever used to decide whether to skip a read.
+   */
+  knownLastSyncedAt?: string;
 }
 
 /** Sleeper uses "0" as an empty-roster-slot placeholder; never store it. */
@@ -152,7 +163,14 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
   }
 
   if (!claim.claimed) {
-    const cache = await readDraftCache(admin, draftId);
+    // Denied claims are the common case for a room that refreshes itself, and
+    // most of them have nothing to report. Skip the read entirely when the caller
+    // is already holding the exact snapshot the claim just looked at.
+    const unchanged =
+      params.knownLastSyncedAt !== undefined &&
+      claim.lastSyncedAt !== null &&
+      params.knownLastSyncedAt === claim.lastSyncedAt;
+    const cache = unchanged ? null : await readDraftCache(admin, draftId);
     return {
       status: claim.lockedByOther ? "synced-by-other" : "cooldown",
       cooldownRemainingSeconds: claim.cooldownRemainingSeconds,
@@ -164,16 +182,18 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
   // 3. We won the claim: fetch Sleeper and upsert. Release the lock on any failure
   //    so the user can retry before the cooldown.
   try {
-    if (!draftObj) draftObj = await getSleeperDraft(draftId);
-    if (!draftObj) {
-      await releaseSync(admin, draftId);
-      return cacheOutcome(admin, draftId, "error", 0, "Could not reach Sleeper. Try again shortly.");
-    }
-
-    // FFB-SEC-002: identifier-independent per-IP budget for the Sleeper fan-out. Checked
-    // only here, after the per-draft claim was won and a real fan-out is imminent, so
-    // cache hits and cooldown denials (passive polling) never consume budget. Fails
-    // closed and releases the lock so the cooldown does not advance on a denial.
+    // FFB-SEC-002: identifier-independent per-IP budget for the Sleeper fan-out.
+    // Checked after the per-draft claim was won, so cache hits and cooldown denials
+    // (passive polling, which is what a room refreshing itself mostly produces)
+    // never consume budget. Fails closed and releases the lock so the cooldown does
+    // not advance on a denial.
+    //
+    // It sits ABOVE the getSleeperDraft below on purpose. A caller that omits the
+    // league hint reaches this function with no draft object, and checking the
+    // budget afterwards meant an exhausted network still spent one Sleeper request
+    // per attempt: a script walking made-up draft ids won every claim (no row
+    // exists yet), spent the lookup, and only then was refused. The budget has to
+    // come before the first Sleeper call of the won claim, not before the rest.
     if (params.ipKey) {
       let withinBudget: boolean;
       try {
@@ -191,6 +211,12 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
           "Too many draft lookups from your network. Try again in a minute.",
         );
       }
+    }
+
+    if (!draftObj) draftObj = await getSleeperDraft(draftId);
+    if (!draftObj) {
+      await releaseSync(admin, draftId);
+      return cacheOutcome(admin, draftId, "error", 0, "Could not reach Sleeper. Try again shortly.");
     }
 
     // FFB-SEC-003: the Sleeper draft object is the AUTHORITATIVE league binding. Any

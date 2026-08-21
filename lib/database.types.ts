@@ -5511,6 +5511,22 @@ export type Database = {
           team: string;
         }[];
       };
+      beam_search_players: {
+        Args: { p_limit?: number; p_min_similarity?: number; p_query: string };
+        Returns: {
+          first_name: string;
+          full_name: string;
+          id: string;
+          last_name: string;
+          match_similarity: number;
+          position: string;
+          search_last_name: string;
+          search_name: string;
+          slug: string;
+          status: string;
+          team: string;
+        }[];
+      };
       claim_league_sync_jobs: {
         Args: { p_limit: number };
         Returns: {
@@ -5554,11 +5570,7 @@ export type Database = {
         Returns: number;
       };
       cleanup_on_the_clock_cache: {
-        Args: {
-          p_active_ttl_hours?: number;
-          p_completed_retention_hours?: number;
-          p_projection_retention_hours?: number;
-        };
+        Args: { p_projection_retention_hours?: number };
         Returns: Json;
       };
       cleanup_on_the_clock_rate_limits: {

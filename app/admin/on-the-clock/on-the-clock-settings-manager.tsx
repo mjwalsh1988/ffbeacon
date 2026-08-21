@@ -391,7 +391,7 @@ export function OnTheClockSettingsManager({
       {/* 2. Sync & Sleeper limits */}
       <SectionCard
         title="Sync and Sleeper limits"
-        blurb="How often the room can pull fresh picks from Sleeper, and how many drafting leagues a user can load at once."
+        blurb="How often a room pulls fresh picks from Sleeper, on its own and when someone presses Sync, and how many drafting leagues a user can load at once."
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
@@ -420,6 +420,28 @@ export function OnTheClockSettingsManager({
               min={1}
             />
           </Field>
+          <Field
+            label="Automatic refresh (seconds)"
+            htmlFor={`${ids}-autorefresh`}
+            hint="How often an open draft room pulls Sleeper on its own, shared by everyone watching that draft. At 60, one draft costs one Sleeper fetch a minute however many people have it open. Anything below the sync cooldown is raised to match it on save."
+          >
+            <NumberInput
+              id={`${ids}-autorefresh`}
+              value={settings.sync.autoRefreshSeconds}
+              onChange={(n) => patchSync({ autoRefreshSeconds: Math.round(n) })}
+              step="1"
+              min={settings.sync.cooldownSeconds}
+            />
+          </Field>
+          <div className="flex items-end">
+            <Toggle
+              id={`${ids}-autorefresh-on`}
+              checked={settings.sync.autoRefreshEnabled}
+              onChange={(v) => patchSync({ autoRefreshEnabled: v })}
+              label="Refresh open draft rooms automatically"
+              hint="When on, a room updates itself on the interval above and nobody has to press Sync. When off, the room only updates when someone presses it. Rooms stop refreshing on their own once a draft is complete either way."
+            />
+          </div>
           <Field
             label="Max drafting leagues shown"
             htmlFor={`${ids}-maxleagues`}
@@ -1131,36 +1153,25 @@ export function OnTheClockSettingsManager({
       >
         <div className="space-y-6">
           <fieldset>
-            <legend className="text-sm font-semibold text-ink">Cache cleanup windows</legend>
+            <legend className="text-sm font-semibold text-ink">Cache cleanup window</legend>
             <p className="mt-1 text-xs text-ink-subtle">
-              How long cached drafts are kept before they can be pruned. These take effect whenever the
-              cleanup job runs.
+              Drafts and their picks are kept permanently. They are what this tool watched happen, a
+              finished draft can still be opened and locked later, and re-syncing cannot recover the
+              moment a pick landed. The nightly cleanup only clears the projection cache, which is
+              rebuilt from data we still hold.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
-                label="Active draft cache (hours)"
-                htmlFor={`${ids}-activettl`}
-                hint="An unfinished draft with no activity for this long can be removed. 24 hours is the default."
+                label="Projection cache (hours)"
+                htmlFor={`${ids}-projectionretention`}
+                hint="How long a cached weekly-projection sweep is kept after it was built. It stops being served after 24 hours, so anything above that is headroom before it is deleted and rebuilt. 72 hours is the default."
               >
                 <NumberInput
-                  id={`${ids}-activettl`}
-                  value={settings.cache.activeTtlHours}
-                  onChange={(n) => patchCache({ activeTtlHours: Math.round(n) })}
+                  id={`${ids}-projectionretention`}
+                  value={settings.cache.projectionRetentionHours}
+                  onChange={(n) => patchCache({ projectionRetentionHours: Math.round(n) })}
                   step="1"
-                  min={1}
-                />
-              </Field>
-              <Field
-                label="Completed draft cache (hours)"
-                htmlFor={`${ids}-completedttl`}
-                hint="A finished draft is kept this long before it can be removed. 168 hours (7 days) is the default."
-              >
-                <NumberInput
-                  id={`${ids}-completedttl`}
-                  value={settings.cache.completedRetentionHours}
-                  onChange={(n) => patchCache({ completedRetentionHours: Math.round(n) })}
-                  step="1"
-                  min={1}
+                  min={24}
                 />
               </Field>
             </div>

@@ -8,19 +8,26 @@
  *
  * The player pool is INFERRED from the league and draft (no manual toggle): the
  * pool chip states what the room is showing, and the one-time PoolNotice modal
- * explains why. In snapshot mode (a completed draft rendered from its finalized
- * snapshot) the Sync control is replaced by a "results locked" note, because
- * nothing about a finished draft can change.
+ * explains why.
+ *
+ * The sync slot empties as the draft ends. A finished draft has nothing left to
+ * fetch, so the control goes away rather than sitting there dimmed forever: first
+ * for a short note while the results are locked, then for nothing at all once the
+ * "Final results" banner below carries the story. A reader standing ON the button
+ * when that happens is carried to whatever replaced it, because the change is the
+ * draft ending rather than anything they did, and focus falling to the top of the
+ * document is how a room loses somebody.
  *
  * Carries the ASSERTIVE "your turn" live region (sr-only role=alert); the polite
- * sync channel lives in the SyncButton. The on-the-clock pulse is decorative and
+ * sync channel lives in the SyncPanel. The on-the-clock pulse is decorative and
  * reduced-motion-safe.
  */
 
+import { useEffect, useRef } from "react";
 import { Users, Baby, Lock, Eye } from "lucide-react";
 import { MASTHEAD_TITLE_SIZE } from "@/components/app-shell/masthead-card";
 import type { ShapedDraftCache, PlayerPool } from "@/lib/on-the-clock/types";
-import { SyncButton } from "./sync-button";
+import { SyncPanel } from "./sync-panel";
 
 function Chip({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
@@ -68,10 +75,18 @@ export function CommandHeader({
   onTheClockPickLabel: string;
   isYourTurn: boolean;
   yourSeatLabel: string;
-  /** Controlled sync state, owned by the room. Null in snapshot mode. */
+  /**
+   * Controlled sync state, owned by the room. Null once the draft is over, in
+   * either sense: complete but still locking its results, or fully in snapshot
+   * mode.
+   */
   sync: {
     syncing: boolean;
-    cooldownRemaining: number;
+    manualReadyAt: number;
+    autoDueAt: number | null;
+    autoRefreshSeconds: number;
+    autoPaused: boolean;
+    autoAvailable: boolean;
     statusMessage: string;
     onSync: () => void;
   } | null;
@@ -82,6 +97,43 @@ export function CommandHeader({
   snapshotNotice?: string | null;
 }) {
   const snapshotMode = snapshotNotice !== null;
+  // The three states of the sync slot, in the order a draft passes through them.
+  const slot: "control" | "closing" | "locked" = sync
+    ? "control"
+    : snapshotMode
+      ? "locked"
+      : "closing";
+
+  // Focus handoff as the slot empties, so a reader standing on the Sync button
+  // when the draft ends is carried to what replaced it rather than dropped at the
+  // top of the document.
+  //
+  // `slotHadFocus` is set by the focus events bubbling out of the slot (React's
+  // onFocus/onBlur are focusin/focusout). Clearing it is the delicate half:
+  // removing a focused element does NOT reliably fire a blur in every browser,
+  // and where it does the relatedTarget is null, so treating any blur as "the
+  // reader left" would throw away the one fact the handoff depends on. It is
+  // cleared only when focus demonstrably lands somewhere else, and the handoff
+  // then double-checks that focus really was dropped before moving anything.
+  const slotHadFocus = useRef(false);
+  const previousSlot = useRef(slot);
+  const closingNoteRef = useRef<HTMLParagraphElement | null>(null);
+  const lockedNoteRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const previous = previousSlot.current;
+    previousSlot.current = slot;
+    if (previous === slot || !slotHadFocus.current) return;
+    // The reader has moved on under their own steam since. Leave them there.
+    const active = document.activeElement;
+    if (active && active !== document.body) {
+      slotHadFocus.current = false;
+      return;
+    }
+    const target = slot === "closing" ? closingNoteRef.current : lockedNoteRef.current;
+    if (!target) return;
+    slotHadFocus.current = false;
+    target.focus({ preventScroll: true });
+  }, [slot]);
   const statusWord = snapshotMode
     ? "Draft complete"
     : draft.draftStatus === "drafting"
@@ -136,19 +188,50 @@ export function CommandHeader({
             </p>
           </div>
 
-          {sync && !snapshotMode ? (
-            <SyncButton
-              syncing={sync.syncing}
-              cooldownRemaining={sync.cooldownRemaining}
-              statusMessage={sync.statusMessage}
-              onSync={sync.onSync}
-            />
-          ) : null}
+          <div
+            onFocus={() => {
+              slotHadFocus.current = true;
+            }}
+            onBlur={(event) => {
+              // A null relatedTarget means focus went nowhere, which is what a
+              // removed element looks like. Only a real destination outside this
+              // slot counts as the reader having left.
+              const next = event.relatedTarget as Node | null;
+              if (next && !event.currentTarget.contains(next)) slotHadFocus.current = false;
+            }}
+          >
+            {slot === "control" && sync ? (
+              <SyncPanel
+                syncing={sync.syncing}
+                manualReadyAt={sync.manualReadyAt}
+                autoDueAt={sync.autoDueAt}
+                autoRefreshSeconds={sync.autoRefreshSeconds}
+                autoPaused={sync.autoPaused}
+                autoAvailable={sync.autoAvailable}
+                statusMessage={sync.statusMessage}
+                onSync={sync.onSync}
+              />
+            ) : slot === "closing" ? (
+              <p
+                ref={closingNoteRef}
+                tabIndex={-1}
+                role="status"
+                className="max-w-xs text-right text-xs text-ink-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                Draft complete. Locking the final results, so there is nothing left to sync.
+              </p>
+            ) : null}
+          </div>
         </div>
 
         {/* On-the-clock banner (broadcast strip), or the snapshot lock note. */}
         {snapshotMode ? (
-          <div className="mt-3 flex items-center gap-2.5 rounded-card border border-brand-purple/40 bg-brand-purple/10 px-3 py-2">
+          <div
+            ref={lockedNoteRef}
+            tabIndex={-1}
+            role="status"
+            className="mt-3 flex items-center gap-2.5 rounded-card border border-brand-purple/40 bg-brand-purple/10 px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
             <Lock aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-brand-purple" />
             <p className="text-sm text-ink">
               <span className="font-semibold">Final results.</span>{" "}

@@ -416,3 +416,43 @@ export function syncStatusLine(
       return rel ? `Last synced ${rel}.` : "Not synced yet.";
   }
 }
+
+/**
+ * Whether two shaped caches describe the same draft in the same state, ignoring
+ * the sync stamp.
+ *
+ * An open room now refreshes itself every minute, and most of those refreshes
+ * bring back a cache identical to the one already on screen apart from
+ * `lastSyncedAt`. Handing that to setState would hand every array in the room a
+ * new identity, and the memos downstream would rebuild the available board, the
+ * ADP simulation, the roster rollups and the recommendation for a draft that did
+ * not move. This is the test that stops that.
+ *
+ * The cheap scalars come first and settle the common case, a pick landing, in a
+ * few comparisons. Only a draft that looks unchanged pays for the structural
+ * check, which is still an order of magnitude cheaper than the rebuild it avoids,
+ * and it has to be structural: a trade moves players between rosters and rewrites
+ * traded picks without touching a single count.
+ */
+export function sameDraftCacheContent(a: ShapedDraftCache, b: ShapedDraftCache): boolean {
+  if (a.draft.sleeperDraftId !== b.draft.sleeperDraftId) return false;
+  if (a.draft.pickCount !== b.draft.pickCount) return false;
+  if (a.draft.draftStatus !== b.draft.draftStatus) return false;
+  if (a.draft.draftType !== b.draft.draftType) return false;
+  if (a.draft.playoffTeams !== b.draft.playoffTeams) return false;
+  if (a.draft.playoffWeekStart !== b.draft.playoffWeekStart) return false;
+  if (a.picks.length !== b.picks.length) return false;
+  if (a.users.length !== b.users.length) return false;
+  if (a.rosters.length !== b.rosters.length) return false;
+  if (a.tradedPicks.length !== b.tradedPicks.length) return false;
+  return (
+    JSON.stringify(a.picks) === JSON.stringify(b.picks) &&
+    JSON.stringify(a.rosters) === JSON.stringify(b.rosters) &&
+    JSON.stringify(a.users) === JSON.stringify(b.users) &&
+    JSON.stringify(a.tradedPicks) === JSON.stringify(b.tradedPicks) &&
+    JSON.stringify(a.draft.settings) === JSON.stringify(b.draft.settings) &&
+    JSON.stringify(a.draft.slotToRosterId) === JSON.stringify(b.draft.slotToRosterId) &&
+    JSON.stringify(a.draft.scoringSettings) === JSON.stringify(b.draft.scoringSettings) &&
+    JSON.stringify(a.draft.rosterPositions) === JSON.stringify(b.draft.rosterPositions)
+  );
+}

@@ -108,7 +108,8 @@ export default async function OnTheClockPage() {
                 defaultSeason={season}
                 defaultUsername={savedUsername}
                 realtimeEnabled={settings.sync.realtimeEnabled}
-                cooldownSeconds={settings.sync.cooldownSeconds}
+                autoRefreshEnabled={settings.sync.autoRefreshEnabled}
+                autoRefreshSeconds={settings.sync.autoRefreshSeconds}
                 settings={settings}
               />
             ) : (

@@ -8,8 +8,12 @@
  *   - select a league -> GET /api/on-the-clock/draft?draft_id= (warm read; the
  *     server warms a cold cache once through the durable lock),
  *   - Sync draft -> POST /api/on-the-clock/draft/sync (server-enforced cooldown),
+ *   - an open room ALSO refreshes itself on the draft's shared auto interval
+ *     (lib/on-the-clock/use-draft-sync.ts), which claims the same durable lock, so
+ *     a dozen tabs on one draft still produce one Sleeper fetch a minute between
+ *     them. It stops the moment the draft reports complete,
  *   - Supabase Realtime on on_the_clock_pick_cache merges co-viewer picks with NO
- *     Sleeper call and NO automatic sync. There is NO polling anywhere.
+ *     Sleeper call.
  * The draft board, pick list, My Draft, on-the-clock status, and connected-team
  * detection all read from the live shaped cache.
  *
@@ -51,6 +55,11 @@ import {
 } from "@/lib/on-the-clock/rationale";
 import { createClient } from "@/lib/supabase/client";
 import {
+  useDraftSync,
+  type SyncBlockedReason,
+  type SyncRunner,
+} from "@/lib/on-the-clock/use-draft-sync";
+import {
   fetchLeagues,
   fetchDraft,
   syncDraft,
@@ -77,6 +86,7 @@ import {
   inferPlayerPool,
   describeInferredPool,
   draftShapeFromMeta,
+  sameDraftCacheContent,
 } from "@/lib/on-the-clock/draft-derive";
 import { formatEastern, formatEasternDate } from "@/lib/datetime";
 import { buildTradeCatalog } from "@/lib/on-the-clock/trade-analyzer";
@@ -220,6 +230,50 @@ const NO_PASSED_ON: PassedOn[] = [];
 const NO_TRADE_GROUPS: TradeItemGroup[] = [];
 const NO_PULSE_TEAMS: DraftPulseTeam[] = [];
 
+/**
+ * The views that read the league's trade feed. A refresh only refetches it while
+ * one of them is open, because that feed is its own Sleeper fan-out (a walk of
+ * the weekly transaction endpoints) rather than a field on the draft cache.
+ */
+const VIEWS_READING_TRADES: ReadonlySet<View> = new Set<View>(["history", "rankings", "grades"]);
+
+/**
+ * The floor between two refetches of the trade feed.
+ *
+ * Deliberately longer than the automatic refresh interval. This feed is the most
+ * expensive thing the room can ask for: the server walks Sleeper's transaction
+ * endpoint week by week, up to twenty-six times, and there is no shared per-league
+ * claim in front of it the way there is for the draft, so every viewer parked on
+ * a trades view pays for their own walk. Trades during a draft are rare enough
+ * that a couple of minutes costs nothing, and the tab carries its own Refresh
+ * control for anyone who wants it sooner.
+ */
+const TRADE_HISTORY_MIN_REFRESH_MS = 2 * 60_000;
+
+/**
+ * How stale the FF Beacon board may get inside a room that stays open.
+ *
+ * A day, because that is how often the numbers on it actually change. Every table
+ * behind this board is written by a nightly cron and by nothing else: rankings and
+ * player_value_trends by recalculate-derived, player_value_history by the value
+ * syncs, player_market_snapshots by sync-sleeper-market, draft_pick_values and
+ * draft_value_targets by rebuild-draft-value. The whole chain lands between 3am
+ * and 11am Eastern and then nothing moves until the next one. Refetching a board
+ * of six hundred players through the afternoon could only ever return the bytes
+ * already on screen.
+ *
+ * Note what this is NOT about. Who is still available updates on every single
+ * refresh, because that is the board minus the picks in the draft cache, and the
+ * picks are what a sync brings back. This constant governs the underlying values
+ * and ADP alone.
+ *
+ * Worth keeping rather than deleting, because slow dynasty drafts on Sleeper run
+ * for days on eight-hour pick clocks, and a room left open through one of those
+ * would otherwise price every remaining pick off values from whenever it was
+ * opened.
+ */
+const BOARD_MIN_REFRESH_MS = 24 * 60 * 60_000;
+
 /** Coerce a Sleeper pick/roster position string to one of the six draft buckets. */
 function coercePosition(pos: string | null): DraftPosition | null {
   const p = (pos ?? "").toUpperCase();
@@ -234,7 +288,8 @@ export function OnTheClockClient({
   defaultSeason,
   defaultUsername = "",
   realtimeEnabled = true,
-  cooldownSeconds = 30,
+  autoRefreshEnabled = true,
+  autoRefreshSeconds = 60,
   settings,
 }: {
   /**
@@ -247,7 +302,10 @@ export function OnTheClockClient({
   defaultSeason: string;
   defaultUsername?: string;
   realtimeEnabled?: boolean;
-  cooldownSeconds?: number;
+  /** Whether an open room refreshes itself without anyone pressing Sync. */
+  autoRefreshEnabled?: boolean;
+  /** The room's shared automatic refresh interval, in seconds. */
+  autoRefreshSeconds?: number;
   /** Admin On The Clock settings (drives the Team Need engine). */
   settings: OnTheClockSettings;
 }) {
@@ -317,9 +375,32 @@ export function OnTheClockClient({
   const historyLoadedFor = useRef<string | null>(null);
 
   // ----- sync -----
-  const [syncing, setSyncing] = useState(false);
-  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  // The two countdowns are NOT state here. useDraftSync hands out the instants
+  // they run to, and the panel that shows them does its own ticking, so a room
+  // with a live board does not re-render once a second to move a number.
   const [syncMessage, setSyncMessage] = useState("Not synced yet");
+  // The cache exactly as it stands on screen, mirrored into a ref, so the sync
+  // runner can compare against it without being rebuilt every time a pick lands.
+  // Realtime advances the same cache between syncs, so reading it from the last
+  // response would be wrong.
+  const cacheRef = useRef<ShapedDraftCache | null>(null);
+  // The stamp of the newest sync this room has HEARD ABOUT, which is not the same
+  // as the stamp on the cache it is rendering. When a refresh comes back byte for
+  // byte identical the cache object is deliberately left alone (see runSync), so
+  // the stamp has to live somewhere the render does not touch. It is what tells
+  // the server it can skip resending a board we already have.
+  const lastSyncedAtRef = useRef<string | null>(null);
+  // When the board and the league's trade feed were last fetched, so a refresh
+  // can leave alone what cannot have changed. Both reset with the league.
+  const boardLoadedAt = useRef(0);
+  const tradeHistoryLoadedAt = useRef(0);
+  // The draft whose snapshot has already been requested, so the completion
+  // handoff fires once rather than on every refresh after the draft ends.
+  const snapshotRequestedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    cacheRef.current = cache;
+  }, [cache]);
 
   // ----- realtime -----
   const [liveStatus, setLiveStatus] = useState<LiveStatus>(realtimeEnabled ? "connecting" : "off");
@@ -406,6 +487,49 @@ export function OnTheClockClient({
   // payload (board, cache, trades, awards); nothing recalculates from current
   // values. Active drafts stay fully live.
   const snapshotMode = snapshot !== null;
+
+  // The draft has ended. Nothing on Sleeper can change from here, so the room
+  // stops refreshing itself the moment it sees this, without waiting for the
+  // snapshot to finish locking.
+  const draftComplete = cache?.draft.draftStatus === "complete";
+
+  // ----- the room's sync clock -----
+  //
+  // Declared up here because selectLeague and loadDraft both drive it, and hooks
+  // cannot be declared below them. The runner it calls needs the loaders, which
+  // are three hundred lines further down, so it reaches them through this ref
+  // rather than by reordering the file around one callback.
+  const runSyncRef = useRef<SyncRunner>(async () => null);
+  const runSyncStable = useCallback<SyncRunner>((trigger) => runSyncRef.current(trigger), []);
+
+  // Seeded from the server render and then kept current by every response, so a
+  // room that has been open since before the owner changed the interval follows
+  // the new one instead of describing the old.
+  const [autoSeconds, setAutoSeconds] = useState(autoRefreshSeconds);
+
+  // A press that could not run says why. It is the one moment the exact wait is
+  // worth speaking, which is why the button carries no state that announces
+  // itself as the shared window opens and closes on its own.
+  const onSyncBlocked = useCallback((reason: SyncBlockedReason) => {
+    setSyncMessage(
+      reason.kind === "syncing"
+        ? "Already syncing. The room will update in a moment."
+        : `Just refreshed. Sync is available again in ${reason.seconds} ${
+            reason.seconds === 1 ? "second" : "seconds"
+          }.`,
+    );
+  }, []);
+
+  const syncClock = useDraftSync({
+    active: step === "room" && league !== null && !snapshotMode && !draftComplete,
+    autoEnabled: autoRefreshEnabled,
+    autoRefreshSeconds: autoSeconds,
+    runSync: runSyncStable,
+    onBlocked: onSyncBlocked,
+  });
+  // Both are stable for the life of the room; pulled out so the callbacks that
+  // depend on them are not rebuilt on every render of a live board.
+  const { noteAttempt: noteSyncAttempt, reset: resetSyncClock } = syncClock;
 
   /**
    * Below xl the layout has no second column, so the side rail moves into a
@@ -946,32 +1070,52 @@ export function OnTheClockClient({
   };
 
   // ----- board load (FF Beacon, format auto-detected from the league) -----
-  const loadBoard = useCallback(async (card: LeagueCard, poolForAdp: PlayerPool) => {
-    if (activeDraftIdRef.current !== card.draftId) return;
-    if (!card.formatSlug) {
-      setBoard(null);
-      setBoardError(
-        "We could not match this league to an FF Beacon format, so the available board is unavailable.",
-      );
-      setBoardLoading(false);
-      return;
-    }
-    setBoardLoading(true);
-    setBoardError(null);
-    const result = await fetchBoard(card.formatSlug, poolForAdp);
-    if (activeDraftIdRef.current !== card.draftId) return; // league switched away
-    if (result.ok) {
-      setBoard(result.data.board);
-    } else {
-      setBoard(null);
-      setBoardError(result.message);
-    }
-    setBoardLoading(false);
-  }, []);
+  //
+  // `quiet` is the refresh a sync performs on a board the room is already
+  // showing: no loading state, and a failure keeps the board that is on screen
+  // rather than replacing a working list with an error. The first load of a
+  // league is never quiet, because there is nothing to keep.
+  const loadBoard = useCallback(
+    async (card: LeagueCard, poolForAdp: PlayerPool, opts?: { quiet?: boolean }) => {
+      const quiet = opts?.quiet === true;
+      if (activeDraftIdRef.current !== card.draftId) return;
+      if (!card.formatSlug) {
+        if (quiet) return;
+        setBoard(null);
+        setBoardError(
+          "We could not match this league to an FF Beacon format, so the available board is unavailable.",
+        );
+        setBoardLoading(false);
+        return;
+      }
+      if (!quiet) {
+        setBoardLoading(true);
+        setBoardError(null);
+      }
+      const result = await fetchBoard(card.formatSlug, poolForAdp);
+      if (activeDraftIdRef.current !== card.draftId) return; // league switched away
+      // Stamped on the ATTEMPT, not on success, so a board that could not load
+      // gets one quiet retry per window instead of one per refresh. A retry that
+      // works clears the error and the list appears where the message was.
+      boardLoadedAt.current = Date.now();
+      if (result.ok) {
+        setBoard(result.data.board);
+        setBoardError(null);
+      } else if (!quiet) {
+        setBoard(null);
+        setBoardError(result.message);
+      }
+      if (!quiet) setBoardLoading(false);
+    },
+    [],
+  );
 
   // ----- snapshot load (completed drafts; locked results, snapshot-first) -----
   const loadSnapshot = useCallback(
     async (card: LeagueCard, fallbackPool: PlayerPool) => {
+      // Claimed immediately, so a refresh that lands while this is in flight does
+      // not start a second lock of the same draft.
+      snapshotRequestedFor.current = card.draftId;
       setSnapshotLoading(true);
       setSnapshotWarning(null);
       const result = await fetchSnapshot({
@@ -1018,7 +1162,18 @@ export function OnTheClockClient({
       if (result.ok && result.data.cache) {
         const loaded = result.data.cache;
         setCache(loaded);
+        lastSyncedAtRef.current = loaded.draft.lastSyncedAt;
         setSyncMessage(formatLastSynced(loaded.draft.lastSyncedAt, Date.now()));
+        // Both countdowns start on the DRAFT's clock, not on this tab's arrival:
+        // someone opening the room forty seconds into the shared window sees
+        // twenty seconds left, the same as everyone already in it.
+        if (result.data.autoRefreshSeconds > 0) setAutoSeconds(result.data.autoRefreshSeconds);
+        noteSyncAttempt({
+          manualRemainingSeconds: result.data.cooldownRemainingSeconds,
+          autoRemainingSeconds: result.data.autoRemainingSeconds,
+          failed: false,
+          autoDisabled: !result.data.autoRefreshEnabled,
+        });
         // The player pool is inferred (no manual toggle): league type + draft
         // round count. Completed drafts route to snapshot mode; live drafts load
         // the current FF Beacon board (with ADP for the inferred pool's market).
@@ -1032,33 +1187,56 @@ export function OnTheClockClient({
           void loadBoard(card, inferredPool);
         }
         if (!poolNoticeSeen(card.draftId)) setPoolNoticeOpen(true);
-      } else if (result.ok) {
-        setDraftError("We could not load that draft.");
       } else {
-        setDraftError(result.message);
+        setDraftError(result.ok ? "We could not load that draft." : result.message);
+        // Arm the clock on the way out. selectLeague has just cleared it, and
+        // without this the room that failed to open would never try again on its
+        // own: no timer, no countdown, and a Sync button as the only way back.
+        noteSyncAttempt({
+          manualRemainingSeconds: 0,
+          autoRemainingSeconds: 0,
+          failed: true,
+          autoDisabled: false,
+        });
       }
       setDraftLoading(false);
     },
-    [loadBoard, loadSnapshot],
+    [loadBoard, loadSnapshot, noteSyncAttempt],
   );
 
   // ----- trade history load (Sleeper trades for the league, server-fetched) -----
-  const loadTradeHistory = useCallback(async (leagueId: string) => {
-    // Claim the league id immediately so the open-tab effect won't refire while
-    // this request is in flight.
-    historyLoadedFor.current = leagueId;
-    setTradeHistoryLoading(true);
-    setTradeHistoryError(null);
-    const result = await fetchTransactions(leagueId);
-    if (result.ok) {
-      setTradeHistory(result.data.transactions);
-      setTradeHistoryTruncated(result.data.truncated);
-    } else {
-      setTradeHistoryError(result.message);
-      historyLoadedFor.current = null; // allow a retry
-    }
-    setTradeHistoryLoading(false);
-  }, []);
+  //
+  // `quiet` is the refresh a sync performs on a feed the reader is already looking
+  // at. Without it the list is replaced by a loading card and its live region
+  // announces the count again, once a minute, unprompted. The first load of a tab
+  // and both explicit Refresh controls stay loud, because there the reader asked
+  // and is waiting for an answer.
+  const loadTradeHistory = useCallback(
+    async (leagueId: string, opts?: { quiet?: boolean }) => {
+      const quiet = opts?.quiet === true;
+      // Claim the league id immediately so the open-tab effect won't refire while
+      // this request is in flight.
+      historyLoadedFor.current = leagueId;
+      if (!quiet) {
+        setTradeHistoryLoading(true);
+        setTradeHistoryError(null);
+      }
+      const result = await fetchTransactions(leagueId);
+      // Stamped on the ATTEMPT, so a failing feed gets one quiet retry per window
+      // rather than one per refresh.
+      tradeHistoryLoadedAt.current = Date.now();
+      if (result.ok) {
+        setTradeHistory(result.data.transactions);
+        setTradeHistoryTruncated(result.data.truncated);
+        setTradeHistoryError(null);
+      } else if (!quiet) {
+        setTradeHistoryError(result.message);
+        historyLoadedFor.current = null; // allow a retry
+      }
+      if (!quiet) setTradeHistoryLoading(false);
+    },
+    [],
+  );
 
   const selectLeague = (l: LeagueCard) => {
     activeDraftIdRef.current = l.draftId;
@@ -1085,7 +1263,11 @@ export function OnTheClockClient({
     setBuildMode(readBuildMode(l.draftId, settings.buildMode.defaultMode));
     setWatchlist(readWatchlist(l.draftId));
     setRosterSort("value");
-    setCooldownRemaining(0);
+    boardLoadedAt.current = 0;
+    tradeHistoryLoadedAt.current = 0;
+    lastSyncedAtRef.current = null;
+    snapshotRequestedFor.current = null;
+    resetSyncClock();
     setSyncMessage("Loading draft...");
     setLiveStatus(realtimeEnabled ? "connecting" : "off");
     setStep("room");
@@ -1094,48 +1276,145 @@ export function OnTheClockClient({
     void loadDraft(l);
   };
 
-  // ----- sync handler -----
-  const onSync = useCallback(async () => {
-    if (!league || syncing || cooldownRemaining > 0) return;
-    setSyncing(true);
-    setSyncMessage("Syncing the room...");
-    const result = await syncDraft({
-      draftId: league.draftId,
-      leagueId: league.leagueId,
-      season: league.season,
-    });
-    const now = Date.now();
-    if (!result.ok) {
-      setSyncMessage(result.message);
-      setSyncing(false);
-      return;
-    }
-    const data = result.data;
-    if (data.cache) setCache(data.cache);
-    const status: SyncStatus = data.status;
-    setSyncMessage(
-      syncStatusLine(status, {
-        lastSyncedAt: data.lastSyncedAt,
-        cooldownRemainingSeconds: data.cooldownRemainingSeconds,
-        nowMs: now,
-        error: data.error,
-      }),
-    );
-    // A successful sync starts the full shared cooldown; a blocked claim uses the
-    // server's reported remaining window so the button matches the server clock.
-    if (status === "synced") setCooldownRemaining(cooldownSeconds);
-    else if (status === "cooldown" || status === "synced-by-other") {
-      setCooldownRemaining(Math.max(0, Math.round(data.cooldownRemainingSeconds)));
-    }
-    setSyncing(false);
-  }, [league, syncing, cooldownRemaining, cooldownSeconds]);
+  // ----- the sync runner -----
+  //
+  // One request, then everything the room shows that could have moved with it.
+  // The draft cache is most of the room: picks, rosters, league members and
+  // traded picks all arrive in it, so the big board, the pick list, My Draft, the
+  // rosters view, the trade builder and the awards all follow from one setCache.
+  // Draft Pulse re-fires on its own signature the moment the pick count moves.
+  //
+  // Two things do NOT follow from the cache, and are refreshed here:
+  //   - the league's trade feed, which is a separate Sleeper fan-out across the
+  //     weekly transaction endpoints, so it goes only when the room is showing a
+  //     view that reads it and not twice inside one window,
+  //   - the FF Beacon board, whose values and ADP move on the nightly jobs rather
+  //     than on picks, so it is refreshed on a slow clock and quietly.
+  //
+  // The same runner serves both triggers. What differs is what it SAYS: a press
+  // always gets an answer, while an automatic refresh that found nothing new
+  // leaves the status line exactly as it was, so a room open for two hours does
+  // not announce itself to a screen reader a hundred and twenty times.
+  const runSync = useCallback<SyncRunner>(
+    async (trigger) => {
+      if (!league) return null;
+      const draftId = league.draftId;
+      if (trigger === "manual") setSyncMessage("Syncing the room...");
 
-  // ----- cooldown countdown (UI only; NOT polling, never calls Sleeper) -----
+      const result = await syncDraft({
+        draftId,
+        leagueId: league.leagueId,
+        season: league.season,
+        trigger,
+        knownLastSyncedAt: lastSyncedAtRef.current,
+      });
+
+      // The reader opened a different league while this was in flight. Drop it
+      // whole: applying this cache, or rescheduling on its clock, would be the
+      // same bug the staleness guard on loadDraft exists to prevent.
+      if (activeDraftIdRef.current !== draftId) return null;
+
+      const now = Date.now();
+      if (!result.ok) {
+        // A transport-level failure (throttled, server error, offline). Said once;
+        // an identical string is not re-announced, so a repeat is silent.
+        setSyncMessage(result.message);
+        // 503 is the feature switched off underneath an open room. Retrying that
+        // on a backoff ladder for the rest of the session asks a settled question
+        // over and over, so the loop stops instead.
+        if (result.code === "feature-disabled") {
+          return {
+            manualRemainingSeconds: 0,
+            autoRemainingSeconds: 0,
+            failed: true,
+            autoDisabled: true,
+          };
+        }
+        // The button holds rather than reopening the instant the failure lands.
+        // A 429 carries the server's own retry window; anything else gets a few
+        // seconds so a bad connection cannot be hammered.
+        const hold = result.status === 429 ? (result.retryAfterSeconds ?? 60) : 5;
+        return {
+          manualRemainingSeconds: hold,
+          autoRemainingSeconds: 0,
+          failed: true,
+          autoDisabled: false,
+        };
+      }
+
+      const data = result.data;
+      const status: SyncStatus = data.status;
+      if (data.autoRefreshSeconds > 0) setAutoSeconds(data.autoRefreshSeconds);
+      lastSyncedAtRef.current = data.lastSyncedAt ?? lastSyncedAtRef.current;
+
+      // Measured against what is ON SCREEN, not against the last response.
+      // Realtime usually beats a sync to the same picks, in which case this is
+      // zero and there is genuinely nothing new to say. A null cache means the
+      // server found nothing had changed and sent no board at all.
+      const onScreen = cacheRef.current?.picks.length ?? 0;
+      const landed = data.cache ? Math.max(0, data.cache.picks.length - onScreen) : 0;
+      if (data.cache) {
+        const fresh = data.cache;
+        // Replaced only when something in it actually differs.
+        //
+        // Most refreshes of a quiet draft return a cache identical to the one on
+        // screen apart from its sync stamp, and handing that to setCache would
+        // give every array in the room a new identity: the board would re-filter
+        // six hundred players, the ADP simulation would re-run, the roster
+        // rollups would rebuild, all to arrive back where they started. Every
+        // viewer would pay that once a minute for the whole draft. The stamp
+        // itself lives in a ref for exactly this reason.
+        setCache((prev) => (prev && sameDraftCacheContent(prev, fresh) ? prev : fresh));
+      }
+
+      if (trigger === "manual" || landed > 0 || status === "error") {
+        const line = syncStatusLine(status, {
+          lastSyncedAt: data.lastSyncedAt,
+          cooldownRemainingSeconds: data.cooldownRemainingSeconds,
+          nowMs: now,
+          error: data.error,
+        });
+        setSyncMessage(
+          landed > 0 ? `${landed} new ${landed === 1 ? "pick" : "picks"}. ${line}` : line,
+        );
+      }
+
+      // The draft ended while the room was open. Lock the results: the room
+      // switches to the frozen snapshot and the whole sync control goes away,
+      // because there is nothing left on Sleeper for it to fetch.
+      if (data.cache?.draft.draftStatus === "complete") {
+        if (!snapshot && snapshotRequestedFor.current !== draftId) {
+          void loadSnapshot(league, pool);
+        }
+      } else if (!snapshot) {
+        if (
+          historyLoadedFor.current === league.leagueId &&
+          VIEWS_READING_TRADES.has(view) &&
+          now - tradeHistoryLoadedAt.current >= TRADE_HISTORY_MIN_REFRESH_MS
+        ) {
+          void loadTradeHistory(league.leagueId, { quiet: true });
+        }
+        if (now - boardLoadedAt.current >= BOARD_MIN_REFRESH_MS) {
+          void loadBoard(league, pool, { quiet: true });
+        }
+      }
+
+      return {
+        manualRemainingSeconds: data.cooldownRemainingSeconds,
+        autoRemainingSeconds: data.autoRemainingSeconds,
+        failed: status === "error",
+        autoDisabled: !data.autoRefreshEnabled,
+        contended: status === "synced-by-other",
+      };
+    },
+    [league, pool, view, snapshot, loadSnapshot, loadTradeHistory, loadBoard],
+  );
+
+  // The clock above was declared before the loaders this runner needs, so it
+  // calls through here.
   useEffect(() => {
-    if (cooldownRemaining <= 0) return;
-    const timer = setTimeout(() => setCooldownRemaining((c) => c - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [cooldownRemaining]);
+    runSyncRef.current = runSync;
+  }, [runSync]);
 
   // ----- Supabase Realtime: merge co-viewer picks, never call Sleeper/sync.
   // Skipped entirely in snapshot mode: a completed draft can never change. -----
@@ -1721,6 +2000,11 @@ export function OnTheClockClient({
   // Snapshot provenance line shown in the command bar (snapshot mode only).
   const snapshotNotice = snapshotMode ? buildSnapshotNotice(snapshot) : null;
 
+  // Whether the room is currently refreshing itself. Read by the sync panel and
+  // by the note that appears when Realtime drops, which would otherwise tell a
+  // reader to press Sync for updates the room is already fetching.
+  const autoRefreshActive = autoRefreshEnabled && !syncClock.autoStopped && !draftComplete;
+
   // Format/source chips: source is ALWAYS FF Beacon (forced); format is auto-detected
   // from the Sleeper league. Use the league's detected label until the board confirms it.
   const formatLabel = activeBoard?.formatLabel ?? league?.formatLabel ?? "Detecting...";
@@ -1845,7 +2129,21 @@ export function OnTheClockClient({
         isYourTurn={isYourTurn}
         yourSeatLabel={yourSeatLabel}
         sync={
-          snapshotMode ? null : { syncing, cooldownRemaining, statusMessage: syncMessage, onSync }
+          // Gone the moment the draft reports complete, not merely dimmed. The
+          // clock stops at the same instant, so a control left on screen here
+          // would be one that looks pressable and answers nothing.
+          snapshotMode || draftComplete
+            ? null
+            : {
+                syncing: syncClock.syncing,
+                manualReadyAt: syncClock.manualReadyAt,
+                autoDueAt: syncClock.autoDueAt,
+                autoRefreshSeconds: autoSeconds,
+                autoPaused: syncClock.autoPaused,
+                autoAvailable: autoRefreshActive,
+                statusMessage: syncMessage,
+                onSync: syncClock.syncNow,
+              }
         }
         snapshotNotice={snapshotNotice}
       />
@@ -1925,7 +2223,9 @@ export function OnTheClockClient({
             <WifiOff aria-hidden="true" className="h-3.5 w-3.5" />
             {liveStatus === "connecting"
               ? "Connecting live updates..."
-              : "Live updates unavailable. Use Sync draft to refresh."}
+              : autoRefreshActive
+                ? `Live updates between viewers are unavailable. The room still refreshes itself every ${autoSeconds} seconds.`
+                : "Live updates unavailable. Use Sync draft to refresh."}
           </p>
         )}
 

@@ -7,6 +7,7 @@ import { runCalculateTrends } from "@/lib/calculate-trends";
 import { recordCronRun } from "@/lib/cron-runs";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { loadBeamSettings } from "@/lib/beam/settings";
+import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ export const maxDuration = 300;
  * the two value syncs. Runs:
  *   1. seed-rankings (rebuild rankings table from latest player_value_history)
  *   2. calculate-trends (rebuild player_value_trends pre-calc)
+ *
+ * It also carries the global, deletion-only retention prunes that have nowhere
+ * better to live: the rate-limit ledgers, the BEAM question log, and the On The
+ * Clock caches. Each is non-fatal and none of them recompute anything.
  *
  * These are global, player-level tables, not per-league. League Pulse power
  * rankings are NOT recomputed here: that is done on demand when a league deep
@@ -69,6 +74,40 @@ export async function GET(req: Request) {
         console.error("[cron/recalculate-derived] rate-limit ledger prune failed", pruneErr);
       }
 
+      // Bounded retention prune for the On The Clock caches. Deletion only, and it
+      // never touches a draft: drafts and their picks are what this tool observed
+      // happening and are kept permanently (see migration 0205). What it clears is
+      // the projection cache, which is a recomputable sweep of weekly projections
+      // keyed on a league's scoring shape rather than on any draft, plus pulse rows
+      // orphaned by a manual deletion. It recomputes nothing per draft or per
+      // league, which is what keeps it on this global cron.
+      //
+      // Migrations 0113 and 0185 both built this function and both deliberately
+      // left the wiring for later. Later is now: without a caller, the projection
+      // cache grows about a megabyte per distinct league scoring shape, and that
+      // signature comes from user-controlled scoring settings, so it is unbounded.
+      //
+      // Non-fatal, like the prunes around it.
+      let onTheClockCacheRowsDeleted: {
+        drafts?: number;
+        projections?: number;
+        pulses?: number;
+      } | null = null;
+      try {
+        const otcSettings = await loadOnTheClockSettings(supabase);
+        const { data, error } = await supabase.rpc("cleanup_on_the_clock_cache", {
+          p_projection_retention_hours: otcSettings.cache.projectionRetentionHours,
+        });
+        // Logged rather than swallowed. A prune that quietly reports nothing is
+        // indistinguishable from a prune that found nothing to do, and telling
+        // those two apart is the whole reason this runs.
+        if (error) throw new Error(error.message);
+        onTheClockCacheRowsDeleted =
+          (data as { drafts?: number; projections?: number; pulses?: number } | null) ?? null;
+      } catch (pruneErr) {
+        console.error("[cron/recalculate-derived] On The Clock cache prune failed", pruneErr);
+      }
+
       // Bounded retention prune for the BEAM question log. Same reasoning as the
       // ledgers above: global, deletion-only, and non-fatal. The window comes
       // from beam_settings so the admin control over it is real rather than
@@ -89,6 +128,7 @@ export async function GET(req: Request) {
         rankings,
         trends,
         rateLimitLedgerRowsDeleted,
+        onTheClockCacheRowsDeleted,
         beamQueryRowsDeleted,
         durationMs: Date.now() - started,
       };

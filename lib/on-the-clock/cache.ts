@@ -151,6 +151,31 @@ export function claimPulseBudget(admin: Client, ip: string): Promise<boolean> {
   });
 }
 
+/**
+ * Request-count ceiling for the draft sync route, separate from the Sleeper
+ * fan-out budget above.
+ *
+ * The fan-out budget is spent only by a claim that WINS, which is what keeps a
+ * dozen tabs on one draft from each being charged for the single fetch they
+ * share. It therefore says nothing about the losing requests, and an open room
+ * that refreshes itself on a timer makes those the ordinary case. A losing
+ * request is not free: it costs a settings read, a claim, and a full read of the
+ * draft and its picks whenever the caller does not already hold that snapshot.
+ *
+ * The ceiling is set well past anything a person produces. One viewer costs about
+ * two requests a minute, so 300 covers a hundred and fifty rooms behind a single
+ * office, carrier or VPN address before it bites.
+ */
+export const SYNC_REQUEST_BUDGET_MAX_REQUESTS = 300;
+export const SYNC_REQUEST_BUDGET_WINDOW_SECONDS = 60;
+
+export function claimSyncRequestBudget(admin: Client, ip: string): Promise<boolean> {
+  return claimIpBudget(admin, `sync:${ip}`, {
+    maxRequests: SYNC_REQUEST_BUDGET_MAX_REQUESTS,
+    windowSeconds: SYNC_REQUEST_BUDGET_WINDOW_SECONDS,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Cache read + shaping (any client; cache tables are public-read)
 // ---------------------------------------------------------------------------

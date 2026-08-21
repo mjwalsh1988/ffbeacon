@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import {
   validateOnTheClockSettings,
   clampOnTheClockSettings,
+  invalidateOnTheClockSettingsCache,
   ON_THE_CLOCK_SETTINGS_ID,
 } from "@/lib/on-the-clock/settings";
 import type { OnTheClockSettings } from "@/lib/on-the-clock/types";
@@ -51,6 +52,9 @@ export async function saveOnTheClockSettings(raw: unknown): Promise<ActionResult
   );
   if (error) return { ok: false, error: error.message };
 
+  // Drops this instance's memo of the row. Other instances age out on their own
+  // short TTL, so a save is live everywhere inside half a minute.
+  invalidateOnTheClockSettingsCache();
   revalidatePath("/admin/on-the-clock");
   revalidatePath("/tools/on-the-clock");
   return { ok: true };
@@ -95,6 +99,9 @@ export async function resetOnTheClockSettings(): Promise<
   );
   if (error) return { ok: false, error: error.message };
 
+  // Drops this instance's memo of the row. Other instances age out on their own
+  // short TTL, so a save is live everywhere inside half a minute.
+  invalidateOnTheClockSettingsCache();
   revalidatePath("/admin/on-the-clock");
   revalidatePath("/tools/on-the-clock");
   return { ok: true, settings: next };

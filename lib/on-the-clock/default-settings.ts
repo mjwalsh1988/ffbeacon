@@ -40,11 +40,18 @@ export const DEFAULT_ON_THE_CLOCK_SETTINGS: OnTheClockSettings = {
     // Short in-progress lock that blocks two simultaneous syncs of one draft.
     lockSeconds: 15,
     realtimeEnabled: true,
+    // An open room pulls Sleeper on its own so a drafter reading the board never
+    // has to press anything. Shared per draft, not per viewer: twelve people
+    // watching one draft still produce one Sleeper fetch a minute between them.
+    autoRefreshEnabled: true,
+    autoRefreshSeconds: 60,
   },
 
   cache: {
-    activeTtlHours: 24,
-    completedRetentionHours: 168, // 7 days
+    // Three times PROJECTION_CACHE_TTL_MS, so a sweep is only dropped well after
+    // it stopped being served and a rebuild is one background pass rather than a
+    // user-facing wait. Drafts and picks have no window: they are never deleted.
+    projectionRetentionHours: 72,
   },
 
   limits: {

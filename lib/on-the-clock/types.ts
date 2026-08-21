@@ -67,19 +67,33 @@ export interface PoolSettings {
 }
 
 export interface SyncSettings {
-  /** Server-enforced per-draft cooldown between Sleeper syncs. */
+  /** Server-enforced per-draft cooldown between MANUAL Sleeper syncs. */
   cooldownSeconds: number;
   /** Short in-progress lock that blocks two concurrent syncs of one draft. */
   lockSeconds: number;
   /** Whether the client subscribes to Supabase Realtime for co-viewer picks. */
   realtimeEnabled: boolean;
+  /** Whether an open room refreshes itself without anyone pressing Sync. */
+  autoRefreshEnabled: boolean;
+  /**
+   * The room's unattended refresh interval, shared per draft the same way the
+   * manual cooldown is. Never shorter than cooldownSeconds: a shorter window
+   * would be denied by the manual claim anyway and would only add traffic.
+   */
+  autoRefreshSeconds: number;
 }
 
 export interface CacheSettings {
-  /** Non-complete drafts older than this (by last activity) are prunable. */
-  activeTtlHours: number;
-  /** Completed drafts older than this are prunable. */
-  completedRetentionHours: number;
+  /**
+   * How long a cached projection sweep is kept after it was computed.
+   *
+   * The only On The Clock cache with a retention window, because it is the only
+   * one that is not a record of something that happened. Drafts and their picks
+   * are kept permanently: they are what this tool observed, a completed draft can
+   * still be opened and snapshotted later, and no resync can restore the moment we
+   * watched a pick land.
+   */
+  projectionRetentionHours: number;
 }
 
 export interface LimitSettings {

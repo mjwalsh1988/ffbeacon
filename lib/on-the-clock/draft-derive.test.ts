@@ -15,6 +15,7 @@ import {
   excludeDrafted,
   filterPool,
   pickBestByValue,
+  sameDraftCacheContent,
 } from "./draft-derive";
 import type { ShapedDraftCache, ShapedPick } from "./types";
 import type { RankedPlayer } from "./board-types";
@@ -352,5 +353,80 @@ describe("relativeTime / formatLastSynced / syncStatusLine", () => {
         error: "Sync failed. Try again shortly.",
       }),
     ).toBe("Sync failed. Try again shortly.");
+  });
+});
+
+describe("sameDraftCacheContent", () => {
+  it("holds a refresh of a draft that did not move", () => {
+    // The case that matters: an automatic refresh of a quiet draft. Everything is
+    // equal by value and nothing by reference, which is exactly what a fresh
+    // response looks like, and what must NOT be handed to setState.
+    expect(sameDraftCacheContent(cacheWith(24), cacheWith(24))).toBe(true);
+  });
+
+  it("ignores the sync stamp, which moves whenever anyone syncs", () => {
+    const before = cacheWith(24);
+    const after = cacheWith(24);
+    after.draft.lastSyncedAt = "2026-08-20T18:00:00.000Z";
+    expect(sameDraftCacheContent(before, after)).toBe(true);
+  });
+
+  it("sees a pick landing", () => {
+    expect(sameDraftCacheContent(cacheWith(24), cacheWith(25))).toBe(false);
+  });
+
+  it("sees a pick reverted", () => {
+    expect(sameDraftCacheContent(cacheWith(25), cacheWith(24))).toBe(false);
+  });
+
+  it("sees a pick whose player changed under the same count", () => {
+    const before = cacheWith(24);
+    const after = cacheWith(24);
+    after.picks[5] = pick(6, { playerId: "someone-else", sleeperPlayerId: "9999" });
+    expect(sameDraftCacheContent(before, after)).toBe(false);
+  });
+
+  it("sees a trade, which moves players between rosters and changes no count", () => {
+    const before = cacheWith(24);
+    const after = cacheWith(24);
+    after.rosters[0] = { ...after.rosters[0], players: ["4046"] };
+    expect(sameDraftCacheContent(before, after)).toBe(false);
+  });
+
+  it("sees traded picks appear", () => {
+    const before = cacheWith(24);
+    const after = cacheWith(24);
+    after.tradedPicks = [
+      { season: "2027", round: 1, roster_id: 3, owner_id: 5, previous_owner_id: 3 },
+    ];
+    expect(sameDraftCacheContent(before, after)).toBe(false);
+  });
+
+  it("sees a team rename", () => {
+    const before = cacheWith(24);
+    const after = cacheWith(24);
+    after.users[2] = { ...after.users[2], teamName: "New Name" };
+    expect(sameDraftCacheContent(before, after)).toBe(false);
+  });
+
+  it("sees the draft finish", () => {
+    const before = cacheWith(40);
+    const after = cacheWith(40);
+    after.draft.draftStatus = "complete";
+    expect(sameDraftCacheContent(before, after)).toBe(false);
+  });
+
+  it("sees the league's scoring settings arrive", () => {
+    const before = cacheWith(24);
+    const after = cacheWith(24);
+    after.draft.scoringSettings = { rec: 1 };
+    expect(sameDraftCacheContent(before, after)).toBe(false);
+  });
+
+  it("never calls two different drafts the same", () => {
+    const before = cacheWith(24);
+    const after = cacheWith(24);
+    after.draft.sleeperDraftId = "D2";
+    expect(sameDraftCacheContent(before, after)).toBe(false);
   });
 });
