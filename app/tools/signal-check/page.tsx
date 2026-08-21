@@ -178,7 +178,7 @@ function Masthead({
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            Power Rankings
+            Player Rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </>

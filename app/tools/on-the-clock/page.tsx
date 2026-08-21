@@ -184,22 +184,26 @@ function Masthead({ isMember, season }: { isMember: boolean; season: string }) {
           {/* Mobile-only skip-to-form shortcut for anyone still seeing the
               Discord invite. Members get the same scroll behavior from the
               primary button below (on every breakpoint), so hide it for them
-              to avoid a duplicate "Start drafting". */}
+              to avoid a duplicate "Draft Help". */}
           {!isMember && <StartDraftingButton />}
 
+          {/* Short labels on purpose: the hero shows two of these three buttons
+              at once, and the longer wording pushed the pair onto two rows at
+              phone width. */}
           <MemberHeroCta
             isMember={isMember}
             size="lg"
             memberMode="scroll"
             memberScrollTargetId="otc-connect"
-            memberLabel="Start drafting"
+            memberLabel="Draft Help"
             memberIcon="arrow-down"
+            joinLabel="Join Discord"
           />
           <Link
             href="/rankings"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            View player rankings
+            Player Rankings
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         </>

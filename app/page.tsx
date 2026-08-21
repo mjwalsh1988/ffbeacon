@@ -231,20 +231,24 @@ function Hero({
             are. No paywall, no gatekeeping.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
+            {/* Short labels on purpose: the hero shows two of these three
+                buttons at once, and the longer wording pushed the pair onto two
+                rows at phone width. */}
             <MemberHeroCta
               isMember={isMember}
               size="lg"
               memberMode="link"
               memberHref="/tools"
-              memberLabel="Explore our fantasy tools"
+              memberLabel="Free Tools"
               memberIcon="tools"
+              joinLabel="Join Discord"
             />
             <Link
-              href="/tools/on-the-clock"
+              href="/rankings"
               className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface/70 px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
-              <Timer aria-hidden="true" className="h-4 w-4" />
-              Live draft help
+              <BarChart3 aria-hidden="true" className="h-4 w-4" />
+              Player Rankings
             </Link>
           </div>
 
