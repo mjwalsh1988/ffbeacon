@@ -81,7 +81,7 @@ export async function calculateAcrossLeagues(
         report: null,
         rosteredBy: null,
         message:
-          "We have not synced this league yet. Open it in League Pulse once and it will answer next time.",
+          "We hold nothing for this league yet. Pick it in the league box above and we will sync it.",
       });
       continue;
     }

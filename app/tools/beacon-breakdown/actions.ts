@@ -24,6 +24,7 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import { getSleeperLeagues, getSleeperUser } from "@/lib/sleeper";
+import { syncLeagueOnDemand } from "@/lib/league-on-demand-sync";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
 const RATE_WINDOW_SECONDS = 60;
@@ -62,7 +63,7 @@ export type BreakdownLeague = {
 };
 
 export type ConnectBreakdownResult =
-  | { ok: true; leagues: BreakdownLeague[] }
+  | { ok: true; sleeperUserId: string; leagues: BreakdownLeague[] }
   | { ok: false; error: string };
 
 export async function connectBreakdownLeagues(input: {
@@ -145,5 +146,78 @@ export async function connectBreakdownLeagues(input: {
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
 
-  return { ok: true, leagues: out };
+  return { ok: true, sleeperUserId: user.user_id, leagues: out };
+}
+
+export type SyncBreakdownLeagueResult =
+  | { ok: true; rosterId: number | null; synced: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Sync one league the reader just picked, then say where their team is in it.
+ *
+ * A league nobody has opened has no stored rosters, which used to make it a
+ * dead row in this list: visible, disabled, and pointing at League Pulse. Now
+ * picking it runs the same sync opening the league would have run, and the
+ * comparison loads against the roster that sync just wrote.
+ *
+ * The claim inside syncLeagueOnDemand is the same per-visitor slot the League
+ * Pulse list and the FAAB calculator hold, so three surfaces share one budget.
+ */
+export async function syncBreakdownLeague(input: {
+  sleeperLeagueId: string;
+  sleeperUserId: string;
+}): Promise<SyncBreakdownLeagueResult> {
+  const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(sleeperLeagueId)) {
+    return { ok: false, error: "Invalid league id" };
+  }
+  const sleeperUserId = String(input.sleeperUserId ?? "");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(sleeperUserId)) {
+    return { ok: false, error: "Invalid user id" };
+  }
+
+  let actorKey: string;
+  try {
+    const requestHeaders = await headers();
+    actorKey = await resolveRateLimitActorKey(
+      new Request("https://ffbeacon.internal/breakdown", { headers: requestHeaders }),
+    );
+  } catch (err) {
+    console.error("[breakdown] could not derive a sync limit key", err);
+    return {
+      ok: false,
+      error: "Syncing is unavailable right now. Open the league in League Pulse instead.",
+    };
+  }
+
+  const admin = createAdminClient();
+  const outcome = await syncLeagueOnDemand(admin, sleeperLeagueId, actorKey);
+  if (!outcome.ok) return { ok: false, error: outcome.error };
+
+  const { data: row } = await admin
+    .from("leagues")
+    .select("id")
+    .eq("sleeper_league_id", sleeperLeagueId)
+    .maybeSingle();
+  if (!row) return { ok: true, rosterId: null, synced: false };
+
+  const { data: rosterRows } = await admin
+    .from("rosters")
+    .select("sleeper_roster_id, owner_user_id, co_owners")
+    .eq("league_id", row.id);
+
+  let rosterId: number | null = null;
+  for (const r of rosterRows ?? []) {
+    const co = Array.isArray(r.co_owners) ? r.co_owners : [];
+    const owns =
+      r.owner_user_id === sleeperUserId ||
+      co.some((c) => typeof c === "string" && c === sleeperUserId);
+    if (owns) {
+      rosterId = Number(r.sleeper_roster_id);
+      break;
+    }
+  }
+
+  return { ok: true, rosterId, synced: (rosterRows ?? []).length > 0 };
 }

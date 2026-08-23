@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
+import {
+  LEAGUE_SYNC_COOLDOWN_SECONDS,
+  syncLeagueOnDemand,
+} from "@/lib/league-on-demand-sync";
 
 /**
  * POST /api/leagues/[league_id]/sync
@@ -18,20 +21,11 @@ import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
  * cause the work that opening the league would cause, and writes nothing a page
  * render would not write.
  *
- * WHAT MAKES IT SAFE TO EXPOSE
- *   A visitor holds exactly one sync slot. While a sync is in flight, that
- *   visitor's next request is refused; after it finishes, the next one waits out
- *   a short cooldown. The claim is atomic (a SECURITY DEFINER RPC behind a row
- *   lock), so two clicks landing together collapse to one sync rather than both
- *   reading "free". The browser greys the other buttons out, but that is a
- *   courtesy to the reader, not the control; this is the control.
- *
- *   The actor key is derived server-side from the session cookie, falling back
- *   to a salted hash of the trusted client IP. It is never read from the body:
- *   a caller who names their own limit key has no limit.
- *
- * The slot is released in a finally, so a sync that throws costs the visitor a
- * cooldown rather than locking them out until the lease expires.
+ * The claim, the cooldown, and the sync itself live in
+ * lib/league-on-demand-sync.ts, shared with the FAAB calculator and the Beacon
+ * Breakdown, which sync a league the moment a reader picks an unsynced one. One
+ * implementation and one per-visitor budget, so alternating between the three
+ * surfaces cannot buy three of them.
  *
  * Response shape:
  *   200 { ok: true, cached: boolean }
@@ -41,30 +35,6 @@ import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
  *   429 { error, retryInSeconds, reason: "in_flight" | "cooldown" }
  *   500 { error }
  */
-
-/** Kept in step with COOLDOWN_SECONDS in lib/league-sync-queue.tsx and with the
- *  p_cooldown_seconds default on try_claim_league_sync. */
-const COOLDOWN_SECONDS = 5;
-
-/**
- * How long a claim may sit unreleased before another request may take it over.
- * Only reached when a process dies mid-sync; a normal run releases in a finally.
- */
-const LEASE_SECONDS = 180;
-
-/**
- * What we tell a caller who is blocked by their own in-flight sync. The RPC
- * reports the remaining lease, which is a crash guard and not a real wait, so
- * quoting it back would tell someone to wait three minutes for work that is
- * usually seconds from done.
- */
-const IN_FLIGHT_RETRY_SECONDS = 5;
-
-type ClaimResult = {
-  claimed?: boolean;
-  retry_after_seconds?: number;
-  in_flight?: boolean;
-};
 
 export async function POST(
   req: Request,
@@ -96,83 +66,30 @@ export async function POST(
     );
   }
 
-  const admin = createAdminClient();
-
-  const { data: claim, error: claimErr } = await admin.rpc(
-    "try_claim_league_sync" as never,
-    {
-      p_actor_key: actorKey,
-      p_sleeper_league_id: sleeperLeagueId,
-      p_cooldown_seconds: COOLDOWN_SECONDS,
-      p_lease_seconds: LEASE_SECONDS,
-    } as never,
+  const outcome = await syncLeagueOnDemand(
+    createAdminClient(),
+    sleeperLeagueId,
+    actorKey,
   );
-  if (claimErr) {
-    console.error("[league-sync] claim rpc failed", claimErr);
-    return NextResponse.json(
-      { error: "We could not start that sync. Try again shortly." },
-      { status: 500 },
-    );
+
+  if (outcome.ok) {
+    return NextResponse.json({ ok: true, cached: outcome.cached });
   }
 
-  const result = (claim ?? {}) as ClaimResult;
-  if (result.claimed !== true) {
-    const inFlight = result.in_flight === true;
-    const retryInSeconds = inFlight
-      ? IN_FLIGHT_RETRY_SECONDS
-      : (result.retry_after_seconds ?? COOLDOWN_SECONDS);
+  if (outcome.reason === "in_flight" || outcome.reason === "cooldown") {
     return NextResponse.json(
       {
-        error: inFlight
-          ? "One league syncs at a time. Wait for the current one to finish."
-          : `Only one sync every ${COOLDOWN_SECONDS} seconds.`,
-        retryInSeconds,
-        reason: inFlight ? "in_flight" : "cooldown",
+        error: outcome.error,
+        retryInSeconds: outcome.retryInSeconds || LEAGUE_SYNC_COOLDOWN_SECONDS,
+        reason: outcome.reason,
       },
       { status: 429 },
     );
   }
 
-  try {
-    // Exactly what the deep view does, in the same order. Core first, so a
-    // league Sleeper does not know about fails before any derived work starts.
-    const core = await pulseLeagueCore(admin, sleeperLeagueId);
-    if (!core.ok) {
-      return NextResponse.json(
-        { error: "We could not find that league on Sleeper." },
-        { status: 404 },
-      );
-    }
-
-    // Awaited, unlike the warm-up endpoint, which backgrounds this half. The
-    // caller is going to re-render the row the moment we answer, and the
-    // standing it wants is produced here.
-    await pulseLeagueDerived(admin, core.leagueRowId, {
-      resynced: !core.cached,
-    });
-
-    return NextResponse.json({ ok: true, cached: core.cached });
-  } catch (err) {
-    console.error(
-      `[league-sync] sync failed for ${sleeperLeagueId}:`,
-      (err as Error).message,
-    );
-    // Deliberately not the underlying message: it can carry connection strings
-    // and upstream detail that a public endpoint has no business echoing.
-    return NextResponse.json(
-      { error: "That sync did not finish. It usually works on a second try." },
-      { status: 500 },
-    );
-  } finally {
-    // Frees the slot and starts the cooldown, on every path including a throw.
-    const { error: releaseErr } = await admin.rpc(
-      "release_league_sync" as never,
-      { p_actor_key: actorKey } as never,
-    );
-    if (releaseErr) {
-      // The lease expiry covers this; the visitor waits it out rather than
-      // being locked out for good.
-      console.warn("[league-sync] release failed", releaseErr);
-    }
+  if (outcome.reason === "not_found") {
+    return NextResponse.json({ error: outcome.error }, { status: 404 });
   }
+
+  return NextResponse.json({ error: outcome.error }, { status: 500 });
 }

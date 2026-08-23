@@ -33,6 +33,7 @@ import { getSleeperLeagues, getSleeperUser } from "@/lib/sleeper";
 import { loadFaabSettings } from "@/lib/faab/settings";
 import { calculateLeagueFaab } from "@/lib/faab/league-faab";
 import { calculateAcrossLeagues, MAX_PRICED_LEAGUES } from "@/lib/faab/multi-league";
+import { syncLeagueOnDemand } from "@/lib/league-on-demand-sync";
 import { loadPlayerOutlook, type PlayerOutlook } from "@/lib/faab/outlook";
 import {
   loadLeagueFreeAgents,
@@ -169,7 +170,7 @@ export async function fetchLeagueFreeAgents(input: {
   if (!league) {
     return {
       ok: false,
-      error: "We have not synced this league yet. Open it in League Pulse once and come back.",
+      error: "That league did not finish syncing. Pick it again in a moment.",
     };
   }
   if (!format) return { ok: false, error: "Unknown format" };
@@ -184,7 +185,7 @@ export async function fetchLeagueFreeAgents(input: {
       return {
         ok: false,
         error:
-          "We hold no rosters for this league yet, so we cannot tell who is available. Open it in League Pulse once.",
+          "We hold no rosters for this league yet, so we cannot tell who is available. Pick it again in a moment.",
       };
     }
     return {
@@ -324,6 +325,116 @@ export async function connectSleeperLeagues(input: {
   return { ok: true, sleeperUserId: user.user_id, leagues: out };
 }
 
+export type LeagueSyncPatch = {
+  rosterId: number | null;
+  synced: boolean;
+  remainingBudget: number | null;
+};
+
+export type SyncConnectedLeagueResult =
+  | { ok: true; patch: LeagueSyncPatch }
+  | { ok: false; error: string };
+
+/**
+ * Sync one league the reader just picked, then report what it changed.
+ *
+ * Picking a league nobody has opened used to be impossible: the option was
+ * greyed out and the reader was told to go and open it in League Pulse first,
+ * which is an errand, not an answer. Now picking it runs the same sync opening
+ * the league would have run, and the free-agent list loads behind it.
+ *
+ * Returns a patch rather than a whole league so the name, season, and team count
+ * the reader is looking at keep coming from Sleeper's own list, not from a
+ * string the browser sent us and we echoed back.
+ *
+ * The per-visitor claim inside syncLeagueOnDemand is the gate. It is the same
+ * slot /api/leagues/[league_id]/sync holds, so a reader alternating between the
+ * League Pulse list and this calculator gets one sync budget, not two.
+ */
+export async function syncConnectedLeague(input: {
+  sleeperLeagueId: string;
+  sleeperUserId: string;
+}): Promise<SyncConnectedLeagueResult> {
+  const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
+  if (!SLEEPER_ID_PATTERN.test(sleeperLeagueId)) {
+    return { ok: false, error: "Invalid league id" };
+  }
+  const sleeperUserId = String(input.sleeperUserId ?? "");
+  if (!SLEEPER_ID_PATTERN.test(sleeperUserId)) {
+    return { ok: false, error: "Invalid user id" };
+  }
+
+  let actorKey: string;
+  try {
+    const requestHeaders = await headers();
+    actorKey = await resolveRateLimitActorKey(
+      new Request("https://ffbeacon.internal/faab", { headers: requestHeaders }),
+    );
+  } catch (err) {
+    console.error("[faab] could not derive a sync limit key", err);
+    return {
+      ok: false,
+      error: "Syncing is unavailable right now. Open the league in League Pulse instead.",
+    };
+  }
+
+  const admin = createAdminClient();
+  const outcome = await syncLeagueOnDemand(admin, sleeperLeagueId, actorKey);
+  if (!outcome.ok) return { ok: false, error: outcome.error };
+
+  return { ok: true, patch: await readLeagueMembership(admin, sleeperLeagueId, sleeperUserId) };
+}
+
+/**
+ * Where the reader stands in one league, read from our own tables.
+ *
+ * Shared by the connect call, which does this for every league at once, and by
+ * the on-demand sync, which does it for the one league that just finished.
+ */
+async function readLeagueMembership(
+  admin: ReturnType<typeof createAdminClient>,
+  sleeperLeagueId: string,
+  sleeperUserId: string,
+): Promise<LeagueSyncPatch> {
+  const { data: row } = await admin
+    .from("leagues")
+    .select("id, metadata")
+    .eq("sleeper_league_id", sleeperLeagueId)
+    .maybeSingle();
+
+  if (!row) return { rosterId: null, synced: false, remainingBudget: null };
+
+  const { data: rosterRows } = await admin
+    .from("rosters")
+    .select("sleeper_roster_id, owner_user_id, co_owners, waiver_budget")
+    .eq("league_id", row.id);
+
+  let mine: { rosterId: number; waiverBudgetUsed: number } | null = null;
+  for (const r of rosterRows ?? []) {
+    const co = Array.isArray(r.co_owners) ? r.co_owners : [];
+    const owns =
+      r.owner_user_id === sleeperUserId ||
+      co.some((c) => typeof c === "string" && c === sleeperUserId);
+    if (!owns) continue;
+    mine = {
+      rosterId: Number(r.sleeper_roster_id),
+      waiverBudgetUsed: Number(r.waiver_budget ?? 0),
+    };
+    break;
+  }
+
+  const meta = (row.metadata ?? {}) as { settings?: Record<string, unknown> };
+  const total = Number(meta.settings?.waiver_budget);
+  return {
+    rosterId: mine?.rosterId ?? null,
+    synced: (rosterRows ?? []).length > 0,
+    remainingBudget:
+      mine && Number.isFinite(total)
+        ? Math.max(0, total - mine.waiverBudgetUsed)
+        : null,
+  };
+}
+
 export type LeagueBidResult =
   | { ok: true; report: LeagueFaabReport }
   | { ok: false; error: string };
@@ -364,7 +475,7 @@ export async function runLeagueBid(input: {
   if (!league) {
     return {
       ok: false,
-      error: "We have not synced this league yet. Open it in League Pulse once and come back.",
+      error: "That league did not finish syncing. Pick it again in a moment.",
     };
   }
 

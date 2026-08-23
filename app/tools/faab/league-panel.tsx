@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { Layers, Link2, Loader2, Users } from "lucide-react";
 import {
   connectSleeperLeagues,
   fetchLeagueFreeAgents,
   runAllLeagueBids,
   runLeagueBid,
+  syncConnectedLeague,
   type ConnectedLeague,
 } from "./actions";
 import { useStepScroll } from "@/lib/use-step-scroll";
@@ -79,6 +80,11 @@ export function LeaguePanel({
   const [leaguePositions, setLeaguePositions] = useState<string[]>([]);
   const [freeAgentError, setFreeAgentError] = useState<string | null>(null);
   const [loadingAgents, startLoadingAgents] = useTransition();
+  // Split out from loadingAgents because the two waits are different lengths and
+  // different promises. Reading a synced league is a database query; syncing an
+  // unsynced one is a round trip to Sleeper plus every derived pass, so the
+  // reader is told which one they are waiting on.
+  const [syncingLeague, setSyncingLeague] = useState(false);
 
   const [pricing, startPricing] = useTransition();
   const [report, setReport] = useState<LeagueFaabReport | null>(null);
@@ -111,20 +117,78 @@ export function LeaguePanel({
     setAllError(null);
   }, [player?.sleeper_id]);
 
+  // Read inside the league effect without listing them as dependencies. Both
+  // change as a RESULT of that effect running: it writes the synced league back
+  // into `leagues`, and listing that here would restart the effect it just
+  // finished, clearing the list the reader is about to search.
+  const leaguesRef = useRef(leagues);
+  leaguesRef.current = leagues;
+  const sleeperUserIdRef = useRef(sleeperUserId);
+  sleeperUserIdRef.current = sleeperUserId;
+
   // Availability is per league, so switching leagues invalidates both the list
   // and whoever was picked from the previous one.
+  //
+  // A league nobody has opened is synced here rather than refused. We hold no
+  // rosters for it, so there is nothing to answer with until Sleeper is asked,
+  // and sending the reader off to open it somewhere else was never the answer
+  // they came for.
   useEffect(() => {
     setFreeAgents(null);
     setFreeAgentError(null);
     setPlayer(null);
     setQuery("");
+    setSyncingLeague(false);
     if (!selectedLeagueId || !sourceSlug) return;
+
+    // Guards the reader who changes their mind mid-sync: a slow answer for a
+    // league they have already moved on from must not overwrite the new one.
+    let current = true;
+
+    const picked = leaguesRef.current.find(
+      (l) => l.sleeperLeagueId === selectedLeagueId,
+    );
+    const needsSync = Boolean(picked && (!picked.synced || picked.rosterId === null));
+    const userId = sleeperUserIdRef.current;
+
     startLoadingAgents(async () => {
+      if (needsSync && userId) {
+        setSyncingLeague(true);
+        const synced = await syncConnectedLeague({
+          sleeperLeagueId: selectedLeagueId,
+          sleeperUserId: userId,
+        });
+        if (!current) return;
+        setSyncingLeague(false);
+        if (!synced.ok) {
+          setFreeAgentError(synced.error);
+          return;
+        }
+        setLeagues((prev) =>
+          prev.map((l) =>
+            l.sleeperLeagueId === selectedLeagueId ? { ...l, ...synced.patch } : l,
+          ),
+        );
+        if (!synced.patch.synced) {
+          setFreeAgentError(
+            "Sleeper gave us no rosters for that league, so there is nothing to price a bid against yet.",
+          );
+          return;
+        }
+        if (synced.patch.rosterId === null) {
+          setFreeAgentError(
+            `We synced that league but could not find a team owned by ${username.trim() || "you"} in it.`,
+          );
+          return;
+        }
+      }
+
       const result = await fetchLeagueFreeAgents({
         sleeperLeagueId: selectedLeagueId,
         formatSlug,
         sourceSlug,
       });
+      if (!current) return;
       if (!result.ok) {
         setFreeAgentError(result.error);
         return;
@@ -133,6 +197,13 @@ export function LeaguePanel({
       setRosteredCount(result.rostered);
       setLeaguePositions(result.positions);
     });
+
+    return () => {
+      current = false;
+    };
+    // `username` is read only for an error message, and `leagues` and
+    // `sleeperUserId` come through refs above, so none of them belongs here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLeagueId, formatSlug, sourceSlug]);
 
   const connect = useCallback(() => {
@@ -319,17 +390,13 @@ export function LeaguePanel({
               >
                 <option value="">Select a league</option>
                 {leagues.map((l) => (
-                  <option
-                    key={l.sleeperLeagueId}
-                    value={l.sleeperLeagueId}
-                    disabled={!l.synced || l.rosterId === null}
-                  >
+                  <option key={l.sleeperLeagueId} value={l.sleeperLeagueId}>
                     {l.name}
                     {l.synced && l.rosterId !== null
                       ? l.remainingBudget !== null
                         ? ` (${l.remainingBudget} FAAB left)`
                         : ""
-                      : " (not synced yet)"}
+                      : " (syncs when you pick it)"}
                   </option>
                 ))}
               </select>
@@ -338,7 +405,9 @@ export function LeaguePanel({
             {loadingAgents ? (
               <p className="flex items-center gap-2 text-sm text-ink-muted">
                 <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-brand-cyan" />
-                Reading who is available in this league.
+                {syncingLeague
+                  ? "Pulling this league from Sleeper for the first time. Give it a few seconds."
+                  : "Reading who is available in this league."}
               </p>
             ) : freeAgentError ? (
               <p role="alert" className="text-sm text-signal-danger">
@@ -370,8 +439,9 @@ export function LeaguePanel({
               <p className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
                 <Layers aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" />
                 <span>
-                  Greyed-out leagues are not synced yet. Open one in League Pulse once and it
-                  will answer here.
+                  Leagues marked &quot;syncs when you pick it&quot; are ones we have not
+                  read yet. Pick one and we read it from Sleeper on the spot. A few seconds
+                  the first time, nothing after that.
                 </span>
               </p>
             )}
@@ -405,7 +475,9 @@ export function LeaguePanel({
 
         {/* Short on purpose: the detail is in the cards below. */}
         <p className="sr-only" role="status" aria-live="polite">
-          {pricing || checkingAll
+          {syncingLeague
+            ? "Syncing this league from Sleeper. This takes a few seconds."
+            : pricing || checkingAll
             ? "Working on it."
             : report
               ? `${report.headline}. Bid ${report.ladder.likely} FAAB, walk away above ${report.ladder.walkAway}.`

@@ -157,7 +157,7 @@ export async function loadLeagueMode(
     return {
       report: null,
       notice:
-        "We have not synced that league yet. Open it once in League Pulse and this will fill in.",
+        "That league did not finish syncing. Pick it again from the league list and it will fill in.",
     };
   }
 

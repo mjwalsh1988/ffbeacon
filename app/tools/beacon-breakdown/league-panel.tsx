@@ -8,16 +8,22 @@
  * comparison is recomputed server-side against their actual team and the
  * resulting link is shareable with a leaguemate.
  *
- * Leagues nobody has opened in League Pulse cannot be compared against, because
- * we hold no rosters for them. Those are listed and disabled with the reason
- * said out loud, never silently filtered: "we did not look" and "you are not in
- * it" must not look the same.
+ * Leagues nobody has opened before have no stored rosters, so picking one syncs
+ * it from Sleeper first and then applies it. That wait is said out loud on the
+ * row being synced rather than left to look like a stuck button. A league the
+ * reader turns out not to have a team in is still refused afterwards, with that
+ * reason said out loud too: "we did not look" and "you are not in it" must not
+ * look the same.
  */
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Users, X } from "lucide-react";
-import { connectBreakdownLeagues, type BreakdownLeague } from "./actions";
+import {
+  connectBreakdownLeagues,
+  syncBreakdownLeague,
+  type BreakdownLeague,
+} from "./actions";
 
 export type ActiveLeague = {
   sleeperLeagueId: string;
@@ -52,6 +58,9 @@ export function LeaguePanel({
   const [username, setUsername] = useState("");
   const [season, setSeason] = useState(defaultSeason);
   const [leagues, setLeagues] = useState<BreakdownLeague[] | null>(null);
+  const [sleeperUserId, setSleeperUserId] = useState<string | null>(null);
+  /** The league currently being pulled from Sleeper, so only its row spins. */
+  const [syncingLeagueId, setSyncingLeagueId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [connecting, setConnecting] = useState(false);
@@ -74,6 +83,7 @@ export function LeaguePanel({
         setError(result.error);
         return;
       }
+      setSleeperUserId(result.sleeperUserId);
       setLeagues(result.leagues);
     } catch {
       setError("Something went wrong reaching Sleeper. Try again in a moment.");
@@ -82,9 +92,7 @@ export function LeaguePanel({
     }
   }
 
-  function applyLeague(league: BreakdownLeague) {
-    const rosterId = league.rosterId;
-    if (rosterId == null) return;
+  function navigateTo(league: BreakdownLeague, rosterId: number) {
     const join = applyHrefBase.includes("?") ? "&" : "?";
     const href = `${applyHrefBase}${join}league=${encodeURIComponent(
       league.sleeperLeagueId,
@@ -92,6 +100,59 @@ export function LeaguePanel({
     startTransition(() => {
       router.push(href);
     });
+  }
+
+  /**
+   * Pick a league. One that has never been read is pulled from Sleeper first,
+   * which is the same work opening it in League Pulse would have done, and then
+   * applied without the reader having to come back and press it again.
+   */
+  async function applyLeague(league: BreakdownLeague) {
+    setError(null);
+
+    if (league.rosterId != null) {
+      navigateTo(league, league.rosterId);
+      return;
+    }
+
+    if (!sleeperUserId) {
+      setError("Find your leagues again, then pick this one.");
+      return;
+    }
+
+    setSyncingLeagueId(league.sleeperLeagueId);
+    try {
+      const result = await syncBreakdownLeague({
+        sleeperLeagueId: league.sleeperLeagueId,
+        sleeperUserId,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // Write the answer back either way, so a second press does not spend
+      // another sync slot to learn the same thing.
+      setLeagues((prev) =>
+        (prev ?? []).map((l) =>
+          l.sleeperLeagueId === league.sleeperLeagueId
+            ? { ...l, rosterId: result.rosterId, synced: result.synced }
+            : l,
+        ),
+      );
+      if (!result.synced) {
+        setError(`Sleeper gave us no rosters for ${league.name}, so there is nothing to compare against.`);
+        return;
+      }
+      if (result.rosterId == null) {
+        setError(`We read ${league.name} but could not find your team in it.`);
+        return;
+      }
+      navigateTo(league, result.rosterId);
+    } catch {
+      setError("Something went wrong reaching Sleeper. Try again in a moment.");
+    } finally {
+      setSyncingLeagueId(null);
+    }
   }
 
   if (active) {
@@ -214,7 +275,10 @@ export function LeaguePanel({
 
           <p aria-live="polite" className="sr-only">
             {connecting ? "Looking up your leagues." : ""}
-            {leagues ? `Found ${leagues.length} leagues.` : ""}
+            {leagues && !connecting ? `Found ${leagues.length} leagues.` : ""}
+            {syncingLeagueId
+              ? " Reading that league from Sleeper. This takes a few seconds."
+              : ""}
           </p>
 
           {error && (
@@ -233,34 +297,45 @@ export function LeaguePanel({
               </h4>
               <ul role="list" className="mt-2 space-y-2">
                 {leagues.map((league) => {
-                  const ready = league.synced && league.rosterId != null;
+                  const ready = league.rosterId != null;
+                  // Only a league we read and found no team in is a dead end.
+                  // One nobody has read yet is not: picking it reads it.
+                  const noTeam = league.synced && league.rosterId == null;
+                  const syncing = syncingLeagueId === league.sleeperLeagueId;
                   return (
                     <li key={league.sleeperLeagueId}>
                       <button
                         type="button"
-                        disabled={!ready || pending}
-                        onClick={() => applyLeague(league)}
+                        disabled={noTeam || pending || syncingLeagueId !== null}
+                        onClick={() => void applyLeague(league)}
                         className={`flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-card border px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
-                          ready
-                            ? "border-line bg-base text-ink hover:border-brand-cyan/50"
-                            : "cursor-not-allowed border-line/50 bg-base/40 text-ink-subtle"
+                          noTeam
+                            ? "cursor-not-allowed border-line/50 bg-base/40 text-ink-subtle"
+                            : "border-line bg-base text-ink hover:border-brand-cyan/50 disabled:opacity-60"
                         }`}
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-medium">{league.name}</span>
                           <span className="block text-[11px] text-ink-subtle">
                             {league.teams ? `${league.teams} teams` : "Sleeper league"}
-                            {!league.synced &&
-                              ", not synced yet. Open it once in League Pulse to compare against it."}
-                            {league.synced &&
-                              league.rosterId == null &&
-                              ", we could not find your team in it."}
+                            {syncing && ", reading it from Sleeper now."}
+                            {!syncing &&
+                              !league.synced &&
+                              ", we read this one when you pick it."}
+                            {!syncing && noTeam && ", we could not find your team in it."}
                           </span>
                         </span>
-                        {ready && (
-                          <span className="shrink-0 text-xs font-semibold text-brand-cyan">
-                            Use this league
+                        {syncing ? (
+                          <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-brand-cyan">
+                            <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+                            Syncing
                           </span>
+                        ) : (
+                          !noTeam && (
+                            <span className="shrink-0 text-xs font-semibold text-brand-cyan">
+                              {ready ? "Use this league" : "Sync and use"}
+                            </span>
+                          )
                         )}
                       </button>
                     </li>
