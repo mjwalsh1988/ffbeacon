@@ -15,8 +15,10 @@ import {
   ReferenceLoadError,
   referenceAgeDays,
   spearman,
+  driftAlertStreak,
   type DriftAlertSettings,
 } from "./reference";
+import { resolveDriftThresholds } from "./settings";
 import { buildSyntheticReference } from "./calibrate";
 import { parseFormatSlugList, resolveNormalizationMethod } from "./settings";
 import type { SourcePlayerValue } from "./normalize";
@@ -466,6 +468,177 @@ describe("drift alerts", () => {
       settings,
     );
     expect(a).toHaveLength(6);
+  });
+});
+
+describe("resolveDriftThresholds", () => {
+  const settings = {
+    calibrationMaxAgeDays: 45,
+    calibrationMinSharedPlayers: 100,
+    calibrationDriftMeanAbs: 100,
+    calibrationDriftPlayerMax: 500,
+    calibrationDriftPct250: 0.02,
+    calibrationDriftMinSpearman: 0.993,
+    calibrationDriftRedraftMeanAbs: 120,
+    calibrationDriftRedraftPlayerMax: 700,
+    calibrationDriftRedraftPct250: 0.08,
+    calibrationDriftRedraftMinSpearman: 0.992,
+  };
+
+  it("gives a redraft board the wider limits", () => {
+    const t = resolveDriftThresholds("redraft", settings);
+    expect(t.calibrationDriftPlayerMax).toBe(700);
+    expect(t.calibrationDriftPct250).toBe(0.08);
+  });
+
+  it("gives a dynasty board the tight ones", () => {
+    const t = resolveDriftThresholds("dynasty", settings);
+    expect(t.calibrationDriftPlayerMax).toBe(500);
+    expect(t.calibrationDriftPct250).toBe(0.02);
+  });
+
+  it("falls to the tight set on an unclassified board", () => {
+    // Over-reporting about a board nobody has characterised is the safe
+    // direction; going quiet about one is not.
+    expect(resolveDriftThresholds(null, settings).calibrationDriftPlayerMax).toBe(500);
+    expect(resolveDriftThresholds("keeper", settings).calibrationDriftPct250).toBe(0.02);
+  });
+
+  it("keeps age and thinness the same either way, since neither is movement", () => {
+    for (const type of ["dynasty", "redraft"]) {
+      const t = resolveDriftThresholds(type, settings);
+      expect(t.calibrationMaxAgeDays).toBe(45);
+      expect(t.calibrationMinSharedPlayers).toBe(100);
+    }
+  });
+
+  it("separates the two boards that actually disagreed in production", () => {
+    // redraft-ppr-sflex on 2026-08-24: one player moving 516, 7.8 percent of the
+    // board moving 250+. An ordinary preseason night for a one-year board, and
+    // it emailed, because it was being judged by dynasty numbers.
+    const ordinaryRedraftNight = {
+      players: 320,
+      meanAbs: 68.8,
+      maxMove: 516,
+      over250: 25,
+      over500: 1,
+      pctOver250: 0.078,
+      spearman: 0.99945,
+    };
+    expect(
+      evaluateDriftAlerts(
+        { ageDays: 23, sharedPlayerCount: 181, metrics: ordinaryRedraftNight },
+        resolveDriftThresholds("redraft", settings),
+      ),
+    ).toEqual([]);
+    expect(
+      evaluateDriftAlerts(
+        { ageDays: 23, sharedPlayerCount: 181, metrics: ordinaryRedraftNight },
+        resolveDriftThresholds("dynasty", settings),
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("still reports the redraft night that was genuinely out of range", () => {
+    // 2026-08-22, the middle of the three-night run: 10.0 percent of the board
+    // moving 250+. Widening the limits must not have swallowed this one, because
+    // this is the run the whole change is meant to preserve.
+    const outOfRange = {
+      players: 320,
+      meanAbs: 74,
+      maxMove: 542,
+      over250: 32,
+      over500: 4,
+      pctOver250: 0.1,
+      spearman: 0.99926,
+    };
+    const alerts = evaluateDriftAlerts(
+      { ageDays: 21, sharedPlayerCount: 181, metrics: outOfRange },
+      resolveDriftThresholds("redraft", settings),
+    );
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toContain("250 points or more");
+  });
+
+  it("clears the dynasty rank-correlation trips that were inside the noise", () => {
+    // Dynasty tripped the old 0.995 limit four times at 0.9942 to 0.9948 while
+    // moving the average player 26 points. Nothing was wrong; the limit was.
+    const dynastyNoise = {
+      players: 780,
+      meanAbs: 26,
+      maxMove: 148,
+      over250: 0,
+      over500: 0,
+      pctOver250: 0,
+      spearman: 0.9942,
+    };
+    expect(
+      evaluateDriftAlerts(
+        { ageDays: 22, sharedPlayerCount: 387, metrics: dynastyNoise },
+        resolveDriftThresholds("dynasty", settings),
+      ),
+    ).toEqual([]);
+  });
+
+  it("still reports a dynasty board that genuinely reorders", () => {
+    // Widening redraft must not have made dynasty unalarmable.
+    const broken = {
+      players: 600,
+      meanAbs: 30,
+      maxMove: 900,
+      over250: 40,
+      over500: 12,
+      pctOver250: 0.07,
+      spearman: 0.96,
+    };
+    const alerts = evaluateDriftAlerts(
+      { ageDays: 12, sharedPlayerCount: 380, metrics: broken },
+      resolveDriftThresholds("dynasty", settings),
+    );
+    expect(alerts.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("driftAlertStreak", () => {
+  const run = (...slugs: string[]) => new Set(slugs);
+
+  it("is zero when tonight is clean, however bad last week was", () => {
+    // A streak is about what is happening now. A board that tripped yesterday
+    // and is fine today has nothing to report.
+    expect(driftAlertStreak("redraft-ppr-std", false, [run("redraft-ppr-std")])).toBe(0);
+  });
+
+  it("counts tonight alone when there is no history", () => {
+    expect(driftAlertStreak("redraft-ppr-std", true, [])).toBe(1);
+  });
+
+  it("counts consecutive runs and stops at the first clean one", () => {
+    const history = [
+      run("redraft-ppr-std"),
+      run("redraft-ppr-std", "dynasty-ppr-sflex"),
+      run("dynasty-ppr-sflex"),
+      run("redraft-ppr-std"),
+    ];
+    expect(driftAlertStreak("redraft-ppr-std", true, history)).toBe(3);
+  });
+
+  it("does not credit another board's streak", () => {
+    const history = [run("redraft-ppr-sflex"), run("redraft-ppr-sflex")];
+    expect(driftAlertStreak("redraft-ppr-std", true, history)).toBe(1);
+  });
+
+  it("reproduces the three-night run that should still email", () => {
+    // 2026-08-21, 22 and 23 on redraft-ppr-sflex: 9.4, 10.0 and 8.7 percent of
+    // the board moving 250+. Three checks running, so it clears a streak of 3.
+    const history = [run("redraft-ppr-sflex"), run("redraft-ppr-sflex")];
+    expect(driftAlertStreak("redraft-ppr-sflex", true, history)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("holds back the isolated spikes that made up most of the noise", () => {
+    // 2026-08-13 on redraft-ppr-std: one player moving 532, clean the night
+    // before and the night after. One of thirteen emails that should not have
+    // been sent.
+    expect(driftAlertStreak("redraft-ppr-std", true, [run("dynasty-ppr-sflex"), run()])).toBe(1);
   });
 });
 

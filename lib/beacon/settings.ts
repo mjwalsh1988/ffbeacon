@@ -44,12 +44,95 @@ export interface BeaconSettings {
   calibrationRebuildDays: number;
   /** Reference age that raises an alert (it never stops the engine). */
   calibrationMaxAgeDays: number;
+  /**
+   * Drift limits for DYNASTY boards. Redraft has its own set below.
+   *
+   * The split is by league_type rather than by format slug because it is about
+   * how long a roster is held, not about these particular boards. A one-year
+   * board reprices on every depth-chart report; a dynasty board does not. See
+   * migration 0206 for the measurements.
+   */
   calibrationDriftMeanAbs: number;
   calibrationDriftPlayerMax: number;
   calibrationDriftPct250: number;
   calibrationDriftMinSpearman: number;
+  /** The same four limits for redraft boards. */
+  calibrationDriftRedraftMeanAbs: number;
+  calibrationDriftRedraftPlayerMax: number;
+  calibrationDriftRedraftPct250: number;
+  calibrationDriftRedraftMinSpearman: number;
+  /**
+   * Consecutive drift checks one board must trip before the alert emails. The
+   * metrics are computed and recorded every run regardless; this governs only
+   * the email. 1 restores the original every-trip behaviour.
+   */
+  calibrationDriftAlertStreak: number;
   /** The raw rows, for the run's weights_snapshot. */
   raw: Record<string, unknown>;
+}
+
+/**
+ * The four movement limits, resolved for one board.
+ *
+ * Field names match the dynasty settings so evaluateDriftAlerts reads one shape
+ * whichever set it was handed.
+ */
+export type DriftThresholds = {
+  calibrationMaxAgeDays: number;
+  calibrationMinSharedPlayers: number;
+  calibrationDriftMeanAbs: number;
+  calibrationDriftPlayerMax: number;
+  calibrationDriftPct250: number;
+  calibrationDriftMinSpearman: number;
+};
+
+/**
+ * Pick the threshold set for a board.
+ *
+ * Age and thinness are properties of the reference itself rather than of how
+ * much the board moves, so they are the same either way.
+ */
+export type DriftSettings = Pick<
+  BeaconSettings,
+  | "calibrationMaxAgeDays"
+  | "calibrationMinSharedPlayers"
+  | "calibrationDriftMeanAbs"
+  | "calibrationDriftPlayerMax"
+  | "calibrationDriftPct250"
+  | "calibrationDriftMinSpearman"
+  | "calibrationDriftRedraftMeanAbs"
+  | "calibrationDriftRedraftPlayerMax"
+  | "calibrationDriftRedraftPct250"
+  | "calibrationDriftRedraftMinSpearman"
+>;
+
+export function resolveDriftThresholds(
+  leagueType: string | null | undefined,
+  settings: DriftSettings,
+): DriftThresholds {
+  const shared = {
+    calibrationMaxAgeDays: settings.calibrationMaxAgeDays,
+    calibrationMinSharedPlayers: settings.calibrationMinSharedPlayers,
+  };
+  if (leagueType === "redraft") {
+    return {
+      ...shared,
+      calibrationDriftMeanAbs: settings.calibrationDriftRedraftMeanAbs,
+      calibrationDriftPlayerMax: settings.calibrationDriftRedraftPlayerMax,
+      calibrationDriftPct250: settings.calibrationDriftRedraftPct250,
+      calibrationDriftMinSpearman: settings.calibrationDriftRedraftMinSpearman,
+    };
+  }
+  // Dynasty, and anything we cannot classify. Falling to the tighter set on an
+  // unknown league_type is the safe direction: it over-reports rather than
+  // going quiet about a board nobody has characterised yet.
+  return {
+    ...shared,
+    calibrationDriftMeanAbs: settings.calibrationDriftMeanAbs,
+    calibrationDriftPlayerMax: settings.calibrationDriftPlayerMax,
+    calibrationDriftPct250: settings.calibrationDriftPct250,
+    calibrationDriftMinSpearman: settings.calibrationDriftMinSpearman,
+  };
 }
 
 export type NormalizationMethod = "quantile_median" | "calibrated";
@@ -110,7 +193,12 @@ const DEFAULTS = {
   calibrationDriftMeanAbs: 100,
   calibrationDriftPlayerMax: 500,
   calibrationDriftPct250: 0.02,
-  calibrationDriftMinSpearman: 0.995,
+  calibrationDriftMinSpearman: 0.993,
+  calibrationDriftRedraftMeanAbs: 120,
+  calibrationDriftRedraftPlayerMax: 700,
+  calibrationDriftRedraftPct250: 0.08,
+  calibrationDriftRedraftMinSpearman: 0.992,
+  calibrationDriftAlertStreak: 3,
 };
 
 function num(v: unknown, fallback: number): number {
@@ -185,6 +273,26 @@ export async function loadBeaconSettings(
     calibrationDriftMinSpearman: num(
       map.get("calibration_drift_min_spearman"),
       DEFAULTS.calibrationDriftMinSpearman,
+    ),
+    calibrationDriftRedraftMeanAbs: num(
+      map.get("calibration_drift_redraft_mean_abs"),
+      DEFAULTS.calibrationDriftRedraftMeanAbs,
+    ),
+    calibrationDriftRedraftPlayerMax: num(
+      map.get("calibration_drift_redraft_player_max"),
+      DEFAULTS.calibrationDriftRedraftPlayerMax,
+    ),
+    calibrationDriftRedraftPct250: num(
+      map.get("calibration_drift_redraft_pct_250"),
+      DEFAULTS.calibrationDriftRedraftPct250,
+    ),
+    calibrationDriftRedraftMinSpearman: num(
+      map.get("calibration_drift_redraft_min_spearman"),
+      DEFAULTS.calibrationDriftRedraftMinSpearman,
+    ),
+    calibrationDriftAlertStreak: Math.max(
+      1,
+      Math.round(num(map.get("calibration_drift_alert_streak"), DEFAULTS.calibrationDriftAlertStreak)),
     ),
     raw,
   };

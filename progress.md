@@ -6928,3 +6928,125 @@ T676 | completed | Home and away on every player, and a phone-first player cell
      | edges and the projected-points numbers stay on the inner edge against the
      | slot column.
      | verified: yes (tsc clean, next build clean, 1980 tests green)
+
+T677 | completed | Contender / Bubble / Rebuilder, and Longshot in a redraft league
+     | files: lib/league-team-status.ts, lib/league-team-status.test.ts,
+     |   components/team-status-badge.tsx, components/league-key.tsx,
+     |   lib/sleeper-to-format.ts, lib/league-power-pulse-data.ts,
+     |   lib/league-team-status-data.ts, lib/trade-finder-data.ts,
+     |   lib/trade-impact/types.ts, lib/trade-impact/evaluate.ts,
+     |   lib/trade-impact/reasons.ts, app/tools/league-pulse/page.tsx,
+     |   app/my-beacon/sleeper-leagues/page.tsx
+     | Renames the three Power Pulse standing tags. Contender, Bubble, Rebuilder in
+     | dynasty and keeper leagues; Contender, Bubble, Longshot in redraft, where
+     | there is no next year to bank assets for and calling a team a rebuilder
+     | claims something the league cannot support.
+     | THE LOGIC IS UNTOUCHED. TeamStatusKey still drives every sort, filter and
+     | trade-engine branch. A new `variant` on TeamStatus picks the words, and a
+     | test asserts the classification is identical across both vocabularies.
+     | KEEPER TAKES THE DYNASTY WORDS, via deriveKeeperStyle rather than
+     | DerivedFormat.league_type. That one folds keeper into redraft because that
+     | is how keeper leagues PRICE; what a manager can plan is a different
+     | question. All 193 stored leagues carry settings.type, so it resolves for
+     | every one (168 dynasty, 2 keeper, 22 redraft, 1 chopped).
+     | LONGSHOT GETS DICE. The piggy bank is the one mark that cannot carry
+     | across: banking assets is the whole idea in dynasty and an impossibility in
+     | redraft. Swords and the splitting arrow are unchanged.
+     | TWO COUPLINGS THE RENAME WOULD HAVE BROKEN QUIETLY. reasons.ts chose its
+     | direction reason by matching "competitor" inside the DISPLAY label, so
+     | Contender would have silenced direction-fit and direction-clash entirely;
+     | TeamImpact now carries statusKey and the branch reads that. And five
+     | surfaces put the label after an indefinite article, where "a Bubble" is not
+     | a sentence, so TeamStatus carries a `phrase` form for prose while the badge
+     | still renders `label`.
+     | verified: yes (tsc clean, next build clean, 2018 tests green)
+
+T678 | completed | Retune the calibration drift alert so it means something again
+     | files: supabase/migrations/0206_calibration_drift_alerting.sql,
+     |   lib/beacon/settings.ts, lib/beacon/reference.ts,
+     |   lib/beacon/reference.test.ts, app/api/cron/beacon-reference-drift/route.ts,
+     |   lib/email/beacon-reference-emails.ts, app/admin/beacon/calibration/page.tsx
+     | depends on: T677
+     | The drift check emailed on 13 of its first 24 nights and on 6 of the last 6.
+     | An alarm that fires most days stops being read. Two causes, neither of them
+     | the check itself.
+     | THE THRESHOLDS WERE MEASURED ON THE WRONG BOARDS. Migration 0160 numbers
+     | came with their evidence attached, and that evidence was dynasty boards in
+     | the offseason. Dynasty still behaves exactly as predicted (mean move 20-32,
+     | max 210, nobody over 250). Redraft does not and should not: two sources over
+     | ~181 shared players, in August, on a board that reprices on every
+     | depth-chart report (mean 34-94, max 736, 2.2-10.0 percent over 250). So
+     | redraft gets its own four limits, keyed off format_configs.league_type
+     | rather than a slug list, because the split is about how long a roster is
+     | held and any future one-year board wants the same numbers. Dynasty rank
+     | correlation moves 0.995 to 0.993, which it was tripping four times in 24
+     | nights at 0.9942 while moving the average player 26 points: a limit sitting
+     | inside its own noise.
+     | THE TRIGGER WAS A SINGLE NIGHT. Widening far enough that one bad night never
+     | fires would make the check useless, so the email now needs a streak
+     | (calibration_drift_alert_streak, default 3). The metrics are still computed
+     | and recorded EVERY night and the admin page still shows them on demand; only
+     | the email waits. loadDriftAlertHistory reads the streak out of cron_runs
+     | rather than a table of its own, because the drift job already records its
+     | whole preview payload there.
+     | REPLAYED AGAINST THE REAL 24 NIGHTS: 17 format-trips over 13 email nights
+     | becomes 4 trips over 1 email night, and the 1 is the genuine three-night run
+     | on redraft-ppr-sflex (8.7, 10.0, 9.4 percent of the board moving 250+).
+     | verified: yes (tsc clean, next build clean, 2046 tests green; replay
+     |   confirmed in SQL against cron_runs)
+
+T679 | completed | See a cron that never fired, and put a lid on the ledger
+     | files: lib/cron-health.ts, lib/cron-health.test.ts,
+     |   app/api/cron/cron-health/route.ts, lib/email/cron-health-emails.ts,
+     |   lib/cron-runs.ts, vercel.json
+     | depends on: T678
+     | On 2026-08-14 sync-dynastyprocess and recalculate-beacon did not run. There
+     | is no row for either in cron_runs that day, while 07:00, 08:00 and 10:00 all
+     | ran normally: the platform skipped the window. The consequence was a missing
+     | day in the FF Beacon value series and a trends rebuild at 10:02 that ran
+     | happily off a day-old board, and nobody was told.
+     | NOBODY COULD HAVE BEEN. cron_runs records invocations that STARTED, so a job
+     | that never fires writes no row, no error and no failed status, and the admin
+     | health panel still shows its last success. The only way to see it is to
+     | start from the list of jobs that should have run and look for the absence,
+     | which is what findMissedJobs does, working off CRON_JOBS so a job added
+     | there is covered without touching the new file.
+     | PER-CADENCE WINDOWS. 26 hours for a daily job (Vercel promises the hour, not
+     | the minute), 3 for anything hourly or faster. A month-restricted job is
+     | checked in season and skipped out of it. A schedule with a restricted
+     | day-of-month or day-of-week is skipped rather than guessed at: nothing uses
+     | those today, and inventing an answer would make the first job that does
+     | throw a false alarm.
+     | THE LEDGER HAD NO LID. 135,591 rows and 67 MB, 99.7 percent of it from three
+     | jobs running every minute or every five; the nightly jobs anyone reads were
+     | 400 rows. Retention is per cadence: a week of the workers, a year of the
+     | rest. Deletes go by primary key in bounded batches because PostgREST kills a
+     | statement at 8 seconds and one predicate delete over six figures of rows is
+     | one statement. Rows still marked 'running' are never pruned; a row with no
+     | terminal status is the only evidence an invocation started and died.
+     | ALSO FIXED cron_runs.error recording "[object Object]". errMsg did
+     | String(err) on non-Errors, and Supabase throws PostgrestError, which is a
+     | plain object, so the one genuine beacon-reference-rebuild failure in the
+     | ledger lost its message, code, details and hint and can no longer be
+     | diagnosed. Named fields are pulled out first now, with JSON as the fallback.
+     | verified: yes (tsc clean, next build clean, 2046 tests green; checked
+     |   against the live ledger, zero false misses at time of writing)
+
+T680 | completed | Drop the pre-calibration value backup
+     | files: supabase/migrations/0207_drop_pre_calibration_backup.sql,
+     |   scripts/backfill-beacon-calibrated-history.ts, lib/database.types.ts
+     | depends on: T679
+     | Migration 0161 set one condition on its own removal: drop the table once the
+     | rewritten series has been reviewed and trusted. It has been. Median FF
+     | Beacon value on dynasty-ppr-sflex runs 163, 162, 164 into 2026-08-01 and
+     | 163, 163, 162 out of it, with no step anywhere along a series that moves
+     | smoothly from 144 in mid-June to 142 today. Twenty-three days of nightly
+     | recomputes have since been written on top of the backfilled rows, and the
+     | drift check has compared the board against a fresh candidate every one of
+     | those nights.
+     | No runtime code read it. 338,941 rows and 213 MB, about 12 percent of a
+     | 1.8 GB value store, holding a snapshot of a scale the engine no longer uses.
+     | Types regenerated via MCP after the drop; the only diff is the 33 lines for
+     | the removed table.
+     | verified: yes (tsc clean, next build clean, 2046 tests green; table
+     |   confirmed gone, to_regclass returns null)

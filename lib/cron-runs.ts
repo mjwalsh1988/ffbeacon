@@ -94,7 +94,8 @@ export type CronJobName =
   | "beacon-brief-curate"
   | "beacon-brief-worker"
   | "league-sync-worker"
-  | "rebuild-draft-value";
+  | "rebuild-draft-value"
+  | "cron-health";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
 
@@ -215,6 +216,13 @@ export const CRON_JOBS: ReadonlyArray<{
     description:
       "Drains the Sync all queue from My Sleeper Leagues: up to four league pulses per run, paced, with backoff and a reaper for stalled jobs. Idle runs cost one indexed read.",
   },
+  {
+    name: "cron-health",
+    label: "Schedule health check",
+    schedule: "0 16 * * *",
+    description:
+      "Reads this registry, finds any job that should have run by now and has not, and emails when one is missing. A job that never fires writes no row, so a missed run is invisible to every other view here; this is the only thing that can see it. Also prunes the ledger: a week of the minute-by-minute workers, a year of everything else. Runs last in the day so every other job has had its window.",
+  },
 ];
 
 function isSkippedResult(result: unknown): boolean {
@@ -292,8 +300,53 @@ export async function recordCronRun<T>(
   }
 }
 
+/** How much of one error we are willing to store. Long enough for a stack-free
+ *  Postgrest payload, short enough that a runaway object cannot bloat the row. */
+const MAX_ERROR_CHARS = 2000;
+
+/**
+ * A readable message from anything that was thrown.
+ *
+ * `String(err)` on a plain object is "[object Object]", and Supabase throws
+ * PostgrestError, which is a plain object. That is how the one genuine
+ * beacon-reference-rebuild failure in this ledger came to be recorded as
+ * "[object Object]" with its message, code, details and hint all discarded, and
+ * why nobody can now say what went wrong that night. Anything object-shaped gets
+ * its named fields pulled out first, and falls back to JSON rather than to the
+ * default toString.
+ */
 function errMsg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  const raw = describeError(err);
+  return raw.length > MAX_ERROR_CHARS
+    ? `${raw.slice(0, MAX_ERROR_CHARS)} [truncated]`
+    : raw;
+}
+
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name || "Error";
+  if (typeof err === "string") return err;
+  if (err === null || err === undefined) return String(err);
+  if (typeof err === "object") {
+    const o = err as Record<string, unknown>;
+    // The PostgrestError shape, and the shape most SDK errors settle on.
+    const named = ["message", "code", "details", "hint"]
+      .map((k) => {
+        const v = o[k];
+        if (typeof v === "string" && v.trim()) return `${k}: ${v.trim()}`;
+        if (typeof v === "number") return `${k}: ${v}`;
+        return null;
+      })
+      .filter((part): part is string => part !== null);
+    if (named.length > 0) return named.join(" | ");
+    try {
+      const json = JSON.stringify(err);
+      if (json && json !== "{}") return json;
+    } catch {
+      // Circular, or something with a throwing getter. Fall through.
+    }
+    return "Unrecognised error object with no message";
+  }
+  return String(err);
 }
 
 /**

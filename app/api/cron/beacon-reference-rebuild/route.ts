@@ -26,8 +26,9 @@ export const maxDuration = 300;
  * with no reference yet is built here, but only after passing the same
  * completeness and shared-player gates, and the build is logged loudly.
  *
- * NOT YET SCHEDULED. No entry in vercel.json; add one when the calibrated
- * method is enabled for a format.
+ * Scheduled daily at 13:00 UTC in vercel.json, after the whole daily pipeline,
+ * so a new reference takes effect on the NEXT morning's recompute rather than
+ * landing mid-cycle.
  *
  * Auth: `Authorization: Bearer <CRON_SECRET>` only.
  */

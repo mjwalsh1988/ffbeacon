@@ -32,11 +32,15 @@
  * never went through calibration, so their history is already on one scale.
  *
  * SAFETY
- * Dry run by default; --write is required to change anything. Every row it
- * would rewrite is backed up in player_value_history_ffbeacon_pre_calibration
- * (migration 0161). Rewritten rows carry metadata.recalibrated recording the
- * original value and the ratio applied, so the change is auditable per row and
- * reversible from the backup table.
+ * Dry run by default; --write is required to change anything. Rewritten rows
+ * carry metadata.recalibrated recording the original value and the ratio
+ * applied, so the change is auditable per row.
+ *
+ * This used to also point at player_value_history_ffbeacon_pre_calibration
+ * (migration 0161) as a restore path. That table was dropped by migration 0207
+ * once the rewritten series had been reviewed: it shows no seam at the
+ * 2026-08-01 boundary and has carried three weeks of nightly recomputes on top
+ * of it. The remaining undo path is a point-in-time restore.
  *
  * Run:
  *   npm run backfill:beacon-calibrated -- --limit 3

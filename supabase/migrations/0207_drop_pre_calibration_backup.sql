@@ -1,0 +1,46 @@
+-- Migration 0207: drop the pre-calibration value backup
+--
+-- Retires public.player_value_history_ffbeacon_pre_calibration, created by
+-- migration 0161 as the undo path for the calibrated-history backfill.
+--
+-- ACCESS MATRIX
+--   the dropped table  had service_role ALL and nothing else. Dropping it
+--                      removes that policy with it. No other object's grants,
+--                      policies, or RLS state change.
+--
+-- WHY NOW
+-- 0161 set one condition on its own removal: "Drop it once the new series has
+-- been reviewed and trusted." It has been.
+--
+-- The check that matters is whether the rewritten series has a seam at the
+-- boundary. Median FF Beacon value on dynasty-ppr-sflex, by day, across the
+-- 2026-08-01 backfill:
+--
+--   07-29  163      08-01  163
+--   07-30  162      08-02  163
+--   07-31  164      08-03  162
+--
+-- No step and no scale break, and the series runs smoothly from 144 in mid-June
+-- to 142 on 2026-08-24 with no discontinuity anywhere along it. Twenty-three
+-- days of nightly recomputes have since been written on top of the backfilled
+-- rows and the drift check has compared the board against a fresh candidate
+-- every one of those nights.
+--
+-- No runtime code reads the table. The only mention of it outside migration 0161
+-- is a comment in scripts/backfill-beacon-calibrated-history.ts naming it as the
+-- restore path, which is now historical; that comment is updated in the same
+-- commit as this migration.
+--
+-- WHAT IT COSTS TO KEEP
+-- 338,941 rows, 213 MB, about 12 percent of a 1.8 GB value store, none of it
+-- reachable and none of it growing. The rows it holds are a snapshot of a scale
+-- the engine no longer uses; restoring them today would put the series back onto
+-- the normalization we deliberately left.
+--
+-- IF THIS TURNS OUT TO BE WRONG
+-- It is not recoverable from the database after this runs. The recovery path is
+-- a point-in-time restore from the Supabase backup taken before this migration,
+-- or re-deriving the pre-calibration values by setting normalization_method back
+-- to quantile_median and replaying. Neither is needed for anything we know of.
+
+drop table if exists public.player_value_history_ffbeacon_pre_calibration;

@@ -31,6 +31,7 @@ type VersionRow = {
 
 type DriftPreviewRow = {
   formatSlug: string;
+  leagueType?: string | null;
   status: string;
   reason?: string;
   activeVersion?: number;
@@ -45,6 +46,8 @@ type DriftPreviewRow = {
     spearman: number;
   };
   alerts: string[];
+  /** Checks in a row this board has tripped, counting the last one. */
+  streak?: number;
 };
 
 /**
@@ -164,13 +167,18 @@ export default async function BeaconCalibrationPage() {
           {!lastDrift ? (
             <p className="rounded-card border border-line bg-surface/40 p-4 text-sm text-ink-muted">
               The drift check has never run. It compares a freshly built reference against the
-              stored one and emails if the board would move too far. It is not scheduled yet.
+              stored one and reports when the board would move too far.
             </p>
           ) : (
             <p className="rounded-card border border-line bg-surface/40 p-4 text-sm text-ink-muted">
               Ran {formatRelative(lastDrift.started_at, nowMs)}{" "}
               <span title={formatEastern(lastDrift.started_at)}>({formatEastern(lastDrift.started_at)})</span>, status{" "}
-              {lastDrift.status}. Per-format results appear on each card below.
+              {lastDrift.status}. Per-format results appear on each card below. It runs
+              nightly and measures every board every time; the email waits until one board
+              has tripped {settings.calibrationDriftAlertStreak} checks in a row, because a
+              single night over a limit is ordinary and a run of them is not. Dynasty and
+              redraft are judged against separate limits, since a one-year board reprices
+              far more than a dynasty one.
             </p>
           )}
         </section>
@@ -275,6 +283,7 @@ export default async function BeaconCalibrationPage() {
                     <div className="mt-3 rounded-card border border-line bg-base/40 px-3 py-2">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
                         Last drift check
+                        {drift.leagueType ? ` (${drift.leagueType} limits)` : ""}
                       </p>
                       {drift.metrics ? (
                         <p className="mt-1 text-xs text-ink-muted">
@@ -287,13 +296,24 @@ export default async function BeaconCalibrationPage() {
                         <p className="mt-1 text-xs text-ink-muted">{drift.reason ?? drift.status}</p>
                       )}
                       {drift.alerts.length > 0 ? (
-                        <ul role="list" className="mt-2 space-y-1">
-                          {drift.alerts.map((a) => (
-                            <li key={a} className="text-xs text-signal-warning">
-                              {a}
-                            </li>
-                          ))}
-                        </ul>
+                        <>
+                          <ul role="list" className="mt-2 space-y-1">
+                            {drift.alerts.map((a) => (
+                              <li key={a} className="text-xs text-signal-warning">
+                                {a}
+                              </li>
+                            ))}
+                          </ul>
+                          {/* Whether this tripped once or has been tripping for
+                              days is the difference between noise and a problem,
+                              and it is the only thing that decides whether an
+                              email went out. Say it either way. */}
+                          <p className="mt-1 text-xs text-ink-subtle">
+                            {(drift.streak ?? 1) >= settings.calibrationDriftAlertStreak
+                              ? `${drift.streak} checks in a row. An alert was emailed.`
+                              : `${drift.streak ?? 1} check${(drift.streak ?? 1) === 1 ? "" : "s"} in a row, under the ${settings.calibrationDriftAlertStreak} needed to email.`}
+                          </p>
+                        </>
                       ) : (
                         <p className="mt-1 text-xs text-ink-muted">No threshold was crossed.</p>
                       )}

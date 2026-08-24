@@ -32,7 +32,13 @@ import {
 } from "./calibrate";
 import type { SourcePlayerValue } from "./normalize";
 import { isDerivedFormat } from "./derived-formats";
-import { loadBeaconSettings, loadSignalWeights, type BeaconSettings } from "./settings";
+import {
+  loadBeaconSettings,
+  loadSignalWeights,
+  resolveDriftThresholds,
+  type BeaconSettings,
+  type DriftThresholds,
+} from "./settings";
 
 const SOURCE_SLUG = "ffbeacon";
 const SKILL_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
@@ -375,6 +381,8 @@ export async function persistReference(
 export interface FormatSourceSlice {
   formatConfigId: string;
   formatSlug: string;
+  /** 'dynasty' | 'redraft', straight off format_configs. Picks the drift set. */
+  leagueType: string | null;
   bySource: Map<string, SourcePlayerValue[]>;
   expected: string[];
 }
@@ -398,7 +406,9 @@ export async function gatherReferenceInputs(
 
   const { data: formats, error: fErr } = await supabase
     .from("format_configs")
-    .select("id, slug");
+    // league_type picks which drift threshold set the board is judged against.
+    // A one-year board reprices far more than a dynasty one (migration 0206).
+    .select("id, slug, league_type");
   if (fErr) throw fErr;
   const ffbeaconFormats = (formats ?? [])
     .filter((f) => ffSlugs.includes(f.slug))
@@ -410,7 +420,7 @@ export async function gatherReferenceInputs(
     // perfectly. Skip them here, exactly as the engine skips them.
     .filter((f) => !isDerivedFormat(f.slug))
     .filter((f) => !opts.formatSlugs || opts.formatSlugs.includes(f.slug))
-    .map((f) => ({ slug: f.slug, id: f.id }));
+    .map((f) => ({ slug: f.slug, id: f.id, leagueType: f.league_type }));
 
   const { data: srcRows, error: sErr } = await supabase
     .from("source_registry")
@@ -458,6 +468,7 @@ export async function gatherReferenceInputs(
     return {
       formatConfigId: f.id,
       formatSlug: f.slug,
+      leagueType: f.leagueType,
       bySource,
       // Expected = declares support AND its source_value weight is enabled. A
       // source the owner has switched off is not owed a seat in the consensus.
@@ -593,6 +604,8 @@ export interface DriftMetrics {
 export interface DriftPreview {
   formatSlug: string;
   formatConfigId: string;
+  /** Which threshold set judged this board, so the admin page can say so. */
+  leagueType: string | null;
   status: "compared" | "no_active_reference" | "candidate_refused";
   reason?: string;
   activeVersion?: number;
@@ -601,7 +614,15 @@ export interface DriftPreview {
   activeSharedPlayers?: number;
   candidateSharedPlayers?: number;
   metrics?: DriftMetrics;
+  /** The limits this board was judged against, for the email and the panel. */
+  thresholds?: DriftThresholds;
   alerts: string[];
+  /**
+   * How many checks in a row this board has tripped, counting this one. 0 when
+   * it is clean. Only populated by the drift cron, which is the only caller
+   * that reads the run history; an ad-hoc preview leaves it undefined.
+   */
+  streak?: number;
 }
 
 /**
@@ -644,6 +665,7 @@ export async function previewReferenceDrift(
       previews.push({
         formatSlug: slice.formatSlug,
         formatConfigId: slice.formatConfigId,
+        leagueType: slice.leagueType,
         status: "no_active_reference",
         reason: "No active reference for this format yet.",
         alerts: [],
@@ -651,10 +673,12 @@ export async function previewReferenceDrift(
       continue;
     }
 
+    // A dynasty board and a one-year board are not judged by the same numbers.
+    const thresholds = resolveDriftThresholds(slice.leagueType, settings);
     const ageDays = referenceAgeDays(current.generatedAt, opts.nowMs);
     const alerts = evaluateDriftAlerts(
       { ageDays, sharedPlayerCount: current.sharedPlayerCount },
-      settings,
+      thresholds,
     );
 
     let candidate: CandidateReference;
@@ -670,12 +694,14 @@ export async function previewReferenceDrift(
       previews.push({
         formatSlug: slice.formatSlug,
         formatConfigId: slice.formatConfigId,
+        leagueType: slice.leagueType,
         status: "candidate_refused",
         reason: errMsg(err),
         activeVersion: current.version,
         activeVersionId: current.versionId,
         ageDays,
         activeSharedPlayers: current.sharedPlayerCount,
+        thresholds,
         alerts,
       });
       continue;
@@ -702,7 +728,7 @@ export async function previewReferenceDrift(
     alerts.push(
       ...evaluateDriftAlerts(
         { ageDays, sharedPlayerCount: current.sharedPlayerCount, metrics },
-        settings,
+        thresholds,
         { skipStatic: true },
       ),
     );
@@ -710,6 +736,7 @@ export async function previewReferenceDrift(
     previews.push({
       formatSlug: slice.formatSlug,
       formatConfigId: slice.formatConfigId,
+      leagueType: slice.leagueType,
       status: "compared",
       activeVersion: current.version,
       activeVersionId: current.versionId,
@@ -717,6 +744,7 @@ export async function previewReferenceDrift(
       activeSharedPlayers: current.sharedPlayerCount,
       candidateSharedPlayers: candidate.reference.sharedPlayers.length,
       metrics,
+      thresholds,
       alerts,
     });
   }
@@ -730,15 +758,12 @@ export interface DriftAlertInput {
   metrics?: DriftMetrics;
 }
 
-export type DriftAlertSettings = Pick<
-  BeaconSettings,
-  | "calibrationMaxAgeDays"
-  | "calibrationMinSharedPlayers"
-  | "calibrationDriftMeanAbs"
-  | "calibrationDriftPlayerMax"
-  | "calibrationDriftPct250"
-  | "calibrationDriftMinSpearman"
->;
+/**
+ * The limits one board is judged against, already resolved for its league type
+ * by resolveDriftThresholds. Same field names as the dynasty settings, so this
+ * function reads one shape whichever set it was handed.
+ */
+export type DriftAlertSettings = DriftThresholds;
 
 /**
  * Every drift threshold in one pure function, so each one can be tested on its
@@ -796,6 +821,81 @@ export function evaluateDriftAlerts(
     );
   }
   return alerts;
+}
+
+/**
+ * Which formats tripped on each of the previous drift checks, newest first.
+ *
+ * Reads the cron ledger rather than a table of its own. The drift job already
+ * records its whole preview payload there on every run, so the history is
+ * already written and a second store would be a second thing to keep in step.
+ *
+ * Successful runs only, and it skips PAST a failed one rather than stopping at
+ * it. A run that died produced no measurements, so it is not evidence that the
+ * board was clean that night, and letting it break a streak would delay a real
+ * alert by however many nights the ledger was broken.
+ *
+ * Never throws. A read that fails degrades to "no history", which makes the
+ * streak equal to tonight alone. That errs toward waiting rather than toward
+ * emailing, so a broken ledger cannot turn this into the every-night alarm it
+ * used to be.
+ */
+export async function loadDriftAlertHistory(
+  supabase: SupabaseClient<Database>,
+  runs: number,
+): Promise<Array<Set<string>>> {
+  if (runs <= 0) return [];
+  try {
+    const { data, error } = await supabase
+      .from("cron_runs")
+      .select("result")
+      .eq("job_name", "beacon-reference-drift")
+      .eq("status", "success")
+      .order("started_at", { ascending: false })
+      .limit(runs);
+    if (error) throw error;
+    return (data ?? []).map((row) => {
+      const previews = (row.result as { previews?: unknown } | null)?.previews;
+      const out = new Set<string>();
+      if (!Array.isArray(previews)) return out;
+      for (const p of previews) {
+        const entry = p as { formatSlug?: unknown; alerts?: unknown };
+        if (
+          typeof entry.formatSlug === "string" &&
+          Array.isArray(entry.alerts) &&
+          entry.alerts.length > 0
+        ) {
+          out.add(entry.formatSlug);
+        }
+      }
+      return out;
+    });
+  } catch (err) {
+    console.warn("[beacon-reference-drift] could not read alert history:", errMsg(err));
+    return [];
+  }
+}
+
+/**
+ * How many checks in a row this board has tripped, counting the current one.
+ *
+ * 0 when the current check is clean: a streak is about what is happening now,
+ * so a board that tripped yesterday and is fine today has no streak to report.
+ *
+ * `history` is newest-first and must NOT include the current run.
+ */
+export function driftAlertStreak(
+  formatSlug: string,
+  currentHasAlerts: boolean,
+  history: ReadonlyArray<ReadonlySet<string>>,
+): number {
+  if (!currentHasAlerts) return 0;
+  let streak = 1;
+  for (const run of history) {
+    if (!run.has(formatSlug)) break;
+    streak += 1;
+  }
+  return streak;
 }
 
 /**

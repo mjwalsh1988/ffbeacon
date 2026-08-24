@@ -3591,39 +3591,6 @@ export type Database = {
           },
         ];
       };
-      player_value_history_ffbeacon_pre_calibration: {
-        Row: {
-          captured_at: string | null;
-          format_config_id: string | null;
-          formula_offset: number | null;
-          id: string | null;
-          metadata: Json | null;
-          player_id: string | null;
-          source: string | null;
-          value: number | null;
-        };
-        Insert: {
-          captured_at?: string | null;
-          format_config_id?: string | null;
-          formula_offset?: number | null;
-          id?: string | null;
-          metadata?: Json | null;
-          player_id?: string | null;
-          source?: string | null;
-          value?: number | null;
-        };
-        Update: {
-          captured_at?: string | null;
-          format_config_id?: string | null;
-          formula_offset?: number | null;
-          id?: string | null;
-          metadata?: Json | null;
-          player_id?: string | null;
-          source?: string | null;
-          value?: number | null;
-        };
-        Relationships: [];
-      };
       player_value_trends: {
         Row: {
           change_30d: number | null;

@@ -46,6 +46,10 @@
       "schedule": "0 14 * * *"
     },
     {
+      "path": "/api/cron/cron-health",
+      "schedule": "0 16 * * *"
+    },
+    {
       "path": "/api/cron/beacon-brief",
       "schedule": "*/5 * * * *"
     },
