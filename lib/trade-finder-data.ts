@@ -32,6 +32,7 @@ import type { Database, Json } from "@/lib/database.types";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { buildPickPositionResolver, NO_PICK_POSITIONS } from "@/lib/league-pick-position";
+import { formatPickLabel } from "@/lib/trade-ideas/pick-label";
 import { loadLeagueTeamCards, type TeamCardData } from "@/lib/league-view-data";
 import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
 import { startingSlots } from "@/lib/power-pulse/lineup";
@@ -226,13 +227,6 @@ async function loadPickValues(
   return out;
 }
 
-const ROUND_LABEL: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd" };
-
-function pickLabel(season: number, round: number, position: string): string {
-  const ordinal = ROUND_LABEL[round] ?? `${round}th`;
-  const slot = position === "unknown" ? "" : ` (${position})`;
-  return `${season} ${ordinal}${slot}`;
-}
 
 /** Which roster belongs to the reader, from whatever the caller knows. */
 function resolveMyRosterId(
@@ -400,14 +394,12 @@ export async function loadTradeFinderLeague(
 
     const picks: FinderPick[] = isDynasty
       ? card.draftPicks.map((pick) => {
+          const originalRosterId = Number(pick.original_roster_id);
           // A roster's own future picks carry no slot, and defaulting them all
           // to "mid" priced a contender's 1st and a bottom team's 1st the same.
           // The published draft order answers first, the projected finish of the
           // pick's ORIGINAL team second, "mid" only when neither can.
-          const placed = pickPositions.resolve(
-            Number(pick.original_roster_id),
-            Number(pick.season),
-          );
+          const placed = pickPositions.resolve(originalRosterId, Number(pick.season));
           const position = (pick.pick_position ??
             placed?.position ??
             "mid") as FinderPick["pickPosition"];
@@ -415,12 +407,33 @@ export async function loadTradeFinderLeague(
             pickValues.get(`${pick.season}|${pick.round}|${position}`) ??
             pickValues.get(`${pick.season}|${pick.round}|mid`) ??
             0;
-          return {
-            key: `pick:${pick.season}:${pick.round}:${pick.original_roster_id}`,
+          // Who it came from, in the same preference order the team card uses:
+          // handle, then team name. Both read off the card, which already
+          // carries the whole league's lookup for exactly this purpose.
+          const isOwnPick = originalRosterId === card.sleeperRosterId;
+          const shape = {
             season: Number(pick.season),
             round: Number(pick.round),
             pickPosition: position,
-            label: pickLabel(Number(pick.season), Number(pick.round), position),
+            originalRosterId,
+            isOwnPick,
+            originalOwnerHandle: isOwnPick
+              ? null
+              : (card.rosterIdToOwnerUsername[originalRosterId] ?? null),
+            originalTeamName: isOwnPick
+              ? null
+              : (card.rosterIdToTeamName[originalRosterId] ?? null),
+          };
+          return {
+            // Keyed on the ORIGINAL roster, not on season and round. A roster in
+            // a real league holds nine different 2027 1sts; without this they
+            // are one asset with one value and eight of them cannot be traded.
+            key: `pick:${pick.season}:${pick.round}:${originalRosterId}`,
+            ...shape,
+            // A published draft order is a fact. A projected finish is not, and
+            // the label says which one answered.
+            positionEstimated: pick.pick_position ? false : (placed?.estimated ?? true),
+            label: formatPickLabel(shape),
             value,
             hasValue: value > 0,
           };

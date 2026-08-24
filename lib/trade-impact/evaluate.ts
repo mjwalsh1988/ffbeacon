@@ -102,22 +102,50 @@ function assetKeyOf(asset: BuildAsset): string {
     : `k:${asset.season}:${asset.round}`;
 }
 
+
 /**
  * Resolve one side's assets against ONE team's actual holdings.
  *
  * A player has to be on that roster. A pick has to be among that roster's
- * tradeable picks, matched on season and round: the slot bucket is our estimate
- * rather than the league's fact, so requiring it to match would reject real
- * picks over a label we chose ourselves.
+ * tradeable picks.
+ *
+ * HOW A PICK IS MATCHED, AND WHY IT IS TWO STEPS
+ *   Season, round and ORIGINAL OWNER identify a pick. Season and round alone do
+ *   not: one roster in a real league holds nine different 2027 1sts, worth
+ *   different amounts because each lands wherever its original team finishes,
+ *   and a map keyed on season and round kept whichever one it saw last. Eight
+ *   picks were untradeable and the ninth answered for all of them.
+ *
+ *   So an asset carrying an original owner is matched on all three, exactly. If
+ *   that roster does not hold THAT pick, the trade is rejected rather than
+ *   quietly resolved to a same-round pick it does hold, which would evaluate a
+ *   different deal to the one that was proposed.
+ *
+ *   An asset with no original owner is a link written before the field existed.
+ *   Those fall back to the first pick matching season and round, which is what
+ *   they have always resolved to. Not ideal and not new; the alternative is
+ *   breaking every shared trade in existence.
+ *
+ *   The slot bucket is never part of the match. It is our estimate rather than
+ *   the league's fact, so requiring it to agree would reject a real pick over a
+ *   label we chose ourselves.
  */
-function resolveAgainstTeam(
+export function resolveAgainstTeam(
   assets: BuildAsset[],
   team: TradeImpactWorld["finder"]["teams"][number],
 ): { resolved: ResolvedAsset[]; missing: string[] } {
   const byPlayer = new Map(team.players.map((p) => [p.playerId, p]));
-  const picksByKey = new Map<string, (typeof team.picks)[number]>();
+  const picksByIdentity = new Map<string, (typeof team.picks)[number]>();
+  const firstByRound = new Map<string, (typeof team.picks)[number]>();
   for (const pick of team.picks) {
-    picksByKey.set(`k:${pick.season}:${pick.round}`, pick);
+    picksByIdentity.set(
+      `k:${pick.season}:${pick.round}:${pick.originalRosterId}`,
+      pick,
+    );
+    // First wins, so a legacy link resolves to the same pick on every render
+    // rather than to whichever one the roster read happened to order last.
+    const roundKey = `k:${pick.season}:${pick.round}`;
+    if (!firstByRound.has(roundKey)) firstByRound.set(roundKey, pick);
   }
 
   const resolved: ResolvedAsset[] = [];
@@ -145,7 +173,12 @@ function resolveAgainstTeam(
       continue;
     }
 
-    const pick = picksByKey.get(assetKeyOf(asset));
+    const pick =
+      asset.originalRosterId === undefined
+        ? firstByRound.get(`k:${asset.season}:${asset.round}`)
+        : picksByIdentity.get(
+            `k:${asset.season}:${asset.round}:${asset.originalRosterId}`,
+          );
     if (!pick) {
       missing.push(`a ${asset.season} round ${asset.round} pick that roster does not hold`);
       continue;
@@ -157,6 +190,11 @@ function resolveAgainstTeam(
       season: pick.season,
       round: pick.round,
       pickPosition: pick.pickPosition,
+      originalRosterId: pick.originalRosterId,
+      isOwnPick: pick.isOwnPick,
+      originalOwnerHandle: pick.originalOwnerHandle,
+      originalTeamName: pick.originalTeamName,
+      positionEstimated: pick.positionEstimated,
       value: pick.hasValue ? pick.value : 0,
     });
   }
@@ -806,6 +844,7 @@ export async function evaluateValidatedTrade(
       grade: grade ?? null,
       gaps,
       weeksConsidered: weeks.length,
+      isDynasty: world.finder.isDynasty,
       formatDisplay: world.finder.formatDisplay,
       sourceDisplay: world.finder.sourceDisplay,
       pickSourceDisplay: world.finder.pickSourceDisplay,

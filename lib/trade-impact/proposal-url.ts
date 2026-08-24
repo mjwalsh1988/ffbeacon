@@ -12,7 +12,16 @@
  *
  *   `with` is the counterparty's Sleeper roster id. `in` is what the reader
  *   receives, `out` is what they send, both underscore separated. A player is
- *   its FF Beacon uuid. A pick is `season-round-slot`.
+ *   its FF Beacon uuid. A pick is `season-round-slot-originalRoster`.
+ *
+ *   The fourth part is what makes a pick a specific pick. Without it a token
+ *   said "a 2027 1st on that roster", and a roster in a real league holds nine
+ *   of those, from nine different original owners, worth different amounts. A
+ *   link could name only whichever one happened to be found first.
+ *
+ *   Three-part tokens still decode. Every link written before that field existed
+ *   is one, and they resolve by season and round exactly as they used to, which
+ *   is the old behaviour rather than a broken one.
  *
  *   Underscore is the separator for a specific reason, and it was arrived at by
  *   being wrong first. The obvious pick is a comma or a tilde. A comma is what
@@ -62,10 +71,16 @@ function isPickSlot(value: string): value is PickSlot {
   return (PICK_SLOTS as readonly string[]).includes(value);
 }
 
+/** Sleeper roster ids are small positive integers. Wider than any real league. */
+const MAX_ROSTER_ID = 100_000;
+
 /** One asset, as it appears in the query string. */
 export function encodeAsset(asset: BuildAsset): string {
   if (asset.kind === "player") return asset.playerId;
-  return `${asset.season}-${asset.round}-${asset.pickPosition}`;
+  const base = `${asset.season}-${asset.round}-${asset.pickPosition}`;
+  return asset.originalRosterId === undefined
+    ? base
+    : `${base}-${asset.originalRosterId}`;
 }
 
 /**
@@ -83,7 +98,9 @@ export function decodeAsset(token: string): BuildAsset | null {
   }
 
   const parts = trimmed.split("-");
-  if (parts.length !== 3) return null;
+  // Three parts is the older form, still written by nobody but still arriving in
+  // links people saved. Four is the current one.
+  if (parts.length !== 3 && parts.length !== 4) return null;
   const season = Number.parseInt(parts[0], 10);
   const round = Number.parseInt(parts[1], 10);
   const slot = parts[2];
@@ -92,7 +109,21 @@ export function decodeAsset(token: string): BuildAsset | null {
   }
   if (!Number.isInteger(round) || round < 1 || round > MAX_PICK_ROUND) return null;
   if (!isPickSlot(slot)) return null;
-  return { kind: "pick", season, round, pickPosition: slot };
+  if (parts.length === 3) return { kind: "pick", season, round, pickPosition: slot };
+
+  const originalRosterId = Number.parseInt(parts[3], 10);
+  // A malformed fourth part fails the whole token rather than silently falling
+  // back to the three-part form. Dropping it would resolve the link to whichever
+  // same-round pick came first, which is a different pick presented as the one
+  // that was shared.
+  if (
+    !Number.isInteger(originalRosterId) ||
+    originalRosterId < 0 ||
+    originalRosterId > MAX_ROSTER_ID
+  ) {
+    return null;
+  }
+  return { kind: "pick", season, round, pickPosition: slot, originalRosterId };
 }
 
 function encodeSide(assets: BuildAsset[]): string {

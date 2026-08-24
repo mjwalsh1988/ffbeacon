@@ -30,7 +30,19 @@ export type PickSlot = "early" | "mid" | "late" | "unknown";
 /** One asset in a proposed trade, as the client submits it. */
 export type BuildAsset =
   | { kind: "player"; playerId: string }
-  | { kind: "pick"; season: number; round: number; pickPosition: PickSlot };
+  | {
+      kind: "pick";
+      season: number;
+      round: number;
+      pickPosition: PickSlot;
+      /**
+       * Sleeper roster id of the pick's ORIGINAL owner, which is what makes one
+       * 2027 1st a different asset to another. Optional because every link
+       * written before this field existed omits it, and those still resolve by
+       * season and round the way they always did.
+       */
+      originalRosterId?: number;
+    };
 
 /**
  * A trade to evaluate.
@@ -66,10 +78,19 @@ export type ResolvedAsset =
   | {
       kind: "pick";
       key: string;
+      /** Full plain-text label: "2027 R1 Early (via @handle)". */
       label: string;
       season: number;
       round: number;
       pickPosition: PickSlot;
+      /** Who it came from. The fact that decides the slot and the one a manager
+       *  asks about. */
+      originalRosterId: number;
+      isOwnPick: boolean;
+      originalOwnerHandle: string | null;
+      originalTeamName: string | null;
+      /** True when the slot is our projection rather than a published order. */
+      positionEstimated: boolean;
       value: number;
     };
 
@@ -199,6 +220,12 @@ export type TradeImpact = {
   gaps: ImpactGaps;
   /** Remaining regular-season weeks the lineup figures cover. */
   weeksConsidered: number;
+  /**
+   * Whether a roster carries forward. Age is a currency in a dynasty league and
+   * a fact about a person in a one-year one, so the asset notes only spend it
+   * where it buys something.
+   */
+  isDynasty: boolean;
   formatDisplay: string;
   sourceDisplay: string;
   pickSourceDisplay: string | null;

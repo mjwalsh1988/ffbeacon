@@ -31,14 +31,24 @@ function playerAsset(playerId: string, name: string, value: number): ResolvedAss
   };
 }
 
-function pickAsset(season: number, round: number, label: string): ResolvedAsset {
+function pickAsset(
+  season: number,
+  round: number,
+  label: string,
+  originalRosterId = 9,
+): ResolvedAsset {
   return {
     kind: "pick",
-    key: `${season}-${round}-mid`,
+    key: `${season}-${round}-mid-${originalRosterId}`,
     label,
     season,
     round,
     pickPosition: "mid",
+    originalRosterId,
+    isOwnPick: false,
+    originalOwnerHandle: `manager${originalRosterId}`,
+    originalTeamName: `Team ${originalRosterId}`,
+    positionEstimated: true,
     value: 1200,
   };
 }

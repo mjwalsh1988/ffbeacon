@@ -7,6 +7,9 @@ import { ordinal } from "@/components/league-schedule/format";
 import { ReasonList } from "@/components/trade-ideas/reason-list";
 import { ImpactWeeks } from "@/components/trade-ideas/impact-weeks";
 import { VerdictTabs } from "@/components/trade-ideas/verdict-tabs";
+import { PickTag } from "@/components/trade-ideas/pick-tag";
+import { TradeOutcomePanel } from "@/components/trade-ideas/trade-outcome";
+import { buildTradeOutcome } from "@/lib/trade-impact/outcome";
 import type {
   ImpactGaps,
   ResolvedAsset,
@@ -27,12 +30,15 @@ import type {
  *   its own eyebrow and heading, so a screen reader user can jump straight to
  *   the part they care about.
  *
- * REASONS IS THE PRIMARY SURFACE
- *   Exactly one elevated panel per screen, and this is it: accent border, corner
- *   wash, and the beacon glow. The prose is the answer; the tiles and the table
- *   below it are the working. Putting the elevation on the numbers instead would
- *   invert that, and a reader would take the biggest box on the page as the
- *   conclusion when it is only the evidence.
+ * THE CALL COMES FIRST, OUTSIDE THE TABS
+ *   components/trade-ideas/trade-outcome.tsx renders above all of this and says
+ *   whether to take the deal. It sits outside the tab switch because it is true
+ *   of the whole evaluation rather than of one half of it, and a reader who
+ *   lands on the Value tab must not miss the answer.
+ *
+ *   That demotes the reasons panel from conclusion to evidence, which is what it
+ *   always was. It keeps its elevation inside the tab, where it is still the
+ *   first thing to read, but the biggest box on the SCREEN is now the call.
  *
  * WHY A MISSING FIGURE GETS A SENTENCE
  *   `impact.gaps` is the model saying "I could not measure this", and the honest
@@ -103,10 +109,11 @@ export function TradeVerdict({
   theirTeamLabel: string;
 }) {
   const mine = impact.mine;
+  const outcome = buildTradeOutcome(mine, impact.gaps);
 
   const impactTab = (
     <div className="space-y-4">
-      {/* 1. REASONS. The primary surface.
+      {/* 1. REASONS. The working behind the call above.
           The wash sits on a wrapper rather than on the Panel because Panel owns
           its own background, and its bg-surface/50 is translucent enough for the
           gradient underneath to read through it. Doing it this way keeps the
@@ -217,7 +224,26 @@ export function TradeVerdict({
     </div>
   );
 
-  return <VerdictTabs impact={impactTab} value={valueTab} />;
+  return (
+    <div className="space-y-5">
+      {/* THE ANSWER, THEN THE WORKING.
+          Above the tabs on purpose, and outside them: the call is true of the
+          whole evaluation rather than of one tab, and burying it inside either
+          would mean a reader on the other tab never sees it. It also settles
+          what the tabs are FOR, which is checking the call rather than
+          assembling it. */}
+      <TradeOutcomePanel
+        outcome={outcome}
+        mine={mine}
+        gaps={impact.gaps}
+        weeksConsidered={impact.weeksConsidered}
+        isDynasty={impact.isDynasty}
+        myTeamLabel={myTeamLabel}
+        theirTeamLabel={theirTeamLabel}
+      />
+      <VerdictTabs impact={impactTab} value={valueTab} />
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -630,8 +656,12 @@ function AssetRow({ asset }: { asset: ResolvedAsset }) {
           {ordinal(asset.round)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold text-ink">{asset.label}</span>
-          <span className="block text-xs text-ink-muted">
+          {/* The same three facts the builder's picker showed: which pick, where
+              in the round, and whose it originally was. A verdict that named the
+              pick differently to the list it was chosen from would read as a
+              different asset. */}
+          <PickTag pick={asset} estimated={asset.positionEstimated} />
+          <span className="mt-0.5 block text-xs text-ink-muted">
             Draft pick, value {fmtValue(asset.value)}
           </span>
         </span>

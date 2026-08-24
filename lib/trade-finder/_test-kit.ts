@@ -39,11 +39,20 @@ export function pick(overrides: Partial<FinderPick> = {}): FinderPick {
   const season = overrides.season ?? 2027;
   const round = overrides.round ?? 1;
   const value = overrides.value ?? 3000;
+  // Defaults to somebody else's pick rather than an own one, because that is
+  // the case with more moving parts: an own pick has no handle to render and no
+  // second copy to be told apart from.
+  const originalRosterId = overrides.originalRosterId ?? 9;
   return {
-    key: overrides.key ?? `pick:${season}:${round}:${counter}`,
+    key: overrides.key ?? `pick:${season}:${round}:${originalRosterId}`,
     season,
     round,
     pickPosition: overrides.pickPosition ?? "mid",
+    originalRosterId,
+    isOwnPick: overrides.isOwnPick ?? false,
+    originalOwnerHandle: overrides.originalOwnerHandle ?? `manager${originalRosterId}`,
+    originalTeamName: overrides.originalTeamName ?? `Team ${originalRosterId}`,
+    positionEstimated: overrides.positionEstimated ?? true,
     label: overrides.label ?? `${season} round ${round}`,
     value,
     hasValue: overrides.hasValue ?? value > 0,

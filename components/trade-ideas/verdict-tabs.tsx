@@ -24,6 +24,15 @@ import { Scale, TrendingUp } from "lucide-react";
  *   page. So the panels are rendered on the server, handed here as children, and
  *   this component does nothing but decide which one is visible.
  *
+ * WHY THE TAB STRIP IS FRAMED
+ *   As two bare cards on the page background they read as a summary of what is
+ *   below rather than as a choice: nothing said the second one was reachable, so
+ *   the Value half went unvisited for the same reason it would have gone
+ *   unscrolled. The strip now sits in its own bordered tray under an eyebrow and
+ *   a "Pick a view" hint, the same shape every other control group on the site
+ *   wears, and the open tab carries the beacon gradient along its bottom edge.
+ *   The affordance is the frame, the hint and the hover, never colour alone.
+ *
  * ACCESSIBILITY. The WAI tabs pattern, manual activation: arrow keys move focus
  * between tabs and Enter or Space selects, so a screen reader user can pass over
  * a tab without the panel underneath changing out from under them. Home and End
@@ -78,56 +87,88 @@ export function VerdictTabs({
 
   return (
     <div>
-      <div
-        role="tablist"
-        aria-label="Trade evaluation"
-        onKeyDown={onKeyDown}
-        className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
-      >
-        {TABS.map(({ key, label, sub, Icon }) => {
-          const selected = key === active;
-          return (
-            <button
-              key={key}
-              ref={(node) => {
-                refs.current[key] = node;
-              }}
-              type="button"
-              role="tab"
-              id={tabId(key)}
-              data-tab-key={key}
-              aria-selected={selected}
-              aria-controls={panelId(key)}
-              // Roving tabindex: exactly one tab is in the tab order, and the
-              // arrow keys move between the rest. Leaving all of them tabbable
-              // makes a reader pass through every tab to reach the panel.
-              tabIndex={selected ? 0 : -1}
-              onClick={() => setActive(key)}
-              className={`flex min-h-11 flex-col justify-center rounded-card border px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:px-4 ${
-                selected
-                  ? "border-line-accent bg-surface-elevated shadow-[0_0_40px_-30px_rgba(168,85,247,0.9)]"
-                  : "border-line bg-surface/40 hover:border-brand-cyan/50"
-              }`}
-            >
-              <span
-                className={`flex items-center gap-1.5 text-sm font-semibold ${
-                  selected ? "text-ink" : "text-ink-muted"
+      {/* The tray. Its visible eyebrow is a plain paragraph, not a label: a
+          tablist is named by its aria-label, and a second accessible name would
+          have a screen reader announce the group twice before the first tab. */}
+      <div className="rounded-modal border border-line-accent bg-surface/50 p-3 sm:p-4">
+        <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+            Explore the detail
+          </p>
+          {/* Says out loud that these are pressable. They are obvious once you
+              have pressed one; this is for the reader who has not. aria-hidden
+              because the tablist role already tells a screen reader exactly
+              this, in its own words. */}
+          <p aria-hidden="true" className="text-[11px] text-ink-subtle">
+            Pick a view
+          </p>
+        </div>
+        <div
+          role="tablist"
+          aria-label="Trade evaluation detail"
+          onKeyDown={onKeyDown}
+          className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
+        >
+          {TABS.map(({ key, label, sub, Icon }) => {
+            const selected = key === active;
+            return (
+              <button
+                key={key}
+                ref={(node) => {
+                  refs.current[key] = node;
+                }}
+                type="button"
+                role="tab"
+                id={tabId(key)}
+                data-tab-key={key}
+                aria-selected={selected}
+                aria-controls={panelId(key)}
+                // Roving tabindex: exactly one tab is in the tab order, and the
+                // arrow keys move between the rest. Leaving all of them tabbable
+                // makes a reader pass through every tab to reach the panel.
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActive(key)}
+                className={`group relative flex min-h-11 flex-col justify-center overflow-hidden rounded-card border px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:flex-1 sm:px-4 ${
+                  selected
+                    ? "border-brand-cyan/60 bg-brand-cyan/10 shadow-[0_0_34px_-14px_rgba(34,211,238,0.9)]"
+                    : "border-line-accent bg-base/70 hover:border-brand-cyan/50 hover:bg-surface-elevated"
                 }`}
               >
-                <Icon
-                  aria-hidden="true"
-                  className={`h-4 w-4 shrink-0 ${
-                    selected ? "text-brand-cyan" : "text-ink-subtle"
+                {/* The beacon gradient, under the open tab only. A second signal
+                    beside the fill, so which tab is open survives with no colour
+                    perception at all. */}
+                {selected && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-0 bottom-0 h-[3px] bg-beacon"
+                  />
+                )}
+                <span
+                  className={`flex items-center gap-1.5 text-sm font-semibold transition-colors ${
+                    selected ? "text-ink" : "text-ink-muted group-hover:text-ink"
                   }`}
-                />
-                {label}
-              </span>
-              <span className="mt-0.5 text-[11px] leading-tight text-ink-subtle">
-                {sub}
-              </span>
-            </button>
-          );
-        })}
+                >
+                  <Icon
+                    aria-hidden="true"
+                    className={`h-4 w-4 shrink-0 transition-colors ${
+                      selected
+                        ? "text-brand-cyan"
+                        : "text-ink-subtle group-hover:text-brand-cyan"
+                    }`}
+                  />
+                  {label}
+                </span>
+                <span
+                  className={`mt-0.5 text-[11px] leading-tight transition-colors ${
+                    selected ? "text-ink-muted" : "text-ink-subtle"
+                  }`}
+                >
+                  {sub}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* tabIndex 0 on the panel, per the WAI pattern: the panel body is not

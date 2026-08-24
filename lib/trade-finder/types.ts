@@ -97,12 +97,40 @@ export type FinderPlayer = {
 };
 
 export type FinderPick = {
-  /** Stable key for fingerprinting: "pick:2027:1:mid". */
+  /**
+   * Stable identity: "pick:2027:1:4", where the last part is the ORIGINAL
+   * roster. Season and round alone are not an identity. One roster in a real
+   * league holds nine different 2027 1sts, and keying on season and round
+   * collapsed eight of them out of existence: the builder offered one, the
+   * evaluator matched one, and the URL could only say one.
+   */
   key: string;
   season: number;
   round: number;
   pickPosition: "early" | "mid" | "late" | "unknown";
-  /** "2027 1st", or "2027 1st (early)" when the slot is known. */
+  /**
+   * Sleeper roster id of the team the pick ORIGINALLY belonged to.
+   *
+   * This is the field that makes a pick a pick. It decides which end of the
+   * round the pick lands in (a bad team's 1st is an early pick and a contender's
+   * is a late one), and it is what a manager actually asks about: "whose first?"
+   * The team holding it is already known from the side of the trade it sits on.
+   */
+  originalRosterId: number;
+  /** True when the holder is also the original owner. */
+  isOwnPick: boolean;
+  /** Original owner's Sleeper handle, for "via @handle". Null if unresolved. */
+  originalOwnerHandle: string | null;
+  /** Original owner's team name. The fallback when the handle is unknown. */
+  originalTeamName: string | null;
+  /**
+   * True when the early/mid/late bucket came from a projected finish rather than
+   * a published draft order. Drives the wording; never hidden, because an
+   * estimate presented as a fact is the thing this codebase keeps refusing to
+   * do.
+   */
+  positionEstimated: boolean;
+  /** Full plain-text label: "2027 R1, early, via @handle". Feeds aria. */
   label: string;
   value: number;
   hasValue: boolean;

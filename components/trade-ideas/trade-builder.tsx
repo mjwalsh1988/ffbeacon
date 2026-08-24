@@ -2,10 +2,11 @@
 
 import { useCallback, useId, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, Plus, Scale, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, Plus, Scale, X } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
-import { PlayerPicker, type PlayerOption } from "@/components/player-picker";
-import { SlideUpDialog } from "@/components/slide-up-dialog";
+import { SidePanel } from "@/components/side-panel";
+import { PanelFilterField, FILTER_THRESHOLD } from "@/components/panel-filter-field";
+import { PickTag } from "@/components/trade-ideas/pick-tag";
 import { MAX_BUILD_ASSETS_PER_SIDE, proposalHref } from "@/lib/trade-impact/proposal-url";
 import type { BuildAsset, PickSlot, TradeProposal } from "@/lib/trade-impact/types";
 
@@ -56,11 +57,26 @@ export type BuilderPlayer = {
   projPoints: number | null;
 };
 
-/** One tradeable pick, already labelled and priced by lib/trade-finder-data.ts. */
+/**
+ * One tradeable pick, already placed and priced by lib/trade-finder-data.ts.
+ *
+ * `originalRosterId` is part of the identity, not decoration. A roster in a real
+ * league holds nine different 2027 1sts, each landing wherever its ORIGINAL team
+ * finishes and each therefore worth a different amount. Keyed on season and
+ * round alone they are one asset: the picker offered one, eight could not be
+ * traded, and the one that showed answered for all of them.
+ */
 export type BuilderPick = {
   season: number;
   round: number;
   pickPosition: PickSlot;
+  originalRosterId: number;
+  isOwnPick: boolean;
+  originalOwnerHandle: string | null;
+  originalTeamName: string | null;
+  /** True when the pool is a projected finish rather than a published order. */
+  positionEstimated: boolean;
+  /** Full plain-text label. Used where there is no room to render the parts. */
   label: string;
   value: number;
 };
@@ -76,31 +92,26 @@ export type BuilderTeam = {
 type Side = "in" | "out";
 type PickerKind = "player" | "pick";
 
+/**
+ * Identity for deduping and for the remove button.
+ *
+ * A pick is identified by season, round and ORIGINAL OWNER. The slot bucket is
+ * deliberately not in the key: it is our own estimate, and it can change under a
+ * pick between one page load and the next when Power Pulse recomputes, which
+ * would make the same pick look like a different asset.
+ */
 function assetKey(asset: BuildAsset): string {
   return asset.kind === "player"
     ? `p:${asset.playerId}`
-    : `k:${asset.season}-${asset.round}-${asset.pickPosition}`;
+    : `k:${asset.season}-${asset.round}-${asset.originalRosterId ?? "any"}`;
 }
 
-function pickKey(pick: {
-  season: number;
-  round: number;
-  pickPosition: PickSlot;
-}): string {
-  return `k:${pick.season}-${pick.round}-${pick.pickPosition}`;
+function pickKey(pick: { season: number; round: number; originalRosterId: number }): string {
+  return `k:${pick.season}-${pick.round}-${pick.originalRosterId}`;
 }
 
 function fmtValue(value: number): string {
   return Math.round(value).toLocaleString("en-US");
-}
-
-/** A player option as the picker wants it: name, position, team, grouped by team. */
-function toOption(player: BuilderPlayer, teamName: string): PlayerOption {
-  return {
-    playerId: player.playerId,
-    label: `${player.name} (${player.position}${player.team ? `, ${player.team}` : ""})`,
-    group: teamName,
-  };
 }
 
 export function TradeBuilder({
@@ -141,14 +152,12 @@ export function TradeBuilder({
   const [incoming, setIncoming] = useState<BuildAsset[]>(initialProposal?.incoming ?? []);
   const [outgoing, setOutgoing] = useState<BuildAsset[]>(initialProposal?.outgoing ?? []);
   const [picker, setPicker] = useState<{ side: Side; kind: PickerKind } | null>(null);
-  const [pickerValue, setPickerValue] = useState("");
   const [announcement, setAnnouncement] = useState("");
 
-  // Stable identity on purpose. An inline arrow here changes on every keystroke
-  // in the picker, and SlideUpDialog treats a new handler as a new dialog: it
-  // would hand focus back to the button behind the modal and then pull it to
-  // the close button. SlideUpDialog now holds the handler in a ref so this
-  // cannot happen, but a memoized handler is the right shape regardless.
+  // Stable identity on purpose. An inline arrow changes on every keystroke in
+  // the panel's filter box, and a panel that treats a new handler as a new
+  // dialog would hand focus back to the button behind it and then drag focus to
+  // the close button, mid-typing.
   const closePicker = useCallback(() => setPicker(null), []);
 
   const theirTeam = useMemo(
@@ -177,14 +186,20 @@ export function TradeBuilder({
     (side: Side, asset: Extract<BuildAsset, { kind: "pick" }>): BuilderPick | null => {
       const team = teamOf(side);
       if (!team) return null;
-      // Matched on season and round only, the same way
-      // lib/trade-impact/evaluate.ts matches a proposed pick against a roster:
-      // the slot bucket is our own estimate rather than the league's fact, so
-      // requiring it to agree would reject a real pick over a label we chose.
-      return (
-        team.picks.find((p) => p.season === asset.season && p.round === asset.round) ??
-        null
+      // Season, round and ORIGINAL OWNER, the same three the server matches on
+      // in lib/trade-impact/evaluate.ts. The slot bucket is left out on purpose:
+      // it is our own estimate rather than the league's fact, so requiring it to
+      // agree would reject a real pick over a label we chose.
+      //
+      // An asset with no original owner came out of a link written before that
+      // field existed. It falls back to the first pick of that season and round,
+      // which is what it has always resolved to.
+      const match = team.picks.filter(
+        (p) => p.season === asset.season && p.round === asset.round,
       );
+      if (match.length === 0) return null;
+      if (asset.originalRosterId === undefined) return match[0];
+      return match.find((p) => p.originalRosterId === asset.originalRosterId) ?? null;
     },
     [teamOf],
   );
@@ -259,6 +274,35 @@ export function TradeBuilder({
     [incoming, outgoing, setSide],
   );
 
+  /**
+   * What this side already holds, keyed the way the picker keys its rows, and
+   * mapped to the key that removes it.
+   *
+   * TWO KEYS, NOT ONE, because they can differ. A row in the picker is keyed by
+   * the pick's real identity; an asset that arrived in a link written before the
+   * original owner was encoded is stored under a vaguer key ("k:2027-1-any").
+   * Resolving each stored asset back to the pick it actually points at is what
+   * lets such a row show as added, and returning the STORED key is what lets it
+   * be removed again. Keying both ends the same way would break one or the other.
+   */
+  const addedOnSide = useCallback(
+    (side: Side): Map<string, string> => {
+      const assets = side === "in" ? incoming : outgoing;
+      const map = new Map<string, string>();
+      for (const asset of assets) {
+        const stored = assetKey(asset);
+        if (asset.kind === "player") {
+          map.set(`p:${asset.playerId}`, stored);
+          continue;
+        }
+        const found = resolvePick(side, asset);
+        map.set(found ? pickKey(found) : stored, stored);
+      }
+      return map;
+    },
+    [incoming, outgoing, resolvePick],
+  );
+
   const changeTeam = useCallback(
     (rosterId: number) => {
       const team = otherTeams.find((t) => t.rosterId === rosterId) ?? null;
@@ -319,7 +363,7 @@ export function TradeBuilder({
       </p>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <SidePanel
+        <DealSide
           side="out"
           heading="You send"
           teamName={myTeam.teamName}
@@ -328,15 +372,12 @@ export function TradeBuilder({
           resolvePick={resolvePick}
           total={valueOut}
           canAddPicks={canAddPicks && myTeam.picks.length > 0}
-          onAdd={(kind) => {
-            setPickerValue("");
-            setPicker({ side: "out", kind });
-          }}
+          onAdd={(kind) => setPicker({ side: "out", kind })}
           onRemove={removeAsset}
           idPrefix={`${baseId}-out`}
         />
 
-        <SidePanel
+        <DealSide
           side="in"
           heading="You receive"
           teamName={theirTeam?.teamName ?? ""}
@@ -345,10 +386,7 @@ export function TradeBuilder({
           resolvePick={resolvePick}
           total={valueIn}
           canAddPicks={canAddPicks && (theirTeam?.picks.length ?? 0) > 0}
-          onAdd={(kind) => {
-            setPickerValue("");
-            setPicker({ side: "in", kind });
-          }}
+          onAdd={(kind) => setPicker({ side: "in", kind })}
           onRemove={removeAsset}
           idPrefix={`${baseId}-in`}
           teamSelect={
@@ -365,12 +403,13 @@ export function TradeBuilder({
                 onChange={(e) => changeTeam(Number.parseInt(e.target.value, 10))}
                 className="mt-1 min-h-11 w-full rounded-card border border-ink-subtle bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
+                {/* teamName is already formatTeamLabel output, so it carries
+                    the handle when there is one to carry: "Sir Chuddy kid Cudi
+                    (@jnesselhauf)". Appending ownerHandle here as well printed
+                    it twice. */}
                 {otherTeams.map((team) => (
                   <option key={team.rosterId} value={team.rosterId}>
                     {team.teamName}
-                    {team.ownerHandle && team.ownerHandle !== team.teamName
-                      ? ` (${team.ownerHandle})`
-                      : ""}
                   </option>
                 ))}
               </select>
@@ -427,19 +466,23 @@ export function TradeBuilder({
         )}
       </div>
 
+      {/* Keyed on the side and kind so switching from "Add player" on one side
+          to "Add pick" on the other rebuilds the panel rather than reusing it
+          with a stale filter still typed into the box. */}
       {picker && (
-        <AddDialog
+        <AssetPickerPanel
+          key={`${picker.side}-${picker.kind}`}
           side={picker.side}
           kind={picker.kind}
           team={teamOf(picker.side)}
-          usedKeys={usedKeys}
-          value={pickerValue}
-          onValueChange={setPickerValue}
+          added={addedOnSide(picker.side)}
+          atCap={
+            (picker.side === "in" ? incoming.length : outgoing.length) >=
+            MAX_BUILD_ASSETS_PER_SIDE
+          }
           onClose={closePicker}
-          onAdd={(asset, label) => {
-            addAsset(picker.side, asset, label);
-            setPicker(null);
-          }}
+          onAdd={(asset, label) => addAsset(picker.side, asset, label)}
+          onRemove={(key, label) => removeAsset(picker.side, key, label)}
         />
       )}
     </Panel>
@@ -451,8 +494,12 @@ export function TradeBuilder({
  *
  * A real section with a real heading, so the two halves are two places a screen
  * reader user can jump between rather than one long run of buttons.
+ *
+ * Named DealSide rather than SidePanel because the shared drawer component is
+ * called SidePanel and this file now uses both. One is a half of the trade; the
+ * other is the thing that slides in from the right.
  */
-function SidePanel({
+function DealSide({
   side,
   heading,
   teamName,
@@ -560,7 +607,7 @@ function SidePanel({
             reason={atCap ? capReason : null}
             onClick={() => onAdd("pick")}
           >
-            Add pick
+            Add draft pick
           </AddButton>
         )}
       </div>
@@ -643,11 +690,14 @@ function AssetRow({
   }
 
   if (!("name" in found)) {
+    // Same three facts as the picker row, in the same order, so a pick a reader
+    // just added is recognisable as the one they chose rather than as a
+    // shortened version of it.
     return (
       <div className={shell}>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold text-ink">{found.label}</span>
-          <span className="block text-xs text-ink-muted">
+          <PickTag pick={found} estimated={found.positionEstimated} />
+          <span className="mt-0.5 block text-xs text-ink-muted">
             Draft pick, value {fmtValue(found.value)}
           </span>
         </span>
@@ -733,176 +783,320 @@ function Total({
 }
 
 /**
- * Picking one asset out of a roster.
+ * Picking assets out of a roster, as a drawer.
  *
- * WHY A DIALOG AT EVERY WIDTH
- *   The picker is a filter over several hundred names. Inline, it would push the
- *   other side of the deal off the screen on a phone and leave a tall empty
- *   column on a desktop. In a dialog it is one interaction to learn, it works
- *   the same on both, and SlideUpDialog already handles the focus trap, the
- *   Escape key, and returning focus to the button that opened it.
+ * WHY A DRAWER AND WHY IT STAYS OPEN
+ *   It used to be a dialog holding one select and one confirm button, which
+ *   meant a three-for-one offer cost three round trips through open, filter,
+ *   choose, confirm, close. The list itself is the interaction now: every row
+ *   carries its own button, and adding closes nothing. Building a package is one
+ *   open and one press per piece.
  *
- * WHY THERE IS A SEPARATE ADD BUTTON
- *   Committing on the select's change event would be fewer clicks and would also
- *   fire while a keyboard user arrows through the list, closing the dialog on
- *   whichever name they happened to pass. The select changes a pending choice;
- *   the button is what puts it in the deal.
+ *   SidePanel is the shared drawer: it comes in from the right on desktop and up
+ *   from the bottom on a phone, and it already handles the focus trap, Escape,
+ *   the backdrop, and the scroll lock. Right-hand entry is what lets the deal
+ *   stay visible beside the list on a wide screen, so a reader can watch the
+ *   totals move as they add.
+ *
+ * WHY AN ADDED ROW STAYS PUT
+ *   It used to leave the list, which read as the row being deleted rather than
+ *   moved: the thing you just pressed vanished from under the cursor, the rows
+ *   below jumped up, and pressing the wrong name meant closing the drawer to
+ *   undo it. A row now stays exactly where it was, lights up, and its button
+ *   turns into Remove. Nothing moves, the mistake is visible, and the fix is the
+ *   same button you just pressed.
+ *
+ *   That also means Remove keeps working when the side is full. Add disables at
+ *   the cap; Remove is how you make room without leaving the drawer.
+ *
+ * WHICH ROSTER IT SHOWS
+ *   Whichever team owns that side. The counterparty is chosen before any of this
+ *   is reachable, so the panel never has to ask again, and the list can never
+ *   contain a player the server would reject as not on that roster.
+ *
+ * WHY THE PICK ROWS LOOK LIKE THAT
+ *   See components/trade-ideas/pick-tag.tsx. Which pick, where in the round as a
+ *   pill, and whose it originally was. The last one decides the second, and it
+ *   is the question a manager actually asks out loud.
  */
-function AddDialog({
+function AssetPickerPanel({
   side,
   kind,
   team,
-  usedKeys,
-  value,
-  onValueChange,
+  added,
+  atCap,
   onClose,
   onAdd,
+  onRemove,
 }: {
   side: Side;
   kind: PickerKind;
   team: BuilderTeam | null;
-  usedKeys: Set<string>;
-  value: string;
-  onValueChange: (value: string) => void;
+  /** Row key of everything already on this side, mapped to the key that removes
+   *  it. See addedOnSide for why those two are not always the same string. */
+  added: Map<string, string>;
+  /** True when this side is full. Rows stay visible; only Add goes dead. */
+  atCap: boolean;
   onClose: () => void;
   onAdd: (asset: BuildAsset, label: string) => void;
+  onRemove: (key: string, label: string) => void;
 }) {
-  const baseId = useId();
+  const [query, setQuery] = useState("");
+  const [announcement, setAnnouncement] = useState("");
   const sideWords = side === "in" ? "receive" : "send";
-  const title =
-    kind === "player"
-      ? `Add a player to what you ${sideWords}`
-      : `Add a pick to what you ${sideWords}`;
-  const chooseNoteId = `${baseId}-choose`;
+  const title = kind === "player" ? "Add a player" : "Add a draft pick";
 
-  const options = useMemo(() => {
+  const players = useMemo(() => {
     if (!team || kind !== "player") return [];
+    const q = query.trim().toLowerCase();
     return team.players
-      .filter((p) => !usedKeys.has(`p:${p.playerId}`))
-      .map((p) => toOption(p, team.teamName))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [kind, team, usedKeys]);
+      .filter(
+        (p) =>
+          q === "" ||
+          p.name.toLowerCase().includes(q) ||
+          p.position.toLowerCase().includes(q) ||
+          (p.team ?? "").toLowerCase().includes(q),
+      )
+      // Most valuable first. A package is nearly always assembled from the top
+      // of a roster down, and alphabetical buried the best player on the team
+      // somewhere in the middle of thirty names.
+      //
+      // Deliberately NOT re-sorted by whether a row is in the deal. Moving a row
+      // the moment it is pressed is the thing this list stopped doing.
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+  }, [kind, team, query]);
 
   const picks = useMemo(() => {
     if (!team || kind !== "pick") return [];
-    return team.picks.filter((p) => !usedKeys.has(pickKey(p)));
-  }, [kind, team, usedKeys]);
+    const q = query.trim().toLowerCase();
+    return team.picks
+      .filter(
+        (p) =>
+          q === "" ||
+          p.label.toLowerCase().includes(q) ||
+          String(p.season).includes(q) ||
+          (p.originalOwnerHandle ?? "").toLowerCase().includes(q) ||
+          (p.originalTeamName ?? "").toLowerCase().includes(q),
+      )
+      // Soonest first, then round, then value. A 2027 1st is a different
+      // conversation to a 2029 4th, and the year is how managers group them.
+      .sort((a, b) => a.season - b.season || a.round - b.round || b.value - a.value);
+  }, [kind, team, query]);
 
-  // Nothing to pick from is a different state to nothing picked yet, and only
-  // the second one is the reader's to fix. The empty-roster message above
-  // already covers the first, so the note below stays off for it.
-  const hasChoices = kind === "player" ? options.length > 0 : picks.length > 0;
-  const nothingChosen = hasChoices && !value;
-  const chooseNote =
-    kind === "player" ? "Choose a player first." : "Choose a pick first.";
+  const shown = kind === "player" ? players.length : picks.length;
+  const roster = kind === "player" ? (team?.players.length ?? 0) : (team?.picks.length ?? 0);
+  const showFilter = roster > FILTER_THRESHOLD;
 
-  const commit = useCallback(() => {
-    if (!team || !value) return;
-    if (kind === "player") {
-      const player = team.players.find((p) => p.playerId === value);
-      if (!player) return;
-      onAdd({ kind: "player", playerId: player.playerId }, player.name);
+  const noun = kind === "player" ? "player" : "pick";
+  const nouns = shown === 1 ? noun : `${noun}s`;
+  const filterStatus = query.trim()
+    ? `${shown} ${nouns} match ${query.trim()}.`
+    : `${shown} ${nouns} to choose from.`;
+
+  /** Add or remove, from one press, with the right sentence spoken after it. */
+  const toggle = (
+    rowKey: string,
+    label: string,
+    build: () => BuildAsset,
+  ) => {
+    const storedKey = added.get(rowKey);
+    if (storedKey !== undefined) {
+      onRemove(storedKey, label);
+      setAnnouncement(`${label} removed from what you ${sideWords}.`);
       return;
     }
-    const pick = picks.find((p) => pickKey(p) === value);
-    if (!pick) return;
-    onAdd(
-      {
-        kind: "pick",
-        season: pick.season,
-        round: pick.round,
-        pickPosition: pick.pickPosition,
-      },
-      pick.label,
-    );
-  }, [kind, onAdd, picks, team, value]);
+    onAdd(build(), label);
+    setAnnouncement(`${label} added to what you ${sideWords}.`);
+  };
 
   return (
-    <SlideUpDialog open onClose={onClose} label={title} closeLabel="Close without adding">
-      <div className="px-4 pb-4 sm:px-5">
-        <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
-        <p className="mt-1 text-xs text-ink-muted">{team?.teamName ?? "This team"}</p>
+    <SidePanel
+      open
+      onClose={onClose}
+      title={title}
+      subtitle={
+        team ? `${team.teamName}, to what you ${sideWords}` : `To what you ${sideWords}`
+      }
+    >
+      {/* Every press announces here rather than through the parent's region. The
+          parent's sits outside this drawer, and a live region inside the open
+          dialog is the one a screen reader is listening to while focus is in it.
+          The parent still announces too, because it owns the running totals. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
 
-        <div className="mt-4">
-          {kind === "player" ? (
-            options.length === 0 ? (
-              <p className="text-sm text-ink-muted">
-                Every player we can price on that roster is already in the deal.
-              </p>
-            ) : (
-              <PlayerPicker
-                filterLabel="Find a player"
-                label="Player to add"
-                hint="Only players we hold a value for appear here."
-                options={options}
-                value={value}
-                onChange={onValueChange}
-                anyLabel="Nobody chosen yet"
-              />
-            )
-          ) : picks.length === 0 ? (
-            <p className="text-sm text-ink-muted">
-              That team has no tradeable picks left to add.
-            </p>
-          ) : (
-            <>
-              <label
-                htmlFor={`${baseId}-pick`}
-                className="block text-sm font-semibold text-ink"
-              >
-                Pick to add
-              </label>
-              <p id={`${baseId}-pick-hint`} className="mt-0.5 text-xs text-ink-muted">
-                Values come from the draft pick source named in the rail.
-              </p>
-              <select
-                id={`${baseId}-pick`}
-                aria-describedby={`${baseId}-pick-hint`}
-                value={value}
-                onChange={(e) => onValueChange(e.target.value)}
-                className="mt-1.5 min-h-11 w-full rounded-card border border-ink-subtle bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                <option value="">No pick chosen yet</option>
-                {picks.map((pick) => (
-                  <option key={pickKey(pick)} value={pickKey(pick)}>
-                    {pick.label}, value {fmtValue(pick.value)}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
+      {atCap && (
+        <p className="mb-4 rounded-card border border-line bg-base/50 px-3 py-2 text-sm text-ink-muted">
+          That side already holds {MAX_BUILD_ASSETS_PER_SIDE} assets, which is the most
+          one side can carry. Remove one below to add another.
+        </p>
+      )}
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={!value}
-            aria-describedby={nothingChosen ? chooseNoteId : undefined}
-            onClick={commit}
-            className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2 text-sm font-bold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus aria-hidden="true" className="h-4 w-4" />
-            Add to the deal
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex min-h-11 items-center rounded-card border border-line px-4 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            Cancel
-          </button>
-        </div>
-        {/* Why the confirm button is greyed out, as a real paragraph. Same
-            reason the asset cap states itself in the panel body: a disabled
-            button is out of the tab order, so somebody tabbing Close, filter,
-            select, Cancel never reaches the description hung off it and never
-            learns the button is there at all. */}
-        {nothingChosen && (
-          <p id={chooseNoteId} className="mt-2 text-xs text-ink-muted">
-            {chooseNote}
-          </p>
+      {showFilter && (
+        <PanelFilterField
+          label={kind === "player" ? "Filter players" : "Filter picks"}
+          placeholder={kind === "player" ? "Name, position, or team" : "Year or owner"}
+          value={query}
+          onChange={setQuery}
+          status={filterStatus}
+        />
+      )}
+
+      {shown === 0 ? (
+        <p className="rounded-card border border-dashed border-line px-3 py-6 text-center text-sm text-ink-muted">
+          {query.trim()
+            ? "Nothing on this roster matches that."
+            : kind === "player"
+              ? "We hold no values for that roster, so there is nobody to offer."
+              : "That team has no tradeable picks."}
+        </p>
+      ) : (
+        <ul role="list" className="space-y-2">
+          {kind === "player"
+            ? players.map((player) => {
+                const rowKey = `p:${player.playerId}`;
+                return (
+                  <li key={player.playerId}>
+                    <PickerRow
+                      added={added.has(rowKey)}
+                      atCap={atCap}
+                      name={player.name}
+                      sideWords={sideWords}
+                      onToggle={() =>
+                        toggle(rowKey, player.name, () => ({
+                          kind: "player",
+                          playerId: player.playerId,
+                        }))
+                      }
+                    >
+                      <span className="block text-sm font-bold text-ink">{player.name}</span>
+                      <span className="block text-xs text-ink-muted">
+                        {[player.position, player.team].filter(Boolean).join(", ")}
+                        {". "}
+                        {fmtValue(player.value)}
+                        {player.projPoints !== null
+                          ? `, ${player.projPoints.toFixed(1)} pts/wk`
+                          : ""}
+                      </span>
+                    </PickerRow>
+                  </li>
+                );
+              })
+            : picks.map((pick) => {
+                const rowKey = pickKey(pick);
+                return (
+                  <li key={rowKey}>
+                    <PickerRow
+                      added={added.has(rowKey)}
+                      atCap={atCap}
+                      name={pick.label}
+                      sideWords={sideWords}
+                      onToggle={() =>
+                        toggle(rowKey, pick.label, () => ({
+                          kind: "pick",
+                          season: pick.season,
+                          round: pick.round,
+                          pickPosition: pick.pickPosition,
+                          originalRosterId: pick.originalRosterId,
+                        }))
+                      }
+                    >
+                      <PickTag pick={pick} estimated={pick.positionEstimated} />
+                      <span className="mt-0.5 block text-xs text-ink-muted">
+                        {fmtValue(pick.value)}
+                      </span>
+                    </PickerRow>
+                  </li>
+                );
+              })}
+        </ul>
+      )}
+
+      {kind === "pick" && shown > 0 && (
+        <p className="mt-4 border-t border-line pt-3 text-xs leading-relaxed text-ink-subtle">
+          Early, Mid and Late come from where the pick&apos;s original owner is projected
+          to finish, not from who holds it: a team near the bottom of the standings sends
+          an early pick and a contender sends a late one. Where a league has already
+          published its draft order we use that instead.
+        </p>
+      )}
+    </SidePanel>
+  );
+}
+
+/**
+ * One row in the picker: what it is on the left, one press to put it in or take
+ * it back out on the right.
+ *
+ * THE ROW SAYS IT IS IN, THREE WAYS
+ *   A cyan border and wash on the whole card, a check on the button, and the
+ *   word Remove where Add was. Colour is never the only signal, so the state
+ *   survives with no colour perception at all, and the button's accessible name
+ *   spells it out for a reader who sees neither.
+ *
+ *   The name is the whole instruction rather than "Add" or "Remove". A screen
+ *   reader user pulling up the button list of an open panel would otherwise find
+ *   thirty of them with the same name and no way to tell which is which.
+ *
+ * WHY THE BUTTON IS NOT aria-pressed
+ *   A toggle button announces "pressed" and leaves the reader to work out what
+ *   pressed means. The label changing from "Add X to what you send" to "Remove X
+ *   from what you send" says the state and the next action in the same breath,
+ *   which is the thing a toggle state cannot do on its own.
+ */
+function PickerRow({
+  added,
+  atCap,
+  name,
+  sideWords,
+  onToggle,
+  children,
+}: {
+  added: boolean;
+  atCap: boolean;
+  /** Plain name of the asset, for the button's accessible name. */
+  name: string;
+  sideWords: string;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  // The cap stops you adding a tenth thing. It has no business stopping you
+  // taking one back out, which is how you get under the cap in the first place.
+  const disabled = atCap && !added;
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-card border p-2.5 transition-colors ${
+        added
+          ? "border-brand-cyan/60 bg-brand-cyan/10 shadow-[0_0_20px_-10px_rgba(34,211,238,0.9)]"
+          : "border-line bg-surface"
+      }`}
+    >
+      <span className="min-w-0 flex-1">{children}</span>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onToggle}
+        aria-label={
+          added
+            ? `Remove ${name} from what you ${sideWords}`
+            : disabled
+              ? `Add ${name} to what you ${sideWords}. That side is full, so remove something first.`
+              : `Add ${name} to what you ${sideWords}`
+        }
+        className={`inline-flex h-11 shrink-0 items-center justify-center gap-1 rounded-card border px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:border-dashed disabled:border-line disabled:bg-transparent disabled:text-ink-subtle ${
+          added
+            ? "border-brand-cyan/70 bg-brand-cyan/20 text-brand-cyan hover:border-signal-danger/70 hover:bg-signal-danger/10 hover:text-signal-danger"
+            : "border-brand-cyan/50 bg-brand-cyan/10 text-brand-cyan hover:bg-brand-cyan/20"
+        }`}
+      >
+        {added ? (
+          <Check aria-hidden="true" className="h-4 w-4" />
+        ) : (
+          <Plus aria-hidden="true" className="h-4 w-4" />
         )}
-      </div>
-    </SlideUpDialog>
+        <span aria-hidden="true">{added ? "Remove" : "Add"}</span>
+      </button>
+    </div>
   );
 }

@@ -676,6 +676,14 @@ async function BuildSection({
         season: p.season,
         round: p.round,
         pickPosition: p.pickPosition,
+        // Identity, not decoration. Two 2027 1sts on one roster are two assets
+        // with two values, and without the original owner the builder can only
+        // offer one of them.
+        originalRosterId: p.originalRosterId,
+        isOwnPick: p.isOwnPick,
+        originalOwnerHandle: p.originalOwnerHandle,
+        originalTeamName: p.originalTeamName,
+        positionEstimated: p.positionEstimated,
         label: p.label,
         value: p.value,
       })),

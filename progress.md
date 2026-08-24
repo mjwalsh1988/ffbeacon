@@ -7050,3 +7050,173 @@ T680 | completed | Drop the pre-calibration value backup
      | the removed table.
      | verified: yes (tsc clean, next build clean, 2046 tests green; table
      |   confirmed gone, to_regclass returns null)
+
+T681 | completed | A draft pick is season, round AND original owner
+     | files: lib/trade-ideas/pick-label.ts, lib/trade-ideas/pick-label.test.ts,
+     |   lib/trade-finder/types.ts, lib/trade-finder-data.ts,
+     |   lib/trade-finder/_test-kit.ts, lib/trade-impact/types.ts,
+     |   lib/trade-impact/proposal-url.ts, lib/trade-impact/proposal-url.test.ts,
+     |   lib/trade-impact/evaluate.ts, lib/trade-impact/pick-identity.test.ts,
+     |   lib/trade-impact/reasons.test.ts,
+     |   app/leagues/[league_id]/trade-ideas/page.tsx
+     | depends on: T680
+     | Every layer keyed a pick on season and round. That is not an identity. One
+     | roster in a real synced league holds NINE different 2027 1sts, from nine
+     | different original owners, and across stored leagues 3,048
+     | roster/season/round groups hold more than one pick, covering 7,274 picks.
+     | Eight of those nine were unreachable: `picksByKey` kept whichever it wrote
+     | last, the builder listed one, the URL could name one, and the one that
+     | survived answered for all of them AT ITS OWN VALUE. The measured spread is
+     | not cosmetic: in this league a 2027 1st ran 5,873 early against 4,242 late.
+     | ORIGINAL OWNER IS NOW PART OF THE KEY, end to end. FinderPick carries
+     | originalRosterId, isOwnPick, the handle, the team name and whether the
+     | early/mid/late bucket was projected or read off a published draft order.
+     | The URL token grows a fourth part (season-round-slot-originalRoster) and
+     | three-part tokens still decode, because every link anyone has saved is one.
+     | A malformed fourth part fails the token rather than falling back, since
+     | falling back would resolve a shared link to a DIFFERENT pick and present it
+     | as the one that was sent.
+     | THE OWNERSHIP CHECK MATCHES ALL THREE. evaluate.ts rejects a pick that
+     | roster does not hold rather than substituting a same-round pick it does.
+     | The slot bucket is deliberately never matched on: it is our estimate and
+     | Power Pulse can move it between loads, so requiring it to agree would
+     | reject a real pick over a label we chose ourselves.
+     | The pooling logic itself needed no change. lib/league-pick-position.ts
+     | already resolved early/mid/late from the ORIGINAL owner's projected finish;
+     | nothing downstream had been carrying the answer.
+     | verified: yes (tsc clean, next build clean, 2073 tests green; confirmed in
+     |   the browser against Men in Black MaxPF roster 8, which now lists nine
+     |   separate 2027 R1s at three distinct prices)
+
+T682 | completed | Pick a player off a list instead of out of a dropdown
+     | files: components/trade-ideas/trade-builder.tsx,
+     |   components/trade-ideas/pick-tag.tsx,
+     |   components/trade-ideas/trade-verdict.tsx
+     | depends on: T681
+     | The picker was a dialog holding one select and one confirm button, so a
+     | three-for-one offer cost three trips through open, filter, choose, confirm,
+     | close. The list is the interaction now: the shared SidePanel drawer comes
+     | in from the right on desktop and up from the bottom on a phone, every row
+     | carries its own Add button, adding does not close anything, and a row
+     | leaves the list once it is in the deal so what remains is always what is
+     | still available.
+     | WHICH ROSTER IT SHOWS is settled before the panel opens. The counterparty
+     | is chosen first, so each side's panel lists exactly that team's assets and
+     | can never offer something the server would reject.
+     | A PICK READS AS ITS THREE FACTS, through one formatter
+     | (lib/trade-ideas/pick-label.ts) used by the picker row, the row in a built
+     | side, and the verdict, so the same pick cannot be named three ways.
+     | "2027 R1", the pool as a coloured pill, then "(via @handle)" in subtle
+     | text. The holder is deliberately absent: the side of the trade already
+     | says it. Colour is never the only signal, the pill says its own word, and
+     | the whole thing carries ONE aria-label ("2027 first round pick, projected
+     | early in the round, via @handle") rather than three fragments and an "R1"
+     | read as a letter and a number.
+     | Players sort by value descending, because a package is assembled from the
+     | top of a roster down and alphabetical buried the best player mid-list.
+     | Picks sort by season then round. The filter appears past the existing
+     | FILTER_THRESHOLD of 8 rather than always.
+     | ALSO FIXED, both found while testing this: the counterparty select printed
+     | the handle twice ("Sir Chuddy kid Cudi (@jnesselhauf) (jnesselhauf)")
+     | because teamName is already formatTeamLabel output, and the button read
+     | "Add pick" against a panel titled "Add a draft pick".
+     | The local SidePanel was renamed DealSide; the file now imports the shared
+     | drawer of that name.
+     | verified: yes (tsc clean, next build clean, 2073 tests green; walked the
+     |   drawer in the browser on both sides, adding, filtering and removing)
+
+T683 | completed | An added row stays put, lights up, and offers Remove
+     | files: components/trade-ideas/trade-builder.tsx, components/side-panel.tsx
+     | depends on: T682
+     | A row left the picker the moment it was added, which read as the row being
+     | deleted rather than moved: the thing you just pressed vanished from under
+     | the cursor, everything below it jumped up, and pressing the wrong name
+     | meant closing the drawer to undo it. A row now stays exactly where it was,
+     | takes a cyan border and wash, and its button becomes Remove. Nothing moves,
+     | the mistake is visible, and the fix is the button you just pressed.
+     | THE STATE IS SAID THREE WAYS, so colour is never carrying it alone: the
+     | card lights, the icon turns from a plus to a check, and the word changes.
+     | The button's accessible name changes with it, from "Add X to what you send"
+     | to "Remove X from what you send", which says the state and the next action
+     | in one breath. Deliberately not aria-pressed: a toggle announces "pressed"
+     | and leaves the reader to work out what pressed means.
+     | THE LIST DOES NOT RE-SORT when a row is pressed. Moving a row the instant
+     | it is touched is the behaviour this change exists to remove.
+     | REMOVE KEEPS WORKING AT THE CAP. Add goes dead at six assets a side; Remove
+     | must not, because removing is how you get back under the cap without
+     | leaving the drawer. The disabled Add explains that in its own label.
+     | TWO KEYS PER ROW, NOT ONE. A picker row is keyed by the pick's real
+     | identity, but an asset that arrived in a link written before the original
+     | owner was encoded is stored under a vaguer key ("k:2027-1-any"). addedOnSide
+     | resolves each stored asset back to the pick it points at and maps that to
+     | the STORED key, so such a row both shows as added and can be removed again.
+     | ALSO FIXED, in components/side-panel.tsx: `onClose` sat in the focus
+     | effect's dep array, so any parent re-render with a fresh handler identity
+     | tore the effect down, and its cleanup calls previouslyFocused.focus() while
+     | the panel is still open. Focus would land behind the drawer and then be
+     | dragged back inside 80ms later. Survivable while every caller memoized and
+     | the contents were static; this picker is neither, since pressing a row is
+     | now what re-renders it. Held in a ref, the same fix and the same reasoning
+     | as components/slide-up-dialog.tsx, which had already been bitten by it.
+     | verified: yes (tsc clean, next build clean, 2073 tests green; no browser
+     |   pass this round, per instruction)
+
+T684 | completed | Lead with the answer, then show the working
+     | files: lib/trade-impact/outcome.ts, lib/trade-impact/outcome.test.ts,
+     |   lib/trade-impact/asset-notes.ts,
+     |   components/trade-ideas/trade-outcome.tsx,
+     |   components/trade-ideas/trade-verdict.tsx,
+     |   lib/trade-impact/types.ts, lib/trade-impact/evaluate.ts
+     | depends on: T683
+     | The evaluation opened on its reasons. Every one of them is true and none of
+     | them is what a reader came for, which is "should I take this". They read
+     | four paragraphs, two tables and a week-by-week chart and did the
+     | subtraction themselves. There was no equivalent of Signal Check's "who
+     | wins and by how much" anywhere on the page.
+     | THE CALL IS A FUNCTION, NOT AN OPINION. lib/trade-impact/outcome.ts turns
+     | figures the model already produced into one of five calls (take, lean yes,
+     | too close, lean against, decline) by rules written out in the open, and
+     | `summary` names the measure that decided so the call can be argued with. No
+     | language model, per the ABSOLUTE RULE in CLAUDE.md; every sentence cites a
+     | number printed on the same screen.
+     | VALUE AND WINS ARE BOTH REPORTED, ALWAYS, because they routinely disagree
+     | and the disagreement is the point of the module. When they split, the call
+     | leans on whichever matches the team's own direction, the same rule
+     | directionReason already uses: a contender is judged on the lineup and a
+     | rebuilder on the value. A team in the middle gets NO tiebreak, because the
+     | status classifier declined to say which way it points and inventing one
+     | here would be a claim the rest of the page does not make.
+     | THE MARGIN IS SIGNAL CHECK'S, |A-B| / (A+B), so the same trade cannot read
+     | 12 percent on one tool and 30 on the other. A test pins it to Signal
+     | Check's own fixture.
+     | HALF THE EVIDENCE EARNS HALF THE VERDICT. With no season left to simulate,
+     | value alone can reach "lean yes" and never "take".
+     | THE ASSETS CARRY THE DEPTH. 64px photos, and per-asset notes from
+     | lib/trade-impact/asset-notes.ts saying what each piece does for THIS
+     | roster: how many weeks an arriving player cracks the optimal lineup
+     | (incomingStartWeeks, the most useful thing the model knows about him), what
+     | his position gains or loses, whether he is the piece the deal is about or a
+     | throw-in, age where age is a currency.
+     | A POSITIONAL NOTE IS ONLY PINNED ON AN ASSET WHEN IT IS THE SOLE PIECE AT
+     | THAT POSITION in the whole trade. Two receivers crossing net out to one
+     | number and hanging it on either would credit him with the other's effect.
+     | That note is also the only thing that answers "good or bad for me" about a
+     | player on the way OUT, where there are no start counts to read: the model
+     | measures the lineup with him gone, not the weeks he used to fill.
+     | Found in the browser and fixed: a 44 percent tight end, the main piece of a
+     | three-for-one, was reading as an ordinary throw-in with no notes at all.
+     | Centrepiece is now "biggest thing on its side AND at least 40 percent",
+     | because a share alone gets both ends wrong (0.6 misses the main piece of a
+     | three-for-one; 0.4 alone crowns both halves of a 55/45 pair).
+     | Colour is never the answer on its own: the call is a word before it is a
+     | colour, every tone chip carries its own label, and the balance bar is
+     | aria-hidden with a sentence stating the same split, the pattern
+     | app/tools/signal-check/trade-margin-graph.tsx set.
+     | The panel sits ABOVE the tabs and outside them, because the call is true of
+     | the whole evaluation and a reader who lands on the Value tab must not miss
+     | it. That demotes the reasons panel from conclusion to evidence, which is
+     | what it always was.
+     | verified: yes (tsc clean, next build clean, 2093 tests green, 20 of them
+     |   new on the call; walked a real 2-for-3 in the browser on Men in Black
+     |   MaxPF, which reads "Lean against it, 1% value spread, -0.4 projected
+     |   wins", with QB gaining 14.6 a week and TE losing 13.9)

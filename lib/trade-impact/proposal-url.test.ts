@@ -50,6 +50,55 @@ describe("encodeAsset / decodeAsset", () => {
     expect(decodeAsset("<script>")).toBeNull();
     expect(decodeAsset("1; drop table players")).toBeNull();
   });
+
+  it("round trips the pick's original owner, which is what makes it that pick", () => {
+    const asset = {
+      kind: "pick",
+      season: 2027,
+      round: 1,
+      pickPosition: "early",
+      originalRosterId: 7,
+    } as const;
+    expect(encodeAsset(asset)).toBe("2027-1-early-7");
+    expect(decodeAsset(encodeAsset(asset))).toEqual(asset);
+  });
+
+  it("keeps two same-round picks apart in the query string", () => {
+    // The bug. One roster in a real league holds nine 2027 1sts, and all nine
+    // used to encode to the same token, so a link could name only one of them.
+    const mine = encodeAsset({
+      kind: "pick",
+      season: 2027,
+      round: 1,
+      pickPosition: "late",
+      originalRosterId: 3,
+    });
+    const theirs = encodeAsset({
+      kind: "pick",
+      season: 2027,
+      round: 1,
+      pickPosition: "early",
+      originalRosterId: 7,
+    });
+    expect(mine).not.toBe(theirs);
+  });
+
+  it("still reads a three-part token, because saved links are full of them", () => {
+    expect(decodeAsset("2027-1-mid")).toEqual({
+      kind: "pick",
+      season: 2027,
+      round: 1,
+      pickPosition: "mid",
+    });
+  });
+
+  it("refuses a malformed original owner rather than dropping it", () => {
+    // Dropping it would resolve the link to whichever same-round pick came
+    // first, presenting a different pick as the one that was shared.
+    expect(decodeAsset("2027-1-mid-abc")).toBeNull();
+    expect(decodeAsset("2027-1-mid--4")).toBeNull();
+    expect(decodeAsset("2027-1-mid-999999999")).toBeNull();
+  });
 });
 
 describe("decodeProposal", () => {

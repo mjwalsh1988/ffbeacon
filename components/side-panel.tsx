@@ -58,6 +58,25 @@ export function SidePanel({
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
 
+  /**
+   * Read by the Escape handler and the backdrop, never by a dep array.
+   *
+   * `onClose` used to sit in the focus effect's deps, which meant any parent
+   * re-render producing a fresh handler identity tore the effect down and set it
+   * up again, and the CLEANUP fires `previouslyFocused.focus()` while the panel
+   * is still open. Focus would land on the button behind the drawer and then get
+   * dragged back to the first focusable inside it 80ms later.
+   *
+   * That was survivable while every caller passed a memoized handler and the
+   * panel's contents were static. The asset picker in the trade builder is
+   * neither: it re-renders on every press, because pressing a row is what puts
+   * an asset in the deal. Holding the handler in a ref fixes it for every caller
+   * rather than for the one that remembered. Same fix, and the same reasoning,
+   * as components/slide-up-dialog.tsx. Do not put `onClose` back in the deps.
+   */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     setMounted(true);
@@ -83,7 +102,7 @@ export function SidePanel({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       } else if (event.key === "Tab" && panelRef.current) {
         const focusables =
           panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE);
@@ -108,7 +127,7 @@ export function SidePanel({
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!mounted || !open) return null;
 
