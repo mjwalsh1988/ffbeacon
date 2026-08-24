@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, CalendarDays } from "lucide-react";
 import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
+import { formatTeamLabel, ownerLine } from "@/lib/team-label";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
@@ -162,7 +163,11 @@ const loadMatchupTitle = cache(
       const user = roster?.owner_user_id
         ? usersById.get(roster.owner_user_id)
         : null;
-      return user?.team_name || user?.display_name || `Team ${rosterId}`;
+      return formatTeamLabel({
+        teamName: user?.team_name,
+        username: user?.display_name,
+        sleeperRosterId: rosterId,
+      });
     };
 
     return {
@@ -715,9 +720,9 @@ function SideSummary({
           <p className="truncate text-[15px] font-bold leading-tight text-ink">
             {side.teamName}
           </p>
-          {side.ownerHandle && (
+          {ownerLine(side.teamName, side.ownerHandle) && (
             <p className="truncate text-[11px] text-ink-subtle">
-              @{side.ownerHandle}
+              {ownerLine(side.teamName, side.ownerHandle)}
             </p>
           )}
         </div>

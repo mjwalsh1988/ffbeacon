@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronRight, Trophy, Users } from "lucide-react";
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { ScheduleMatchup, ScheduleMatchupSide } from "@/lib/league-schedule/types";
 import { WinProbBar } from "./win-prob-bar";
@@ -197,8 +198,10 @@ function SideRow({
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-ink">{side.teamName}</p>
-        {side.ownerHandle && (
-          <p className="truncate text-[11px] text-ink-subtle">@{side.ownerHandle}</p>
+        {ownerLine(side.teamName, side.ownerHandle) && (
+          <p className="truncate text-[11px] text-ink-subtle">
+            {ownerLine(side.teamName, side.ownerHandle)}
+          </p>
         )}
         <p className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className={CHIP}>

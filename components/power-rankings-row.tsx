@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { BeaconValue } from "@/components/beacon-value-icon";
 import { TeamStatusBadge } from "@/components/team-status-badge";
@@ -180,9 +181,9 @@ function TeamIdentity({ data }: { data: PowerRankingsRowData }) {
         <span className="block truncate text-sm font-medium text-ink">
           {data.teamName}
         </span>
-        {data.ownerHandle && (
+        {ownerLine(data.teamName, data.ownerHandle) && (
           <span className="block truncate text-[11px] text-ink-subtle">
-            @{data.ownerHandle}
+            {ownerLine(data.teamName, data.ownerHandle)}
           </span>
         )}
       </span>
@@ -374,8 +375,10 @@ function TeamRankSheet({
             >
               {data.teamName}
             </h2>
-            {data.ownerHandle && (
-              <p className="truncate text-xs text-ink-subtle">@{data.ownerHandle}</p>
+            {ownerLine(data.teamName, data.ownerHandle) && (
+              <p className="truncate text-xs text-ink-subtle">
+                {ownerLine(data.teamName, data.ownerHandle)}
+              </p>
             )}
             <p className="mt-1 font-mono text-xs tabular-nums text-ink-muted">
               Record {record}

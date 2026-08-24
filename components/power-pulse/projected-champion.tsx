@@ -18,6 +18,7 @@
  * Server component: pure presentation over data resolved upstream.
  */
 
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { Panel } from "@/components/dashboard-panel";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
@@ -62,8 +63,11 @@ function positionLabel(position: string): string {
  * whose team is being talked about. The handle is, and it is the label that
  * matches what they see in Sleeper.
  */
+/** Kept as a thin wrapper so the sentences below stay readable. The pairing
+ *  itself lives in lib/team-label.ts, shared with every other surface. */
 function teamLabel(name: string, handle: string | null | undefined): string {
-  return handle ? `${name} (@${handle})` : name;
+  const owner = ownerLine(name, handle);
+  return owner ? `${name} (${owner})` : name;
 }
 
 /**
@@ -326,9 +330,9 @@ export function ProjectedChampion({
             <p className="truncate text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
               {favorite.teamName}
             </p>
-            {favorite.ownerHandle && (
+            {ownerLine(favorite.teamName, favorite.ownerHandle) && (
               <p className="truncate text-sm font-semibold text-brand-cyan">
-                @{favorite.ownerHandle}
+                {ownerLine(favorite.teamName, favorite.ownerHandle)}
               </p>
             )}
             {record && (
@@ -401,9 +405,9 @@ export function ProjectedChampion({
                       <span className="block truncate text-xs font-medium text-ink">
                         {team.teamName}
                       </span>
-                      {team.ownerHandle && (
+                      {ownerLine(team.teamName, team.ownerHandle) && (
                         <span className="block truncate text-[11px] text-ink-subtle">
-                          @{team.ownerHandle}
+                          {ownerLine(team.teamName, team.ownerHandle)}
                         </span>
                       )}
                       {/* Decorative bar; the percentage beside it is the real value. */}

@@ -91,6 +91,21 @@ const GROUP_ORDER: readonly SlotGroup[] = [
   "DEF",
 ];
 
+/**
+ * The phone-width form of a slot label.
+ *
+ * Only SUPERFLEX needs it: every other token is four characters or fewer and
+ * fits the column as it is. Anything not listed falls through unchanged rather
+ * than being truncated, so a new slot token cannot quietly turn into nonsense.
+ */
+const SHORT_SLOT_LABEL: Record<string, string> = {
+  SUPERFLEX: "SF",
+};
+
+function shortSlotLabel(label: string): string {
+  return SHORT_SLOT_LABEL[label] ?? label;
+}
+
 type PairedRow = {
   key: string;
   home: MatchupSlotEntry;
@@ -293,7 +308,14 @@ export function MatchupTable({
                       scope="row"
                       className="w-14 px-1 py-2 text-center align-middle text-[11px] font-bold uppercase tracking-wide text-ink-muted"
                     >
-                      {row.home.slot.label}
+                      {/* SUPERFLEX is nine characters in a fourteen-pixel-wide
+                          column, so the phone gets SF and everything from the
+                          small breakpoint up gets the full word. Both are in the
+                          DOM rather than swapped by script, and the screen
+                          reader hears the spelled-out description either way, so
+                          nothing is lost at any width. */}
+                      <span className="sm:hidden">{shortSlotLabel(row.home.slot.label)}</span>
+                      <span className="hidden sm:inline">{row.home.slot.label}</span>
                       {/* "W/T" read aloud is noise, so the spelled-out form rides
                           along and the abbreviation stays for the eye. */}
                       <span className="sr-only">, {row.home.slot.description}</span>

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { formatTeamLabelCompact } from "@/lib/team-label";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import type { SleeperLeague } from "@/lib/sleeper";
@@ -92,7 +93,16 @@ export async function GET(
         const r = rosterById.get(c.roster_id);
         if (!r) continue;
         const u = r.owner_user_id ? userBySleeperId.get(r.owner_user_id) : null;
-        const teamName = u?.team_name || u?.display_name || `Team ${r.sleeper_roster_id}`;
+        // Trimmed here rather than at render, so the clip lands on the team
+        // name and the handle beside it survives at full length.
+        const teamName = formatTeamLabelCompact(
+          {
+            teamName: u?.team_name,
+            username: u?.display_name,
+            sleeperRosterId: r.sleeper_roster_id,
+          },
+          16,
+        );
         topTeams.push({
           teamName,
           rank: c.overall_rank ?? 0,
@@ -242,7 +252,7 @@ export async function GET(
                     flex: 1,
                   }}
                 >
-                  {clip(t.teamName, 32)}
+                  {t.teamName}
                 </p>
                 <p
                   style={{

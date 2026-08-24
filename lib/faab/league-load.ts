@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { formatTeamLabel } from "@/lib/team-label";
 import type { GameLogEntry, PositionalFinish } from "./signals";
 
 type ServiceClient = SupabaseClient<Database>;
@@ -304,32 +305,6 @@ export async function loadPlayerValues(
   }
 
   return chosen ?? out;
-}
-
-/**
- * How a rival is named everywhere in this calculator.
- *
- * Team name plus handle, because team names change on a whim and the handle is
- * the part a reader recognises in October when "Herbert The Pervert" has become
- * something else. Sleeper's `display_name` IS the account handle; `team_name`
- * is the nickname on top of it, and plenty of managers never set one.
- *
- *   both, and different       Herbert The Pervert (@BigBCardz)
- *   no team name              @BenMacleod27
- *   team name equals handle   @BigBCardz          (never printed twice)
- *   neither                   Team 4
- */
-export function formatTeamLabel(input: {
-  teamName?: string | null;
-  username?: string | null;
-  sleeperRosterId: number;
-}): string {
-  const team = input.teamName?.trim() || null;
-  const handle = input.username?.trim() || null;
-
-  if (!handle) return team ?? `Team ${input.sleeperRosterId}`;
-  if (!team || team.toLowerCase() === handle.toLowerCase()) return `@${handle}`;
-  return `${team} (@${handle})`;
 }
 
 /** Display names for every roster, so the report can name teams properly. */

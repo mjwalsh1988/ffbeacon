@@ -2,6 +2,7 @@ import "server-only";
 import { unstable_cache, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
+import { formatTeamLabel } from "@/lib/team-label";
 import type { Database } from "@/lib/database.types";
 import { getDefaultSourceSlug } from "@/lib/source";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
@@ -332,9 +333,14 @@ async function loadLeagueLeaders(
     const u = r.owner_user_id
       ? userByKey.get(userKey(r.league_id, r.owner_user_id))
       : null;
-    const teamName =
-      u?.team_name || u?.display_name || `Team ${r.sleeper_roster_id}`;
-    result.set(r.league_id, teamName);
+    result.set(
+      r.league_id,
+      formatTeamLabel({
+        teamName: u?.team_name,
+        username: u?.display_name,
+        sleeperRosterId: r.sleeper_roster_id,
+      }),
+    );
   }
   return result;
 }

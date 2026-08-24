@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formatTeamLabelOrNull } from "@/lib/team-label";
 import type { Database } from "@/lib/database.types";
 
 /**
@@ -252,9 +253,9 @@ export async function findFreeAgentLeagues(
  * The manager holding him, per league, by league row id.
  *
  * Only for the leagues where he was actually found, so this reads a handful of
- * rows rather than every member of every league. `display_name` leads because
- * `team_name` is null on most stored rows; the pair is checked in that order
- * rather than assuming either one is present.
+ * rows rather than every member of every league. Both halves are named where we
+ * have both, because `team_name` is null on most stored rows and the handle is
+ * the more useful of the two when only one exists.
  */
 async function resolveOwnerNames(
   supabase: AnySupabase,
@@ -275,7 +276,7 @@ async function resolveOwnerNames(
   const byLeagueAndUser = new Map(
     data.map((u) => [
       `${u.league_id}:${u.sleeper_user_id}`,
-      u.display_name?.trim() || u.team_name?.trim() || null,
+      formatTeamLabelOrNull({ teamName: u.team_name, username: u.display_name }),
     ]),
   );
   for (const [rowId, hit] of hits) {

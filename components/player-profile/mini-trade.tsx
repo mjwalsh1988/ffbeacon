@@ -1,8 +1,8 @@
 /**
  * Minimal trade card for the overview sidebar: a bare what-for-what view of a
- * trade involving the player, with no grade, verdict, or Signal Check. Sides are
- * labeled generically (Side A / Side B) and the card is headed by the league's
- * format, not the league or team names. Every asset is its own condensed tag so
+ * trade involving the player, with no grade, verdict, or Signal Check. Sides
+ * carry the numbered label the feed assigns them, and the card is headed by the
+ * league's format, not the league or team names. Every asset is its own condensed tag so
  * it is obvious where one player or pick ends and the next begins; picks are
  * tinted apart from players and the focus player is highlighted. The full graded
  * view lives on the Trades tab. Server component.
@@ -11,8 +11,6 @@
 import { ArrowDown } from "lucide-react";
 import { formatRelative } from "@/lib/datetime";
 import type { PlayerTrade } from "@/lib/player-trades";
-
-const SIDE_LETTERS = "ABCDEFGH";
 
 export function MiniTrade({
   trade,
@@ -42,7 +40,7 @@ export function MiniTrade({
             )}
             <div>
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-                Side {SIDE_LETTERS[idx] ?? idx + 1}
+                {side.sideLabel}
               </p>
               <ul className="flex flex-wrap gap-1">
                 {side.players.length === 0 && side.picks.length === 0 && (

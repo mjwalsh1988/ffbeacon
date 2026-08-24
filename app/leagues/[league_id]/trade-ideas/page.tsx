@@ -1047,14 +1047,9 @@ function TeamChooser({
                 href={`/leagues/${sleeperLeagueId}/trade-ideas?${qs.toString()}`}
                 className="flex min-h-11 items-center rounded-card border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                <span>
-                  {team.teamName}
-                  {team.ownerHandle && team.ownerHandle !== team.teamName && (
-                    <span className="block text-xs font-normal text-ink-muted">
-                      {team.ownerHandle}
-                    </span>
-                  )}
-                </span>
+                {/* teamName already pairs the name with the handle, so this
+                    is one line rather than two. */}
+                <span>{team.teamName}</span>
               </Link>
             </li>
           );

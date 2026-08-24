@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { formatTeamLabel } from "@/lib/team-label";
 import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
 import {
   resolvePlayers,
@@ -121,8 +122,11 @@ export async function loadTeamShareCard(
   const row = cacheByRoster.get(target.id) ?? null;
 
   const owner = target.owner_user_id ? usersById.get(target.owner_user_id) : null;
-  const teamName =
-    owner?.team_name || owner?.display_name || `Team ${target.sleeper_roster_id}`;
+  const teamName = formatTeamLabel({
+    teamName: owner?.team_name,
+    username: owner?.display_name,
+    sleeperRosterId: target.sleeper_roster_id,
+  });
 
   // Only this roster's players get resolved and priced.
   const sleeperIds = asStringArray(target.player_ids);
@@ -174,7 +178,11 @@ export async function loadTeamShareCard(
     rosterIdToHandle.set(r.sleeper_roster_id, u?.display_name ?? null);
     rosterIdToTeamName.set(
       r.sleeper_roster_id,
-      u?.team_name || u?.display_name || `Team ${r.sleeper_roster_id}`,
+      formatTeamLabel({
+        teamName: u?.team_name,
+        username: u?.display_name,
+        sleeperRosterId: r.sleeper_roster_id,
+      }),
     );
   }
 

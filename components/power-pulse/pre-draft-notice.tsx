@@ -1,4 +1,5 @@
 import { CalendarClock } from "lucide-react";
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { LeagueReadiness } from "@/lib/league-readiness";
 import { describeReadinessGap } from "@/lib/league-readiness";
@@ -111,9 +112,9 @@ export function PreDraftNotice({
                   <span className="block truncate text-sm font-medium text-ink">
                     {team.teamName}
                   </span>
-                  {team.ownerHandle && (
+                  {ownerLine(team.teamName, team.ownerHandle) && (
                     <span className="block truncate text-[11px] text-ink-subtle">
-                      @{team.ownerHandle}
+                      {ownerLine(team.teamName, team.ownerHandle)}
                     </span>
                   )}
                 </span>

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { formatTeamLabel } from "@/lib/team-label";
 import { createAdminClient } from "@/lib/supabase/server";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { analyzeTrade } from "@/lib/trade-analyzer";
@@ -87,7 +88,11 @@ export async function GET(
   for (const r of rosterRows ?? []) {
     const u = r.owner_user_id ? userBySleeperId.get(r.owner_user_id) : null;
     rosterIdentities[r.sleeper_roster_id] = {
-      teamName: u?.team_name || u?.display_name || `Team ${r.sleeper_roster_id}`,
+      teamName: formatTeamLabel({
+        teamName: u?.team_name,
+        username: u?.display_name,
+        sleeperRosterId: r.sleeper_roster_id,
+      }),
       ownerHandle: u?.display_name ?? null,
       avatarId: u?.avatar ?? null,
     };
@@ -120,11 +125,10 @@ export async function GET(
   const winnerSide = analysis.verdict.winnerRosterId
     ? (analysis.sides.find((s) => s.rosterId === analysis.verdict.winnerRosterId) ?? null)
     : null;
-  // Prefer the Sleeper username on the verdict line so the share card matches
-  // the in-app phrasing. Falls back to team name when no handle is recorded.
-  const winnerName = winnerSide
-    ? (winnerSide.ownerHandle ? `@${winnerSide.ownerHandle}` : winnerSide.teamName)
-    : null;
+  // Both halves, matching the in-app verdict line: team names rotate through a
+  // season and handles do not, and a card that outlives the name it was made
+  // with should still say who won.
+  const winnerName = winnerSide ? winnerSide.teamName : null;
   const verdictText = buildVerdictText(analysis.verdict, winnerName);
 
   return new ImageResponse(
@@ -229,7 +233,7 @@ export async function GET(
                       margin: 0,
                     }}
                   >
-                    {clip(side.teamName, 22)}
+                    {clip(side.teamName, 30)}
                   </p>
                   <p
                     style={{

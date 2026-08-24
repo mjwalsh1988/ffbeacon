@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { formatTeamLabelCompact } from "@/lib/team-label";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -660,7 +661,13 @@ async function loadFacets(
     const u = r.owner_user_id ? userBySleeperId.get(r.owner_user_id) : null;
     return {
       rosterId: r.sleeper_roster_id,
-      label: u?.team_name || u?.display_name || `Team ${r.sleeper_roster_id}`,
+      // Compact, because these are dropdown options with a fixed width. The
+      // handle survives the trim; the team name is what gets clipped.
+      label: formatTeamLabelCompact({
+        teamName: u?.team_name,
+        username: u?.display_name,
+        sleeperRosterId: r.sleeper_roster_id,
+      }),
     };
   });
 

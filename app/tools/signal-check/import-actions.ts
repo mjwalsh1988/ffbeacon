@@ -9,6 +9,7 @@ import {
   currentNflSeason,
   type SleeperLeague,
 } from "@/lib/sleeper";
+import { formatTeamLabel } from "@/lib/team-label";
 import { pulseLeague, normalizeDraftPicks } from "@/lib/league-pulse";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import {
@@ -140,7 +141,14 @@ function rosterLabelMap(
   const map = new Map<number, string>();
   for (const r of rosters) {
     const u = r.owner_user_id ? userById.get(r.owner_user_id) : null;
-    map.set(r.sleeper_roster_id, u?.team_name || u?.display_name || `Team ${r.sleeper_roster_id}`);
+    map.set(
+      r.sleeper_roster_id,
+      formatTeamLabel({
+        teamName: u?.team_name,
+        username: u?.display_name,
+        sleeperRosterId: r.sleeper_roster_id,
+      }),
+    );
   }
   return map;
 }

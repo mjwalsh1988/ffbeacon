@@ -253,6 +253,8 @@ export type ScheduleBoard = {
 export type SosRow = {
   sleeperRosterId: number;
   teamName: string;
+  /** Sleeper handle, shown under the name. Team names change; handles do not. */
+  ownerHandle: string | null;
   /** Opponent points per remaining week. */
   remainingPoints: number | null;
   /** 1 is the hardest remaining schedule. */
@@ -267,6 +269,8 @@ export type SosRow = {
 export type LuckRow = {
   sleeperRosterId: number;
   teamName: string;
+  /** Sleeper handle, shown under the name. Team names change; handles do not. */
+  ownerHandle: string | null;
   record: { wins: number; losses: number; ties: number };
   /** Wins if this team had played every other team every week. */
   allPlayWins: number;

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { ownerLine } from "@/lib/team-label";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -612,9 +613,14 @@ function SosPanel({
                   </td>
                   <th
                     scope="row"
-                    className="max-w-[9rem] truncate py-2 pr-2 text-left text-xs font-semibold text-ink"
+                    className="max-w-[10rem] py-2 pr-2 text-left text-xs font-semibold text-ink"
                   >
-                    {row.teamName}
+                    <span className="block truncate">{row.teamName}</span>
+                    {ownerLine(row.teamName, row.ownerHandle) && (
+                      <span className="block truncate text-[11px] font-normal text-ink-subtle">
+                        {ownerLine(row.teamName, row.ownerHandle)}
+                      </span>
+                    )}
                   </th>
                   <td className="py-2 pr-2 text-right font-mono text-xs tabular-nums text-ink">
                     {row.remainingPoints === null ? (
@@ -699,8 +705,15 @@ function LuckPanel({
                 className="rounded-card border border-line bg-base/40 px-3 py-2"
               >
                 <p className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate text-xs font-semibold text-ink">
-                    {row.teamName}
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold text-ink">
+                      {row.teamName}
+                    </span>
+                    {ownerLine(row.teamName, row.ownerHandle) && (
+                      <span className="block truncate text-[11px] text-ink-subtle">
+                        {ownerLine(row.teamName, row.ownerHandle)}
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">
                     {recordLabel(row.record)}
@@ -791,6 +804,12 @@ function SpotlightPanel({
   );
 }
 
+/** A team named the way the rest of the site names one. */
+function teamWithHandle(team: { teamName: string; ownerHandle: string | null }): string {
+  const owner = ownerLine(team.teamName, team.ownerHandle);
+  return owner ? `${team.teamName} (${owner})` : team.teamName;
+}
+
 function SpotlightItem({
   label,
   matchup,
@@ -818,8 +837,8 @@ function SpotlightItem({
           href={href}
           className="rounded-sm hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
-          {matchup.home.teamName}
-          {away ? ` vs ${away.teamName}` : ""}
+          {teamWithHandle(matchup.home)}
+          {away ? ` vs ${teamWithHandle(away)}` : ""}
           <span className="sr-only">
             , week {matchup.week}, open the matchup
           </span>

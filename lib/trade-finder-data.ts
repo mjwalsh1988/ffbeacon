@@ -35,6 +35,7 @@ import { buildPickPositionResolver, NO_PICK_POSITIONS } from "@/lib/league-pick-
 import { loadLeagueTeamCards, type TeamCardData } from "@/lib/league-view-data";
 import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
 import { startingSlots } from "@/lib/power-pulse/lineup";
+import { formatTeamLabel } from "@/lib/team-label";
 import { scoreWithFallback, type ScoringSettings } from "@/lib/league-scoring";
 import { computeAgeDecimal } from "@/lib/player-age";
 import type { FinderPick, FinderPlayer, FinderTeam } from "@/lib/trade-finder/types";
@@ -428,7 +429,14 @@ export async function loadTradeFinderLeague(
 
     return {
       rosterId: card.sleeperRosterId,
-      teamName: card.teamName,
+      // Paired here rather than in the engine, because every suggestion the
+      // engine writes drops this straight into a sentence and a bare team name
+      // is the half that goes stale.
+      teamName: formatTeamLabel({
+        teamName: card.teamName,
+        username: card.ownerSleeperUsername,
+        sleeperRosterId: card.sleeperRosterId,
+      }),
       ownerHandle: card.ownerSleeperUsername,
       statusKey: pulse?.status?.key ?? null,
       statusLabel: pulse?.status?.label ?? null,

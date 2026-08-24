@@ -5,6 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { BeaconValue } from "@/components/beacon-value-icon";
 import { CopyLinkButton } from "@/components/copy-link-button";
+import { ownerLine } from "@/lib/team-label";
 import { formatValue } from "@/lib/format-value";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { TeamStatusBadge } from "@/components/team-status-badge";
@@ -192,9 +193,13 @@ export function TeamCard({
             >
               {teamName}
             </HeadingTag>
-            {(ownerSleeperUsername || ownerDisplayName) && (
+            {/* Always with the @, so this reads as the handle it is rather
+                than as a second, differently-formatted team name. Hidden when
+                it would only repeat the heading above it, which is every
+                manager who never set a team name. */}
+            {ownerLine(teamName, ownerDisplayName || ownerSleeperUsername) && (
               <p className="mt-0.5 truncate text-xs text-ink-subtle">
-                Owner: {ownerDisplayName || `@${ownerSleeperUsername}`}
+                Owner: {ownerLine(teamName, ownerDisplayName || ownerSleeperUsername)}
               </p>
             )}
             {teamStatus && (

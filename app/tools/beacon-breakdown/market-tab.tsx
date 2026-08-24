@@ -436,11 +436,10 @@ function TradeRow({ trade }: { trade: PlayerTrade }) {
   return (
     <li className="rounded-card border border-line bg-base/40 p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        {/* The format, not the league. This is a public page about a player,
+            so the room it happened in is nobody's business. */}
         <p className="text-xs font-medium text-ink">
-          {trade.leagueName ?? "A synced league"}
-          {trade.formatDisplay && (
-            <span className="ml-1.5 font-normal text-ink-subtle">{trade.formatDisplay}</span>
-          )}
+          {trade.formatDisplay ?? "Unmatched format"}
         </p>
         {when && <p className="text-[11px] text-ink-subtle">{when}</p>}
       </div>
@@ -448,7 +447,7 @@ function TradeRow({ trade }: { trade: PlayerTrade }) {
       <ul role="list" className="mt-2 space-y-1.5">
         {trade.sides.map((side) => (
           <li key={side.rosterId} className="text-xs leading-relaxed">
-            <span className="font-semibold text-ink">{side.teamName}</span>
+            <span className="font-semibold text-ink">{side.sideLabel}</span>
             <span className="text-ink-subtle"> received </span>
             <span className="text-ink-muted">
               {[

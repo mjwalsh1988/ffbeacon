@@ -8,6 +8,7 @@
  * a four-team or eight-team league gets the right line.
  */
 
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
 import { compareProjectedFinish } from "@/lib/power-pulse/projected-order";
@@ -105,9 +106,9 @@ export function ProjectedStandings({
                       <span className="block truncate text-xs font-medium text-ink">
                         {team.teamName}
                       </span>
-                      {team.ownerHandle && (
+                      {ownerLine(team.teamName, team.ownerHandle) && (
                         <span className="block truncate text-[11px] text-ink-subtle">
-                          @{team.ownerHandle}
+                          {ownerLine(team.teamName, team.ownerHandle)}
                         </span>
                       )}
                     </span>

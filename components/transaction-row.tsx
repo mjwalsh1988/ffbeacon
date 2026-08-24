@@ -1,5 +1,6 @@
 import { Plus, Minus, ArrowRight, Coins, Layers } from "lucide-react";
 import type { TradeAnalysis, TradeSide } from "@/lib/trade-analyzer";
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { CopyLinkButton } from "@/components/copy-link-button";
@@ -247,8 +248,10 @@ function TradeSideCard({
           >
             {side.teamName}
           </h3>
-          {side.ownerHandle && (
-            <p className="truncate text-[11px] text-ink-subtle">@{side.ownerHandle}</p>
+          {ownerLine(side.teamName, side.ownerHandle) && (
+            <p className="truncate text-[11px] text-ink-subtle">
+              {ownerLine(side.teamName, side.ownerHandle)}
+            </p>
           )}
         </div>
         <p
@@ -492,9 +495,9 @@ function RosterMoveCard({
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-ink">{teamName}</p>
-          {roster?.ownerHandle && (
+          {ownerLine(teamName, roster?.ownerHandle) && (
             <p className="truncate text-[11px] text-ink-subtle">
-              @{roster.ownerHandle}
+              {ownerLine(teamName, roster?.ownerHandle)}
             </p>
           )}
         </div>
@@ -639,7 +642,10 @@ function labelFor(
     { teamName: string; ownerHandle: string | null; avatarId: string | null }
   >,
 ): string {
-  return rosterIdentities[rosterId]?.teamName ?? `Team ${rosterId}`;
+  const identity = rosterIdentities[rosterId];
+  if (!identity) return `Team ${rosterId}`;
+  const owner = ownerLine(identity.teamName, identity.ownerHandle);
+  return owner ? `${identity.teamName} (${owner})` : identity.teamName;
 }
 
 function buildVerdictLabel(
@@ -648,16 +654,20 @@ function buildVerdictLabel(
 ): string {
   if (verdict.label === "Even trade") return "Even trade";
   const winner = sides.find((s) => s.rosterId === verdict.winnerRosterId);
-  // Prefer the owner's Sleeper username on the verdict line so users
-  // immediately recognize the trade partner; team names rotate but
-  // handles are durable. Falls back to team name and a numeric label.
-  const name = winner?.ownerHandle
-    ? `@${winner.ownerHandle}`
-    : (winner?.teamName ?? "-");
-  if (verdict.label === "Slight edge") {
-    return `Slight edge to ${name} (+${formatValue(verdict.differential)}, ${verdict.differentialPct.toFixed(1)}%)`;
-  }
-  return `${name} won the trade (+${formatValue(verdict.differential)}, ${verdict.differentialPct.toFixed(1)}%)`;
+  // Both halves, because team names rotate through a season and handles do
+  // not, and a reader coming back to an old trade needs the durable one without
+  // losing the name they actually see in the app.
+  if (!winner) return verdictSentence("-", verdict);
+  const owner = ownerLine(winner.teamName, winner.ownerHandle);
+  const name = owner ? `${winner.teamName} (${owner})` : winner.teamName;
+  return verdictSentence(name, verdict);
+}
+
+function verdictSentence(name: string, verdict: TradeAnalysis["verdict"]): string {
+  const margin = `+${formatValue(verdict.differential)}, ${verdict.differentialPct.toFixed(1)}%`;
+  return verdict.label === "Slight edge"
+    ? `Slight edge to ${name} (${margin})`
+    : `${name} won the trade (${margin})`;
 }
 
 function formatTypeLabel(type: string): string {

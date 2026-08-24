@@ -90,7 +90,12 @@ export async function TradesTab({
         const meta = metaById.get(leagueRowId);
         if (!meta) return;
         const rosterLabels: Record<number, string> = {};
-        for (const t of group) for (const s of t.sides) rosterLabels[s.rosterId] = s.teamName;
+        // Numbered, never named. Signal Check prints these labels on the graded
+        // card, and this page is public and about a player, so the managers stay
+        // anonymous here even though the same card names them inside a league.
+        for (const t of group) {
+          for (const s of t.sides) rosterLabels[s.rosterId] = s.sideLabel;
+        }
         try {
           const analysis = await analyzeLeagueTrades(admin, {
             sleeperLeague: meta as unknown as SleeperLeague,
@@ -128,8 +133,12 @@ export async function TradesTab({
               const view = graded.get(t.transactionId);
               return (
                 <li key={`${t.leagueRowId}-${t.transactionId}`}>
+                  {/* Format and season only. Naming the league would put the
+                      managers back on the page by another route. */}
                   <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-subtle">
-                    <span className="font-medium text-ink-muted">{t.leagueName ?? "League trade"}</span>
+                    <span className="font-medium text-ink-muted">
+                      {t.formatDisplay ?? "Unmatched format"}
+                    </span>
                     {t.season != null && <span>{t.season} season</span>}
                   </div>
                   {view ? (

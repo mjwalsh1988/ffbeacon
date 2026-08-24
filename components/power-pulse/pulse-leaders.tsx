@@ -19,6 +19,7 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import type { PulseLeader } from "@/lib/league-power-pulse-data";
 
@@ -134,9 +135,9 @@ export function PulseLeaders({ leaders }: { leaders: PulseLeader[] }) {
                 <span className="block truncate text-sm font-semibold text-ink">
                   {leader.team.teamName}
                 </span>
-                {leader.team.ownerHandle && (
+                {ownerLine(leader.team.teamName, leader.team.ownerHandle) && (
                   <span className="block truncate text-[11px] text-ink-subtle">
-                    @{leader.team.ownerHandle}
+                    {ownerLine(leader.team.teamName, leader.team.ownerHandle)}
                   </span>
                 )}
               </p>

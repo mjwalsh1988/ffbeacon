@@ -20,6 +20,7 @@ import { Fragment, useId, useState } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { ownerLine } from "@/lib/team-label";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
@@ -341,9 +342,9 @@ function TeamIdentity({ team }: { team: PulseTeam }) {
       />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-ink">{team.teamName}</span>
-        {team.ownerHandle && (
+        {ownerLine(team.teamName, team.ownerHandle) && (
           <span className="block truncate text-[11px] text-ink-subtle">
-            @{team.ownerHandle}
+            {ownerLine(team.teamName, team.ownerHandle)}
           </span>
         )}
       </span>

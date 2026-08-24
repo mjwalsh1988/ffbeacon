@@ -10,6 +10,16 @@
  * on top of this by the trades tab.
  *
  * Sleeper sends "0" as an empty roster-slot placeholder; those are stripped.
+ *
+ * ANONYMOUS BY DESIGN. These trades are shown on player pages and in the Beacon
+ * Breakdown, which are public pages about a PLAYER rather than about anybody's
+ * league. Somebody reading them has no relationship to the managers involved and
+ * no reason to be told who they are, so the sides are numbered and no team name,
+ * handle, or owner id leaves this module. Every other surface on the site names
+ * both halves (see lib/team-label.ts); this one deliberately names neither.
+ *
+ * Do not add an owner field here. If a surface genuinely needs to name the
+ * managers, it is a league view and should read them from the league loaders.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -36,8 +46,12 @@ export type TradePick = {
 
 export type TradeSide = {
   rosterId: number;
-  teamName: string;
-  ownerHandle: string | null;
+  /**
+   * "Team 1", "Team 2", numbered within this trade only. Deliberately not a
+   * team name and deliberately not stable across trades: two trades in the same
+   * league can put the same manager on different numbers, which is the point.
+   */
+  sideLabel: string;
   players: TradeAsset[];
   picks: TradePick[];
 };
@@ -108,15 +122,14 @@ export async function findPlayerTrades(
 
   const leagueIds = Array.from(new Set(trades.map((t) => t.league_id)));
 
-  // Batch-load league metadata + roster identities + player names for every
-  // league and player referenced across the returned trades.
-  const [{ data: leagueRows }, { data: rosterRows }, { data: userRows }] = await Promise.all([
+  // Batch-load league metadata and player names for every league and player
+  // referenced across the returned trades.
+  //
+  // league_users is NOT read here, and that is the whole privacy control: a
+  // manager's name cannot leak onto a public player page through a field that
+  // was never fetched. See the module header.
+  const [{ data: leagueRows }] = await Promise.all([
     db.from("leagues").select("id, sleeper_league_id, name, season, format_config_id").in("id", leagueIds),
-    db.from("rosters").select("league_id, sleeper_roster_id, owner_user_id").in("league_id", leagueIds),
-    db
-      .from("league_users")
-      .select("league_id, sleeper_user_id, display_name, team_name")
-      .in("league_id", leagueIds),
   ]);
 
   const leagueById = new Map(
@@ -143,32 +156,6 @@ export async function findPlayerTrades(
       .select("id, display_name")
       .in("id", formatIds);
     for (const f of fmts ?? []) formatById.set(f.id, f.display_name);
-  }
-
-  // (leagueId -> sleeper_user_id -> user) for owner-handle resolution.
-  const usersByLeague = new Map<string, Map<string, { display_name: string | null; team_name: string | null }>>();
-  for (const u of userRows ?? []) {
-    let m = usersByLeague.get(u.league_id);
-    if (!m) {
-      m = new Map();
-      usersByLeague.set(u.league_id, m);
-    }
-    if (u.sleeper_user_id) m.set(u.sleeper_user_id, { display_name: u.display_name, team_name: u.team_name });
-  }
-
-  // (leagueId -> roster_id -> identity)
-  const identityByLeague = new Map<string, Map<number, { teamName: string; ownerHandle: string | null }>>();
-  for (const r of rosterRows ?? []) {
-    let m = identityByLeague.get(r.league_id);
-    if (!m) {
-      m = new Map();
-      identityByLeague.set(r.league_id, m);
-    }
-    const user = r.owner_user_id ? usersByLeague.get(r.league_id)?.get(r.owner_user_id) : null;
-    m.set(r.sleeper_roster_id, {
-      teamName: user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`,
-      ownerHandle: user?.display_name ?? null,
-    });
   }
 
   // Resolve every referenced Sleeper player id to a name/position/team/slug.
@@ -198,21 +185,14 @@ export async function findPlayerTrades(
     const adds = (t.adds as Record<string, number> | null) ?? {};
     const drops = (t.drops as Record<string, number> | null) ?? {};
     const draftPicks = Array.isArray(t.draft_picks) ? (t.draft_picks as unknown[]) : [];
-    const identities = identityByLeague.get(t.league_id) ?? new Map();
-
     // Group received players (adds) and received picks (owner_id) by roster.
+    // The roster id is kept because the caller needs it to match the two halves
+    // of a trade to each other; it is never shown.
     const sideMap = new Map<number, TradeSide>();
     const ensureSide = (rosterId: number): TradeSide => {
       let s = sideMap.get(rosterId);
       if (!s) {
-        const id = identities.get(rosterId);
-        s = {
-          rosterId,
-          teamName: id?.teamName ?? `Team ${rosterId}`,
-          ownerHandle: id?.ownerHandle ?? null,
-          players: [],
-          picks: [],
-        };
+        s = { rosterId, sideLabel: "", players: [], picks: [] };
         sideMap.set(rosterId, s);
       }
       return s;
@@ -241,7 +221,11 @@ export async function findPlayerTrades(
       });
     }
 
-    const sides = Array.from(sideMap.values()).sort((a, b) => a.rosterId - b.rosterId);
+    // Numbered after sorting, so the same trade reads the same way on every
+    // load without the number meaning anything outside this one trade.
+    const sides = Array.from(sideMap.values())
+      .sort((a, b) => a.rosterId - b.rosterId)
+      .map((side, i) => ({ ...side, sideLabel: `Team ${i + 1}` }));
     const focusRosterId = toInt(adds[sleeperId]);
     const league = leagueById.get(t.league_id);
 

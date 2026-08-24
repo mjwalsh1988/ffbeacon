@@ -83,6 +83,7 @@ export function buildSosRows(teams: ScheduleTeam[], weeks: InsightWeek[]): SosRo
   return teams.map((team, i) => ({
     sleeperRosterId: team.sleeperRosterId,
     teamName: team.teamName,
+    ownerHandle: team.ownerHandle,
     remainingPoints: team.sosPoints,
     remainingRank: team.sosRank,
     playedPoints: played[i],
@@ -154,6 +155,7 @@ export function buildLuckRows(teams: ScheduleTeam[], weeks: InsightWeek[]): Luck
   return teams.map((team, i) => ({
     sleeperRosterId: team.sleeperRosterId,
     teamName: team.teamName,
+    ownerHandle: team.ownerHandle,
     record: team.record,
     allPlayWins: allPlayWins.get(team.sleeperRosterId) ?? 0,
     allPlayLosses: allPlayLosses.get(team.sleeperRosterId) ?? 0,

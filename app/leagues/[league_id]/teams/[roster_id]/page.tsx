@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { formatTeamLabel } from "@/lib/team-label";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -50,7 +51,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
         .eq("sleeper_user_id", roster.owner_user_id)
         .maybeSingle()
     : { data: null };
-  const teamName = user?.team_name || user?.display_name || `Team ${roster_id}`;
+  const teamName = formatTeamLabel({
+    teamName: user?.team_name,
+    username: user?.display_name,
+    sleeperRosterId: roster_id,
+  });
   const title = `${teamName}, ${league.name}`;
   const description = `Roster, draft picks, and value breakdown for ${teamName} in ${league.name}.`;
   const ogPath = `/api/og/team/${league_id}/${roster_id}`;
