@@ -297,6 +297,20 @@ export function acquirablePool(
      * roster's best assets can never be traded at all.
      */
     comparableTo?: number | null;
+    /**
+     * Position groups the reader asked to receive, or null for any.
+     *
+     * Applied HERE rather than as a test on the finished suggestion. The search
+     * downstream prefers whatever balances first, so filtering afterwards means
+     * every package it builds is thrown away and a reader who asked for a
+     * running back is told no trade exists in a league full of them.
+     *
+     * Picks are left in. They cannot satisfy a position ask on their own, and
+     * the engine's own gate makes sure at least one asset does; what they can do
+     * is ride alongside the back as change, which is a real deal and one the
+     * reader plainly did not exclude.
+     */
+    positions?: ReadonlySet<string> | null;
   },
 ): AssetRef[] {
   if (opts.targetPlayerId) {
@@ -334,7 +348,9 @@ export function acquirablePool(
     }
   }
 
+  const wanted = opts.positions ?? null;
   const pool: AssetRef[] = players
+    .filter((player) => !wanted || wanted.has(player.position))
     .map((player) => ({ ref: { kind: "player" as const, player }, score: appetite(player, mine, opts.goal) }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.ref.player.playerId.localeCompare(b.ref.player.playerId))
@@ -548,13 +564,27 @@ export function givablePool(
  */
 export function anchorCandidates(
   mine: TeamProfile,
-  opts: { goal: TradeGoal; allowPicks: boolean },
+  opts: {
+    goal: TradeGoal;
+    allowPicks: boolean;
+    /**
+     * Position groups the reader said they would move, or null for any.
+     *
+     * When set, picks drop out of the anchor list entirely. A pick has no
+     * position, so it can never satisfy the ask, and anchoring on one would
+     * spend a coverage slot building deals the engine's own gate then refuses.
+     */
+    positions?: ReadonlySet<string> | null;
+  },
 ): AssetRef[] {
+  const wanted = opts.positions ?? null;
   const out: AssetRef[] = mine.team.players
     .filter((p) => p.hasValue && p.value > 0)
+    .filter((p) => !wanted || wanted.has(p.position))
     .map((player) => ({ kind: "player" as const, player }));
 
-  const spendsPicks = opts.allowPicks && spendsPicksFor(opts.goal, mine.direction);
+  const spendsPicks =
+    !wanted && opts.allowPicks && spendsPicksFor(opts.goal, mine.direction);
   if (spendsPicks) {
     for (const pick of mine.team.picks) {
       if (!pick.hasValue || pick.value <= 0) continue;

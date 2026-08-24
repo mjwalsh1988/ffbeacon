@@ -9,8 +9,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Layers,
+  Lightbulb,
   Loader2,
   Search,
+  SearchX,
+  SlidersHorizontal,
   ThumbsDown,
   Trash2,
 } from "lucide-react";
@@ -29,10 +33,14 @@ import {
 import type { SavedTrade } from "@/lib/trade-finder-saves";
 import { proposalHref } from "@/lib/trade-impact/proposal-url";
 import type { BuildAsset } from "@/lib/trade-impact/types";
+import { PositionFilter } from "@/components/trade-ideas/position-filter";
+import { SuggestionEvaluation } from "@/components/trade-ideas/suggestion-evaluation";
 import {
   TRADE_GOALS,
+  TRADE_POSITION_LABEL,
   type SuggestionAsset,
   type TradeGoal,
+  type TradePosition,
   type TradeSuggestion,
 } from "@/lib/trade-finder/types";
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
@@ -59,7 +67,21 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *   So the three intentions are now three separate things in three places.
  *   Search re-runs the query and lives with the filters that shape it. Previous
  *   and Next move through the shortlist the server already sent, with no round
- *   trip at all. Not interested still means refused, and Save means keep.
+ *   trip at all. Pass still means refused, and Save means keep.
+ *
+ * WHAT THE FILTERS ASK FOR
+ *   Four questions, narrowing as they go: the SHAPE of the deal (the goal), the
+ *   POSITION GROUPS on each side, and a NAMED PLAYER on each side. They are
+ *   ordered that way on screen because that is the order of specificity, and the
+ *   engine resolves conflicts the same way: a named player settles the side he
+ *   is on and stands the position ask on that side down, because "get me this
+ *   quarterback" and "get me a running back" cannot both be honoured and the
+ *   name is the more specific request. The ask on the OTHER side survives, which
+ *   is the combination managers actually type.
+ *
+ *   Nothing auto-searches. A chip press is cheap and a search is a few hundred
+ *   lineup fills, so pressing four chips must not run four searches; the live
+ *   region says "press Search to apply" after every one of them.
  *
  * ONE COMPONENT, TWO SURFACES
  *   `league` mode searches the other teams in one room. `portfolio` mode walks
@@ -111,10 +133,25 @@ export function TradeFinder(props: {
   /** league mode */
   sleeperLeagueId?: string;
   searchedUsername?: string | null;
+  /**
+   * The reader's own team name, as formatTeamLabel renders it.
+   *
+   * Only needed by the full evaluation, which names both sides of the deal.
+   * Absent in portfolio mode, where no evaluation runs.
+   */
+  myTeamName?: string | null;
   /** Players on the reader's roster, for the "move this player" picker. */
   myPlayers?: PlayerOption[];
   /** Players on every other roster, for the "get this player" picker. */
   theirPlayers?: PlayerOption[];
+  /**
+   * The position groups this league actually rosters, in display order.
+   *
+   * Passed in rather than assumed, so a league with no kicker slot is never
+   * offered a kicker chip whose only possible answer is "no trade found".
+   * Absent or empty (portfolio mode) hides the position rows entirely.
+   */
+  availablePositions?: TradePosition[];
   /**
    * The reader's own Sleeper roster id in THIS league. Only the league page
    * knows it, and without it a deal cannot be handed to the builder, because
@@ -139,6 +176,8 @@ export function TradeFinder(props: {
   const [goal, setGoal] = useState<TradeGoal>("balanced");
   const [targetPlayerId, setTargetPlayerId] = useState("");
   const [offerPlayerId, setOfferPlayerId] = useState("");
+  const [wantPositions, setWantPositions] = useState<TradePosition[]>([]);
+  const [givePositions, setGivePositions] = useState<TradePosition[]>([]);
 
   const [tab, setTab] = useState<Tab>("suggestions");
   const [suggestions, setSuggestions] = useState<AnySuggestion[]>(
@@ -167,6 +206,10 @@ export function TradeFinder(props: {
   const [hasSearched, setHasSearched] = useState(Boolean(props.initial));
 
   const headingId = useId();
+  const filtersId = useId();
+  const goalId = useId();
+  const passNoteId = useId();
+  const evaluationId = useId();
   const cardRef = useRef<HTMLElement>(null);
   /** Set when the next render should move focus onto the card. */
   const focusNext = useRef(false);
@@ -202,6 +245,8 @@ export function TradeFinder(props: {
             goal,
             targetPlayerId: targetPlayerId || null,
             offerPlayerId: offerPlayerId || null,
+            wantPositions,
+            givePositions,
             sessionExcluded: excluded,
           });
           if (!res.ok) {
@@ -256,6 +301,7 @@ export function TradeFinder(props: {
       }
     },
     [
+      givePositions,
       goal,
       isLeague,
       offerPlayerId,
@@ -265,6 +311,7 @@ export function TradeFinder(props: {
       props.sleeperUserId,
       props.source,
       targetPlayerId,
+      wantPositions,
     ],
   );
 
@@ -510,6 +557,74 @@ export function TradeFinder(props: {
   const canGoForward = at < list.length - 1;
   const isSaved = shownSuggestion ? savedSet.has(shownSuggestion.key) : false;
 
+  /**
+   * The position rows, and what they are allowed to offer.
+   *
+   * Hidden below two groups, because a league that rosters one position has
+   * nothing to choose between and a filter with a single option is a control
+   * that can only be wrong. Portfolio mode has no single league to read a roster
+   * shape from, so it never draws them.
+   */
+  const positionsAvailable = props.availablePositions ?? [];
+  const showPositions = isLeague && positionsAvailable.length > 1;
+
+  /**
+   * Toggle one group, keeping the list in the league's own display order.
+   *
+   * Rebuilt from `positionsAvailable` rather than appended to, so the order
+   * never depends on which chip was pressed first. That matters past the
+   * cosmetic: the rationale sentence on the card is assembled from this list.
+   */
+  const nextPositions = (
+    list: TradePosition[],
+    position: TradePosition,
+  ): TradePosition[] =>
+    positionsAvailable.filter((p) =>
+      p === position ? !list.includes(p) : list.includes(p),
+    );
+
+  /**
+   * The deal on screen, in the shape the evaluator takes, or null.
+   *
+   * Null is the same condition that drops the builder link, and for the same
+   * reasons: a portfolio deal can come out of any league and holds no roster id
+   * for it, and a bookmark can name a league the reader has since left. Neither
+   * can be evaluated against a roster, so neither is.
+   *
+   * Memoised on the suggestion object, not rebuilt per render, because the arrays
+   * inside it are the evaluator's identity for the request it is about to make.
+   */
+  const shownProposal = useMemo(() => {
+    const myRosterId = props.myRosterId;
+    if (!shownSuggestion || myRosterId === null || myRosterId === undefined) return null;
+    const leagueId = leagueIdOf(shownSuggestion, currentSaved?.sleeperLeagueId);
+    if (!leagueId || leagueId !== props.sleeperLeagueId) return null;
+    return {
+      leagueId,
+      myRosterId,
+      theirRosterId: shownSuggestion.counterparty.rosterId,
+      incoming: shownSuggestion.incoming.map(toBuildAsset),
+      outgoing: shownSuggestion.outgoing.map(toBuildAsset),
+    };
+  }, [
+    currentSaved?.sleeperLeagueId,
+    leagueIdOf,
+    props.myRosterId,
+    props.sleeperLeagueId,
+    shownSuggestion,
+  ]);
+
+  /** Said out loud on every chip press, because nothing else changes on screen. */
+  const announceToggle = (
+    position: TradePosition,
+    added: boolean,
+    side: "get" | "give",
+  ) => {
+    setStatus(
+      `${TRADE_POSITION_LABEL[position]} ${added ? "added to" : "removed from"} what you ${side}. Press Search to apply.`,
+    );
+  };
+
   return (
     <div className="space-y-4">
       <form
@@ -518,96 +633,163 @@ export function TradeFinder(props: {
           void search(sessionExcluded, isLeague ? 0 : cursor);
         }}
       >
-        <fieldset className="rounded-card border border-line bg-surface p-4">
-          <legend className="px-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
-            What are you after
-          </legend>
-
-          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {/* The description rides in the OPTION text, not only in the hint.
-                These five differ in ways a two-word label cannot hold ("Split
-                assets" is not self-explanatory), and a describedby hint is the
-                wrong place for the difference: arrowing through a closed select
-                changes the value immediately, so the hint updates silently
-                behind the reader and they only ever hear the explanation for a
-                choice they have already made. Option text is read on every
-                arrow press, which is the moment it is needed. */}
-            {/* A static hint, because the per-goal description now rides in the
-                option text where it is actually read. Repeating it here would
-                announce the same phrase twice for one choice. */}
-            <Field label="Kind of trade" hint="What the trade has to do for you.">
-              {(id, describedBy) => (
-                <select
-                  id={id}
-                  aria-describedby={describedBy}
-                  value={goal}
-                  onChange={(e) => {
-                    setGoal(e.target.value as TradeGoal);
-                    // A new goal is a new question, so the portfolio walk starts
-                    // over. Continuing from where it stopped would leave every
-                    // league already visited unexamined under the new goal.
-                    setCursor(0);
-                    setLeaguesLeft(null);
-                  }}
-                  className={SELECT_CLASS}
-                >
-                  {TRADE_GOALS.map((g) => (
-                    <option key={g.key} value={g.key}>
-                      {g.label}: {g.blurb}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-
-            {isLeague && (props.theirPlayers?.length ?? 0) > 0 && (
-              <PlayerPicker
-                filterLabel="Find a player to get"
-                label="Player you want"
-                hint="Works out what he would cost."
-                options={props.theirPlayers ?? []}
-                value={targetPlayerId}
-                onChange={setTargetPlayerId}
-              />
-            )}
-
-            {isLeague && (props.myPlayers?.length ?? 0) > 0 && (
-              <PlayerPicker
-                filterLabel="Find a player to send"
-                label="Player you would move"
-                hint="Shows what he brings back."
-                options={props.myPlayers ?? []}
-                value={offerPlayerId}
-                onChange={setOfferPlayerId}
-              />
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {/* Says what it does. This used to read "Find another trade" and
-                re-ran a deterministic search with unchanged inputs, which handed
-                back the trade already on screen. */}
-            <button
-              type="submit"
-              disabled={pending}
-              className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2 text-sm font-bold text-black shadow-[0_0_24px_-10px_rgba(168,85,247,0.9)] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60"
+        {/* A framed tray with a header band, the shape every other control group
+            on the site wears (components/dashboard-panel.tsx). It was a bare
+            fieldset whose legend floated on the border, which reads as a caption
+            rather than as the top of a container, and the tiers inside ran
+            together with no seam between one question and the next. */}
+        <section
+          aria-labelledby={filtersId}
+          className="overflow-hidden rounded-modal border border-line bg-surface/50"
+        >
+          <div className="flex items-center gap-2 border-b border-line bg-surface-elevated/50 px-4 py-3">
+            <SlidersHorizontal
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0 text-brand-cyan"
+            />
+            <h3
+              id={filtersId}
+              className="text-[13px] font-bold uppercase tracking-[0.16em] text-ink"
             >
-              {pending ? (
-                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search aria-hidden="true" className="h-4 w-4" />
-              )}
-              {hasSearched ? "Search with these settings" : "Find me a trade"}
-            </button>
-            <p className="text-xs text-ink-muted">
-              {isLeague
-                ? "Runs the search again. Use the arrows to move between results."
-                : leaguesLeft !== null && leaguesLeft > 0
-                  ? `Searches the next ${leaguesLeft === 1 ? "league" : "leagues"}. ${leaguesLeft} to go.`
-                  : "Runs the search again across your leagues."}
-            </p>
+              What you are after
+            </h3>
           </div>
-        </fieldset>
+
+          <div className="divide-y divide-line">
+            <div className="px-4 py-3.5">
+              {/* The description rides in the OPTION text, not only in a hint.
+                  These five differ in ways a two-word label cannot hold ("Split
+                  assets" is not self-explanatory), and a describedby hint is the
+                  wrong place for the difference: arrowing through a closed
+                  select changes the value immediately, so the hint updates
+                  silently behind the reader and they only ever hear the
+                  explanation for a choice they have already made. Option text is
+                  read on every arrow press, which is the moment it is needed.
+
+                  There is no hint under the label any more, for the same reason.
+                  "What the trade has to do for you" said nothing the label and
+                  the options did not, and it was read out ahead of every one of
+                  them. */}
+              <label htmlFor={goalId} className="block text-sm font-semibold text-ink">
+                Kind of trade
+              </label>
+              <select
+                id={goalId}
+                value={goal}
+                onChange={(e) => {
+                  setGoal(e.target.value as TradeGoal);
+                  // A new goal is a new question, so the portfolio walk starts
+                  // over. Continuing from where it stopped would leave every
+                  // league already visited unexamined under the new goal.
+                  setCursor(0);
+                  setLeaguesLeft(null);
+                }}
+                className={`mt-1.5 ${SELECT_CLASS}`}
+              >
+                {TRADE_GOALS.map((g) => (
+                  <option key={g.key} value={g.key}>
+                    {g.label}: {g.blurb}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* POSITIONS. Two rows rather than one control, because they are two
+                independent asks and a reader routinely sets only one of them. */}
+            {showPositions && (
+              <div className="grid gap-3 px-4 py-3.5 sm:grid-cols-2">
+                <PositionFilter
+                  side="in"
+                  positions={positionsAvailable}
+                  selected={wantPositions}
+                  onToggle={(position) => {
+                    const next = nextPositions(wantPositions, position);
+                    setWantPositions(next);
+                    announceToggle(position, next.includes(position), "get");
+                  }}
+                  onClear={() => {
+                    setWantPositions([]);
+                    setStatus("Cleared the positions you want. Press Search to apply.");
+                  }}
+                />
+                <PositionFilter
+                  side="out"
+                  positions={positionsAvailable}
+                  selected={givePositions}
+                  onToggle={(position) => {
+                    const next = nextPositions(givePositions, position);
+                    setGivePositions(next);
+                    announceToggle(position, next.includes(position), "give");
+                  }}
+                  onClear={() => {
+                    setGivePositions([]);
+                    setStatus(
+                      "Cleared the positions you would send. Press Search to apply.",
+                    );
+                  }}
+                />
+              </div>
+            )}
+
+            {/* NAMED PLAYERS. More specific than a position, and the engine
+                treats them that way: naming somebody stands the position ask on
+                that side down rather than trying to satisfy both. */}
+            {isLeague &&
+              ((props.theirPlayers?.length ?? 0) > 0 ||
+                (props.myPlayers?.length ?? 0) > 0) && (
+                <div className="grid gap-4 px-4 py-3.5 sm:grid-cols-2">
+                  {(props.theirPlayers?.length ?? 0) > 0 && (
+                    <PlayerPicker
+                      filterLabel="Find a player to get"
+                      label="Player you want"
+                      hint="What he would cost."
+                      options={props.theirPlayers ?? []}
+                      value={targetPlayerId}
+                      onChange={setTargetPlayerId}
+                      showCount={false}
+                    />
+                  )}
+                  {(props.myPlayers?.length ?? 0) > 0 && (
+                    <PlayerPicker
+                      filterLabel="Find a player to send"
+                      label="Player you would move"
+                      hint="What he brings back."
+                      options={props.myPlayers ?? []}
+                      value={offerPlayerId}
+                      onChange={setOfferPlayerId}
+                      showCount={false}
+                    />
+                  )}
+                </div>
+              )}
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-base/30 px-4 py-3.5">
+              {/* Says what it does. This used to read "Find another trade" and
+                  re-ran a deterministic search with unchanged inputs, which
+                  handed back the trade already on screen. The sentence that sat
+                  beside it explained the arrows, which are their own labelled
+                  controls twenty pixels lower. */}
+              <button
+                type="submit"
+                disabled={pending}
+                className="inline-flex min-h-11 items-center gap-2 rounded-card bg-beacon px-4 py-2 text-sm font-bold text-black shadow-[0_0_24px_-10px_rgba(168,85,247,0.9)] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60"
+              >
+                {pending ? (
+                  <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search aria-hidden="true" className="h-4 w-4" />
+                )}
+                {hasSearched ? "Search" : "Find me a trade"}
+              </button>
+              {!isLeague && leaguesLeft !== null && leaguesLeft > 0 && (
+                <p className="text-xs text-ink-muted">
+                  {leaguesLeft} {leaguesLeft === 1 ? "league" : "leagues"} still to
+                  search.
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
       </form>
 
       {/* Every result, move, pass, and save lands here. Polite so it waits for
@@ -616,9 +798,15 @@ export function TradeFinder(props: {
         {status}
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Two toggles over one region, drawn as a segmented strip so they read as
+          a choice rather than as two loose buttons on the page background. Each
+          carries its own count, which is the thing a reader actually wants from
+          a tab label. */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-card border border-line bg-surface/50 p-1.5">
         <TabButton
           active={tab === "suggestions"}
+          Icon={Lightbulb}
+          count={suggestions.length}
           onClick={() => {
             setTab("suggestions");
             setCopied(false);
@@ -632,21 +820,28 @@ export function TradeFinder(props: {
           Suggestions
         </TabButton>
         {props.isSignedIn ? (
-          <TabButton active={tab === "saved"} onClick={() => void openSaved()}>
-            Saved{savedKeys.length > 0 ? ` (${savedKeys.length})` : ""}
+          <TabButton
+            active={tab === "saved"}
+            Icon={Bookmark}
+            count={savedKeys.length}
+            onClick={() => void openSaved()}
+          >
+            Saved
           </TabButton>
         ) : (
           <Link
             href="/login"
-            className="inline-flex min-h-11 items-center rounded-card border border-dashed border-line px-4 py-2 text-sm text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            className="inline-flex min-h-11 items-center gap-2 rounded-card border border-dashed border-line px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            Sign in to save trades
+            <Bookmark aria-hidden="true" className="h-4 w-4" />
+            Sign in to save
           </Link>
         )}
       </div>
 
       {pending && (
-        <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-muted">
+        <p className="flex items-center gap-2 rounded-card border border-line bg-surface p-4 text-sm text-ink-muted">
+          <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
           Working through the rosters.
         </p>
       )}
@@ -667,34 +862,52 @@ export function TradeFinder(props: {
         <section ref={cardRef} aria-labelledby={headingId} className="space-y-3">
           {/* Position first, so a reader knows where they are before they read
               the deal. It is real text rather than an aria-only string, because
-              a sighted reader needs to know there are eleven more just as much. */}
-          <div className="flex flex-wrap items-center gap-2">
+              a sighted reader needs to know there are eleven more just as much.
+
+              A bar rather than three loose controls: the counter sits between
+              the two arrows that move it, in its own tray, so the relationship
+              is the layout rather than something to work out. */}
+          <div className="flex items-center gap-2 rounded-card border border-line bg-surface/50 px-2 py-2">
             <button
               type="button"
               onClick={() => go(-1)}
               disabled={!canGoBack}
+              aria-label="Previous trade"
               className={NAV_BUTTON_CLASS}
             >
               <ChevronLeft aria-hidden="true" className="h-4 w-4" />
-              Previous
+              <span aria-hidden="true" className="hidden sm:inline">
+                Previous
+              </span>
             </button>
-            <p className="text-sm font-semibold tabular-nums text-ink">
-              Trade {at + 1} of {list.length}
-            </p>
+
+            <div className="min-w-0 flex-1 text-center">
+              <p className="truncate text-sm font-bold tabular-nums text-ink">
+                Trade {at + 1}{" "}
+                <span className="font-medium text-ink-muted">of {list.length}</span>
+              </p>
+              {/* What is behind the window, once, in three words rather than a
+                  sentence hanging off the end of the row. */}
+              {tab === "suggestions" && (meta?.beyondWindow ?? 0) > 0 && (
+                <p className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-ink-subtle">
+                  <Layers aria-hidden="true" className="h-3 w-3" />
+                  {meta?.beyondWindow} more ranked behind
+                </p>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => go(1)}
               disabled={!canGoForward}
+              aria-label="Next trade"
               className={NAV_BUTTON_CLASS}
             >
-              Next
+              <span aria-hidden="true" className="hidden sm:inline">
+                Next
+              </span>
               <ChevronRight aria-hidden="true" className="h-4 w-4" />
             </button>
-            {tab === "suggestions" && (meta?.beyondWindow ?? 0) > 0 && (
-              <p className="text-xs text-ink-muted">
-                {meta?.beyondWindow} more behind these
-              </p>
-            )}
           </div>
 
           {/* tabIndex -1 makes this a focus target without putting it in the tab
@@ -713,6 +926,9 @@ export function TradeFinder(props: {
               searchedUsername={props.searchedUsername ?? null}
               headingId={headingId}
               leagueLabel={leagueNameOf(shownSuggestion, currentSaved?.leagueName)}
+              // The grade moves into the evaluation below whenever there is
+              // going to be one, so the same verdict is never on screen twice.
+              showGrade={!shownProposal}
               builderHref={builderHrefOf(
                 shownSuggestion,
                 leagueIdOf(shownSuggestion, currentSaved?.sleeperLeagueId),
@@ -722,15 +938,21 @@ export function TradeFinder(props: {
 
           {currentSaved && (
             <p className="text-xs text-ink-muted">
-              Saved {formatEastern(currentSaved.savedAtIso)}. Player values are as
-              they were then.
+              Saved {formatEastern(currentSaved.savedAtIso)}. Values are as they were
+              then.
             </p>
           )}
 
-          <div className="flex flex-wrap gap-2">
+          {/* What you can do with the deal, in its own tray under it. The labels
+              are one or two words because the icon carries the rest; the
+              accessible name spells out what a two-word label leaves implied, so
+              a screen reader user pulling up the button list finds "Pass on this
+              trade" rather than "Pass". */}
+          <div className="flex flex-wrap gap-1.5 rounded-card border border-line bg-surface/50 p-1.5">
             <button
               type="button"
               onClick={() => void copyPitch()}
+              aria-label="Copy the message to send the other manager"
               className={ACTION_BUTTON_CLASS}
             >
               {copied ? (
@@ -738,7 +960,7 @@ export function TradeFinder(props: {
               ) : (
                 <Copy aria-hidden="true" className="h-4 w-4" />
               )}
-              {copied ? "Copied" : "Copy the pitch"}
+              <span aria-hidden="true">{copied ? "Copied" : "Copy pitch"}</span>
             </button>
 
             {props.isSignedIn ? (
@@ -746,6 +968,13 @@ export function TradeFinder(props: {
                 type="button"
                 onClick={() => void toggleSave()}
                 disabled={savePending}
+                aria-label={
+                  tab === "saved"
+                    ? "Remove this trade from your saved trades"
+                    : isSaved
+                      ? "Remove this trade from your saved trades"
+                      : "Save this trade for later"
+                }
                 className={ACTION_BUTTON_CLASS}
               >
                 {tab === "saved" ? (
@@ -755,15 +984,17 @@ export function TradeFinder(props: {
                 ) : (
                   <Bookmark aria-hidden="true" className="h-4 w-4" />
                 )}
-                {tab === "saved" ? "Remove" : isSaved ? "Saved" : "Save for later"}
+                <span aria-hidden="true">
+                  {tab === "saved" ? "Remove" : isSaved ? "Saved" : "Save"}
+                </span>
               </button>
             ) : (
               <Link
                 href="/login"
-                className="inline-flex min-h-11 items-center gap-2 rounded-card border border-dashed border-line px-4 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="inline-flex min-h-11 items-center gap-2 rounded-card border border-dashed border-line px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-cyan/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <Bookmark aria-hidden="true" className="h-4 w-4" />
-                Sign in to bookmark this trade
+                Sign in to save
               </Link>
             )}
 
@@ -771,29 +1002,69 @@ export function TradeFinder(props: {
               <button
                 type="button"
                 onClick={() => void decline()}
-                className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface px-4 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-purple/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                aria-label="Pass on this trade"
+                aria-describedby={passNoteId}
+                className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-brand-purple/60 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <ThumbsDown aria-hidden="true" className="h-4 w-4" />
-                Not interested
+                <span aria-hidden="true">Pass</span>
               </button>
             )}
           </div>
 
+          {/* The note the Pass button is described by. aria-hidden would take it
+              out of the tree the description resolves from, so it stays visible
+              text and the button points at it rather than restating it. */}
           {tab === "suggestions" && (
-            <p className="text-xs text-ink-muted">
-              Not interested hides a trade for two weeks.{" "}
-              {props.isSignedIn ? "" : "Signed out, that lasts this visit only."}
+            <p id={passNoteId} className="text-[11px] text-ink-subtle">
+              Passing hides a trade for two weeks
+              {props.isSignedIn ? "" : ", this visit only while signed out"}.
             </p>
+          )}
+
+          {/* THE FULL EVALUATION, the same one the builder renders.
+              Below the actions rather than above them, and that order is
+              deliberate. Copy, Save and Pass are about the DEAL and a reader
+              flicking through twelve of them reaches for Pass on every card;
+              putting three screens of evaluation between the card and that
+              button would make the common move the buried one. The evaluation is
+              the deep read, so it sits where a deep read belongs.
+
+              Its own section with its own heading, so a screen reader user can
+              jump to it or step over it in one move. Not keyed on the
+              suggestion: the component caches every answer it has already paid
+              for, and remounting would throw that away on each press of Next. */}
+          {shownProposal && (
+            <section aria-labelledby={evaluationId} className="pt-2">
+              <h3 id={evaluationId} className="sr-only">
+                What this trade does to your season
+              </h3>
+              <SuggestionEvaluation
+                suggestionKey={shownSuggestion.key}
+                sleeperLeagueId={shownProposal.leagueId}
+                searchedUsername={props.searchedUsername ?? null}
+                source={props.source ?? null}
+                myRosterId={shownProposal.myRosterId}
+                theirRosterId={shownProposal.theirRosterId}
+                incoming={shownProposal.incoming}
+                outgoing={shownProposal.outgoing}
+                myTeamLabel={props.myTeamName ?? "Your team"}
+                theirTeamLabel={shownSuggestion.counterparty.teamName}
+                grade={shownGrade}
+              />
+            </section>
           )}
         </section>
       )}
 
       {!pending && !error && !shownSuggestion && tab === "saved" && saved !== null && (
         <div className="rounded-card border border-dashed border-line bg-base/40 p-5">
-          <p className="text-base font-semibold text-ink">No saved trades yet.</p>
+          <p className="flex items-center gap-2 text-base font-semibold text-ink">
+            <Bookmark aria-hidden="true" className="h-4 w-4 text-ink-subtle" />
+            No saved trades yet.
+          </p>
           <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-            Press Save for later on a suggestion and it will be here, exactly as it
-            was shown, whenever you come back.
+            Press Save on a suggestion and it will be here, exactly as it was shown.
           </p>
         </div>
       )}
@@ -804,6 +1075,7 @@ export function TradeFinder(props: {
           meta={meta}
           leaguesLeft={leaguesLeft}
           declinedAll={sessionExcluded.length > 0}
+          positionAsk={wantPositions.length + givePositions.length > 0}
         />
       )}
     </div>
@@ -824,8 +1096,13 @@ function describeFound(count: number): string {
 const SELECT_CLASS =
   "min-h-11 w-full rounded-card border border-ink-subtle bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
+// min-w-11 as well as min-h-11. Below sm the word beside the chevron is hidden
+// and the button is a 16px icon in 24px of padding, which is a 40px target: the
+// minimum has to be stated on both axes or the mobile state quietly misses it.
+// The word is a label, not data; the icon plus the button's aria-label carry the
+// same meaning at every width.
 const NAV_BUTTON_CLASS =
-  "inline-flex min-h-11 items-center gap-1 rounded-card border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-card border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:cursor-not-allowed disabled:opacity-50";
 
 const ACTION_BUTTON_CLASS =
   "inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-60";
@@ -839,57 +1116,48 @@ const ACTION_BUTTON_CLASS =
  */
 function TabButton({
   active,
+  Icon,
+  count,
   onClick,
   children,
 }: {
   active: boolean;
+  Icon: typeof Lightbulb;
+  /** How many trades are behind this toggle. Zero renders no badge. */
+  count: number;
   onClick: () => void;
-  children: React.ReactNode;
+  children: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex min-h-11 items-center rounded-card border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+      // The count rides in the accessible name rather than being read as a
+      // stray number after the label, which is what a bare "(3)" does.
+      aria-label={count > 0 ? `${children}, ${count}` : children}
+      className={`inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-card border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:flex-none ${
         active
           ? "border-brand-cyan/60 bg-brand-cyan/10 text-ink"
-          : "border-line bg-surface text-ink-muted hover:border-brand-cyan/40 hover:text-ink"
+          : "border-transparent text-ink-muted hover:border-line hover:bg-surface hover:text-ink"
       }`}
     >
-      {children}
+      <Icon
+        aria-hidden="true"
+        className={`h-4 w-4 shrink-0 ${active ? "text-brand-cyan" : "text-ink-subtle"}`}
+      />
+      <span aria-hidden="true">{children}</span>
+      {count > 0 && (
+        <span
+          aria-hidden="true"
+          className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
+            active ? "bg-brand-cyan/20 text-brand-cyan" : "bg-line-accent text-ink-muted"
+          }`}
+        >
+          {count}
+        </span>
+      )}
     </button>
-  );
-}
-
-/**
- * A labelled control with its hint wired up.
- *
- * The hint is real guidance rather than decoration, so it is joined to the
- * control with aria-describedby instead of sitting beside it as text a screen
- * reader user would have to go looking for.
- */
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint: string;
-  children: (id: string, describedBy: string) => React.ReactNode;
-}) {
-  const id = useId();
-  const hintId = `${id}-hint`;
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-semibold text-ink">
-        {label}
-      </label>
-      <p id={hintId} className="mt-0.5 text-xs text-ink-muted">
-        {hint}
-      </p>
-      <div className="mt-1.5">{children(id, hintId)}</div>
-    </div>
   );
 }
 
@@ -907,24 +1175,37 @@ function EmptyState({
   meta,
   leaguesLeft,
   declinedAll,
+  positionAsk,
 }: {
   mode: "league" | "portfolio";
   meta: TradeFinderMeta | null;
   leaguesLeft: number | null;
   declinedAll: boolean;
+  /**
+   * Whether a position filter was part of the question.
+   *
+   * A fifth reason, and the newest one. Asking for a kicker back and a
+   * quarterback out is a question a real league can answer with nothing, and a
+   * reader who has just pressed four chips deserves to be pointed at them rather
+   * than told to change the kind of trade.
+   */
+  positionAsk: boolean;
 }) {
   return (
     <div className="rounded-card border border-dashed border-line bg-base/40 p-5">
-      <p className="text-base font-semibold text-ink">
-        {declinedAll ? "That is everything we found." : "No trade to suggest right now."}
+      <p className="flex items-center gap-2 text-base font-semibold text-ink">
+        <SearchX aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-subtle" />
+        {declinedAll ? "That is everything we found." : "No trade to suggest."}
       </p>
       {mode === "league" ? (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
           {declinedAll
-            ? "Search again for a fresh set, or change the kind of trade."
+            ? "Search again for a fresh set, or change what you are after."
             : meta && meta.consideredTeams === 0
               ? "No other team has a piece it would move yet."
-              : "Nothing we could build helps you or would be accepted. Try a different kind of trade, or name a player."}
+              : positionAsk
+                ? "Nothing that fits those positions comes back level. Widen them, or clear one side."
+                : "Nothing we could build helps you or would be accepted. Try a different kind of trade, or name a player."}
         </p>
       ) : (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">

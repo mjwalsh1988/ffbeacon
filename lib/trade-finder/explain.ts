@@ -60,6 +60,28 @@ function round(value: number): string {
   return Math.round(Math.abs(value)).toLocaleString("en-US");
 }
 
+/** "a receiver", "a receiver or a tight end", "a back, a receiver, or a tight end". */
+function orList(words: string[]): string {
+  if (words.length === 1) return words[0];
+  if (words.length === 2) return `${words[0]} or ${words[1]}`;
+  return `${words.slice(0, -1).join(", ")}, or ${words[words.length - 1]}`;
+}
+
+/**
+ * The opening clause when the reader named positions rather than a player.
+ *
+ * Written as the request read back, so the first thing on the card confirms the
+ * control did something. Both halves when both were set, because a reader who
+ * asked to move a back for a receiver is asking one question, not two.
+ */
+function askClause(want: string[], give: string[]): string {
+  if (want.length > 0 && give.length > 0) {
+    return `You asked to bring in ${orList(want)} and move ${orList(give)}.`;
+  }
+  if (want.length > 0) return `You asked to bring in ${orList(want)}.`;
+  return `You asked to move ${orList(give)}.`;
+}
+
 export function buildHeadline(
   incoming: SuggestionAsset[],
   outgoing: SuggestionAsset[],
@@ -106,14 +128,28 @@ export function buildRationale(params: {
   needPoints: number | null;
   /** Whether the deal was built around a player the reader named. */
   named: "target" | "offer" | null;
+  /**
+   * Position groups the reader asked for, if any, as plain words.
+   *
+   * The opening clause names what was ASKED FOR rather than the goal whenever
+   * there is an ask, because a reader who set a filter and reads "a deal that
+   * fits how your roster is built" has no way to tell whether the filter did
+   * anything. Empty arrays mean no ask on that side, and the clause falls back.
+   */
+  asked?: { want: string[]; give: string[] } | null;
   mine: SideImpact;
 }): string {
   const parts: string[] = [];
+
+  const wanted = params.asked?.want ?? [];
+  const given = params.asked?.give ?? [];
 
   if (params.named === "target") {
     parts.push("This is what it would take to get the player you named.");
   } else if (params.named === "offer") {
     parts.push("This is what the player you named brings back.");
+  } else if (wanted.length > 0 || given.length > 0) {
+    parts.push(askClause(wanted, given));
   } else {
     parts.push(GOAL_CLAUSE[params.goal] ?? GOAL_CLAUSE.balanced);
   }

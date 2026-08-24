@@ -108,6 +108,7 @@ import {
   buildWhyYou,
 } from "./explain";
 import { suggestionKey } from "./fingerprint";
+import { TRADE_POSITIONS, TRADE_POSITION_PHRASE } from "./types";
 import type {
   SuggestionAsset,
   TradeFinderInput,
@@ -217,6 +218,36 @@ type ShapeConstraint = {
 
 /** No constraint at all. What a named player gets, whatever the goal says. */
 const NO_SHAPE: ShapeConstraint = {};
+
+/** Does any player in this set play one of the named positions? */
+function hasPosition(assets: AssetRef[], positions: ReadonlySet<string>): boolean {
+  return assets.some((a) => a.kind === "player" && positions.has(a.player.position));
+}
+
+/**
+ * The goal's shape constraint, with a position ask folded into it.
+ *
+ * Composed rather than replacing, because the two say different things and both
+ * are true: "at least two pieces leave" and "one of them is a running back" is a
+ * coherent request, and dropping either half answers a question nobody asked.
+ *
+ * The test is "at least one", never "only". A reader asking for a receiver has
+ * not said the pick coming back alongside him is unwelcome, and refusing to name
+ * that deal would hide the best version of the thing they asked for. Same
+ * reasoning as the goals, which have always meant a shape rather than a filter.
+ */
+function withPositions(
+  base: ShapeConstraint,
+  positions: ReadonlySet<string>,
+): ShapeConstraint {
+  if (positions.size === 0) return base;
+  const accept = base.accept;
+  return {
+    ...base,
+    accept: (assets) =>
+      hasPosition(assets, positions) && (!accept || accept(assets)),
+  };
+}
 
 /**
  * How many assets the OUTGOING side needs, for goals that describe its shape.
@@ -397,15 +428,42 @@ function collect(
   const excluded = new Set(input.excludeKeys);
   const specificAsk = Boolean(input.targetPlayerId || input.offerPlayerId);
 
+  // A named player settles the side he is on. Asking for a running back back AND
+  // naming the quarterback you want is a contradiction, and the name is the more
+  // specific request, so the ask on that side stands down. The OTHER side's ask
+  // survives, which is the combination a reader actually types: "get me this
+  // player, and take a running back off my hands".
+  const wantPositions: ReadonlySet<string> = new Set(
+    input.targetPlayerId ? [] : (input.wantPositions ?? []),
+  );
+  const givePositions: ReadonlySet<string> = new Set(
+    input.offerPlayerId ? [] : (input.givePositions ?? []),
+  );
+
   // The reader's own currency is the same whoever they are talking to, so it is
   // assembled once rather than per counterparty. A named player widens it: see
   // givablePool for why answering "what would it take" out of bench pieces is
   // not answering it.
+  //
+  // Naming a position to send widens it for the same reason. "Trade me a running
+  // back" is a reader volunteering one, and a pool restricted to pieces the
+  // roster can afford to lose holds their fourth back and not the one they meant.
+  // Read back in the order the filter draws its chips, so two readers who picked
+  // the same two groups get the same sentence whichever they pressed first.
+  const askedPhrases = {
+    want: TRADE_POSITIONS.filter((p) => wantPositions.has(p)).map(
+      (p) => TRADE_POSITION_PHRASE[p],
+    ),
+    give: TRADE_POSITIONS.filter((p) => givePositions.has(p)).map(
+      (p) => TRADE_POSITION_PHRASE[p],
+    ),
+  };
+
   const givable = givablePool(mine, {
     goal: input.goal,
     offerPlayerId: input.offerPlayerId,
     allowPicks: input.allowPicks,
-    widen: specificAsk,
+    widen: specificAsk || givePositions.size > 0,
   });
   const required = input.offerPlayerId
     ? (givable.find((a) => assetId(a) === input.offerPlayerId) ?? null)
@@ -493,6 +551,16 @@ function collect(
       return null;
     }
 
+    // THE POSITION ASK IS A HARD GATE, not a preference.
+    //
+    // The pools and the shape tests above already steer the search, and this
+    // catches the paths they cannot reach: a combination assembled by
+    // incomingCombos, and the coverage pass, which fixes one side outright
+    // rather than building it. A reader who asked for a receiver and was shown a
+    // tight end would read the whole control as decoration.
+    if (wantPositions.size > 0 && !hasPosition(incoming, wantPositions)) return null;
+    if (givePositions.size > 0 && !hasPosition(outgoing, givePositions)) return null;
+
     const myImpact = measureImpact(mine, slots, incoming, outgoing);
     // The other team's ledger is this one reversed: what the reader sends is
     // what they receive.
@@ -565,6 +633,7 @@ function collect(
         positionHelped: helped?.position ?? null,
         needPoints: helped?.need ?? null,
         named: input.targetPlayerId ? "target" : input.offerPlayerId ? "offer" : null,
+        asked: askedPhrases,
         mine: myImpact,
       }),
       whyYou: buildWhyYou(myImpact, input.goal, helped?.position ?? null),
@@ -601,8 +670,20 @@ function collect(
   // filter the named player out of his own search before the override ever got a
   // chance to run: ask for picks, then ask about a tight end, and the incoming
   // side would be required to contain a pick that the tight end is not.
-  const outgoingShape = specificAsk ? NO_SHAPE : outgoingShapeFor(input.goal);
-  const incomingShape = specificAsk ? NO_SHAPE : incomingShapeFor(input.goal);
+  //
+  // The POSITION ask is folded back in afterwards, because it is not the goal
+  // and a named player on one side does not answer it on the other. "Get me this
+  // quarterback, and take a running back" needs the outgoing ask to survive the
+  // naming of the incoming player; the sets above have already stood down on
+  // whichever side was named.
+  const outgoingShape = withPositions(
+    specificAsk ? NO_SHAPE : outgoingShapeFor(input.goal),
+    givePositions,
+  );
+  const incomingShape = withPositions(
+    specificAsk ? NO_SHAPE : incomingShapeFor(input.goal),
+    wantPositions,
+  );
 
   for (const theirs of profiles) {
     if (theirs.team.rosterId === input.myRosterId) continue;
@@ -611,6 +692,7 @@ function collect(
       goal: input.goal,
       targetPlayerId: input.targetPlayerId,
       allowPicks: input.allowPicks,
+      positions: wantPositions.size > 0 ? wantPositions : null,
     });
     if (acquirable.length === 0) continue;
     considered.add(theirs.team.rosterId);
@@ -703,6 +785,7 @@ function collect(
         const candidates = anchorCandidates(mine, {
           goal: input.goal,
           allowPicks: input.allowPicks,
+          positions: givePositions.size > 0 ? givePositions : null,
         });
 
         if (input.goal === "consolidate") {
@@ -750,6 +833,7 @@ function collect(
           targetPlayerId: null,
           allowPicks: input.allowPicks,
           comparableTo: anchorValue,
+          positions: wantPositions.size > 0 ? wantPositions : null,
         }).filter((a) => !anchorSet.some((held) => assetId(held) === assetId(a)));
         if (pool.length === 0) continue;
         // A team with nothing spare can still have somebody the reader can

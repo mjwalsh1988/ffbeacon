@@ -65,7 +65,14 @@ import {
   type TradeQualityConfig,
 } from "@/lib/trade-quality";
 import { isValidSuggestionKey } from "@/lib/trade-finder/fingerprint";
-import { TRADE_GOALS, type TradeGoal, type TradeSuggestion } from "@/lib/trade-finder/types";
+import {
+  TRADE_GOALS,
+  TRADE_POSITIONS,
+  readTradePosition,
+  type TradeGoal,
+  type TradePosition,
+  type TradeSuggestion,
+} from "@/lib/trade-finder/types";
 
 /** Sleeper ids are its own long numeric strings; usernames are short handles. */
 const SLEEPER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -193,6 +200,23 @@ function readPlayerId(value: unknown): string | null {
 }
 
 /**
+ * The position groups a caller named, normalised and deduplicated.
+ *
+ * Bounded by the six that exist, so a caller cannot widen the search by posting
+ * a list, and returned in the fixed display order so the same two groups always
+ * produce the same rationale sentence whichever order they arrived in.
+ */
+function readPositions(value: unknown): TradePosition[] {
+  if (!Array.isArray(value)) return [];
+  const found = new Set<TradePosition>();
+  for (const raw of value) {
+    const position = readTradePosition(raw);
+    if (position) found.add(position);
+  }
+  return TRADE_POSITIONS.filter((p) => found.has(p));
+}
+
+/**
  * The durable per-actor limit.
  *
  * The mechanism lives in lib/rate-limit-claim.ts, because a server RENDERED path
@@ -218,6 +242,10 @@ export async function findLeagueTrade(input: {
   goal?: string;
   targetPlayerId?: string | null;
   offerPlayerId?: string | null;
+  /** Position groups the incoming side must contain at least one of. */
+  wantPositions?: string[];
+  /** Position groups the outgoing side must contain at least one of. */
+  givePositions?: string[];
   sessionExcluded?: string[];
 }): Promise<TradeFinderResponse> {
   const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
@@ -281,6 +309,8 @@ export async function findLeagueTrade(input: {
     goal: readGoal(input.goal),
     targetPlayerId: readPlayerId(input.targetPlayerId),
     offerPlayerId: readPlayerId(input.offerPlayerId),
+    wantPositions: readPositions(input.wantPositions),
+    givePositions: readPositions(input.givePositions),
     excludeKeys: [...stored, ...sessionExcluded],
     quality: { config: qualityConfig, poolMax: league.poolMax },
   });

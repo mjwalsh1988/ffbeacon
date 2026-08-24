@@ -80,6 +80,7 @@ export const PlayerPicker = memo(function PlayerPicker({
   onChange,
   anyLabel = "Anyone",
   filterLabel,
+  showCount = true,
 }: {
   label: string;
   hint: string;
@@ -90,6 +91,20 @@ export const PlayerPicker = memo(function PlayerPicker({
   anyLabel?: string;
   /** Visible label for the filter box. Says which list it narrows. */
   filterLabel: string;
+  /**
+   * Whether "349 players in the list" is drawn under the filter box.
+   *
+   * Off on Trade Ideas, where two of these sit side by side and a running count
+   * pinned under each input is clutter rather than guidance: the select right
+   * below it is the list, and its length is obvious from opening it.
+   *
+   * The count NEVER stops being available to a screen reader. Off, it keeps its
+   * id and its text and only loses its visible box, because it is what the
+   * select's aria-describedby resolves to. Deleting the element would take the
+   * select's own explanation of its length with it, which is the one reader who
+   * cannot see the list shrink.
+   */
+  showCount?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -205,9 +220,12 @@ export const PlayerPicker = memo(function PlayerPicker({
       <label htmlFor={filterId} className="block text-sm font-semibold text-ink">
         {filterLabel}
       </label>
+      {/* Short, because it is read out before the field on every visit and two
+          of these sit side by side on Trade Ideas. The placeholder inside the
+          box already says what to type; what a reader cannot see is what Enter
+          does, so that is the half that is kept. */}
       <p id={filterHintId} className="mt-0.5 text-xs text-ink-muted">
-        Type a name or team to narrow the list. Enter jumps to the list, picking
-        the player if only one matches.
+        Enter jumps to the list, taking a single match with it.
       </p>
       <div className="relative mt-1.5">
         <Search
@@ -280,7 +298,11 @@ export const PlayerPicker = memo(function PlayerPicker({
           live region, but it still carries an id: aria-describedby resolves text
           out of hidden subtrees, which is what lets the select explain its own
           length to somebody who arrives at it long after the filter was typed. */}
-      <p id={statusId} aria-hidden="true" className="mt-1 text-xs text-ink-muted">
+      <p
+        id={statusId}
+        aria-hidden="true"
+        className={showCount ? "mt-1 text-xs text-ink-muted" : "sr-only"}
+      >
         {status}
       </p>
 

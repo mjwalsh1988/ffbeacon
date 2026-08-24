@@ -909,3 +909,127 @@ describe("findTrades rationale", () => {
     expect(named.rationale).toContain("the player you named");
   });
 });
+
+/**
+ * Naming a position group on either side.
+ *
+ * The contract is "at least one", never "only": a reader asking for a tight end
+ * has not said the pick riding along with him is unwelcome. What the tests below
+ * pin is that the named group is always THERE, on the side it was named for,
+ * and that the two asks compose with the goals and with a named player rather
+ * than quietly cancelling each other.
+ */
+describe("findTrades position asks", () => {
+  it("brings back the position that was asked for", () => {
+    const { suggestions } = run({ wantPositions: ["TE"] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      expect(s.incoming.some((a) => a.kind === "player" && a.position === "TE")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("sends the position that was offered", () => {
+    const { suggestions } = run({ givePositions: ["RB"] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      expect(s.outgoing.some((a) => a.kind === "player" && a.position === "RB")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("satisfies both sides at once", () => {
+    // The shape a manager actually types: move a back, get a tight end.
+    const { suggestions } = run({ wantPositions: ["TE"], givePositions: ["RB"] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      expect(s.incoming.some((a) => a.kind === "player" && a.position === "TE")).toBe(
+        true,
+      );
+      expect(s.outgoing.some((a) => a.kind === "player" && a.position === "RB")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("treats several groups as any one of them, not all of them", () => {
+    const { suggestions } = run({ wantPositions: ["TE", "WR"] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      const positions = s.incoming
+        .filter((a) => a.kind === "player")
+        .map((a) => (a.kind === "player" ? a.position : ""));
+      expect(positions.some((p) => p === "TE" || p === "WR")).toBe(true);
+    }
+    // And at least one of them came back without the other, or the filter is
+    // behaving as an AND and the test above proves nothing.
+    const single = suggestions.some((s) => {
+      const positions = new Set(
+        s.incoming
+          .filter((a) => a.kind === "player")
+          .map((a) => (a.kind === "player" ? a.position : "")),
+      );
+      return positions.has("TE") !== positions.has("WR");
+    });
+    expect(single).toBe(true);
+  });
+
+  it("does not let a pick alone answer a position ask", () => {
+    // A pick has no position, so a deal made only of picks can never satisfy
+    // "bring me back a tight end", however well the values line up.
+    const { suggestions } = run({ goal: "add-picks", wantPositions: ["TE"] });
+    for (const s of suggestions) {
+      expect(s.incoming.some((a) => a.kind === "player" && a.position === "TE")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("keeps the goal's own shape alongside the position ask", () => {
+    // Consolidation means two or more pieces leave. Adding "one of them is a
+    // running back" must narrow that, not replace it.
+    const { suggestions } = run({ goal: "consolidate", givePositions: ["RB"] });
+    for (const s of suggestions) {
+      expect(s.outgoing.length).toBeGreaterThanOrEqual(2);
+      expect(s.outgoing.some((a) => a.kind === "player" && a.position === "RB")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("stands the ask down on the side a player was named for", () => {
+    // "Get me this tight end, and take a running back off my hands." The named
+    // player settles the incoming side; the outgoing ask survives him.
+    const { suggestions } = run({
+      targetPlayerId: "th-te2",
+      wantPositions: ["QB"],
+      givePositions: ["RB"],
+    });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      expect(s.incoming.some((a) => a.kind === "player" && a.playerId === "th-te2")).toBe(
+        true,
+      );
+      expect(s.outgoing.some((a) => a.kind === "player" && a.position === "RB")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("reads the ask back on the card", () => {
+    const [first] = run({ wantPositions: ["TE"] }).suggestions;
+    expect(first.rationale).toContain("a tight end");
+  });
+
+  it("changes nothing when no position is named", () => {
+    // The empty case has to be byte-identical to the old behaviour, or every
+    // reader who never touches the control gets a different engine.
+    const before = run().suggestions.map((s) => s.key);
+    const after = run({ wantPositions: [], givePositions: [] }).suggestions.map(
+      (s) => s.key,
+    );
+    expect(after).toEqual(before);
+  });
+});

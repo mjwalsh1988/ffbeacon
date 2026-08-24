@@ -45,6 +45,11 @@ import {
   validateProposal,
 } from "@/lib/trade-impact/evaluate";
 import type { TradeProposal } from "@/lib/trade-impact/types";
+import {
+  TRADE_POSITIONS,
+  readTradePosition,
+  type TradePosition,
+} from "@/lib/trade-finder/types";
 
 /**
  * Suggestions handed to the client on first paint.
@@ -261,8 +266,7 @@ export default async function LeagueTradeFinderPage({
             Trade Ideas
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            One trade at a time, built from what every roster in this league
-            needs.
+            One deal at a time, built from every roster in this league.
           </p>
         </section>
 
@@ -511,11 +515,20 @@ async function TradeFinderSection({
 
   // Picker options. Both lists carry position and team so two players with the
   // same surname are told apart in a select a screen reader is reading aloud.
+  //
+  // The same walk records which position groups this league actually holds a
+  // priced player at, which is what the position chips are drawn from. Derived
+  // rather than assumed: a league with no kicker slot must not be offered a
+  // kicker chip whose only possible answer is "no trade found", and a league
+  // that starts two of them must be.
   const myPlayers: PlayerOption[] = [];
   const theirPlayers: PlayerOption[] = [];
+  const positionsHeld = new Set<TradePosition>();
   for (const team of finderLeague.teams) {
     for (const p of team.players) {
       if (!p.hasValue) continue;
+      const position = readTradePosition(p.position);
+      if (position) positionsHeld.add(position);
       const option: PlayerOption = {
         playerId: p.playerId,
         label: `${p.name} (${p.position}${p.team ? `, ${p.team}` : ""})`,
@@ -528,6 +541,7 @@ async function TradeFinderSection({
   const byLabel = (a: PlayerOption, b: PlayerOption) => a.label.localeCompare(b.label);
   myPlayers.sort(byLabel);
   theirPlayers.sort(byLabel);
+  const availablePositions = TRADE_POSITIONS.filter((p) => positionsHeld.has(p));
 
   return (
     <TradeFinder
@@ -539,8 +553,10 @@ async function TradeFinderSection({
       // What makes "Open in builder" possible on a card: the builder needs to
       // know whose side of the deal is whose, and only the page knows that.
       myRosterId={myRosterId}
+      myTeamName={finderLeague.teams.find((t) => t.rosterId === myRosterId)?.teamName ?? null}
       myPlayers={myPlayers}
       theirPlayers={theirPlayers}
+      availablePositions={availablePositions}
       initial={{
         suggestions: initialSuggestions,
         grades: initialGrades,

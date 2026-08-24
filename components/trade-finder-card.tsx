@@ -1,8 +1,29 @@
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, Info, Wrench } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  CheckCircle2,
+  CircleDashed,
+  CircleHelp,
+  Info,
+  MessageSquareText,
+  ScanSearch,
+  Target,
+  Trophy,
+  Users,
+  Wrench,
+} from "lucide-react";
 import { PLAYER_PHOTO_RADIUS, PlayerHeadshot } from "@/components/player-headshot";
+import { SignalCheckNote } from "@/components/trade-ideas/signal-check-note";
+import {
+  POSITION_BADGE,
+  POSITION_BADGE_FALLBACK,
+  normalizePositionColor,
+} from "@/lib/on-the-clock/position-colors";
 import {
   ACCEPTANCE_LABEL,
+  TRADE_POSITION_LABEL,
+  readTradePosition,
   type SuggestionAsset,
   type TradeSuggestion,
 } from "@/lib/trade-finder/types";
@@ -33,19 +54,6 @@ function fmtValue(value: number): string {
   return Math.round(value).toLocaleString("en-US");
 }
 
-/**
- * Signal Check's explanation opens by restating its own verdict, which is right
- * on its own page and wrong here, where the verdict is already the line above.
- * Left alone it reads "Fair Trade. Fair Trade Neither side comes out ahead."
- */
-function stripVerdictPrefix(explanation: string, verdict: string): string {
-  const trimmed = explanation.trimStart();
-  if (!trimmed.toLowerCase().startsWith(verdict.trim().toLowerCase())) {
-    return explanation;
-  }
-  return trimmed.slice(verdict.trim().length).replace(/^[\s.:,-]+/, "");
-}
-
 function fmtSigned(value: number, digits = 0): string {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}${Math.abs(value).toFixed(digits)}`;
@@ -65,6 +73,7 @@ export function TradeFinderCard({
   searchedUsername,
   headingId,
   leagueLabel,
+  showGrade = true,
   builderHref,
 }: {
   suggestion: TradeSuggestion;
@@ -75,6 +84,14 @@ export function TradeFinderCard({
   headingId: string;
   /** Shown in the cross-league panel, where the league is not implied. */
   leagueLabel?: string | null;
+  /**
+   * Whether to print Signal Check's verdict on the card.
+   *
+   * False when the surface is going to render a full evaluation underneath,
+   * whose Value tab carries the same grade. Defaults to true so the portfolio
+   * panel and any other caller keeps it without having to know why.
+   */
+  showGrade?: boolean;
   /**
    * Where this exact deal opens in the trade builder.
    *
@@ -117,13 +134,22 @@ export function TradeFinderCard({
       <div className="flex flex-wrap items-center gap-2">
         <AcceptanceBadge suggestion={suggestion} />
         {leagueLabel && (
-          <span className="rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink-muted">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink-muted">
+            <Trophy aria-hidden="true" className="h-3 w-3" />
             {leagueLabel}
           </span>
         )}
+        {/* The status word alone, with the icon carrying the "them" and the
+            accessible name saying it in full. "They are a Rebuilder" was five
+            words in a row of chips, and the sentence version is the one that
+            matters, which is the one a screen reader now gets. */}
         {suggestion.counterparty.statusLabel && (
-          <span className="rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink-muted">
-            They are a {suggestion.counterparty.statusLabel}
+          <span
+            aria-label={`The other team reads as a ${suggestion.counterparty.statusLabel}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-medium text-ink-muted"
+          >
+            <Users aria-hidden="true" className="h-3 w-3" />
+            <span aria-hidden="true">{suggestion.counterparty.statusLabel}</span>
           </span>
         )}
       </div>
@@ -135,28 +161,42 @@ export function TradeFinderCard({
         {suggestion.headline}
       </h3>
 
+      {/* teamName is already formatTeamLabel output, so it carries the handle
+          when there is one to carry. The line used to append ownerHandle after
+          it as well, which printed the same handle twice, and the word "Open"
+          did the job an underlined team name in the brand colour already does. */}
       <p className="mt-1 text-sm text-ink-muted">
         <Link
           href={teamHref}
+          aria-label={`Open ${suggestion.counterparty.teamName}`}
           className="font-semibold text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
-          Open {suggestion.counterparty.teamName}
+          {suggestion.counterparty.teamName}
         </Link>
-        {suggestion.counterparty.ownerHandle && (
-          <span>, managed by {suggestion.counterparty.ownerHandle}</span>
-        )}
       </p>
 
       {/* Why this deal is in front of you, before the deal itself.
           A reader who does not know why a suggestion was chosen reads the whole
           card as arbitrary, and on the cross-league panel it is the only thing
           that accounts for the league it came out of. Older bookmarks predate
-          the field and simply do not render this block. */}
+          the field and simply do not render this block.
+
+          A framed callout rather than a rule down the left. Between the headline
+          and the two asset columns the bare quote read as a continuation of the
+          sentence above it; boxed, it is plainly a note ABOUT the deal. The icon
+          replaces the "Why this one:" lead-in, which was three words spent
+          saying what the box already says. */}
       {suggestion.rationale && (
-        <p className="mt-3 border-l-2 border-brand-purple/50 pl-3 text-sm leading-relaxed text-ink-muted">
-          <strong className="font-semibold text-ink">Why this one: </strong>
-          {suggestion.rationale}
-        </p>
+        <div className="mt-3 flex gap-2.5 rounded-card border border-brand-purple/30 bg-brand-purple/[0.06] p-3">
+          <ScanSearch
+            aria-hidden="true"
+            className="mt-0.5 h-4 w-4 shrink-0 text-brand-purple"
+          />
+          <p className="text-sm leading-relaxed text-ink-muted">
+            <span className="sr-only">Why this one: </span>
+            {suggestion.rationale}
+          </p>
+        </div>
       )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -184,22 +224,25 @@ export function TradeFinderCard({
           and after, and the week by week strip against your real schedule. A
           button that said only "Open in builder" made that sound like a detour
           to a different tool rather than the way to finish reading this deal. */}
+      {/* THE LABEL NAMES WHAT IS LEFT TO GAIN, and that changed.
+          It used to read "Full impact and edit", because the full impact WAS
+          one press away. The evaluation now renders under this card, so the
+          only thing the builder still offers is changing a piece, and a button
+          promising an impact the reader has already scrolled past is a button
+          that wastes their press. */}
       {builderHref && (
         <Link
           href={builderHref}
+          aria-label="Open this trade in the builder to change any piece"
           className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-card border border-line-accent bg-surface px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
         >
           <Wrench aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
-          <span>
-            Full impact and edit
-            <span className="block text-xs font-normal text-ink-muted">
-              Playoff odds, week by week, and change any piece
-            </span>
-          </span>
+          <span aria-hidden="true">Change a piece</span>
         </Link>
       )}
 
-      <h4 className="mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
+      <h4 className="mt-5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.16em] text-brand-cyan">
+        <Target aria-hidden="true" className="h-3.5 w-3.5" />
         What it does
       </h4>
       <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -240,31 +283,21 @@ export function TradeFinderCard({
       <p className="mt-4 text-sm leading-relaxed text-ink">{suggestion.whyYou}</p>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">{suggestion.whyThem}</p>
 
-      {grade && (
-        <div className="mt-4 rounded-card border border-line-accent bg-base/50 p-3">
-          <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-purple">
-            Signal Check says
-          </h4>
-          <p className="mt-1.5 text-sm font-semibold text-ink">{grade.verdictLabel}</p>
-          <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-            {stripVerdictPrefix(grade.explanation, grade.verdictLabel)}
-          </p>
-          <p className="mt-1.5 text-xs text-ink-muted">
-            {[
-              `Graded on FF Beacon values in ${grade.formatDisplay}`,
-              grade.confidenceLabel,
-              grade.tradeShapeLabel,
-            ]
-              .filter(Boolean)
-              .join(", ")}
-            .
-          </p>
+      {/* Dropped when a full evaluation is going to render under this card,
+          because its Value tab owns the grade there and printing the same
+          verdict in both places is the redundancy `stripVerdictPrefix` exists to
+          avoid, one level up. The decision is made from the caller's own props
+          rather than from whether the evaluation has arrived yet, so the block
+          does not vanish out of a card the reader is already reading. */}
+      {grade && showGrade && (
+        <div className="mt-4">
+          <SignalCheckNote grade={grade} />
         </div>
       )}
 
       {suggestion.caveats.length > 0 && (
-        <div className="mt-4">
-          <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
+        <div className="mt-4 rounded-card border border-line bg-base/40 p-3">
+          <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.16em] text-ink-muted">
             <Info aria-hidden="true" className="h-3.5 w-3.5" />
             Worth knowing
           </h4>
@@ -282,8 +315,9 @@ export function TradeFinderCard({
           because the clipboard can be blocked, and without it a reader who
           cannot copy has no way to reach the message at all. */}
       <details className="mt-4 border-t border-line pt-3">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
-          Preview the message
+        <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-xs font-bold uppercase tracking-[0.16em] text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan">
+          <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5" />
+          The message
         </summary>
         <p className="mt-1.5 whitespace-pre-line rounded-card border border-line bg-base/50 p-3 text-sm leading-relaxed text-ink-muted">
           {suggestion.pitch}
@@ -302,16 +336,23 @@ export function TradeFinderCard({
  * description underneath it.
  */
 function AcceptanceBadge({ suggestion }: { suggestion: TradeSuggestion }) {
-  const tone =
-    suggestion.acceptance === "likely"
-      ? "border-signal-success/50 bg-signal-success/10 text-signal-success"
-      : suggestion.acceptance === "worth-asking"
-        ? "border-brand-cyan/50 bg-brand-cyan/10 text-brand-cyan"
-        : "border-line text-ink-muted";
+  const likely = suggestion.acceptance === "likely";
+  const worthAsking = suggestion.acceptance === "worth-asking";
+  const tone = likely
+    ? "border-signal-success/50 bg-signal-success/10 text-signal-success"
+    : worthAsking
+      ? "border-brand-cyan/50 bg-brand-cyan/10 text-brand-cyan"
+      : "border-line text-ink-muted";
+  // A third signal beside the word and the hue, so the three bands are told
+  // apart with no colour perception at all: a filled check for the one they
+  // probably take, an open circle for the one worth asking, a dashed one for a
+  // long shot.
+  const Icon = likely ? CheckCircle2 : worthAsking ? CircleHelp : CircleDashed;
   return (
     <span
-      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${tone}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${tone}`}
     >
+      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
       {ACCEPTANCE_LABEL[suggestion.acceptance]}
     </span>
   );
@@ -399,7 +440,12 @@ function AssetRow({ asset }: { asset: SuggestionAsset }) {
     );
   }
 
-  const detail = [asset.position, asset.team].filter(Boolean).join(", ");
+  const colorKey = normalizePositionColor(asset.position);
+  // Spoken in full. Several screen readers spell "RB" out one letter at a time,
+  // and a position group is the thing this card is most likely to have been
+  // filtered on, so it is the last abbreviation that should arrive as letters.
+  const position = readTradePosition(asset.position);
+  const spokenPosition = position ? TRADE_POSITION_LABEL[position] : asset.position;
   const figures = [
     `value ${fmtValue(asset.value)}`,
     asset.projPoints !== null ? `${asset.projPoints.toFixed(1)} pts/wk` : null,
@@ -414,9 +460,34 @@ function AssetRow({ asset }: { asset: SuggestionAsset }) {
           twice. */}
       <PlayerHeadshot sleeperId={asset.sleeperId} name="" size={40} className="shrink-0" />
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-bold text-ink">{asset.name}</span>
+        {/* The position moved out of the detail line and onto the name, in the
+            shared position hue (lib/on-the-clock/position-colors). A card
+            produced by a position filter has to make the position findable at a
+            glance, and it was previously the first word of a grey run-on
+            beginning "RB, PHI. value 6,412, 14.2 pts/wk, age 24.1".
+
+            aria-hidden, and the position is restated in the detail line's
+            visually hidden text, so a screen reader hears the name followed by
+            "Running back, PHI" rather than an abbreviation spelled out
+            mid-sentence. */}
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className="text-sm font-bold text-ink">{asset.name}</span>
+          {asset.position && (
+            <span
+              aria-hidden="true"
+              className={`rounded-md px-1.5 py-0.5 text-[10px] font-extrabold tracking-[0.1em] ${
+                colorKey ? POSITION_BADGE[colorKey] : POSITION_BADGE_FALLBACK
+              }`}
+            >
+              {asset.position}
+            </span>
+          )}
+        </span>
         <span className="block text-xs text-ink-muted">
-          {detail ? `${detail}. ` : ""}
+          <span className="sr-only">
+            {[spokenPosition, asset.team].filter(Boolean).join(", ")}.{" "}
+          </span>
+          <span aria-hidden="true">{asset.team ? `${asset.team}. ` : ""}</span>
           {figures.join(", ")}
         </span>
       </span>

@@ -68,6 +68,62 @@ export const TRADE_GOALS: { key: TradeGoal; label: string; blurb: string }[] = [
   },
 ];
 
+/**
+ * A position group the reader can name on either side of a deal.
+ *
+ * Deliberately the same six keys lib/on-the-clock/position-colors.ts colours, so
+ * a chip in the filter and a tag on an asset row are the same word in the same
+ * hue. Anything a league does not roster is never offered as a choice; see
+ * `availablePositions` on the Trade Ideas page.
+ */
+export type TradePosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
+
+/** Display order. Skill positions first, because that is what gets traded. */
+export const TRADE_POSITIONS: TradePosition[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
+
+const TRADE_POSITION_SET = new Set<string>(TRADE_POSITIONS);
+
+/**
+ * Coerce a raw position string to one of the six, or null.
+ *
+ * Sleeper says DST where we say DEF and PK where we say K, and a filter that
+ * silently failed to match either would look like a broken control rather than
+ * like a naming difference.
+ */
+export function readTradePosition(raw: unknown): TradePosition | null {
+  if (typeof raw !== "string") return null;
+  const upper = raw.trim().toUpperCase();
+  if (upper === "DST") return "DEF";
+  if (upper === "PK") return "K";
+  return TRADE_POSITION_SET.has(upper) ? (upper as TradePosition) : null;
+}
+
+/** The spoken and written name of a group. "DEF" alone reads as an abbreviation. */
+export const TRADE_POSITION_LABEL: Record<TradePosition, string> = {
+  QB: "Quarterback",
+  RB: "Running back",
+  WR: "Wide receiver",
+  TE: "Tight end",
+  K: "Kicker",
+  DEF: "Defense",
+};
+
+/**
+ * The group as it appears inside a sentence, article and all.
+ *
+ * Separate from the label because the label is a heading ("Running back") and
+ * this is prose ("You asked to bring in a running back"). Keeping one string for
+ * both jobs is how a card ends up reading "bring in Running back".
+ */
+export const TRADE_POSITION_PHRASE: Record<TradePosition, string> = {
+  QB: "a quarterback",
+  RB: "a running back",
+  WR: "a wide receiver",
+  TE: "a tight end",
+  K: "a kicker",
+  DEF: "a defense",
+};
+
 /** Which side of a suggested deal an asset sits on, from the reader's view. */
 export type Direction = "in" | "out";
 
@@ -163,6 +219,22 @@ export type TradeFinderInput = {
   targetPlayerId: string | null;
   /** Lock this player onto the outgoing side ("what can I get?"). */
   offerPlayerId: string | null;
+  /**
+   * Position groups the reader wants at least one of on the INCOMING side.
+   *
+   * Empty or absent means any. A NAMED target settles the incoming side on its
+   * own and overrides this, for the same reason it overrides the goal: naming a
+   * player is the more specific request, and applying both would ask for a deal
+   * where the named quarterback is also a running back.
+   */
+  wantPositions?: TradePosition[];
+  /**
+   * Position groups the reader is willing to send at least one of.
+   *
+   * Same contract as `wantPositions`, on the other side, and overridden by
+   * `offerPlayerId` for the same reason.
+   */
+  givePositions?: TradePosition[];
   /** Deal fingerprints the reader has already passed on. */
   excludeKeys: string[];
   /**
