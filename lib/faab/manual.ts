@@ -147,6 +147,8 @@ export function computeManualMarginal(
     titleOddsAfter: null,
     weeks: input.weeks,
     dropCost: null,
+    dropOptions: [],
+    dropNote: null,
     isBenchOnly: isBelowReplacement,
   };
 

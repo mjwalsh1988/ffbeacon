@@ -284,6 +284,8 @@ export function FaabSettingsManager({
   // ---- league mode ----
   const patchMarginal = (next: Partial<FaabSettings["marginal"]>) =>
     setSettings((s) => ({ ...s, marginal: { ...s.marginal, ...next } }));
+  const patchDropGuard = (next: Partial<FaabSettings["dropGuard"]>) =>
+    setSettings((s) => ({ ...s, dropGuard: { ...s.dropGuard, ...next } }));
   const patchLadder = (next: Partial<FaabSettings["ladder"]>) =>
     setSettings((s) => ({ ...s, ladder: { ...s.ladder, ...next } }));
   const patchReplacementShape = (position: string, perTeam: number) =>
@@ -784,6 +786,78 @@ export function FaabSettingsManager({
                   onChange={(n) => patchMarginal({ simulationRuns: Math.round(n) })}
                   step="100"
                   min={200}
+                />
+              </Field>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              Who we will tell somebody to cut
+            </legend>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
+              A full roster means a claim costs somebody their place. Ranking that
+              cut on projected points alone names whoever is hurt, because an
+              injured player projects zero and so looks free to release. These
+              rules decide who is off limits.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={settings.dropGuard.enabled}
+                  onChange={(e) => patchDropGuard({ enabled: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                Protect players from being suggested as cuts
+              </label>
+              <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={settings.dropGuard.useHealthyBaseline}
+                  onChange={(e) =>
+                    patchDropGuard({ useHealthyBaseline: e.target.checked })
+                  }
+                  className="h-4 w-4"
+                />
+                Rank cuts on what a player is worth when he plays
+              </label>
+              <Field
+                label="Redraft: most a cut may be worth"
+                htmlFor={`${ids}-dg-ratio`}
+                hint="As a multiple of the player being claimed. 1 means never name somebody the market rates above the claim. 0 to 1."
+              >
+                <NumberInput
+                  id={`${ids}-dg-ratio`}
+                  value={settings.dropGuard.maxDropValueRatio}
+                  onChange={(n) => patchDropGuard({ maxDropValueRatio: n })}
+                  step="0.05"
+                  min={0}
+                />
+              </Field>
+              <Field
+                label="Keeper: cuts come from this bottom share"
+                htmlFor={`${ids}-dg-share`}
+                hint="0.4 means only the bottom 40% of the roster by value is ever named. Dynasty and keeper leagues only, where a cut gives up the asset itself. 0.05 to 0.9."
+              >
+                <NumberInput
+                  id={`${ids}-dg-share`}
+                  value={settings.dropGuard.keeperBottomShare}
+                  onChange={(n) => patchDropGuard({ keeperBottomShare: n })}
+                  step="0.05"
+                  min={0.05}
+                />
+              </Field>
+              <Field
+                label="Priced players needed before these rules run"
+                htmlFor={`${ids}-dg-min`}
+                hint="Below this many rostered players with a market value, the rules stand down rather than sort noise."
+              >
+                <NumberInput
+                  id={`${ids}-dg-min`}
+                  value={settings.dropGuard.minValuedPlayers}
+                  onChange={(n) => patchDropGuard({ minValuedPlayers: Math.round(n) })}
+                  min={0}
                 />
               </Field>
             </div>

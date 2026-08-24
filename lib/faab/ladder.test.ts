@@ -23,6 +23,8 @@ function marginal(overrides: Partial<MarginalValue> = {}): MarginalValue {
     titleOddsAfter: 11,
     weeks: [],
     dropCost: null,
+    dropOptions: [],
+    dropNote: null,
     isBenchOnly: false,
     ...overrides,
   };
@@ -32,8 +34,11 @@ function market(overrides: Partial<MarketRead> = {}): MarketRead {
   return {
     yourBudget: 100,
     rivalsRicher: 3,
+    rivalsAtLeastAsRich: 3,
     richestRivalBudget: 90,
     medianRivalBudget: 55,
+    leagueTotalBudget: 100,
+    everyoneAtFullBudget: false,
     interestedRivals: 2,
     rivalsChecked: 11,
     comparable: null,
@@ -185,6 +190,43 @@ describe("empty the clip", () => {
     );
     expect(out.isDumpCandidate).toBe(false);
     expect(out.notices.join(" ")).toContain("not the week to empty the budget");
+  });
+
+  /**
+   * The scale this whole module runs on, pinned.
+   *
+   * The simulator that feeds it answers in a 0-to-1 probability and every
+   * threshold here is written in percentage POINTS. When the producer handed
+   * over the raw probability, a healthy 45% team arrived as 0.45, landed under
+   * the 5-point already-cooked ceiling, and every reader in every league was
+   * told their season was over and the empty-the-clip path was switched off for
+   * all of them. These two cases fail if the scale slips again.
+   */
+  it("reads a 45 as forty-five percent, not as a probability", () => {
+    const out = buildLadder(
+      baseInput({
+        marginal: marginal({
+          playoffOddsBefore: 45,
+          playoffOddsAfter: 68,
+          netPointsPerWeek: 6,
+        }),
+      }),
+    );
+    expect(out.isDumpCandidate).toBe(true);
+    expect(out.notices.join(" ")).not.toContain("not the week to empty the budget");
+  });
+
+  it("treats the already-cooked ceiling as points too", () => {
+    const out = buildLadder(
+      baseInput({
+        marginal: marginal({
+          playoffOddsBefore: 4,
+          playoffOddsAfter: 40,
+          netPointsPerWeek: 6,
+        }),
+      }),
+    );
+    expect(out.isDumpCandidate).toBe(false);
   });
 
   it("can be switched off entirely", () => {

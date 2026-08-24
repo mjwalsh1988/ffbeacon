@@ -44,6 +44,13 @@ export type MarketInput = {
   currentWeek: number;
   /** Last week of the regular season for this league. */
   lastRegularWeek: number;
+  /**
+   * The league's full per-team FAAB allowance. Null when Sleeper publishes
+   * none. Without it there is no way to tell a rival sitting on the maximum
+   * from one sitting on the scraps, which is how a league where everybody had
+   * their whole budget got described as a league full of broke teams.
+   */
+  leagueTotalBudget: number | null;
   settings: MarketSettings;
 };
 
@@ -95,30 +102,74 @@ function toMultiplier(strength: number, maxAdjustPct: number): number {
 /**
  * How much money is pointed at you.
  *
- * Two halves: how the richest rival's wallet compares to yours (which sets the
- * ceiling on what you can be outbid by) and how many rivals are above you at
- * all (which sets how many times you can be outbid).
+ * The measure is symmetric on purpose: every term is zero when a rival holds
+ * exactly what you hold, so a league where nobody has spent a dollar reads as
+ * level rather than as an advantage to anybody. The old version counted only
+ * the STRICTLY richer rivals, so ten teams tied at the maximum came out as ten
+ * teams poorer than you, and the calculator told a reader with 100 FAAB that
+ * the richest rival had "only 100" and could not compete with him.
+ *
+ * Two halves, both relative to your own budget: the richest wallet, which
+ * decides how far you can be outbid, and the median wallet, which decides how
+ * many times.
  */
 function rivalBudgetSignal(input: MarketInput, read: MarketRead): FaabSignal | null {
   const cfg = input.settings.rivalBudget;
   if (!cfg.enabled || input.rivalBudgets.length === 0) return null;
 
+  const yours = Math.max(1, input.yourBudget);
   const richest = read.richestRivalBudget ?? 0;
-  const ratio = richest / Math.max(1, input.yourBudget);
-  const ratioTerm = clamp(ratio - 1, -1, 1);
-  const richerShare = read.rivalsRicher / input.rivalBudgets.length;
-  const shareTerm = clamp(richerShare * 2 - 1, -1, 1);
-  const strength = 0.6 * ratioTerm + 0.4 * shareTerm;
-  if (Math.abs(strength) < 0.1) return null;
+  const medianRival = read.medianRivalBudget ?? 0;
+
+  const richestTerm = clamp(richest / yours - 1, -1, 1);
+  const medianTerm = clamp(medianRival / yours - 1, -1, 1);
+  const strength = 0.6 * richestTerm + 0.4 * medianTerm;
+
+  if (Math.abs(strength) < 0.1) {
+    // Level budgets are a real answer, not the absence of one, and staying
+    // silent here is what let the wrong sentence fill the gap. It moves the bid
+    // by nothing because it should move the bid by nothing.
+    if (read.everyoneAtFullBudget) {
+      return {
+        id: "rival-budget",
+        label: "Nobody has spent anything yet",
+        detail: `Every team still holds the full ${read.leagueTotalBudget ?? yours}. No one can be priced out, so this comes down to who wants him most.`,
+        tone: "neutral",
+        multiplier: 1,
+        spread: 0,
+      };
+    }
+    return {
+      id: "rival-budget",
+      label: "Budgets are level",
+      detail: `You have ${input.yourBudget} and the richest rival has ${richest}. Nobody at this table can outspend anybody.`,
+      tone: "neutral",
+      multiplier: 1,
+      spread: 0,
+    };
+  }
 
   const pressured = strength > 0;
+  if (pressured) {
+    const canOutbid = read.rivalsAtLeastAsRich;
+    return {
+      id: "rival-budget",
+      label: "Your rivals have money",
+      detail: `${canOutbid} of ${input.rivalBudgets.length} rivals can match or beat anything you bid, and the richest holds ${richest} against your ${input.yourBudget}. You are the one stretching.`,
+      tone: "bad",
+      multiplier: toMultiplier(strength, cfg.maxAdjustPct),
+      spread: 0,
+    };
+  }
+
+  // Only reachable when the richest rival is genuinely behind you, so the
+  // sentence can say the one thing that actually helps: the ceiling on what
+  // anybody else is able to pay.
   return {
     id: "rival-budget",
-    label: pressured ? "Your rivals have money" : "Your rivals are broke",
-    detail: pressured
-      ? `${read.rivalsRicher} of ${input.rivalBudgets.length} rivals have more FAAB than you; the richest has ${richest}. You are the one stretching.`
-      : `The richest rival has only ${richest}. You do not need to pay full price to win this.`,
-    tone: pressured ? "bad" : "good",
+    label: "Your rivals are short of money",
+    detail: `The richest rival holds ${richest} against your ${input.yourBudget}, so nobody can take him past ${richest}. You do not need to pay full price to win this.`,
+    tone: "good",
     multiplier: toMultiplier(strength, cfg.maxAdjustPct),
     spread: 0,
   };
@@ -200,11 +251,20 @@ export function buildMarket(input: MarketInput): {
   signals: FaabSignal[];
 } {
   const rivals = [...input.rivalBudgets].sort((a, b) => a - b);
+  const total = input.leagueTotalBudget;
   const read: MarketRead = {
     yourBudget: input.yourBudget,
     rivalsRicher: rivals.filter((b) => b > input.yourBudget).length,
+    rivalsAtLeastAsRich: rivals.filter((b) => b >= input.yourBudget).length,
     richestRivalBudget: rivals.length > 0 ? rivals[rivals.length - 1] : null,
     medianRivalBudget: rivals.length > 0 ? median(rivals) : null,
+    leagueTotalBudget: total,
+    everyoneAtFullBudget:
+      total !== null &&
+      total > 0 &&
+      input.yourBudget >= total &&
+      rivals.length > 0 &&
+      rivals.every((b) => b >= total),
     interestedRivals: input.interestedRivals,
     rivalsChecked: input.rivalsChecked,
     comparable: input.comparable,

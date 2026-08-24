@@ -16,6 +16,7 @@ function baseInput(overrides: Partial<MarketInput> = {}): MarketInput {
     comparable: null,
     currentWeek: 7,
     lastRegularWeek: 14,
+    leagueTotalBudget: 100,
     settings: DEFAULT_FAAB_SETTINGS.market,
     ...overrides,
   };
@@ -57,6 +58,49 @@ describe("rival budget", () => {
     const signal = signals.find((s) => s.id === "rival-budget");
     expect(signal?.tone).toBe("bad");
     expect(signal?.multiplier).toBeGreaterThan(1);
+  });
+
+  /**
+   * The reported bug. A league where nobody has spent a dollar used to read as
+   * a league full of broke rivals, because only the STRICTLY richer ones were
+   * counted, and it told a reader holding the league maximum that the richest
+   * rival had "only" that same maximum and could not compete.
+   */
+  it("calls a league where nobody has spent anything level, not broke", () => {
+    const { read, signals } = buildMarket(
+      baseInput({
+        yourBudget: 100,
+        rivalBudgets: [100, 100, 100, 100, 100],
+        leagueTotalBudget: 100,
+      }),
+    );
+    expect(read.rivalsRicher).toBe(0);
+    expect(read.rivalsAtLeastAsRich).toBe(5);
+    expect(read.everyoneAtFullBudget).toBe(true);
+
+    const signal = signals.find((s) => s.id === "rival-budget");
+    expect(signal?.tone).toBe("neutral");
+    expect(signal?.multiplier).toBe(1);
+    expect(signal?.detail).not.toMatch(/only/i);
+    expect(signal?.label).not.toMatch(/broke/i);
+  });
+
+  it("does not discount when rivals merely tie you below full budget", () => {
+    const { read, signals } = buildMarket(
+      baseInput({ yourBudget: 40, rivalBudgets: [40, 40, 40], leagueTotalBudget: 100 }),
+    );
+    expect(read.everyoneAtFullBudget).toBe(false);
+    const signal = signals.find((s) => s.id === "rival-budget");
+    expect(signal?.tone).toBe("neutral");
+    expect(signal?.multiplier).toBe(1);
+  });
+
+  it("never claims rivals are short when one of them can outbid you", () => {
+    const { signals } = buildMarket(
+      baseInput({ yourBudget: 50, rivalBudgets: [50, 50, 90, 10, 10] }),
+    );
+    const signal = signals.find((s) => s.id === "rival-budget");
+    expect(signal?.label).not.toMatch(/short of money/i);
   });
 });
 

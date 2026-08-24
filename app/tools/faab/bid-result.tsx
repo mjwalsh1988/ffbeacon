@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -9,9 +10,11 @@ import {
   ShieldAlert,
   Target,
   TrendingUp,
+  UserMinus,
 } from "lucide-react";
 import type {
   BidLadder,
+  DropCandidate,
   FaabConfidence,
   FaabSignal,
   LeagueFaabReport,
@@ -126,6 +129,13 @@ export function BidResult({ view }: { view: BidView }) {
       </div>
 
       {view.marginal && !benchOnly && <ImpactGrid view={view} />}
+      {view.marginal && (view.marginal.dropOptions.length > 0 || view.marginal.dropNote) && (
+        <DropOptions
+          options={view.marginal.dropOptions}
+          note={view.marginal.dropNote}
+          weeksConsidered={view.marginal.weeksConsidered}
+        />
+      )}
       {view.marginal && view.marginal.weeks.length > 0 && (
         <WeekStrip weeks={view.marginal.weeks} mode={view.mode} />
       )}
@@ -288,14 +298,133 @@ function ImpactGrid({ view }: { view: BidView }) {
           </div>
         ))}
       </dl>
-      {m.dropCost && (
-        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-          You would drop <strong className="text-ink">{m.dropCost.name}</strong>
-          {m.dropCost.pointsPerWeek > 0.1
-            ? `, costing ${m.dropCost.pointsPerWeek.toFixed(1)} a week. Figures above are net of that.`
-            : ", who costs you nothing."}
-        </p>
+      {/* The cut these figures are net of is named in the summary above and
+          badged on its own row in the shortlist below, so repeating it here
+          would be the third mention of one player on one screen. */}
+    </section>
+  );
+}
+
+/**
+ * Who you could drop, as a shortlist rather than an instruction.
+ *
+ * The model ranks by projected lineup points and market value. Both are real,
+ * and neither can see the reasons a reader keeps somebody: a handcuff whose
+ * stock jumped the day the starter ahead of him went down, a rookie they are
+ * high on, a piece of a trade already in motion. So this names a few players
+ * and says plainly that the last call is theirs.
+ *
+ * Every figure a wide screen shows is present on a phone. The row stacks rather
+ * than dropping the cost, and the cost keeps its own line at every width.
+ */
+function DropOptions({
+  options,
+  note,
+  weeksConsidered,
+}: {
+  options: DropCandidate[];
+  note: string | null;
+  weeksConsidered: number;
+}) {
+  // Both a league answer and a manual answer can be on screen at once, so the
+  // heading id has to be unique per instance or the second section points its
+  // label at the first section's heading.
+  const headingId = `${useId()}-drop`;
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="rounded-card border border-line bg-surface/40 p-4"
+    >
+      <h5
+        id={headingId}
+        className="flex items-center gap-2 text-sm font-semibold text-ink"
+      >
+        <UserMinus aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
+        Who you could drop
+      </h5>
+
+      {options.length > 0 ? (
+        <>
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+            Your roster is full, so somebody has to go.{" "}
+            {options.length === 1
+              ? "Only one player here looks spare. Everyone else is in your lineup or worth more than this claim."
+              : `Your lineup would miss these least over the next ${weeksConsidered} week${weeksConsidered === 1 ? "" : "s"}, cheapest first.`}
+          </p>
+
+          <ul role="list" className="mt-3 space-y-2">
+            {options.map((option, index) => (
+              <li
+                key={option.playerId}
+                className="rounded-card border border-line bg-base/50 p-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                      {option.name}
+                      <span className="rounded-full border border-line bg-surface px-2 py-0.5 font-mono text-[11px] font-medium text-ink-subtle">
+                        {[option.position, option.team].filter(Boolean).join(" ") ||
+                          "Bench"}
+                      </span>
+                      {option.injuryStatus && (
+                        <span className="rounded-full border border-signal-warning/40 bg-signal-warning/10 px-2 py-0.5 text-[11px] font-medium text-signal-warning">
+                          {option.injuryStatus}
+                        </span>
+                      )}
+                      {index === 0 && (
+                        <span className="rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-2 py-0.5 text-[11px] font-medium text-brand-cyan">
+                          Used for the figures above
+                        </span>
+                      )}
+                    </p>
+                    {option.note && (
+                      <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                        {option.note}
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="shrink-0 text-right">
+                    <span
+                      aria-hidden="true"
+                      className="block font-mono text-sm font-bold tabular-nums text-ink"
+                    >
+                      {option.pointsPerWeek <= 0.05
+                        ? "Free"
+                        : `-${option.pointsPerWeek.toFixed(1)}`}
+                    </span>
+                    <span aria-hidden="true" className="block text-[11px] text-ink-subtle">
+                      {option.pointsPerWeek <= 0.05 ? "to cut" : "points a week"}
+                    </span>
+                    <span className="sr-only">
+                      {option.pointsPerWeek <= 0.05
+                        ? "Cutting him costs your lineup nothing."
+                        : `Cutting him costs your lineup ${option.pointsPerWeek.toFixed(1)} points a week.`}
+                    </span>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
+      {note && (
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">{note}</p>
       )}
+
+      {/* The caveat is part of the answer, not a disclaimer bolted to the end of
+          it, so it sits inside the same card and is read out with the list. */}
+      <p className="mt-3 flex items-start gap-2 rounded-card border border-dashed border-line bg-base/40 px-3 py-2.5 text-sm leading-relaxed text-ink-muted">
+        <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" />
+        <span>
+          A shortlist, not advice. We only see projected points and market value,
+          so we miss what you know: a backup who just became the starter, a rookie
+          you like, a name someone has asked you about in a trade. Check before you
+          cut.
+        </span>
+      </p>
     </section>
   );
 }
@@ -429,11 +558,28 @@ function SignalList({ signals }: { signals: FaabSignal[] }) {
 function MarketCard({ view, market }: { view: BidView; market: MarketRead }) {
   const lines: string[] = [];
 
-  lines.push(
-    market.richestRivalBudget !== null
-      ? `You have ${market.yourBudget} FAAB; the richest rival has ${market.richestRivalBudget}.`
-      : `You have ${market.yourBudget} FAAB left.`,
-  );
+  // Budgets, said in a way that survives a league where everybody is level.
+  // "The richest rival has 100" is a useless sentence on its own when 100 is
+  // the league maximum, so the line always states what it means for the bid.
+  if (market.richestRivalBudget === null) {
+    lines.push(`You have ${market.yourBudget} FAAB left.`);
+  } else if (market.everyoneAtFullBudget) {
+    lines.push(
+      `Every team still holds the full ${market.leagueTotalBudget ?? market.yourBudget}, you included. Nobody can be priced out yet.`,
+    );
+  } else if (market.richestRivalBudget > market.yourBudget) {
+    lines.push(
+      `You have ${market.yourBudget} FAAB and ${market.rivalsAtLeastAsRich} of the other teams can match or beat that, the richest with ${market.richestRivalBudget}.`,
+    );
+  } else if (market.richestRivalBudget === market.yourBudget) {
+    lines.push(
+      `You have ${market.yourBudget} FAAB and so does the richest rival. Nobody here can outspend anybody.`,
+    );
+  } else {
+    lines.push(
+      `You have ${market.yourBudget} FAAB and the richest rival has ${market.richestRivalBudget}, so nobody can take him past ${market.richestRivalBudget}.`,
+    );
+  }
 
   if (market.interestedRivals !== null && market.rivalsChecked !== null) {
     lines.push(

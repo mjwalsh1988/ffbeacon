@@ -183,7 +183,7 @@ export default async function FaabPage({
           <PageMasthead
             eyebrow="Tools"
             title="FAAB Calculator"
-            description="What to bid, and when to walk away. Connect your Sleeper league and we price the claim against your real roster, or enter your setup by hand."
+            description="What to bid, and when to walk away. Connect your Sleeper league to price the claim against your real roster, or enter your setup by hand."
             chips={mastheadChips}
             actions={
               <>

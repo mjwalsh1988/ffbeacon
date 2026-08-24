@@ -98,6 +98,8 @@ export function ManualResult({
       comparable: null,
       currentWeek: outlook.currentWeek,
       lastRegularWeek: outlook.lastRegularWeek,
+      // No league, so no published allowance to compare wallets against.
+      leagueTotalBudget: null,
       settings: settings.market,
     });
 

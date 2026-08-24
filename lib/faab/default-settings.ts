@@ -107,6 +107,22 @@ export const DEFAULT_FAAB_SETTINGS: FaabSettings = {
     minMeaningfulPointsPerWeek: 0.25,
   },
 
+  dropGuard: {
+    enabled: true,
+    useHealthyBaseline: true,
+    // A straight comparison. We will not tell somebody to cut a player the
+    // market prices above the one they are claiming, and no fudge factor makes
+    // that advice better.
+    maxDropValueRatio: 1,
+    // The bottom 40% of a keeper roster. Deep enough that a real spare part is
+    // always available, shallow enough that nobody is told to release a starter
+    // they intend to keep next year.
+    keeperBottomShare: 0.4,
+    // Below eight priced players a roster has no meaningful top and bottom, so
+    // the guards would be sorting noise.
+    minValuedPlayers: 8,
+  },
+
   signals: {
     beatRate: { enabled: true, neutral: 0.5, maxAdjustPct: 12, minWeeks: 4 },
     availability: { enabled: true, neutral: 0.85, maxAdjustPct: 15 },

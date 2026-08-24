@@ -147,6 +147,19 @@ export const faabSettingsSchema = z.object({
     })
     .default(d.marginal),
 
+  dropGuard: z
+    .object({
+      enabled: z.boolean().default(d.dropGuard.enabled),
+      useHealthyBaseline: z.boolean().default(d.dropGuard.useHealthyBaseline),
+      // Above 1 the calculator would start naming players worth more than the
+      // claim, which is the behavior this guard exists to stop.
+      maxDropValueRatio: z.number().min(0).max(1).default(d.dropGuard.maxDropValueRatio),
+      // Capped below 1 so a keeper roster always keeps a protected top.
+      keeperBottomShare: z.number().min(0.05).max(0.9).default(d.dropGuard.keeperBottomShare),
+      minValuedPlayers: z.number().int().min(0).default(d.dropGuard.minValuedPlayers),
+    })
+    .default(d.dropGuard),
+
   signals: z
     .object({
       beatRate: signalToggle

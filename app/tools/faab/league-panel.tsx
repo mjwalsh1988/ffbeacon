@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
-import { Layers, Link2, Loader2, Users } from "lucide-react";
+import {
+  Calculator,
+  Layers,
+  Link2,
+  Loader2,
+  Trophy,
+  UserSearch,
+  Users,
+} from "lucide-react";
 import {
   connectSleeperLeagues,
   fetchLeagueFreeAgents,
@@ -297,12 +305,11 @@ export function LeaguePanel({
             id={`${ids}-heading`}
             className="text-xl font-semibold tracking-tight text-ink sm:text-2xl"
           >
-            Connect your league for a bid built from your roster
+            Price a bid against your actual roster
           </h2>
           <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-            We project every remaining week with and without him, in your league&apos;s
-            scoring, then price what he actually adds. Sleeper username only, no account
-            needed.
+            We project every remaining week with him and without him, in your
+            league&apos;s scoring. Sleeper username only, no account.
           </p>
         </div>
       </div>
@@ -368,92 +375,145 @@ export function LeaguePanel({
           </p>
         )}
 
-        {/* Step 2: which league, which player */}
+        {/* Step 2: which league, which player.
+            Two columns on a wide screen because the two choices are one step,
+            not two, and stacking them made the second look like a follow-up the
+            reader had to scroll to find. Stacks on a phone with nothing
+            dropped. */}
         {connected && (
-          <div
+          <form
             id={`${ids}-league-step`}
-            className="scroll-mt-24 space-y-4 rounded-card border border-line bg-base/50 p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              priceOne();
+            }}
+            className="scroll-mt-24 rounded-card border border-line bg-base/50 p-4 sm:p-5"
           >
-            <div>
-              <label htmlFor={`${ids}-league`} className="block text-sm font-medium text-ink">
-                Your league
-              </label>
-              <select
-                id={`${ids}-league`}
-                value={selectedLeagueId}
-                onChange={(e) => {
-                  setSelectedLeagueId(e.target.value);
-                  setReport(null);
-                  setBidError(null);
-                }}
-                className="mt-2 min-h-11 w-full rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+            <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
+              {/* Pick your league */}
+              <section aria-labelledby={`${ids}-league-heading`} className="min-w-0">
+                <h3
+                  id={`${ids}-league-heading`}
+                  className="flex items-center gap-2 text-sm font-semibold text-ink"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-card border border-brand-purple/40 bg-brand-purple/10 text-brand-purple"
+                  >
+                    <Trophy className="h-4 w-4" />
+                  </span>
+                  Pick your league
+                </h3>
+
+                <label htmlFor={`${ids}-league`} className="sr-only">
+                  Your league
+                </label>
+                <select
+                  id={`${ids}-league`}
+                  value={selectedLeagueId}
+                  onChange={(e) => {
+                    setSelectedLeagueId(e.target.value);
+                    setReport(null);
+                    setBidError(null);
+                  }}
+                  className="mt-3 min-h-11 w-full rounded-card border border-line bg-base px-3 py-2.5 text-sm text-ink focus:border-brand-purple focus:outline-none focus:ring-2 focus:ring-brand-purple/30"
+                >
+                  <option value="">Select a league</option>
+                  {leagues.map((l) => (
+                    <option key={l.sleeperLeagueId} value={l.sleeperLeagueId}>
+                      {l.name}
+                      {l.synced && l.rosterId !== null
+                        ? l.remainingBudget !== null
+                          ? ` (${l.remainingBudget} FAAB left)`
+                          : ""
+                        : " (syncs when picked)"}
+                    </option>
+                  ))}
+                </select>
+
+                {leagues.some((l) => !l.synced || l.rosterId === null) && (
+                  <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
+                    <Layers
+                      aria-hidden="true"
+                      className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan"
+                    />
+                    <span>
+                      Leagues marked &quot;syncs when picked&quot; are new to us. Pick one
+                      and we read it from Sleeper on the spot.
+                    </span>
+                  </p>
+                )}
+              </section>
+
+              {/* Pick your player */}
+              <section
+                aria-labelledby={`${ids}-player-heading`}
+                className="min-w-0 border-t border-line pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0"
               >
-                <option value="">Select a league</option>
-                {leagues.map((l) => (
-                  <option key={l.sleeperLeagueId} value={l.sleeperLeagueId}>
-                    {l.name}
-                    {l.synced && l.rosterId !== null
-                      ? l.remainingBudget !== null
-                        ? ` (${l.remainingBudget} FAAB left)`
-                        : ""
-                      : " (syncs when you pick it)"}
-                  </option>
-                ))}
-              </select>
+                <h3
+                  id={`${ids}-player-heading`}
+                  className="flex items-center gap-2 text-sm font-semibold text-ink"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan"
+                  >
+                    <UserSearch className="h-4 w-4" />
+                  </span>
+                  Pick your player
+                </h3>
+
+                <div className="mt-3">
+                  {loadingAgents ? (
+                    <p className="flex items-center gap-2 text-sm text-ink-muted">
+                      <Loader2
+                        aria-hidden="true"
+                        className="h-4 w-4 animate-spin text-brand-cyan"
+                      />
+                      {syncingLeague
+                        ? "Reading this league from Sleeper. A few seconds."
+                        : "Checking who is available."}
+                    </p>
+                  ) : freeAgentError ? (
+                    <p role="alert" className="text-sm text-signal-danger">
+                      {freeAgentError}
+                    </p>
+                  ) : freeAgents ? (
+                    <PlayerCombobox
+                      players={freeAgents}
+                      query={query}
+                      onQueryChange={setQuery}
+                      selected={player}
+                      onSelect={(p) => {
+                        setPlayer(p);
+                        setQuery(p ? p.name : "");
+                      }}
+                      formatName={formatName}
+                      label="Free agent you are bidding on"
+                      helpText={`${freeAgents.length} free agents, in the positions this league starts (${leaguePositions.join(", ")}). ${rosteredCount} ranked players are already owned.`}
+                    />
+                  ) : (
+                    <p className="text-sm text-ink-muted">
+                      Pick a league first and we will list who is free in it.
+                    </p>
+                  )}
+                </div>
+              </section>
             </div>
 
-            {loadingAgents ? (
-              <p className="flex items-center gap-2 text-sm text-ink-muted">
-                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-brand-cyan" />
-                {syncingLeague
-                  ? "Pulling this league from Sleeper for the first time. Give it a few seconds."
-                  : "Reading who is available in this league."}
-              </p>
-            ) : freeAgentError ? (
-              <p role="alert" className="text-sm text-signal-danger">
-                {freeAgentError}
-              </p>
-            ) : freeAgents ? (
-              <div>
-                <PlayerCombobox
-                  players={freeAgents}
-                  query={query}
-                  onQueryChange={setQuery}
-                  selected={player}
-                  onSelect={(p) => {
-                    setPlayer(p);
-                    setQuery(p ? p.name : "");
-                  }}
-                  formatName={formatName}
-                  label="Player you are bidding on"
-                  helpText={`${freeAgents.length} free agents in this league. Only the positions it starts (${leaguePositions.join(", ")}), and ${rosteredCount} ranked players are already rostered.`}
-                />
-              </div>
-            ) : (
-              <p className="text-sm text-ink-muted">
-                Pick a league above to see who is available in it.
-              </p>
-            )}
-
-            {leagues.some((l) => !l.synced || l.rosterId === null) && (
-              <p className="flex items-start gap-2 text-sm leading-relaxed text-ink-muted">
-                <Layers aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan" />
-                <span>
-                  Leagues marked &quot;syncs when you pick it&quot; are ones we have not
-                  read yet. Pick one and we read it from Sleeper on the spot. A few seconds
-                  the first time, nothing after that.
-                </span>
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-3 border-t border-line pt-5">
+              {/* A real submit, styled like the hero's primary action, so the
+                  one thing the reader came here to press looks like it. */}
               <button
-                type="button"
-                onClick={priceOne}
+                type="submit"
                 disabled={busy || !player?.sleeper_id || !selected?.rosterId}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-card border border-brand-cyan/50 bg-brand-cyan/10 px-4 py-2.5 text-sm font-semibold text-brand-cyan transition-colors hover:bg-brand-cyan/20 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-card bg-beacon px-5 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                {pricing && <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />}
+                {pricing ? (
+                  <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Calculator aria-hidden="true" className="h-4 w-4" />
+                )}
                 {pricing ? "Pricing" : "Price this bid"}
               </button>
 
@@ -466,11 +526,11 @@ export function LeaguePanel({
                 >
                   {checkingAll && <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />}
                   <Users aria-hidden="true" className="h-4 w-4" />
-                  {checkingAll ? "Checking" : `Check all ${priceable.length} leagues`}
+                  {checkingAll ? "Checking" : `All ${priceable.length} leagues`}
                 </button>
               )}
             </div>
-          </div>
+          </form>
         )}
 
         {/* Short on purpose: the detail is in the cards below. */}
@@ -584,8 +644,8 @@ function MultiLeagueList({
 
       {notChecked > 0 && (
         <p className="mt-3 text-sm text-ink-muted">
-          {notChecked} more league{notChecked === 1 ? "" : "s"} unchecked: pricing is heavy, so
-          we cap how many run at once. Price those individually above.
+          {notChecked} more league{notChecked === 1 ? "" : "s"} unchecked. Pricing is
+          heavy, so we cap how many run at once. Do those one at a time above.
         </p>
       )}
     </section>

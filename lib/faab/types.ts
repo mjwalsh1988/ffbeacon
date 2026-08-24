@@ -113,6 +113,46 @@ export interface ResultCopy {
 // ---------------------------------------------------------------------------
 
 /** Turning a lineup upgrade into a share of budget. */
+/**
+ * Which players the calculator is allowed to tell you to cut.
+ *
+ * The lineup model measures a player by the points he adds to your starting
+ * lineup over the weeks you have left. That is the right measure for pricing a
+ * bid and the wrong one for choosing a cut, because a player carrying a
+ * long-term injury designation projects zero for every remaining week and so
+ * reads as the cheapest man on the roster. He is not cheap. He is the most
+ * expensive thing you own, sitting still.
+ *
+ * Two guards, and the second one is different in a keeper league on purpose: a
+ * cut returns nothing, and in a league where you keep your team, what you are
+ * giving up is the asset, not the rest of a season.
+ */
+export interface DropGuardSettings {
+  enabled: boolean;
+  /**
+   * Rank cut candidates on what they are worth when they play, ignoring injury
+   * designations. Turning this off restores the old behavior, where the injured
+   * player is always the cheapest cut.
+   */
+  useHealthyBaseline: boolean;
+  /**
+   * Redraft only. A cut may be suggested when the market rates that player at
+   * or below this multiple of the player being added. 1 means "never tell me to
+   * cut someone worth more than the man I am bidding on".
+   */
+  maxDropValueRatio: number;
+  /**
+   * Dynasty and keeper leagues only. A cut may be suggested only from this
+   * bottom share of the roster by market value. 0.4 means the bottom 40%.
+   */
+  keeperBottomShare: number;
+  /**
+   * Below this many valued players on a roster the value guards are skipped
+   * entirely: a bottom share of four players is not a share of anything.
+   */
+  minValuedPlayers: number;
+}
+
 export interface MarginalSettings {
   /**
    * The points-per-week gain treated as a full-strength upgrade. A player who
@@ -260,6 +300,7 @@ export interface FaabSettings {
   valueNormalization: ValueNormalization;
   copy: ResultCopy;
   marginal: MarginalSettings;
+  dropGuard: DropGuardSettings;
   signals: SignalSettings;
   market: MarketSettings;
   ladder: LadderSettings;
@@ -357,9 +398,22 @@ export interface DropCost {
   playerId: string;
   name: string;
   position: string;
+  /** NFL team, for telling two players with the same surname apart. */
+  team: string | null;
   /** Points per week the optimal lineup loses by cutting them. Usually 0. */
   pointsPerWeek: number;
+  /** Sleeper's injury designation, verbatim. Null when healthy. */
+  injuryStatus: string | null;
+  /**
+   * One short plain-language line about this player's place on the roster, so a
+   * reader does not have to interpret a points figure to understand why he is
+   * on the list.
+   */
+  note: string | null;
 }
+
+/** One player on the shortlist of who a reader could cut. */
+export type DropCandidate = DropCost;
 
 /** What adding this player actually does to your team. */
 export interface MarginalValue {
@@ -373,12 +427,40 @@ export interface MarginalValue {
   /** After subtracting what the drop costs you. This is the number that counts. */
   netPointsPerWeek: number;
   expectedWinsAdded: number | null;
+  /**
+   * Playoff and title odds in percentage POINTS, 0 to 100, not a 0-to-1
+   * probability. The simulator answers in probabilities and lib/faab/league-faab.ts
+   * converts once on the way in, because everything downstream of here (the
+   * ladder's point thresholds, the copy, the page) reads points.
+   */
   playoffOddsBefore: number | null;
   playoffOddsAfter: number | null;
   titleOddsBefore: number | null;
   titleOddsAfter: number | null;
   weeks: MarginalWeek[];
+  /**
+   * The cut the figures above are measured net of. Always the first entry in
+   * `dropOptions`, because the lineup math has to apply one specific cut and
+   * the cheapest is the one it applies.
+   */
   dropCost: DropCost | null;
+  /**
+   * Two to four players your lineup would miss least, cheapest first.
+   *
+   * A LIST RATHER THAN A VERDICT, on purpose. The model measures projected
+   * lineup points and market value, and there are real reasons to keep a player
+   * it cannot see: a handcuff whose stock jumped when the starter ahead of him
+   * went down, a rookie the reader is high on, a piece of a trade already in
+   * motion. Naming one player in a confident sentence reads as an instruction.
+   * Naming a few, cheapest first, reads as what it is.
+   */
+  dropOptions: DropCandidate[];
+  /**
+   * Set when the cut search refused to name somebody, either because every
+   * player left is worth keeping or because the obvious cut is a player we will
+   * not tell you to give away. Says who, and why, in one sentence.
+   */
+  dropNote: string | null;
   /** True when he never cracks the lineup: insurance, not an upgrade. */
   isBenchOnly: boolean;
 }
@@ -411,8 +493,20 @@ export interface MarketRead {
   yourBudget: number;
   /** Rival teams holding more FAAB than you. */
   rivalsRicher: number;
+  /**
+   * Rival teams holding at least as much as you, which is the number that
+   * decides whether you can be outbid. Counting only the strictly-richer ones
+   * reads a league where everybody is level as a league where nobody can
+   * compete, which is how "the richest rival has only 100" got printed about a
+   * league whose budget is 100.
+   */
+  rivalsAtLeastAsRich: number;
   richestRivalBudget: number | null;
   medianRivalBudget: number | null;
+  /** The league's full per-team FAAB allowance. Null when not configured. */
+  leagueTotalBudget: number | null;
+  /** True when nobody in the league, you included, has spent a dollar yet. */
+  everyoneAtFullBudget: boolean;
   /** How many rival teams this player would meaningfully improve. Null when we
    * could not run the check. */
   interestedRivals: number | null;

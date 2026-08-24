@@ -192,8 +192,8 @@ export function FaabForm({
           No league? Enter your setup instead
         </h2>
         <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-          We price him against the best player you could already start in a league this
-          size, then adjust for his projections, reliability, usage, and the calendar.
+          We price him against the best player you could already start in a league
+          this size, then adjust for his projections, usage, and the calendar.
         </p>
       </div>
 

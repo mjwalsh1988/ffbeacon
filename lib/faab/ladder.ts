@@ -204,7 +204,13 @@ export function buildLadder(input: LadderInput): LadderOutput {
   );
 
   // Never recommend paying more than he is worth, and never invert the rungs.
+  //
+  // When the market price runs past his worth to you, all three rungs land on
+  // the same number, and a ladder printed as "34, 34, 34" reads as a broken
+  // calculator rather than as the answer it is. So we remember that it happened
+  // and say it in words further down.
   walkAway = Math.min(walkAway, budget);
+  const cappedByWorth = aggressive > walkAway || likely > walkAway;
   aggressive = Math.min(aggressive, Math.max(walkAway, 0));
   likely = Math.min(likely, aggressive);
 
@@ -231,6 +237,7 @@ export function buildLadder(input: LadderInput): LadderOutput {
     likely,
     walkAway,
     upgradeStrength,
+    cappedByWorth,
   });
 
   if (input.confidence === "low") notices.push(settings.copy.thinDataNote);
@@ -265,6 +272,7 @@ function describe({
   likely,
   walkAway,
   upgradeStrength,
+  cappedByWorth,
 }: {
   marginal: MarginalValue | null;
   market: MarketRead;
@@ -272,6 +280,8 @@ function describe({
   likely: number;
   walkAway: number;
   upgradeStrength: number;
+  /** True when the market price ran past his worth and the rungs collapsed. */
+  cappedByWorth: boolean;
 }): { headline: string; explanation: string } {
   if (!marginal) {
     return {
@@ -302,11 +312,14 @@ function describe({
     );
   }
 
+  // Named rather than asserted: the figure has to be measured against one
+  // specific cut, but the cut itself is the reader's call and the shortlist
+  // below the summary is where the alternatives are.
   if (marginal.dropCost) {
     parts.push(
       marginal.dropCost.pointsPerWeek > 0.1
-        ? `Net of cutting ${marginal.dropCost.name} (${round1(marginal.dropCost.pointsPerWeek)} a week).`
-        : `You would cut ${marginal.dropCost.name}, who costs you nothing.`,
+        ? `Measured against cutting ${marginal.dropCost.name}, the cheapest spot to clear, which costs ${round1(marginal.dropCost.pointsPerWeek)} a week.`
+        : `Measured against cutting ${marginal.dropCost.name}, the cheapest spot to clear, which costs you nothing.`,
     );
   }
 
@@ -319,7 +332,9 @@ function describe({
   parts.push(
     isDumpCandidate
       ? `Spend. ${likely} gets it done; ${walkAway} is where even this stops being worth it.`
-      : `${likely} should win him. Above ${walkAway} you are overpaying, and letting him go is the right move.`,
+      : cappedByWorth
+        ? `He is worth ${likely} to you and the room is likely to pay more than that. Bid ${likely} and let him go above it: there is no version of this where paying over his worth is the right move.`
+        : `${likely} should win him. Above ${walkAway} you are overpaying, and letting him go is the right move.`,
   );
 
   const headline = isDumpCandidate

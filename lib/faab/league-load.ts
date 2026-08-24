@@ -197,6 +197,141 @@ export async function loadPositionalFinishes(
   }));
 }
 
+/**
+ * What kind of league this is, and which value board prices it.
+ *
+ * The cut guard in lib/faab/marginal.ts needs both. A dynasty roster and a
+ * redraft roster disagree completely about what a player on IR is worth, and
+ * the disagreement is already priced: the same player carries two different
+ * numbers on two different boards. So rather than guessing at return dates we
+ * read the board that matches the league, which `pulseLeague` already derived
+ * from the league's own Sleeper settings.
+ *
+ * Sleeper's `settings.type` is 0 redraft, 1 keeper, 2 dynasty. It is the
+ * fallback for a league whose scoring shape matched no format of ours, where
+ * `format_config_id` is null and there is no board to read.
+ */
+export type LeagueValueContext = {
+  formatConfigId: string | null;
+  /** True for dynasty and keeper leagues, where a cut gives up the asset. */
+  isKeeperLeague: boolean;
+};
+
+export async function loadLeagueValueContext(
+  supabase: ServiceClient,
+  leagueRowId: string,
+): Promise<LeagueValueContext> {
+  const { data } = await supabase
+    .from("leagues")
+    .select("format_config_id, metadata, format_configs(league_type)")
+    .eq("id", leagueRowId)
+    .maybeSingle();
+
+  if (!data) return { formatConfigId: null, isKeeperLeague: false };
+
+  const config = data.format_configs as { league_type?: string | null } | null;
+  const meta = (data.metadata ?? {}) as { settings?: Record<string, unknown> };
+  const sleeperType = numberFrom(meta.settings?.type);
+
+  // The derived format leads, because it is what the value lookup will read
+  // against. Sleeper's own flag only decides leagues we could not match.
+  const isKeeperLeague =
+    config?.league_type === "dynasty" ? true : sleeperType !== null && sleeperType >= 1;
+
+  return { formatConfigId: data.format_config_id ?? null, isKeeperLeague };
+}
+
+/**
+ * Market value for a set of players, on one board.
+ *
+ * Values are only comparable within a single source, so this picks one source
+ * and reads every player from it rather than taking whatever each player has
+ * the most of. The highest-priority active source that actually covers these
+ * players wins; a player that source has no row for comes back absent, which
+ * the cut guard reads as "the market puts nothing on him", which is correct.
+ *
+ * Returns an empty map when no source covers the format, and the guard that
+ * consumes it stands down rather than inventing a bar.
+ */
+export async function loadPlayerValues(
+  supabase: ServiceClient,
+  formatConfigId: string | null,
+  playerIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!formatConfigId || playerIds.length === 0) return out;
+
+  const [{ data: sources }, { data: rows }] = await Promise.all([
+    supabase
+      .from("source_registry")
+      .select("slug, priority")
+      .eq("is_active", true)
+      .order("priority", { ascending: true }),
+    supabase
+      .from("player_value_trends")
+      .select("player_id, source, current_value")
+      .eq("format_config_id", formatConfigId)
+      .in("player_id", playerIds.slice(0, PAGE)),
+  ]);
+
+  if (!rows || rows.length === 0) return out;
+
+  const bySource = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const value = numberFrom(row.current_value);
+    if (value === null) continue;
+    const map = bySource.get(row.source) ?? new Map<string, number>();
+    map.set(row.player_id, value);
+    bySource.set(row.source, map);
+  }
+
+  // Priority order, and the first source with real coverage wins. "Coverage"
+  // is deliberately most-rows rather than any-rows: a source holding two of
+  // eighteen players would give the guard a board with no bottom.
+  const ordered = (sources ?? []).map((r) => r.slug).filter((slug) => bySource.has(slug));
+  let chosen: Map<string, number> | null = null;
+  for (const slug of ordered) {
+    const map = bySource.get(slug);
+    if (!map) continue;
+    if (chosen === null || map.size > chosen.size) chosen = map;
+    // A source that prices most of the roster is good enough; stop looking.
+    if (chosen.size >= playerIds.length * 0.75) break;
+  }
+  if (!chosen) {
+    for (const map of bySource.values()) {
+      if (chosen === null || map.size > chosen.size) chosen = map;
+    }
+  }
+
+  return chosen ?? out;
+}
+
+/**
+ * How a rival is named everywhere in this calculator.
+ *
+ * Team name plus handle, because team names change on a whim and the handle is
+ * the part a reader recognises in October when "Herbert The Pervert" has become
+ * something else. Sleeper's `display_name` IS the account handle; `team_name`
+ * is the nickname on top of it, and plenty of managers never set one.
+ *
+ *   both, and different       Herbert The Pervert (@BigBCardz)
+ *   no team name              @BenMacleod27
+ *   team name equals handle   @BigBCardz          (never printed twice)
+ *   neither                   Team 4
+ */
+export function formatTeamLabel(input: {
+  teamName?: string | null;
+  username?: string | null;
+  sleeperRosterId: number;
+}): string {
+  const team = input.teamName?.trim() || null;
+  const handle = input.username?.trim() || null;
+
+  if (!handle) return team ?? `Team ${input.sleeperRosterId}`;
+  if (!team || team.toLowerCase() === handle.toLowerCase()) return `@${handle}`;
+  return `${team} (@${handle})`;
+}
+
 /** Display names for every roster, so the report can name teams properly. */
 export async function loadTeamNames(
   supabase: ServiceClient,
@@ -215,14 +350,25 @@ export async function loadTeamNames(
       .eq("league_id", leagueRowId),
   ]);
 
-  const byUser = new Map<string, string>();
+  const byUser = new Map<string, { teamName: string | null; username: string | null }>();
   for (const u of users ?? []) {
-    const name = u.team_name || u.display_name;
-    if (u.sleeper_user_id && name) byUser.set(u.sleeper_user_id, name);
+    if (!u.sleeper_user_id) continue;
+    byUser.set(u.sleeper_user_id, {
+      teamName: u.team_name ?? null,
+      username: u.display_name ?? null,
+    });
   }
   for (const r of rosters ?? []) {
-    const name = r.owner_user_id ? byUser.get(r.owner_user_id) : null;
-    out.set(Number(r.sleeper_roster_id), name ?? `Team ${r.sleeper_roster_id}`);
+    const owner = r.owner_user_id ? byUser.get(r.owner_user_id) : undefined;
+    const sleeperRosterId = Number(r.sleeper_roster_id);
+    out.set(
+      sleeperRosterId,
+      formatTeamLabel({
+        teamName: owner?.teamName,
+        username: owner?.username,
+        sleeperRosterId,
+      }),
+    );
   }
   return out;
 }

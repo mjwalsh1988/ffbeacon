@@ -45,13 +45,19 @@ import {
   type LineupCandidate,
 } from "@/lib/power-pulse/lineup";
 import type { PulsePosition } from "@/lib/power-pulse/types";
-import { computeLineupSwap, type CandidateWeek } from "./marginal";
+import {
+  computeLineupSwap,
+  type CandidateWeek,
+  type RosterMetaEntry,
+} from "./marginal";
 import { buildSignals } from "./signals";
 import { buildMarket, summarizeComparableBids } from "./market";
 import { buildLadder } from "./ladder";
 import {
   loadGameLogs,
   loadLeagueMoney,
+  loadLeagueValueContext,
+  loadPlayerValues,
   loadPositionalFinishes,
   loadTeamNames,
   loadWinningBids,
@@ -102,6 +108,7 @@ function buildRosterWeeks({
   defense,
   defenseSeasons,
   pulseSettings,
+  ignoreInjuries = false,
 }: {
   roster: RosterRow;
   players: Map<string, PlayerRow>;
@@ -113,7 +120,13 @@ function buildRosterWeeks({
   defense: Parameters<typeof projectPlayerWeek>[0]["defense"];
   defenseSeasons: number[];
   pulseSettings: Parameters<typeof projectPlayerWeek>[0]["settings"];
-}): { byWeek: RosterWeeks; meta: Map<string, { name: string; position: string }> } {
+  /**
+   * Project as if nobody were hurt. Used for the cut ranking only: a player on
+   * IR projects zero every week, which makes the most valuable man on a roster
+   * look like the cheapest one to release.
+   */
+  ignoreInjuries?: boolean;
+}): { byWeek: RosterWeeks; meta: Map<string, RosterMetaEntry> } {
   // IR and taxi players cannot start, so they are not lineup candidates and are
   // not drop candidates either: cutting them frees nothing that matters here.
   const ineligible = new Set([...roster.reserveSleeperIds, ...roster.taxiSleeperIds]);
@@ -122,12 +135,23 @@ function buildRosterWeeks({
     .map((sid) => players.get(sid))
     .filter((p): p is PlayerRow => Boolean(p));
 
-  const meta = new Map<string, { name: string; position: string }>();
+  const meta = new Map<string, RosterMetaEntry>();
+  // Disabling the whole injury block is the honest way to ask "what is he worth
+  // when he plays": it drops the week-to-week haircuts as well as the season
+  // ones, which is exactly the question the cut ranking is asking.
+  const projectionSettings = ignoreInjuries
+    ? { ...pulseSettings, injury: { ...pulseSettings.injury, enabled: false } }
+    : pulseSettings;
   const byWeek: RosterWeeks = new Map();
   for (const week of weeks) byWeek.set(week, []);
 
   for (const player of rosterPlayers) {
-    meta.set(player.playerId, { name: player.name, position: player.position });
+    meta.set(player.playerId, {
+      name: player.name,
+      position: player.position,
+      team: player.team,
+      injuryStatus: player.injuryStatus,
+    });
     const acc = accuracy.get(player.playerId) ?? null;
     const reliability = reliabilityMultiplier(acc, pulseSettings);
     for (const week of weeks) {
@@ -141,7 +165,7 @@ function buildRosterWeeks({
         defenseSeasons,
         week,
         currentWeek,
-        settings: pulseSettings,
+        settings: projectionSettings,
       });
       if (!projected) continue;
       byWeek.get(week)?.push({
@@ -207,13 +231,30 @@ export async function calculateLeagueFaab(
 
   const pulseSettings = await loadPowerPulseSettings(supabase);
 
-  const [projectionRows, accuracy, defense, schedule, money] = await Promise.all([
-    loadProjections(supabase, playerIds, league.season, currentWeek),
-    loadAccuracy(supabase, playerIds, scoringBase),
-    loadDefenseSplits(supabase, scoringBase, defenseSeasons),
-    loadSchedule(supabase, input.leagueRowId, league.season),
-    loadLeagueMoney(supabase, input.leagueRowId),
-  ]);
+  const [projectionRows, accuracy, defense, schedule, money, valueContext] =
+    await Promise.all([
+      loadProjections(supabase, playerIds, league.season, currentWeek),
+      loadAccuracy(supabase, playerIds, scoringBase),
+      loadDefenseSplits(supabase, scoringBase, defenseSeasons),
+      loadSchedule(supabase, input.leagueRowId, league.season),
+      loadLeagueMoney(supabase, input.leagueRowId),
+      loadLeagueValueContext(supabase, input.leagueRowId),
+    ]);
+
+  // Priced on the board that matches this league, so a dynasty roster and a
+  // redraft roster get the two different answers they should get about what an
+  // injured star is worth. Only the reader's own roster plus the candidate,
+  // because only the reader is being told to cut anybody.
+  const mineWithCandidate = Array.from(
+    new Set(
+      [...mine.playerSleeperIds, input.candidateSleeperId]
+        .map((sid) => players.get(sid)?.playerId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const playerValues = settings.dropGuard.enabled
+    ? await loadPlayerValues(supabase, valueContext.formatConfigId, mineWithCandidate)
+    : new Map<string, number>();
 
   const projections = new Map<string, Map<number, ProjectionRow>>();
   for (const row of projectionRows) {
@@ -286,6 +327,14 @@ export async function calculateLeagueFaab(
   // is the roster limit. At the limit, adding him means cutting someone.
   const mustDrop = mine.playerSleeperIds.length >= league.rosterPositions.length;
 
+  // A second projection pass over ONE roster, the reader's, with injuries
+  // switched off. It never touches the lineup math or the simulation; it only
+  // ranks who is cheapest to release. Skipped entirely when no cut is required.
+  const healthyRosterByWeek =
+    mustDrop && settings.dropGuard.enabled && settings.dropGuard.useHealthyBaseline
+      ? buildRosterWeeks({ roster: mine, ...projectArgs, ignoreInjuries: true }).byWeek
+      : undefined;
+
   const swap = computeLineupSwap({
     slots,
     weeks,
@@ -295,6 +344,11 @@ export async function calculateLeagueFaab(
     candidatePosition: candidate.position as PulsePosition,
     rosterMeta: rosterMetaById.get(mine.sleeperRosterId) ?? new Map(),
     mustDrop,
+    healthyRosterByWeek,
+    rosterValues: playerValues,
+    candidateValue: playerValues.get(candidate.playerId) ?? null,
+    isKeeperLeague: valueContext.isKeeperLeague,
+    dropGuard: settings.dropGuard,
   });
 
   // ---- playoff odds, before and after --------------------------------------
@@ -336,11 +390,34 @@ export async function calculateLeagueFaab(
     },
   });
 
+  // UNITS. The simulator answers in a 0-to-1 probability; every consumer of
+  // MarginalValue in this module reads percentage POINTS. The ladder compares
+  // playoff odds against thresholds written as points (a 12-point swing is the
+  // empty-the-clip bar, a team under 5 is already cooked), and the page prints
+  // the number with a percent sign after it. Handing those a fraction printed
+  // "0%" on every bid, marked every reader as mathematically eliminated, and
+  // silently zeroed the odds half of the upgrade score, which is half the
+  // recommendation by default. The conversion belongs here, once, at the only
+  // point where the two scales meet.
+  const asPoints = (odds: number) => odds * 100;
+
   if (simulated) {
     const b = simulated.before.get(mine.sleeperRosterId);
     const a = simulated.after.get(mine.sleeperRosterId);
-    if (b) oddsBefore = { playoff: b.playoffOdds, title: b.titleOdds, wins: b.expectedWins };
-    if (a) oddsAfter = { playoff: a.playoffOdds, title: a.titleOdds, wins: a.expectedWins };
+    if (b) {
+      oddsBefore = {
+        playoff: asPoints(b.playoffOdds),
+        title: asPoints(b.titleOdds),
+        wins: b.expectedWins,
+      };
+    }
+    if (a) {
+      oddsAfter = {
+        playoff: asPoints(a.playoffOdds),
+        title: asPoints(a.titleOdds),
+        wins: a.expectedWins,
+      };
+    }
   }
 
   const marginal: MarginalValue = {
@@ -357,6 +434,8 @@ export async function calculateLeagueFaab(
     titleOddsAfter: oddsAfter?.title ?? null,
     weeks: swap.weeks,
     dropCost: swap.dropCost,
+    dropOptions: swap.dropOptions,
+    dropNote: swap.dropNote,
     isBenchOnly: swap.isBenchOnly,
   };
 
@@ -424,6 +503,7 @@ export async function calculateLeagueFaab(
     comparable,
     currentWeek,
     lastRegularWeek,
+    leagueTotalBudget: money.totalBudget,
     settings: settings.market,
   });
 
