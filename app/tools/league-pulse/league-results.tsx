@@ -88,7 +88,7 @@ function statusKeyOf(
  * jumped to directly.
  */
 const STANDING_ORDER_NOTE =
-  "Within each type, your Competitors come first, then Mid Tier, then Rebuilders. Leagues we have not synced yet come last.";
+  "Within each type, your Contenders come first, then Bubble teams, then Rebuilders and Longshots. Leagues we have not synced yet come last.";
 
 /**
  * Where a row should land: always the league's Overview.
@@ -184,7 +184,7 @@ export function LeagueResults({
   /** Dashboard variant only, leagues currently visible on the user's
    * profile. */
   shownLeagueIds?: string[];
-  /** Competitor / Rebuilder standing for this user's own team, for the
+  /** Contender / Rebuilder standing for this user's own team, for the
    * leagues we have already pulsed. Missing entries render as pending. */
   teamStatuses?: TeamStatusMap;
   /** Active value source, so the FF Beacon mark on a rebuilder's roster value

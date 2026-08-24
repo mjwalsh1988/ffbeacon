@@ -696,6 +696,7 @@ export async function evaluateValidatedTrade(
   const mineImpact: TeamImpact = {
     rosterId: proposal.myRosterId,
     teamName: mineTeam.teamName,
+    statusKey: mineTeam.statusKey,
     statusLabel: statusOf(mineTeam),
     pulseRank: mineTeam.pulseRank,
     valueBefore: teamValueOf(mineTeam, world.finder.allowPicks),
@@ -726,6 +727,7 @@ export async function evaluateValidatedTrade(
   const theirImpact: TeamImpact = {
     rosterId: proposal.theirRosterId,
     teamName: theirTeam.teamName,
+    statusKey: theirTeam.statusKey,
     statusLabel: statusOf(theirTeam),
     pulseRank: theirTeam.pulseRank,
     valueBefore: teamValueOf(theirTeam, world.finder.allowPicks),

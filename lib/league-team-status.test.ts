@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyTeamStatus } from "./league-team-status";
+import { classifyTeamStatus, teamStatusWords } from "./league-team-status";
 
 const twelve = (pulseRank: number | null, valueRank: number | null = null) =>
   classifyTeamStatus({ pulseRank, valueRank, teamCount: 12 });
@@ -57,5 +57,51 @@ describe("classifyTeamStatus", () => {
 
   it("names the team's actual placing in the reason", () => {
     expect(twelve(1, 1)?.reason).toContain("1st of 12 by Power Pulse");
+  });
+
+  it("speaks dynasty by default", () => {
+    expect(twelve(1, 1)?.label).toBe("Contender");
+    expect(twelve(6, 6)?.label).toBe("Bubble");
+    expect(twelve(12, 12)?.label).toBe("Rebuilder");
+  });
+
+  it("calls the bottom band a Longshot in a one-year league", () => {
+    const redraft = (pulseRank: number, valueRank: number) =>
+      classifyTeamStatus({ pulseRank, valueRank, teamCount: 12, variant: "redraft" });
+    expect(redraft(12, 12)?.label).toBe("Longshot");
+    // Same band, same reasoning, different word.
+    expect(redraft(12, 12)?.key).toBe("rebuilder");
+    expect(redraft(1, 1)?.label).toBe("Contender");
+    expect(redraft(6, 6)?.label).toBe("Bubble");
+  });
+
+  it("changes only the words, never the classification", () => {
+    for (const rank of [1, 3, 5, 6, 7, 9, 12]) {
+      expect(
+        classifyTeamStatus({ pulseRank: rank, valueRank: rank, teamCount: 12, variant: "redraft" })
+          ?.key,
+      ).toBe(twelve(rank, rank)?.key);
+    }
+  });
+
+  it("carries the variant that produced its words", () => {
+    expect(twelve(12, 12)?.variant).toBe("dynasty");
+    expect(
+      classifyTeamStatus({ pulseRank: 12, valueRank: 12, teamCount: 12, variant: "redraft" })
+        ?.variant,
+    ).toBe("redraft");
+  });
+});
+
+describe("teamStatusWords", () => {
+  it("gives the middle band a form that survives an indefinite article", () => {
+    // "a Bubble" is not a sentence. Every prose surface uses `phrase`.
+    expect(teamStatusWords("middle").label).toBe("Bubble");
+    expect(teamStatusWords("middle").phrase).toBe("Bubble team");
+  });
+
+  it("shortens only what needs shortening", () => {
+    expect(teamStatusWords("competitor").short).toBe("Contend");
+    expect(teamStatusWords("rebuilder", "redraft").short).toBe("Longshot");
   });
 });

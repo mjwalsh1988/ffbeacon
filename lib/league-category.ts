@@ -55,8 +55,8 @@ export function categorizeLeague(league: SleeperLeague): LeagueCategoryKey {
  * Where each standing sits in the list, inside its category.
  *
  * Competing teams first, because they are the ones with something to do this
- * week. Rebuilders last for the same reason. A league we hold no standing for
- * lands past the rebuilders: it is not a claim that the team is bad, it is the
+ * week. Rebuilders and Longshots last for the same reason. A league we hold no
+ * standing for lands past them: it is not a claim that the team is bad, it is the
  * absence of a claim, and the bottom is where a row goes when the sort has
  * nothing to say about it.
  */
@@ -82,8 +82,8 @@ function standingOrder(
 
 /**
  * Group leagues into the ordered category buckets. Within a bucket, leagues run
- * Competitor, Mid Tier, Rebuilder, then whatever has no standing yet, and
- * alphabetically (case- and accent-insensitive) inside each of those bands.
+ * Contender, Bubble, then Rebuilder or Longshot, then whatever has no standing
+ * yet, and alphabetically (case- and accent-insensitive) inside each band.
  * Empty buckets are dropped so the UI only renders sections that actually have
  * leagues. Input order is not mutated.
  *

@@ -1,5 +1,5 @@
 /**
- * Read layer for the Competitor / Rebuilder tag on the league list, and for the
+ * Read layer for the Contender / Rebuilder tag on the league list, and for the
  * figure that now sits beside it.
  *
  * The list at /tools/league-pulse and on My Beacon shows every league a Sleeper
@@ -30,7 +30,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
+import {
+  classifyTeamStatus,
+  type TeamStatus,
+  type TeamStatusVariant,
+} from "@/lib/league-team-status";
 import { compareProjectedFinish } from "@/lib/power-pulse/projected-order";
 
 type AnySupabase =
@@ -65,7 +69,7 @@ export type LeagueTeamStatusSummary = {
    * formats, the "Unmatched" case), and those can never produce an exact match.
    *
    * The number is shown either way. Withholding it was the wrong call: a
-   * Rebuilder's whole story is what the roster is worth, and a fifth of them
+   * rebuild's whole story is what the roster is worth, and a fifth of them
    * were getting a projected finish instead, which is the one number a rebuild
    * is not measured by. The tag beside it was already quoting a rank from this
    * same fallback, so refusing to print the value only meant naming a rank whose
@@ -91,6 +95,15 @@ export async function loadSearchedTeamStatuses(
   sleeperUserId: string,
   season: number,
   sourceSlug: string | null,
+  /**
+   * Sleeper league id to the wording its status tag uses, so a redraft room
+   * reads Longshot where a dynasty one reads Rebuilder. Passed in rather than
+   * read here: both callers already hold the Sleeper league objects this comes
+   * from, and pulling every league's raw payload back out of our own table to
+   * re-derive one boolean would be the same answer at twenty times the cost.
+   * Anything missing from the map falls back to the dynasty wording.
+   */
+  variantByLeagueId: Readonly<Record<string, TeamStatusVariant>> = {},
 ): Promise<Map<string, LeagueTeamStatusSummary>> {
   const out = new Map<string, LeagueTeamStatusSummary>();
   if (sleeperLeagueIds.length === 0 || !sleeperUserId) return out;
@@ -234,6 +247,7 @@ export async function loadSearchedTeamStatuses(
           pulseRank,
           valueRank: chosen?.overall_rank ?? null,
           teamCount: Number(league.total_rosters ?? 0),
+          variant: variantByLeagueId[league.sleeper_league_id] ?? "dynasty",
         }),
       });
     }

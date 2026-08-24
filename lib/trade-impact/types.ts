@@ -21,6 +21,7 @@
  */
 
 import type { PulsePosition } from "@/lib/power-pulse/types";
+import type { TeamStatusKey } from "@/lib/league-team-status";
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
 
 /** Where a pick sits in its round, as draft_pick_values buckets them. */
@@ -89,7 +90,16 @@ export type WeekImpact = {
 export type TeamImpact = {
   rosterId: number;
   teamName: string;
-  /** Competitor / Mid Tier / Rebuilder. Null when the league has no Power Pulse. */
+  /**
+   * Which band this team is in. The logic key, not the words: the words change
+   * with the league type (Rebuilder in dynasty, Longshot in redraft) and the
+   * reasons below have to branch on the band, not on what it is called.
+   */
+  statusKey: TeamStatusKey | null;
+  /**
+   * The band as prose, for sentences that put it after an indefinite article.
+   * Null when the league has no Power Pulse.
+   */
   statusLabel: string | null;
   /** Power Pulse rank in this league, before the trade. */
   pulseRank: number | null;

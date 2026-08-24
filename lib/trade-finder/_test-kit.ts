@@ -12,7 +12,7 @@
  */
 
 import type { FinderPick, FinderPlayer, FinderTeam } from "./types";
-import type { TeamStatusKey } from "@/lib/league-team-status";
+import { teamStatusWords, type TeamStatusKey } from "@/lib/league-team-status";
 
 let counter = 0;
 
@@ -58,15 +58,11 @@ export function team(overrides: Partial<FinderTeam> = {}): FinderTeam {
     teamName: overrides.teamName ?? `Team ${counter}`,
     ownerHandle: overrides.ownerHandle ?? `manager${counter}`,
     statusKey: status,
+    // The prose form, matching lib/trade-finder-data.ts: every consumer puts
+    // this after "a".
     statusLabel:
       overrides.statusLabel ??
-      (status === "competitor"
-        ? "Competitor"
-        : status === "rebuilder"
-          ? "Rebuilder"
-          : status === "middle"
-            ? "Mid Tier"
-            : null),
+      (status ? teamStatusWords(status).phrase : null),
     pulseRank: overrides.pulseRank ?? null,
     valueRank: overrides.valueRank ?? null,
     players: overrides.players ?? [],

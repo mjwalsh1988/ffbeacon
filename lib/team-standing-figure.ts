@@ -1,18 +1,19 @@
 /**
- * The number that goes under the Competitor / Mid Tier / Rebuilder tag, as data.
+ * The number that goes under the Contender / Bubble / Rebuilder tag, as data.
  *
  * The tag says which of three shapes a roster is. It does not say how close the
  * season is, and that is the thing a manager acts on: 2nd is a season worth
  * protecting, 6th is a season worth a trade. So each tag gets the figure that
  * answers its own question.
  *
- *   - Competitor and Mid Tier get the projected finish. Ordered by
+ *   - Contender and Bubble get the projected finish. Ordered by
  *     expected wins (see lib/power-pulse/projected-order.ts), matching the
  *     Projected final standings table inside the league, so it is where we think
  *     the season ENDS rather than where the roster ranks today.
- *   - Rebuilder gets what the roster is worth and where that sits in the league.
- *     A rebuild is not measured in wins, and printing a projected 11th next to a
- *     Rebuilder tag tells its owner nothing they did not choose.
+ *   - Rebuilder, and Longshot in a redraft league, gets what the roster is
+ *     worth and where that sits in the league. Neither one is measured in wins,
+ *     and printing a projected 11th next to that tag tells its owner nothing
+ *     they did not choose.
  *
  * Every sentence names the measure it quotes ("by expected wins", "by roster
  * value"). The tag's own explanation quotes Power Pulse, and a hard schedule
@@ -53,7 +54,7 @@ export type FigureInput = {
 /**
  * True when the rebuilder branch has a value figure to print.
  *
- * A Rebuilder shows value or it shows nothing useful. This used to also demand
+ * The bottom band shows value or it shows nothing useful. This used to also demand
  * an exact format-and-source match, which meant every Unmatched league quietly
  * showed a projected finish instead, and a projected finish is the single number
  * a rebuild is not measured by.

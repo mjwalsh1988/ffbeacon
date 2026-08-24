@@ -12,7 +12,7 @@ import {
  * Calculate a league from the league list, without leaving it.
  *
  * The list at /tools/league-pulse and /my-beacon/sleeper-leagues tags every
- * roster Competitor, Mid Tier, or Rebuilder, and shows where that team
+ * roster Contender, Bubble, Rebuilder, or Longshot, and shows where that team
  * is projected to finish. Both come from Power Pulse, which only exists for a
  * league somebody has opened. Until now the only way to fill in a "Not yet
  * synced" row was to open the league. This does the same work in place.

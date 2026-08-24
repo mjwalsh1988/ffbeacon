@@ -480,23 +480,28 @@ function fillsHoleReason(input: ReasonInput): TradeReason | null {
 /**
  * Whether the deal points the same way the roster does.
  *
- * A competitor is judged on the lineup and a rebuilder on the value, because
- * those are the two different things the two teams are playing for. A mid-tier
+ * A contender is judged on the lineup and a rebuilder on the value, because
+ * those are the two different things the two teams are playing for. A bubble
  * team gets neither reason: there is no direction to agree or disagree with, and
  * asserting one would be a claim the status classifier declined to make.
+ *
+ * Branches on `statusKey`, never on the label. The label is the word a reader
+ * sees and it changes with the league (Rebuilder in dynasty, Longshot in
+ * redraft); the band it names does not.
  *
  * Exactly one of fit and clash can fire. They are branches of the same test.
  */
 function directionReason(input: ReasonInput): TradeReason | null {
   const m = input.mine;
-  if (!m.statusLabel) return null;
+  if (!m.statusKey) return null;
 
-  const status = m.statusLabel.toLowerCase();
   const rankClause = finite(m.pulseRank)
     ? `You are ranked ${ordinal(m.pulseRank)} by Power Pulse`
-    : `You read as a ${m.statusLabel}`;
+    : m.statusLabel
+      ? `You read as a ${m.statusLabel}`
+      : "Your roster reads that way";
 
-  if (status.includes("competitor")) {
+  if (m.statusKey === "competitor") {
     const delta = m.lineupDelta;
     if (input.gaps.lineup || !finite(delta)) return null;
     if (delta > REASON_THRESHOLDS.lineupNoise) {
@@ -518,7 +523,7 @@ function directionReason(input: ReasonInput): TradeReason | null {
     return null;
   }
 
-  if (status.includes("rebuild")) {
+  if (m.statusKey === "rebuilder") {
     if (!finite(m.valueDelta) || !finite(m.valueBefore) || m.valueBefore <= 0)
       return null;
     const share = Math.abs(m.valueDelta) / m.valueBefore;

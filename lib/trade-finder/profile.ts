@@ -160,7 +160,7 @@ export function leagueStarterBaselines(
   return out;
 }
 
-/** Competitor / Mid Tier / Rebuilder, as the engine reads it. */
+/** Contender / Bubble / Rebuilder, as the engine reads it. */
 export function directionOf(team: FinderTeam): TeamDirection {
   if (team.statusKey === "competitor") return "win-now";
   if (team.statusKey === "rebuilder") return "rebuild";

@@ -2,7 +2,11 @@ import {
   TeamStatusBadge,
   TeamStatusPending,
 } from "@/components/team-status-badge";
-import type { TeamStatusKey } from "@/lib/league-team-status";
+import {
+  teamStatusWords,
+  type TeamStatusKey,
+  type TeamStatusVariant,
+} from "@/lib/league-team-status";
 
 /**
  * What the pills in the "Your team" column mean.
@@ -32,32 +36,47 @@ type LeagueKeyLayout =
   /** Full width under the public tool's table. Spreads onto a grid. */
   | "inline";
 
-const TAG_ENTRIES: { key: TeamStatusKey; label: string; blurb: string }[] = [
+/**
+ * Four cards for three bands. The third band is one call with two names: a
+ * dynasty or keeper roster low on wins is holding assets for later, and a
+ * redraft roster in the same place has nothing to hold them for. Both appear
+ * here because this list sits above leagues of both kinds.
+ */
+const TAG_ENTRIES: {
+  key: TeamStatusKey;
+  variant: TeamStatusVariant;
+  blurb: string;
+}[] = [
   {
     key: "competitor",
-    label: "Competitor",
+    variant: "dynasty",
     blurb: "Near the top of the league on expected wins.",
   },
   {
     key: "middle",
-    label: "Mid Tier",
+    variant: "dynasty",
     blurb: "Mid-table on expected wins and on roster value.",
   },
   {
     key: "rebuilder",
-    label: "Rebuilder",
-    blurb: "Low on expected wins, high on trade value.",
+    variant: "dynasty",
+    blurb: "Dynasty or keeper. Low on expected wins, high on trade value.",
+  },
+  {
+    key: "rebuilder",
+    variant: "redraft",
+    blurb: "Redraft. Low on expected wins, with no next year to bank on.",
   },
 ];
 
 const FIGURE_ENTRIES: { term: string; def: string }[] = [
   {
-    term: "Competitor, Mid Tier",
+    term: "Contender, Bubble",
     def: "Projected finish. Gold, silver, or bronze on the top three.",
   },
   {
-    term: "Rebuilder",
-    def: "Roster value and where it ranks, because a rebuild is not measured in wins.",
+    term: "Rebuilder, Longshot",
+    def: "Roster value and where it ranks, because neither one is measured in wins.",
   },
 ];
 
@@ -72,9 +91,10 @@ export function LeagueKey({
   className?: string;
 }) {
   const panel = layout === "panel";
-  // The tag cards are one column in the sidebar and spread out inline, where
-  // four across is what stops the key being taller than it is useful.
-  const tagGrid = panel ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-4";
+  // The tag cards are one column in the sidebar and spread out inline. Three
+  // across is what stops the key being taller than it is useful now that the
+  // third band carries both of its names.
+  const tagGrid = panel ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3";
   const figureGrid = panel ? "grid-cols-1" : "sm:grid-cols-2";
 
   return (
@@ -95,14 +115,14 @@ export function LeagueKey({
           <dl className={`grid gap-2 ${tagGrid}`}>
             {TAG_ENTRIES.map((entry) => (
               <KeyCard
-                key={entry.key}
+                key={`${entry.variant}-${entry.key}`}
                 badge={
                   <TeamStatusBadge
                     size="sm"
                     status={{
                       key: entry.key,
-                      label: entry.label,
-                      short: entry.label,
+                      variant: entry.variant,
+                      ...teamStatusWords(entry.key, entry.variant),
                       // The definition is in the dd beside it. Passing the reason
                       // as well would have a screen reader read the explanation
                       // twice in a row.

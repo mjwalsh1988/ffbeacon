@@ -2,7 +2,7 @@
  * Everything Trade Finder needs about one league, read once.
  *
  * The engine is pure and knows nothing about Postgres. This is the seam: it
- * gathers rosters, values, projections, picks, ages, and the Competitor /
+ * gathers rosters, values, projections, picks, ages, and the Contender /
  * Rebuilder call, shapes them into the engine's plain input, and stops.
  *
  * READS ONLY, AND NEVER SYNCS. Every table here is one the league deep view has
@@ -439,7 +439,10 @@ export async function loadTradeFinderLeague(
       }),
       ownerHandle: card.ownerSleeperUsername,
       statusKey: pulse?.status?.key ?? null,
-      statusLabel: pulse?.status?.label ?? null,
+      // The prose form, because every consumer of this field puts it after an
+      // indefinite article ("they read as a ___"). "a Bubble" is not a sentence
+      // and "a Bubble team" is. The tag itself renders from `status` directly.
+      statusLabel: pulse?.status?.phrase ?? null,
       pulseRank: pulse?.pulseRank ?? null,
       valueRank: pulse?.valueRank ?? null,
       players,

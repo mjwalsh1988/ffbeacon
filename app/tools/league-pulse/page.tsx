@@ -9,6 +9,7 @@ import { StepRail } from "./step-rail";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { deriveStatusVariant } from "@/lib/sleeper-to-format";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   loadSearchedTeamStatuses,
@@ -105,6 +106,11 @@ export default async function LeaguePulsePage({
           user.user_id,
           Number(season),
           resolvedSource.slug,
+          // Redraft rooms get the redraft wording on their tag. Read off the
+          // Sleeper payload we already have rather than our own table.
+          Object.fromEntries(
+            leagues.map((l) => [l.league_id, deriveStatusVariant(l)]),
+          ),
         );
         teamStatuses = Object.fromEntries(statusMap);
       }

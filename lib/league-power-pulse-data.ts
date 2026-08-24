@@ -13,7 +13,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
+import {
+  classifyTeamStatus,
+  type TeamStatus,
+  type TeamStatusVariant,
+} from "@/lib/league-team-status";
+import { deriveStatusVariant } from "@/lib/sleeper-to-format";
+import type { SleeperLeague } from "@/lib/sleeper";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -89,7 +95,7 @@ export type PulseTeam = {
    */
   rankDivergence: number | null;
   /**
-   * Competitor / Mid Tier / Rebuilder, derived from the two ranks
+   * Contender / Bubble / Rebuilder, derived from the two ranks
    * above. Null when there is no Power Pulse rank to read.
    */
   status: TeamStatus | null;
@@ -125,7 +131,7 @@ export async function loadPowerPulseView(
   formatConfigId: string | null,
   sourceSlug: string | null,
 ): Promise<PowerPulseView | null> {
-  const [pulseRes, rostersRes, usersRes, valueRes] = await Promise.all([
+  const [pulseRes, rostersRes, usersRes, valueRes, leagueRes] = await Promise.all([
     supabase
       .from("league_power_pulse_cache")
       .select("*")
@@ -147,10 +153,18 @@ export async function loadPowerPulseView(
           .eq("format_config_id", formatConfigId)
           .eq("source", sourceSlug)
       : Promise.resolve({ data: [], error: null }),
+    // Only for the wording on the status tag. Sleeper's league type lives in
+    // the raw payload and nowhere else on the row, so this reads the one league
+    // rather than making all six callers thread a flag down to here.
+    supabase.from("leagues").select("metadata").eq("id", leagueRowId).maybeSingle(),
   ]);
 
   const pulseRows = pulseRes.data ?? [];
   if (pulseRows.length === 0) return null;
+
+  const variant: TeamStatusVariant = deriveStatusVariant(
+    (leagueRes.data?.metadata ?? {}) as unknown as SleeperLeague,
+  );
 
   const rosters = rostersRes.data ?? [];
   const usersById = new Map((usersRes.data ?? []).map((u) => [u.sleeper_user_id, u]));
@@ -239,6 +253,7 @@ export async function loadPowerPulseView(
         pulseRank,
         valueRank,
         teamCount: pulseRows.length,
+        variant,
       }),
     };
   });

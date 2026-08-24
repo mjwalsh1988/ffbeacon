@@ -61,6 +61,7 @@ function team(overrides: Partial<TeamImpact> = {}): TeamImpact {
   return {
     rosterId: 1,
     teamName: "My Team",
+    statusKey: null,
     statusLabel: null,
     pulseRank: null,
     valueBefore: 20000,
@@ -454,11 +455,12 @@ describe("buildTradeReasons: depth, holes, direction, grade", () => {
     expect(kinds(reasons)).not.toContain("fills-hole");
   });
 
-  it("fires direction-fit for a competitor whose lineup improves", () => {
+  it("fires direction-fit for a contender whose lineup improves", () => {
     const reasons = buildTradeReasons(
       baseInput({
         mine: team({
-          statusLabel: "Competitor",
+          statusKey: "competitor",
+          statusLabel: "Contender",
           pulseRank: 2,
           lineupDelta: 3.4,
         }),
@@ -470,11 +472,12 @@ describe("buildTradeReasons: depth, holes, direction, grade", () => {
     expect(kinds(reasons)).not.toContain("direction-clash");
   });
 
-  it("fires direction-clash for a competitor whose lineup drops", () => {
+  it("fires direction-clash for a contender whose lineup drops", () => {
     const reasons = buildTradeReasons(
       baseInput({
         mine: team({
-          statusLabel: "Competitor",
+          statusKey: "competitor",
+          statusLabel: "Contender",
           pulseRank: 2,
           lineupDelta: -2.1,
         }),
@@ -490,6 +493,7 @@ describe("buildTradeReasons: depth, holes, direction, grade", () => {
     const reasons = buildTradeReasons(
       baseInput({
         mine: team({
+          statusKey: "rebuilder",
           statusLabel: "Rebuilder",
           pulseRank: 9,
           valueBefore: 20000,
@@ -503,10 +507,10 @@ describe("buildTradeReasons: depth, holes, direction, grade", () => {
     );
   });
 
-  it("gives a mid-tier team no direction reason", () => {
+  it("gives a bubble team no direction reason", () => {
     const reasons = buildTradeReasons(
       baseInput({
-        mine: team({ statusLabel: "Mid Tier", pulseRank: 6, lineupDelta: 4 }),
+        mine: team({ statusKey: "middle", statusLabel: "Bubble team", pulseRank: 6, lineupDelta: 4 }),
       }),
     );
     expect(kinds(reasons)).not.toContain("direction-fit");
@@ -606,6 +610,7 @@ describe("buildTradeReasons: their side and ordering", () => {
           valueBefore: 20000,
           valueDelta: -2400,
           ageDelta: 1.4,
+          statusKey: "rebuilder",
           statusLabel: "Rebuilder",
           pulseRank: 11,
           outgoing: [pickAsset(2027, 1, "2027 1st")],
@@ -732,7 +737,8 @@ describe("buildTradeReasons: every kind is reachable and clean", () => {
       kind: "direction-fit",
       input: baseInput({
         mine: team({
-          statusLabel: "Competitor",
+          statusKey: "competitor",
+          statusLabel: "Contender",
           pulseRank: 2,
           lineupDelta: 3.4,
         }),
@@ -742,7 +748,8 @@ describe("buildTradeReasons: every kind is reachable and clean", () => {
       kind: "direction-clash",
       input: baseInput({
         mine: team({
-          statusLabel: "Competitor",
+          statusKey: "competitor",
+          statusLabel: "Contender",
           pulseRank: 2,
           lineupDelta: -3.4,
         }),

@@ -1,8 +1,12 @@
-import { CircleDashed, PiggyBank, Split, Swords, type LucideIcon } from "lucide-react";
-import type { TeamStatus, TeamStatusKey } from "@/lib/league-team-status";
+import { CircleDashed, Dices, PiggyBank, Split, Swords, type LucideIcon } from "lucide-react";
+import type {
+  TeamStatus,
+  TeamStatusKey,
+  TeamStatusVariant,
+} from "@/lib/league-team-status";
 
 /**
- * The Competitor / Mid Tier / Rebuilder tag.
+ * The Contender / Bubble / Rebuilder tag.
  *
  * Built to read as a tag at a glance rather than as another line of text: an
  * icon, a filled pill, a bright border, and a soft glow in the tag's own colour.
@@ -14,11 +18,13 @@ import type { TeamStatus, TeamStatusKey } from "@/lib/league-team-status";
  * recognizable before the label is legible and stays recognizable in the
  * compact form where the label shortens to one word.
  *
- *   - Competitor: crossed swords. This team is in the fight.
- *   - Mid Tier: a splitting arrow. The season could still go either
- *     way, which is exactly what a mid-table Power Pulse says.
+ *   - Contender: crossed swords. This team is in the fight.
+ *   - Bubble: a splitting arrow. The season could still go either way, which is
+ *     exactly what a mid-table Power Pulse says.
  *   - Rebuilder: a piggy bank. Assets going in for later rather than points
- *     going out now.
+ *     going out now. Dynasty and keeper leagues only.
+ *   - Longshot: dice. The redraft reading of the same band, where nothing
+ *     carries over and the season has to break this team's way.
  *
  * Colour follows the convention the rest of League Pulse uses for a rank, cyan
  * at the top and purple at the bottom, and is never the only signal: the icon
@@ -27,10 +33,20 @@ import type { TeamStatus, TeamStatusKey } from "@/lib/league-team-status";
  * has to hover for.
  */
 
-const ICON: Record<TeamStatusKey, LucideIcon> = {
-  competitor: Swords,
-  middle: Split,
-  rebuilder: PiggyBank,
+const ICON: Record<TeamStatusVariant, Record<TeamStatusKey, LucideIcon>> = {
+  dynasty: {
+    competitor: Swords,
+    middle: Split,
+    rebuilder: PiggyBank,
+  },
+  redraft: {
+    competitor: Swords,
+    middle: Split,
+    // A piggy bank is the one mark that does not carry across. Banking assets
+    // is the whole idea in dynasty and an impossibility in redraft, so the
+    // Longshot band gets its own.
+    rebuilder: Dices,
+  },
 };
 
 /** Border, fill, text, and glow per tag. Kept as one string so a tone is one
@@ -57,13 +73,13 @@ export function TeamStatusBadge({
 }: {
   status: TeamStatus;
   size?: keyof typeof SIZE;
-  /** Use the short label ("Rebuild") instead of the full one. The icon stays
+  /** Use the short label ("Contend") instead of the full one. The icon stays
    *  either way, which is what keeps the two forms recognizable as the same
    *  tag. */
   compact?: boolean;
   className?: string;
 }) {
-  const Icon = ICON[status.key];
+  const Icon = ICON[status.variant][status.key];
   const dims = SIZE[size];
   // An empty reason means the caller is already explaining the tag next to it,
   // as the legend does. Repeating the sentence there would make a screen reader

@@ -51,7 +51,7 @@ export type PowerRankingsRowData = {
   pulseRank: number | null;
   /** League rank by total team value, 1 = most valuable. */
   valueRank: number | null;
-  /** Competitor / Mid Tier / Rebuilder. Null before the first
+  /** Contender / Bubble / Rebuilder. Null before the first
    * Power Pulse calculation, which is also when powerPulse is null. */
   status: TeamStatus | null;
 };

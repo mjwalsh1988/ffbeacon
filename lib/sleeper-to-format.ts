@@ -1,4 +1,5 @@
 import type { SleeperLeague } from "@/lib/sleeper";
+import type { TeamStatusVariant } from "@/lib/league-team-status";
 
 export type DerivedFormat = {
   league_type: "redraft" | "dynasty";
@@ -27,6 +28,22 @@ export function deriveKeeperStyle(league: SleeperLeague): KeeperStyle {
   if (type === 2) return "dynasty";
   if (type === 1) return "keeper";
   return "redraft";
+}
+
+/**
+ * Which vocabulary the Contender / Bubble / Rebuilder tag speaks in this
+ * league. Keeper takes the dynasty words: a keeper roster carries players
+ * forward, so banking assets for next year is a real plan there. Everything
+ * else is a one-year league, where the third band reads Longshot instead.
+ *
+ * Deliberately NOT DerivedFormat.league_type, which folds keeper into redraft
+ * because that is how keeper leagues PRICE. What a roster is worth and what a
+ * manager can plan are two different questions.
+ */
+export function deriveStatusVariant(
+  league: SleeperLeague,
+): TeamStatusVariant {
+  return deriveKeeperStyle(league) === "redraft" ? "redraft" : "dynasty";
 }
 
 export function deriveLeagueFormat(league: SleeperLeague): DerivedFormat {

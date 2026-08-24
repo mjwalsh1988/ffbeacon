@@ -101,7 +101,7 @@ export function LeagueProjectionsPanel({
                 placeholder="Filter by league or tag..."
                 value={query}
                 onChange={setQuery}
-                hint="Matches a league's name and its Competitor, Mid Tier, or Rebuilder tag."
+                hint="Matches a league's name and its Contender, Bubble, Rebuilder, or Longshot tag."
                 status={
                   query
                     ? `${visible.length} of ${leagues.length} leagues match. The counts above still cover all of them.`
