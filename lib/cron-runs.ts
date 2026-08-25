@@ -187,7 +187,7 @@ export const CRON_JOBS: ReadonlyArray<{
     label: "Sleeper stats sync",
     schedule: "0 9 * 1,2,8,9,10,11,12 *",
     description:
-      "Refreshes current-season player_stats from Sleeper. Skips in the off-season.",
+      "Refreshes current-season player_stats from Sleeper, then everything derived from them: positional finishes, opponent strength (nfl_defense_vs_position) and projection accuracy (player_projection_accuracy). Skips in the off-season. The last two were unscheduled until 2026-08-25, which would have frozen strength of schedule on prior seasons and left Power Pulse unable to learn anything about the current one.",
   },
   {
     name: "sync-sleeper-market",

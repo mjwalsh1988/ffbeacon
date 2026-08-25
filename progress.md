@@ -7220,3 +7220,209 @@ T684 | completed | Lead with the answer, then show the working
      |   new on the call; walked a real 2-for-3 in the browser on Men in Black
      |   MaxPF, which reads "Lean against it, 1% value spread, -0.4 projected
      |   wins", with QB gaining 14.6 a week and TE losing 13.9)
+
+T685 | completed | A ranking row says when it was last ranked, not when it was born
+     | files: lib/seed-rankings.ts, lib/seed-rankings.test.ts
+     | depends on: none
+     | rankings.generated_at has a now() default, and a default fires only on
+     | INSERT. The upsert conflicts on (player_id, format_config_id, source,
+     | week, season), so every night after the first one UPDATES an existing row
+     | and the default never fires again. The column recorded when a player was
+     | FIRST ever ranked. Every reader assumes the opposite.
+     | Three features filter on it as a 90-day relevance window:
+     | lib/player-search.ts (all six search boxes), lib/signal-scout/
+     | eligibility.ts (the daily game's player pool) and lib/beacon-brief-feed.ts.
+     | So ranked players aged out of search, the game and the feed while being
+     | ranked every single night, and nothing errored.
+     | Measured against prod on 2026-08-25 before the fix: the job had just
+     | written 11,458 rows and NONE of them carried that day's date. 2 players
+     | were already invisible; 158 would go by 30 Sep, 712 by 31 Oct, and all
+     | 815 by 30 Nov. Search would have gone dark mid-season.
+     | Fix is one explicit generated_at on the row builder, stamped once per run
+     | so a single snapshot cannot be split by a window boundary.
+     | Ran npm run seed:rankings after the change: 11,458 of 12,115 rows now
+     | carry today's date (the other 657 are combos no longer seeded and
+     | correctly age out). Projected invisible-in-90-days fell from 815 to 15,
+     | and those 15 are players genuinely no longer ranked by any source.
+     | verified: yes (tsc clean, 3 new tests, one of which asserts the stamp is
+     |   present and inside the run window; re-ran the real job against prod)
+
+T686 | completed | A value from a source that stopped covering the player is not a current value
+     | files: lib/calculate-trends.ts, lib/calculate-trends-staleness.test.ts
+     | depends on: none
+     | player_value_trends.current_value was "the newest snapshot we hold", with
+     | no limit on how old that is allowed to be. A source that stops covering a
+     | player keeps its last snapshot in player_value_history forever, so the
+     | trade analyzer kept serving it as the player's CURRENT value.
+     | Worse, it looked healthy from the outside: the trend row's own updated_at
+     | said today, because the calc ran today. A table-level freshness check
+     | (lib/data-freshness.ts, added T-1 session) reports this table green while
+     | every one of these rows is wrong. Per-row staleness is a different
+     | question from per-table staleness and needs its own answer.
+     | Measured on prod 2026-08-25 before the fix: 213 players, 589 rows, worst
+     | case 200 days old.
+     | The gate already existed. lib/beacon/freshness.ts applies exactly this to
+     | the FF Beacon blend, and its header describes this bug word for word. It
+     | was simply never wired into the trends calc. Reused rather than rewritten:
+     | staleDaysFor + FALLBACK_STALE_DAYS, so daily sources get 3 days and weekly
+     | ones get 10 and DynastyProcess is not punished for publishing weekly.
+     | No row is written rather than a null value, because current_value is NOT
+     | NULL and the honest answer is that we have no current value for that pair.
+     | A sweep then deletes rows the run did not write, matched on updated_at
+     | rather than a key list, guarded on having written something so a load
+     | failure cannot empty the table.
+     | Ran npm run calculate:trends after the change: 11,497 rows written, 778
+     | stale rows removed, 0 stale pairs remaining. Spot-checked Tahj Washington,
+     | who was carrying a KTC value of 8635 last published on 9 June and now
+     | reads 1308 from the format KTC still covers.
+     | verified: yes (tsc clean, 2158 tests green, 9 new on the gate including
+     |   the weekly-publisher exception; re-ran the real job against prod)
+
+T687 | completed | Everything derived from stats rebuilds when the stats do
+     | files: app/api/cron/sync-sleeper-stats/route.ts, lib/cron-runs.ts,
+     |   lib/derived-tables-scheduled.test.ts
+     | depends on: none
+     | calculate-defense-splits and calculate-projection-accuracy existed only as
+     | npm scripts. A search of every cron route found zero references to either.
+     | They had last run by hand on 2026-08-01.
+     | CORRECTION TO THE AUDIT THAT FOUND THIS. The audit reported them as "24
+     | days stale, no 2026 rows". The owner pushed back and was right. Both filter
+     | season_type 'regular' and the 2026 regular season has not started: Sleeper
+     | read season_type "pre", week 3 on 2026-08-25, and player_stats held only
+     | 2026 preseason weeks 1 and 2. Having no 2026 row was CORRECT. Re-running
+     | both by hand after this change confirmed it: defense splits still produced
+     | seasons 2025/2024/2023 only, and projection accuracy still produced 2025,
+     | 2024 and all-time. Nothing was wrong with the data.
+     | What was real, and all this task claims: neither would EVER have rebuilt.
+     | Both pick their seasons from the data (recentSeasons() and max(season)),
+     | so both take up 2026 by themselves the first time anything runs them, and
+     | nothing would have. Strength of schedule would have stayed frozen on prior
+     | seasons for the whole year, and player_projection_accuracy would never
+     | have learned anything about the current one, which makes the CLAUDE.md
+     | product requirement that the current season MUST outweigh prior seasons
+     | unmeetable by construction. The failure was dated, not present, and it
+     | lands the week the season does.
+     | Chained both into the stats cron, which already chained positional
+     | finishes and is the one moment their only input changes. Each derived calc
+     | runs on its own error boundary: the stats are the irreplaceable part and a
+     | derived table rebuilds next run.
+     | Also added lib/derived-tables-scheduled.test.ts, which works backwards
+     | from the producers the way lib/cron-health.ts works backwards from the
+     | schedule. It fails if any lib/calculate-*, lib/sync-* or seed-rankings is
+     | not imported by a cron route and not listed in ON_DEMAND_BY_DESIGN with a
+     | reason. This test would have caught the sync-sleeper-players bug that
+     | started this whole session, and it caught a second thing while being
+     | written: app/api/cron/beacon-brief records itself as "beacon-brief-curate",
+     | so the assertion reads the name out of recordCronRun rather than assuming
+     | the folder.
+     | verified: yes (tsc clean, 2175 tests green, 17 new; ran both calcs against
+     |   prod, 1728 and 5637 rows, and confirmed the season coverage is right)
+
+T688 | completed | One Sleeper state stops meaning two different things
+     | files: lib/sync-sleeper-players.ts, lib/sync-sleeper-players.test.ts
+     | depends on: none
+     | deriveStatus() read Sleeper's `active` boolean FIRST and returned early,
+     | which threw away the far more specific `status` string whenever the two
+     | disagreed. One Sleeper state then mapped to two different values decided
+     | by an unrelated flag: on prod, 53 players reading "Injured Reserve" came
+     | out "inactive" while 39 with the identical string came out "ir". Most of
+     | the specific branches the function exists to produce (ir, pup,
+     | practice_squad, suspended, nfi) almost never fired. That is the root
+     | cause of the search bug this session already shipped, and of T689.
+     | Neither field is trustworthy alone, which is why the order matters rather
+     | than one of them simply winning. The string says WHAT the situation is and
+     | goes stale for departed players (Eli Manning still reads "Active"). The
+     | boolean says WHETHER the player is in the league and knows nothing about
+     | why. So a NAMED situation in the string wins, and the boolean is consulted
+     | only when the string names nothing specific, which is exactly the Eli
+     | Manning case.
+     | Re-ran npm run sync:players. For every player the sync maintains the
+     | mapping is now one to one: all 102 "Injured Reserve" read "ir", Practice
+     | Squad reads practice_squad, and the 7 remaining "Active" -> "inactive" are
+     | the correct Eli Manning shape (stale string, active=false).
+     | The 53 rows still reading "Injured Reserve" -> "inactive" are NOT this
+     | bug: they are Greg Olsen, Jordy Nelson, Sebastian Janikowski and other
+     | long-retired players with active=false and no team, whom the inclusion
+     | filter deliberately skips. Their rows are frozen at the 2026-05-16 seed
+     | and "inactive" is an accurate description of them.
+     | The doc comment now states plainly that this column is a description and
+     | never a relevance test, so the next reader does not filter on it.
+     | verified: yes (tsc clean, 20 new tests, one asserting both roster-flag
+     |   variants of Injured Reserve agree; re-ran the real sync against prod)
+
+T689 | completed | Beacon Brief links the player the article is about, whoever he is
+     | files: lib/beacon-brief/match.ts, lib/beacon-brief/match-players.test.ts
+     | depends on: T688
+     | isCurrent() gated auto-linking on players.status being "active" or "ir".
+     | It half-anticipated injuries and still got them wrong, because Sleeper
+     | reports a player on injured reserve as "Inactive", not "Injured Reserve"
+     | (T688 is why). So an article about a season-ending injury could not link
+     | to the player whose injury it was, and the reason it went to manual review
+     | was the injury itself.
+     | OWNER'S INSTRUCTION, and it is broader than the audit proposed. The audit
+     | wanted to swap the status test for a rankings-membership test. The
+     | instruction is that this search must not be limited in ANY way: linking an
+     | article to a retired player, or anyone else, has to be possible. So the
+     | gate is REMOVED rather than replaced. News is written about whoever it is
+     | written about, and the matcher's job is to identify the person named, not
+     | to judge whether that person still matters.
+     | Nothing about link safety is lost, because the status check never provided
+     | any. What prevents a wrong link is the exact normalized-name match plus
+     | the one-result rule, and both are unchanged and now covered by tests that
+     | assert a merely-similar name still refuses and two same-named players
+     | still go to moderation.
+     | status is still read in ONE place, playerLabel(), purely so a human
+     | choosing between two same-named players sees "[retired]" next to one of
+     | them. Renamed the helper isUnremarkableStatus so nobody mistakes it for a
+     | gate again, and renamed exactCurrent to exactMatches.
+     | Checked the other two Brief player lookups and both were already
+     | unfiltered: searchPlayers in app/admin/beacon-brief/actions.ts is a plain
+     | ilike, and match-resolution.ts only checks the row exists. The RPC
+     | bb_player_match_candidates does not filter either; it only uses
+     | (status = 'active') desc as a tie-break among equally similar names, which
+     | is an ordering preference and not a limit, so it stays.
+     | verified: yes (tsc clean, 2208 tests green, 13 new including one asserting
+     |   every status value links, retired included)
+
+T690 | completed | The rankings season is derived, and the table holds exactly one
+     | files: lib/seed-rankings.ts, components/rankings/rankings-view.tsx,
+     |   app/api/rankings/import/route.ts, lib/seed-rankings.test.ts
+     | depends on: T685
+     | `const SEASON = 2025` was written out by hand in three files: the writer
+     | and two readers. On 2026-08-25 all three still said 2025 while the site
+     | was operating in the 2026 season. It worked only because they agreed on
+     | the same wrong number.
+     | The trap was that they could stop agreeing. Bumping the writer and missing
+     | a reader leaves that reader querying a season nothing writes any more, and
+     | it serves the frozen old rows forever without erroring. Same silent shape
+     | as everything else in this batch.
+     | Writer now derives from currentNflSeason(), which already existed in
+     | lib/sleeper.ts and already handles the March rollover.
+     | Readers do NOT get the derived constant, they drop the season filter
+     | entirely, because a pinned constant on the reader has a second failure
+     | mode: currentNflSeason() flips in March and the board would be blank from
+     | midnight until that night's write. A sweep at the end of the writer
+     | deletes every row from another season, so the table holds exactly one by
+     | construction and no reader has to know which.
+     | Ran npm run seed:rankings: 12,115 rows from season 2025 removed, 11,458
+     | written under 2026, 800 players. The 15 players lost against yesterday's
+     | 815 are the ones no source ranks any more, matching the T685 projection.
+     | verified: yes (tsc clean, next build clean, 2211 tests green, 3 new
+     |   asserting the derivation, the stamp and the sweep filter)
+
+T691 | completed | A shareable card names the injury, not the roster paperwork
+     | files: app/api/og/player/[slug]/route.tsx
+     | depends on: T688
+     | The card's meta line read players.status whenever it was not "active", so
+     | Ricky Pearsall's shareable social card said "WR,  SF,  INACTIVE".
+     | "Inactive" is Sleeper roster jargon nobody uses in fantasy, and it buries
+     | the one fact a reader wants while the term they expect was sitting unused
+     | in the same row. Now reads metadata.sleeper.injury_status, so the card
+     | says IR, PUP or QUESTIONABLE, and a healthy player has no designation at
+     | all so the line stays a clean "WR,  SF".
+     | Checked against real rows: Pearsall IR, Charbonnet PUP, Nabers and Mahomes
+     | Questionable.
+     | This also removes the last user-facing consumer of players.status outside
+     | the moderation label in lib/beacon-brief/match.ts, which is where T689
+     | left it deliberately.
+     | verified: yes (tsc clean, next build clean, 2211 tests green)

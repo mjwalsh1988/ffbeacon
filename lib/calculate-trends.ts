@@ -6,6 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { chunkUpsert, withRetry } from "./supabase/retry";
 import type { Database } from "./database.types";
+import { FALLBACK_STALE_DAYS, staleDaysFor } from "./beacon/freshness";
 
 type HistoryRow = {
   id: string;
@@ -264,10 +265,18 @@ function windowCovered(
  * daily, 7 for weekly). It drives the per-window show_trend_* bookend gate.
  * Missing entries default to daily, so existing callers behave as before.
  */
+/**
+ * How old the newest snapshot may be before a source's value stops counting as
+ * current, per source slug. Defaults to the daily allowance for anything the
+ * caller does not name, which is the conservative direction.
+ */
+export type StaleDaysBySource = Map<string, number>;
+
 export function computeTrendRows(
   allRows: HistoryRow[],
   nowMs: number = Date.now(),
   intervalBySource: Map<string, number> = new Map(),
+  staleDaysBySource: StaleDaysBySource = new Map(),
 ): TrendRow[] {
   const groups = new Map<string, HistoryRow[]>();
   for (const row of allRows) {
@@ -323,6 +332,28 @@ export function computeTrendRows(
 
   for (const [, rowsDesc] of groups) {
     const newest = rowsDesc[0];
+
+    // A source that stops covering a player keeps its last snapshot in
+    // player_value_history forever, and "newest row wins" would keep serving
+    // that number as this player's CURRENT value with nothing marking it old.
+    // Measured on prod 2026-08-25: 213 players carried a current_value from a
+    // source that had dropped them, worst case 200 days earlier, including
+    // Tahj Washington at 8635 on a KTC value last published on 9 June. The
+    // trend row's own updated_at said "today", because the calc had run today,
+    // so a table-level freshness check reported it healthy.
+    //
+    // Same gate lib/beacon/freshness.ts already applies to the FF Beacon blend,
+    // and for the same stated reason. No row is written at all rather than a
+    // null value, because current_value is NOT NULL and because the honest
+    // answer is that we have no current value for this pair, not that it is
+    // zero. Rows already stored for a pair that goes stale are removed by the
+    // sweep in runCalculateTrends.
+    const staleDays = staleDaysBySource.get(newest.source) ?? FALLBACK_STALE_DAYS.daily;
+    const newestMs = new Date(newest.captured_at).getTime();
+    if (!Number.isFinite(newestMs) || newestMs < nowMs - staleDays * MS_PER_DAY) {
+      continue;
+    }
+
     // current_value stored = published (worth). All movement math below runs on
     // the market series (value - formula_offset), so a silent FF Beacon change
     // does not show as movement. Identical for external sources (offset 0).
@@ -422,6 +453,8 @@ export type CalculateTrendsResult = {
   ok: boolean;
   combos: number;
   written: number;
+  /** Rows removed because their source stopped covering that player. */
+  cleared: number;
   startedAt: string;
   finishedAt: string;
   durationMs: number;
@@ -444,12 +477,21 @@ export async function runCalculateTrends(
     .select("slug, update_cadence");
   if (srcErr) throw srcErr;
   const intervalBySource = new Map<string, number>();
+  // How stale a source's newest snapshot may be before its value stops being
+  // treated as current. daily 3, weekly 10, from lib/beacon/freshness.ts, so a
+  // weekly publisher like DynastyProcess is not called stale for publishing
+  // weekly.
+  const staleDaysBySource = new Map<string, number>();
   for (const s of sources ?? []) {
     intervalBySource.set(s.slug, INTERVAL_DAYS_BY_CADENCE[s.update_cadence] ?? DEFAULT_INTERVAL_DAYS);
+    staleDaysBySource.set(s.slug, staleDaysFor(s.update_cadence ?? "daily", FALLBACK_STALE_DAYS));
   }
 
   const nowMs = Date.now();
-  const outputs = computeTrendRows(allRows, nowMs, intervalBySource);
+  // The exact stamp every row this run writes will carry, so the sweep below can
+  // recognise "not written by this run" as "strictly older than this".
+  const updatedAtIso = new Date(nowMs).toISOString();
+  const outputs = computeTrendRows(allRows, nowMs, intervalBySource, staleDaysBySource);
   console.log(`  ${outputs.length} (player, format, source) combos`);
 
   console.log(`Upserting ${outputs.length} trend rows...`);
@@ -465,12 +507,40 @@ export async function runCalculateTrends(
     written += chunk.length;
   });
 
+  // Remove rows this run did not write. Those are pairs whose source has gone
+  // quiet past its allowance, or that have fallen out of the history window
+  // entirely. The upsert above can only correct a pair it still computes, so
+  // without this a stale value simply survives, which is the whole bug.
+  //
+  // Matched on updated_at rather than a key list, because the touched set runs
+  // to twelve thousand rows. Every row this run wrote carries `updatedAt`
+  // exactly; every row it did not is strictly older.
+  //
+  // Guarded on having written something. A run that computed nothing means a
+  // load failure, not an empty league of players, and clearing the table on the
+  // strength of that would be the worse mistake.
+  let cleared = 0;
+  if (written > 0) {
+    const { data: removed, error: clearErr } = await withRetry(
+      async () =>
+        await supabase
+          .from("player_value_trends")
+          .delete()
+          .lt("updated_at", updatedAtIso)
+          .select("player_id"),
+      { label: "player_value_trends clear-stale" },
+    );
+    if (clearErr) throw clearErr;
+    cleared = removed?.length ?? 0;
+  }
+
   const finished = Date.now();
-  console.log(`Done. ${written} player_value_trends rows updated.`);
+  console.log(`Done. ${written} player_value_trends rows updated, ${cleared} stale rows removed.`);
   return {
     ok: true,
     combos: outputs.length,
     written,
+    cleared,
     startedAt,
     finishedAt: new Date(finished).toISOString(),
     durationMs: finished - started,

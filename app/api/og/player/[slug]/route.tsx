@@ -47,9 +47,19 @@ export async function GET(
   const supabase = createAdminClient();
   const { data: player } = await supabase
     .from("players")
-    .select("first_name, last_name, position, team, status, external_ids")
+    .select(
+      "first_name, last_name, position, team, external_ids, injury_status:metadata->sleeper->>injury_status",
+    )
     .eq("slug", slug)
-    .maybeSingle();
+    .maybeSingle()
+    .overrideTypes<{
+      first_name: string | null;
+      last_name: string | null;
+      position: string | null;
+      team: string | null;
+      external_ids: unknown;
+      injury_status: string | null;
+    }>();
 
   if (!player) {
     return notFoundImage(`Player not found`);
@@ -60,9 +70,18 @@ export async function GET(
   const accent = positionAccent(position);
   const sleeperId = (player.external_ids as { sleeper?: string } | null)?.sleeper ?? null;
   const headshot = sleeperId ? `${PLAYER_IMAGE_BASE}/${sleeperId}.jpg` : null;
-  const metaLine = [position, player.team, player.status && player.status !== "active" ? player.status.toUpperCase() : null]
-    .filter(Boolean)
-    .join(",  ");
+  // The injury DESIGNATION, not the roster status.
+  //
+  // This used to read players.status, which is Sleeper's roster state, so a
+  // player on injured reserve produced "WR, SF, INACTIVE". "Inactive" is roster
+  // jargon nobody uses in fantasy and it buries the one fact a reader wants,
+  // while the term they expect (IR) was sitting unused in the same row. A
+  // healthy player has no designation and the card stays a clean "WR, SF".
+  const injury =
+    typeof player.injury_status === "string" && player.injury_status.trim()
+      ? player.injury_status.trim().toUpperCase()
+      : null;
+  const metaLine = [position, player.team, injury].filter(Boolean).join(",  ");
 
   return new ImageResponse(
     (

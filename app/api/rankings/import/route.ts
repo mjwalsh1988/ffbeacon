@@ -14,7 +14,6 @@ import {
 
 // Mirror the public rankings board (/rankings) so an import matches exactly
 // what the user sees there: current season, season-long (week null) rankings.
-const SEASON = 2025;
 const MAX_ROWS = 1000;
 
 /**
@@ -91,7 +90,12 @@ export async function GET(req: Request) {
     )
     .eq("format_config_id", format.id)
     .eq("source", resolution.source)
-    .eq("season", SEASON)
+    // No season filter. lib/seed-rankings.ts derives the season from
+    // currentNflSeason() and sweeps every other one, so the table holds
+    // exactly one. Pinning a constant here is what used to risk this
+    // reader and the writer drifting apart and silently serving a frozen
+    // board, and it would also blank the page for the hours between the
+    // March rollover and that night's write.
     .is("week", null)
     .order("overall_rank", { ascending: true })
     .limit(MAX_ROWS);

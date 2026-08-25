@@ -41,7 +41,6 @@ import { formatEasternShortDate } from "@/lib/datetime";
  * working identically on both.
  */
 
-const SEASON = 2025;
 
 export interface RankingsViewProps {
   /** The format to render. Already decided by the caller. */
@@ -145,7 +144,12 @@ export async function RankingsView({
     )
     .eq("format_config_id", format.id)
     .eq("source", rankingsResolution.source ?? "__none__")
-    .eq("season", SEASON)
+    // No season filter. lib/seed-rankings.ts derives the season from
+    // currentNflSeason() and sweeps every other one, so the table holds
+    // exactly one. Pinning a constant here is what used to risk this
+    // reader and the writer drifting apart and silently serving a frozen
+    // board, and it would also blank the page for the hours between the
+    // March rollover and that night's write.
     .is("week", null)
     .order("overall_rank")
     .limit(500);

@@ -13,11 +13,25 @@
  *    teams; cities are not ("New York", "Los Angeles"), so an ambiguous city falls
  *    through to moderation with ranked suggestions rather than guessing. Never a
  *    substring guess.
- *  - Players: exactly ONE CURRENT (active/ir) player whose normalized full_name
- *    equals the normalized AI name -> auto-link. Multiple current exacts ->
- *    disambiguate by a referenced team; if exactly one plays for a referenced
- *    team, auto-link, else moderation. No current exact -> never auto-link;
- *    moderation with the top trigram-similar candidates as ranked suggestions.
+ *  - Players: exactly ONE player whose normalized full_name equals the
+ *    normalized AI name -> auto-link. Multiple exacts -> disambiguate by a
+ *    referenced team; if exactly one plays for a referenced team, auto-link,
+ *    else moderation. No exact -> never auto-link; moderation with the top
+ *    trigram-similar candidates as ranked suggestions.
+ *
+ *    NO RELEVANCE FILTER IS APPLIED TO PLAYERS, deliberately. This used to gate
+ *    on `players.status` being active or ir, which failed in the one case that
+ *    matters most: Sleeper reports a player on injured reserve as "Inactive", so
+ *    an article about a season-ending injury could not link to the player whose
+ *    injury it was, and went to manual review instead. Any relevance test has
+ *    the same shape of problem. Linking an article to a retired player, a
+ *    practice-squad player or anyone else is legitimate: news is written about
+ *    whoever it is written about, and the matcher's job is to identify the
+ *    person named, not to judge whether that person still matters.
+ *
+ *    The safety here is the EXACT normalized name match plus the one-result
+ *    rule, which is what actually prevents a wrong link. A status check never
+ *    contributed to that and only ever removed correct answers.
  *
  * Confident matches flow into article_players / article_teams (and Discord role
  * pings). Non-confident names become PendingReferenceMatch entries that the
@@ -38,9 +52,18 @@ type Admin = SupabaseClient<Database>;
 
 const GENERATIONAL_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
 
-/** Players we treat as "current" enough to confidently auto-link to fresh news. */
-function isCurrent(status: string | null): boolean {
-  return status === "active" || status === "ir";
+/**
+ * Whether a candidate's roster situation is worth showing in a moderation
+ * label. Purely cosmetic: it decides whether the label gets a trailing
+ * "[practice_squad]" style note so a human choosing between two same-named
+ * players can see the difference.
+ *
+ * It does NOT gate matching, and must not. See the note on players in the file
+ * header: an injured player reads "Inactive", and gating on that stopped injury
+ * articles linking to the injured player.
+ */
+function isUnremarkableStatus(status: string | null): boolean {
+  return status === "active" || status === null;
 }
 
 /**
@@ -201,7 +224,7 @@ function playerLabel(c: PlayerCandidate): string {
   const meta = [c.pos, c.team].filter(Boolean).join(" - ");
   const base = c.full_name ?? "(unnamed player)";
   const withMeta = meta ? `${base} (${meta})` : base;
-  return isCurrent(c.status) ? withMeta : `${withMeta} [${c.status}]`;
+  return isUnremarkableStatus(c.status) ? withMeta : `${withMeta} [${c.status}]`;
 }
 
 /**
@@ -258,7 +281,8 @@ export async function matchReferences(
     }
   }
 
-  // Players: exact-normalized current match only (with team disambiguation).
+  // Players: exact-normalized name match only (with team disambiguation).
+  // No relevance filter, deliberately: see the note in the file header.
   const playerIds: string[] = [];
   for (const rawPlayer of dedupeNames(ai.players)) {
     const norm = normalizeName(rawPlayer);
@@ -272,19 +296,19 @@ export async function matchReferences(
     });
     const list = (data ?? []) as PlayerCandidate[];
 
-    const exactCurrent = list.filter(
-      (c) =>
-        isCurrent(c.status) &&
-        c.full_name &&
-        normalizeName(c.full_name) === norm,
+    // Every candidate with a matching name, whatever their roster situation.
+    // The exact-name rule and the one-result rule below are what make a link
+    // safe; a status filter never did, and only ever deleted right answers.
+    const exactMatches = list.filter(
+      (c) => c.full_name && normalizeName(c.full_name) === norm,
     );
 
-    if (exactCurrent.length === 1) {
-      pushUnique(playerIds, exactCurrent[0].id);
+    if (exactMatches.length === 1) {
+      pushUnique(playerIds, exactMatches[0].id);
       continue;
     }
-    if (exactCurrent.length > 1) {
-      const byTeam = exactCurrent.filter(
+    if (exactMatches.length > 1) {
+      const byTeam = exactMatches.filter(
         (c) => c.team && matchedTeamAbbrevs.has(c.team.toLowerCase()),
       );
       if (byTeam.length === 1) {
@@ -294,7 +318,7 @@ export async function matchReferences(
       pending.push({
         kind: "player",
         rawName: rawPlayer,
-        candidates: exactCurrent.map((c) => ({
+        candidates: exactMatches.map((c) => ({
           id: c.id,
           label: playerLabel(c),
         })),

@@ -152,15 +152,52 @@ export function pickPrimaryPosition(player: SleeperPlayer): string | null {
   return candidates[0] ?? null;
 }
 
+/**
+ * Sleeper's roster situation for a player, normalized.
+ *
+ * Two Sleeper fields answer different questions and neither is reliable alone,
+ * so the order they are read in matters.
+ *
+ *   `status` (a string) says WHAT the situation is: "Injured Reserve",
+ *   "Practice Squad", "Suspended". It is the informative one, and it goes
+ *   stale for players who have left the league: Eli Manning still reads
+ *   "Active".
+ *
+ *   `active` (a boolean) says WHETHER the player is in the league at all. It is
+ *   right about Eli Manning and says nothing about why anyone else is out.
+ *
+ * The original version checked the boolean FIRST and returned early, which
+ * threw the string away whenever it disagreed. One Sleeper state then mapped to
+ * two different values depending on an unrelated flag: on 2026-08-25, 53
+ * players reading "Injured Reserve" came out as "inactive" while 39 with the
+ * identical string came out as "ir". The specific branches this function is
+ * written to produce (ir, pup, practice_squad, suspended, nfi) mostly never
+ * fired, which is why anything filtering on the column misbehaved.
+ *
+ * So: a specific situation in the string wins, because that is the most
+ * informative thing Sleeper has told us. The boolean is consulted only when the
+ * string offers nothing specific, which is exactly the Eli Manning case.
+ *
+ * This column is a description, NOT a relevance test. Do not filter
+ * user-facing lookups on it; an injured player reads "Inactive" and vanishing
+ * him from search is the bug lib/player-search.test.ts now guards against.
+ */
 export function deriveStatus(player: SleeperPlayer): string {
-  if (player.active === false) return "inactive";
   const raw = (player.status ?? "").toLowerCase();
+
+  // A named situation is the most specific thing available, whatever the
+  // boolean says.
   if (raw.includes("injured reserve") || raw === "ir") return "ir";
   if (raw.includes("practice squad")) return "practice_squad";
   if (raw.includes("suspended")) return "suspended";
   if (raw.includes("physically unable") || raw === "pup") return "pup";
   if (raw.includes("non football injury") || raw === "nfi") return "nfi";
   if (raw.includes("retired")) return "retired";
+
+  // No named situation. Now the boolean is the better witness, and it is the
+  // one that catches a departed player whose status string was never updated.
+  if (player.active === false) return "inactive";
+
   if (raw.includes("inactive")) return "inactive";
   return "active";
 }
