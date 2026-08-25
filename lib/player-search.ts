@@ -6,7 +6,7 @@ import { ELIGIBLE_POSITIONS } from "@/lib/ranking-boards";
  * site-wide search palette, Signal Check, Beacon Breakdown, and the My Rankings
  * add-player combobox).
  *
- * Why this exists: Sleeper marks ~8.6k players `status='active'`, including
+ * Why this exists: Sleeper marks ~8.5k players `status='active'`, including
  * retired free agents (Adrian Peterson still reads active), practice-squad
  * depth, punters, and long snappers. `players.team` is not a reliable filter
  * either: it comes from a periodic snapshot and carries false-nulls for real
@@ -14,8 +14,26 @@ import { ELIGIBLE_POSITIONS } from "@/lib/ranking-boards";
  * "currently fantasy relevant" is membership in the `rankings` table: our value
  * sources rank the players who actually matter and drop the ones who don't, and
  * that table is a rolling recent window (see RELEVANCE_WINDOW_DAYS). So every
- * autocomplete only surfaces active players in the six fantasy positions who are
- * currently ranked by at least one source.
+ * autocomplete surfaces players in the six fantasy positions who are currently
+ * ranked by at least one source.
+ *
+ * `players.status` is deliberately NOT part of that filter, and used to be.
+ * It is Sleeper's ROSTER state, not a statement about whether a player exists:
+ * a player on injured reserve is off the active 53 and reads "Inactive". So the
+ * status filter did the opposite of its job in both directions at once. It let
+ * through retired free agents, which is the thing the paragraph above says it
+ * cannot catch, and it removed 28 currently-ranked real players, among them
+ * Ricky Pearsall and Jayden Higgins, for the offence of being hurt.
+ *
+ * Nobody noticed until 2026-08-25, because the player dimension had not been
+ * synced since May and every one of those players was still carrying a stale
+ * "active" from before their injury. The moment the data became correct, they
+ * vanished from search. Going on IR is exactly when someone looks a player up,
+ * and a ranked player is a real player whatever his roster state.
+ *
+ * Dropping it costs nothing: measured across the busiest surname queries, every
+ * one returns the same results or more (smith 9 -> 11, higgins 2 -> 3), because
+ * the ranked-membership filter was already doing all the real work.
  */
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -72,9 +90,12 @@ export async function fantasyRelevantPlayerIds(
 }
 
 /**
- * Search active, currently-ranked players by name. Returns raw display rows in
+ * Search currently-ranked players by name. Returns raw display rows in
  * `full_name` order; callers map to their own result shape and apply any
  * additional ranking (e.g. promoting prefix matches).
+ *
+ * "Currently ranked" is the only relevance test, on purpose. See the file
+ * header for why roster state is not one.
  *
  * `query` must already be sanitized and length-checked by the caller.
  */
@@ -91,7 +112,6 @@ export async function searchFantasyPlayers(
     .select(
       "id, slug, first_name, last_name, full_name, position, team, external_ids",
     )
-    .eq("status", "active")
     .or(
       `full_name.ilike.%${escaped}%,first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%`,
     )
