@@ -3707,9 +3707,11 @@ export type Database = {
       };
       player_weekly_projections: {
         Row: {
+          availability: string;
           game_id: string | null;
           generated_at: string;
           id: string;
+          injury_status: string | null;
           metadata: Json | null;
           opponent: string | null;
           player_id: string | null;
@@ -3726,9 +3728,11 @@ export type Database = {
           week: number;
         };
         Insert: {
+          availability?: string;
           game_id?: string | null;
           generated_at?: string;
           id?: string;
+          injury_status?: string | null;
           metadata?: Json | null;
           opponent?: string | null;
           player_id?: string | null;
@@ -3745,9 +3749,11 @@ export type Database = {
           week: number;
         };
         Update: {
+          availability?: string;
           game_id?: string | null;
           generated_at?: string;
           id?: string;
+          injury_status?: string | null;
           metadata?: Json | null;
           opponent?: string | null;
           player_id?: string | null;

@@ -15,6 +15,37 @@
  * the pre / off season we refresh the full slate from week 1. Projections are a
  * regular-season concept, so season_type defaults to "regular" (weeks 1-18).
  *
+ * Availability, and why a missing projection is not always a missing row:
+ * Sleeper does NOT publish a zero for a player who cannot play. The row still
+ * arrives, still carries the injury designation, and simply has no pts_ppr /
+ * pts_half_ppr / pts_std key. This sync used to require one of those keys before
+ * it would store anything, so an injured player was skipped and the PREVIOUS
+ * night's numbers survived in place. That is how Ricky Pearsall (IR, out for the
+ * season) kept reading 8.9 PPR a week in Power Pulse and Trade Ideas for 24 days
+ * after Sleeper stopped projecting him.
+ *
+ * Writing a zero on sight would be just as wrong, because an empty stats object
+ * describes three completely different things. In week 10 of 2026 it covers
+ * Ricky Pearsall on season-ending IR, Jalen Hurts and 68 others on bye, and
+ * Justin Fields, a healthy rostered quarterback Sleeper simply does not project
+ * because he is a backup. classifyRow() separates them:
+ *
+ *   points published                    -> 'projected', store the numbers
+ *   no points, game, injury designation -> 'out', store a real 0
+ *   no points, game, no designation     -> 'unprojected', store nulls
+ *   no points, no game                  -> bye; store NOTHING
+ *
+ * Bye weeks stay absent rather than becoming rows, and an unprojected row holds
+ * nulls, so the project-wide rule that a null projection is never a zero still
+ * holds. The only thing that changed is that "cannot play" now has a way to be
+ * said out loud, separate from "we have no opinion".
+ *
+ * The sweep at the end of each week is the last piece. The upsert can only fix a
+ * row the payload still mentions, so a player Sleeper drops from the feed
+ * entirely would keep his old numbers forever. Anything this run did not touch
+ * therefore has its numbers cleared, guarded on the run having actually stored
+ * something, and skipped entirely for backfills (see clearStale).
+ *
  * Failure posture (mirrors the stats sync, same Sleeper per-week endpoint family):
  * an individual empty week is NOT an error. Early in the off-season Sleeper may
  * not have published later weeks yet, so we log and continue. If EVERY targeted
@@ -50,13 +81,58 @@ function readPts(stats: Record<string, number> | null | undefined, key: string):
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-/** A row is worth storing only if it carries at least one real point projection. */
-function isStorableRow(row: SleeperWeeklyProjection): boolean {
+/** Whether Sleeper published any point projection at all for this row. */
+function hasPublishedPoints(row: SleeperWeeklyProjection): boolean {
   return (
     readPts(row.stats, "pts_ppr") !== null ||
     readPts(row.stats, "pts_half_ppr") !== null ||
     readPts(row.stats, "pts_std") !== null
   );
+}
+
+/** Sleeper's injury designation on a projection row, trimmed. Null when healthy. */
+function readInjuryStatus(row: SleeperWeeklyProjection): string | null {
+  const raw = row.player?.injury_status;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * What this row means, which is not the same question as what it contains.
+ *
+ * Three different things arrive looking identical, as an empty stats object:
+ *
+ *   "projected"   Sleeper published points. Its opinion, stored verbatim.
+ *   "out"         A scheduled game, no points, AND an injury designation.
+ *                 Sleeper is saying this player cannot play. Stored as a real
+ *                 zero, because that is the answer rather than the absence of
+ *                 one. Ricky Pearsall on season-ending IR is this case in every
+ *                 week of 2026.
+ *   "unprojected" A scheduled game, no points, and no designation. Sleeper has
+ *                 no opinion, which is NOT the same as an opinion of zero.
+ *                 Stored with null points so readers treat the week as absent.
+ *   "bye"         No game at all. Not stored; the week stays absent.
+ *
+ * The designation is the discriminator, and it has to be, because game_id alone
+ * is not enough. In week 10 of 2026, Justin Fields (healthy, on KC, on fantasy
+ * rosters, averaged 20.4 PPR in his projected weeks last season) has a scheduled
+ * game and no points, exactly like Pearsall does. The only thing separating them
+ * is that Pearsall carries "IR" and Fields carries nothing. Sleeper does not
+ * project backup quarterbacks; that is silence, not a forecast of zero, and
+ * writing a zero there would invent an opinion Sleeper never gave and bury a
+ * real player at the bottom of every lineup.
+ *
+ * A bye is filtered on game_id and stays absent because bye weeks are fixed for
+ * the season, so no stale number can be hiding behind one.
+ */
+export function classifyRow(
+  row: SleeperWeeklyProjection,
+): "projected" | "out" | "unprojected" | "bye" {
+  if (hasPublishedPoints(row)) return "projected";
+  const gameId = typeof row.game_id === "string" ? row.game_id.trim() : "";
+  if (gameId.length === 0) return "bye";
+  return readInjuryStatus(row) !== null ? "out" : "unprojected";
 }
 
 export type WeeklyProjectionsSyncOptions = {
@@ -68,6 +144,19 @@ export type WeeklyProjectionsSyncOptions = {
   fromWeek?: number;
   /** Last week to refresh. Defaults to week 18. */
   toWeek?: number;
+  /**
+   * Clear the numbers on rows Sleeper no longer returns for a week. Default
+   * true, which is what the nightly sync wants: a forward-looking projection
+   * for a player who has vanished from the feed is the exact staleness this
+   * whole path exists to stop.
+   *
+   * The BACKFILL passes false. A past week's projection is a historical record,
+   * graded against what actually happened by
+   * lib/calculate-projection-accuracy.ts. Sleeper's view of a finished season
+   * shifts over time, and clearing a week we already scored would delete the
+   * evidence rather than correct it.
+   */
+  clearStale?: boolean;
 };
 
 export type WeeklyProjectionsSyncResult = {
@@ -78,8 +167,23 @@ export type WeeklyProjectionsSyncResult = {
   season: number;
   seasonType: SleeperSeasonType;
   weeks: number[];
-  perWeek: Array<{ week: number; fetched: number; stored: number; matched: number }>;
+  perWeek: Array<{
+    week: number;
+    fetched: number;
+    stored: number;
+    matched: number;
+    /** Rows stored as a real zero: a scheduled game, no points, an injury designation. */
+    out: number;
+    /** Rows stored with null points: Sleeper simply does not cover the player. */
+    unprojected: number;
+    /** Rows deliberately not stored because the player had no game that week. */
+    bye: number;
+    /** Rows Sleeper dropped from the payload entirely, whose numbers we cleared. */
+    cleared: number;
+  }>;
   totalStored: number;
+  /** Across every week: how many stored rows are a genuine "cannot play" zero. */
+  totalOut: number;
   matchedPlayers: number;
   unmatchedPlayers: number;
   startedAt: string;
@@ -94,6 +198,7 @@ export async function runWeeklyProjectionsSync(
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
   const seasonType: SleeperSeasonType = opts.seasonType ?? "regular";
+  const clearStale = opts.clearStale ?? true;
 
   // Resolve season and starting week from explicit opts or Sleeper's live state.
   let season = opts.season ?? null;
@@ -120,7 +225,14 @@ export async function runWeeklyProjectionsSync(
   const finish = (
     partial: Pick<
       WeeklyProjectionsSyncResult,
-      "skipped" | "reason" | "weeks" | "perWeek" | "totalStored" | "matchedPlayers" | "unmatchedPlayers"
+      | "skipped"
+      | "reason"
+      | "weeks"
+      | "perWeek"
+      | "totalStored"
+      | "totalOut"
+      | "matchedPlayers"
+      | "unmatchedPlayers"
     >,
   ): WeeklyProjectionsSyncResult => {
     const finished = Date.now();
@@ -143,6 +255,7 @@ export async function runWeeklyProjectionsSync(
       weeks: [],
       perWeek: [],
       totalStored: 0,
+      totalOut: 0,
       matchedPlayers: 0,
       unmatchedPlayers: 0,
     });
@@ -154,6 +267,7 @@ export async function runWeeklyProjectionsSync(
   const perWeek: WeeklyProjectionsSyncResult["perWeek"] = [];
   let totalFetched = 0;
   let totalStored = 0;
+  let totalOut = 0;
   let matchedPlayers = 0;
 
   for (const week of weeks) {
@@ -162,10 +276,24 @@ export async function runWeeklyProjectionsSync(
 
     const inserts: WeeklyProjectionInsert[] = [];
     let matchedThisWeek = 0;
+    let outThisWeek = 0;
+    let unprojectedThisWeek = 0;
+    let byeThisWeek = 0;
     for (const row of rows) {
       const sleeperId = typeof row.player_id === "string" ? row.player_id.trim() : "";
       if (!sleeperId || sleeperId === "0") continue;
-      if (!isStorableRow(row)) continue;
+
+      const availability = classifyRow(row);
+      // A bye is an absent week, not a zero. Storing one would sum into every
+      // season total and quietly become a real number nobody could trace back.
+      if (availability === "bye") {
+        byeThisWeek += 1;
+        continue;
+      }
+      const isOut = availability === "out";
+      const isUnprojected = availability === "unprojected";
+      if (isOut) outThisWeek += 1;
+      if (isUnprojected) unprojectedThisWeek += 1;
 
       const playerId = idBySleeper.get(sleeperId) ?? null;
       if (playerId) matchedThisWeek += 1;
@@ -177,13 +305,30 @@ export async function runWeeklyProjectionsSync(
         week,
         sleeper_player_id: sleeperId,
         player_id: playerId,
-        projected_pts_ppr: readPts(row.stats, "pts_ppr"),
-        projected_pts_half_ppr: readPts(row.stats, "pts_half_ppr"),
-        projected_pts_std: readPts(row.stats, "pts_std"),
+        // An out row is a real zero in every scoring base, so a reader picking
+        // whichever base fits its league gets the same answer. An unprojected
+        // row carries nulls: the row exists to overwrite whatever number was
+        // sitting there, not to assert a new one.
+        projected_pts_ppr: isOut ? 0 : isUnprojected ? null : readPts(row.stats, "pts_ppr"),
+        projected_pts_half_ppr: isOut
+          ? 0
+          : isUnprojected
+            ? null
+            : readPts(row.stats, "pts_half_ppr"),
+        projected_pts_std: isOut ? 0 : isUnprojected ? null : readPts(row.stats, "pts_std"),
+        availability,
+        injury_status: readInjuryStatus(row),
         opponent: typeof row.opponent === "string" ? row.opponent : null,
         team: typeof row.team === "string" ? row.team : null,
         game_id: typeof row.game_id === "string" ? row.game_id : null,
-        stat_line: (row.stats ?? null) as unknown as Json,
+        // Neither an out row nor an unprojected one carries a stat line, only
+        // leftovers like adp_dd_ppr, so the extracted line is emptied either
+        // way and nothing rescoring under a league's own settings can mistake a
+        // draft-position number for production. The two differ in HOW empty:
+        // {} scores to a definite zero, null scores to no opinion at all, which
+        // is exactly the distinction between the two states. The raw payload is
+        // preserved in metadata regardless.
+        stat_line: (isOut ? {} : isUnprojected ? null : (row.stats ?? null)) as unknown as Json,
         metadata: row as unknown as Json,
         generated_at: nowIso,
         updated_at: nowIso,
@@ -206,11 +351,63 @@ export async function runWeeklyProjectionsSync(
       );
     }
 
+    // Anything this run did not touch is, by definition, a row Sleeper stopped
+    // returning at all. That is the last way a stale number can survive: the
+    // upsert above can only correct rows the payload still mentions, and a
+    // player dropped from the feed entirely is never mentioned again. Their
+    // numbers are cleared rather than the rows deleted, so the fact that we
+    // once had a projection and no longer do stays on the record.
+    //
+    // Matched on updated_at rather than an id list, because the touched set runs
+    // to a thousand ids a week and would not survive a URL. Every row this run
+    // wrote carries nowIso exactly; every row it did not is strictly older.
+    //
+    // Guarded on having actually stored something. On a run that fetched
+    // nothing, "untouched" would mean the whole week, and the sweep would erase
+    // a good week's projections on the strength of one failed request.
+    let cleared = 0;
+    if (clearStale && inserts.length > 0) {
+      const { data: clearedRows, error: clearError } = await withRetry(
+        async () =>
+          await supabase
+            .from("player_weekly_projections")
+            .update({
+              projected_pts_ppr: null,
+              projected_pts_half_ppr: null,
+              projected_pts_std: null,
+              stat_line: null,
+              availability: "unprojected",
+              updated_at: nowIso,
+            })
+            .eq("source", WEEKLY_PROJECTION_SOURCE_SLUG)
+            .eq("season", season as number)
+            .eq("season_type", seasonType)
+            .eq("week", week)
+            .lt("updated_at", nowIso)
+            .select("id"),
+        { label: `player_weekly_projections clear-stale ${season} ${seasonType} wk${week}` },
+      );
+      if (clearError) throw clearError;
+      cleared = clearedRows?.length ?? 0;
+    }
+
     totalStored += inserts.length;
     matchedPlayers += matchedThisWeek;
-    perWeek.push({ week, fetched: rows.length, stored: inserts.length, matched: matchedThisWeek });
+    totalOut += outThisWeek;
+    perWeek.push({
+      week,
+      fetched: rows.length,
+      stored: inserts.length,
+      matched: matchedThisWeek,
+      out: outThisWeek,
+      unprojected: unprojectedThisWeek,
+      bye: byeThisWeek,
+      cleared,
+    });
     console.log(
-      `  ${season} ${seasonType} wk${week}: ${rows.length} fetched, ${inserts.length} stored (${matchedThisWeek} matched)`,
+      `  ${season} ${seasonType} wk${week}: ${rows.length} fetched, ${inserts.length} stored ` +
+        `(${matchedThisWeek} matched, ${outThisWeek} out, ${unprojectedThisWeek} unprojected, ` +
+        `${byeThisWeek} on bye, ${cleared} cleared)`,
     );
   }
 
@@ -223,6 +420,7 @@ export async function runWeeklyProjectionsSync(
       weeks,
       perWeek,
       totalStored: 0,
+      totalOut: 0,
       matchedPlayers: 0,
       unmatchedPlayers: 0,
     });
@@ -240,6 +438,7 @@ export async function runWeeklyProjectionsSync(
     weeks,
     perWeek,
     totalStored,
+    totalOut,
     matchedPlayers,
     unmatchedPlayers,
   });

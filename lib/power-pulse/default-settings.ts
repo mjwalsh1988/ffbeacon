@@ -134,7 +134,13 @@ export type PowerPulseSettings = {
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
-  modelVersion: "pp-1",
+  // pp-2 (2026-08-25): availability now comes from Sleeper rather than from a
+  // player row that had not been refreshed since May. A week Sleeper declines to
+  // project for a designated player scores a real zero, and our own week-to-week
+  // injury discount no longer stacks on top of a number Sleeper already
+  // discounted. Both change what a score means, so cached pp-1 rows are stale by
+  // definition and every league rescores on next view.
+  modelVersion: "pp-2",
 
   weights: {
     points: 0.55,

@@ -8,6 +8,7 @@ import {
   pruneCronRuns,
 } from "@/lib/cron-health";
 import { sendCronHealthEmail } from "@/lib/email/cron-health-emails";
+import { checkDataFreshness, staleOnly } from "@/lib/data-freshness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,15 @@ const SELF = new Set<string>(["cron-health"]);
  * admin panel already treats as canonical, so a job added there is covered
  * without touching this file.
  *
- * TWO: prune the ledger. cron_runs had no retention and had reached 135,591 rows
+ * TWO: check whether the DATA moved, not just whether the jobs ran. Those come
+ * apart in both directions. A table nothing is scheduled to write is never late,
+ * so the check above cannot see it: players sat unchanged from 2026-05-18 to
+ * 2026-08-25 with a perfect ledger, projecting players on IR as healthy the
+ * whole time. And a job can run green while quietly skipping part of its
+ * subject, which is how a season-ending injury kept reading 8.9 points a week.
+ * Starting from the tables catches both.
+ *
+ * THREE: prune the ledger. cron_runs had no retention and had reached 135,591 rows
  * and 67 MB, 99.7 percent of it from three jobs running every minute or every
  * five. Retention is per cadence: a week of the high-frequency workers, a year
  * of the nightly jobs anyone actually reads. Rows still marked running are never
@@ -65,7 +74,21 @@ export async function GET(req: Request) {
       const missed = findMissedJobs(CRON_JOBS, lastRunByJob, nowMs, SELF);
       const stalledReportable = stalled.filter((s) => !SELF.has(s.name));
 
-      if (missed.length > 0 || stalledReportable.length > 0) {
+      // Freshness never fails the job. A read that errors grades as unknown
+      // rather than stale, and a thrown one here would take the missed-run
+      // check down with it.
+      let freshness: Awaited<ReturnType<typeof checkDataFreshness>> = [];
+      try {
+        freshness = await checkDataFreshness(supabase, nowMs);
+      } catch (err) {
+        console.warn(
+          "[cron/cron-health] freshness check failed:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+      const staleTables = staleOnly(freshness);
+
+      if (missed.length > 0 || stalledReportable.length > 0 || staleTables.length > 0) {
         // Loud in the platform log as well as in the mailbox: an alert that
         // depends on one delivery channel is an alert with a single point of
         // failure, and Resend can be unconfigured or down.
@@ -74,8 +97,15 @@ export async function GET(req: Request) {
           missed.map((m) => `${m.name} (${m.hoursSince?.toFixed(1) ?? "never"}h)`).join(", ") || "none",
           "| stalled:",
           stalledReportable.map((s) => s.name).join(", ") || "none",
+          "| stale tables:",
+          staleTables.map((r) => `${r.table} (${r.ageHours?.toFixed(1) ?? "?"}h)`).join(", ") ||
+            "none",
         );
-        await sendCronHealthEmail({ missed, stalled: stalledReportable });
+        await sendCronHealthEmail({
+          missed,
+          stalled: stalledReportable,
+          stale: staleTables,
+        });
       }
 
       // Pruning runs last and on its own error boundary. A retention problem is
@@ -95,7 +125,15 @@ export async function GET(req: Request) {
         jobsChecked: CRON_JOBS.length - SELF.size,
         missed,
         stalled: stalledReportable,
-        emailed: missed.length > 0 || stalledReportable.length > 0,
+        staleTables: staleTables.map((r) => ({
+          table: r.table,
+          label: r.label,
+          ageHours: r.ageHours === null ? null : Number(r.ageHours.toFixed(1)),
+          maxAgeHours: r.maxAgeHours,
+        })),
+        tablesChecked: freshness.length,
+        emailed:
+          missed.length > 0 || stalledReportable.length > 0 || staleTables.length > 0,
         pruned: pruned?.deleted ?? 0,
         pruneCapped: pruned?.capped ?? false,
         pruneByWindow: pruned?.byWindow ?? [],

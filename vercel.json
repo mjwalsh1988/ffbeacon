@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "path": "/api/cron/sync-sleeper-players",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/cron/sync-ktc",
       "schedule": "0 7 * * *"
     },

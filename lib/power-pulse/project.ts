@@ -89,20 +89,42 @@ export function availabilityMultiplier(
 }
 
 /**
- * Injury multiplier for a specific week. Week-to-week designations only affect
- * the upcoming week; season-long designations affect every remaining week.
+ * Injury multiplier for a specific week.
+ *
+ * Two designations, two different jobs.
+ *
+ * A season-long designation (IR, PUP, ...) zeroes every remaining week, and it
+ * does so REGARDLESS of what the projection says. That is the safety net: if a
+ * player is on IR and a live projection still shows points, the projection is
+ * the thing that is wrong, and the designation wins. It is the check that would
+ * have caught Ricky Pearsall reading 8.9 points a week while on season-ending
+ * IR, even before the projections sync learned to store a zero.
+ *
+ * A week-to-week designation (Questionable, Doubtful) is different, because
+ * Sleeper has ALREADY priced it into the number it published. Tank Dell is
+ * listed Questionable and projected 6.42, not his healthy figure. Applying our
+ * own 0.9 on top of that discounts one injury twice and makes every banged-up
+ * starter look worse than the market thinks he is. So when the projection came
+ * from a source that prices availability in, `sourcePricedIn` is true and the
+ * week-to-week multiplier stands down.
+ *
+ * It still fires when nothing priced it in: a projection we derived ourselves,
+ * a stale row, or any future source that publishes a number without an opinion
+ * on whether the player suits up.
  */
 export function injuryMultiplier(
   status: string | null,
   week: number,
   currentWeek: number,
   settings: PowerPulseSettings,
+  opts: { sourcePricedIn?: boolean } = {},
 ): number {
   if (!settings.injury.enabled || !status) return 1;
   const key = status.toUpperCase();
   const multiplier = settings.injury.multipliers[key];
   if (multiplier === undefined) return 1;
   if (LONG_TERM_INJURY_STATUSES.has(key)) return multiplier;
+  if (opts.sourcePricedIn) return 1;
   return week === currentWeek ? multiplier : 1;
 }
 
@@ -151,6 +173,11 @@ export type ProjectedWeek = {
  * does not publish, or a stat line we cannot score. A null is "no opinion", and
  * callers must treat it as an absent week rather than a zero, because a zero
  * would quietly drag a player's average down every bye.
+ *
+ * A projection row marked `availability: "out"` is the opposite case and is NOT
+ * a null. Sleeper scheduled that player a game and declined to project him, so
+ * zero is the answer rather than the absence of one, and it arrives here as a
+ * stored zero that flows through the math untouched.
  */
 export function projectPlayerWeek({
   projection,
@@ -178,6 +205,24 @@ export function projectPlayerWeek({
 }): ProjectedWeek | null {
   if (!projection) return null;
 
+  // Sleeper scheduled this player a game and declined to project him while he
+  // carried an injury designation. That is an answer, not a gap, so it short
+  // circuits ahead of every multiplier: there is no opponent adjustment, no
+  // reliability and no variance to apply to a player who is not playing. Said
+  // here rather than left to fall out of the scoring math, so it cannot quietly
+  // stop being zero if that math changes.
+  if (projection.availability === "out") {
+    return {
+      week,
+      points: 0,
+      rawPoints: 0,
+      sigma: 0,
+      opponentMultiplier: 1,
+      opponent: projection.opponent,
+      usedLeagueScoring: false,
+    };
+  }
+
   const scored = scoreWithFallback(
     projection.statLine,
     { ppr: projection.ppr, half_ppr: projection.halfPpr, std: projection.std },
@@ -193,7 +238,13 @@ export function projectPlayerWeek({
     subject.position,
     settings,
   );
-  const injMult = injuryMultiplier(subject.injuryStatus, week, currentWeek, settings);
+  // Sleeper prices a week-to-week designation into the number it publishes, so
+  // our own week-to-week discount must not fire on top of it. A season-long
+  // designation still overrides everything: see injuryMultiplier.
+  const sourcePricedIn = projection.availability === "projected";
+  const injMult = injuryMultiplier(subject.injuryStatus, week, currentWeek, settings, {
+    sourcePricedIn,
+  });
   const availMult = availabilityMultiplier(accuracy, settings);
 
   const points = Math.max(0, scored.points * oppMult * reliability * availMult * injMult);

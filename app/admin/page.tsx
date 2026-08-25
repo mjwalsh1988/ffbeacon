@@ -14,6 +14,7 @@ import { AdminHero } from "@/components/admin/admin-hero";
 import { ImageWithFallback } from "@/components/image-with-fallback";
 import { Pager } from "@/components/admin/pager";
 import { formatRelative, formatEastern, formatDuration } from "@/lib/datetime";
+import { checkDataFreshness, staleOnly, type FreshnessResult } from "@/lib/data-freshness";
 import type { Json } from "@/lib/database.types";
 
 export const metadata: Metadata = { title: "Overview" };
@@ -66,6 +67,7 @@ export default async function AdminOverviewPage({
     snaps24h,
     latestRuns,
     recentLeagues,
+    freshness,
   ] = await Promise.all([
     admin.from("players").select("id", { count: "exact", head: true }),
     admin.from("leagues").select("id", { count: "exact", head: true }),
@@ -100,6 +102,10 @@ export default async function AdminOverviewPage({
       .select("sleeper_league_id, name, season, total_rosters, last_pulsed_at")
       .order("last_pulsed_at", { ascending: false, nullsFirst: false })
       .limit(6),
+    // Freshness is checked on the TABLES, not on the jobs. A job that was never
+    // scheduled leaves no failed run to notice, which is exactly how the player
+    // dimension went three months without an update.
+    checkDataFreshness(admin),
   ]);
 
   // Latest run per job, one lookup per job name (see comment above).
@@ -203,6 +209,7 @@ export default async function AdminOverviewPage({
     <div className="space-y-12">
       <AdminHero />
       <StatsSection stats={stats} />
+      <DataFreshnessSection results={freshness} nowMs={nowMs} />
       <CronHealthSection latestByJob={latestByJob} nowMs={nowMs} />
       <RecentLeaguesSection leagues={recentLeagues.data ?? []} nowMs={nowMs} />
       <UsersSection
@@ -361,6 +368,125 @@ function UsersSection({
         label="Users pages"
         hash="admin-users-heading"
       />
+    </section>
+  );
+}
+
+/* ---------- Data freshness ---------- */
+
+/** How old a table is allowed to look before the label changes. */
+function freshnessTone(result: FreshnessResult): { label: string; className: string } {
+  if (result.level === "stale") {
+    return {
+      label: "Stale",
+      className: "border-signal-danger/40 bg-signal-danger/10 text-signal-danger",
+    };
+  }
+  if (result.level === "unknown") {
+    return { label: "No rows", className: "border-line bg-surface text-ink-muted" };
+  }
+  if (result.outOfSeason) {
+    return {
+      label: "Off season",
+      className: "border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan",
+    };
+  }
+  return {
+    label: "Current",
+    className: "border-signal-success/40 bg-signal-success/10 text-signal-success",
+  };
+}
+
+/**
+ * Whether the data is still moving, table by table.
+ *
+ * Deliberately separate from the cron panel below it. That one reports whether
+ * jobs ran; this one reports whether the tables changed, and the two disagree
+ * in both of the ways that actually bite. A table nothing is scheduled to write
+ * shows up here with no corresponding job to look guilty, and a job that runs
+ * green every night while its table sits still shows up here too.
+ */
+function DataFreshnessSection({
+  results,
+  nowMs,
+}: {
+  results: FreshnessResult[];
+  nowMs: number;
+}) {
+  const stale = staleOnly(results);
+  return (
+    <section aria-labelledby="admin-freshness-heading">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <SectionEyebrow>Health</SectionEyebrow>
+          <h2
+            id="admin-freshness-heading"
+            className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+          >
+            Data freshness
+          </h2>
+        </div>
+      </div>
+
+      <p
+        className={`mt-4 rounded-card border p-4 text-sm ${
+          stale.length > 0
+            ? "border-signal-danger/40 bg-signal-danger/10 text-signal-danger"
+            : "border-line bg-surface/40 text-ink-muted"
+        }`}
+        role={stale.length > 0 ? "alert" : undefined}
+      >
+        {stale.length > 0
+          ? `${stale.length} table${stale.length === 1 ? "" : "s"} ${
+              stale.length === 1 ? "has" : "have"
+            } not been written in over 48 hours: ${stale
+              .map((r) => r.label)
+              .join(", ")}. The site is still serving those rows as if they were current.`
+          : "Every watched table has been written in the last 48 hours."}
+      </p>
+
+      <ul role="list" className="mt-4 grid gap-3">
+        {results.map((result) => {
+          const tone = freshnessTone(result);
+          return (
+            <li key={result.table} className="rounded-card border border-line bg-surface/60 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink">{result.label}</p>
+                  <p className="mt-0.5 font-mono text-xs text-ink-subtle">{result.table}</p>
+                </div>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${tone.className}`}
+                  aria-label={`${result.label}: ${tone.label}`}
+                >
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {tone.label}
+                </span>
+              </div>
+
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+                <Field label="Newest row">
+                  {result.newestAt ? (
+                    <span title={formatEastern(result.newestAt)}>
+                      {formatRelative(result.newestAt, nowMs)}
+                    </span>
+                  ) : (
+                    <span className="text-ink-muted">None</span>
+                  )}
+                </Field>
+                <Field label="Written">
+                  {result.newestAt ? formatEastern(result.newestAt) : "n/a"}
+                </Field>
+                <Field label="Alerts after">{result.maxAgeHours} hours</Field>
+              </dl>
+
+              {result.level === "stale" ? (
+                <p className="mt-3 text-sm leading-relaxed text-signal-danger">{result.matters}</p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

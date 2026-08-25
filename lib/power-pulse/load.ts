@@ -74,6 +74,17 @@ export type ProjectionRow = {
   ppr: number | null;
   halfPpr: number | null;
   std: number | null;
+  /**
+   * Why this row holds the number it holds. "projected" means Sleeper published
+   * points with any injury already priced in; "out" means Sleeper scheduled the
+   * player a game and published nothing, so the stored zero is a real answer.
+   * Optional so a caller constructing rows by hand keeps the old, more
+   * conservative behaviour: an absent value is treated as "nobody priced this
+   * in", and our own injury discount still applies.
+   */
+  availability?: string | null;
+  /** Sleeper's designation captured on this row at sync time. Null when healthy. */
+  injuryStatus?: string | null;
 };
 
 export type AccuracyRow = {
@@ -322,7 +333,7 @@ export async function loadProjections(
       let q = supabase
         .from("player_weekly_projections")
         .select(
-          "id, player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
+          "id, player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, availability, injury_status",
         )
         .eq("season", season)
         .eq("season_type", "regular")
@@ -345,6 +356,8 @@ export async function loadProjections(
           ppr: numOrNull(row.projected_pts_ppr),
           halfPpr: numOrNull(row.projected_pts_half_ppr),
           std: numOrNull(row.projected_pts_std),
+          availability: row.availability,
+          injuryStatus: row.injury_status,
         });
       }
       loaded += data.length;

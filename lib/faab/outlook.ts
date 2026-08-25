@@ -110,8 +110,17 @@ async function loadPositionProjections(
 
     for (const row of data as unknown as Array<Record<string, unknown>>) {
       const playerId = row.player_id;
-      const value = Number(row[column]);
-      if (typeof playerId !== "string" || !Number.isFinite(value)) continue;
+      if (typeof playerId !== "string") continue;
+      // A null projection is Sleeper declining to cover this player, and it must
+      // not become a zero. Number(null) is 0 and Number.isFinite(0) is true, so
+      // checking the parsed value alone lets every unprojected week through as a
+      // scoring week worth nothing, which both drags the player's average down
+      // and inflates his week count. Reject the null before it is parsed.
+      // A player who is genuinely OUT is stored as a real 0 and does count.
+      const raw = row[column];
+      if (raw === null || raw === undefined) continue;
+      const value = Number(raw);
+      if (!Number.isFinite(value)) continue;
       const entry = totals.get(playerId) ?? { total: 0, weeks: 0 };
       entry.total += value;
       entry.weeks += 1;

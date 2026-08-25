@@ -71,6 +71,11 @@ async function main() {
       fromWeek: 1,
       toWeek: REGULAR_SEASON_LAST_WEEK,
       seasonType: "regular",
+      // A past week's projection is a historical record, graded against what
+      // actually happened. Sleeper's view of a finished season shifts, and
+      // clearing a week we already scored would delete the evidence rather than
+      // correct it. Only the forward-looking nightly sync sweeps.
+      clearStale: false,
     });
     grandTotal += result.totalStored;
     console.log(

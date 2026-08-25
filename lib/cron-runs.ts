@@ -81,6 +81,7 @@ export function describeCronSchedule(
 }
 
 export type CronJobName =
+  | "sync-sleeper-players"
   | "sync-ktc"
   | "sync-fantasycalc"
   | "sync-dynastyprocess"
@@ -119,6 +120,13 @@ export const CRON_JOBS: ReadonlyArray<{
   schedule: string;
   description: string;
 }> = [
+  {
+    name: "sync-sleeper-players",
+    label: "Player dimension sync",
+    schedule: "0 6 * * *",
+    description:
+      "Refreshes every fantasy-relevant NFL player from Sleeper: names, teams, positions, and the injury designations (IR, PUP, Questionable, ...) that decide whether a player is projected at all. Runs FIRST each night, because the value syncs, the weekly projections sync and every derived recalc read those designations. This job existed but was never scheduled until 2026-08-25; the table sat unchanged from 2026-05-18, projecting injured players as healthy and healthy players as out.",
+  },
   {
     name: "sync-ktc",
     label: "KTC value sync",

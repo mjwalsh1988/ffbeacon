@@ -554,6 +554,16 @@ export type SleeperSeasonProjection = {
     team?: string | null;
     fantasy_positions?: string[] | null;
     years_exp?: number | null;
+    /**
+     * Sleeper's injury designation for this player, carried on every
+     * projection row. This is the SAME designation the full player dump
+     * publishes, which makes it a second, independent copy that arrives with
+     * the nightly projections even if the player sync has not run. That
+     * redundancy is deliberate: when Sleeper withholds a point projection, the
+     * designation sitting next to it is the evidence for why.
+     */
+    injury_status?: string | null;
+    injury_body_part?: string | null;
   } | null;
   company?: string | null;
   updated_at?: number | null;
@@ -607,6 +617,47 @@ export async function getSleeperWeeklyProjections(
   for (const pos of PROJECTION_POSITIONS) params.append("position[]", pos);
   const url = `${PROJECTIONS_BASE}/projections/nfl/${season}/${week}?${params.toString()}`;
   return (await safeFetch<SleeperWeeklyProjection[]>(url, 45_000)) ?? [];
+}
+
+/**
+ * One player from Sleeper's full NFL player dump.
+ *
+ * `injury_status` is the field the whole availability model hangs on: it is
+ * Sleeper's own designation (IR, PUP, Questionable, Out, ...) and it is what
+ * tells us a player is unavailable for the rest of the season rather than for
+ * one week. `status` is the roster-level state (Active, Inactive, Practice
+ * Squad) and answers a different question, so both are kept.
+ */
+export type SleeperPlayer = {
+  player_id?: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  position?: string;
+  fantasy_positions?: string[];
+  team?: string | null;
+  status?: string;
+  injury_status?: string | null;
+  injury_body_part?: string | null;
+  active?: boolean;
+  birth_date?: string;
+  height?: string;
+  weight?: string;
+  college?: string;
+  years_exp?: number;
+};
+
+/**
+ * The full NFL player dump, keyed by Sleeper player id.
+ *
+ * This is a large response (roughly 15 MB for ~12,000 players), so the timeout
+ * is generous and the size cap is left at the file default, which already sits
+ * well above it. Returns null on any failure rather than an empty map, because
+ * an empty map and a failed request mean opposite things here: one would say
+ * "the NFL has no players" and the caller must never act on that.
+ */
+export async function getSleeperPlayers(): Promise<Record<string, SleeperPlayer> | null> {
+  return safeFetch<Record<string, SleeperPlayer>>(`${BASE}/players/nfl`, 90_000);
 }
 
 export function currentNflSeason(): string {
