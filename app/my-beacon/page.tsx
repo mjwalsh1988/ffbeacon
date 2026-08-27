@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {
   BarChart3,
   Calculator,
+  ListChecks,
   ListOrdered,
   Newspaper,
   Radar,
@@ -51,6 +52,13 @@ const YOURS: Destination[] = [
     body: "Rank players in your own order, overall or one position at a time, with tiers when you want them.",
     icon: ListOrdered,
     accent: "purple",
+  },
+  {
+    href: "/my-beacon/draft-tracker",
+    title: "Draft Tracker",
+    body: "Cross players off by hand for a draft in a room, or on a site we do not connect to.",
+    icon: ListChecks,
+    accent: "cyan",
   },
   {
     href: "/my-beacon/signal",

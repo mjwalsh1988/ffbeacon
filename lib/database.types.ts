@@ -5327,6 +5327,105 @@ export type Database = {
         };
         Relationships: [];
       };
+      user_draft_tracker_picks: {
+        Row: {
+          created_at: string;
+          id: string;
+          player_id: string;
+          team_slot: number | null;
+          tracker_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          player_id: string;
+          team_slot?: number | null;
+          tracker_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          player_id?: string;
+          team_slot?: number | null;
+          tracker_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_draft_tracker_picks_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "user_draft_tracker_picks_tracker_id_fkey";
+            columns: ["tracker_id"];
+            isOneToOne: false;
+            referencedRelation: "user_draft_tracker_pick_counts";
+            referencedColumns: ["tracker_id"];
+          },
+          {
+            foreignKeyName: "user_draft_tracker_picks_tracker_id_fkey";
+            columns: ["tracker_id"];
+            isOneToOne: false;
+            referencedRelation: "user_draft_trackers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_draft_trackers: {
+        Row: {
+          created_at: string;
+          format_config_id: string;
+          id: string;
+          my_team_slot: number;
+          name: string;
+          order_by: string;
+          status: string;
+          team_count: number;
+          team_names: Json;
+          tracking_mode: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          format_config_id: string;
+          id?: string;
+          my_team_slot?: number;
+          name: string;
+          order_by?: string;
+          status?: string;
+          team_count?: number;
+          team_names?: Json;
+          tracking_mode?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          format_config_id?: string;
+          id?: string;
+          my_team_slot?: number;
+          name?: string;
+          order_by?: string;
+          status?: string;
+          team_count?: number;
+          team_names?: Json;
+          tracking_mode?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_draft_trackers_format_config_id_fkey";
+            columns: ["format_config_id"];
+            isOneToOne: false;
+            referencedRelation: "format_configs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       user_preferences: {
         Row: {
           avatar_path: string | null;
@@ -5614,6 +5713,14 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      user_draft_tracker_pick_counts: {
+        Row: {
+          my_pick_count: number | null;
+          pick_count: number | null;
+          tracker_id: string | null;
+        };
+        Relationships: [];
       };
     };
     Functions: {

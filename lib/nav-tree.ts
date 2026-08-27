@@ -158,6 +158,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "layers",
       },
       {
+        id: "/my-beacon/draft-tracker",
+        label: "Draft Tracker",
+        href: "/my-beacon/draft-tracker",
+        hint: "Track a draft we cannot see",
+        icon: "listChecks",
+      },
+      {
         id: "/my-beacon/signal",
         label: "Signal",
         href: "/my-beacon/signal",

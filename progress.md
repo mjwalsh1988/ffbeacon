@@ -8488,3 +8488,376 @@ FINAL STATE: typecheck clean, npm run build clean with /api/og/war/[league_id]
 and /leagues/[league_id]/positional-war both in the route manifest, 169 test
 files, 2,585 tests, all green. Nothing committed, nothing pushed. HEAD is still
 c068818.
+
+# My Beacon: Draft Tracker
+
+The manual draft board, for a draft FF Beacon cannot see: one in a room, or one
+on a platform we do not sync with. Lives at /my-beacon/draft-tracker with the
+board at /my-beacon/draft-tracker/[trackerId].
+
+THE NAME. "Draft Tracker", because somebody arriving from the dashboard has to
+know what it does without a glossary, and what it does is track a draft. On The
+Clock is the live room for a Sleeper draft we can read; this is the pad of paper
+for one we cannot.
+
+T692 | completed | Two user-owned tables for a draft nobody else can see
+     | files: supabase/migrations/0219_user_draft_trackers.sql,
+     |   lib/database.types.ts
+     | depends on: none
+     | user_draft_trackers and user_draft_tracker_picks, shaped after
+     | user_ranking_boards (0056): owner-only for authenticated, nothing at all
+     | for anon, service_role for admin. Picks inherit ownership through their
+     | parent tracker, so a guessed tracker_id reads and writes nothing.
+     | Verified on production inside begin/rollback: anon sees 0 rows, the owner
+     | sees both of theirs, a second signed-in account sees 0 of either, and
+     | both write attacks (a forged tracker for another user, a pick attached to
+     | a tracker the caller does not own) fail with 42501.
+     | NO pick_number COLUMN. Pick order is read off created_at, so undoing a
+     | pick in the middle renumbers the ones after it for free, and a
+     | double-click cannot collide on a stored integer.
+     | Format lives on the tracker, not on the reader. A draft is run under one
+     | set of rules decided before the first pick; letting the header's format
+     | toggle move it mid draft would reorder the list under somebody's hand.
+     | verified: yes (RLS proven on prod, types regenerated)
+
+T693 | completed | Ordering, filtering and labels, as pure functions
+     | files: lib/draft-tracker/types.ts, lib/draft-tracker/order.ts,
+     |   lib/draft-tracker/order.test.ts
+     | depends on: T692
+     | The three orderings answer three different questions and the copy says
+     | which: player value from the reader's own source, the Sleeper ADP market
+     | for this exact format, or A to Z by last name. A null sort key sinks to
+     | the bottom rather than sorting as zero, because a player with no ADP is
+     | not the first player off the board. 19 tests.
+     | verified: yes
+
+T694 | completed | The board: every draftable player, with the three numbers
+     | files: lib/draft-tracker/board.ts, lib/draft-tracker/store.ts
+     | depends on: T693
+     | Rankings for (format, resolved source) joined to players, value and
+     | seven-day movement off player_value_trends (one row per player, not a
+     | scan of every snapshot ever written), and Sleeper ADP through the same
+     | key mapping On The Clock grades picks against, so a dynasty superflex
+     | room is never priced off a redraft market.
+     | Memoized per (format, source) on the hourly TTL and the player-values
+     | tag: the list is identical for every reader and changes overnight. The
+     | reader's own picks are NOT cached and are read live every render.
+     | Both paged reads carry an explicit order. Without one, Postgres may hand
+     | back a different sequence per page, which duplicates some players and
+     | drops others; the PPR ADP market is 1,644 rows, so it pages every time.
+     | verified: yes
+
+T695 | completed | Seven writes, each one validated against the tracker's own limits
+     | files: app/my-beacon/draft-tracker/actions.ts
+     | depends on: T692
+     | Session, then re-read the tracker under the caller's own user_id, then
+     | validate, then write. A team slot outside the room is refused rather than
+     | clamped, because silently moving a pick to a different manager is worse
+     | than saying no. 25 saved drafts per account.
+     | The pick write is an UPSERT on (tracker_id, player_id), not an insert.
+     | Tapping Mine and then Gone half a second apart hit the unique constraint
+     | on the second write, and the screen would then show the player as gone
+     | while the database still had him on the reader's own team.
+     | The pick path does NOT revalidate. Everything under /my-beacon is
+     | force-dynamic, so there is no cached page to bust and the only effect
+     | would be refetching the whole board after every pick.
+     | verified: yes
+
+T696 | completed | Set up a draft in four answers
+     | files: app/my-beacon/draft-tracker/page.tsx,
+     |   app/my-beacon/draft-tracker/start-draft-form.tsx,
+     |   app/my-beacon/draft-tracker/delete-tracker-button.tsx
+     | depends on: T695
+     | Ordering, then format, then how much of the room to track, then a name.
+     | Tracking is asked before the board exists rather than sprung on the
+     | reader mid draft, because it is what decides what the second button on
+     | every row does. Team names are optional and stay collapsed until asked
+     | for; an unnamed slot reads as "Team 4" everywhere.
+     | verified: yes
+
+T697 | completed | The room: board, rosters, and an undo for every tap
+     | files: app/my-beacon/draft-tracker/[trackerId]/page.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/draft-room.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/available-players.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/assign-team-dialog.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/team-rosters.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/team-names-dialog.tsx
+     | depends on: T694, T695, T696
+     | Every button changes the screen first and calls its action second; a
+     | failure rolls the change back and says why, on screen and out loud. A
+     | draft moves faster than a round trip.
+     | Tracking one team: Gone removes the player, and he comes back from the
+     | "Taken by someone else" list or the Undo button in the header. Tracking
+     | the room: Gone opens the shared slide-up dialog, one tap per team, plus
+     | "Not sure yet" because somebody often knows a player is gone before they
+     | know who called it, and the alternative is leaving him on the board.
+     | Mobile keeps every number: tier, ADP and value leave their columns below
+     | sm and come back as one line under the name, and the two action buttons
+     | stack rather than shrink.
+     | verified: yes
+
+T698 | completed | Wire it into the navigation
+     | files: lib/nav-tree.ts, lib/breadcrumbs.ts, app/my-beacon/page.tsx
+     | depends on: T697
+     | verified: yes
+
+## Review pass: four independent sub-agents
+
+Implementation, security, accessibility, and performance, each reading the same
+sixteen files with no knowledge of the others. Eleven confirmed bugs and one
+blocker between them. Everything below is fixed and re-verified.
+
+T699 | completed | Both caps enforced in the database, not only in the action
+     | files: supabase/migrations/0220_draft_tracker_limits_in_the_database.sql
+     | depends on: T695
+     | The security review MEASURED two write-arounds. Every signed-in reader
+     | holds the publishable key (inlined in the browser bundle, which is
+     | correct) plus their own JWT, which is a working PostgREST endpoint
+     | against their own rows. RLS was doing its job; RLS counts nothing and
+     | compares nothing. Writing straight to PostgREST produced 40 trackers
+     | against a stated cap of 25, and a pick at team slot 99999 in a one-team
+     | draft. The second is the quieter and worse one: the board groups picks by
+     | slot, so a pick on a slot that does not exist vanishes from every roster
+     | while still counting as off the board.
+     | Two triggers now hold the cap, the slot bound, and a 1200-pick-per-draft
+     | backstop. Both original attacks re-run and now fail with 23514, and the
+     | happy path (valid slot, unknown owner, the reassign UPDATE) still passes.
+     | The pick trigger stays SILENT about a tracker it cannot see: a BEFORE
+     | trigger runs ahead of the RLS WITH CHECK, so raising there would confirm
+     | that a guessed tracker id is real.
+     | verified: yes
+
+T700 | completed | Counting picks without fetching them, and freshness in a trigger
+     | files: supabase/migrations/0221_draft_tracker_counts_and_freshness.sql,
+     |   lib/draft-tracker/store.ts, app/my-beacon/draft-tracker/actions.ts
+     | depends on: T699
+     | Three findings, one migration. The list page was embedding every pick row
+     | of every saved draft to compute two integers per card: up to 30,000 rows
+     | for fifty numbers. The second number is a count FILTERED on a column of
+     | the parent row, which PostgREST's (count) aggregate cannot express, hence
+     | a security_invoker view.
+     | Every pick also cost a second round trip whose only job was stamping the
+     | parent's updated_at, on the one path with a draft clock against it. A
+     | trigger does it in the same statement, so a pick is one round trip again,
+     | and the stamp is right whoever writes the pick.
+     | And the list ordered by created_at while the card said "Last touched". It
+     | orders by updated_at now, so a draft in progress sits above one nobody
+     | has opened since March.
+     | team_names was shape-checked and nothing else; it is bounded now too.
+     | verified: yes
+
+T701 | completed | Hoist auth.uid() out of eight row filters
+     | files: supabase/migrations/0222_draft_tracker_policies_hoist_auth_uid.sql
+     | depends on: T699
+     | Bare auth.uid() re-evaluates per row. Reading a draft's picks is a few
+     | hundred rows and clearing the board is a bulk delete over the same set,
+     | so one action could call it several hundred times. (select auth.uid())
+     | makes it an InitPlan. Predicates otherwise identical to 0219, and
+     | cross-user isolation re-proven after the rewrite.
+     | verified: yes
+
+T702 | completed | Pin search_path on the three trigger functions
+     | files: supabase/migrations/0223_draft_tracker_functions_pin_search_path.sql
+     | depends on: T699, T700
+     | Supabase lint 0011. All three already schema-qualify every table, so the
+     | empty path changes no behaviour, and the trigger set was re-exercised
+     | end to end afterwards to prove it.
+     | Advisors now report zero findings against anything in this feature.
+     | verified: yes
+
+T703 | completed | Focus survives a pick
+     | files: app/my-beacon/draft-tracker/[trackerId]/available-players.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/team-rosters.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/draft-room.tsx,
+     |   app/my-beacon/draft-tracker/saved-drafts-list.tsx,
+     |   app/my-beacon/draft-tracker/delete-tracker-button.tsx
+     | depends on: T697
+     | The accessibility review's only BLOCKER, and it was right. Pressing Mine
+     | removes the row, so the button holding focus unmounts and focus falls to
+     | the body. A keyboard reader then tabs past the header, the back link,
+     | four tiles, three ordering buttons, the search box, seven position chips
+     | and three column headers to get back. A 12 team, 15 round draft does that
+     | 180 times.
+     | Every press now records the player and the seat he sat in, and once he is
+     | actually gone focus moves to whoever moved up into that seat. The end of
+     | the list falls back to the last row, an emptied list to the search box.
+     | Waiting for the player to LEAVE rather than firing on the next render is
+     | what makes the same mechanism cover the assign dialog, where the row
+     | outlives the press and SlideUpDialog's own restore aims at a button that
+     | no longer exists.
+     | Busy buttons are aria-disabled, never disabled: setting disabled on a
+     | focused element blurs it, which would be a second way to lose focus on the
+     | exact press being protected. Deleting a draft now announces and hands
+     | focus to the list heading; the toolbar's Undo and Start over stay mounted
+     | rather than disappearing under the reader's finger.
+     | verified: yes
+
+T704 | completed | Optimistic state that survives two taps at once
+     | files: app/my-beacon/draft-tracker/[trackerId]/draft-room.tsx
+     | depends on: T697
+     | Three real bugs in one mechanism.
+     | Rollback restored a whole-array snapshot. Only the row being written is
+     | quiet, so a reader can take player B while A is in flight, and A failing
+     | would erase B's committed pick and put a drafted player back on the board.
+     | Every revert is scoped to one player now, and busyPlayerIds is a set, so
+     | finishing one write no longer clears another's marker.
+     | Pick order came off the client clock. It is derived from the picks already
+     | held (one millisecond past the latest), and re-taking a player keeps his
+     | original stamp, which is what the server's upsert does on conflict.
+     | The remaining count was read from the previous render, so two fast presses
+     | announced the same number twice.
+     | verified: yes
+
+T705 | completed | A pick can outlive its player, and still be undone
+     | files: app/my-beacon/draft-tracker/[trackerId]/team-rosters.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/draft-room.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/assign-team-dialog.tsx
+     | depends on: T697
+     | Source is reader-controlled and the board is one source's ranked list, so
+     | switching source mid draft could drop a drafted player out of the board
+     | entirely. Those picks were filtered away: gone from every roster, still
+     | counted as off the board, and unreachable short of clearing everything.
+     | They render as a row that says what happened and keeps its undo.
+     | verified: yes
+
+T706 | completed | Every live region says one thing, once
+     | files: app/my-beacon/draft-tracker/[trackerId]/draft-room.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/available-players.tsx,
+     |   app/my-beacon/draft-tracker/[trackerId]/team-names-dialog.tsx,
+     |   app/my-beacon/draft-tracker/start-draft-form.tsx,
+     |   lib/draft-tracker/order.ts, lib/draft-tracker/order.test.ts
+     | depends on: T697
+     | Five separate faults the accessibility review found by tracing what a
+     | reader actually hears.
+     | role="alert" nested inside aria-live="polite" fires twice, once
+     | interrupting the other. The wrappers are gone.
+     | A failed action set the error AND the polite announcement to the same
+     | sentence. Only the alert carries a failure now.
+     | "Team names saved." was announced into a region outside the open modal,
+     | which is removed from the accessibility tree, so twelve names were typed
+     | in and nothing was ever said. The dialog says it itself, then closes.
+     | Pressing a sort header fired both regions, one of them to report a count
+     | that had not changed.
+     | Show more announced NOTHING: the sentence was built from the match count,
+     | which the press does not change, so React skipped the DOM write. The one
+     | control whose whole job is adding rows the reader cannot see was silent.
+     | describeBoard takes the visible count now and a test pins that the string
+     | actually differs between presses.
+     | verified: yes
+
+T707 | completed | Setup form: honest states and a count that does not fight you
+     | files: app/my-beacon/draft-tracker/start-draft-form.tsx
+     | depends on: T696
+     | Typing "12" in the team count produced 21: the value was clamped on every
+     | keystroke, so the "1" snapped up to the minimum of 2 before the "2"
+     | landed. Held as text now, settled on blur and on submit.
+     | No formats available rendered four questions and a permanently dimmed
+     | button with nothing saying why. It renders an honest empty state.
+     | The room settings sat inside question 3's fieldset, so its legend was read
+     | before all 34 controls; they have their own fieldset. The mode buttons
+     | carry aria-controls and aria-expanded, and the disclosure keeps one name
+     | and lets aria-expanded carry its state.
+     | verified: yes
+
+T708 | completed | Column headers stop repeating their sort instruction
+     | files: app/my-beacon/draft-tracker/[trackerId]/available-players.tsx
+     | depends on: T697
+     | A th's name is computed from its subtree, so the sorting instruction on
+     | the button inside it was read before EVERY cell in that column during
+     | table navigation: "Sleeper ADP, sort earliest first: 1.4" on 800 rows.
+     | Short aria-label on the th, the instruction on the button.
+     | Position rank gets its sr-only expansion here too, matching the rosters.
+     | verified: yes
+
+T709 | completed | Assign dialog stops claiming a choice was already made
+     | files: app/my-beacon/draft-tracker/[trackerId]/assign-team-dialog.tsx
+     | depends on: T697
+     | aria-current tested currentSlot === null, and a brand new pick opens with
+     | currentSlot null, so "Not sure yet" was announced as the current item on
+     | every ordinary Gone press. It is gated on isMove now, so placing a player
+     | marks nothing current and moving one marks the team he is on.
+     | The dialog also names itself from its visible heading rather than an
+     | sr-only span, so the name is not said and then immediately repeated.
+     | verified: yes
+
+T710 | completed | Payload, queries, and the reads that were doing too much
+     | files: lib/draft-tracker/board.ts, lib/draft-tracker/store.ts,
+     |   lib/draft-tracker/types.ts, app/my-beacon/draft-tracker/actions.ts,
+     |   app/my-beacon/draft-tracker/[trackerId]/team-rosters.tsx
+     | depends on: T694
+     | change7d, trend7d and show7d were queried, shipped on all 799 rows, and
+     | rendered nowhere. Removed as dead code rather than for speed: measured,
+     | they are 15% of the uncompressed payload and 1.0 kB brotli.
+     | The ADP read pulled the whole adp jsonb (107 kB across the dynasty
+     | superflex market) to use one number per row; it selects the one key now.
+     | It is also cached on the format alone, because it does not vary by source,
+     | so four sources on one format no longer each pay for the same market read.
+     | loadTracker ran its two reads in sequence though neither needs the other,
+     | and the picks read had no paging (unreachable at BOARD_LIMIT 900, but the
+     | constant that keeps it safe lives in another file).
+     | setTrackerOrder revalidated the list, which is reachable from six in-draft
+     | controls and refetches the whole board; worse, the refetch replaces the
+     | pick list and could drop a pick made while it was in flight.
+     | TeamRosters is uncapped (240 rows in a 12 by 20 room) and re-rendered three
+     | times per pick; memoized, with a stable callback so the memo can hold.
+     | verified: yes
+
+T711 | completed | The consistency cleanups
+     | files: lib/draft-tracker/types.ts, lib/draft-tracker/order.ts,
+     |   lib/draft-tracker/board.ts, app/my-beacon/draft-tracker/actions.ts,
+     |   app/my-beacon/draft-tracker/[trackerId]/page.tsx,
+     |   app/my-beacon/draft-tracker/page.tsx,
+     |   app/my-beacon/draft-tracker/start-draft-form.tsx,
+     |   components/slide-up-dialog.tsx
+     | depends on: T710
+     | BoardPosition is an alias of PositionColorKey and toBoardPosition is gone:
+     | it was a byte-for-byte copy of normalizePositionColor, and two components
+     | index that module's classes by this type, so a drift would have produced
+     | an undefined class name at runtime.
+     | sortBoard no longer uses localeCompare. The table server-renders and then
+     | hydrates, and Node's locale is not the browser's, so a locale-aware
+     | comparison risked a hydration mismatch across all 800 rows.
+     | Dead exports removed, the duplicated uuid regex folded into one, the
+     | duplicated ORDERS constants folded into DRAFT_ORDERS, teamLabel reused
+     | where it had been reimplemented, and revalidatePath routed through the one
+     | helper.
+     | The value ordering's source name is resolved PER FORMAT now: the reader
+     | can pick a format their source does not cover, and the option label was
+     | naming a source the board would not use.
+     | Source display names are no longer lowercased into sentences (they are
+     | proper nouns out of source_registry); orderPhrase exists for that.
+     | The breadcrumb showed the raw uuid, split on hyphens and capitalised.
+     | SlideUpDialog gained an optional labelledBy so a dialog with a visible
+     | heading is not named twice. Additive, every existing caller unchanged.
+     | Both pages redirect rather than assert on a missing session: Next renders
+     | a layout and its page concurrently, so the layout's redirect cannot be
+     | relied on to have happened first.
+     | verified: yes
+
+DECLINED, with reasons:
+- next/image for player headshots. Real and well measured: the Sleeper CDN
+  serves a 350x254, 20.8 kB PNG for a 32px slot, so the first screenful of the
+  board is 510 kB of images against 25 kB for the entire 799-player payload.
+  But ImageWithFallback is shared by roughly every surface on the site and the
+  change belongs in its own task with its own review, not smuggled in here.
+  Lazy loading and decoding="async" are already on.
+- A rate limiter on the pick path. It would add a database round trip to the one
+  interaction with an eight-second clock behind it. The storage consequence,
+  which was the actual risk, is now bounded by triggers at 25 drafts of 1200
+  picks per account.
+- getClaims() in place of getUser(). Removes an auth-server round trip from
+  every action and every page render in the space, but it depends on the
+  project's JWT signing key setup and it is a site-wide auth change.
+- Radiogroup semantics for the four single-select button groups. Accurate, and
+  aria-pressed is what On The Clock already uses; consistency wins until both
+  change together.
+- The two INFO advisors on the new tables: format_config_id has no covering
+  index (it is a lookup, never deleted) and idx_user_draft_tracker_picks_player
+  reads as unused (it exists for the players FK cascade, and the table is empty).
+  Same call, and the same reasoning, as positional_war_curves.first_league_id.
+
+FINAL STATE: typecheck clean, 170 test files and 2,613 tests green, npm run build
+clean with both routes in the manifest. Migrations 0219 through 0223 applied to
+production and verified there. Supabase advisors report nothing against this
+feature. All 22 new and changed files are plain ASCII. Nothing committed, nothing
+pushed. HEAD is still d453334.

@@ -43,6 +43,7 @@ export function SlideUpDialog({
   open,
   onClose,
   label,
+  labelledBy,
   showClose = true,
   closeLabel = "Close",
   children,
@@ -50,8 +51,19 @@ export function SlideUpDialog({
   open: boolean;
   onClose: () => void;
   /** Accessible name for the dialog. Surfaced via an sr-only span +
-   * aria-labelledby on the container. */
+   * aria-labelledby on the container. Ignored when `labelledBy` is given. */
   label: string;
+  /**
+   * The id of a heading inside `children` to name the dialog with, instead of
+   * the sr-only span.
+   *
+   * Pass it whenever the dialog already draws a visible heading. Without it the
+   * reader hears the dialog's name and then immediately hears the heading
+   * saying much the same thing, which is two announcements for one fact. The
+   * `label` prop stays required so a caller cannot end up with an unnamed
+   * dialog by passing an id that does not resolve.
+   */
+  labelledBy?: string;
   /**
    * Set false only when `children` already renders its own close button. The
    * default is on, so a dialog that forgets to draw one still has a way out
@@ -135,12 +147,14 @@ export function SlideUpDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby={labelId}
+      aria-labelledby={labelledBy ?? labelId}
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
     >
-      <span id={labelId} className="sr-only">
-        {label}
-      </span>
+      {!labelledBy && (
+        <span id={labelId} className="sr-only">
+          {label}
+        </span>
+      )}
       <button
         type="button"
         aria-label="Close dialog"

@@ -7,10 +7,11 @@ import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { shortFormatName } from "@/lib/format-display";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
 import { PageBody } from "@/components/app-shell/page-body";
-import { PageColumns } from "@/components/app-shell/page-columns";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { PageRailProvider } from "@/components/app-shell/page-rail";
 import type { SignalStatus } from "@/components/signal/signal-status-card";
 import { BeaconRail, type BeaconRailFacts } from "./beacon-rail";
+import { DashboardColumns } from "./dashboard-columns";
 
 export const metadata: Metadata = {
   title: {
@@ -160,12 +161,18 @@ export default async function MyBeaconLayout({
         />
       </PageBody>
 
-      <PageColumns
-        railLabel="Your Signal and account summary"
-        rail={<BeaconRail signal={signal} facts={facts} />}
-      >
-        {children}
-      </PageColumns>
+      {/* The rail is the account summary on most of this space, and the page's
+          own on a draft board. See lib/dashboard-rail.ts for how that is
+          decided and components/app-shell/page-rail.tsx for how the content
+          gets there. */}
+      <PageRailProvider>
+        <DashboardColumns
+          railLabel="Your Signal and account summary"
+          rail={<BeaconRail signal={signal} facts={facts} />}
+        >
+          {children}
+        </DashboardColumns>
+      </PageRailProvider>
     </main>
   );
 }
