@@ -2,12 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   closestScoringBase,
   describeLeagueScoring,
+  isNonScoringKey,
   isUsableScoring,
   scoreStatMap,
   scoreWithFallback,
   tePremiumPerReception,
   type ScoringSettings,
 } from "./league-scoring";
+import { normalizedScoring } from "./positional-war/fingerprint";
 
 // A real Sleeper scoring_settings map, trimmed to the keys that matter here.
 // Taken from a live 2026 dynasty superflex TE-premium league.
@@ -164,4 +166,77 @@ describe("describeLeagueScoring", () => {
     );
     expect(describeLeagueScoring({})).toBe("Standard scoring (league settings unavailable)");
   });
+});
+
+describe("isNonScoringKey", () => {
+  it("flags the literal non-scoring keys and every adp_/pos_rank_/rank_ prefix", () => {
+    expect(isNonScoringKey("pts_ppr")).toBe(true);
+    expect(isNonScoringKey("gp")).toBe(true);
+    expect(isNonScoringKey("adp_ppr")).toBe(true);
+    expect(isNonScoringKey("adp_dynasty_2qb")).toBe(true);
+    expect(isNonScoringKey("pos_rank_ppr")).toBe(true);
+    expect(isNonScoringKey("rank_ppr")).toBe(true);
+  });
+
+  it("does not flag a real scoring key", () => {
+    expect(isNonScoringKey("rec")).toBe(false);
+    expect(isNonScoringKey("pass_td")).toBe(false);
+    expect(isNonScoringKey("bonus_rec_te")).toBe(false);
+  });
+});
+
+// T-WAR-04: the Positional WAR fingerprint (lib/positional-war/fingerprint.ts)
+// derives normalizedScoring from isNonScoringKey. This suite proves the key set
+// normalizedScoring returns is exactly the key set scoreStatMap actually reads,
+// as a property of scoreStatMap's own behavior rather than an assumption about
+// its filtering. If scoreStatMap's filtering ever changes without a matching
+// change here, one of the assertions below fails.
+describe("normalizedScoring key-set parity with scoreStatMap (T-WAR-04)", () => {
+  const FIXTURE: ScoringSettings = {
+    rec: 1,
+    rec_yd: 0.1,
+    rec_td: 6,
+    pass_yd: 0.04,
+    pass_td: 4,
+    rush_td: 0, // zero-valued: never scores, regardless of quantity
+    bonus_rec_te: Number.NaN, // non-finite: never scores
+    adp_ppr: 3, // excluded key, adp_ prefix
+    pos_rank_ppr: 2, // excluded key, pos_rank prefix
+    pts_ppr: 1, // excluded key, literal
+  };
+
+  const includedKeys = new Set(normalizedScoring(FIXTURE).map(([key]) => key));
+
+  it("keeps exactly the keys that can affect a score, and drops the rest", () => {
+    expect(includedKeys).toEqual(new Set(["pass_td", "pass_yd", "rec", "rec_td", "rec_yd"]));
+  });
+
+  const baseStats: Record<string, number> = {
+    rec: 4,
+    rec_yd: 40,
+    rec_td: 1,
+    pass_yd: 200,
+    pass_td: 2,
+    rush_td: 1,
+    bonus_rec_te: 4,
+    adp_ppr: 10,
+    pos_rank_ppr: 5,
+    pts_ppr: 99,
+  };
+
+  for (const key of Object.keys(FIXTURE)) {
+    const isIncluded = includedKeys.has(key);
+
+    it(`changing "${key}"'s stat quantity ${isIncluded ? "changes" : "never changes"} scoreStatMap's result`, () => {
+      const before = scoreStatMap(baseStats, FIXTURE);
+      const changed = { ...baseStats, [key]: (baseStats[key] ?? 0) + 10 };
+      const after = scoreStatMap(changed, FIXTURE);
+
+      if (isIncluded) {
+        expect(after).not.toBe(before);
+      } else {
+        expect(after).toBe(before);
+      }
+    });
+  }
 });

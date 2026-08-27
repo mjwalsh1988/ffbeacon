@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { HelpCircle } from "lucide-react";
 import { resolveGuidePageKey } from "@/lib/guide/registry";
+import {
+  setSignalGuideAvailable,
+  subscribeToSignalGuideOpen,
+} from "@/lib/guide/open-guide";
 import type { GuidePageContent } from "@/lib/guide/types";
 import { GuidePanel } from "./guide-panel";
 
@@ -20,6 +24,16 @@ export function SignalGuideMount() {
   const pathname = usePathname();
   const [content, setContent] = useState<GuidePageContent | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  /**
+   * The entry a deep link asked for, and a nonce so asking for the SAME entry
+   * twice still counts as a new request. Without the nonce, a reader who
+   * opened the guide at Positional WAR, closed it, and pressed the same
+   * control again would pass an unchanged prop and the panel would open at
+   * the top.
+   */
+  const [focusRequest, setFocusRequest] = useState<{ heading: string | null; nonce: number } | null>(
+    null,
+  );
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -27,6 +41,8 @@ export function SignalGuideMount() {
     // Reset on navigation so the previous page's button never lingers.
     setContent(null);
     setPanelOpen(false);
+    setFocusRequest(null);
+    setSignalGuideAvailable(false);
     if (!pageKey) return;
 
     let cancelled = false;
@@ -48,6 +64,9 @@ export function SignalGuideMount() {
             questions: data.questions ?? [],
             terms: data.terms ?? [],
           });
+          // Publish availability so an in-page control ("What is Positional
+          // WAR?") can render as a real opener rather than a link away.
+          setSignalGuideAvailable(true);
         }
       } catch {
         // Network error or aborted navigation: leave the button hidden.
@@ -59,6 +78,20 @@ export function SignalGuideMount() {
       controller.abort();
     };
   }, [pathname]);
+
+  // Deep-link requests from anywhere on the page. Registered for as long as
+  // the mount lives, and the availability flag is cleared on unmount so a
+  // caller never believes an opener exists when none does.
+  useEffect(() => {
+    const unsubscribe = subscribeToSignalGuideOpen((request) => {
+      setFocusRequest(request);
+      setPanelOpen(true);
+    });
+    return () => {
+      unsubscribe();
+      setSignalGuideAvailable(false);
+    };
+  }, []);
 
   if (!content) return null;
 
@@ -73,7 +106,10 @@ export function SignalGuideMount() {
         <button
           ref={triggerRef}
           type="button"
-          onClick={() => setPanelOpen(true)}
+          onClick={() => {
+            setFocusRequest(null);
+            setPanelOpen(true);
+          }}
           aria-haspopup="dialog"
           aria-expanded={panelOpen}
           aria-label={`Open the Signal Guide for ${content.page.title}: help and definitions for this page`}
@@ -90,6 +126,8 @@ export function SignalGuideMount() {
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
         content={content}
+        focusHeading={focusRequest?.heading ?? null}
+        focusNonce={focusRequest?.nonce ?? 0}
       />
     </>
   );

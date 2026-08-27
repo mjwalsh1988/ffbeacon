@@ -19,6 +19,8 @@ import { TeamFilter } from "@/components/team-filter";
 import { LeagueLoadError } from "@/components/league-load-error";
 import { LeagueShell } from "@/components/league-shell";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
+import { PositionalWarSection } from "@/components/league-war/positional-war-section";
+import { WarRailSummary } from "@/components/league-war/war-rail-summary";
 import { PicksToggle } from "@/components/picks-toggle";
 import { RankModeToggle, type RankMode } from "@/components/power-pulse/rank-mode-toggle";
 import { Panel } from "@/components/dashboard-panel";
@@ -33,6 +35,7 @@ import {
   ArrowRight,
   Handshake,
   CalendarDays,
+  TrendingDown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -105,6 +108,7 @@ export default async function LeagueDeepViewPage({
     roster?: string;
     picks?: string;
     rank?: string;
+    war?: string;
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
@@ -115,6 +119,7 @@ export default async function LeagueDeepViewPage({
     roster: rosterParam,
     picks: picksParam,
     rank: rankParam,
+    war: warParam,
   } = await searchParams;
   const searchedUsername =
     typeof usernameParam === "string" && usernameParam.trim() ? usernameParam.trim() : null;
@@ -248,6 +253,9 @@ export default async function LeagueDeepViewPage({
   const scheduleHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/schedules?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/schedules`;
+  const positionalWarHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}/positional-war`;
 
   // The masthead is identical on every League Pulse section, so its inputs are
   // assembled once here and handed to the shell, which renders it above
@@ -317,12 +325,63 @@ export default async function LeagueDeepViewPage({
                 resynced={!pulseResult.cached}
               />
             </Suspense>
+
+            {/*
+              The rankings table says who is strong. The Positional WAR curve
+              says where strength in this league comes from, so it continues
+              the overview's argument rather than starting a new one.
+
+              It sits in the MAIN column rather than the rail because six
+              series, a y-axis, and a legend do not fit in the rail's 340px:
+              the series become indistinguishable, the tick labels collide, and
+              the legend toggles cannot hold their 44x44 tap target. The rail
+              carries the finding instead, as text, in WarRailSummary below.
+
+              Last in DOM order on the main column, so on a phone it lands
+              after the rankings. Its own Suspense boundary, so a slow or
+              failed curve never blocks the table above it.
+            */}
+            <Suspense fallback={<WarSkeleton />}>
+              <PositionalWarSection
+                supabase={supabase}
+                leagueRowId={league.id}
+                season={Number(league.season ?? 0)}
+                teamCount={league.total_rosters ?? 0}
+                rosterPositions={
+                  Array.isArray(league.roster_positions)
+                    ? (league.roster_positions as unknown[]).filter(
+                        (t): t is string => typeof t === "string",
+                      )
+                    : []
+                }
+                scoringSettings={(league.scoring_settings ?? {}) as Record<string, number>}
+                searchedUsername={searchedUsername}
+                focusedRosterId={focusedRosterId}
+                war={warParam}
+              />
+            </Suspense>
           </div>
 
           <aside
-            aria-label="League snapshot and links"
+            aria-label="League findings and links"
             className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
           >
+            {/*
+              A finding outranks a navigation list, so the summary card sits
+              above "Explore this league". It renders nothing at all when there
+              is no cached curve: the panel below already carries the honest
+              empty state, and an empty finding card is worse than no card.
+            */}
+            <Suspense fallback={null}>
+              <WarRailSummary
+                supabase={supabase}
+                leagueRowId={league.id}
+                season={Number(league.season ?? 0)}
+                searchedUsername={searchedUsername}
+                focusedRosterId={focusedRosterId}
+              />
+            </Suspense>
+
             <Panel eyebrow="Go deeper" title="Explore this league">
               <ul className="space-y-2">
                 <li>
@@ -339,6 +398,14 @@ export default async function LeagueDeepViewPage({
                     icon={CalendarDays}
                     label="Schedules"
                     hint="Every week, every matchup, both lineups"
+                  />
+                </li>
+                <li>
+                  <ExploreLink
+                    href={positionalWarHref}
+                    icon={TrendingDown}
+                    label="Positional WAR"
+                    hint="Which positions are scarce in this league"
                   />
                 </li>
                 <li>
@@ -406,6 +473,25 @@ function RankingsSkeleton() {
   );
 }
 
+/**
+ * Placeholder while the Positional WAR curve streams in. Announced politely so
+ * a screen reader hears that work is in progress rather than sitting on
+ * silence, matching RankingsSkeleton above. The shape stands in for the chart's
+ * aspect ratio so the page does not jump when the real panel arrives.
+ */
+function WarSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-modal border border-line bg-surface/50 p-6"
+    >
+      <p className="text-sm text-ink-muted">Loading Positional WAR</p>
+      <div aria-hidden="true" className="mt-4 h-56 animate-pulse rounded-card bg-base/60" />
+    </div>
+  );
+}
+
 function ExploreLink({
   href,
   icon: Icon,
@@ -468,7 +554,14 @@ async function TeamsPanel({
 }) {
   // Values, rankings, and the schedule land here, not in the page shell. The
   // header is already on screen while this runs.
-  await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+  // includePositionalWar: false. This boundary shows the RANKINGS TABLE, and a
+  // cold Positional WAR compute would hold that table up for about ten seconds
+  // for work the reader has not scrolled to yet. The curve's own boundary owns
+  // its own compute; see components/league-war/positional-war-section.tsx.
+  await pulseLeagueDerived(createAdminClient(), leagueRowId, {
+    resynced,
+    includePositionalWar: false,
+  });
 
   const supabase = await createClient();
 

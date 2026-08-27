@@ -138,9 +138,12 @@ export function VerdictTabs({
                     beside the fill, so which tab is open survives with no colour
                     perception at all. */}
                 {selected && (
+                  // pointer-events-none: the underline spans the bottom of the
+                  // tab, so without it a hover down there finds a nameless
+                  // decorative span instead of the tab.
                   <span
                     aria-hidden="true"
-                    className="absolute inset-x-0 bottom-0 h-[3px] bg-beacon"
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-beacon"
                   />
                 )}
                 <span

@@ -25,6 +25,7 @@ export function Panel({
   headingLevel = 2,
   className = "",
   bodyClassName = "",
+  headingFocusable = false,
   children,
 }: {
   id?: string;
@@ -36,6 +37,13 @@ export function Panel({
   headingLevel?: HeadingLevel;
   className?: string;
   bodyClassName?: string;
+  /**
+   * Adds tabIndex={-1} to the heading so an in-page anchor link (`href="#{id}-
+   * title"`) can move keyboard/screen-reader focus to this panel's heading,
+   * not merely scroll the viewport to it. Off by default: most panels are not
+   * anchor targets, and a heading is not normally in the tab order.
+   */
+  headingFocusable?: boolean;
   children: ReactNode;
 }) {
   const Heading = (`h${headingLevel}` as const) as "h2" | "h3" | "h4";
@@ -47,10 +55,19 @@ export function Panel({
       className={`relative overflow-hidden rounded-modal border border-line bg-surface/50 ${className}`}
       style={glow ? { boxShadow: "0 0 80px -48px rgba(168, 85, 247, 0.55)" } : undefined}
     >
-      {/* Top-edge beacon hairline, decorative. */}
+      {/* Top-edge beacon hairline, decorative.
+
+          pointer-events-none is not cosmetic. This span is absolutely
+          positioned across the full width of the panel, so it sits OVER the
+          top edge of the header, and anything the mouse finds there hit-tests
+          to a decorative element that carries no accessible name. A screen
+          reader following the mouse (NVDA mouse tracking, ZoomText) then
+          announces nothing at all for a control the reader is pointing
+          straight at. Every decorative overlay in this file carries it for the
+          same reason. */}
       <span
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
@@ -70,14 +87,15 @@ export function Panel({
             <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
               <span
                 aria-hidden="true"
-                className="h-3 w-1 shrink-0 rounded-full bg-beacon"
+                className="pointer-events-none h-3 w-1 shrink-0 rounded-full bg-beacon"
               />
               {eyebrow}
             </p>
           )}
           <Heading
             id={titleId}
-            className="mt-1 text-[17px] font-bold leading-tight tracking-tight text-ink"
+            tabIndex={headingFocusable ? -1 : undefined}
+            className="mt-1 text-[17px] font-bold leading-tight tracking-tight text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
             {title}
           </Heading>

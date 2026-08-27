@@ -12,9 +12,19 @@ import {
 } from "lucide-react";
 import { PLAYER_PHOTO_RADIUS, PlayerHeadshot } from "@/components/player-headshot";
 import { PickTag } from "@/components/trade-ideas/pick-tag";
+import { GuideTermLink } from "@/components/signal-guide/guide-term-link";
 import { ordinal } from "@/components/league-schedule/format";
-import { readAsset, assetFigures, byImportance } from "@/lib/trade-impact/asset-notes";
-import type { AssetTone, AssetVerdict } from "@/lib/trade-impact/asset-notes";
+import {
+  readAsset,
+  assetFigures,
+  byImportance,
+  positionalWarSentence,
+} from "@/lib/trade-impact/asset-notes";
+import type {
+  AssetTone,
+  AssetVerdict,
+  PositionalWarContext,
+} from "@/lib/trade-impact/asset-notes";
 import type { TradeOutcome, OutcomeCall } from "@/lib/trade-impact/outcome";
 import type { ImpactGaps, ResolvedAsset, TeamImpact } from "@/lib/trade-impact/types";
 
@@ -116,6 +126,8 @@ export function TradeOutcomePanel({
   isDynasty,
   myTeamLabel,
   theirTeamLabel,
+  sleeperLeagueId,
+  positionalWarByPlayer,
 }: {
   outcome: TradeOutcome;
   mine: TeamImpact;
@@ -124,6 +136,15 @@ export function TradeOutcomePanel({
   isDynasty: boolean;
   myTeamLabel: string;
   theirTeamLabel: string;
+  /** For the asset card's Signal Guide link. */
+  sleeperLeagueId: string;
+  /**
+   * Positional WAR for this league season, keyed by Sleeper id. Read only,
+   * built once by the page (lib/trade-impact/positional-war-context.ts) and
+   * handed down; absent on a league with no cached curve, which is not an
+   * error, so the block simply does not render for any asset.
+   */
+  positionalWarByPlayer?: Map<string, PositionalWarContext>;
 }) {
   const style = CALL_STYLE[outcome.call];
   const Icon = style.icon;
@@ -138,10 +159,14 @@ export function TradeOutcomePanel({
         className="pointer-events-none absolute inset-0"
         style={{ backgroundImage: style.wash }}
       />
-      {/* The beacon gradient hairline every elevated surface on the site wears. */}
+      {/* The beacon gradient hairline every elevated surface on the site wears.
+          pointer-events-none, like the wash above it: an absolutely positioned
+          decorative span across the top of a card is exactly the layer that
+          swallows a hover and leaves a screen reader following the mouse with
+          nothing to announce. */}
       <span
         aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-px"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px"
         style={{
           backgroundImage:
             "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
@@ -174,6 +199,8 @@ export function TradeOutcomePanel({
             gaps={gaps}
             weeksConsidered={weeksConsidered}
             isDynasty={isDynasty}
+            sleeperLeagueId={sleeperLeagueId}
+            positionalWarByPlayer={positionalWarByPlayer}
           />
           <AssetColumn
             direction="outgoing"
@@ -184,6 +211,8 @@ export function TradeOutcomePanel({
             gaps={gaps}
             weeksConsidered={weeksConsidered}
             isDynasty={isDynasty}
+            sleeperLeagueId={sleeperLeagueId}
+            positionalWarByPlayer={positionalWarByPlayer}
           />
         </div>
       </div>
@@ -311,7 +340,7 @@ function BalanceBar({
           />
           {/* Even, marked. Without it a 54/46 split and a 46/54 split look the
               same at a glance, and they are opposite answers. */}
-          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-ink/60" />
+          <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-ink/60" />
         </div>
 
         <div className="mt-2 flex items-baseline justify-between gap-2 font-mono text-[11px] tabular-nums text-ink-muted">
@@ -371,7 +400,15 @@ function SeasonStrip({ outcome, gaps }: { outcome: TradeOutcome; gaps: ImpactGap
       </p>
       <dl className="mt-3 space-y-2.5">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-baseline justify-between gap-3">
+          <div
+            key={row.label}
+            // Marks the row holding the team-specific wins figure, so a test
+            // can confirm the Positional WAR block on the asset card below
+            // never lands inside this container. See asset-notes.ts for why
+            // the two numbers are kept apart.
+            data-role={row.label === "Projected wins" ? "wins-metric" : undefined}
+            className="flex items-baseline justify-between gap-3"
+          >
             <dt className="min-w-0 text-xs text-ink-muted">{row.label}</dt>
             <dd
               className={`shrink-0 font-mono text-sm font-bold tabular-nums ${
@@ -438,6 +475,8 @@ function AssetColumn({
   gaps,
   weeksConsidered,
   isDynasty,
+  sleeperLeagueId,
+  positionalWarByPlayer,
 }: {
   direction: "incoming" | "outgoing";
   heading: string;
@@ -447,6 +486,8 @@ function AssetColumn({
   gaps: ImpactGaps;
   weeksConsidered: number;
   isDynasty: boolean;
+  sleeperLeagueId: string;
+  positionalWarByPlayer?: Map<string, PositionalWarContext>;
 }) {
   const incoming = direction === "incoming";
   const Arrow = incoming ? ArrowDownLeft : ArrowUpRight;
@@ -504,8 +545,10 @@ function AssetColumn({
                   startWeeksByPlayer: mine.incomingStartWeeks ?? {},
                   noLineup: gaps.lineup,
                   isDynasty,
+                  positionalWarByPlayer,
                 })}
                 incoming={incoming}
+                sleeperLeagueId={sleeperLeagueId}
               />
             </li>
           ))}
@@ -531,10 +574,12 @@ function AssetCard({
   asset,
   verdict,
   incoming,
+  sleeperLeagueId,
 }: {
   asset: ResolvedAsset;
   verdict: AssetVerdict;
   incoming: boolean;
+  sleeperLeagueId: string;
 }) {
   const centrepiece = verdict.role === "centrepiece";
   return (
@@ -578,8 +623,11 @@ function AssetCard({
             <PickTag pick={asset} estimated={asset.positionEstimated} />
           )}
 
+          {/* Comma, not a middle dot. A screen reader reads the dot aloud or
+              skips it depending on the engine, and neither is the pause a
+              reader wants between three figures. CLAUDE.md bans it outright. */}
           <p className="mt-1 font-mono text-[11px] tabular-nums text-ink-subtle">
-            {assetFigures(asset).join(" · ")}
+            {assetFigures(asset).join(", ")}
           </p>
         </div>
       </div>
@@ -600,6 +648,65 @@ function AssetCard({
           ))}
         </ul>
       )}
+
+      {/* League-wide scarcity for this asset's position, in its own block and
+          never one of the notes above: those are roster-specific, and this
+          number is read off a league-average team that owns nobody. See
+          lib/trade-impact/asset-notes.ts and lib/positional-war/types.ts. */}
+      {verdict.positionalWar && (
+        <PositionalWarBlock
+          context={verdict.positionalWar}
+          sleeperLeagueId={sleeperLeagueId}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * League-wide Positional WAR for one asset, kept apart from the notes above on
+ * purpose: they describe what an asset does for THIS roster, and this number
+ * describes the position in this league and knows nothing about who owns whom.
+ * Constraint 3 of the extension plan: never the same column, row, or sentence
+ * as a roster-specific figure such as projected wins.
+ */
+function PositionalWarBlock({
+  context,
+  sleeperLeagueId,
+}: {
+  context: PositionalWarContext;
+  sleeperLeagueId: string;
+}) {
+  return (
+    <div
+      data-role="positional-war-block"
+      className="mt-3 rounded-card border border-line bg-base/40 p-2.5"
+    >
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-brand-purple">
+        Positional WAR (league-wide)
+      </p>
+      {/* The heading directly above already names the metric, so the sentence
+          does not repeat it. */}
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+        {positionalWarSentence(context)}
+      </p>
+      {/* Real text, not an icon: this is the "link to the Signal Guide term"
+          constraint 2 requires, and it now opens the guide IN PLACE at the
+          Positional WAR entry rather than navigating to a page where that
+          entry happens to surface. Trade Ideas is a registered guide page
+          (migration 0217) and the term is global (migration 0213), so the
+          panel exists here and GuideTermLink renders its button form. On a
+          route with no guide, or before hydration, it renders the League
+          Overview link this control used to be. Min height and width both
+          cover the 44px tap target on a card with little room to spare. */}
+      <GuideTermLink
+        heading="Positional WAR"
+        fallbackHref={`/leagues/${sleeperLeagueId}`}
+        label="What is Positional WAR?"
+        ariaLabel="What is Positional WAR? Open the Signal Guide entry for it."
+        fallbackAriaLabel="What is Positional WAR? Open the Signal Guide entry for it on the League Overview page."
+        className="mt-1.5 inline-flex min-h-11 min-w-11 items-center rounded-card px-1 text-left text-xs font-semibold text-brand-cyan underline decoration-brand-cyan/40 underline-offset-2 hover:text-brand-cyan/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      />
     </div>
   );
 }

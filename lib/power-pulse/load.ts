@@ -20,6 +20,44 @@ type ServiceClient = SupabaseClient<Database>;
 
 const PAGE = 1000;
 
+/**
+ * Cap on simultaneous chunk reads for the concurrent loops below (and the
+ * ones in lib/positional-war/load.ts, which imports this helper rather than
+ * duplicating it). A cold Positional WAR compute alone fires 6 to 8 chunks
+ * across a handful of these loops; running all of them at once would let one
+ * request saturate the Supabase connection pool for every other request this
+ * instance is serving. 5 is comfortably below that ceiling while still
+ * cutting wall-clock time by roughly a factor of 5 versus the fully
+ * sequential walk it replaces.
+ */
+export const DB_CHUNK_CONCURRENCY = 5;
+
+/**
+ * Runs `fn` over `items` with at most `limit` calls in flight at once,
+ * preserving result order (out[i] corresponds to items[i]) regardless of
+ * which call finishes first. Used for independent chunk reads only: a walk
+ * where one page's query depends on the previous page's cursor must stay a
+ * plain sequential loop, never this.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  }
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return out;
+}
+
 export type LeagueRow = {
   id: string;
   sleeperLeagueId: string;
@@ -134,7 +172,12 @@ function positiveIntOrNull(v: unknown): number | null {
   return n !== null && n > 0 ? n : null;
 }
 
-function numOrNull(v: unknown): number | null {
+/**
+ * Exported so lib/positional-war/load.ts builds its ProjectionRow objects from
+ * the exact same coercion this file's own reader uses. Two copies of "what
+ * counts as a number here" reading the same table is one copy too many.
+ */
+export function numOrNull(v: unknown): number | null {
   if (v === null || v === undefined) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
@@ -297,6 +340,84 @@ export async function loadPlayers(
  * with it. The parameter is optional and omitting it changes nothing about the
  * query, so Power Pulse, FAAB and Trade Ideas keep the exact reads they had.
  */
+/**
+ * One chunk's worth of loadProjections: its own count guard, then its own
+ * keyset walk. Kept as a standalone function so the outer chunk loop below
+ * can run chunks concurrently while the walk inside a single chunk (each
+ * page depends on the previous page's cursor) stays exactly as sequential as
+ * it always was.
+ */
+async function loadProjectionsChunk(
+  supabase: ServiceClient,
+  chunk: string[],
+  season: number,
+  fromWeek: number,
+  toWeek?: number,
+): Promise<ProjectionRow[]> {
+  const out: ProjectionRow[] = [];
+
+  let countQ = supabase
+    .from("player_weekly_projections")
+    .select("id", { count: "exact", head: true })
+    .eq("season", season)
+    .eq("season_type", "regular")
+    .gte("week", fromWeek)
+    .in("player_id", chunk);
+  // The ceiling has to sit on the count as well as the select. The count is
+  // what the completeness guard below compares against, so a count over
+  // eighteen weeks and a select over one would fail every run.
+  if (toWeek !== undefined) countQ = countQ.lte("week", toWeek);
+  const { count: expected, error: countErr } = await countQ;
+  if (countErr) {
+    throw new Error(`power pulse projection count failed: ${countErr.message}`);
+  }
+
+  let loaded = 0;
+  let cursor: string | null = null;
+  for (;;) {
+    let q = supabase
+      .from("player_weekly_projections")
+      .select(
+        "id, player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, availability, injury_status",
+      )
+      .eq("season", season)
+      .eq("season_type", "regular")
+      .gte("week", fromWeek)
+      .in("player_id", chunk)
+      .order("id", { ascending: true })
+      .limit(PAGE);
+    if (toWeek !== undefined) q = q.lte("week", toWeek);
+    if (cursor !== null) q = q.gt("id", cursor);
+    const { data, error } = await q;
+    if (error) throw new Error(`power pulse projection load failed: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data) {
+      if (!row.player_id) continue;
+      out.push({
+        playerId: row.player_id,
+        week: Number(row.week),
+        opponent: row.opponent,
+        statLine: (row.stat_line as Record<string, unknown> | null) ?? null,
+        ppr: numOrNull(row.projected_pts_ppr),
+        halfPpr: numOrNull(row.projected_pts_half_ppr),
+        std: numOrNull(row.projected_pts_std),
+        availability: row.availability,
+        injuryStatus: row.injury_status,
+      });
+    }
+    loaded += data.length;
+    cursor = data[data.length - 1].id;
+    if (data.length < PAGE) break;
+  }
+
+  if (expected != null && loaded < expected) {
+    throw new Error(
+      `power pulse projection load incomplete: read ${loaded} of ${expected} rows for ${chunk.length} players`,
+    );
+  }
+  return out;
+}
+
 export async function loadProjections(
   supabase: ServiceClient,
   playerIds: string[],
@@ -304,74 +425,23 @@ export async function loadProjections(
   fromWeek: number,
   toWeek?: number,
 ): Promise<ProjectionRow[]> {
-  const out: ProjectionRow[] = [];
-  if (playerIds.length === 0) return out;
+  if (playerIds.length === 0) return [];
 
   const CHUNK = 150;
+  const chunks: string[][] = [];
   for (let i = 0; i < playerIds.length; i += CHUNK) {
-    const chunk = playerIds.slice(i, i + CHUNK);
-
-    let countQ = supabase
-      .from("player_weekly_projections")
-      .select("id", { count: "exact", head: true })
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .gte("week", fromWeek)
-      .in("player_id", chunk);
-    // The ceiling has to sit on the count as well as the select. The count is
-    // what the completeness guard below compares against, so a count over
-    // eighteen weeks and a select over one would fail every run.
-    if (toWeek !== undefined) countQ = countQ.lte("week", toWeek);
-    const { count: expected, error: countErr } = await countQ;
-    if (countErr) {
-      throw new Error(`power pulse projection count failed: ${countErr.message}`);
-    }
-
-    let loaded = 0;
-    let cursor: string | null = null;
-    for (;;) {
-      let q = supabase
-        .from("player_weekly_projections")
-        .select(
-          "id, player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, availability, injury_status",
-        )
-        .eq("season", season)
-        .eq("season_type", "regular")
-        .gte("week", fromWeek)
-        .in("player_id", chunk)
-        .order("id", { ascending: true })
-        .limit(PAGE);
-      if (toWeek !== undefined) q = q.lte("week", toWeek);
-      if (cursor !== null) q = q.gt("id", cursor);
-      const { data, error } = await q;
-      if (error) throw new Error(`power pulse projection load failed: ${error.message}`);
-      if (!data || data.length === 0) break;
-      for (const row of data) {
-        if (!row.player_id) continue;
-        out.push({
-          playerId: row.player_id,
-          week: Number(row.week),
-          opponent: row.opponent,
-          statLine: (row.stat_line as Record<string, unknown> | null) ?? null,
-          ppr: numOrNull(row.projected_pts_ppr),
-          halfPpr: numOrNull(row.projected_pts_half_ppr),
-          std: numOrNull(row.projected_pts_std),
-          availability: row.availability,
-          injuryStatus: row.injury_status,
-        });
-      }
-      loaded += data.length;
-      cursor = data[data.length - 1].id;
-      if (data.length < PAGE) break;
-    }
-
-    if (expected != null && loaded < expected) {
-      throw new Error(
-        `power pulse projection load incomplete: read ${loaded} of ${expected} rows for ${chunk.length} players`,
-      );
-    }
+    chunks.push(playerIds.slice(i, i + CHUNK));
   }
-  return out;
+
+  // Chunks are independent player-id partitions of the same query shape, so
+  // they run concurrently (capped) instead of one after another. Each chunk
+  // keeps its own count-then-page walk unchanged, including its own guard,
+  // so a short read in one chunk still fails the whole call exactly as
+  // before; only the wall-clock ordering across chunks has changed.
+  const perChunk = await mapWithConcurrency(chunks, DB_CHUNK_CONCURRENCY, (chunk) =>
+    loadProjectionsChunk(supabase, chunk, season, fromWeek, toWeek),
+  );
+  return perChunk.flat();
 }
 
 /** Blended, recency-weighted reliability rows for one scoring base. */
@@ -384,8 +454,16 @@ export async function loadAccuracy(
   if (playerIds.length === 0) return out;
 
   const CHUNK = 300;
+  const chunks: string[][] = [];
   for (let i = 0; i < playerIds.length; i += CHUNK) {
-    const chunk = playerIds.slice(i, i + CHUNK);
+    chunks.push(playerIds.slice(i, i + CHUNK));
+  }
+
+  // Independent id partitions of one query shape, so they run concurrently
+  // (capped) rather than one after another, matching loadProjections above.
+  // Positional WAR asks this for 1,083 players, four chunks deep, and paid
+  // four serial round trips for what is one wave.
+  const perChunk = await mapWithConcurrency(chunks, DB_CHUNK_CONCURRENCY, async (chunk) => {
     const { data, error } = await supabase
       .from("player_projection_accuracy")
       .select("player_id, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, weeks_played")
@@ -393,7 +471,11 @@ export async function loadAccuracy(
       .is("season", null)
       .in("player_id", chunk);
     if (error) throw new Error(`power pulse accuracy load failed: ${error.message}`);
-    for (const row of data ?? []) {
+    return data ?? [];
+  });
+
+  for (const data of perChunk) {
+    for (const row of data) {
       out.set(row.player_id, {
         playerId: row.player_id,
         shrunkMultiplier: numOrNull(row.shrunk_multiplier),

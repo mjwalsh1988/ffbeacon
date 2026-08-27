@@ -4,9 +4,10 @@
  * here, so a section can never appear in one and go missing from the other.
  *
  * Overview and Teams are inline views on `/leagues/[id]`; Schedules, Power Pulse,
- * Trade Ideas, and Transactions are full routes of their own. `leagueTabHref`
- * knows which is which and forwards the searched Sleeper handle either way, so
- * the in-view switcher and the Teams-tab owner default survive every hop.
+ * Positional WAR, Trade Ideas, and Transactions are full routes of their own.
+ * `leagueTabHref` knows which is which and forwards the searched Sleeper handle
+ * either way, so the in-view switcher and the Teams-tab owner default survive
+ * every hop.
  */
 
 import type { NavIconName } from "@/components/app-shell/nav-icons";
@@ -16,6 +17,7 @@ export type LeagueTabId =
   | "teams"
   | "schedules"
   | "power-pulse"
+  | "positional-war"
   | "trade-ideas"
   | "transactions";
 
@@ -58,6 +60,12 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     icon: "activity",
   },
   {
+    id: "positional-war",
+    label: "Positional WAR",
+    hint: "Which positions are scarce in this league",
+    icon: "trendingDown",
+  },
+  {
     id: "trade-ideas",
     label: "Trade Ideas",
     hint: "Deals worth offering, and any deal you want checked",
@@ -83,6 +91,7 @@ export function leagueTabHref(
   if (
     tabId === "transactions" ||
     tabId === "power-pulse" ||
+    tabId === "positional-war" ||
     tabId === "trade-ideas" ||
     tabId === "schedules"
   ) {

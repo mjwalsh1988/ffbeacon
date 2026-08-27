@@ -876,6 +876,17 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "When an analyst says the usage is encouraging but the production is not, they mean the opportunity is already there and the results should follow. That is usually a buy signal.",
         ],
       },
+      {
+        id: "war",
+        term: "WAR",
+        aka: "Wins Above Replacement",
+        body: [
+          "WAR stands for wins above replacement: how many more games a team would win by starting a given player instead of the best player at that position nobody in the league starts.",
+          "It measures scarcity, not talent. The same running back is worth more in a league that starts three of them, because the player he is being compared against is that much worse. Turn on superflex and every quarterback's WAR jumps, without a single quarterback getting better.",
+          "On FF Beacon the number is called Positional WAR, and it is worked out for your league specifically: your roster slots, your team count and your own scoring settings. Read it to decide which position is worth paying up for, then check what a particular move does for your team, because those are two different questions.",
+        ],
+        link: { href: "/tools/league-pulse", label: "See Positional WAR for your league" },
+      },
     ],
   },
   {

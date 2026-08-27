@@ -10,6 +10,7 @@
 
 import { z } from "zod";
 import { DEFAULT_POWER_PULSE_SETTINGS, type PowerPulseSettings } from "./default-settings";
+import { WAR_SETTING_BOUNDS } from "../positional-war/default-settings";
 
 const unit = z.number().min(0).max(1);
 const multiplier = z.number().min(0.1).max(3);
@@ -87,6 +88,33 @@ export const powerPulseSettingsSchema = z
       min: z.number().min(0).max(50),
       max: z.number().min(51).max(100),
       sharpness: z.number().min(0.2).max(3),
+    }),
+
+    // Positional WAR (section 15.7). Bounds chosen so the model still behaves
+    // at either end: below 1.0 displayDepthMultiple would cut the curve
+    // before the replacement line, and above 6 a WR series runs past 250
+    // points for no gain. cliffThreshold outside (0, 1) makes cliff_rank
+    // meaningless, since it is a fraction of the rank-1 Positional WAR
+    // figure.
+    war: z.object({
+      modelVersion: z
+        .string()
+        .min(WAR_SETTING_BOUNDS.modelVersion.minLength)
+        .max(WAR_SETTING_BOUNDS.modelVersion.maxLength),
+      displayDepthMultiple: z
+        .number()
+        .min(WAR_SETTING_BOUNDS.displayDepthMultiple.min)
+        .max(WAR_SETTING_BOUNDS.displayDepthMultiple.max),
+      minDisplayDepth: z
+        .number()
+        .int()
+        .min(WAR_SETTING_BOUNDS.minDisplayDepth.min)
+        .max(WAR_SETTING_BOUNDS.minDisplayDepth.max),
+      cliffThreshold: z
+        .number()
+        .min(WAR_SETTING_BOUNDS.cliffThreshold.min)
+        .max(WAR_SETTING_BOUNDS.cliffThreshold.max),
+      clampBelowReplacement: z.boolean(),
     }),
   })
   // Cross-field checks the per-field bounds cannot express.

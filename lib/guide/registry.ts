@@ -28,6 +28,8 @@ export type GuidePageKey =
   | "league-overview"
   | "league-team"
   | "league-transactions"
+  | "league-trade-ideas"
+  | "league-positional-war"
   | "dashboard"
   | "my-rankings"
   | "my-signal"
@@ -66,6 +68,16 @@ export const GUIDE_PAGES: GuidePageDef[] = [
     key: "league-transactions",
     title: "League Transactions",
     match: (p) => /^\/leagues\/[^/]+\/transactions$/.test(p),
+  },
+  {
+    key: "league-trade-ideas",
+    title: "Trade Ideas",
+    match: (p) => /^\/leagues\/[^/]+\/trade-ideas$/.test(p),
+  },
+  {
+    key: "league-positional-war",
+    title: "Positional WAR",
+    match: (p) => /^\/leagues\/[^/]+\/positional-war$/.test(p),
   },
   {
     key: "league-overview",

@@ -62,6 +62,19 @@ export type AssetNote = {
 
 export type AssetRole = "centrepiece" | "piece" | "filler";
 
+/**
+ * How scarce this asset's position is in the reader's OWN league, read from
+ * league_positional_war_cache. Player-independent: it says nothing about this
+ * roster, which is exactly why it renders as its own labelled block rather than
+ * folding into the notes above, which are all roster-specific.
+ */
+export type PositionalWarContext = {
+  war: number;
+  positionRank: number;
+  structuralDemand: number;
+  position: string;
+};
+
 export type AssetVerdict = {
   /** How much of its own side this asset is. Drives the card's prominence. */
   role: AssetRole;
@@ -70,7 +83,34 @@ export type AssetVerdict = {
   /** Weeks it cracks the lineup, for incoming players only. Null otherwise. */
   startWeeks: number | null;
   notes: AssetNote[];
+  /**
+   * Null for a pick, for a player with no Sleeper id, and for a player past the
+   * display depth cap on his position's curve. All three read the same way: an
+   * absence, never a fabricated zero.
+   */
+  positionalWar: PositionalWarContext | null;
 };
+
+/**
+ * The Positional WAR sentence on an asset card. A deterministic template: every
+ * figure in it is present in `ctx`, nothing is generated, and nothing compares
+ * to the other side of the trade.
+ */
+export function positionalWarSentence(ctx: PositionalWarContext): string {
+  return `${ctx.war.toFixed(2)} wins over replacement. ${ctx.position}${ctx.positionRank} of the ${ctx.structuralDemand} this league starts.`;
+}
+
+/**
+ * Positional WAR is read-only context: a pick, a player with no Sleeper id, and
+ * a player the map does not carry all resolve to null rather than a guess.
+ */
+function positionalWarOf(
+  asset: ResolvedAsset,
+  map: Map<string, PositionalWarContext> | undefined,
+): PositionalWarContext | null {
+  if (!map || asset.kind !== "player" || !asset.sleeperId) return null;
+  return map.get(asset.sleeperId) ?? null;
+}
 
 function fmtValue(value: number): string {
   return Math.round(value).toLocaleString("en-US");
@@ -117,6 +157,13 @@ export function readAsset(
     /** No weekly projections in this league, so no starts can be counted. */
     noLineup: boolean;
     isDynasty: boolean;
+    /**
+     * Positional WAR for the reader's own league season, keyed by Sleeper id.
+     * Built once by the page (lib/trade-impact/positional-war-context.ts) and
+     * handed down; absent here, or missing this player, and positionalWar on
+     * the result is null. Read only: this file never computes the curve.
+     */
+    positionalWarByPlayer?: Map<string, PositionalWarContext>;
   },
 ): AssetVerdict {
   const incoming = opts.direction === "incoming";
@@ -143,6 +190,9 @@ export function readAsset(
       share,
       startWeeks: null,
       notes,
+      // Picks are excluded from the Positional WAR model entirely: nothing
+      // that cannot start a game gets a position rank.
+      positionalWar: null,
     };
   }
 
@@ -246,7 +296,13 @@ export function readAsset(
     }
   }
 
-  return { role, share, startWeeks, notes };
+  return {
+    role,
+    share,
+    startWeeks,
+    notes,
+    positionalWar: positionalWarOf(asset, opts.positionalWarByPlayer),
+  };
 }
 
 /**

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { TeamCard } from "@/components/team-card";
 import { TeamChipBar, type TeamChipBarTeam } from "@/components/team-chip-bar";
+import { matchViewerRoster } from "@/lib/league-viewer";
 import type { TeamCardData } from "@/lib/league-view-data";
 import type { TeamStatus } from "@/lib/league-team-status";
 
@@ -44,7 +45,7 @@ export function TeamFilter({
   sourceSlug = null,
 }: TeamFilterProps) {
   const ownerRosterId = useMemo(
-    () => resolveOwnerRosterId(teams, searchedUsername, focusedRosterId),
+    () => matchViewerRoster(teams, searchedUsername, focusedRosterId),
     [teams, searchedUsername, focusedRosterId],
   );
 
@@ -187,24 +188,4 @@ export function TeamFilter({
       )}
     </div>
   );
-}
-
-function resolveOwnerRosterId(
-  teams: TeamCardData[],
-  searchedUsername: string | null | undefined,
-  focusedRosterId: number | null | undefined,
-): number | null {
-  // Explicit roster focus (e.g. clicking a row on Power Rankings) wins over
-  // the broader "searched username" default so deep-links land on the exact
-  // team the user picked even when they also have a username in the URL.
-  if (focusedRosterId != null) {
-    const match = teams.find((t) => t.sleeperRosterId === focusedRosterId);
-    if (match) return match.sleeperRosterId;
-  }
-  if (!searchedUsername || !searchedUsername.trim()) return null;
-  const needle = searchedUsername.trim().toLowerCase();
-  const match = teams.find(
-    (t) => (t.ownerSleeperUsername ?? "").trim().toLowerCase() === needle,
-  );
-  return match ? match.sleeperRosterId : null;
 }

@@ -10,6 +10,12 @@
  */
 
 import type { PulsePosition } from "./types";
+import { DEFAULT_WAR_SETTINGS, type WarSettings } from "@/lib/positional-war/default-settings";
+
+// Re-exported so one document has one type: callers reading PowerPulseSettings
+// never need to also import from lib/positional-war/default-settings.
+export { DEFAULT_WAR_SETTINGS };
+export type { WarSettings };
 
 export type PowerPulseSettings = {
   modelVersion: string;
@@ -131,6 +137,16 @@ export type PowerPulseSettings = {
     max: number;
     sharpness: number;
   };
+
+  /**
+   * Positional WAR display and model settings. See
+   * lib/positional-war/default-settings.ts for the field-by-field reasoning.
+   * Lives inside this document rather than a table of its own, because the
+   * Positional WAR model reuses the entire Power Pulse projection stack and a
+   * half-applied edit across two documents could produce a curve computed
+   * under mixed settings.
+   */
+  war: WarSettings;
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
@@ -222,6 +238,8 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
     max: 99,
     sharpness: 1,
   },
+
+  war: DEFAULT_WAR_SETTINGS,
 };
 
 /**
@@ -268,5 +286,6 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
     },
     simulation: obj("simulation", base.simulation),
     display: obj("display", base.display),
+    war: obj("war", base.war),
   };
 }

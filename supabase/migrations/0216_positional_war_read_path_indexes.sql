@@ -1,0 +1,48 @@
+-- 0216: two index changes on the Positional WAR read path.
+--
+-- Access matrix: unchanged by this migration. No table is created, no policy
+-- is added or removed, and no grant changes. Both tables keep exactly the
+-- posture migrations 0211 and the original player_weekly_projections
+-- migration gave them:
+--   player_weekly_projections    public SELECT, writes via service role only
+--   league_positional_war_cache  public SELECT, writes via service role only
+--
+-- ---------------------------------------------------------------------------
+-- 1. An index for the projections freshness probe.
+--
+-- lib/positional-war/load.ts loadProjectionsSnapshot() asks for the newest
+-- updated_at in a season, and it runs on EVERY league page view: it is the
+-- read that detects a fresh projections sync, so it is deliberately not
+-- memoized. Without an index that can be walked in updated_at order, Postgres
+-- read all 18,413 rows of the 2026 season and top-N sorted them to return one
+-- value. Measured on production: 28.1ms and 18,659 shared buffer hits per
+-- call, and both grow linearly with every season stored.
+--
+-- Leading on (season, season_type) so the equality predicates are index
+-- conditions and the scan can then walk updated_at backwards and stop at the
+-- first row. The `week >= n` predicate stays a filter rather than an index
+-- column, deliberately: it is a range, so putting it before updated_at would
+-- destroy the ordering the scan exists to exploit, and almost every row in a
+-- season satisfies it anyway. Measured with the index: 0.05ms and 12 buffer
+-- hits, at fromWeek 1 and at fromWeek 13.
+--
+-- Not CONCURRENTLY: the table is small (18k rows), it is written only by the
+-- nightly projections sync, and CREATE INDEX CONCURRENTLY cannot run inside
+-- the transaction a migration is applied in.
+create index if not exists idx_player_weekly_projections_season_updated
+  on public.player_weekly_projections (season, season_type, updated_at desc);
+
+-- ---------------------------------------------------------------------------
+-- 2. Drop a redundant index.
+--
+-- idx_league_positional_war_cache_league covers (league_id, season), which is
+-- a strict prefix of the unique index on (league_id, season, position). Every
+-- read this feature makes against the table filters on league_id and season,
+-- and the unique index answers all of them: verified on production by dropping
+-- it inside a rolled-back transaction and re-planning both reads, which then
+-- used league_positional_war_cache_league_id_season_position_key with the same
+-- 0.05ms execution time.
+--
+-- It cost nothing on reads and a little write amplification on every upsert,
+-- which is six rows per league per recompute.
+drop index if exists public.idx_league_positional_war_cache_league;

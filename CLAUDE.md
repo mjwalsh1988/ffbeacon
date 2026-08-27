@@ -378,12 +378,13 @@ League Pulse is ONE continuous user journey, not multiple features. The journey:
 
 Naming rules:
 - Feature name in copy/docs: "League Pulse".
-- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/positional-war` (the Positional WAR curve plus the upgrade what-if), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
 - `/leagues/[sleeper_league_id]/trade-finder` was renamed to `trade-ideas`. `next.config.ts` holds a permanent 308 for the old path; keep it forever, shared links use it.
 - Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
 - Tabs within `/leagues/[sleeper_league_id]` use plain functional labels.
 
 Sync rules:
+- `/leagues/[sleeper_league_id]/positional-war`, like every other section route, calls `pulseLeague` and never writes to league tables directly.
 - All writes flow through `lib/league-pulse.ts`. Do not write to `leagues`, `rosters`, `league_users`, or `league_transactions` from anywhere else. If you need a one-off, run `npm run pulse:league -- <id>` or `npm run pulse:league -- <id> --force`.
 - The sync has two halves, both in `lib/league-pulse.ts`. `pulseLeagueCore(supabase, sleeper_league_id, { force })` fetches the league, rosters, members, and drafts: everything a page must have before it can render. `pulseLeagueDerived(supabase, league_row_id, { force, resynced })` does transaction history, trade-value power rankings, and Power Pulse. `pulseLeague(...)` runs both and is what scripts and the refresh endpoint call. The deep view calls the halves separately so the header paints while the derived work streams in behind a Suspense boundary; any page that only needs one await should keep calling `pulseLeague`.
 - Both halves coalesce per league in-process: concurrent renders (or a warm-up request that lands mid-render) share one execution instead of starting duplicate syncs.
@@ -441,6 +442,38 @@ Module map:
 Opponent strength is OURS, not Sleeper's. ABSOLUTE RULE: do not derive strength of schedule from Sleeper's weekly projections. They are effectively a season average repeated 18 times (measured spread across a 2026 player-season is only 2.6% to 5.4%), so any SOS built on them ranks every team identically. `nfl_defense_vs_position` is computed from `player_stats` (which carries `opponent` on every row back to 2020) and produces a real 0.80-1.25 spread.
 
 Model config lives in `league_power_pulse_settings` (single `id='global'` row, service-role only) with code fallbacks in `lib/power-pulse/default-settings.ts`, admin-edited at `/admin/power-pulse`, validated server-side by `lib/power-pulse/validate.ts`. Saving does NOT fan out recomputes; bump `modelVersion` to force every league to rescore on next view.
+
+Observability: `leagues.power_pulse_status` (`pending`, `ok`, `skipped`, `settled`, `error`) plus `power_pulse_detail`, `power_pulse_attempted_at` and `power_pulse_succeeded_at` (migration 0215). `refreshPowerPulse` writes the verdict rather than only logging it, backs off `POWER_PULSE_RETRY_MS` (15 minutes) after any non-`ok` verdict, and the panel reads the status so a reader is told which honest reason applies instead of "still calculating" forever. `/admin/system/league-health` lists both this and Positional WAR.
+
+## Positional WAR (League Pulse positional scarcity)
+
+Positional WAR is a multi-series curve, one line per position, showing wins over replacement by position rank, specific to the league being viewed. It answers "which positions are worth spending on in THIS league", and the shape of the line is the answer: steep means the position runs out fast, flat means the next player down is nearly as good.
+
+ABSOLUTE RULE, the naming rule. The token "WAR" names exactly ONE metric in this product, the player-independent positional one, and it carries the word "Positional" adjacent to it on first use in any surface. Nothing that measures one specific roster may be called WAR, in code, in copy, in a column name, or in a chart axis. Team-specific work stays `winsDelta` / `expectedWins` in code and "projected wins" / "wins added" in copy. A surface that shows both must show both labels and must NOT place them in the same column. `lib/positional-war/naming.test.ts` enforces this: inside `lib/trade-impact/`, `lib/faab/` and `lib/power-pulse/`, every occurrence of the token `WAR` must have the literal `Positional` within 40 characters before it.
+
+The two metrics, and why they legitimately disagree: Positional WAR is player-independent, evaluates every player against a league-average reference team and a league-average opponent, reads NO roster, and runs the lineup optimizer once per week per league. Projected wins is team-specific, depends on who owns whom, and reruns the optimizer per candidate (`lib/power-pulse/what-if.ts`, `lib/faab/marginal.ts`). A league where QB1 carries 0.65 Positional WAR still gives a reader who already starts QB2 almost no wins added by acquiring him.
+
+ABSOLUTE RULE: the optimizer is NEVER rerun per player inside `lib/positional-war/`. Every quantity is read off ONE merged fill per week and the rest is arithmetic. A per-player refill loop would be 1,083 times more expensive AND would compute the team-specific metric under the Positional WAR name, which is exactly what the naming rule forbids.
+
+ABSOLUTE RULE: Positional WAR does NOT vary by value source or by `format_config_id`, for the same reason Power Pulse does not. It is built from Sleeper projections scored under the league's own literal `scoring_settings`. Flipping the source toggle must not invalidate the cache, and `source` is deliberately absent from the fingerprint. Draft picks contribute nothing: a 2028 first cannot start.
+
+ABSOLUTE RULE: recomputed ONLY on demand, through `pulseLeague` (gated by `POSITIONAL_WAR_TTL_MS`, 12 hours, plus a fingerprint change, a model version change, or the week window advancing), or manually via `npm run calculate:positional-war`. NEVER wire per-league Positional WAR into a nightly cron, for the same scaling reason as league power rankings. The nightly job's only Positional WAR work is a single seven-day prune of `positional_war_curves`, which iterates no leagues.
+
+Structural versus weekly demand is a specification, not an implementation detail. `structural_demand` is one integer per position from the BYE-FREE fill, and it drives the x-axis, the depth cap, every label, and every sentence of copy. Weekly seated counts drive replacement level only, because a bye week genuinely lowers replacement and that is exactly the week a starter is worth most. A consequence that must be stated in the UI and must not be "fixed": the curve does not cross zero at `x = 1.0`, so the marker there is labeled with its real value (`war_at_demand`), never with an asserted zero.
+
+Module map:
+- `lib/positional-war/types.ts` — shared shapes, and the naming rule in its header.
+- `lib/positional-war/fingerprint.ts` — the exact invalidation key. Pure, clock-free.
+- `lib/positional-war/replacement.ts` — the merged fill, structural and weekly demand, replacement / avgSeated / deficit / muRef / sigmaRef.
+- `lib/positional-war/war.ts` — PAR, the two lineups, and the win conversion. The anti-double-count lives here.
+- `lib/positional-war/engine.ts` — `computeCurves()`. Pure; takes plain data.
+- `lib/positional-war/load.ts` — the cached full-universe projection read, keyed `(season, fromWeek, toWeek, scoringBase)`.
+- `lib/positional-war/chart-geometry.ts` — the path maths, shared by the on-page chart and the OG route so the two can never disagree about a league.
+- `lib/league-positional-war.ts` — orchestrator + `refreshPositionalWar()` (never throws).
+
+Storage: `league_positional_war_cache`, one row per (league, season, position), six rows for a normal league. `positional_war_curves` is keyed by fingerprint and shares the COMPUTE across leagues on the WRITE path only; the read path is unchanged, so every consumer still issues exactly one query against the per-league table. It is service-role only and nothing in the UI reads it.
+
+Observability: `leagues.positional_war_status` / `_detail` / `_attempted_at` / `_succeeded_at` (migration 0212), `POSITIONAL_WAR_RETRY_MS` 15 minutes, and the `settled` verdict clears stored rows the same way Power Pulse does, because a degenerate answer outlives the run that produced it. `positional_war_detail` is server-written, never user-controlled, and rendered as text, never as HTML.
 
 ## Schedules (League Pulse)
 

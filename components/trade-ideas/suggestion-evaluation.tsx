@@ -7,6 +7,7 @@ import { SignalCheckNote } from "@/components/trade-ideas/signal-check-note";
 import { TradeVerdict } from "@/components/trade-ideas/trade-verdict";
 import { evaluateProposedTrade } from "@/app/actions/trade-impact";
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
+import type { PositionalWarContext } from "@/lib/trade-impact/asset-notes";
 import type { BuildAsset, TradeImpact } from "@/lib/trade-impact/types";
 
 /**
@@ -71,6 +72,7 @@ export function SuggestionEvaluation({
   myTeamLabel,
   theirTeamLabel,
   grade,
+  positionalWarByPlayer,
 }: {
   /** The deal's fingerprint. Identity for the cache and the settle timer. */
   suggestionKey: string;
@@ -91,6 +93,12 @@ export function SuggestionEvaluation({
    * dropped its own copy, so the grade is on screen exactly once in every state.
    */
   grade: SuggestionGrade | null;
+  /**
+   * Positional WAR for this league season, keyed by Sleeper id. Read only,
+   * loaded once by the page and passed down unchanged; it does not depend on
+   * which suggestion is on screen, so it needs no place in the effect above.
+   */
+  positionalWarByPlayer?: Map<string, PositionalWarContext>;
 }) {
   const [state, setState] = useState<State>({ kind: "idle" });
 
@@ -208,6 +216,8 @@ export function SuggestionEvaluation({
         impact={state.impact}
         myTeamLabel={myTeamLabel}
         theirTeamLabel={theirTeamLabel}
+        sleeperLeagueId={sleeperLeagueId}
+        positionalWarByPlayer={positionalWarByPlayer}
       />
     );
   }

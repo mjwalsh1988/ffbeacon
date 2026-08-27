@@ -44,6 +44,7 @@ import {
   evaluateValidatedTrade,
   validateProposal,
 } from "@/lib/trade-impact/evaluate";
+import { loadPositionalWarContext } from "@/lib/trade-impact/positional-war-context";
 import type { TradeProposal } from "@/lib/trade-impact/types";
 import {
   TRADE_POSITIONS,
@@ -247,7 +248,7 @@ export default async function LeagueTradeFinderPage({
         >
           <span
             aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-px"
+            className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{
               backgroundImage:
                 "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
@@ -295,6 +296,7 @@ export default async function LeagueTradeFinderPage({
                   leagueRowId={league.id}
                   resynced={!pulseResult.cached}
                   sourceSlug={resolvedSource.slug}
+                  season={league.season ?? null}
                   searchedUsername={searchedUsername}
                   rosterParam={rosterParam}
                   proposalParams={{ with: sp.with, in: sp.in, out: sp.out }}
@@ -318,6 +320,7 @@ export default async function LeagueTradeFinderPage({
                     leagueRowId={league.id}
                     resynced={!pulseResult.cached}
                     sourceSlug={resolvedSource.slug}
+                    season={league.season ?? null}
                     searchedUsername={searchedUsername}
                     rosterParam={rosterParam}
                     isSignedIn={Boolean(user)}
@@ -402,6 +405,7 @@ async function TradeFinderSection({
   leagueRowId,
   resynced,
   sourceSlug,
+  season,
   searchedUsername,
   rosterParam,
   isSignedIn,
@@ -411,6 +415,7 @@ async function TradeFinderSection({
   resynced: boolean;
   /** Null when the registry has no active value source at all. */
   sourceSlug: string | null;
+  season: number | null;
   searchedUsername: string | null;
   rosterParam: number | null;
   isSignedIn: boolean;
@@ -543,6 +548,12 @@ async function TradeFinderSection({
   theirPlayers.sort(byLabel);
   const availablePositions = TRADE_POSITIONS.filter((p) => positionsHeld.has(p));
 
+  // Read only: the six rows league_positional_war_cache already holds for this
+  // league season, or an empty map on a league with no cached curve yet. Never
+  // a compute trigger, and cache()'d so BuildSection's read of the same league
+  // season is one query rather than two.
+  const positionalWarByPlayer = await loadPositionalWarContext(leagueRowId, season);
+
   return (
     <TradeFinder
       mode="league"
@@ -557,6 +568,7 @@ async function TradeFinderSection({
       myPlayers={myPlayers}
       theirPlayers={theirPlayers}
       availablePositions={availablePositions}
+      positionalWarByPlayer={positionalWarByPlayer}
       initial={{
         suggestions: initialSuggestions,
         grades: initialGrades,
@@ -604,6 +616,7 @@ async function BuildSection({
   leagueRowId,
   resynced,
   sourceSlug,
+  season,
   searchedUsername,
   rosterParam,
   proposalParams,
@@ -612,6 +625,7 @@ async function BuildSection({
   leagueRowId: string;
   resynced: boolean;
   sourceSlug: string | null;
+  season: number | null;
   searchedUsername: string | null;
   rosterParam: number | null;
   proposalParams: ProposalParams;
@@ -793,6 +807,7 @@ async function BuildSection({
               resynced={resynced}
               rosterParam={rosterParam}
               sourceSlug={sourceSlug}
+              season={season}
               searchedUsername={searchedUsername}
               proposal={decoded.proposal}
               myTeamLabel={myTeam?.teamName ?? "Your team"}
@@ -821,6 +836,7 @@ async function ProposalEvaluation({
   resynced,
   rosterParam,
   sourceSlug,
+  season,
   searchedUsername,
   proposal,
   myTeamLabel,
@@ -833,6 +849,7 @@ async function ProposalEvaluation({
   resynced: boolean;
   rosterParam: number | null;
   sourceSlug: string | null;
+  season: number | null;
   searchedUsername: string | null;
   proposal: TradeProposal;
   myTeamLabel: string;
@@ -902,11 +919,19 @@ async function ProposalEvaluation({
     return <EvaluationState kind="error" message={result.error} retryHref={retryHref} />;
   }
 
+  // Read only: the six rows league_positional_war_cache already holds for this
+  // league season, or an empty map on a league with no cached curve yet. Same
+  // cache()'d read TradeFinderSection makes, so a reader who has visited both
+  // modes on this request pays for one query.
+  const positionalWarByPlayer = await loadPositionalWarContext(leagueRowId, season);
+
   return (
     <TradeVerdict
       impact={result.impact}
       myTeamLabel={myTeamLabel}
       theirTeamLabel={theirTeamLabel}
+      sleeperLeagueId={sleeperLeagueId}
+      positionalWarByPlayer={positionalWarByPlayer}
     />
   );
 }

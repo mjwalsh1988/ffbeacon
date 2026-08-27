@@ -514,6 +514,26 @@ the resolution helpers. The pages that do this today:
 Any future page that reads from `rankings` or `player_value_history` **must** go
 through `resolveSourceForFormat`. Do not hardcode a source slug.
 
+### Surfaces that are deliberately source-independent
+
+Two League Pulse features read no value source at all, so they are outside the
+rule above and must stay that way:
+
+- **Power Pulse** (`league_power_pulse_cache`). Computed from Sleeper's weekly
+  projections rescored under the league's own literal `scoring_settings`.
+- **Positional WAR** (`league_positional_war_cache`, `positional_war_curves`).
+  Same projection stack, same league scoring.
+
+Neither varies by `source` or by `format_config_id`, so neither carries a source
+column and neither may gain one. Flipping the source toggle on a league page
+must not invalidate either cache. `source` is deliberately absent from the
+Positional WAR fingerprint in `lib/positional-war/fingerprint.ts`, and the
+absence is enforced there as a compile-time assertion rather than as a comment.
+
+Draft picks contribute nothing to either. A 2028 first cannot start in a lineup,
+so `draft_pick_values` and its KTC pick source are read by the trade-value power
+rankings only.
+
 ## Raw source payloads (`metadata` jsonb)
 
 Every external-ingestion table carries a `metadata` jsonb column that

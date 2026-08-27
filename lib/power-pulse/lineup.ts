@@ -81,24 +81,49 @@ export function buildOptimalLineup(
   /** slot index to the candidate currently holding it. */
   const occupant: (LineupCandidate | null)[] = slots.map(() => null);
 
-  const slotsFor = (candidate: LineupCandidate): number[] => {
-    const out: number[] = [];
-    for (let i = 0; i < slotEligibility.length; i += 1) {
-      if (slotEligibility[i].includes(candidate.position)) out.push(i);
+  /**
+   * Slot indices a position can occupy, ascending, precomputed once per fill.
+   *
+   * Eligibility depends on the candidate's POSITION and nothing else, so the
+   * answer is the same for every candidate at that position and for every one
+   * of the (many) times an augmenting path re-asks it about an incumbent. The
+   * previous shape rebuilt the array on each ask, scanning every slot and
+   * running Array.includes over its eligibility list, which is the single
+   * hottest thing in a Positional WAR compute: that fill offers 613 candidates
+   * to 120 merged slots, fourteen times over, and each offer walks a
+   * relocation chain. Same indices, same ascending order, so the seating
+   * decisions are byte-identical; only the repeated scanning is gone.
+   */
+  const slotsByPosition = new Map<PulsePosition, number[]>();
+  for (let i = 0; i < slotEligibility.length; i += 1) {
+    for (const position of slotEligibility[i]) {
+      const bucket = slotsByPosition.get(position);
+      if (bucket) bucket.push(i);
+      else slotsByPosition.set(position, [i]);
     }
-    return out;
-  };
+  }
+  const NO_SLOTS: number[] = [];
+
+  /**
+   * Which attempt last visited each slot. A plain stamp array replaces the
+   * per-candidate Set<number>: one allocation for the whole fill instead of
+   * one per offer, and an integer compare instead of a hash lookup. Attempt
+   * numbering starts at 1 so the zero-filled initial state means "unvisited".
+   */
+  const visitedStamp = new Int32Array(slots.length);
+  let attempt = 0;
 
   /**
    * Try to seat `candidate`, relocating incumbents along an augmenting path.
-   * `visited` guards against revisiting a slot within one attempt.
+   * The stamp guards against revisiting a slot within one attempt.
    */
-  const seat = (candidate: LineupCandidate, visited: Set<number>): boolean => {
-    for (const slotIndex of slotsFor(candidate)) {
-      if (visited.has(slotIndex)) continue;
-      visited.add(slotIndex);
+  const seat = (candidate: LineupCandidate): boolean => {
+    const eligibleSlots = slotsByPosition.get(candidate.position) ?? NO_SLOTS;
+    for (const slotIndex of eligibleSlots) {
+      if (visitedStamp[slotIndex] === attempt) continue;
+      visitedStamp[slotIndex] = attempt;
       const current = occupant[slotIndex];
-      if (current === null || seat(current, visited)) {
+      if (current === null || seat(current)) {
         occupant[slotIndex] = candidate;
         return true;
       }
@@ -110,7 +135,8 @@ export function buildOptimalLineup(
   const ordered = [...candidates].sort((a, b) => b.points - a.points);
   const seated = new Set<string>();
   for (const candidate of ordered) {
-    if (seat(candidate, new Set<number>())) seated.add(candidate.playerId);
+    attempt += 1;
+    if (seat(candidate)) seated.add(candidate.playerId);
   }
 
   const filled: LineupSlot[] = [];

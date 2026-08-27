@@ -16,6 +16,7 @@ import { useEffect, useId, useState, useTransition } from "react";
 import { RotateCcw } from "lucide-react";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import { DEFAULT_POWER_PULSE_SETTINGS } from "@/lib/power-pulse/default-settings";
+import { WAR_SETTING_BOUNDS } from "@/lib/positional-war/default-settings";
 import { savePowerPulseSettingsAction } from "./actions";
 
 const inputCls =
@@ -28,6 +29,7 @@ function NumberInput({
   step = "any",
   min,
   max,
+  describedBy,
 }: {
   id: string;
   value: number;
@@ -35,6 +37,7 @@ function NumberInput({
   step?: string;
   min?: number;
   max?: number;
+  describedBy?: string;
 }) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
@@ -50,6 +53,7 @@ function NumberInput({
       min={min}
       max={max}
       value={text}
+      aria-describedby={describedBy}
       onFocus={() => setFocused(true)}
       onBlur={() => {
         setFocused(false);
@@ -85,13 +89,26 @@ function Field({
   max?: number;
 }) {
   const id = useId();
+  const hintId = `${id}-hint`;
   return (
     <div>
       <label htmlFor={id} className="block text-xs font-medium text-ink-subtle">
         {label}
       </label>
-      <NumberInput id={id} value={value} onChange={onChange} step={step} min={min} max={max} />
-      {hint && <p className="mt-1 text-[11px] leading-tight text-ink-subtle">{hint}</p>}
+      <NumberInput
+        id={id}
+        value={value}
+        onChange={onChange}
+        step={step}
+        min={min}
+        max={max}
+        describedBy={hint ? hintId : undefined}
+      />
+      {hint && (
+        <p id={hintId} className="mt-1 text-[11px] leading-tight text-ink-subtle">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -131,6 +148,35 @@ function Toggle({
         {label}
       </button>
       {hint && <p className="mt-1 text-[11px] leading-tight text-ink-subtle">{hint}</p>}
+    </div>
+  );
+}
+
+function Checkbox({
+  label,
+  checked,
+  onChange,
+  describedBy,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  describedBy: string;
+}) {
+  const id = useId();
+  return (
+    <div className="flex min-h-11 items-center gap-2.5">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        aria-describedby={describedBy}
+        className="h-5 w-5 shrink-0 rounded border-line bg-base text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      />
+      <label htmlFor={id} className="text-sm font-medium text-ink">
+        {label}
+      </label>
     </div>
   );
 }
@@ -451,6 +497,69 @@ export function PowerPulseSettingsManager({
           />
           <p className="mt-1 text-[11px] leading-tight text-ink-subtle">
             Change this to force every league to rescore on its next view.
+          </p>
+        </div>
+      </Section>
+
+      <Section
+        title="Positional WAR"
+        description="Controls the curve on the Positional WAR chart: how far it extends past replacement level, where a position's cliff falls, and whether a below-replacement player floors at zero. Saving does not recompute anything. Every field here is part of the cache key, so each league recomputes on its next view on its own."
+      >
+        <Field
+          label="Curve depth multiple"
+          value={settings.war.displayDepthMultiple}
+          onChange={(v) => patch("war", { displayDepthMultiple: v })}
+          hint="How far past the replacement line each position's curve is drawn, as a multiple of how many that league starts. Lower this to cut the curve shorter."
+          step={String(WAR_SETTING_BOUNDS.displayDepthMultiple.step)}
+          min={WAR_SETTING_BOUNDS.displayDepthMultiple.min}
+          max={WAR_SETTING_BOUNDS.displayDepthMultiple.max}
+        />
+        <Field
+          label="Minimum curve depth"
+          value={settings.war.minDisplayDepth}
+          onChange={(v) => patch("war", { minDisplayDepth: Math.trunc(v) })}
+          hint="A floor on that length, so a position a league starts only twelve of still gets a readable curve."
+          step={String(WAR_SETTING_BOUNDS.minDisplayDepth.step)}
+          min={WAR_SETTING_BOUNDS.minDisplayDepth.min}
+          max={WAR_SETTING_BOUNDS.minDisplayDepth.max}
+        />
+        <Field
+          label="Cliff threshold"
+          value={settings.war.cliffThreshold}
+          onChange={(v) => patch("war", { cliffThreshold: v })}
+          hint="The share of the best player's wins that marks where a position falls off. The cliff rank is the first player below it."
+          step={String(WAR_SETTING_BOUNDS.cliffThreshold.step)}
+          min={WAR_SETTING_BOUNDS.cliffThreshold.min}
+          max={WAR_SETTING_BOUNDS.cliffThreshold.max}
+        />
+        <div>
+          <Checkbox
+            label="Clamp below-replacement players to zero"
+            checked={settings.war.clampBelowReplacement}
+            onChange={(v) => patch("war", { clampBelowReplacement: v })}
+            describedBy="war-clamp-hint"
+          />
+          <p id="war-clamp-hint" className="mt-1 text-[11px] leading-tight text-ink-subtle">
+            When on, a player below replacement level scores zero rather than a negative. Turn it
+            off to let the chart show negative wins, and the y-axis then starts below zero.
+          </p>
+        </div>
+        <div>
+          <label htmlFor="war-model-version" className="block text-xs font-medium text-ink-subtle">
+            Model version
+          </label>
+          <input
+            id="war-model-version"
+            type="text"
+            value={settings.war.modelVersion}
+            maxLength={WAR_SETTING_BOUNDS.modelVersion.maxLength}
+            aria-describedby="war-model-version-hint"
+            onChange={(e) => patch("war", { modelVersion: e.target.value })}
+            className={inputCls}
+          />
+          <p id="war-model-version-hint" className="mt-1 text-[11px] leading-tight text-ink-subtle">
+            Bump this by hand to force every league to recompute, for a change the fields above
+            do not otherwise capture.
           </p>
         </div>
       </Section>

@@ -19,6 +19,9 @@ describe("resolveGuidePageKey", () => {
     expect(resolveGuidePageKey("/players/brock-purdy-6813")).toBe("player-profile");
     expect(resolveGuidePageKey("/leagues/123")).toBe("league-overview");
     expect(resolveGuidePageKey("/leagues/123/transactions")).toBe("league-transactions");
+    expect(resolveGuidePageKey("/leagues/123/trade-ideas")).toBe("league-trade-ideas");
+    expect(resolveGuidePageKey("/leagues/123/positional-war")).toBe("league-positional-war");
+    expect(resolveGuidePageKey("/leagues/123/teams/4")).toBe("league-team");
     expect(resolveGuidePageKey("/games/signal-scout")).toBe("signal-scout");
     expect(resolveGuidePageKey("/my-beacon")).toBe("dashboard");
     expect(resolveGuidePageKey("/")).toBe("home");
@@ -30,6 +33,17 @@ describe("resolveGuidePageKey", () => {
     expect(resolveGuidePageKey("/login")).toBeNull();
     expect(resolveGuidePageKey("/somehandle")).toBe("creator-profile");
     expect(resolveGuidePageKey("/u/somehandle")).toBe("creator-profile");
+  });
+
+  it("keeps a league section route off the league-overview catch", () => {
+    // league-overview matches /leagues/[anything] with no further segment, so
+    // a new section route added BELOW it in the list would resolve to the
+    // overview's guide instead of its own. This is that guard.
+    expect(resolveGuidePageKey("/leagues/123/trade-ideas?mode=build")).toBe("league-trade-ideas");
+    expect(resolveGuidePageKey("/leagues/123/positional-war/")).toBe("league-positional-war");
+    // A section route with no guide page still resolves to nothing rather than
+    // borrowing the overview's.
+    expect(resolveGuidePageKey("/leagues/123/schedules")).toBeNull();
   });
 
   it("ignores a trailing slash and a query string", () => {

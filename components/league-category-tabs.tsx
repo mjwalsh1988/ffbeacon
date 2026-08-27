@@ -124,10 +124,16 @@ export function LeagueCategoryTabs({
                     {count}
                   </span>
                   {/* Active underline in the beacon gradient, sitting on the
-                      wrapper's rule. */}
+                      wrapper's rule.
+
+                      pointer-events-none because this span is stretched across
+                      the bottom of the TAB ITSELF. Without it the bottom strip
+                      of every tab hit-tests to a decorative element with no
+                      accessible name, and a screen reader following the mouse
+                      announces nothing for a tab the reader is pointing at. */}
                   <span
                     aria-hidden="true"
-                    className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 rounded-full"
                     style={{
                       backgroundImage: selected
                         ? "linear-gradient(90deg, #A855F7 0%, #22D3EE 100%)"

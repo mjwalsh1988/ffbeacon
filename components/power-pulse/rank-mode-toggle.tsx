@@ -19,6 +19,11 @@ import { useTransition } from "react";
  *
  * Real radio semantics rather than two buttons, so a screen reader announces
  * "Rank by, Power Pulse, selected, 1 of 2".
+ *
+ * The 44px minimum target holds at EVERY width. It used to be dropped from sm
+ * up, and sm starts at 640px: a tablet, and a large phone turned sideways, are
+ * both touch devices well past that line. components/league-war/
+ * war-axis-toggle.tsx copies this control and was changed with it.
  */
 export type RankMode = "pulse" | "value";
 
@@ -80,7 +85,7 @@ export function RankModeToggle({
             aria-label={`Rank by ${option.label}. ${option.hint}${disabled ? " Not available yet for this league." : ""}`}
             disabled={pending || disabled}
             onClick={() => select(option.id)}
-            className={`min-h-11 flex-1 truncate rounded-card px-2 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:min-h-0 sm:flex-none sm:px-3 sm:text-xs ${
+            className={`min-h-11 flex-1 truncate rounded-card px-2 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan disabled:opacity-50 sm:flex-none sm:px-3 sm:text-xs ${
               active
                 ? "bg-brand-cyan/15 text-brand-cyan shadow-[0_0_20px_-10px_rgba(34,211,238,0.9)]"
                 : "text-ink-muted hover:bg-surface hover:text-ink"

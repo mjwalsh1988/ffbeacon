@@ -17,6 +17,7 @@ import {
 import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import { refreshPowerPulse } from "@/lib/league-power-pulse";
+import { refreshPositionalWar } from "@/lib/league-positional-war";
 import { captureLeagueDraftSelections } from "@/lib/league-draft-selections";
 import type { Database } from "@/lib/database.types";
 
@@ -346,10 +347,10 @@ export async function pulseLeagueCore(
 export async function pulseLeagueDerived(
   supabase: ServiceClient,
   leagueRowId: string,
-  options: { force?: boolean; resynced?: boolean } = {},
+  options: { force?: boolean; resynced?: boolean; includePositionalWar?: boolean } = {},
 ): Promise<{ transactions: number }> {
-  const { force = false, resynced = false } = options;
-  return coalesce(`derived:${leagueRowId}:${force}`, async () => {
+  const { force = false, resynced = false, includePositionalWar = true } = options;
+  return coalesce(`derived:${leagueRowId}:${force}:${includePositionalWar}`, async () => {
     const startedAt = Date.now();
 
     const { data: league } = await supabase
@@ -416,6 +417,28 @@ export async function pulseLeagueDerived(
       // Power Pulse: expected competitive performance under the league's own
       // scoring. Independent of the value source, so no format/source loop.
       timed("power-pulse", () => refreshPowerPulse(supabase, leagueRowId, { force })),
+
+      // Positional WAR: league-wide positional scarcity. Deliberately NOT
+      // sequenced after Power Pulse above; it reads no Power Pulse output (it
+      // reads no roster at all), and each stage already owns its own
+      // failure, so there is no ordering constraint between them.
+      //
+      // `includePositionalWar: false` exists because of WHO AWAITS THIS. A page
+      // does not call pulseLeagueDerived from the Suspense boundary that shows
+      // the curve; it calls it from the one that shows the RANKINGS TABLE. So
+      // every millisecond this stage takes was being spent holding up the
+      // page's primary content, and a cold fingerprint costs about ten seconds
+      // of universe read. The stage itself is correctly parallel with the other
+      // three; the coupling was at the call site, one boundary up.
+      //
+      // Pages therefore pass false here and let the curve's OWN boundary
+      // (components/league-war/positional-war-section.tsx) await the compute,
+      // which is what its skeleton was always for. Scripts and the refresh
+      // endpoint keep the default, because they have no boundaries to protect
+      // and want one call that does everything.
+      includePositionalWar
+        ? timed("positional-war", () => refreshPositionalWar(supabase, leagueRowId, { force }))
+        : Promise.resolve(),
 
       // Completed drafts into the pick ledger. A finished draft never changes,
       // so its picks are worth exactly one Sleeper request ever; the capture

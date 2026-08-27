@@ -22,6 +22,7 @@ import { PulseRankingsTable } from "@/components/power-pulse/pulse-rankings-tabl
 import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
 import { ProjectedStandings } from "@/components/power-pulse/projected-standings";
 import { ProjectedChampion } from "@/components/power-pulse/projected-champion";
+import { PositionalWarSection } from "@/components/league-war/positional-war-section";
 import { HowPowerPulseWorks } from "@/components/power-pulse/how-power-pulse-works";
 import { PreDraftNotice } from "@/components/power-pulse/pre-draft-notice";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
@@ -65,7 +66,7 @@ export default async function LeaguePowerPulsePage({
   searchParams,
 }: {
   params: Promise<{ league_id: string }>;
-  searchParams: Promise<{ source?: string; username?: string }>;
+  searchParams: Promise<{ source?: string; username?: string; war?: string }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
@@ -84,7 +85,7 @@ export default async function LeaguePowerPulsePage({
   const { data: league } = await supabase
     .from("leagues")
     .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
+      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata, power_pulse_status, power_pulse_detail",
     )
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
@@ -190,7 +191,7 @@ export default async function LeaguePowerPulsePage({
         >
           <span
             aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-px"
+            className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{
               backgroundImage:
                 "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
@@ -239,6 +240,18 @@ export default async function LeaguePowerPulsePage({
             scoringDescription={scoringDescription}
             playoffTeams={playoffTeams}
             valueLabel={valueLabel}
+            powerPulseStatus={league.power_pulse_status ?? null}
+            powerPulseDetail={league.power_pulse_detail ?? null}
+            teamCount={league.total_rosters ?? 0}
+            rosterPositions={
+              Array.isArray(league.roster_positions)
+                ? (league.roster_positions as unknown[]).filter(
+                    (t): t is string => typeof t === "string",
+                  )
+                : []
+            }
+            scoringSettings={(league.scoring_settings ?? {}) as ScoringSettings}
+            warParam={sp.war}
           />
         </Suspense>
       </>
@@ -310,6 +323,12 @@ async function PowerPulseBody({
   scoringDescription,
   playoffTeams,
   valueLabel,
+  powerPulseStatus,
+  powerPulseDetail,
+  teamCount,
+  rosterPositions,
+  scoringSettings,
+  warParam,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -323,6 +342,14 @@ async function PowerPulseBody({
   scoringDescription: string;
   playoffTeams: number;
   valueLabel: string | null;
+  powerPulseStatus: string | null;
+  powerPulseDetail: string | null;
+  /** For the Positional WAR panel's copy and footnote. */
+  teamCount: number;
+  rosterPositions: string[];
+  scoringSettings: ScoringSettings;
+  /** The raw `?war=` searchParam value, for the axis toggle. */
+  warParam: string | undefined;
 }) {
   const { readiness, view } = await getPulseData(
     leagueRowId,
@@ -369,16 +396,7 @@ async function PowerPulseBody({
           </div>
         ) : !view ? (
           <div className="mt-6">
-            <Panel
-              eyebrow="Building"
-              title="Power Pulse is still calculating"
-              helper="This runs on the first load after a league syncs."
-            >
-              <p className="text-sm text-ink-muted">
-                We need Sleeper's weekly projections and this league's schedule
-                first. Both arrive on the next sync, so try again in a moment.
-              </p>
-            </Panel>
+            <PowerPulseEmptyState status={powerPulseStatus} detail={powerPulseDetail} />
           </div>
         ) : (
           // Rail on the RIGHT, matching the overview tab. The masthead above
@@ -411,6 +429,27 @@ async function PowerPulseBody({
                   teams={view.teams}
                   simulationRuns={pulseSettings.simulation.runs}
                 />
+
+                {/* The same panel and the same cached rows as the overview.
+                    This page is its better second home: the rail already
+                    carries HowPowerPulseWorks, which is where model
+                    explanation belongs, and a reader who came here to
+                    understand what drives a projection is the reader most
+                    likely to want to know where the scarcity is.
+
+                    Its own Suspense boundary, so a missing curve never blocks
+                    the standings below it. */}
+                <Suspense fallback={<WarSkeleton />}>
+                  <PositionalWarBlock
+                    leagueRowId={leagueRowId}
+                    season={season}
+                    teamCount={teamCount}
+                    rosterPositions={rosterPositions}
+                    scoringSettings={scoringSettings}
+                    searchedUsername={searchedUsername}
+                    warParam={warParam}
+                  />
+                </Suspense>
 
                 {/* "Regular season" is doing real work in this title. The
                     champion card above ranks by title odds, which are decided in
@@ -507,6 +546,97 @@ function PulseBodySkeleton() {
   );
 }
 
+/**
+ * What a reader sees when Power Pulse has no view to render and the league is
+ * past the draft (the pre-draft case is handled earlier by PreDraftNotice).
+ * One fixed sentence per power_pulse_status, never the raw detail: the detail
+ * is server-written and holds no secrets, but a plain status-based sentence
+ * is the honest answer for a non-admin reader, and the raw string belongs on
+ * the admin surface (/admin/system/league-health) instead.
+ */
+function PowerPulseEmptyState({
+  status,
+  detail,
+}: {
+  status: string | null;
+  detail: string | null;
+}) {
+  if (status === "error") {
+    return (
+      <Panel
+        eyebrow="Refresh incomplete"
+        title="The last refresh did not complete"
+        helper="This retries automatically."
+      >
+        <p className="text-sm text-ink-muted">
+          Something interrupted the last Power Pulse calculation for this
+          league. Check back in a few minutes, or reload the page.
+        </p>
+      </Panel>
+    );
+  }
+
+  if (status === "settled") {
+    const seasonOver = detail?.startsWith("no regular season games remaining") ?? false;
+    if (seasonOver) {
+      return (
+        <Panel
+          eyebrow="Season complete"
+          title="The regular season is over"
+          helper="There is nothing left to project."
+        >
+          <p className="text-sm text-ink-muted">
+            Every regular season game for this league has been played, so
+            Power Pulse has no remaining schedule to score.
+          </p>
+        </Panel>
+      );
+    }
+    return (
+      <Panel
+        eyebrow="Waiting on a schedule"
+        title="No schedule to project yet"
+        helper="Power Pulse needs a published matchup schedule."
+      >
+        <p className="text-sm text-ink-muted">
+          This league does not have a schedule published yet. Once one posts,
+          Power Pulse picks it up on the next sync.
+        </p>
+      </Panel>
+    );
+  }
+
+  if (status === "skipped") {
+    return (
+      <Panel
+        eyebrow="Waiting on data"
+        title="Power Pulse needs a little more data"
+        helper="The next sync brings what's missing."
+      >
+        <p className="text-sm text-ink-muted">
+          Sleeper has not published everything this needs yet: rosters,
+          weekly projections, or this week's schedule. Nothing is broken,
+          check back after the next sync.
+        </p>
+      </Panel>
+    );
+  }
+
+  // 'pending', null, or any other value: the normal first-attempt state.
+  return (
+    <Panel
+      eyebrow="Building"
+      title="Power Pulse is still calculating"
+      helper="This runs on the first load after a league syncs."
+    >
+      <p className="text-sm text-ink-muted">
+        We need Sleeper's weekly projections and this league's schedule
+        first. Both arrive on the next sync, so try again in a moment.
+      </p>
+    </Panel>
+  );
+}
+
 function Chip({ label, accent = false }: { label: string; accent?: boolean }) {
   return (
     <span
@@ -516,6 +646,63 @@ function Chip({ label, accent = false }: { label: string; accent?: boolean }) {
     >
       {label}
     </span>
+  );
+}
+
+/**
+ * The Positional WAR section on this page, wrapped so it can own the
+ * cookie-bound read client rather than having one threaded down through
+ * PowerPulseBody's props. PositionalWarSection owns the compute behind this
+ * boundary, so a cold curve never holds up the rankings table above it.
+ */
+async function PositionalWarBlock({
+  leagueRowId,
+  season,
+  teamCount,
+  rosterPositions,
+  scoringSettings,
+  searchedUsername,
+  warParam,
+}: {
+  leagueRowId: string;
+  season: number;
+  teamCount: number;
+  rosterPositions: string[];
+  scoringSettings: ScoringSettings;
+  searchedUsername: string | null;
+  warParam: string | undefined;
+}) {
+  const supabase = await createClient();
+  return (
+    <PositionalWarSection
+      supabase={supabase}
+      leagueRowId={leagueRowId}
+      season={season}
+      teamCount={teamCount}
+      rosterPositions={rosterPositions}
+      scoringSettings={scoringSettings}
+      searchedUsername={searchedUsername}
+      focusedRosterId={null}
+      war={warParam}
+    />
+  );
+}
+
+/**
+ * Placeholder while the Positional WAR curve streams in. Announced politely so
+ * a screen reader hears that work is in progress rather than sitting on
+ * silence.
+ */
+function WarSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-modal border border-line bg-surface/50 p-6"
+    >
+      <p className="text-sm text-ink-muted">Loading Positional WAR</p>
+      <div aria-hidden="true" className="mt-4 h-56 animate-pulse rounded-card bg-base/60" />
+    </div>
   );
 }
 

@@ -10,6 +10,7 @@ import { VerdictTabs } from "@/components/trade-ideas/verdict-tabs";
 import { PickTag } from "@/components/trade-ideas/pick-tag";
 import { TradeOutcomePanel } from "@/components/trade-ideas/trade-outcome";
 import { buildTradeOutcome } from "@/lib/trade-impact/outcome";
+import type { PositionalWarContext } from "@/lib/trade-impact/asset-notes";
 import type {
   ImpactGaps,
   ResolvedAsset,
@@ -103,10 +104,16 @@ export function TradeVerdict({
   impact,
   myTeamLabel,
   theirTeamLabel,
+  sleeperLeagueId,
+  positionalWarByPlayer,
 }: {
   impact: TradeImpact;
   myTeamLabel: string;
   theirTeamLabel: string;
+  /** For the asset card's Signal Guide link. */
+  sleeperLeagueId: string;
+  /** Read only; see lib/trade-impact/positional-war-context.ts. */
+  positionalWarByPlayer?: Map<string, PositionalWarContext>;
 }) {
   const mine = impact.mine;
   const outcome = buildTradeOutcome(mine, impact.gaps);
@@ -240,6 +247,8 @@ export function TradeVerdict({
         isDynasty={impact.isDynasty}
         myTeamLabel={myTeamLabel}
         theirTeamLabel={theirTeamLabel}
+        sleeperLeagueId={sleeperLeagueId}
+        positionalWarByPlayer={positionalWarByPlayer}
       />
       <VerdictTabs impact={impactTab} value={valueTab} />
     </div>

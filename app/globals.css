@@ -1291,3 +1291,38 @@
     animation: none;
   }
 }
+
+/**
+ * DECORATION MUST NOT SWALLOW A HOVER.
+ *
+ * A screen reader that follows the mouse (NVDA's mouse tracking, ZoomText)
+ * announces whatever object the cursor is over. When a button contains an icon,
+ * a swatch or a gradient bar marked aria-hidden, the cursor spends most of its
+ * time over THAT, and an aria-hidden element is not in the accessibility tree,
+ * so there is nothing to announce. The reader points straight at a control and
+ * hears silence.
+ *
+ * Every element that is hidden from assistive technology is therefore also
+ * removed from hit testing when it sits inside something interactive, so the
+ * hover resolves to the control that has a name. This is safe by definition: an
+ * aria-hidden element must never be the thing a person is meant to interact
+ * with, so it has no business being the hit-test target either.
+ *
+ * Absolutely positioned decoration that is a SIBLING of the content rather than
+ * a descendant of a control (the beacon hairline across the top of every panel,
+ * for one) is outside this selector's reach and carries pointer-events-none at
+ * its own call site.
+ */
+a [aria-hidden="true"],
+button [aria-hidden="true"],
+label [aria-hidden="true"],
+summary [aria-hidden="true"],
+[role="button"] [aria-hidden="true"],
+[role="tab"] [aria-hidden="true"],
+[role="radio"] [aria-hidden="true"],
+[role="checkbox"] [aria-hidden="true"],
+[role="switch"] [aria-hidden="true"],
+[role="menuitem"] [aria-hidden="true"],
+[role="option"] [aria-hidden="true"] {
+  pointer-events: none;
+}

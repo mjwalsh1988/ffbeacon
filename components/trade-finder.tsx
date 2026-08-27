@@ -33,6 +33,7 @@ import {
 import type { SavedTrade } from "@/lib/trade-finder-saves";
 import { proposalHref } from "@/lib/trade-impact/proposal-url";
 import type { BuildAsset } from "@/lib/trade-impact/types";
+import type { PositionalWarContext } from "@/lib/trade-impact/asset-notes";
 import { PositionFilter } from "@/components/trade-ideas/position-filter";
 import { SuggestionEvaluation } from "@/components/trade-ideas/suggestion-evaluation";
 import {
@@ -170,6 +171,13 @@ export function TradeFinder(props: {
   sleeperUserId?: string | null;
   /** Both modes. Keeps the value source in step with the rest of the page. */
   source?: string | null;
+  /**
+   * Positional WAR for this league season, keyed by Sleeper id. League mode
+   * only; portfolio mode spans leagues, so there is no one curve to read.
+   * Read only, loaded once by the page (lib/trade-impact/positional-war-context.ts)
+   * and handed down for the evaluation card's asset notes.
+   */
+  positionalWarByPlayer?: Map<string, PositionalWarContext>;
 }) {
   const isLeague = props.mode === "league";
 
@@ -1051,6 +1059,7 @@ export function TradeFinder(props: {
                 myTeamLabel={props.myTeamName ?? "Your team"}
                 theirTeamLabel={shownSuggestion.counterparty.teamName}
                 grade={shownGrade}
+                positionalWarByPlayer={props.positionalWarByPlayer}
               />
             </section>
           )}

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5";
+    PostgrestVersion: "14.17";
   };
   public: {
     Tables: {
@@ -1806,6 +1806,80 @@ export type Database = {
           },
         ];
       };
+      league_positional_war_cache: {
+        Row: {
+          avg_seated_points: number | null;
+          cliff_rank: number | null;
+          curve: Json;
+          deficit: number | null;
+          fingerprint: string;
+          from_week: number;
+          generated_at: string;
+          id: string;
+          league_id: string;
+          model_version: string;
+          position: string;
+          replacement_points: number | null;
+          season: number;
+          shallow_pool: boolean;
+          structural_demand: number;
+          through_week: number;
+          war_at_demand: number | null;
+          war_rank_1: number | null;
+          weekly_diagnostics: Json;
+        };
+        Insert: {
+          avg_seated_points?: number | null;
+          cliff_rank?: number | null;
+          curve?: Json;
+          deficit?: number | null;
+          fingerprint: string;
+          from_week: number;
+          generated_at?: string;
+          id?: string;
+          league_id: string;
+          model_version?: string;
+          position: string;
+          replacement_points?: number | null;
+          season: number;
+          shallow_pool?: boolean;
+          structural_demand: number;
+          through_week: number;
+          war_at_demand?: number | null;
+          war_rank_1?: number | null;
+          weekly_diagnostics?: Json;
+        };
+        Update: {
+          avg_seated_points?: number | null;
+          cliff_rank?: number | null;
+          curve?: Json;
+          deficit?: number | null;
+          fingerprint?: string;
+          from_week?: number;
+          generated_at?: string;
+          id?: string;
+          league_id?: string;
+          model_version?: string;
+          position?: string;
+          replacement_points?: number | null;
+          season?: number;
+          shallow_pool?: boolean;
+          structural_demand?: number;
+          through_week?: number;
+          war_at_demand?: number | null;
+          war_rank_1?: number | null;
+          weekly_diagnostics?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_positional_war_cache_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       league_power_pulse_cache: {
         Row: {
           bye_odds: number | null;
@@ -2265,6 +2339,14 @@ export type Database = {
           last_pulsed_at: string | null;
           metadata: Json;
           name: string;
+          positional_war_attempted_at: string | null;
+          positional_war_detail: string | null;
+          positional_war_status: string | null;
+          positional_war_succeeded_at: string | null;
+          power_pulse_attempted_at: string | null;
+          power_pulse_detail: string | null;
+          power_pulse_status: string | null;
+          power_pulse_succeeded_at: string | null;
           pulse_error: string | null;
           pulse_status: string;
           roster_positions: Json;
@@ -2283,6 +2365,14 @@ export type Database = {
           last_pulsed_at?: string | null;
           metadata?: Json;
           name: string;
+          positional_war_attempted_at?: string | null;
+          positional_war_detail?: string | null;
+          positional_war_status?: string | null;
+          positional_war_succeeded_at?: string | null;
+          power_pulse_attempted_at?: string | null;
+          power_pulse_detail?: string | null;
+          power_pulse_status?: string | null;
+          power_pulse_succeeded_at?: string | null;
           pulse_error?: string | null;
           pulse_status?: string;
           roster_positions?: Json;
@@ -2301,6 +2391,14 @@ export type Database = {
           last_pulsed_at?: string | null;
           metadata?: Json;
           name?: string;
+          positional_war_attempted_at?: string | null;
+          positional_war_detail?: string | null;
+          positional_war_status?: string | null;
+          positional_war_succeeded_at?: string | null;
+          power_pulse_attempted_at?: string | null;
+          power_pulse_detail?: string | null;
+          power_pulse_status?: string | null;
+          power_pulse_succeeded_at?: string | null;
           pulse_error?: string | null;
           pulse_status?: string;
           roster_positions?: Json;
@@ -3859,6 +3957,77 @@ export type Database = {
           years_experience?: number | null;
         };
         Relationships: [];
+      };
+      positional_war_curves: {
+        Row: {
+          avg_seated_points: number | null;
+          cliff_rank: number | null;
+          computed_at: string;
+          curve: Json;
+          deficit: number | null;
+          fingerprint: string;
+          first_league_id: string | null;
+          from_week: number;
+          inputs_digest: Json;
+          model_version: string;
+          position: string;
+          replacement_points: number | null;
+          shallow_pool: boolean;
+          structural_demand: number;
+          through_week: number;
+          war_at_demand: number | null;
+          war_rank_1: number | null;
+          weekly_diagnostics: Json;
+        };
+        Insert: {
+          avg_seated_points?: number | null;
+          cliff_rank?: number | null;
+          computed_at?: string;
+          curve?: Json;
+          deficit?: number | null;
+          fingerprint: string;
+          first_league_id?: string | null;
+          from_week: number;
+          inputs_digest: Json;
+          model_version: string;
+          position: string;
+          replacement_points?: number | null;
+          shallow_pool?: boolean;
+          structural_demand: number;
+          through_week: number;
+          war_at_demand?: number | null;
+          war_rank_1?: number | null;
+          weekly_diagnostics?: Json;
+        };
+        Update: {
+          avg_seated_points?: number | null;
+          cliff_rank?: number | null;
+          computed_at?: string;
+          curve?: Json;
+          deficit?: number | null;
+          fingerprint?: string;
+          first_league_id?: string | null;
+          from_week?: number;
+          inputs_digest?: Json;
+          model_version?: string;
+          position?: string;
+          replacement_points?: number | null;
+          shallow_pool?: boolean;
+          structural_demand?: number;
+          through_week?: number;
+          war_at_demand?: number | null;
+          war_rank_1?: number | null;
+          weekly_diagnostics?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "positional_war_curves_first_league_id_fkey";
+            columns: ["first_league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       rankings: {
         Row: {

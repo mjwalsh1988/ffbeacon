@@ -30,7 +30,10 @@ export const maxDuration = 300;
  * view loads, via pulseLeague() -> calculateLeaguePowerRankings() in
  * lib/league-pulse.ts. Recomputing every stored league nightly does not scale
  * to tens of thousands of leagues, and unviewed leagues never need a cache row.
- * For a manual one-off recompute use `npm run calculate:power-rankings`.
+ * For a manual one-off recompute use `npm run calculate:power-rankings`. The
+ * same holds for Power Pulse and Positional WAR. The only Positional WAR work
+ * here is a single deletion against the fingerprint-keyed sharing table, which
+ * iterates no leagues.
  *
  * Scheduled in vercel.json to fire AFTER both sync-ktc (03:00 ET) and
  * sync-fantasycalc (04:00 ET) so derived tables reflect the freshest values.
@@ -123,6 +126,34 @@ export async function GET(req: Request) {
         console.error("[cron/recalculate-derived] BEAM query log prune failed", pruneErr);
       }
 
+      // Bounded retention prune for the shared Positional WAR curves.
+      //
+      // positional_war_curves is keyed by an input fingerprint that includes the
+      // projections snapshot hour, so every row becomes dead the morning after
+      // the nightly projections sync writes new numbers. Seven days rather than
+      // one, so a week-old fingerprint that somehow recurs still hits.
+      //
+      // ONE STATEMENT, and it iterates no leagues. That is what keeps it on this
+      // global cron without breaking the standing rule that the nightly job must
+      // not do per-league work. It prunes only the write-path sharing table; the
+      // per-league league_positional_war_cache is never touched here, and
+      // Positional WAR itself is recomputed only on demand through pulseLeague.
+      //
+      // Non-fatal, like the prunes above.
+      let positionalWarCurveRowsDeleted: number | null = null;
+      try {
+        const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabase
+          .from("positional_war_curves")
+          .delete()
+          .lt("computed_at", cutoff)
+          .select("fingerprint");
+        if (error) throw new Error(error.message);
+        positionalWarCurveRowsDeleted = data?.length ?? 0;
+      } catch (pruneErr) {
+        console.error("[cron/recalculate-derived] Positional WAR curve prune failed", pruneErr);
+      }
+
       return {
         ok: true as const,
         rankings,
@@ -130,6 +161,7 @@ export async function GET(req: Request) {
         rateLimitLedgerRowsDeleted,
         onTheClockCacheRowsDeleted,
         beamQueryRowsDeleted,
+        positionalWarCurveRowsDeleted,
         durationMs: Date.now() - started,
       };
     });

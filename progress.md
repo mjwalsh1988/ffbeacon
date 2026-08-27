@@ -7426,3 +7426,1065 @@ T691 | completed | A shareable card names the injury, not the roster paperwork
      | the moderation label in lib/beacon-brief/match.ts, which is where T689
      | left it deliberately.
      | verified: yes (tsc clean, next build clean, 2211 tests green)
+
+---
+
+# League Pulse: Positional WAR
+
+Plan: `docs/league-pulse-positional-war-plan.md` (written 2026-08-26 against `c068818`).
+Task ids are the plan's own `T-WAR-##`. Started 2026-08-26.
+
+Task format for this feature:
+
+```
+T-WAR-## | status | description
+     | files: ...
+     | depends on: T-WAR-##
+     | verified: yes/no
+```
+
+## Wave 0 - Schema
+
+T-WAR-01 | completed | Migration 0211: league_positional_war_cache + RLS + access matrix comment
+     | files: supabase/migrations/0211_league_positional_war_cache.sql
+     | depends on: none
+     | notes: one row per (league, season, position). fingerprint, curve jsonb,
+     |   weekly_diagnostics jsonb, structural_demand, war_rank_1, war_at_demand,
+     |   cliff_rank, shallow_pool. Index on (league_id, season) matching 0165.
+     |   Migration comment states the table is independent of value source and of
+     |   format_config_id, the way 0165 does.
+     | verified: yes (pg_policies shows exactly league_positional_war_cache_select_public
+     |   for SELECT to anon+authenticated and league_positional_war_cache_service_role_all
+     |   for ALL to service_role; a service-role insert inside a transaction is visible
+     |   to `set local role anon` (1 row); an anon insert raises 42501 new row violates
+     |   row-level security policy)
+
+T-WAR-02 | completed | Migration 0212: positional_war_status/detail/attempted_at/succeeded_at on leagues + check constraint
+     | files: supabase/migrations/0212_leagues_positional_war_status.sql
+     | depends on: none
+     | notes: five values pending/ok/skipped/settled/error, guarded by
+     |   leagues_positional_war_status_check added inside a do-block so re-running is
+     |   a no-op. Column comments record the write ordering rule: attempted_at before
+     |   the expensive work, succeeded_at after the rows land.
+     | verified: yes (information_schema shows all four columns; constraint present)
+
+T-WAR-39 | completed | E4: migration 0214 positional_war_curves, service-role-only RLS, access matrix comment
+     | files: supabase/migrations/0214_positional_war_curves.sql
+     | depends on: T-WAR-01
+     | notes: primary key (fingerprint, position), inputs_digest jsonb collision guard,
+     |   first_league_id diagnostics only, idx on computed_at for the seven-day prune.
+     | verified: yes (only positional_war_curves_service_role_all exists; a row inserted
+     |   as service role inside a transaction is invisible to `set local role anon`)
+
+T-WAR-49 | completed | E8: migration 0215 power_pulse_status/detail/attempted_at/succeeded_at on leagues
+     | files: supabase/migrations/0215_leagues_power_pulse_status.sql
+     | depends on: none
+     | notes: mirrors 0212 exactly so the admin health view can list both features
+     |   side by side with one row per league and a column per feature.
+     | verified: yes (information_schema shows all four columns; constraint present)
+
+T-WAR-03 | completed | Regenerate lib/database.types.ts via MCP after 0211, 0212, 0214, 0215
+T-WAR-40 | completed | (same regeneration covers 0214)
+     | files: lib/database.types.ts
+     | depends on: T-WAR-01, T-WAR-02, T-WAR-39, T-WAR-49
+     | notes: MCP output is JSON-wrapped, so the `.types` field was extracted before
+     |   writing, then prettier-formatted. All four new surfaces present.
+     | verified: yes (npm run typecheck clean; grep confirms league_positional_war_cache,
+     |   positional_war_curves, positional_war_status and power_pulse_status all present)
+
+## Wave 1 - Pure model
+
+T-WAR-05 | completed | lib/positional-war/types.ts: WarCurvePoint, PositionCurve, WarInput, WeeklyDiagnostic
+     | files: lib/positional-war/types.ts
+     | depends on: none
+     | notes: header states the naming rule (the token WAR names exactly one metric,
+     |   the player-independent positional one, and carries "Positional" adjacent on
+     |   first use). sleeperId carried on every curve entry so the team overlay and the
+     |   Trade Ideas note can join against rosters.player_ids without a second query.
+     |   warAtDemand documented as deliberately non-zero.
+     | verified: yes (tsc clean)
+
+T-WAR-06 | completed | lib/positional-war/default-settings.ts: displayDepthMultiple, minDisplayDepth, cliffThreshold, clampBelowReplacement, modelVersion, TTL and retry constants
+     | files: lib/positional-war/default-settings.ts
+     | depends on: T-WAR-05
+     | notes: POSITIONAL_WAR_TTL_MS 12h matching POWER_PULSE_TTL_MS, POSITIONAL_WAR_RETRY_MS
+     |   15 min. One backoff constant with explicit bypasses rather than a second longer
+     |   constant, because what makes a retry worthwhile is a change in the inputs.
+     | verified: yes (tsc clean)
+
+T-WAR-10 | completed | lib/positional-war/war.ts: PAR, baseline/evaluated means, weekly and season WAR
+T-WAR-11 | completed | Worked-example fixture + anti-double-count regression guard
+     | files: lib/positional-war/war.ts, lib/positional-war/war.test.ts
+     | depends on: T-WAR-05
+     | notes: the two lineups are written out in the module header, along with why
+     |   subtracting avgSeated is the anti-double-count and what the double count costs
+     |   (0.5% at realistic magnitudes, 16% in a low-variance league). The sigma
+     |   simplification is stated as deliberate. Degenerate zero-spread branch mirrors
+     |   winProbability(). Non-finite input returns 0 rather than NaN.
+     | note on the plan: the plan's worked example prints 0.08395 and 0.08351, both
+     |   carrying intermediate rounding (sigmaD 37.94 rather than 37.94733, and a z of
+     |   0.21086 rather than 0.2108189). The exact figures are 0.0839418 and 0.0834855.
+     |   The test asserts the plan's own 1e-5 bound on the first and pins the GAP
+     |   (0.54%) on the second, since the gap is what the fixture is really for.
+     |   vitest toBeCloseTo(x, 5) is a 5e-6 tolerance, tighter than the plan's 1e-5,
+     |   so the bound is written out explicitly.
+     | verified: yes (19 tests green, tsc clean; PAR=0 gives exactly 0 across every
+     |   deficit 0 to 30; 500 random triples confirm evaluatedMean - baselineMean = PAR;
+     |   200 perturbations confirm strict monotonicity in PAR; season = sum of weekly
+     |   within 1e-9; two runs byte-identical)
+
+T-WAR-04 | completed | Export isNonScoringKey from lib/league-scoring.ts + test that normalizedScoring matches scoreStatMap's key set
+     | files: lib/league-scoring.ts, lib/league-scoring.test.ts
+     | depends on: none
+     | notes: exported with a comment saying the fingerprint derives its normalized
+     |   scoring map from exactly the key set scoreStatMap iterates, so the two must
+     |   change together.
+     | verified: yes (28 tests in league-scoring.test.ts, 16 new, all green)
+
+T-WAR-07 | completed | lib/positional-war/fingerprint.ts: normalizedScoring + warFingerprint + warInputsDigest + digestsMatch
+     | files: lib/positional-war/fingerprint.ts, lib/positional-war/fingerprint.test.ts
+     | depends on: T-WAR-04, T-WAR-06
+     | notes: sha256 over a recursively key-sorted canonical JSON, so the digest cannot
+     |   depend on object iteration order. No clock, no RNG, no I/O: projectionsSnapshot
+     |   arrives already truncated to the hour from the caller. pulseSettings is a Pick of
+     |   only reliability/availability/injury/opponent/variance/recency, so an admin edit
+     |   to weights, simulation, display or the Power Pulse modelVersion does NOT
+     |   invalidate a curve. Slots are sorted, because the merged fill's seated SET is
+     |   invariant under slot permutation.
+     | agent decision beyond the plan: the absence of a value source from the fingerprint
+     |   is enforced as a COMPILE-TIME conditional type assertion rather than only a
+     |   comment, so a future accidental `source` field fails tsc.
+     | verified: yes (32 tests green, covering every row of the plan's section 6.4 false-hit
+     |   table including the two intentionally-not-caught rows asserting equality, plus
+     |   nine independent digest-field rejections; tsc clean; full suite 2268 tests green)
+
+T-WAR-32 | completed | E1a: extract matchViewerRoster into lib/league-viewer.ts, make team-filter.tsx import it
+     | files: lib/league-viewer.ts, lib/league-viewer.test.ts, components/team-filter.tsx
+     | depends on: none
+     | notes: extracted verbatim from the private resolveOwnerRosterId. The rule is
+     |   unchanged: explicit ?roster= wins when it matches a team, then a
+     |   case-insensitive trimmed match of ?username= against the owner's Sleeper
+     |   username, else null. TeamCardData satisfies ViewerCandidate structurally so the
+     |   client call site did not change.
+     | verified: yes (6 tests green, including a guard that reads team-filter.tsx and
+     |   asserts it imports matchViewerRoster and defines no local copy, which is what
+     |   stops the second implementation coming back)
+
+T-WAR-46 | completed | E1b: lib/positional-war/rate-limit.ts, WAR_UPGRADE bucket at 5/min
+     | files: lib/positional-war/rate-limit.ts
+     | depends on: none
+     | notes: its own bucket, not the trade bucket. The one-bucket-for-three-paths
+     |   reasoning in lib/trade-impact/rate-limit.ts is about three entry points into ONE
+     |   evaluation; sharing across two features would mean using Trade Ideas exhausts
+     |   this panel, a real cost with no security gain. lib/breakdown/league-mode.ts is
+     |   the precedent. Five per minute because there is one press per answer.
+     | verified: yes (tsc clean; fails closed through lib/rate-limit-claim.ts)
+
+T-WAR-28 | completed | E7: war settings block + merge + zod bounds
+     | files: lib/power-pulse/default-settings.ts, lib/power-pulse/validate.ts,
+     |   lib/power-pulse/validate.test.ts
+     | depends on: T-WAR-06
+     | notes: war: WarSettings added to PowerPulseSettings and to the defaults, merged
+     |   through the existing one-level obj() shallow merge in one line, so a stored
+     |   document written before this ships degrades to the defaults rather than failing.
+     |   Zod bounds are the plan's, with the reasoning inline.
+     |   Checked the admin save path: app/admin/power-pulse/page.tsx loads through
+     |   loadPowerPulseSettings (which now merges war in) and the manager POSTs the whole
+     |   object, so a required war block is safe with the existing form.
+     | verified: yes (validate.test.ts created, 8 tests; every bound rejects a value one
+     |   step outside it; a document with no war key loads the defaults; a partial war
+     |   object merges rather than dropping fields; full suite 2287 tests green)
+
+T-WAR-17 | completed | Promote ChartFigure/DataTable to components/chart-kit.tsx, re-export from the breakdown path
+     | files: components/chart-kit.tsx, app/tools/beacon-breakdown/chart-kit.tsx
+     | depends on: none
+     | notes: moved verbatim with the original header, which documents why the summary is
+     |   a visually hidden paragraph rather than role="img". The old path is now a
+     |   two-line re-export shim, so the four Beacon Breakdown tabs are untouched.
+     | verified: yes (grep confirms all four importers still resolve; npm run build clean
+     |   including /tools/beacon-breakdown)
+
+T-WAR-18 | completed | Six-series palette + legend primitives (hue, dash, marker), dataviz skill loaded first
+     | files: components/chart-kit.tsx, components/chart-kit-legend.tsx,
+     |   components/chart-kit.test.ts, vitest.config.ts
+     | depends on: T-WAR-17
+     | notes: contrast computed against the ACTUAL composited panel surface (bg-surface/50
+     |   over bg-base resolves to #0B0B14), not against a token name.
+     |   QB #A855F7 solid circle 4.95:1 (AA, and AA-only because it is the fixed brand
+     |   purple), RB #22D3EE dash 8 4 square 10.84:1, WR #FB923C dash 2 3 diamond 8.65:1,
+     |   TE #60A5FA dash 6 2 2 2 triangle 7.70:1, K #FB7185 dash 1 4 cross 7.28:1,
+     |   DEF #FDE047 dash 10 3 2 3 2 3 star 14.86:1. All six clear AA, five clear AAA.
+     |   Exported as DATA, not Tailwind classes, because the OG route reads the same
+     |   values server side through Satori and cannot resolve a class.
+     |   SeriesToggleLegend lives in its own "use client" file so chart-kit.tsx stays
+     |   server-renderable for its existing server-component callers.
+     | dataviz skill finding, carried forward: WR and K sit at delta-E 12.5 for normal
+     |   vision under the skill's informational all-pairs check (its prescribed mode for
+     |   line charts is adjacent pairs, which passes with wide margin at 17.4 CVD / 26.9
+     |   normal on the worst pair). Six WAR curves can cross, so any two can end up
+     |   visually adjacent. Every reassignment tried broke a different pair. The
+     |   mandatory per-series dash and marker are the sanctioned mitigation under the
+     |   skill's own rule, and they were already required.
+     | vitest.config.ts change: test.include did not cover components/, so the new test
+     |   file was not being picked up. Widened.
+     | verified: yes (8 tests green; full suite 2295 tests green; tsc and build clean)
+
+T-WAR-23 | completed | Migration 0213: Signal Guide global term "Positional WAR"
+     | files: supabase/migrations/0213_signal_guide_positional_war_term.sql
+     | depends on: none (content only; the plan sequenced it after the panel, but it
+     |   depends on nothing in code)
+     | notes: display_order 13, directly after Power Pulse at 12, which is the term
+     |   readers are most likely to confuse it with. Most of the entry is the difference
+     |   between the two. Idempotent `where not exists` guard on (page_id, kind, heading),
+     |   following 0167, so re-running never clobbers copy an admin has since edited.
+     | verified: yes (row present, is_global true, is_published true, 2180 characters)
+
+T-WAR-24 | in_progress | CLAUDE.md: the Positional WAR naming rule + the on-demand/no-cron/source-independent rules
+     | files: CLAUDE.md, docs/data-sources.md
+     | depends on: none
+     | notes: CLAUDE.md done. Added the route to the League Pulse naming rules, a sync
+     |   rule line, an observability paragraph to the Power Pulse section, and a full
+     |   "Positional WAR (League Pulse positional scarcity)" section carrying the naming
+     |   rule, the never-rerun-the-optimizer rule, the source and format independence
+     |   rule, the on-demand/no-cron rule, the structural-versus-weekly specification,
+     |   the module map, and the storage and observability notes. docs/data-sources.md
+     |   still to check.
+
+     | docs/data-sources.md done: a new "Surfaces that are deliberately
+     |   source-independent" subsection under "Where source filtering is applied",
+     |   naming Power Pulse and Positional WAR, stating neither carries a source column
+     |   nor may gain one, and recording that the fingerprint's lack of a source field is
+     |   a compile-time assertion rather than a comment.
+T-WAR-24 | completed | (see notes above)
+     | verified: yes (tsc clean)
+
+T-WAR-42 | completed | E4: seven-day prune in the nightly recalculate-derived cron, one statement, no league iteration
+     | files: app/api/cron/recalculate-derived/route.ts
+     | depends on: T-WAR-39
+     | notes: one delete against positional_war_curves where computed_at is older than
+     |   seven days, sitting with the other global deletion-only prunes and non-fatal
+     |   like them. Iterates no leagues, so the standing rule holds. The route's header
+     |   comment now says the same about Power Pulse and Positional WAR that it already
+     |   said about power rankings. Rows include the fingerprint in the returning select
+     |   so the count is real rather than assumed.
+     | verified: yes (tsc clean)
+
+T-WAR-08 | completed | lib/positional-war/replacement.ts: merged fill, structural + weekly demand, replacement/avgSeated/deficit/muRef/sigmaRef
+T-WAR-09 | completed | Flex configuration tests F1 through F9 + ordering invariants
+     | files: lib/positional-war/replacement.ts, lib/positional-war/replacement.test.ts
+     | depends on: T-WAR-05
+     | notes: buildOptimalLineup is called ONCE per fill, and the module header states
+     |   that the optimizer is never rerun per player and why the instinct to write that
+     |   loop computes a different metric under the same name. Replacement is definition A
+     |   (best benched player at the position), with the per-slot and refill alternatives
+     |   rejected in the header for stated reasons. Shallow pool falls back to the minimum
+     |   seated points, never zero.
+     | fixture notes from the agent: F2 reuses the exact counterexample in lineup.ts's own
+     |   header (20/15/12, greedy 32 against exact 35), so it is traceable. F7 needed two
+     |   universes: a contiguous integer ladder converges identically regardless of flex
+     |   depth, which is a real property of the ladder rather than of the model, so a
+     |   second staggered universe was added to show the flex-depth effect.
+     | verified: yes (28 tests green, every F block asserting the benched-never-beats-seated
+     |   invariant, seated = exact top k, and exact teamCount * dedicatedSlotCount for
+     |   non-flex positions)
+
+T-WAR-34 | completed | E2: extract path maths into lib/positional-war/chart-geometry.ts (pure), both axis modes
+     | files: lib/positional-war/chart-geometry.ts, lib/positional-war/chart-geometry.test.ts
+     | depends on: T-WAR-05
+     | notes: built BEFORE the chart component rather than extracted from it, so the
+     |   component and the OG route are both callers from the start and cannot disagree
+     |   about a league. Depth mode puts every marker at x = 1.0; rank mode fans them out
+     |   at x = structuralDemand. yMin is computed from the data, not floored at zero, so
+     |   clampBelowReplacement: false renders correctly (E7-4).
+     | agent decisions beyond the plan: the shared 1.0 tick reads "Replacement level"
+     |   because six positions have six different counts and one shared tick cannot carry
+     |   them all (each series carries its own count in its marker label instead); a
+     |   Heckbert nice-number y scale searching for a 4 to 6 tick count; and the marker
+     |   borrows the last real curve point when a shallow pool stops short of demand,
+     |   extending the plan's stated rule for the rank-cap case rather than inventing a
+     |   value.
+     | verified: yes (24 tests green, including a walker that asserts every number in the
+     |   returned object is finite across every fixture)
+
+T-WAR-12 | completed | lib/positional-war/engine.ts: pure computeCurves(), ranking, depth cap, cliff, diagnostics. No I/O
+     | files: lib/positional-war/engine.ts, lib/positional-war/engine.test.ts
+     | depends on: T-WAR-10
+     | notes: W+1 fills, then arithmetic. Per-position weekly stats are computed once per
+     |   week and reused by every player at that position, which is what keeps the cost
+     |   O(W * V * E). Ranking is by WAR, ties by PAR, then by playerId ascending so the
+     |   order is total and a recompute cannot reshuffle two identical players. A bye is
+     |   absent from the sum and absent from the per-week mean, never a zero.
+     |   Also exports unprojectableSlots(), which names an IDP league's excluded slot
+     |   tokens for the footnote, derived from the league's RAW roster_positions so two
+     |   leagues sharing a curve still get their own footnote.
+     | verified: yes (31 tests green: every series monotonically non-increasing; seated
+     |   totals equal slots times teams exactly; QB, K and DEF fixed at teamCount in a
+     |   one-QB league; superflex raises rank-1 QB WAR by more than 40 percent and lowers
+     |   QB replacement; replacement falls and rank-1 WAR rises monotonically at 10, 12
+     |   and 14 teams; warAtDemand is positive for at least four of six positions; 33
+     |   teams flags shallow_pool at DEF with a non-zero replacement; a heavy bye week
+     |   lowers that week's replacement; two runs are byte-identical)
+
+T-WAR-13 | completed | lib/positional-war/load.ts: cached full-universe projection read, keyed (season, fromWeek, toWeek, scoringBase)
+     | files: lib/positional-war/load.ts, lib/positional-war/load.test.ts
+     | depends on: T-WAR-05
+     | notes: the universe read is identical for every league in the same season and week
+     |   window, so it is memoized through unstable_cache with a cookie-less read client
+     |   (every table it touches is RLS-public). scoringBase is in the key because
+     |   loadAccuracy and loadDefenseSplits are keyed by it.
+     |   THE MAP TRAP: unstable_cache serializes through JSON and a Map serializes to
+     |   "{}". The cached function returns tuple arrays and loadWarUniverse rebuilds the
+     |   three Maps on every call, hit or miss. Without that split, every cache hit would
+     |   return three empty Maps and silently zero every projection for every league
+     |   until the tag was busted. Both files carry the reasoning.
+     |   Player resolution goes player-id-first with a plain .in("id", chunk), which is
+     |   simpler and safer than the .or() external-id filter loadPlayers needs for the
+     |   other direction. The count guard reads every row in the window rather than a
+     |   distinct count, so a short read is caught before dedup hides it.
+     |   buildWarPlayers computes reliability once per player, outside the week loop.
+     |   A null projectPlayerWeek is a bye and the week is absent, never a zero.
+     | verified: yes (9 tests green, including the JSON round trip that pins the Map fix,
+     |   the count guard throwing on a short read, a spy confirming reliability is applied
+     |   exactly once for a three-week player, and hour truncation on the snapshot)
+
+T-WAR-29 | completed | E7: Positional WAR fieldset in the admin settings manager + server-side revalidation
+     | files: lib/positional-war/default-settings.ts, lib/power-pulse/validate.ts,
+     |   app/admin/power-pulse/power-pulse-settings-manager.tsx, lib/power-pulse/validate.test.ts
+     | depends on: T-WAR-28
+     | notes: rather than a test that watches for the form and the schema drifting apart,
+     |   the bounds became ONE constant, WAR_SETTING_BOUNDS in
+     |   lib/positional-war/default-settings.ts, that both the zod schema and the form's
+     |   min/max/step read. The two cannot state different numbers. The test derives its
+     |   one-step-outside values from the constant, so it breaks if a future edit stops
+     |   reading it.
+     |   The fieldset's helper text carries the sentence the plan insists on, because it
+     |   is different from the Power Pulse block directly above it: saving recomputes
+     |   nothing, and every field is part of the cache key, so each league recomputes on
+     |   its next view on its own. An admin will otherwise assume they must bump the
+     |   model version.
+     |   aria-describedby was wired through the shared Field and NumberInput components,
+     |   so every input in the form, old and new, now has a properly linked hint.
+     |   clampBelowReplacement is a real checkbox with its consequence described.
+     |   The server action already calls requireAdmin then validatePowerPulseSettings on
+     |   the posted document, independent of the client, so no change was needed there.
+     | verified: yes (typecheck, build, and 2426 tests green)
+
+## E8 - Power Pulse observability parity
+
+T-WAR-50 | completed | E8: classify the nine return shapes, write verdicts, add POWER_PULSE_RETRY_MS with the section 8.2 bypasses
+     | files: lib/league-power-pulse.ts, lib/league-power-pulse.test.ts
+     | depends on: T-WAR-49
+     | notes: closes a real production defect. powerPulseIsStale returned true whenever
+     |   there were no rows and calculateLeaguePowerPulse's skipped reason was only ever
+     |   passed to console.warn, so a league that skipped deterministically re-attempted
+     |   on every page view and the panel said "still calculating" forever with no way
+     |   for anyone to learn why.
+     |   The classifier is a lookup over the existing reason strings, matched by exact
+     |   string or prefix because several carry a dynamic suffix. An unrecognised reason
+     |   degrades to 'skipped', the sooner-retrying verdict, so a future added reason is
+     |   retried rather than parked forever.
+     |   Settled triple encoded as `<reason> [settled season=2026 week=9 playoffStart=15]`.
+     |   attempted_at is written before calculateLeaguePowerPulse; status, detail and
+     |   succeeded_at after the rows land.
+     | agent judgment call against the plan: a settled verdict's triple comparison needs
+     |   a live current NFL week, which this codebase only gets from getNflState(), a
+     |   Sleeper call (process-wide memoised for 60s, not a per-league round trip). The
+     |   plan says the settled backoff costs one small select and never more. The agent
+     |   made getCurrentWeek a lazy closure that powerPulseIsStale invokes only on the
+     |   settled branch, so a skipped or error backoff is genuinely zero-network, which
+     |   is what E8-2 asserts. Documented in the code.
+     | verified: yes (24 tests green: the nine-shape classification, the bypass table,
+     |   write ordering asserted by call index, the early return, force bypassing, and an
+     |   unrecognised reason classifying as skipped)
+
+T-WAR-51 | completed | E8: status-aware Power Pulse empty states, deferring to PreDraftNotice where it already applies
+     | files: app/leagues/[league_id]/power-pulse/page.tsx
+     | depends on: T-WAR-50
+     | notes: PowerPulseEmptyState, one fixed sentence per status. power_pulse_detail is
+     |   never rendered verbatim to a non-admin reader. The PreDraftNotice branch is
+     |   untouched, which is E8-5.
+     | verified: yes (build clean, full suite green)
+
+T-WAR-52 | completed | E8: /admin/system/league-health, both features side by side, counts by status, real landing page
+T-WAR-26 | completed | (subsumed: the same view carries the positional_war_status='error' and stale-succeeded_at sections)
+     | files: app/admin/system/league-health/page.tsx, app/admin/system/page.tsx
+     | depends on: T-WAR-50
+     | notes: app/admin/system/page.tsx was a bare redirect to webhooks with a comment
+     |   saying webhooks was the only sub-area; it is now a real landing page listing
+     |   both. The health view is gated by requireAdmin() at the page AND inherits the
+     |   layout-level gate, matching the existing convention. One row per league with a
+     |   column per feature. Leagues never viewed (all four columns null) are excluded,
+     |   since that is not a fault. Fingerprint collisions surface as their own count.
+     |   detail is rendered as text, never as HTML, and only to admins.
+     | verified: yes (build clean; E8-6 gate confirmed against the pattern every other
+     |   admin page uses)
+
+## E3 - Positional WAR in Trade Ideas
+
+T-WAR-36 | completed | E3: positionalWar field on AssetVerdict + deterministic template + optional map parameter
+T-WAR-37 | completed | E3: cached() curve map load on the Trade Ideas page + separated card block
+T-WAR-38 | completed | E3: naming guard revised to the proximity rule (done earlier, in lib/positional-war/naming.test.ts)
+     | files: lib/trade-impact/asset-notes.ts, lib/trade-impact/asset-notes.test.ts,
+     |   lib/trade-impact/positional-war-context.ts, components/trade-ideas/trade-outcome.tsx,
+     |   components/trade-ideas/trade-verdict.tsx, components/trade-ideas/suggestion-evaluation.tsx,
+     |   components/trade-finder.tsx, app/leagues/[league_id]/trade-ideas/page.tsx
+     | depends on: T-WAR-14 (read only; it never triggers a computation)
+     | notes: the three constraints hold. READ ONLY: the page reads
+     |   league_positional_war_cache and never imports the writer, so a trade evaluation
+     |   cannot become a compute trigger behind a metered endpoint's cheap path.
+     |   LABELLED: the string is always "Positional WAR (league-wide)".
+     |   SEPARATED: the block is a sibling of the notes list, never inside it.
+     |   Template: `Positional WAR (league-wide): ${war.toFixed(2)}. ${position}${positionRank} of ${structuralDemand} who start in this league.`
+     |   Deterministic, every figure present in the input, no thresholds and no adjectives.
+     |   A pick, a player past the display cap, and a player with no Sleeper id all yield
+     |   null, and the card renders exactly as it did before.
+     |   The loader is its own module rather than an addition to load.ts, because load.ts
+     |   is scoped to the heavy per-evaluation simulation input and this is a cheap
+     |   page-level read. Wrapped in React cache() keyed on primitives, mirroring
+     |   loadBuilderLeague, so the suggestion list and the builder verdict share one query.
+     | KNOWN LIMITATION, flagged by the agent and worth a follow-up: no deep-link
+     |   mechanism to a single Signal Guide term exists anywhere in this codebase, and
+     |   /leagues/[id]/trade-ideas is not in the guide page registry at all. Wiring a true
+     |   in-page opener needs a registry migration, which is outside this task and would
+     |   have collided with the concurrent migration work. The card link goes to the
+     |   League Overview instead, which IS a registered guide page and where the
+     |   Positional WAR term already surfaces. Honest and functional, but it does not
+     |   open in place.
+     | verified: yes (23 tests in asset-notes.test.ts; the structural separation is a
+     |   REAL assertion, not a JSX-shape approximation: the agent confirmed no
+     |   component-rendering infra exists (vitest runs in node with no jsdom), used
+     |   react-dom/server renderToStaticMarkup on TradeOutcomePanel, and wrote a
+     |   balanced-tag range parser proving the Positional WAR block is never nested
+     |   inside the wins-metric element or the reverse. 166 tests green across
+     |   naming.test.ts and lib/trade-impact/)
+
+## Wave 3 - Orchestrator
+
+T-WAR-14 | completed | lib/league-positional-war.ts: orchestrator, fingerprint + TTL + week + version staleness, backoff, status writes, clear-on-settled, never throws
+     | files: lib/league-positional-war.ts, lib/league-positional-war.test.ts
+     | depends on: T-WAR-03, T-WAR-07, T-WAR-12, T-WAR-13
+     | notes: staleness is fingerprint OR model version OR week window OR TTL, so a
+     |   commissioner who turns on TE premium at 11pm sees a corrected curve on the next
+     |   page view rather than up to twelve hours later.
+     |   Backoff bypasses per plan 8.2: force, a fingerprint change, or last_pulsed_at
+     |   advancing past the attempt for error and skipped; force or a changed
+     |   (season, fromWeek, toWeek) for settled. The fingerprint check is deliberately
+     |   cheap: it needs the league row, the settings, and the projections snapshot, and
+     |   NOT the universe load, which stays behind it.
+     |   attempted_at before the expensive work, succeeded_at and the rows after.
+     |   Settled detail format `<reason> [settled season=2026 fromWeek=9 toWeek=8]`,
+     |   matching Power Pulse's bracketed key=value style with this model's own fields,
+     |   since it tracks a week window rather than a current week plus a playoff start.
+     |   No draft-pending guard: the model reads no roster, so a pre-draft league still
+     |   gets a full curve. That guard is correct for Power Pulse and wrong here.
+     |   Team count is total_rosters, then the stored roster count, then a skip with
+     |   "unknown team count". It never defaults to 12.
+     | agent additions beyond the brief: `collision` and `fingerprint` on the result type,
+     |   because the brief's shape had nowhere to carry "a collision happened, write this
+     |   detail" or the fingerprint prefix for the log line without a second recompute.
+     |   Both additive. Duration is measured in refreshPositionalWar and appended to the
+     |   detail for ok verdicts only, leaving the result type duration-free.
+     | verified: yes (28 tests: a throw sets error and leaves existing rows untouched and
+     |   does not throw to the caller; a second call inside the retry window performs no
+     |   loads, asserted by a spy on the universe loader; force and a fingerprint change
+     |   each bypass; an empty window sets settled AND deletes rows; a transient skip does
+     |   NOT delete rows; write ordering asserted by call index; total_rosters null falls
+     |   back then skips; a pre-draft league still produces a curve)
+
+T-WAR-41 | completed | E4: share-on-write path, inputs_digest collision guard, concurrent-upsert idempotence
+     | files: lib/positional-war/share.ts, lib/positional-war/share.test.ts
+     | depends on: T-WAR-40, T-WAR-14
+     | notes: resolveSharedCurves implements hit, collision, and miss verbatim. On a hit
+     |   the nine-field inputs_digest is recomputed from the requesting league and
+     |   compared field by field; a mismatch logs both digests at error level, deletes the
+     |   colliding rows, recomputes, and writes "fingerprint collision, recomputed" into
+     |   the detail so it surfaces in the admin health view. That is what turns the silent
+     |   failure mode into a loud one.
+     |   No lock and no coalescing on concurrent upserts: the work is bounded and a lock
+     |   is a new failure mode. `on conflict do update` makes the second write a harmless
+     |   overwrite of identical data.
+     |   The read path is unchanged: league_positional_war_cache keeps its full rows, so
+     |   every consumer still issues exactly one query (E4-3).
+     | verified: yes (6 tests covering hit, miss, collision, and concurrent idempotence)
+
+T-WAR-15 | completed | Chain refreshPositionalWar into pulseLeagueDerived as a fourth parallel stage with its own timing label
+     | files: lib/league-pulse.ts
+     | depends on: T-WAR-14
+     | notes: a fourth INDEPENDENT stage in the existing Promise.all, not sequenced after
+     |   refreshPowerPulse. It reads no Power Pulse output and no roster, so there is no
+     |   ordering constraint, and each stage already owns its own failure. Commented so
+     |   nobody "fixes" it into a queue.
+     | verified: yes (typecheck clean, full suite green)
+
+T-WAR-16 | completed | scripts/calculate-positional-war.ts + npm run calculate:positional-war
+     | files: scripts/calculate-positional-war.ts, package.json
+     | depends on: T-WAR-14
+     | notes: mirrors scripts/calculate-league-power-pulse.ts. All leagues by default,
+     |   --sleeper-league-id <id> for one, --force to bypass every cache.
+     | verified: yes (typecheck clean)
+
+## Wave 4 - Reading surfaces
+
+T-WAR-19 | completed | components/league-war/positional-war-chart.tsx: SVG, normalized axis, legend toggles, focus readout
+T-WAR-20 | completed | components/league-war/positional-war-panel.tsx + lib/league-positional-war-data.ts
+T-WAR-27 | completed | E6: rail summary card, scarcest and deepest, cache()-shared read, anchors to the chart panel
+T-WAR-33 | completed | E1a: viewer roster join + ring markers + Yours column + per-position summary + past-the-cap line
+T-WAR-35 | completed | E2: ?war=rank radiogroup toggle modelled on rank-mode-toggle.tsx, wired through the chart
+     | files: lib/league-positional-war-data.ts, components/league-war/{selection,overlay,summary}.ts,
+     |   components/league-war/{positional-war-chart,positional-war-panel,war-axis-toggle,war-rail-summary}.tsx,
+     |   components/league-war/{rail-summary,overlay,summary}.test.ts, components/dashboard-panel.tsx
+     | depends on: T-WAR-14, T-WAR-18, T-WAR-34
+     | notes: the chart is built ON TOP of buildChartGeometry and owns no path maths, so
+     |   the page and the shared card cannot disagree about a league.
+     |   The svg is aria-hidden; every fact it carries is in the visually hidden summary,
+     |   the legend text, or the always-present data table. Hiding a series through the
+     |   legend removes it from the svg and leaves the table complete.
+     |   The readout is a FOCUS readout as well as a hover readout, in an aria-live
+     |   region, so it is reachable by keyboard.
+     |   The viewer overlay is a ring marker distinguishable by shape and stroke rather
+     |   than hue, so it survives colour removal, plus a literal "Yours" text column in
+     |   the table. IR and taxi players ARE marked: the model is player-independent so
+     |   they have a real rank, and a reader who owns an injured RB1 wants to see that.
+     |   Panel gained an optional headingFocusable prop (tabIndex={-1} on the heading) so
+     |   the rail anchor moves keyboard focus rather than only the scroll position (E6-2).
+     |   The rail card renders NOTHING when there is no cached curve or the status is
+     |   settled or error: the panel below already carries the honest empty state, and an
+     |   empty finding card is worse than no card.
+     | agent judgment call: the plan does not say how to tell "ranks past the chart's
+     |   depth" from "no projection at all" for a rostered but unmatched player, since the
+     |   stored curve is already capped at write time. Resolved by joining the small
+     |   unmatched-id set against `players` and treating a resolvable pulse position as
+     |   past-depth and anything else as no-projection. Documented in overlay.ts.
+     | verified: yes (41 tests across rail-summary, overlay and summary: selection ties
+     |   and determinism, IR and taxi marking, null-sleeperId handling, the past-depth
+     |   versus no-projection split, and every footnote and summary clause)
+
+T-WAR-45 | completed | E5: /api/og/war/[league_id] route, SVG-as-data-URI, brand check, no ?source=, branded not-ready state
+     | files: app/api/og/war/[league_id]/route.tsx, app/api/og/war/[league_id]/card.tsx,
+     |   app/api/og/war/[league_id]/route.test.ts
+     | depends on: T-WAR-34, T-WAR-44
+     | notes: the agent EMPIRICALLY confirmed the data-URI construction works under this
+     |   project's next/og version, with a throwaway probe, before committing to it,
+     |   rather than trusting the plan's assertion. buildWarSvg draws only from
+     |   buildChartGeometry output; no coordinate is recomputed.
+     |   Next's route type-checker rejects any export from a route.tsx other than runtime
+     |   and the handler, so every testable helper lives in card.tsx.
+     |   The plan's mockup showed a middle dot in the meta line. The three existing OG
+     |   routes actually use a plain comma, so this one matches the code rather than the
+     |   mockup, which also keeps it inside the repo's punctuation rule.
+     |   The brand test scans both source files with comments stripped and asserts every
+     |   hex literal is a member of BRAND union POSITION_SERIES, rather than checking
+     |   against a hardcoded denylist.
+     | collision caught and resolved mid-flight: the agent started before
+     |   components/league-war/ existed and wrote its own scarcest/deepest selection in
+     |   lib/positional-war/summary.ts. When the panel agent's
+     |   components/league-war/selection.ts landed with a more complete implementation
+     |   (a canonical position-order tertiary tiebreak, and a correctly null `deepest` for
+     |   a one-position league), it DELETED its own copy and rewired to import theirs.
+     |   There is one selection function, not two.
+     | verified: yes (28 tests, E5-1 through E5-6 all covered by real GET invocations
+     |   because ImageResponse turned out to render fine under vitest; build shows the
+     |   route in the manifest at a footprint matching the other OG routes)
+
+T-WAR-21 | completed | Mount on the overview main column under PowerRankingsSection in its own Suspense boundary
+T-WAR-43 | completed | E5: /leagues/[league_id]/positional-war route inside LeagueShell + ExploreLink + metadata
+T-WAR-22 | completed | Mirror the panel on /leagues/[id]/power-pulse under ProjectedChampion
+     | files: app/leagues/[league_id]/page.tsx, app/leagues/[league_id]/positional-war/page.tsx,
+     |   app/leagues/[league_id]/power-pulse/page.tsx, components/league-shell/nav-items.ts,
+     |   components/app-shell/nav-icons.ts
+     | depends on: T-WAR-20
+     | notes: the panel sits in the overview's MAIN column, not the 340px rail, because
+     |   six series plus a y-axis plus a legend do not fit in 290px of plot area: the
+     |   series become indistinguishable, the tick labels collide, and the legend toggles
+     |   cannot hold their 44x44 target. The rail carries the FINDING instead, as text.
+     |   Last in DOM order on the main column, so on a phone it lands after the rankings.
+     |   The aside's aria-label became "League findings and links", since it now carries a
+     |   finding above the navigation list.
+     |   The dedicated route is a real League Pulse section: registered in LeagueTabId and
+     |   LEAGUE_NAV_ITEMS with a trendingDown icon added to the nav icon registry, so it
+     |   appears in the desktop rail AND the mobile sheet rather than one of the two.
+     |   leagueTabHref knows it is a full route. Its generateMetadata points at
+     |   /api/og/war/[league_id] rather than the league card, because this page's whole
+     |   point is the curve (E5-7).
+     |   The route's derived pulse runs in its own Suspense boundary rendering null, so
+     |   the masthead paints without waiting for the computation.
+     | verified: yes (typecheck clean)
+
+## Live validation against production data
+
+Run by the orchestrator (me), not a sub-agent, before the review pass.
+
+BUG FOUND AND FIXED: `npm run calculate:positional-war` threw
+`Invariant: incrementalCache missing in unstable_cache` before reading a single
+row. `unstable_cache` needs a Next.js incremental cache, which exists during a
+request and does not exist in a plain node process, so the whole standalone
+recompute path was unusable. `loadWarUniverse` now catches THAT invariant
+specifically and falls through to the uncached read. The catch is deliberately
+narrow: a short paged read or a query error still throws, because those are the
+failures that would otherwise shrink the universe and silently raise every
+replacement level. Fixed in lib/positional-war/load.ts.
+
+Universe, confirmed against live 2026 data. WR 413, RB 233, TE 230, QB 133,
+K 42, DEF 32, weeks 1 to 18. Exactly the numbers the plan's section 2 claims.
+
+Dynasty Darlings (12 teams, QB/RB/RB/WR/WR/TE/FLEX/FLEX/FLEX/K, no DEF slot):
+
+| Pos | Demand | Replacement | rank-1 WAR | at demand | cliff | curve |
+| RB | 32 | 8.89 | 2.353 | 0.191 | 8 | 80 |
+| WR | 46 | 9.15 | 2.028 | 0.146 | 9 | 115 |
+| TE | 18 | 8.96 | 1.104 | 0.151 | 6 | 45 |
+| QB | 12 | 17.19 | 0.398 | 0.155 | 11 | 30 |
+| K  | 12 | 7.30 | 0.292 | 0.051 | 5 | 30 |
+
+- No DEF curve, because the league runs no DEF slot. Correct.
+- Seated totals: RB 32 + WR 46 + TE 18 = 96, which is (2+2+1+3) * 12 exactly.
+  Plus QB 12 and K 12 is 120, which is 10 slots * 12 teams exactly.
+- Depth caps are max(24, ceil(demand * 2.5)) at every position.
+- war_at_demand is POSITIVE at all five, which is the plan's acceptance
+  criterion 9 and the consequence it says must not be "fixed" later.
+- Against the plan's section 4.7 bands: QB 0.398 sits inside 0.35 to 0.45. TE
+  1.104 is just above 1.0. RB and WR run above the bands because this league
+  runs THREE flex slots rather than one, so demand is 32 and 46 rather than 28
+  and 42, replacement falls, and rank-1 WAR rises. That is the model working.
+  Nothing is outside a factor of two, which is the plan's own bug threshold.
+- K at 0.292 against a rough 0.1 estimate is the widest gap. The plan's estimate
+  was a generic-PPR back-of-envelope; this league scores kickers under its own
+  settings, and K is the position where a small absolute difference is a large
+  ratio. Worth watching, not a defect.
+
+King of Kings (12 teams, superflex), the plan's sharpest test:
+- QB structural demand 24, exactly 2 * teamCount, so SUPER_FLEX seats a second
+  quarterback on every team.
+- QB replacement falls from 17.19 (one-QB league) to 13.22.
+- QB rank-1 WAR rises from 0.398 to 0.768, a 93 percent jump against the 40
+  percent the plan's acceptance criterion 7 requires.
+
+The QB curve stops at 43 rather than its 60 cap. Checked: exactly 43 of the 133
+QBs in the universe have any published numbers at all, and 90 have projection
+rows with an empty stat line AND a null points column. The engine scored 43 and
+refused to invent the other 90. That is "a null projection is never a zero"
+working end to end on live data, and it is why rank mode's truncation is the
+honest picture rather than a rendering gap.
+
+E4 sharing, proven on live data:
+- Two leagues with genuinely different scoring (68 keys against 67) produced
+  DIFFERENT fingerprints and both computed fresh. The guard correctly declined
+  to share two leagues that are not the same.
+- Two leagues with byte-identical scoring, roster positions, team count and
+  playoff week start produced the SAME fingerprint. The second returned
+  shared=true in 1,177ms against roughly 10,200ms for a fresh compute, an 8.7x
+  saving, and performed no universe load.
+- All four positions' curves compare byte-identical between the two leagues,
+  along with structural_demand and war_rank_1. That is acceptance criterion E4-1.
+
+SECOND BUG FOUND AND FIXED, also by live testing rather than by a test.
+`npm run calculate:positional-war` called `calculateLeaguePositionalWar`
+directly, which writes cache rows and NO verdict. So a manually recomputed
+league kept a null `positional_war_succeeded_at` while its `last_pulsed_at`
+stayed recent, and that exact combination is what the admin league-health view
+reads as the signature of a systemic break. A successful manual recompute would
+have reported itself as a failure, and nobody would have noticed until an admin
+looked at the health view and saw healthy leagues listed as broken.
+
+Fix: extracted `runWithVerdict(supabase, leagueRowId, options, attemptedAt)`
+from `refreshPositionalWar`, so the page path and the script share ONE copy of
+the stamp-calculate-write ordering, and pointed the script at it. Verified live:
+the league now carries status `ok`, detail `5 positions, shared, 1113ms`, and
+both timestamps. `refreshPositionalWar`'s 28 tests still pass unchanged.
+
+That force run also re-proved the sharing path from a different direction: the
+same league recomputed with `--force` came back `shared=true` in 1,113ms,
+because another league had already computed that fingerprint. Forcing bypasses
+the freshness gate, not the compute sharing, which is the intended behaviour.
+
+THIRD BUG FOUND AND FIXED, again by checking against production rather than by
+a test. The admin league-health view's systemic-break signature was "succeeded_at
+is null while last_pulsed_at is inside the 48-hour window", with leagues that
+have never been viewed excluded on the grounds that their last_pulsed_at is
+null.
+
+But `last_pulsed_at` is written by the LEAGUE sync, not by either feature. A
+league pulsed yesterday that has simply never had Positional WAR computed has a
+recent last_pulsed_at and a null succeeded_at through no fault of anything.
+Counted against production: 55 of 212 leagues matched on the day this shipped.
+A health view whose first act is to report a quarter of the estate as broken
+teaches an admin to stop reading it, which is the exact opposite of its purpose.
+
+Fix: `staleSignature` now also requires `attempted_at` to be non-null. A feature
+that has never been attempted for a league is not failing for that league, it is
+waiting for someone to open the page. The page's own explanatory copy was
+updated to match, so the stated rule and the implemented rule agree.
+
+## E1b - The upgrade what-if
+
+T-WAR-47 | completed | E1b: upgrade what-if server action, validate then claim then simulate, computeLineupSwap + simulateWithReplacements
+T-WAR-48 | completed | E1b: upgrade panel UI, both labels, never one column, Signal Guide link, all six empty states
+     | files: lib/positional-war/upgrade.ts, lib/positional-war/upgrade.test.ts,
+     |   app/leagues/[league_id]/positional-war/actions.ts,
+     |   components/league-war/upgrade-panel.tsx,
+     |   app/leagues/[league_id]/positional-war/page.tsx
+     | depends on: T-WAR-46, T-WAR-43, T-WAR-32
+     | notes: THE ARCHITECTURAL CONSTRAINT holds. The what-if runs only from an explicit
+     |   server action, never on a GET and never during a render, and it is not on the
+     |   overview at all. The overview renders on every visit, so a simulation there would
+     |   spend a rate-limit slot on work nobody asked for. There is no URL that encodes an
+     |   upgrade, which is why this needs one bucket rather than Trade Ideas' three-path
+     |   arrangement, and the action's header says so.
+     |   The four gates, in order: zod shape check with no database read; re-derive the
+     |   viewer's roster from rosters.player_ids; claim the slot; simulate. A payload
+     |   naming a roster id the derivation did not itself produce is REFUSED rather than
+     |   silently corrected to the derived one, because silently swapping teams would
+     |   answer a question nobody asked.
+     |   Reuses computeLineupSwap and simulateWithReplacements rather than writing new
+     |   lineup code, so cascading lineup changes and the refusal to name a bad cut come
+     |   for free. Only the viewer's team uses a freshly computed distribution; every
+     |   other team reads from league_power_pulse_cache.weekly on BOTH sides, matching
+     |   what lib/faab/league-faab.ts already does for a single signing.
+     |   Naming: this is the one place both metrics legitimately appear, and it labels
+     |   both. lib/positional-war/naming.test.ts allowlists exactly these three files for
+     |   the team-specific vocabulary and nothing else.
+     | verified: yes (19 tests; full suite 168 files, 2560 tests, typecheck and build clean)
+
+NAMING GUARD FIX, found while the upgrade panel landed: the guard flagged a JSX
+comment carrying the task id `T-WAR-48`, because the hyphens put word boundaries
+either side of the token and `isCommentLine` did not recognise `{/*` as a
+comment opener. An ordinary reference to the plan was reading as an unqualified
+metric name. Added `{/*` to the comment detector, with the reason recorded in
+the code so the next person does not remove it.
+
+Plan-versus-code note from the E1b agent, worth carrying forward: the plan's
+edge-case table implies `computeLineupSwap` can return a non-null `dropNote`
+from a plain `mustDrop: true` call. Tracing `lib/faab/marginal.ts` shows that
+message only fires when a `dropGuard` is configured, which the plan's own
+five-field computation spec for this feature does not include. The pass-through
+is correct and is covered by a test that mocks the return, but in practice that
+sixth empty state cannot fire today. Wiring the value and drop-guard inputs
+would make it reachable and is a deliberate follow-up rather than part of this
+build.
+
+## Review pass: four independent sub-agents
+
+T-WAR-53 | completed | Accessibility audit sub-agent (WCAG 2.2 AA across every surface)
+T-WAR-54 | completed | Security review sub-agent (RLS, the action's gates, the OG route, admin gates)
+         | plus an implementation-correctness reviewer and a speed/performance reviewer,
+         | four in total, each told to stay in its lane and be adversarial about what
+         | the tests do not cover.
+
+CONFIRMED BY THE REVIEWERS, against the live database and the real code rather
+than against the plan's claims:
+- RLS works on both new tables. anon and authenticated read the per-league cache
+  and are refused on write; both are blocked entirely from positional_war_curves
+  against a table proven to hold rows as owner, so that is RLS and not emptiness.
+- All twelve of the plan's most-likely-to-be-wrong areas hold, including the
+  single optimizer call site, the anti-double-count and its regression guard,
+  structural-versus-weekly on every consumer, and the write ordering in both
+  features.
+- No duplicate implementation survived the concurrent build: one selection
+  function, one geometry function, and the OG route and the page call the same
+  one.
+- The palette's claimed contrast ratios were independently recomputed and match.
+- No data is hidden at any breakpoint on any Positional WAR surface.
+
+SEVEN FINDINGS ACTED ON:
+1. (perf, most severe) A cold curve was blocking the RANKINGS TABLE, not the
+   chart. pulseLeagueDerived is awaited by the rankings boundary, not the
+   curve's, so a ten-second cold compute held up the page's primary content
+   while the curve's own skeleton resolved instantly. Fixed with
+   includePositionalWar on pulseLeagueDerived plus a PositionalWarSection server
+   component that owns the compute behind the boundary that shows it. A
+   deliberate divergence from the plan's section 12, reasoning written into both
+   files.
+2. (a11y) The overlay dropped the injury designation section 15.1.1 requires.
+   injuryStatus now rides on the curve, into the spoken readout and into a new
+   Status column.
+3. (impl) Orphaned rows when a league stops starting a position. Scoped delete
+   after the write, plus a test.
+4. (a11y) h2 to h4 heading skip on all three pages. ChartFigure's title level is
+   now a prop defaulting to 4, so Beacon Breakdown is untouched, and this panel
+   passes 3.
+5. (a11y) The live region could rattle through announcements on a pointer sweep.
+   The SPOKEN readout is debounced; the visible one still tracks exactly.
+6. (security) Unguarded PostgREST .or() filter in resolveUnmatchedOwnerInfo.
+   Same character-class guard, same reasoning, as lib/power-pulse/load.ts.
+7. (security) No cheap meter before the upgrade action's reads. Added a
+   deliberately loose outer bucket claimed before any read, plus a test.
+
+Plus two performance fixes delegated from the same pass: parallelizing the
+independent chunk loops in the universe loader, and sharing the viewer reads
+through React cache() the way the curve read already was.
+
+RECORDED, NOT ACTED ON, each with a stated reason in the review document: the
+axis toggle's sub-44px height from sm up (it is a copy of the existing toggle
+and changing one would make the pair inconsistent), a redundant index that is a
+strict prefix of the unique one, unverified mobile chart readability at 320px,
+and one empty state the reviewer judged unreachable.
+
+MEASURED AFTER THE PERFORMANCE FIXES: with positional_war_curves emptied so the
+compute genuinely ran cold, the same superflex league went from 9,525ms to
+5,111ms. Roughly half, from parallelizing chunk loops that were never sequential
+for a reason. Still not fast, and the remaining time is still round trips.
+
+FINAL STATE: typecheck clean, npm run build clean with /api/og/war/[league_id]
+and /leagues/[league_id]/positional-war both in the route manifest, 168 test
+files, 2563 tests, all green. Nothing committed, nothing pushed. HEAD is still
+c068818.
+
+Note on the cold-path measurement: the performance agent could not reproduce a
+cold compute, because its forced run found the fingerprint already shared by
+another league and short-circuited before touching the loader, and it correctly
+declined to bust the shared cache to manufacture a number. The orchestrator
+measured it instead by emptying positional_war_curves first, which is safe
+because that table is regenerable and pruned weekly anyway: 9,525ms before the
+parallelization, 5,111ms after, same league, same window.
+
+## Follow-up pass: the four recorded findings, plus a performance audit
+
+Run after the review above, against the same working tree. Nothing committed.
+
+### The findings the review recorded but did not act on
+
+T-WAR-55 | completed | Mobile chart readability, settled with a rendering rather than arithmetic
+     | files: lib/positional-war/chart-layout.ts, lib/positional-war/chart-layout.test.ts,
+     |        components/league-war/positional-war-chart.tsx
+     | The plan's named risk was six curves overlapping. Measured, the type was
+     | the worse problem, and it is the one a desktop screenshot cannot show. The
+     | chart drew into a fixed 640 by 360 viewBox and let the browser scale it,
+     | so an axis label set at 9 units rendered at 9 * (containerWidth / 640).
+     | The container is not the viewport: a 320px phone leaves the chart 224 CSS
+     | px after the page gutter, the Panel body and the ChartFigure, which puts
+     | every axis label on both axes at about 3 CSS px.
+     | Fixed the way the plan prescribes: below 640 CSS px the coordinate space
+     | is sized to the container, so the scale factor is never below 1 and a
+     | 10-unit label never renders under 10 CSS px, and the aspect ratio grows
+     | as the container narrows so six curves get vertical room. Never fewer
+     | series. A priority-ordered label fitter keeps "Replacement level" and
+     | drops the decimals it would smear into; every dropped label's value is
+     | still in the data table, so nothing is hidden at any breakpoint.
+     | The measured width is floored to a 20px quantum, deliberately DOWN, so
+     | the coordinate space can never end up wider than the container.
+     | verified: yes (17 unit tests including a per-pixel sweep from 200 to 1400
+     |           CSS px asserting the rendered label size never drops below 9,
+     |           plus a rendering of the real league at 224px, before and after)
+
+T-WAR-56 | completed | Tap targets: 44px at every width on both axis-mode toggles
+     | files: components/league-war/war-axis-toggle.tsx, components/power-pulse/rank-mode-toggle.tsx
+     | The review declined to fix this in one file because it would make the
+     | pair inconsistent. Fixed in both, which removes that objection. sm starts
+     | at 640px; a tablet and a large phone turned sideways are both touch
+     | devices well past that line.
+     | verified: yes (typecheck, build, full suite)
+     | note: `sm:min-h-0` appears on four other controls elsewhere in the app
+     |       (team-chip-bar, brief-sidebar, board-editor). Out of scope here and
+     |       worth its own sweep.
+
+T-WAR-57 | completed | Migration 0216: drop the redundant index, add the one the read path needed
+     | files: supabase/migrations/0216_positional_war_read_path_indexes.sql
+     | Dropped idx_league_positional_war_cache_league, a strict prefix of the
+     | unique index, verified on production by dropping it inside a rolled-back
+     | transaction and re-planning both reads.
+     | Added idx_player_weekly_projections_season_updated for
+     | loadProjectionsSnapshot, which runs on EVERY league page view and was
+     | reading all 18,413 rows of the season to top-N sort for one value.
+     | Measured on production: 28.1ms and 18,659 shared buffer hits, down to
+     | 0.05ms and 12.
+     | verified: yes (RLS posture re-queried on both tables and unchanged;
+     |           Supabase security advisor clean of anything new)
+
+T-WAR-58 | completed | The unreachable empty state, in the panel, the rail and the OG card
+     | files: components/league-war/positional-war-panel.tsx,
+     |        components/league-war/war-rail-summary.tsx,
+     |        app/api/og/war/[league_id]/route.tsx
+     | `curves.every((c) => c.curve.length === 0)` rather than
+     | `curves.length === 0`. An empty array satisfies `every`, so the original
+     | no-rows case is unchanged and rows-with-no-points now resolve to the same
+     | honest "nothing to plot" answer instead of an empty chart frame beside a
+     | "not calculated yet" sentence.
+     | verified: yes
+
+T-WAR-59 | completed | The upgrade panel's unreachable sixth empty state, removed rather than faked
+     | files: lib/positional-war/upgrade.ts, components/league-war/upgrade-panel.tsx,
+     |        lib/positional-war/upgrade.test.ts
+     | Both branches of chooseDrop that produce a note require a drop guard, and
+     | this caller configures none, so `dropNote` was structurally always null
+     | and the panel's paragraph could not render. The guard is not simply
+     | missing: both its modes rank the roster by trade VALUE, and Positional WAR
+     | is source-independent by contract, so wiring one would put a value-source
+     | dependency into a surface whose whole point is that the source toggle
+     | cannot change it.
+     | The pass-through is gone and the test now pins the INPUT (no dropGuard, no
+     | rosterValues, no candidateValue) rather than asserting a pass-through
+     | against a mocked return the real call cannot produce. If a guard is ever
+     | configured here the test fails and says to bring the sentence back.
+     | verified: yes
+
+T-WAR-60 | completed | The Signal Guide link opens the guide in place, at the term
+     | files: lib/guide/open-guide.ts, components/signal-guide/guide-term-link.tsx,
+     |        components/signal-guide/signal-guide-mount.tsx,
+     |        components/signal-guide/guide-panel.tsx, lib/guide/registry.ts,
+     |        lib/guide/registry.test.ts, components/trade-ideas/trade-outcome.tsx,
+     |        supabase/migrations/0217_signal_guide_league_section_pages.sql
+     | The review's stated blocker was that no deep-link mechanism existed and
+     | that /leagues/[id]/trade-ideas was not in the guide page registry. Both
+     | are now built, generally rather than for this one card.
+     | A module-level bus carries two directions of traffic: the mount publishes
+     | whether the current page HAS a guide, and any component can request an
+     | open at a named entry. GuideTermLink renders a real opener when a guide
+     | exists and the League Overview link it used to be when one does not, so
+     | it degrades rather than becoming a control that does nothing. Server
+     | rendering always produces the link and upgrades on hydration.
+     | The panel resolves the heading against the FULL content, expands that
+     | entry, scrolls to it and moves focus to it, and its own focus timer stands
+     | down so a screen reader hears the term rather than an empty search field.
+     | A nonce makes the same heading twice count as two requests.
+     | Migration 0217 registers the Trade Ideas and Positional WAR section
+     | routes, which is what gives those pages a panel at all. The "Positional
+     | WAR" term is is_global (0213), so it already surfaces in both.
+     | verified: yes (registry tests including a guard that a new section route
+     |           cannot fall through to league-overview's guide; confirmed in a
+     |           browser against the production build that the Guide launcher now
+     |           appears on /leagues/[id]/trade-ideas and its panel carries the
+     |           Positional WAR term, which sits 33rd of 33 and is exactly why a
+     |           deep link earns its place)
+
+T-WAR-61 | completed | Migration 0218: Signal Guide global term "WAR (wins above replacement)"
+     | files: supabase/migrations/0218_signal_guide_war_term.sql,
+     |        lib/guides/fantasy-football-terms.ts
+     | A short, plain-language definition of the acronym itself, separate from
+     | the 2,180-character "Positional WAR" entry that explains the metric. One
+     | row in guide_entries covers the Signal Guide panel AND BEAM, which reads
+     | the same table (lib/beam/capabilities/glossary-term.ts). The matching
+     | glossary entry was added to /guides/fantasy-football-terms, where it also
+     | reaches the page's schema.org DefinedTerm block.
+     | The heading shape is load-bearing: BEAM scores an exact heading match
+     | above a prefix match above a substring hit, so "what is WAR" lands on the
+     | new entry (59.7 to 9.9) while "what is Positional WAR" still lands on the
+     | full one (109.9). Verified by reproducing that scoring against production.
+     | verified: yes
+
+### Performance audit
+
+Measured on the real database from a developer machine, so absolute latencies
+carry this machine's round-trip time. The BEFORE and AFTER numbers were taken
+back to back in the same minute against the same league, so the ratios hold.
+
+T-WAR-62 | completed | The lineup optimizer's inner loop
+     | files: lib/power-pulse/lineup.ts
+     | A CPU profile of a cold compute put 4,343ms of 7,460ms total samples in
+     | one anonymous function in lib/power-pulse/lineup.ts, which contradicts the
+     | review's conclusion that the engine's arithmetic was negligible next to
+     | I/O. buildOptimalLineup rebuilt a candidate's eligible-slot array on every
+     | seat attempt, scanning all 120 merged slots and running Array.includes over
+     | each one's eligibility list, and allocated a Set per offer.
+     | Eligibility depends on POSITION and nothing else, so it is now precomputed
+     | once per fill, and a stamped Int32Array replaces the per-offer Set.
+     | 13 weekly fills on the real league: 1,108ms before, and the WHOLE engine
+     | (14 fills plus every quantity read off them) is 175ms after.
+     | This also speeds up Power Pulse, FAAB and Trade Ideas, which run the same
+     | optimizer per candidate.
+     | verified: yes (640 randomized cases across four roster shapes including
+     |           overlapping non-nested slots, four team counts and 40 universes
+     |           each: 640 of 640 byte-identical to the original implementation)
+
+T-WAR-63 | completed | One scan of the projection window, not two
+     | files: lib/positional-war/load.ts, lib/power-pulse/load.ts
+     | The loader read the window twice: once for (id, player_id) to learn which
+     | players exist, then again through loadProjections for the full rows of
+     | exactly those players. The second read returns a strict subset of the
+     | first read's rows. Positional WAR's universe is by definition every player
+     | with a projection in the window, so the two sets are the same set.
+     | It now makes one pass for full rows and derives the id set from what came
+     | back, and the completeness count runs alongside the walks instead of ahead
+     | of them. The guard is unchanged in substance and still compares against an
+     | exact count over the whole window.
+     | Also: resolveUniversePlayers asks Postgres for
+     | `metadata->sleeper->>injury_status` instead of selecting the whole
+     | metadata column, which averages 2kB per row across 1,083 players, to read
+     | one string. loadAccuracy's four-chunk loop was serial and now runs
+     | concurrently under the same cap as its siblings.
+     | Universe load: 1,872-2,062ms before, 719-739ms after, identical row and
+     | player counts.
+     | verified: yes (12 real 2026 leagues, 8/10/12 teams, two scoring bases,
+     |           full model run on the old loader's universe and the new one:
+     |           12 of 12 byte-identical curve JSON)
+     | note: PAGE stays at 1000. PostgREST caps this project at 1000 rows per
+     |       response, so limit(2000) silently returns 1000 and the walk's
+     |       short-page stop condition ends it early. Measured: 12,623 of 13,064
+     |       rows. Documented in the loader so nobody optimizes it again.
+
+T-WAR-64 | completed | The warm gate: seven serial round trips per page view, now two waves
+     | files: lib/league-positional-war.ts
+     | Every view of a league page whose curve is already fresh ran the whole
+     | gate, and it ran serially: a leagues read for the season, a second leagues
+     | read for the backoff columns, the cache row, then loadLeague, the settings,
+     | total_rosters, a roster count and the projections snapshot.
+     | The two leagues reads were the same row of the same table a few lines
+     | apart and are now one. The context builds in two waves split at the week
+     | window, which is the only real dependency in it. The memo caches the
+     | PROMISE rather than the resolved value, so two concurrent askers share one
+     | build instead of both starting their own, and the built context is now
+     | threaded into the compute, which used to rebuild the whole thing.
+     | Warm gate: 543-557ms before, 276-278ms after.
+     | Also hardened: a throw inside the gate now writes an error verdict and
+     | stamps attempted_at, so it backs off instead of rerunning the same failing
+     | read on every view.
+     | verified: yes (28 orchestrator tests unchanged and green)
+
+T-WAR-65 | completed | The read path stops fetching a column nothing renders
+     | files: lib/positional-war/types.ts, lib/league-positional-war-data.ts, and
+     |        the six consumers now typed against PlottableCurve
+     | loadPositionalWarView was a `select("*")`, which pulled
+     | weekly_diagnostics, about 6.5kB of jsonb per league, on every league page
+     | view to throw it away. PositionCurve is now PlottableCurve plus that
+     | field, the read path is typed against PlottableCurve and selects an
+     | explicit column list. Left out of the TYPE rather than filled with an
+     | empty array, because an empty array would say the engine produced no
+     | diagnostics and it produced one per week. Still written, still stored.
+     | verified: yes
+
+MEASURED, END TO END, against `next start` on the production build:
+- Overview page: first byte 77ms, rankings table in the stream at 239ms, the
+  Positional WAR panel at 932ms, stream ends at 2,576ms. The review's fix 1
+  still holds: the curve does not block the primary content.
+- Positional WAR page: first byte 150-230ms, full stream 864-924ms across seven
+  consecutive requests.
+- /api/og/war: 380-490ms uncached, 55kB, edge-cached for an hour.
+- Cold compute end to end, positional_war_curves emptied first so it genuinely
+  ran cold: 1,560-2,064ms, median 1,607ms.
+
+MEASURED AND NOT ACTED ON, with reasons:
+- The cached universe serializes to 4.9MB for a 13-week window and 6.8MB for a
+  full season. Next's in-memory data cache is 50MB by default and a hosted Data
+  Cache typically caps an entry well below this, so the memoization should be
+  assumed to be per-instance rather than shared. It is not the bottleneck it
+  looks like: positional_war_curves already shares the expensive COMPUTE across
+  leagues by fingerprint, so a universe miss is bounded by distinct fingerprints
+  rather than by league count. Trimming it is possible but not cheap: stat_line
+  is 2.4MB of the 4.9MB and the engine scores every league under its own
+  settings, so it cannot be pruned by key; dropping zero-valued keys recovers
+  0.25MB, which does not change the outcome and does change what
+  projectPlayerWeek sees.
+- Raising DB_CHUNK_CONCURRENCY from 5 to 8 cut the projection scan from 619ms to
+  445ms in isolation. Left at 5: the cap is shared with Power Pulse and the
+  reason for 5 is connection-pool headroom under concurrent requests, which a
+  single-request benchmark cannot see.
+- The Positional WAR page serves 794kB of HTML, 79kB gzipped. 203kB of that is
+  the data table of every plotted player, which is the accessibility contract.
+  Not worth restructuring.
+- positional_war_curves.first_league_id has no covering index (Supabase advisor,
+  INFO). It is provenance, never queried by, so an index would cost writes for
+  nothing. It does mean a league DELETE scans the table; that table is small and
+  leagues are not deleted in normal operation.
+
+FIXED ALONG THE WAY, and worth naming because it was not a review finding:
+lib/positional-war/share.test.ts asserted that two concurrently computed upserts
+were deeply equal, including `computed_at`. Each call stamps its own
+`new Date()`, so the assertion was that two clock reads landed in the same
+millisecond. It passed almost always and flaked the rest of the time. It now
+compares the payloads with the clock-read columns excluded and asserts
+separately that each one parses as a date, which is what the test was actually
+about: a concurrent second writer overwrites with the same CURVE data.
+
+FINAL STATE: typecheck clean, npm run build clean with /api/og/war/[league_id]
+and /leagues/[league_id]/positional-war both in the route manifest, 169 test
+files, 2,585 tests, all green. Nothing committed, nothing pushed. HEAD is still
+c068818.

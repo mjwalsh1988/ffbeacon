@@ -54,7 +54,14 @@ const NON_SCORING_KEYS = new Set([
   "tm_st_snp",
 ]);
 
-function isNonScoringKey(key: string): boolean {
+/**
+ * Exported because the Positional WAR fingerprint (lib/positional-war/fingerprint.ts)
+ * derives its normalized scoring map from exactly the key set scoreStatMap
+ * iterates below. If the filtering in scoreStatMap ever changes, this function
+ * must change with it, and lib/league-scoring.test.ts asserts the two stay in
+ * step.
+ */
+export function isNonScoringKey(key: string): boolean {
   if (NON_SCORING_KEYS.has(key)) return true;
   // adp_ppr, adp_dynasty_2qb, pos_adp_dd_ppr, pos_rank_ppr, rank_ppr ...
   return (

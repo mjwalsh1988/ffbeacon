@@ -239,7 +239,7 @@ export default async function LeagueSchedulePage({
         >
           <span
             aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-px"
+            className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{
               backgroundImage:
                 "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",

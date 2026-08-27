@@ -49,6 +49,7 @@ import {
   Trophy,
   GraduationCap,
   BarChart3,
+  TrendingDown,
   RefreshCw,
   CalendarDays,
   type LucideIcon,
@@ -92,6 +93,7 @@ export const NAV_ICONS = {
   trophy: Trophy,
   graduationCap: GraduationCap,
   barChart: BarChart3,
+  trendingDown: TrendingDown,
   refresh: RefreshCw,
   calendar: CalendarDays,
 } satisfies Record<string, LucideIcon>;

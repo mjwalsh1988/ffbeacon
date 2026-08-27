@@ -33,10 +33,20 @@ export function GuidePanel({
   open,
   onClose,
   content,
+  focusHeading = null,
+  focusNonce = 0,
 }: {
   open: boolean;
   onClose: () => void;
   content: GuidePageContent;
+  /**
+   * The entry heading a deep link asked to land on, matched
+   * case-insensitively against guide_entries.heading. Null opens at the top,
+   * which is what the floating "?" button does.
+   */
+  focusHeading?: string | null;
+  /** Changes on every request, so the same heading twice still lands twice. */
+  focusNonce?: number;
 }) {
   const labelId = useId();
   const descId = useId();
@@ -51,6 +61,39 @@ export function GuidePanel({
   // Debounced count announced to screen readers so fast typing doesn't flood the
   // live region with one message per keystroke.
   const [liveCount, setLiveCount] = useState("");
+  /** The entry id a deep link resolved to, or null for a plain open. */
+  const [targetEntryId, setTargetEntryId] = useState<string | null>(null);
+  /**
+   * Read by the focus timer, which is set up in an effect that must not re-run
+   * when a deep-link target resolves (re-running it would tear down the Esc
+   * handler and the scroll lock mid-open). A ref keeps the timer's view of the
+   * target current without adding a dependency.
+   *
+   * Synced in an effect rather than written during render, so a double render
+   * cannot leave the ref describing a render that was thrown away. The timer
+   * fires 90ms after the panel opens and the target resolves in the commit
+   * before that, so the ref is always current by the time it is read.
+   */
+  const deepLinkTargetRef = useRef<string | null>(null);
+  useEffect(() => {
+    deepLinkTargetRef.current = targetEntryId;
+  }, [targetEntryId]);
+
+  // Resolve the requested heading to a real entry, on the FULL content rather
+  // than the search-filtered lists, because the search box is empty at the
+  // moment a deep link opens the panel and clearing it later must not undo
+  // where the reader was sent.
+  useEffect(() => {
+    if (!open || !focusHeading) {
+      setTargetEntryId(null);
+      return;
+    }
+    const wanted = focusHeading.trim().toLowerCase();
+    const match = [...content.questions, ...content.terms].find(
+      (e) => e.heading.trim().toLowerCase() === wanted,
+    );
+    setTargetEntryId(match?.id ?? null);
+  }, [open, focusHeading, focusNonce, content.questions, content.terms]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,7 +113,11 @@ export function GuidePanel({
     }
     const previouslyFocused = document.activeElement as HTMLElement | null;
     // Defer focus until the panel is on-screen, then send it to the search box.
+    // A deep link is the exception: the entry it asked for takes focus instead,
+    // so a screen reader hears the term it was sent to read rather than an
+    // empty search field it did not ask for.
     const focusTimer = window.setTimeout(() => {
+      if (deepLinkTargetRef.current) return;
       searchRef.current?.focus();
     }, 90);
 
@@ -255,11 +302,15 @@ export function GuidePanel({
                       icon="question"
                       title={GUIDE_SECTION_LABEL.question}
                       entries={questions}
+                      targetEntryId={targetEntryId}
+                      targetNonce={focusNonce}
                     />
                     <GuideSection
                       icon="term"
                       title={GUIDE_SECTION_LABEL.term}
                       entries={terms}
+                      targetEntryId={targetEntryId}
+                      targetNonce={focusNonce}
                     />
                   </div>
                 )}
@@ -316,10 +367,14 @@ function GuideSection({
   icon,
   title,
   entries,
+  targetEntryId = null,
+  targetNonce = 0,
 }: {
   icon: "question" | "term";
   title: string;
   entries: GuideEntry[];
+  targetEntryId?: string | null;
+  targetNonce?: number;
 }) {
   const headingId = useId();
   if (entries.length === 0) return null;
@@ -336,7 +391,11 @@ function GuideSection({
       <ul role="list" className="mt-3 space-y-2">
         {entries.map((entry) => (
           <li key={entry.id}>
-            <GuideDisclosure entry={entry} />
+            <GuideDisclosure
+              entry={entry}
+              isTarget={entry.id === targetEntryId}
+              targetNonce={targetNonce}
+            />
           </li>
         ))}
       </ul>
@@ -344,13 +403,41 @@ function GuideSection({
   );
 }
 
-function GuideDisclosure({ entry }: { entry: GuideEntry }) {
+function GuideDisclosure({
+  entry,
+  isTarget = false,
+  targetNonce = 0,
+}: {
+  entry: GuideEntry;
+  /** True when a deep link named this entry. Expands it and takes focus. */
+  isTarget?: boolean;
+  targetNonce?: number;
+}) {
   const [open, setOpen] = useState(false);
   const bodyId = useId();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Expand, scroll into view, and take focus when a deep link names this
+  // entry. Focus rather than scroll alone, so the reader who followed a
+  // "What is Positional WAR?" control hears the term and its body instead of
+  // being dropped into a search field with the answer somewhere below it.
+  // The delay clears the panel's own slide-in transition; a scroll during the
+  // transform lands in the wrong place.
+  useEffect(() => {
+    if (!isTarget) return;
+    setOpen(true);
+    const timer = window.setTimeout(() => {
+      buttonRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      buttonRef.current?.focus();
+    }, 340);
+    return () => window.clearTimeout(timer);
+  }, [isTarget, targetNonce]);
+
   return (
     <div className="rounded-card border border-line bg-surface/60">
       <h3 className="m-0">
         <button
+          ref={buttonRef}
           type="button"
           aria-expanded={open}
           aria-controls={bodyId}
