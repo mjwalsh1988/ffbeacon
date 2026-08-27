@@ -3,6 +3,7 @@ import type { Database } from "@/lib/database.types";
 import { analyzeTrade, type TradeAnalysis } from "@/lib/trade-analyzer";
 import type { LeagueContext } from "@/lib/league-format-resolution";
 import { loadLeagueDraftSlots, type LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
+import type { StartupPickIndex } from "@/lib/league-startup-picks";
 import type { TransactionRowData } from "@/components/transaction-row";
 
 type AnySupabase =
@@ -212,6 +213,14 @@ export async function loadLeagueTransactions(
  * Returns a map keyed by sleeper_transaction_id. A trade that throws is simply
  * absent, so one bad row degrades to the plain adds/drops layout instead of
  * failing the feed.
+ *
+ * The startup-pick index is NOT built here. `draft_selections` is service-role
+ * only (migration 0188 gives it no anon or authenticated policy) and this
+ * function is called with the page's user-scoped client, so building one here
+ * read zero selection rows every time and then told the reader that every
+ * startup pick was "not loaded yet" when the truth is that this client may not
+ * read them. The caller passes the index `analyzeLeagueTrades` already built
+ * with the admin client, which is one honest answer and two fewer queries.
  */
 export async function loadTradeAnalyses(
   supabase: AnySupabase,
@@ -219,6 +228,7 @@ export async function loadTradeAnalyses(
   context: LeagueContext | null,
   rows: TransactionRowData[],
   loaded: Pick<LoadedTransactions, "rosterIdentities" | "slotIndex">,
+  startupIndex: StartupPickIndex | null = null,
 ): Promise<Map<string, TradeAnalysis>> {
   const out = new Map<string, TradeAnalysis>();
   if (!context?.formatConfigId || !context.sourceSlug) return out;
@@ -244,6 +254,8 @@ export async function loadTradeAnalyses(
           draftPicks: r.draftPicks,
           rosterIdentities: loaded.rosterIdentities,
           slotIndex: loaded.slotIndex,
+          startupIndex,
+          tradedAtSleeper: r.createdAtSleeper,
           context: analyzerContext,
         });
         if (analysis) out.set(r.sleeperTransactionId, analysis);

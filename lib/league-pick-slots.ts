@@ -1,3 +1,4 @@
+import { loadLeagueDrafts, chooseDraftPerSeason } from "@/lib/league-drafts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 
@@ -9,15 +10,25 @@ type AnySupabase =
  * Look up draft slot labels for a league.
  *
  * Returns:
- *   labelFor(season, originalRosterId) → "1.04" | null
- *   slotFor(season, originalRosterId)  → 4     | null
+ *   labelFor(season, originalRosterId, round) → "1.04" | null
+ *   slotFor(season, originalRosterId)         → 4      | null
  *
  * Sleeper publishes `slot_to_roster_id` on the /draft/{draft_id} payload as
- * `{slot → roster_id}`. We invert it once per (season) so the caller can ask
+ * `{slot → roster_id}`. We invert it once per season so the caller can ask
  * "what slot does this team's pick fall on" in O(1).
  *
  * When the season's draft is not yet scheduled / completed, the mapping is
  * empty and we return null, the UI should fall back to a `2026 R1` label.
+ *
+ * ONE DRAFT PER SEASON IS A CHOICE, NOT A GIVEN.
+ * Migration 0029 dropped the unique (league_id, season) constraint because
+ * leagues really do hold more than one draft for a season, and one production
+ * league carries two completed 23-round 2026 startups whose seat maps DISAGREE.
+ * This used to keep whichever row the database returned last, so the slot a pick
+ * was labelled with could change between two renders of the same page. Both the
+ * read and the tiebreak now live in lib/league-drafts.ts and are shared with
+ * lib/league-startup-picks.ts, so a pick's label and its valuation can never be
+ * read off two different drafts.
  */
 export type LeagueDraftSlotIndex = {
   labelFor: (season: number, originalRosterId: number, round: number) => string | null;
@@ -30,27 +41,12 @@ export async function loadLeagueDraftSlots(
   supabase: AnySupabase,
   leagueRowId: string,
 ): Promise<LeagueDraftSlotIndex> {
-  const { data: rows } = await (supabase as SupabaseClient<Database>)
-    .from("league_drafts")
-    .select("season, slot_to_roster_id")
-    .eq("league_id", leagueRowId);
+  const drafts = await loadLeagueDrafts(supabase, leagueRowId);
+  const chosen = chooseDraftPerSeason(drafts);
 
   const rosterToSlotBySeason = new Map<number, Map<number, number>>();
-  for (const row of rows ?? []) {
-    const season = Number(row.season);
-    if (!Number.isFinite(season)) continue;
-    const raw = row.slot_to_roster_id;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const m = new Map<number, number>();
-    for (const [slotStr, rosterIdRaw] of Object.entries(
-      raw as Record<string, unknown>,
-    )) {
-      const slot = parseInt(slotStr, 10);
-      const rid = Number(rosterIdRaw);
-      if (!Number.isFinite(slot) || !Number.isFinite(rid)) continue;
-      m.set(rid, slot);
-    }
-    if (m.size > 0) rosterToSlotBySeason.set(season, m);
+  for (const [season, draft] of chosen) {
+    rosterToSlotBySeason.set(season, draft.rosterToSeat);
   }
 
   function slotFor(season: number, originalRosterId: number): number | null {

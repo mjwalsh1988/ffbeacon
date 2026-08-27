@@ -24,6 +24,10 @@ import {
   analyzeLeagueTrades,
   type LeagueTradeSignalCheck,
 } from "@/lib/league-signal-check";
+import {
+  loadStartupPickIndex,
+  collectStartupPickQueries,
+} from "@/lib/league-startup-picks";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { TransactionRow } from "@/components/transaction-row";
 import { SignalCheckTradeCard } from "@/components/signal-check-trade-card";
@@ -312,6 +316,7 @@ async function TransactionsFeed({
             sleeperTransactionId: r.sleeperTransactionId,
             adds: r.adds,
             draftPicks: r.draftPicks,
+            createdAtSleeper: r.createdAtSleeper,
           })),
           rosterLabels,
           leagueRowId,
@@ -324,12 +329,34 @@ async function TransactionsFeed({
   // unmatched player) need the plain value analyzer, and they get it
   // concurrently. Normally this list is empty and no valuation runs at all.
   const ungradedTrades = tradeRows.filter((r) => !gradedTrades.has(r.sleeperTransactionId));
+
+  // The startup index, always with the ADMIN client, because draft_selections is
+  // service-role only and the page's user client would read nothing and report
+  // every startup pick as unloaded. Signal Check normally builds it and hands it
+  // back; it returns without one when Signal Check is disabled or the league's
+  // format has no published values, and this feed still has to price startup
+  // picks correctly in both of those cases.
+  const startupIndex =
+    ungradedTrades.length === 0
+      ? null
+      : (tradeAnalysis?.startupIndex ??
+        (context.coverage === "none"
+          ? null
+          : await loadStartupPickIndex(adminClient, {
+              leagueRowId,
+              formatSlug: (context as LeagueContext).formatSlug,
+              picks: ungradedTrades.flatMap((r) =>
+                collectStartupPickQueries(r.draftPicks, r.createdAtSleeper),
+              ),
+            })));
+
   const fallbackAnalyses = await loadTradeAnalyses(
     supabase,
     leagueRowId,
     context.coverage === "none" ? null : (context as LeagueContext),
     ungradedTrades,
     loaded,
+    startupIndex,
   );
 
   const coverageOk = context.coverage !== "none";
@@ -418,6 +445,7 @@ async function TransactionsFeed({
                             createdAtSleeper={row.createdAtSleeper}
                             status={row.status}
                             sourceSlug={coverageOk ? context.sourceSlug : null}
+                            startup={graded.startup}
                           />
                         ) : (
                           <TransactionRow

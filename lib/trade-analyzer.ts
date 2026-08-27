@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
+import type { StartupPickIndex } from "@/lib/league-startup-picks";
+import { describeUnresolved } from "@/lib/startup-draft";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -17,6 +19,14 @@ type AnySupabase =
  * Draft pick values come from draft_pick_values for the (format, KTC),
  * picks are ALWAYS valued via KTC because FantasyCalc doesn't publish them.
  * The UI surfaces this via the LeagueContext.pickSource footnote.
+ *
+ * A DYNASTY STARTUP PICK IS NOT PRICED FROM THAT TABLE.
+ * `draft_pick_values` holds ROOKIE pick values and only rounds 1 to 4, so a
+ * startup pick read from it came back either as a rookie price (wrong by
+ * thousands of points) or as nothing at all (every startup pick past round 4).
+ * When the caller supplies a startup index, a startup pick is instead valued as
+ * the player who was actually taken at that seat. One that cannot be resolved is
+ * marked noValue with a reason, never handed back to the rookie table.
  *
  * The verdict thresholds are based on what feels intuitively fair without
  * being too aggressive:
@@ -60,6 +70,22 @@ export type TradePick = {
   /** Numeric value via the pick source (KTC). 0 when we have no row. */
   value: number;
   noValue: boolean;
+  /**
+   * Set when this pick belongs to a dynasty STARTUP draft, in which case its
+   * value above came from the player at that seat rather than from the rookie
+   * pick table. The UI renders the player so a reader can see what the pick
+   * actually became.
+   */
+  startup?: {
+    /** The player the seat produced. Null when the pick could not be resolved. */
+    playerName: string | null;
+    playerSleeperId: string | null;
+    position: string | null;
+    /** True when the player came from the ADP simulation rather than a selection. */
+    simulated: boolean;
+    /** Reader-facing reason, set only when the pick could not be resolved. */
+    unresolvedNote: string | null;
+  };
 };
 
 export type TradeSide = {
@@ -136,6 +162,19 @@ export type TradeAnalyzerInputs = {
   /** Optional pre-loaded slot index. When supplied, every TradePick gets a
    * concrete slot/pickLabel for scheduled drafts; otherwise both stay null. */
   slotIndex?: LeagueDraftSlotIndex | null;
+  /**
+   * Optional startup-pick index. When supplied, a pick belonging to a dynasty
+   * startup draft is valued as the player at that seat instead of from the
+   * rookie pick table. Without it every pick keeps the old behavior, so callers
+   * that have not been migrated are unaffected.
+   */
+  startupIndex?: StartupPickIndex | null;
+  /**
+   * When Sleeper recorded this trade, ISO. Needed only when the pick's season
+   * ran BOTH a startup and a rookie draft, where the round number alone cannot
+   * say which one a "2026 round 1" belongs to.
+   */
+  tradedAtSleeper?: string | null;
   /** Resolved league context (from lib/league-format-resolution). */
   context: {
     formatConfigId: string;
@@ -152,25 +191,72 @@ export async function analyzeTrade(
   supabase: AnySupabase,
   inputs: TradeAnalyzerInputs,
 ): Promise<TradeAnalysis | null> {
-  const { adds, draftPicks, rosterIdentities, slotIndex = null, context } = inputs;
+  const {
+    adds,
+    draftPicks,
+    rosterIdentities,
+    slotIndex = null,
+    startupIndex = null,
+    tradedAtSleeper = null,
+    context,
+  } = inputs;
   const addEntries = parseAdds(adds);
   const pickEntries = parsePicks(draftPicks);
+  const parsedTradedAt = tradedAtSleeper ? Date.parse(tradedAtSleeper) : NaN;
+  const tradedAtMs = Number.isFinite(parsedTradedAt) ? parsedTradedAt : null;
 
   // No usable content, surface a null analysis so the UI can render a
   // simple "no players or picks" placeholder.
   if (addEntries.length === 0 && pickEntries.length === 0) return null;
 
-  // Resolve players: sleeper_id → (player_id, name, position, team)
-  const sleeperIds = Array.from(new Set(addEntries.map((e) => e.sleeperId)));
-  const playerMeta = await loadPlayerMeta(supabase, sleeperIds);
+  // Resolve every startup pick first. This is pure (the index is already built)
+  // so it costs nothing and it tells us which extra players the value query has
+  // to cover, which lets the reads below run in two waves instead of four.
+  const startupByPick = new Map<
+    number,
+    ReturnType<StartupPickIndex["resolve"]>
+  >();
+  const startupPlayerIds = new Set<string>();
+  if (startupIndex) {
+    pickEntries.forEach((entry, i) => {
+      const resolved = startupIndex.resolve({
+        season: entry.season,
+        round: entry.round,
+        originalRosterId: entry.originalRosterId,
+        tradedAtMs,
+      });
+      if (!resolved) return;
+      startupByPick.set(i, resolved);
+      if (resolved.substitution.kind === "player") {
+        startupPlayerIds.add(resolved.substitution.playerId);
+      }
+    });
+  }
 
-  // Player values keyed by player_id
+  // Pick values keyed by `${season}|${round}|${pickPosition}`. We honor the
+  // pickSourceSlug from context (always KTC today). When no pick source is
+  // configured (every active source publishes picks), default to the main
+  // sourceSlug.
+  const pickSourceForValues = context.pickSourceSlug ?? context.sourceSlug;
+
+  // Wave one: three reads that depend on nothing but the inputs.
+  const sleeperIds = Array.from(new Set(addEntries.map((e) => e.sleeperId)));
+  const [playerMeta, startupMeta, pickValues] = await Promise.all([
+    // sleeper_id -> (player_id, name, position, team)
+    loadPlayerMeta(supabase, sleeperIds),
+    // player_id -> meta, for the players startup picks resolved into.
+    loadPlayerMetaByIds(supabase, Array.from(startupPlayerIds)),
+    loadPickValues(supabase, context.formatConfigId, pickSourceForValues),
+  ]);
+
+  // Wave two: values, which need the player ids wave one resolved.
   const playerIds = Array.from(
-    new Set(
-      Array.from(playerMeta.values())
+    new Set([
+      ...Array.from(playerMeta.values())
         .map((p) => p.playerId)
         .filter((id): id is string => Boolean(id)),
-    ),
+      ...startupPlayerIds,
+    ]),
   );
   const playerValues = await loadPlayerValues(
     supabase,
@@ -179,16 +265,21 @@ export async function analyzeTrade(
     context.sourceSlug,
   );
 
-  // Pick values keyed by `${season}|${round}|${pickPosition}`. We honor the
-  // pickSourceSlug from context (always KTC today). When no pick source is
-  // configured (every active source publishes picks), default to the main
-  // sourceSlug.
-  const pickSourceForValues = context.pickSourceSlug ?? context.sourceSlug;
-  const pickValues = await loadPickValues(
-    supabase,
-    context.formatConfigId,
-    pickSourceForValues,
-  );
+  // A trade made AFTER the draft can move the drafted player AND the spent pick
+  // that produced him. Counting both would add one player's value twice to one
+  // side. The player is the real asset, so the pick defers to him.
+  //
+  // Tracked PER SIDE and per player, so a pick that resolves to a player the
+  // OTHER side received is still worth something, and two pick descriptors
+  // landing on the same seat cannot both be paid.
+  const countedPlayerBySide = new Map<number, Set<string>>();
+  for (const entry of addEntries) {
+    const playerId = playerMeta.get(entry.sleeperId)?.playerId;
+    if (!playerId) continue;
+    const seen = countedPlayerBySide.get(entry.rosterId) ?? new Set<string>();
+    seen.add(playerId);
+    countedPlayerBySide.set(entry.rosterId, seen);
+  }
 
   // Group adds and picks by receiving roster.
   const sideByRoster = new Map<number, TradeSide>();
@@ -219,22 +310,74 @@ export async function analyzeTrade(
     combinedValue += value;
   }
 
-  for (const pickEntry of pickEntries) {
+  for (const [i, pickEntry] of pickEntries.entries()) {
     const ownerId = pickEntry.ownerId;
     if (ownerId == null) continue; // unattributed picks skip the analysis
-    const key = pickKey(pickEntry.season, pickEntry.round, pickEntry.pickPosition);
-    const value = pickValues.get(key) ?? 0;
-    const noValue = value === 0;
-    if (noValue) hasMissingValues = true;
+
+    const startup = startupByPick.get(i) ?? null;
 
     const slot =
-      slotIndex && pickEntry.originalRosterId != null
+      startup?.seat ??
+      (slotIndex && pickEntry.originalRosterId != null
         ? slotIndex.slotFor(pickEntry.season, pickEntry.originalRosterId)
-        : null;
+        : null);
     const pickLabel =
       slot != null
         ? `${pickEntry.round}.${String(slot).padStart(2, "0")}`
         : null;
+
+    let value: number;
+    let noValue: boolean;
+    let startupDetail: TradePick["startup"];
+
+    if (startup) {
+      // A startup pick is worth the player at its seat. It is never priced from
+      // draft_pick_values, which publishes rookie picks only.
+      if (startup.substitution.kind === "player") {
+        const { playerId, simulated } = startup.substitution;
+        const meta = startupMeta.get(playerId) ?? null;
+
+        // The player this pick became is already counted on THIS side, either
+        // because he moved in the same trade or because an earlier pick resolved
+        // to the same seat. The pick conveys nothing further. Priced at zero but
+        // NOT marked noValue: this is a deliberate zero, and flagging it as a
+        // missing value would put a "some values are missing" caveat on a trade
+        // whose values are all present.
+        const seen = countedPlayerBySide.get(ownerId) ?? new Set<string>();
+        const duplicate = seen.has(playerId);
+        seen.add(playerId);
+        countedPlayerBySide.set(ownerId, seen);
+
+        value = duplicate ? 0 : (playerValues.get(playerId) ?? 0);
+        noValue = !duplicate && value === 0;
+        startupDetail = {
+          playerName: meta?.name ?? null,
+          playerSleeperId: meta?.sleeperId ?? null,
+          position: meta?.position ?? null,
+          simulated,
+          unresolvedNote: duplicate
+            ? "Counted once, this player is already on this side of the trade"
+            : null,
+        };
+      } else {
+        value = 0;
+        noValue = true;
+        startupDetail = {
+          playerName: null,
+          playerSleeperId: null,
+          position: null,
+          simulated: false,
+          unresolvedNote: describeUnresolved(startup.substitution.reason),
+        };
+      }
+    } else {
+      const key = pickKey(pickEntry.season, pickEntry.round, pickEntry.pickPosition);
+      value = pickValues.get(key) ?? 0;
+      noValue = value === 0;
+      startupDetail = undefined;
+    }
+
+    if (noValue) hasMissingValues = true;
 
     const pick: TradePick = {
       season: pickEntry.season,
@@ -245,6 +388,7 @@ export async function analyzeTrade(
       pickLabel,
       value,
       noValue,
+      ...(startupDetail ? { startup: startupDetail } : {}),
     };
 
     const side = ensureSide(sideByRoster, ownerId, rosterIdentities);
@@ -448,6 +592,54 @@ async function loadPlayerMeta(
   for (const sid of sleeperIds) {
     if (!out.has(sid)) {
       out.set(sid, { playerId: null, name: sid, position: null, team: null });
+    }
+  }
+  return out;
+}
+
+/**
+ * Player meta keyed by FF Beacon player id.
+ *
+ * Startup picks arrive already resolved to a player id (draft_selections stores
+ * the uuid), so they need the reverse of loadPlayerMeta's sleeper-id lookup.
+ *
+ * `.in()` is NOT parameterized: PostgREST builds a quoted list and does not
+ * escape an embedded quote. It is safe here only because the ids are uuids read
+ * from `draft_selections.player_id`, a typed uuid column with a foreign key to
+ * `players`. A caller passing anything looser would need the same filtering
+ * loadPlayerMeta applies to sleeper ids.
+ */
+async function loadPlayerMetaByIds(
+  supabase: AnySupabase,
+  playerIds: string[],
+): Promise<
+  Map<string, { name: string; position: string | null; team: string | null; sleeperId: string | null }>
+> {
+  const out = new Map<
+    string,
+    { name: string; position: string | null; team: string | null; sleeperId: string | null }
+  >();
+  if (playerIds.length === 0) return out;
+  const CHUNK = 200;
+  for (let i = 0; i < playerIds.length; i += CHUNK) {
+    const chunk = playerIds.slice(i, i + CHUNK);
+    const { data } = await (supabase as SupabaseClient<Database>)
+      .from("players")
+      .select("id, full_name, first_name, last_name, position, team, external_ids")
+      .in("id", chunk);
+    for (const row of data ?? []) {
+      const ext = (row.external_ids as Record<string, unknown>) ?? {};
+      const rawSleeper = ext.sleeper;
+      out.set(row.id, {
+        name:
+          row.full_name ?? (`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() || "Unknown player"),
+        position: row.position ?? null,
+        team: row.team ?? null,
+        sleeperId:
+          typeof rawSleeper === "string" || typeof rawSleeper === "number"
+            ? String(rawSleeper)
+            : null,
+      });
     }
   }
   return out;

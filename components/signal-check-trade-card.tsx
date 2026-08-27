@@ -12,10 +12,13 @@
  * sr-only prose summary so the graph is not color-only.
  */
 
-import { Scale, Trophy, ScrollText, Sparkles } from "lucide-react";
+import { Scale, Trophy, ScrollText, Sparkles, Layers } from "lucide-react";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { SideKey } from "@/lib/signal-check/types";
-import type { LeagueTradeAssetMeta } from "@/lib/league-signal-check";
+import type {
+  LeagueTradeAssetMeta,
+  LeagueTradeStartupInfo,
+} from "@/lib/league-signal-check";
 import {
   BLENDED_PICKS_NOTE,
   ESTIMATED_PICKS_NOTE,
@@ -43,6 +46,7 @@ export function SignalCheckTradeCard({
   createdAtSleeper,
   status,
   sourceSlug = null,
+  startup = null,
 }: {
   view: BuilderView;
   assetMeta: Record<SideKey, LeagueTradeAssetMeta[]>;
@@ -54,6 +58,8 @@ export function SignalCheckTradeCard({
   /** Resolved value source, pinned onto the share image so the picture is
    * priced the same way this card is. */
   sourceSlug?: string | null;
+  /** Set when this trade moved dynasty startup draft picks. */
+  startup?: LeagueTradeStartupInfo | null;
 }) {
   const totalA = view.sides.find((s) => s.side === "a")?.total ?? null;
   const totalB = view.sides.find((s) => s.side === "b")?.total ?? null;
@@ -61,15 +67,32 @@ export function SignalCheckTradeCard({
   const tradeImageHref = `/api/og/trade/${sleeperTransactionId}${
     sourceSlug ? `?source=${encodeURIComponent(sourceSlug)}` : ""
   }`;
+  const isStartup = startup !== null;
+
+  const headingId = `tx-${sleeperTransactionId}-card-heading`;
+  const noteId = `tx-${sleeperTransactionId}-startup-note`;
 
   return (
     <article
-      aria-label="Trade graded by Signal Check"
-      className="relative overflow-hidden rounded-modal border border-brand-purple/40 bg-surface/60"
+      // Named BY the visible header line rather than by a duplicate of it. An
+      // aria-label here would be announced on entry and the same words read
+      // again from the paragraph below it.
+      aria-labelledby={headingId}
+      // The startup note explains that these picks were priced as players and
+      // that the prices are current. Described-by puts that in front of a
+      // linear reader when they enter the card, rather than after every number
+      // it qualifies, with no change to where it sits on screen.
+      aria-describedby={isStartup ? noteId : undefined}
+      className={`relative overflow-hidden rounded-modal bg-surface/60 ${
+        isStartup ? "border-2 border-brand-cyan/60" : "border border-brand-purple/40"
+      }`}
       style={{
-        boxShadow: "0 0 90px -50px rgba(168, 85, 247, 0.6)",
-        backgroundImage:
-          "radial-gradient(ellipse at 50% -20%, rgba(168, 85, 247, 0.16) 0%, transparent 60%), radial-gradient(ellipse at 100% 120%, rgba(34, 211, 238, 0.10) 0%, transparent 55%)",
+        boxShadow: isStartup
+          ? "0 0 90px -50px rgba(34, 211, 238, 0.7)"
+          : "0 0 90px -50px rgba(168, 85, 247, 0.6)",
+        backgroundImage: isStartup
+          ? "radial-gradient(ellipse at 50% -20%, rgba(34, 211, 238, 0.16) 0%, transparent 60%), radial-gradient(ellipse at 100% 120%, rgba(168, 85, 247, 0.10) 0%, transparent 55%)"
+          : "radial-gradient(ellipse at 50% -20%, rgba(168, 85, 247, 0.16) 0%, transparent 60%), radial-gradient(ellipse at 100% 120%, rgba(34, 211, 238, 0.10) 0%, transparent 55%)",
       }}
     >
       {/* Top-edge beacon hairline, decorative. */}
@@ -86,9 +109,14 @@ export function SignalCheckTradeCard({
           vertically-centered row; the week / status chips drop below. */}
       <div className="border-b border-line/60 px-4 py-3 sm:px-5">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+          <p
+            id={headingId}
+            className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan"
+          >
             <Scale aria-hidden="true" className="h-3.5 w-3.5" />
-            Trade graded by Signal Check
+            {isStartup
+              ? `${startup.season} startup draft trade graded by Signal Check`
+              : "Trade graded by Signal Check"}
           </p>
           <div className="flex items-center gap-2">
             {createdAtSleeper && (
@@ -111,8 +139,27 @@ export function SignalCheckTradeCard({
             />
           </div>
         </div>
-        {(week != null || (!isComplete && status)) && (
+        {(week != null || (!isComplete && status) || isStartup) && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {/*
+              The chip is the visible half of the border treatment, so the
+              colour is never the only carrier. No aria-label: a bare span is
+              role="generic", where ARIA prohibits an accessible name, so the
+              label would be honoured by Chrome and dropped by Firefox. The
+              visible text already says it, and the card heading says it again
+              for anyone who did not reach the chip.
+            */}
+            {isStartup && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-brand-cyan/50 bg-brand-cyan/10 px-2 py-0.5 text-xs font-medium text-brand-cyan">
+                <Layers aria-hidden="true" className="h-3 w-3" />
+                {startup.season} startup draft
+              </span>
+            )}
+            {isStartup && startup.timingLabel && (
+              <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">
+                {startup.timingLabel}
+              </span>
+            )}
             {week != null && (
               <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">
                 {week === 0 ? "Preseason" : `Week ${week}`}
@@ -213,6 +260,19 @@ export function SignalCheckTradeCard({
                     const kind: "player" | "pick" =
                       m?.kind ??
                       (a.detail?.toLowerCase().startsWith("draft pick") ? "pick" : "player");
+                    // A startup pick was traded as a slot and became a player.
+                    // Both facts are shown, because a reader comparing this to
+                    // the Sleeper transaction needs to find the pick they moved.
+                    const viaPick = m?.startupPick ?? null;
+                    const detail = viaPick
+                      ? [
+                          `via ${viaPick.label}`,
+                          viaPick.simulated ? "projected pick, not yet made" : "player taken there",
+                          a.detail,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")
+                      : a.detail;
                     return (
                       <li key={i} className="flex items-center gap-2.5">
                         <AssetGlyph
@@ -230,9 +290,17 @@ export function SignalCheckTradeCard({
                               </span>
                             )}
                           </span>
-                          {a.detail && (
-                            <span className="block truncate text-xs text-ink-subtle">
-                              {a.detail}
+                          {detail && (
+                            // A startup line carries the seat, how it was
+                            // resolved, and the position, which is longer than
+                            // one truncated line can hold. It wraps rather than
+                            // being cut off, at every width.
+                            <span
+                              className={`block text-xs text-ink-subtle ${
+                                viaPick ? "break-words" : "truncate"
+                              }`}
+                            >
+                              {detail}
                             </span>
                           )}
                         </span>
@@ -279,8 +347,19 @@ export function SignalCheckTradeCard({
           </ExplainerCard>
         </div>
 
+        {isStartup && (
+          // No role="note": no major screen reader announces it, so the plain
+          // paragraph produces identical output. The article's aria-describedby
+          // points here, which is what actually gets this read at the right time.
+          <p id={noteId} className="text-xs text-ink-subtle">
+            {startupNote(startup)}
+          </p>
+        )}
+
         {(view.hasMissingValues || view.hasBlendedPicks || view.hasEstimatedPicks) && (
-          <p className="text-xs text-ink-subtle" role="note">
+          // role="note" dropped for the same reason as the startup note above:
+          // no major screen reader announces it, so it produced no difference.
+          <p className="text-xs text-ink-subtle">
             {view.hasMissingValues ? `${MISSING_VALUES_NOTE} ` : ""}
             {view.hasEstimatedPicks ? `${ESTIMATED_PICKS_NOTE} ` : ""}
             {view.hasBlendedPicks ? BLENDED_PICKS_NOTE : ""}
@@ -289,6 +368,36 @@ export function SignalCheckTradeCard({
       </div>
     </article>
   );
+}
+
+/**
+ * Why a startup trade reads differently from every other trade on the feed.
+ *
+ * Two things a reader has to be told. First, that these picks were priced as
+ * players rather than as rookie picks, because that is the whole difference.
+ * Second, that the prices are TODAY's, so a startup trade from a past season is
+ * being read for how it turned out, not for whether it looked fair at the time.
+ * Stating that plainly is the difference between a useful grade and one a reader
+ * quietly mistakes for something it is not.
+ */
+function startupNote(startup: LeagueTradeStartupInfo): string {
+  const parts: string[] = [];
+  if (startup.resolvedCount > 0) {
+    parts.push(
+      startup.resolvedCount === 1
+        ? "One pick in this trade is valued as the player actually drafted with it."
+        : `${startup.resolvedCount} picks in this trade are valued as the players actually drafted with them.`,
+    );
+  }
+  if (startup.simulatedCount > 0) {
+    parts.push(
+      startup.simulatedCount === 1
+        ? "One pick has not been made yet and is valued as the player expected at that slot."
+        : `${startup.simulatedCount} picks have not been made yet and are valued as the players expected at those slots.`,
+    );
+  }
+  parts.push("Values are current, so this reads how the deal looks now rather than on the day.");
+  return parts.join(" ");
 }
 
 function sideLabel(view: BuilderView, side: SideKey): string {

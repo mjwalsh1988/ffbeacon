@@ -27,6 +27,7 @@
 import type { RankedPlayer } from "./board-types";
 import type { CurrentDraftPick } from "./pick-ownership";
 import type { SimulatedPick } from "./adp-sim";
+import { substituteStartupPick } from "@/lib/startup-draft";
 
 /** Which side of the trade an asset sits on. */
 export type TradeSideId = "a" | "b";
@@ -178,21 +179,41 @@ export function resolveDraftAsset(ref: DraftAssetRef, ctx: ResolveContext): Reso
   if (!pick) return null;
   const slotLabel = `${pick.round}.${pad2(pick.pickInRound)}`;
 
-  if (pick.made && pick.madePick) {
-    const made = pick.madePick;
-    const name = `${made.firstName ?? ""} ${made.lastName ?? ""}`.trim() || "Unknown player";
-    const boardPlayer =
-      (made.playerId ? ctx.valueBoard.find((p) => p.playerId === made.playerId) : undefined) ??
+  const made = pick.made ? pick.madePick : null;
+  const projected = pick.made ? null : (ctx.simulated.get(pick.overall) ?? null);
+
+  // The player behind a made pick, looked up on the board by either id. A pick
+  // whose player is not on the board resolves to nothing rather than to a price.
+  const boardPlayer = made
+    ? ((made.playerId ? ctx.valueBoard.find((p) => p.playerId === made.playerId) : undefined) ??
       (made.sleeperPlayerId
         ? ctx.valueBoard.find((p) => p.sleeperId === made.sleeperPlayerId)
-        : undefined);
+        : undefined) ??
+      null)
+    : null;
+
+  // THE DECISION IS NOT MADE HERE. substituteStartupPick in lib/startup-draft.ts
+  // holds the one copy of "a made pick IS the player taken, an unmade pick is the
+  // player the market would take there", because League Pulse now has to reach the
+  // same answer for startup trades in its feed. The labels below are still this
+  // room's own; only the judgement is shared.
+  const substitution = substituteStartupPick({
+    // The room only ever asks about seats that exist in this draft.
+    seatKnown: true,
+    used: made !== null,
+    usedPlayerId: boardPlayer?.playerId ?? null,
+    simulatedPlayerId: projected?.player.playerId ?? null,
+  });
+  const resolved = substitution.kind === "player" ? substitution : null;
+
+  if (made) {
+    const name = `${made.firstName ?? ""} ${made.lastName ?? ""}`.trim() || "Unknown player";
     return {
       ref,
       id: `made-${pick.overall}`,
       label: `${slotLabel}, ${name}`,
       detail: `Already drafted${made.position ? `, ${made.position}` : ""}, ${ownerLabel(pick.currentOwnerRosterId, ctx)}`,
-      // A made pick IS the player taken. That is not an approximation.
-      signalCheck: boardPlayer ? { kind: "player", playerId: boardPlayer.playerId } : null,
+      signalCheck: resolved ? { kind: "player", playerId: resolved.playerId } : null,
       value: boardPlayer ? Math.round(boardPlayer.value) : 0,
       simulated: false,
       ownerRosterId: pick.currentOwnerRosterId,
@@ -200,8 +221,7 @@ export function resolveDraftAsset(ref: DraftAssetRef, ctx: ResolveContext): Reso
     };
   }
 
-  const projected = ctx.simulated.get(pick.overall);
-  if (!projected) {
+  if (!projected || !resolved) {
     return {
       ref,
       id: `up-${pick.overall}`,
@@ -220,7 +240,7 @@ export function resolveDraftAsset(ref: DraftAssetRef, ctx: ResolveContext): Reso
     id: `up-${pick.overall}`,
     label: `${slotLabel}, ${projected.player.name}`,
     detail: `${projected.adpKnown ? "Projected by Sleeper ADP" : "Projected by FF Beacon rank, no ADP for this player"}, ${projected.player.position}, ${ownerLabel(pick.currentOwnerRosterId, ctx)}`,
-    signalCheck: { kind: "player", playerId: projected.player.playerId },
+    signalCheck: { kind: "player", playerId: resolved.playerId },
     value: Math.round(projected.player.value),
     simulated: true,
     ownerRosterId: pick.currentOwnerRosterId,

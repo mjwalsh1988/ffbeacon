@@ -23,6 +23,7 @@
  * the six DraftPosition buckets.
  */
 
+import { cache as cacheFn } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { FFBEACON_SOURCE_SLUG, FFBEACON_SOURCE_DISPLAY } from "@/lib/signal-check/format";
@@ -142,6 +143,27 @@ export function shapePickValues(
   }
   return out;
 }
+
+/**
+ * Per-request memoized board load, keyed on (client, format, rookie season).
+ *
+ * The draft room loads a board once per request and does not need this. The
+ * player-profile trades tab does: it grades a player's trades across up to 30
+ * leagues concurrently, each of which may ask for a board, and those leagues
+ * nearly all resolve to the same dynasty format. Without memoization that is 30
+ * independent loads of the same roughly 800-row board in one render.
+ *
+ * The primitive arguments are deliberate. React `cache()` keys on argument
+ * identity, so the object-parameter form below would miss on every call.
+ */
+export const loadRankedBoardCached: (
+  supabase: Client,
+  formatSlug: string,
+  rookieSeason: string,
+) => Promise<BoardResult> = cacheFn(
+  async (supabase: Client, formatSlug: string, rookieSeason: string) =>
+    loadRankedBoard(supabase, { formatSlug, rookieSeason }),
+);
 
 /**
  * Load the FF Beacon ranked board for a format. On The Clock FORCES the value

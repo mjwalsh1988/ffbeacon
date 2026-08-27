@@ -103,6 +103,7 @@ export async function TradesTab({
               sleeperTransactionId: t.transactionId,
               adds: t.raw.adds,
               draftPicks: t.raw.draftPicks,
+              createdAtSleeper: t.createdAtSleeper,
             })),
             rosterLabels,
             leagueRowId,
@@ -150,6 +151,7 @@ export async function TradesTab({
                       week={t.week}
                       createdAtSleeper={t.createdAtSleeper}
                       status={null}
+                      startup={view.startup}
                     />
                   ) : (
                     <div className="rounded-modal border border-line bg-surface/50 p-4">

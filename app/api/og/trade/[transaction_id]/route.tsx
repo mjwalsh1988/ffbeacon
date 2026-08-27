@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { analyzeTrade } from "@/lib/trade-analyzer";
 import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
+import { loadStartupPickIndex, collectStartupPickQueries } from "@/lib/league-startup-picks";
 import type { SleeperLeague } from "@/lib/sleeper";
 
 export const runtime = "nodejs";
@@ -47,7 +48,7 @@ export async function GET(
   const { data: txRow } = await supabase
     .from("league_transactions")
     .select(
-      "id, sleeper_transaction_id, type, week, season, adds, draft_picks, league_id",
+      "id, sleeper_transaction_id, type, week, season, adds, draft_picks, league_id, created_at_sleeper",
     )
     .eq("sleeper_transaction_id", txId)
     .maybeSingle();
@@ -98,15 +99,29 @@ export async function GET(
     };
   }
 
-  const slotIndex = await loadLeagueDraftSlots(supabase, league.id);
+  const draftPicks = Array.isArray(txRow.draft_picks) ? (txRow.draft_picks as unknown[]) : [];
+
+  // The shared image has to price a startup pick the same way the page does, or
+  // a card and the trade it links to would disagree about the same deal. No
+  // board loader: an OG route must stay cheap, and a live startup seat renders
+  // as unpriced rather than paying for a full board fetch.
+  const [slotIndex, startupIndex] = await Promise.all([
+    loadLeagueDraftSlots(supabase, league.id),
+    loadStartupPickIndex(supabase, {
+      leagueRowId: league.id,
+      formatSlug: context.formatSlug,
+      picks: collectStartupPickQueries(draftPicks, txRow.created_at_sleeper),
+    }),
+  ]);
+
   const analysis = await analyzeTrade(supabase, {
     leagueRowId: league.id,
     adds: (txRow.adds as Record<string, number> | null) ?? null,
-    draftPicks: Array.isArray(txRow.draft_picks)
-      ? (txRow.draft_picks as unknown[])
-      : [],
+    draftPicks,
     rosterIdentities,
     slotIndex,
+    startupIndex,
+    tradedAtSleeper: txRow.created_at_sleeper,
     context: {
       formatConfigId: context.formatConfigId,
       formatSlug: context.formatSlug,

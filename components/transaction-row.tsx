@@ -254,28 +254,42 @@ function TradeSideCard({
             </p>
           )}
         </div>
-        <p
-          className="font-mono text-lg font-semibold text-ink"
-          aria-label={`Total value received: ${formatValue(side.totalValue)} points`}
-        >
+        {/* ARIA prohibits an accessible name on a paragraph (role=generic), so
+            the label here was honoured by some browsers and dropped by others.
+            The words live in the DOM instead. */}
+        <p className="font-mono text-lg font-semibold text-ink">
+          <span className="sr-only">Total value received, </span>
           <BeaconValue show={valueIsBeacon}>
             {formatValue(side.totalValue)}
           </BeaconValue>
+          <span className="sr-only"> points</span>
         </p>
       </header>
       <p className="mt-1 text-xs uppercase tracking-wider text-ink-subtle">Acquired</p>
+      {/*
+        NO aria-label ON THESE ROWS.
+        A listitem takes its name from the author, so an aria-label here either
+        shadows the row's visible content (VoiceOver reads the name and stops)
+        or is announced on top of it (NVDA browse mode reads both, so every row
+        is heard twice). Either way the reader is worse off than with plain
+        text. The expansions a label used to carry ("2024 round 1, slot 4"
+        rather than "2024 R1.04") are in the DOM instead, as sr-only spans
+        beside an aria-hidden shorthand, so the same words are both seen and
+        heard exactly once.
+      */}
       <ul className="mt-2 space-y-1.5" role="list">
         {side.players.map((p) => (
           <li
             key={`${side.rosterId}-p-${p.sleeperId}`}
             className="flex items-center justify-between gap-2 text-sm"
-            aria-label={`${p.name}${p.position ? ` ${p.position}` : ""}${p.team ? ` ${p.team}` : ""}, ${p.noValue ? "value not available" : `value ${formatValue(p.value)}`}`}
           >
             <div className="flex min-w-0 items-center gap-2">
+              {/* Decorative: the name is text right beside it. See the
+                  PlayerHeadshot `name` prop contract. */}
               <PlayerHeadshot
                 sleeperId={p.sleeperId}
                 position={p.position ?? ""}
-                name={p.name}
+                name=""
                 size={20}
               />
               <span className="min-w-0 truncate text-ink">{p.name}</span>
@@ -286,9 +300,17 @@ function TradeSideCard({
                 p.noValue ? "text-ink-muted italic" : "text-ink-muted"
               }`}
             >
-              <BeaconValue show={valueIsBeacon && !p.noValue}>
-                {p.noValue ? "-" : formatValue(p.value)}
-              </BeaconValue>
+              {p.noValue ? (
+                <>
+                  <span className="sr-only">value not available</span>
+                  <span aria-hidden="true">-</span>
+                </>
+              ) : (
+                <>
+                  <span className="sr-only">value, </span>
+                  <BeaconValue show={valueIsBeacon}>{formatValue(p.value)}</BeaconValue>
+                </>
+              )}
             </span>
           </li>
         ))}
@@ -299,25 +321,81 @@ function TradeSideCard({
           const slotAria = p.pickLabel
             ? `${p.season} round ${p.round}, slot ${p.slot}`
             : `${p.season} ${ordinal(p.round)} round pick (${p.pickPosition})`;
+
+          // A startup pick was priced as the player at its seat, so the row says
+          // which player. The second line is shown at EVERY width: it is the
+          // difference between a rookie-pick price and a real one, and hiding it
+          // on a phone would hide the only evidence of which one this is.
+          const startupLine = p.startup
+            ? p.startup.unresolvedNote ??
+              [
+                p.startup.playerName,
+                p.startup.position,
+                p.startup.simulated ? "projected, pick not yet made" : "drafted here",
+              ]
+                .filter(Boolean)
+                .join(", ")
+            : null;
+
           return (
             <li
               key={`${side.rosterId}-pick-${i}`}
-              className="flex items-center justify-between gap-2 text-sm"
-              aria-label={`${slotAria}, ${p.noValue ? "value not available" : `value ${formatValue(p.value)}`}`}
+              className="flex items-start justify-between gap-2 text-sm"
             >
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-start gap-2">
                 <PickToken />
-                <span className="truncate text-ink">{labelText}</span>
-                {!p.pickLabel && (
-                  <span className="shrink-0 text-xs text-ink-muted">{p.pickPosition}</span>
-                )}
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    {/* "2024 R1.04" is seen; "2024 round 1, slot 4" is heard. */}
+                    <span aria-hidden="true" className="text-ink">
+                      {labelText}
+                    </span>
+                    <span className="sr-only">
+                      {p.startup ? `Startup draft pick, ${slotAria}` : slotAria}
+                    </span>
+                    {!p.pickLabel && (
+                      <span aria-hidden="true" className="shrink-0 text-xs text-ink-muted">
+                        {p.pickPosition}
+                      </span>
+                    )}
+                    {/*
+                      Purely visual. The words "Startup draft pick" are already
+                      in the sr-only line above, so announcing the pill too would
+                      repeat them. Gated on p.startup, the same condition that
+                      writes those words, so the two can never disagree.
+                    */}
+                    {p.startup && (
+                      <span
+                        aria-hidden="true"
+                        className="shrink-0 rounded-full border border-brand-cyan/50 bg-brand-cyan/10 px-1.5 py-px text-[10px] font-medium text-brand-cyan"
+                      >
+                        Startup
+                      </span>
+                    )}
+                  </span>
+                  {startupLine && (
+                    <span className="mt-0.5 block break-words text-xs text-ink-subtle">
+                      {startupLine}
+                    </span>
+                  )}
+                </span>
               </div>
               <span
                 className={`shrink-0 font-mono text-sm tabular-nums ${
                   p.noValue ? "text-ink-muted italic" : "text-ink-muted"
                 }`}
               >
-                {p.noValue ? "-" : formatValue(p.value)}
+                {p.noValue ? (
+                  <>
+                    <span className="sr-only">value not available</span>
+                    <span aria-hidden="true">-</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="sr-only">value, </span>
+                    {formatValue(p.value)}
+                  </>
+                )}
               </span>
             </li>
           );
@@ -412,13 +490,13 @@ function MovesBody({
           </h3>
           <ul className="mt-2 space-y-1.5" role="list">
             {waiverBudget.map((b, i) => (
-              <li
-                key={`faab-${i}`}
-                className="flex flex-wrap items-center gap-1.5 text-sm"
-                aria-label={`${labelFor(b.sender, rosterIdentities)} sent $${b.amount} FAAB to ${labelFor(b.receiver, rosterIdentities)}`}
-              >
+              // No aria-label on the listitem, same reasoning as the rows above.
+              // The arrow is the only thing that carried meaning visually, so the
+              // words it stands for are an sr-only span.
+              <li key={`faab-${i}`} className="flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="text-ink">{labelFor(b.sender, rosterIdentities)}</span>
                 <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
+                <span className="sr-only">sent FAAB to</span>
                 <span className="text-ink">{labelFor(b.receiver, rosterIdentities)}</span>
                 <span className="ml-0.5 rounded-full border border-signal-positive/30 bg-signal-positive/10 px-2 py-0.5 font-mono text-xs font-semibold text-signal-positive">
                   ${b.amount}
@@ -565,10 +643,10 @@ function MovePlayerLine({
   const isAdd = variant === "added";
   const Icon = isAdd ? Plus : Minus;
   return (
-    <li
-      className="flex items-center gap-2 text-sm"
-      aria-label={`${isAdd ? "Added" : "Dropped"} ${meta.name}${meta.position ? `, ${meta.position}` : ""}${meta.team ? `, ${meta.team}` : ""}`}
-    >
+    // Same reasoning as the trade-side rows above: no aria-label on a listitem.
+    // The add/drop verb the label used to carry is an sr-only span instead, so
+    // it is announced once alongside the visible text rather than in place of it.
+    <li className="flex items-center gap-2 text-sm">
       <span
         aria-hidden="true"
         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
@@ -579,12 +657,9 @@ function MovePlayerLine({
       >
         <Icon className="h-3 w-3" strokeWidth={3} />
       </span>
-      <PlayerHeadshot
-        sleeperId={pid}
-        position={meta.position ?? ""}
-        name={meta.name}
-        size={20}
-      />
+      <span className="sr-only">{isAdd ? "Added" : "Dropped"}</span>
+      {/* Decorative: the name is text right beside it. */}
+      <PlayerHeadshot sleeperId={pid} position={meta.position ?? ""} name="" size={20} />
       {/* Name is content-width (not flex-1) so the meta tag sits inline right
           after it on every breakpoint. min-w-0 + truncate lets a long name
           ellipsis instead of shoving the tag off the row. */}
