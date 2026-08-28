@@ -56,14 +56,14 @@ describe("buildChartSummary", () => {
     });
     const summary = buildChartSummary([rb, k], 12);
 
-    expect(summary).toContain("Running back is the scarcest position");
-    expect(summary).toContain("1.73 wins");
-    expect(summary).toContain("Kicker is the flattest");
-    expect(summary).toContain("0.11 wins");
+    expect(summary).toContain("Running back is the hardest position to replace");
+    expect(summary).toContain("1.73 more matchups");
+    expect(summary).toContain("Kicker is the easiest");
+    expect(summary).toContain("0.11 extra matchups");
     expect(summary).toContain("12-team league");
     // Short enough to be worth hearing. The old version repeated the full
     // replacement definition on top of both findings.
-    expect(summary.length).toBeLessThan(300);
+    expect(summary.length).toBeLessThan(420);
   });
 
   it("omits the half-win clause's rank when the curve never drops below half a win", () => {
@@ -74,14 +74,14 @@ describe("buildChartSummary", () => {
       curve: [pointAt(1, 1), pointAt(2, 0.9), pointAt(3, 0.8), pointAt(4, 0.7)],
     });
     const summary = buildChartSummary([rb], 10);
-    expect(summary).toContain("stays above half a win");
-    expect(summary).not.toMatch(/passes half a win by RB\d/);
+    expect(summary).toContain("stays above half a matchup");
+    expect(summary).not.toMatch(/drops under half a matchup by RB\d/);
   });
 
   it("names only the scarcest position when fewer than two positions have a curve", () => {
     const summary = buildChartSummary([curve({ position: "QB" })], 10);
-    expect(summary).toContain("Quarterback is the scarcest position");
-    expect(summary).not.toContain("flattest");
+    expect(summary).toContain("Quarterback is the hardest position to replace");
+    expect(summary).not.toContain("easiest");
   });
 
   it("never prints a fabricated 0.00 when there is nothing to summarize", () => {
@@ -94,7 +94,7 @@ describe("buildChartSummary", () => {
 describe("buildLegendHeadline", () => {
   it("carries the ranking as readable text", () => {
     const headline = buildLegendHeadline(curve({ position: "QB", warRank1: 0.65, structuralDemand: 12 }));
-    expect(headline).toBe("QB: best is worth 0.65 wins, 12 start");
+    expect(headline).toBe("QB: best one adds 0.65 matchups, 12 start");
   });
 
   it("falls back to a plain label when there is no data yet", () => {
@@ -107,7 +107,7 @@ describe("buildOverlayPositionLine", () => {
   it("reports the viewer's best player against the position's best", () => {
     const rb = curve({ position: "RB", warRank1: 1.73 });
     const line = buildOverlayPositionLine(rb, 6, 0.94);
-    expect(line).toBe("Your best RB is RB6, worth 0.94 wins; RB1 is worth 1.73.");
+    expect(line).toBe("Your best RB is RB6, adding 0.94 matchups; RB1 adds 1.73.");
   });
 
   it("says plainly when the viewer holds nobody at the position", () => {

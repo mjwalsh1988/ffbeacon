@@ -174,17 +174,12 @@ export default async function LeaguePositionalWarPage({
       masthead={mastheadProps}
     >
       <div className="mt-6 space-y-6">
-        {/* Feature intro. Sets expectations before any number appears, and says
-            out loud what the curve is about and what it is not about, because
-            confusing it with the team-specific projected-wins figure is the one
-            misreading this feature is most exposed to. The heading is an h2:
-            the masthead above owns this page's h1.
-
-            THREE SHORT SENTENCES, and that is the budget. This used to be two
-            full paragraphs, and a wall of explanation in front of a chart is
-            the thing a reader skips. Everything cut from here is still
-            available: the footnote under the chart carries the definitions and
-            the Signal Guide entry carries the long version. */}
+        {/* Feature intro. Plain language, and short: this is the first thing
+            a reader who has never met Positional WAR sees, and a wall of
+            explanation in front of a chart is the thing they skip. Everything cut from here
+            is still available: the footnote under the chart carries the
+            definitions and the Signal Guide entry carries the long version.
+            The heading is an h2; the masthead above owns this page's h1. */}
         <section
           aria-labelledby="war-intro"
           className="relative overflow-hidden rounded-modal border border-line-accent p-5 sm:p-6"
@@ -211,13 +206,14 @@ export default async function LeaguePositionalWarPage({
             Positional WAR
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            Which positions are hard to replace in this league. A steep line means
-            the position runs out fast, so the players at the top of it are worth
-            paying up for. A flat line means the next player down is nearly as
-            good.
+            Positional WAR estimates how many extra matchups a player should help you win,
+            compared with a replacement player. A replacement player is the best one at his
+            position who would not make a starting lineup anywhere in this league.
           </p>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            This is about the league, not your team.
+            It runs on projections for the games left to play, not on what has already happened, and
+            it uses your league&apos;s own scoring and starting lineup. A steep line means the
+            position runs out fast, so the players at the top of it are worth paying up for.
           </p>
         </section>
 
@@ -225,6 +221,7 @@ export default async function LeaguePositionalWarPage({
           <PositionalWarSection
             supabase={supabase}
             leagueRowId={league.id}
+            leagueName={league.name}
             season={Number(league.season ?? 0)}
             teamCount={league.total_rosters ?? 0}
             rosterPositions={rosterPositions}
@@ -232,6 +229,15 @@ export default async function LeaguePositionalWarPage({
             searchedUsername={searchedUsername}
             focusedRosterId={focusedRosterId}
             war={sp.war}
+            variant="dashboard"
+            // Positional WAR itself never varies by source or format
+            // (CLAUDE.md). These are for the SCATTERPLOT's other axis, which is
+            // the reader's own market: trade value at the league's derived
+            // format, from whichever source they picked.
+            formatConfigId={coverageOk ? context.formatConfigId : null}
+            sourceSlug={coverageOk ? context.sourceSlug : null}
+            sourceDisplay={coverageOk ? context.sourceDisplay : "your value source"}
+            formatDisplay={coverageOk ? context.formatDisplay : "this league's format"}
           />
         </Suspense>
 

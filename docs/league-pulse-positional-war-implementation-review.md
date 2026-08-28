@@ -941,3 +941,216 @@ gone", which is the negative-parallelism construction the standard bans. It was
 rewritten to state the size plainly, in section 13.5 and in the module header
 it was quoting. No three-item lists
 used as rhythm, and no significance-inflation clauses.
+
+---
+
+# 14. The dashboard rebuild (2026-08-27)
+
+Written against the working tree at the end of that session. Nothing committed,
+nothing pushed. Task ids are `T-WAR-66` through `T-WAR-75` in `progress.md`.
+
+The brief: turn the dedicated page from a crowded scarcity chart into a
+player-level dashboard, and fix the oversized Next data-cache write while doing
+it. The validated calculation is unchanged except where 14.3 and 14.4 say
+otherwise.
+
+## 14.1 The cache fix
+
+The failure the brief names:
+
+```
+Failed to set Next.js data cache for unstable_cache: items over 2MB can not be
+cached, payload approximately 6.0MB
+```
+
+Measured against production (2026, weeks 1 to 17, `pts_ppr`): the serialized
+universe is **6.30 MiB**, of which **6.08 MiB** is 17,394 projection rows and
+their raw `stat_line` maps. Next's data cache refuses anything over 2 MiB, so
+the write failed on every cold load, the read returned the freshly built
+universe anyway, and the layer never populated. Nothing looked broken, which is
+why it survived: `positional_war_curves` was doing the cross-league sharing on
+its own and the universe layer was dead weight.
+
+Three options were on the table.
+
+1. **Slice the universe into entries under 2 MiB.** Chosen.
+2. **Persist the universe in a database-backed cache.** Rejected: it would put
+   6 MiB of jsonb per (season, window, scoring base) into Postgres to avoid
+   reading 6 MiB out of Postgres, and it would need its own invalidation on top
+   of the tag that already exists.
+3. **Remove the wrapper.** Rejected once slicing turned out to be cheap: a cold
+   compute drops from about 2.7s to about 0.8-1.3s with it, and that saving is
+   paid on every fingerprint miss, which is every league on the first view after
+   a projections sync.
+
+The split, and where each boundary comes from:
+
+| Entry | Key | Measured size | % of 2 MiB |
+| --- | --- | --- | --- |
+| projection rows | `(season, week)` | 319-390 KiB | 15.6-19.1 |
+| resolved players | sha256 of the player id set | 227 KiB | 11.1 |
+| projection accuracy | scoring base + that same digest | 113 KiB | 5.5 |
+| defense splits | scoring base + its two seasons | 37 KiB | 1.8 |
+
+A week slice depends on neither the window nor the scoring base, because a
+projection row carries all three scoring columns and its raw stat line. So a
+league asking for weeks 9 to 17 reuses nine of the entries a league asking for
+weeks 1 to 17 already populated, in `pts_ppr` or `pts_std` alike. Twenty-one
+entries cover a whole season for every league in it.
+
+**Keying the id-dependent entries by a digest of the ids** is what rules out the
+partial-cache failure the brief asks about. An entry can only be reused for
+exactly the id set it was built from, so this window's projections can never be
+paired with another window's player map. On top of that the resolve stores how
+many ids it dropped (a position Sleeper does not project) and the assembly
+asserts `resolved + dropped === asked`.
+
+**Completeness, in two places.** Each week slice runs an exact count for its own
+week and throws before it can be stored, so a truncated week never becomes the
+entry every later league reads as the truth. And the assembly still runs one
+**uncached** exact count over the whole window on every call, compared against
+the row counts the slices recorded. That second guard is the one that catches a
+stale, evicted or missing slice, and it is deliberately not cached: a guard
+inside a cached function can only speak for the moment the entry was written.
+
+**A latent bug fixed on the way.** The old window guard compared KEPT rows
+against the count, while its own comment said it compared the read count.
+`player_weekly_projections.player_id` is nullable, so a single null-player row
+would have failed an otherwise complete read. The slice now records `readCount`
+separately from the rows it keeps.
+
+**The standalone script still works.** `withDataCache` catches only Next's
+missing-incremental-cache invariant and falls through to the direct read; every
+other failure still throws, because those are the failures that shrink the
+universe.
+
+**Structure.** `assembleUniverse()` takes its four reads as an argument.
+`directReaders` go to Postgres, `cachedReaders` wrap the same four functions.
+`loadWarUniverse` and `loadWarUniverseUncached` are therefore the same function
+with different readers, and a test asserts they return identical output. They
+cannot drift into computing different universes.
+
+## 14.2 Proving the cache fix
+
+- **The warning is gone.** A cold fingerprint miss through `next dev`, watched
+  in the server log, logs no `2MB` line. Before the change the same load logged
+  one every time.
+- **Byte-identical curves.** A parity script recomputed three production leagues
+  through the new read and diffed every position against the rows the previous
+  code had already written: a 12-team superflex league with K and DEF, and a
+  16-team league without them, both came back **identical at every position**.
+  (A third league differed, and the reason is the check working: its cache
+  predated the last projections sync, so its stored curve was genuinely stale.)
+- **A second equivalent miss reuses the cache.** Instrumented with a temporary
+  probe on the two uncached readers, then removed. The first league with a fresh
+  cache key logged **15 misses** (14 week slices plus the player resolve) and
+  computed in **3,197ms**. The next league, with a different fingerprint so it
+  ran its own full compute, logged **0 misses** and computed in **1,075ms**.
+- **Invalidation.** Every entry carries `CACHE_TAGS.playerProjections`, which
+  `app/api/cron/sync-weekly-projections/route.ts` revalidates after a sync. The
+  fingerprint's `projectionsSnapshot` independently forces a recompute.
+- **Different scoring, same rows.** Week slices are scoring-base independent by
+  construction and carry all three scoring columns plus the raw stat line;
+  `buildWarPlayers` rescores them per league. Leagues on different scoring bases
+  were computed in the same session and produced their own distinct fingerprints
+  and curves.
+- **Nothing exceeds 2 MiB.** Largest entry 390 KiB, 5.2x headroom.
+
+Timings, `next dev`, first view of a league whose fingerprint is stale:
+
+| | Before (single failing entry) | After (sliced) |
+| --- | --- | --- |
+| Universe read + engine, cold | ~2.7s every time | 3.2s first, then 0.8-1.3s |
+| Cache entries written | 0 | 21 per season and scoring base |
+
+## 14.3 The one calculation change, and why
+
+Ranking ties. With `clampBelowReplacement` on, every player who never beats
+weekly replacement scores exactly 0.000 WAR and exactly 0.0 points above
+replacement. In production that was ranks 51 to 78 of one league's wide receiver
+curve: twenty-eight players tied on both sort keys and then ordered by uuid.
+WR51 was Anthony Gould and WR74 was Rashod Bateman, which is not a ranking.
+
+The tiebreak is now `(WAR, points above replacement, projected points a week,
+player id)`. It cannot reorder anyone with positive WAR, because WAR is strictly
+increasing in points above replacement. The same block now reads 10.2, 10.0,
+9.8, 9.7, 9.7, 9.5 points a week.
+
+No WAR value changed. `model_version` moved to `war-2` and `minDisplayDepth` to
+36 (both fingerprinted), so every league recomputes on its next view.
+
+## 14.4 Negative WAR: the floor stays
+
+The reference screenshots show WAR down to about -0.5, so this was reviewed
+rather than assumed.
+
+Season WAR is a **sum** over the weeks a player is projected for. In the
+negative half that makes the model rank a deep backup projected all thirteen
+weeks below a rookie projected twice, purely because one had more weeks in which
+to lose. In the positive half the same asymmetry is exactly right: more weeks is
+more chances to help. In the negative half it stops being a claim about
+football.
+
+There is also a fantasy-specific reason the floor is honest rather than merely
+convenient. Nobody starts a below-replacement player when the replacement is
+sitting on waivers, so those are not wins anyone would actually give up.
+
+The problem the negatives would have solved is the unordered tail, and 14.3
+solves it with a real number instead. Below-replacement players are still named:
+the tier reads `projectedPointsPerWeek < replacementPointsPerWeek`, both stored
+on the curve point, so "Below replacement" is checkable against the same row.
+
+`clampBelowReplacement` stays admin-editable, and the chart's y-domain is still
+computed from the data rather than assumed to start at zero, so turning it off
+still produces a correct chart.
+
+## 14.5 The tier ladder
+
+Six tiers: League breaker, Elite, Strong advantage, Starter, Replacement level,
+Below replacement. The thresholds are not copied from the screenshots.
+
+Season WAR is a sum over the weeks that remain, so the same league in week 14
+carries about a quarter of the WAR it carried in week 1 with no projection
+changed. Any fixed threshold in wins would relabel the whole league every few
+weeks. A share of the best player's WAR is scale-free but hangs the ladder on
+one outlier.
+
+The anchor is the league's own starting jobs: every player ranking inside his
+position's structural demand, across all positions. In a 12-team league that is
+about 120 players, which is precisely the set of jobs the league hands out each
+week.
+
+| Tier | Rule |
+| --- | --- |
+| League breaker | top 2% of the league's starting jobs by WAR |
+| Elite | top 10% |
+| Strong advantage | top 25% |
+| Starter | at or above the least valuable starting job |
+| Replacement level | below that, and not below replacement on points |
+| Below replacement | projects for fewer points a week than replacement |
+
+It scales with team count (more jobs, same percentiles), with lineup shape
+(superflex adds a dozen quarterback jobs, so quarterbacks rise with no
+positional special case) and with the shrinking window (percentiles do not
+notice). A league whose top starting job is worth 0.00 gets no ladder at all
+rather than a "League breaker" badge on a zero.
+
+Measured on a 12-team superflex league: 3 League breakers out of 120 starting
+jobs.
+
+## 14.6 The League Overview
+
+Owner decision, taken mid-task: the overview should not carry a graph the
+dedicated page already carries. Both the chart panel and the rail summary card
+were removed and `components/league-war/war-rail-summary.tsx` was deleted rather
+than left unreferenced. `components/league-war/selection.ts` stays, because the
+chart summary and the OG card both use it.
+
+The overview no longer awaits `refreshPositionalWar`, so a cold curve costs that
+page nothing. Discovery is the section nav plus the "Explore this league" link.
+
+Power Pulse keeps a preview: the same chart at 25 ranks with its own complete
+data table and a link onward, because scarcity is context for expected
+performance there rather than a repeat of it. Worth flagging for the owner: the
+same "one graph, two pages" argument could be made about Power Pulse, and it was
+left alone because the instruction named the overview.

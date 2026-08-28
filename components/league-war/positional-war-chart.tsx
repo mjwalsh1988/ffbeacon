@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Positional WAR chart: six curves, one per position, showing wins over
- * replacement by position rank in the league being viewed.
+ * Positional WAR chart: one line per position, showing wins over replacement
+ * by position rank in the league being viewed.
  *
  * Built entirely on top of buildChartGeometry from
  * lib/positional-war/chart-geometry.ts. This component does not own the path
@@ -10,11 +10,17 @@
  * (app/api/og/war/[league_id]/route.tsx), so the two can never disagree about
  * the same league.
  *
+ * CONTROLLED OR NOT. The dashboard drives one position filter across this
+ * chart, the scatterplot and the player table, so it passes `visible` and
+ * `onToggleSeries` and renders the legend itself. The Overview preview has no
+ * siblings to stay in step with, so it passes neither and this component keeps
+ * its own state and draws its own legend. One component, because the two
+ * surfaces must draw the identical chart.
+ *
  * Accessibility contract, per CLAUDE.md and docs/league-pulse-positional-war-
  * plan.md section 11.4:
  *   - The <svg> is aria-hidden="true". Every fact it carries also lives in the
- *     legend text, the readout, or the data table the panel renders alongside
- *     this component.
+ *     legend text, the readout, or the data table rendered alongside it.
  *   - The legend is a row of real aria-pressed toggle buttons (chart-kit-
  *     legend.tsx SeriesToggleLegend), each carrying its own ranking as text.
  *   - Hover AND focus reveal the nearest point across the currently visible
@@ -22,18 +28,24 @@
  *     it reaches a screen reader whether the interaction was a pointer or a
  *     keyboard.
  *   - Hiding a series through the legend removes it from the <svg> only. The
- *     data table lives in the panel, is not a prop of this component, and is
- *     unaffected by legend state, so it always stays complete.
+ *     data table is not a prop of this component and is unaffected by legend
+ *     state, so it always stays complete.
  */
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { markerPath, POSITION_SERIES } from "@/components/chart-kit";
 import { SeriesToggleLegend, type SeriesToggleItem } from "@/components/chart-kit-legend";
-import { buildChartGeometry, type WarAxisMode } from "@/lib/positional-war/chart-geometry";
+import {
+  buildChartGeometry,
+  defaultVisiblePositions,
+  WAR_CHART_MAX_RANK,
+  type WarAxisMode,
+} from "@/lib/positional-war/chart-geometry";
 import { fitAxisLabels, pickChartBox, quantizeChartWidth } from "@/lib/positional-war/chart-layout";
-import type { PlottableCurve, WarCurvePoint } from "@/lib/positional-war/types";
+import type { WarDashboardPosition, WarTableRow } from "@/lib/positional-war/table";
+import { ownerLabel } from "@/lib/positional-war/table";
+import { WAR_TIER_LABEL } from "@/lib/positional-war/tiers";
 import type { PulsePosition } from "@/lib/power-pulse/types";
-import { matchCurveOwnership } from "./overlay";
 import { buildLegendHeadline } from "./summary";
 
 /** Ink color (tailwind ink.DEFAULT, #F4F4F8), for the viewer-overlay ring marker. */
@@ -51,44 +63,56 @@ const LABEL_GAP = 4;
  */
 const READOUT_SPEAK_DELAY_MS = 200;
 
-function readoutText(
-  point: WarCurvePoint,
-  position: PulsePosition,
-  isYours: boolean,
-  ordinal?: { index: number; total: number },
-): string {
+/**
+ * Everything the chart knows about the player under the pointer, as one
+ * sentence.
+ *
+ * The brief asks for complete player information on hover and on keyboard
+ * focus, and the row already carries it, so this says who owns him, what tier
+ * he lands in and what he currently trades for as well as the two figures the
+ * chart plots. Kept to one clause each: this is read aloud, potentially thirty
+ * times in a row while somebody arrows along a curve, and every clause is
+ * something a reader could not work out from the others.
+ */
+function readoutText(row: WarTableRow, ordinal?: { index: number; total: number }): string {
   const parts = [
-    `${point.name}, ${position}${point.positionRank}`,
-    `${point.war.toFixed(2)} wins over replacement`,
-    `${point.projectedPointsPerWeek.toFixed(1)} points a week against ${point.replacementPointsPerWeek.toFixed(1)}`,
+    `${row.name}, ${row.position}${row.positionRank}`,
+    `${row.war.toFixed(2)} wins over replacement`,
+    WAR_TIER_LABEL[row.tier].toLowerCase(),
+    `${row.projectedPointsPerWeek.toFixed(1)} points a week against ${row.replacementPointsPerWeek.toFixed(1)}`,
   ];
-  // The injury designation, verbatim, the same one every other surface in the
-  // product shows. The overlay deliberately marks a player on IR or the taxi
-  // squad rather than filtering him out, because the model is
-  // player-independent and he still holds a real rank. Naming him without his
-  // designation would tell a reader who owns an injured RB1 the opposite of
-  // what the rest of the product tells them about the same player.
-  if (point.injuryStatus) parts.push(point.injuryStatus);
-  if (isYours) parts.push("on your roster");
-  // Where the reader is in the sequence, so somebody stepping through forty
+  // Sleeper's injury designation, verbatim, the same one every other surface
+  // shows. The overlay marks a player on IR or the taxi squad rather than
+  // filtering him out, because the model is player-independent and he still
+  // holds a real rank. Naming him without his designation would tell a reader
+  // who owns an injured RB1 the opposite of what the rest of the product says.
+  if (row.injuryStatus) parts.push(row.injuryStatus);
+  parts.push(row.isYours ? "on your roster" : ownerLabel(row.owner).toLowerCase());
+  // A null value is never spoken as a zero: the source publishes none for him.
+  if (row.tradeValue !== null) parts.push(`trade value ${Math.round(row.tradeValue)}`);
+  // Where the reader is in the sequence, so somebody stepping through thirty
   // points by keyboard has a sense of position rather than an unbounded walk.
   if (ordinal) parts.push(`${ordinal.index} of ${ordinal.total}`);
-  // Four clauses at most, and each one is a thing a reader could not work out
-  // from the others. This used to name the metric and spell out both
-  // points-per-week figures in full, which is a long sentence to hear once and
-  // an exhausting one to hear forty times while arrowing along a curve.
   return parts.join(", ") + ".";
 }
 
 export function PositionalWarChart({
   curves,
   axisMode,
-  ownedSleeperIds,
+  maxRank = WAR_CHART_MAX_RANK,
+  visible: controlledVisible,
+  onToggleSeries,
+  legend = true,
 }: {
-  curves: PlottableCurve[];
+  curves: WarDashboardPosition[];
   axisMode: WarAxisMode;
-  /** From the resolved viewer roster (lib/league-positional-war-data.ts). Empty or omitted means no overlay. */
-  ownedSleeperIds?: string[];
+  /** The deepest rank to plot. Must match what the table beneath it lists. */
+  maxRank?: number;
+  /** Supplied by the dashboard, which shares one filter across three surfaces. */
+  visible?: ReadonlySet<PulsePosition>;
+  onToggleSeries?: (position: PulsePosition) => void;
+  /** False when the parent renders the legend itself. */
+  legend?: boolean;
 }) {
   const gid = useId().replace(/:/g, "");
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -122,15 +146,30 @@ export function PositionalWarChart({
 
   const plottable = useMemo(() => curves.filter((c) => c.curve.length > 0), [curves]);
 
-  const [visible, setVisible] = useState<Set<PulsePosition>>(
-    () => new Set(plottable.map((c) => c.position)),
+  // The uncontrolled fallback. Always created (a hook cannot be conditional)
+  // and only read when the parent supplies no `visible`.
+  const [internalVisible, setInternalVisible] = useState<Set<PulsePosition>>(() =>
+    defaultVisiblePositions(plottable),
   );
+  const visible = controlledVisible ?? internalVisible;
+  const toggleSeries = (position: PulsePosition) => {
+    if (onToggleSeries) {
+      onToggleSeries(position);
+      return;
+    }
+    setInternalVisible((prev) => {
+      const next = new Set(prev);
+      if (next.has(position)) next.delete(position);
+      else next.add(position);
+      return next;
+    });
+  };
 
-  const hasOwnedIds = (ownedSleeperIds?.length ?? 0) > 0;
-  const [overlayOn, setOverlayOn] = useState(hasOwnedIds);
-
-  const ownedSet = useMemo(() => new Set(ownedSleeperIds ?? []), [ownedSleeperIds]);
-  const ownership = useMemo(() => matchCurveOwnership(curves, ownedSet), [curves, ownedSet]);
+  const hasOwned = useMemo(
+    () => plottable.some((c) => c.curve.some((p) => p.isYours)),
+    [plottable],
+  );
+  const [overlayOn, setOverlayOn] = useState(true);
 
   const geometry = useMemo(
     () =>
@@ -140,8 +179,9 @@ export function PositionalWarChart({
         width: box.width,
         height: box.height,
         padding: box.padding,
+        maxRank,
       }),
-    [plottable, visible, axisMode, box],
+    [plottable, visible, axisMode, box, maxRank],
   );
 
   /**
@@ -162,13 +202,12 @@ export function PositionalWarChart({
     [geometry.xTicks, box.fontSize],
   );
 
-  // Lookup back from a plotted point's playerId to its full WarCurvePoint (for
-  // the readout's projected/replacement figures, which the geometry does not
-  // carry) and to the position it belongs to.
-  const pointDetail = useMemo(() => {
-    const map = new Map<string, { point: WarCurvePoint; position: PulsePosition }>();
+  // Lookup back from a plotted point's playerId to its full row, which carries
+  // the manager, the tier and the value the geometry does not.
+  const rowById = useMemo(() => {
+    const map = new Map<string, WarTableRow>();
     for (const curve of plottable) {
-      for (const point of curve.curve) map.set(point.playerId, { point, position: curve.position });
+      for (const row of curve.curve) map.set(row.playerId, row);
     }
     return map;
   }, [plottable]);
@@ -229,25 +268,12 @@ export function PositionalWarChart({
     pressed: visible.has(curve.position),
   }));
 
-  const toggleSeries = (id: string) => {
-    setVisible((prev) => {
-      const next = new Set(prev);
-      const pos = id as PulsePosition;
-      if (next.has(pos)) next.delete(pos);
-      else next.add(pos);
-      return next;
-    });
-  };
-
-  const active = activeId ? pointDetail.get(activeId) : null;
+  const active = activeId ? (rowById.get(activeId) ?? null) : null;
   const activeIndex = activeId ? flatPoints.findIndex((p) => p.playerId === activeId) : -1;
   const activeX = activeIndex >= 0 ? (flatPoints[activeIndex]?.x ?? null) : null;
-  const activeIsOwned = active ? ownedSet.has(active.point.sleeperId ?? "") : false;
   const readout = active
     ? readoutText(
-        active.point,
-        active.position,
-        activeIsOwned,
+        active,
         activeIndex >= 0 ? { index: activeIndex + 1, total: flatPoints.length } : undefined,
       )
     : "";
@@ -268,12 +294,16 @@ export function PositionalWarChart({
   // blob. Computed in x-plot order across the currently visible series only.
   const ringMarkers = useMemo(() => {
     if (!overlayOn) return [];
+    const owned = new Set<string>();
+    for (const curve of plottable) {
+      for (const row of curve.curve) if (row.isYours) owned.add(row.playerId);
+    }
+    if (owned.size === 0) return [];
     const rings: Array<{ x: number; y: number; r: number }> = [];
     for (const series of geometry.series) {
-      const owned = ownership.matchedByPosition.get(series.position);
-      if (!owned || owned.length === 0) continue;
-      const ownedIds = new Set(owned.map((p) => p.playerId));
-      const points = series.points.filter((p) => ownedIds.has(p.playerId)).sort((a, b) => a.x - b.x);
+      const points = series.points
+        .filter((p) => owned.has(p.playerId))
+        .sort((a, b) => a.x - b.x);
       let collisions = 0;
       let prevX: number | null = null;
       for (const pt of points) {
@@ -287,7 +317,7 @@ export function PositionalWarChart({
       }
     }
     return rings;
-  }, [geometry, ownership, overlayOn, box.ringRadius]);
+  }, [geometry, plottable, overlayOn, box.ringRadius]);
 
   if (plottable.length === 0) {
     return null;
@@ -295,38 +325,40 @@ export function PositionalWarChart({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <SeriesToggleLegend items={legendItems} onToggle={toggleSeries} />
-        {hasOwnedIds && (
-          <button
-            type="button"
-            aria-pressed={overlayOn}
-            onClick={() => setOverlayOn((v) => !v)}
-            className="flex min-h-11 min-w-11 items-center gap-2 rounded-card border border-line bg-base/40 px-3 py-2 text-left text-xs font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple aria-[pressed=false]:opacity-60"
-          >
-            {/* pointer-events-none so a hover lands on the BUTTON, not on a
-                decorative graphic that is not in the accessibility tree. A
-                screen reader tracking the mouse announces the object under the
-                cursor, and an aria-hidden svg announces nothing. */}
-            <svg
-              aria-hidden="true"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              className="pointer-events-none shrink-0"
+      {(legend || hasOwned) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {legend ? <SeriesToggleLegend items={legendItems} onToggle={(id) => toggleSeries(id as PulsePosition)} /> : <span />}
+          {hasOwned && (
+            <button
+              type="button"
+              aria-pressed={overlayOn}
+              onClick={() => setOverlayOn((v) => !v)}
+              className="flex min-h-11 min-w-11 items-center gap-2 rounded-card border border-line bg-base/40 px-3 py-2 text-left text-xs font-medium text-ink transition-colors hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-purple aria-[pressed=false]:opacity-60"
             >
-              <circle cx="8" cy="8" r="6" fill="none" stroke={RING_COLOR} strokeWidth="2" />
-            </svg>
-            <span>Your team</span>
-          </button>
-        )}
-      </div>
+              {/* pointer-events-none so a hover lands on the BUTTON, not on a
+                  decorative graphic that is not in the accessibility tree. A
+                  screen reader tracking the mouse announces the object under
+                  the cursor, and an aria-hidden svg announces nothing. */}
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                className="pointer-events-none shrink-0"
+              >
+                <circle cx="8" cy="8" r="6" fill="none" stroke={RING_COLOR} strokeWidth="2" />
+              </svg>
+              <span>Ring my players</span>
+            </button>
+          )}
+        </div>
+      )}
 
       <div
         ref={containerRef}
         tabIndex={0}
         role="group"
-        aria-label="Positional WAR chart. Arrow keys move through players, Home and End jump to the ends, Escape clears the readout."
+        aria-label="Wins over replacement chart. Arrow keys move through players, Home and End jump to the ends, Escape clears the readout."
         // touch-none lives here rather than on the <svg> below, because the svg
         // is pointer-events-none and therefore no longer the touch target: a
         // drag across the chart now lands on this element, and without it the
@@ -377,6 +409,24 @@ export function PositionalWarChart({
               strokeWidth="1"
             />
           ))}
+          {/* The zero line, drawn brighter than the gridlines because it is the
+              one horizontal on the chart that means something: at it, a player
+              is worth exactly what a freely available one is worth.
+
+              DELIBERATELY UNLABELLED IN THE SVG. A label here sits exactly
+              where every series ends up, so it lands on top of the very points
+              it is describing. The caption below the chart names it instead,
+              as real text a screen reader reaches. */}
+          {geometry.zeroY !== null && (
+            <line
+              x1={geometry.plot.left}
+              y1={geometry.zeroY}
+              x2={geometry.plot.right}
+              y2={geometry.zeroY}
+              stroke="#4A4A63"
+              strokeWidth="1.5"
+            />
+          )}
           {geometry.yTicks.map((tick) => (
             <text
               key={`yl-${tick.y}`}
@@ -428,6 +478,9 @@ export function PositionalWarChart({
                     fill={style.color}
                   />
                 ))}
+                {/* The replacement boundary for this position: the rank of the
+                    last player this league starts. Hollow, so it reads as a
+                    boundary rather than as another player. */}
                 {series.markerAt && (
                   <path
                     d={markerPath(style.marker, series.markerAt.x, series.markerAt.y, box.markerRadius)}
@@ -466,10 +519,19 @@ export function PositionalWarChart({
         </svg>
       </div>
 
+      {/* What the two kinds of marking on the chart mean, as text rather than
+          as labels drawn into an aria-hidden graphic. The horizontal reading
+          is the same for every position; the hollow markers differ per
+          position, which is why the count travels with each one. */}
+      <p className="mt-2 text-xs leading-relaxed text-ink-subtle">
+        The brighter horizontal line is replacement level: zero extra matchups. The hollow marker on
+        each line is the last player at that position this league starts.
+      </p>
+
       {/* Visible readout, mirrored into the aria-live region below for screen readers. */}
-      <p className="mt-2 min-h-[1.5rem] text-xs text-ink-muted" aria-hidden="true">
+      <p className="mt-2 min-h-[2.25rem] text-xs leading-relaxed text-ink-muted" aria-hidden="true">
         {active
-          ? `${active.point.name}, ${active.position}${active.point.positionRank}: ${active.point.war.toFixed(2)} wins, ${active.point.projectedPointsPerWeek.toFixed(1)} pts/wk vs ${active.point.replacementPointsPerWeek.toFixed(1)} replacement.`
+          ? `${active.name}, ${active.position}${active.positionRank}, ${WAR_TIER_LABEL[active.tier]}: ${active.war.toFixed(2)} wins, ${active.projectedPointsPerWeek.toFixed(1)} pts/wk vs ${active.replacementPointsPerWeek.toFixed(1)} replacement. ${active.isYours ? "Yours" : ownerLabel(active.owner)}${active.tradeValue !== null ? `, value ${Math.round(active.tradeValue)}` : ""}.`
           : "Hover or focus the chart to read a player's numbers."}
       </p>
       {/*

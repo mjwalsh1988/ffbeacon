@@ -478,9 +478,9 @@ describe("brand constants (E5-3)", () => {
  * -------------------------------------------------------------------- */
 
 describe("buildHeadline", () => {
-  it("names the scarcest position by its long name", () => {
+  it("names the hardest position to replace by its long name", () => {
     const curves = toPositionCurves(SIX_POSITION_ROWS);
-    expect(buildHeadline(curves)).toBe("Running back is the scarcest position in this league.");
+    expect(buildHeadline(curves)).toBe("Running back is the hardest position to replace in this league.");
   });
 
   it("is deterministic across repeated calls, including a tie case", () => {
@@ -494,7 +494,7 @@ describe("buildHeadline", () => {
     const third = buildHeadline([...curves].reverse());
     expect(first).toBe(second);
     expect(first).toBe(third);
-    expect(first).toBe("Running back is the scarcest position in this league.");
+    expect(first).toBe("Running back is the hardest position to replace in this league.");
   });
 
   it("falls back to null (route renders 'Positional WAR is still calculating.') with no plottable curve", () => {

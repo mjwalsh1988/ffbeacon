@@ -230,6 +230,7 @@ export default async function LeaguePowerPulsePage({
           <PowerPulseBody
             leagueRowId={league.id}
             sleeperLeagueId={sleeperLeagueId}
+            leagueName={league.name}
             season={Number(league.season)}
             seasonLabel={league.season}
             status={league.status ?? null}
@@ -251,7 +252,6 @@ export default async function LeaguePowerPulsePage({
                 : []
             }
             scoringSettings={(league.scoring_settings ?? {}) as ScoringSettings}
-            warParam={sp.war}
           />
         </Suspense>
       </>
@@ -313,6 +313,7 @@ async function IntroChips({
 async function PowerPulseBody({
   leagueRowId,
   sleeperLeagueId,
+  leagueName,
   season,
   seasonLabel,
   status,
@@ -328,10 +329,10 @@ async function PowerPulseBody({
   teamCount,
   rosterPositions,
   scoringSettings,
-  warParam,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
+  leagueName: string;
   season: number;
   seasonLabel: string | number | null;
   status: string | null;
@@ -349,7 +350,6 @@ async function PowerPulseBody({
   rosterPositions: string[];
   scoringSettings: ScoringSettings;
   /** The raw `?war=` searchParam value, for the axis toggle. */
-  warParam: string | undefined;
 }) {
   const { readiness, view } = await getPulseData(
     leagueRowId,
@@ -442,12 +442,17 @@ async function PowerPulseBody({
                 <Suspense fallback={<WarSkeleton />}>
                   <PositionalWarBlock
                     leagueRowId={leagueRowId}
+                    leagueName={leagueName}
                     season={season}
                     teamCount={teamCount}
                     rosterPositions={rosterPositions}
                     scoringSettings={scoringSettings}
                     searchedUsername={searchedUsername}
-                    warParam={warParam}
+                    exploreHref={
+                      searchedUsername
+                        ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
+                        : `/leagues/${sleeperLeagueId}/positional-war`
+                    }
                   />
                 </Suspense>
 
@@ -657,33 +662,40 @@ function Chip({ label, accent = false }: { label: string; accent?: boolean }) {
  */
 async function PositionalWarBlock({
   leagueRowId,
+  leagueName,
   season,
   teamCount,
   rosterPositions,
   scoringSettings,
   searchedUsername,
-  warParam,
+  exploreHref,
 }: {
   leagueRowId: string;
+  leagueName: string;
   season: number;
   teamCount: number;
   rosterPositions: string[];
   scoringSettings: ScoringSettings;
   searchedUsername: string | null;
-  warParam: string | undefined;
+  exploreHref: string;
 }) {
   const supabase = await createClient();
+  // A preview here, not the dashboard. This page's subject is expected
+  // performance; the scarcity curve is context for it, and the full dashboard
+  // (the scatterplot, the player table, the upgrade what-if) has its own page.
   return (
     <PositionalWarSection
       supabase={supabase}
       leagueRowId={leagueRowId}
+      leagueName={leagueName}
       season={season}
       teamCount={teamCount}
       rosterPositions={rosterPositions}
       scoringSettings={scoringSettings}
       searchedUsername={searchedUsername}
       focusedRosterId={null}
-      war={warParam}
+      variant="preview"
+      exploreHref={exploreHref}
     />
   );
 }

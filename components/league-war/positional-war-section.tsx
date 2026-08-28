@@ -27,6 +27,7 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { refreshPositionalWar } from "@/lib/league-positional-war";
 import { PositionalWarPanel } from "./positional-war-panel";
+import { parseAxisMode } from "@/lib/positional-war/chart-geometry";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -34,6 +35,7 @@ import type { Database } from "@/lib/database.types";
 export async function PositionalWarSection({
   supabase,
   leagueRowId,
+  leagueName,
   season,
   teamCount,
   rosterPositions,
@@ -41,10 +43,17 @@ export async function PositionalWarSection({
   searchedUsername,
   focusedRosterId,
   war,
+  variant,
+  exploreHref,
+  formatConfigId,
+  sourceSlug,
+  sourceDisplay,
+  formatDisplay,
 }: {
   /** The cookie-bound read client the panel reads through. */
   supabase: SupabaseClient<Database>;
   leagueRowId: string;
+  leagueName: string;
   season: number;
   teamCount: number;
   rosterPositions: string[];
@@ -52,6 +61,12 @@ export async function PositionalWarSection({
   searchedUsername: string | null;
   focusedRosterId: number | null;
   war?: string | string[] | null;
+  variant: "dashboard" | "preview";
+  exploreHref?: string;
+  formatConfigId?: string | null;
+  sourceSlug?: string | null;
+  sourceDisplay?: string;
+  formatDisplay?: string;
 }) {
   // Service role, because this writes. The panel below reads through the
   // caller's client, which is anon-scoped and correct for a public table.
@@ -61,13 +76,22 @@ export async function PositionalWarSection({
     <PositionalWarPanel
       supabase={supabase}
       leagueRowId={leagueRowId}
+      leagueName={leagueName}
       season={season}
       teamCount={teamCount}
       rosterPositions={rosterPositions}
       scoringSettings={scoringSettings}
       searchedUsername={searchedUsername}
       focusedRosterId={focusedRosterId}
-      war={war}
+      // The preview is one point and a link onward, so it never offers the
+      // axis toggle and always draws the default axis.
+      axisMode={variant === "preview" ? "rank" : parseAxisMode(war)}
+      variant={variant}
+      exploreHref={exploreHref}
+      formatConfigId={formatConfigId}
+      sourceSlug={sourceSlug}
+      sourceDisplay={sourceDisplay}
+      formatDisplay={formatDisplay}
     />
   );
 }

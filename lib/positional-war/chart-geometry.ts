@@ -12,20 +12,29 @@
  *
  * Two axis modes, chosen so a reader can ask either question:
  *
- *   depth (default): x = positionRank / structuralDemand. Every position's
- *   replacement boundary lands at x = 1.0, which is what makes six positions
- *   with six different starting counts comparable on one chart.
+ *   rank (the default): x = positionRank, raw, on one shared domain. "The
+ *   twelfth best running back" is a thing a reader already knows how to think
+ *   about, and QB stopping short while WR runs on IS the answer to "how many
+ *   quarterbacks are worth anything at all". A shorter series simply ends; it
+ *   is never padded with a zero-fill tail, because a plotted zero would read
+ *   as "worth nothing" rather than "not drawn".
  *
- *   rank: x = positionRank, raw, on one shared domain. QB stops around 30 and
- *   WR runs to the cap, and that difference in length IS the answer to "how
- *   many quarterbacks are worth anything at all". A shorter series simply
- *   ends; it is never padded with a zero-fill tail, because a plotted zero
- *   would read as "worth nothing" rather than "not drawn".
+ *   depth (the secondary mode): x = positionRank / structuralDemand. Every
+ *   position's replacement boundary lands at x = 1.0, which is what makes six
+ *   positions with six different starting counts comparable on one chart. Kept
+ *   because that comparison is genuinely useful, moved off the default because
+ *   a normalized axis is one more thing to learn before the first reading.
  *
- * The replacement marker moves with the mode: fixed at x = 1.0 in depth mode
- * (that fixed position is the normalization), and at the league's raw
+ * The replacement marker moves with the mode: at the league's raw
  * structuralDemand rank in rank mode, where it fans out left to right across
- * the six series and that fan is itself the scarcity reading.
+ * the six series and that fan is itself the scarcity reading, and fixed at
+ * x = 1.0 in depth mode, where that fixed position is the normalization.
+ *
+ * EVERY MODE STOPS AT THE SAME RANK. `maxRank` caps both, so the chart, its
+ * axis labels, the spoken summary, the data table under it and the shared
+ * social card all describe the same set of players. A cap that applied to one
+ * mode and not the other would make the toggle silently change the population
+ * as well as the axis.
  */
 
 import { linePath, makeScale } from "@/components/chart-kit";
@@ -48,11 +57,63 @@ export type ChartGeometry = {
   yTicks: Array<{ y: number; label: string }>;
   yMin: number;
   yMax: number;
+  /**
+   * Where zero wins sits, or null when the y-domain does not include it.
+   *
+   * Exposed rather than left for the caller to work out, because the caller
+   * has no scale: the whole point of this module is that it owns the maths.
+   * The chart draws a marked line here, and "this is the line where a player
+   * is worth exactly what a replacement is worth" is the single most useful
+   * thing on the y-axis.
+   */
+  zeroY: number | null;
   plot: { left: number; top: number; right: number; bottom: number };
 };
 
-/** Rank mode never plots past this, no matter how deep a league's pool runs. */
-export const RANK_AXIS_CAP_MAX = 60;
+/**
+ * How deep the dedicated Positional WAR page plots and tabulates.
+ *
+ * 36 is three full rounds' worth of any position in a twelve-team league, so
+ * every series reaches past its own replacement line with room to show the
+ * flattening after it, and no series runs on into the seventy-odd ranks of
+ * players nobody in any league starts. Past this the lines are flat at zero
+ * and add pixels rather than information.
+ */
+export const WAR_CHART_MAX_RANK = 36;
+
+/**
+ * How deep the League Overview's preview plots.
+ *
+ * Shorter than the dedicated page on purpose: the overview is making one
+ * point (which positions are scarce here) and then handing the reader on. The
+ * preview says so out loud and links to the full chart.
+ */
+export const WAR_PREVIEW_MAX_RANK = 25;
+
+/**
+ * The positions a chart shows before the reader touches anything.
+ *
+ * Kickers and team defenses are drawn only on request. Both are genuinely
+ * scarce in the model (a 12-team league starts twelve of each, and the pool is
+ * 32 deep), but their curves sit an order of magnitude below the skill
+ * positions, so on a shared y-axis they flatten against the zero line and add
+ * two more lines to read past. A league that starts them still gets them; it
+ * gets them from the legend, one press away, and the legend says so.
+ */
+export const DEFAULT_VISIBLE_POSITIONS: readonly PulsePosition[] = ["QB", "RB", "WR", "TE"];
+
+/**
+ * The default visible set for one league: the four skill positions it
+ * actually plots. Falls back to everything plottable when a league starts none
+ * of them, so a chart is never empty on first paint.
+ */
+export function defaultVisiblePositions(
+  curves: readonly { position: PulsePosition; curve: readonly unknown[] }[],
+): Set<PulsePosition> {
+  const available = curves.filter((c) => c.curve.length > 0).map((c) => c.position);
+  const preferred = available.filter((p) => DEFAULT_VISIBLE_POSITIONS.includes(p));
+  return new Set(preferred.length > 0 ? preferred : available);
+}
 
 /**
  * Depth mode's domain floor. A short curve (a 6-team league's QB series, say)
@@ -61,13 +122,17 @@ export const RANK_AXIS_CAP_MAX = 60;
 const DEPTH_AXIS_MIN_UPPER = 2.5;
 
 /**
- * Reads the `?war=` URL param. Anything other than the literal string "rank",
+ * Reads the `?war=` URL param. Anything other than the literal string "depth",
  * including undefined, an array (Next hands back an array when a param
- * repeats), and garbage text, falls back to "depth" silently. An unknown axis
+ * repeats), and garbage text, falls back to "rank" silently. An unknown axis
  * parameter is not an error; it is just not an opt-in to the other mode.
+ *
+ * The default flipped from depth to rank when this page became a dashboard.
+ * An older shared link carrying `?war=rank` still resolves to rank, so nothing
+ * anyone shared broke; a link with no parameter now lands on rank too.
  */
 export function parseAxisMode(raw: string | string[] | null | undefined): WarAxisMode {
-  return raw === "rank" ? "rank" : "depth";
+  return raw === "depth" ? "depth" : "rank";
 }
 
 /** True when a position has anything to plot. Guards every division below. */
@@ -140,8 +205,15 @@ export function buildChartGeometry(input: {
   width: number;
   height: number;
   padding: { t: number; r: number; b: number; l: number };
+  /**
+   * The deepest position rank this chart plots. Applied in BOTH modes, before
+   * anything else, so the y-domain, the axis ticks, the markers, the
+   * truncation flags and every consumer's summary all describe one population.
+   */
+  maxRank?: number;
 }): ChartGeometry {
   const { curves, mode, width, height, padding } = input;
+  const maxRank = Math.max(1, Math.floor(input.maxRank ?? WAR_CHART_MAX_RANK));
 
   const plot = {
     left: padding.l,
@@ -150,32 +222,46 @@ export function buildChartGeometry(input: {
     bottom: height - padding.b,
   };
 
-  const plottable = curves.filter(isPlottable);
+  // The cap is applied HERE, once, to the curves themselves, rather than in
+  // each branch below. Everything downstream (the y-domain, the depth-mode
+  // upper bound, the marker's fallback point, the truncation flag) then reads
+  // the capped series, so the two modes cannot disagree about who is plotted.
+  const plottable = curves.filter(isPlottable).map((curve) => {
+    const capped = curve.curve.filter((pt) => pt.positionRank <= maxRank);
+    return { curve, capped, truncated: capped.length < curve.curve.length };
+  });
 
   // The vertical scale is the same in both modes: the two axis toggles read
   // out the same WAR values, only the x placement changes (E2-1).
-  const allWar = plottable.flatMap((curve) => curve.curve.map((pt) => pt.war));
+  const allWar = plottable.flatMap((entry) => entry.capped.map((pt) => pt.war));
   const { yMin, yMax, ticks: yTickValues } = computeYDomain(allWar);
   const yScale = makeScale(yMin, yMax, plot.bottom, plot.top);
   const yTicks = yTickValues.map((v) => ({ y: yScale(v), label: v.toFixed(2) }));
+  const zeroY = yMin <= 0 && yMax >= 0 ? yScale(0) : null;
 
   let xScale: (v: number) => number;
   let xTicks: ChartGeometry["xTicks"];
-  let rankCap = RANK_AXIS_CAP_MAX;
+  let rankCap = maxRank;
 
   if (mode === "rank") {
-    const maxLen = plottable.length > 0 ? Math.max(...plottable.map((c) => c.curve.length)) : RANK_AXIS_CAP_MAX;
-    rankCap = Math.min(RANK_AXIS_CAP_MAX, maxLen);
+    const deepest =
+      plottable.length > 0
+        ? Math.max(...plottable.map((entry) => entry.capped.length))
+        : maxRank;
+    rankCap = Math.max(2, Math.min(maxRank, deepest));
     xScale = makeScale(1, rankCap, plot.left, plot.right);
 
+    // Ticks every 5 on a short axis, every 10 on a long one, plus the two
+    // ends. At the 36-rank default that reads 1, 10, 20, 30, 36.
+    const step = rankCap <= 30 ? 5 : 10;
     const tickValues = new Set<number>([1, rankCap]);
-    for (let t = 10; t < rankCap; t += 10) tickValues.add(t);
+    for (let t = step; t < rankCap; t += step) tickValues.add(t);
     xTicks = [...tickValues].sort((a, b) => a - b).map((t) => ({ x: xScale(t), label: String(t) }));
   } else {
     let maxRatio = 0;
-    for (const curve of plottable) {
-      for (const pt of curve.curve) {
-        const ratio = pt.positionRank / curve.structuralDemand;
+    for (const entry of plottable) {
+      for (const pt of entry.capped) {
+        const ratio = pt.positionRank / entry.curve.structuralDemand;
         if (ratio > maxRatio) maxRatio = ratio;
       }
     }
@@ -196,16 +282,17 @@ export function buildChartGeometry(input: {
     xTicks = ticks;
   }
 
-  const series: ChartGeometry["series"] = plottable.map((curve) => {
+  const series: ChartGeometry["series"] = plottable.map((entry) => {
+    const curve = entry.curve;
     const demand = curve.structuralDemand;
-    const lastRawPoint = curve.curve[curve.curve.length - 1];
+    const lastRawPoint = entry.capped[entry.capped.length - 1] ?? curve.curve[curve.curve.length - 1];
 
-    let plottedRaw: WarCurvePoint[] = curve.curve;
-    let seriesTruncated = false;
-    if (mode === "rank") {
-      plottedRaw = curve.curve.filter((pt) => pt.positionRank <= rankCap);
-      seriesTruncated = plottedRaw.length < curve.curve.length;
-    }
+    // Rank mode narrows once more when the deepest series is shorter than the
+    // cap: the axis then ends at that series' length, so a longer one has to
+    // stop there too rather than draw past the right edge.
+    const plottedRaw: WarCurvePoint[] =
+      mode === "rank" ? entry.capped.filter((pt) => pt.positionRank <= rankCap) : entry.capped;
+    const seriesTruncated = entry.truncated || plottedRaw.length < entry.capped.length;
 
     const points = plottedRaw.map((pt) => {
       const xRaw = mode === "depth" ? pt.positionRank / demand : pt.positionRank;
@@ -227,12 +314,17 @@ export function buildChartGeometry(input: {
     const demandPoint = curve.curve.find((pt) => pt.positionRank === demand);
     const markerSource = demandPoint ?? lastRawPoint;
 
-    const markerClamped = mode === "rank" && demand > rankCap;
+    // Clamped in BOTH modes now that both stop at maxRank. A league that
+    // starts more of a position than the chart plots (a deep-flex league's
+    // running backs, say) would otherwise get a marker drawn at a rank the
+    // line never reaches: at x = 1.0 in depth mode with the series ending well
+    // to its left, which reads as a boundary the data does not support.
+    const markerClamped = demand > rankCap;
     const markerWarSource = markerClamped
       ? (plottedRaw[plottedRaw.length - 1] ?? markerSource)
       : markerSource;
     const markerRank = markerClamped ? markerWarSource.positionRank : demand;
-    const markerXRaw = mode === "depth" ? 1 : markerRank;
+    const markerXRaw = mode === "depth" ? markerRank / demand : markerRank;
 
     const baseLabel =
       curve.warAtDemand != null
@@ -254,5 +346,5 @@ export function buildChartGeometry(input: {
     };
   });
 
-  return { series, xTicks, yTicks, yMin, yMax, plot };
+  return { series, xTicks, yTicks, yMin, yMax, zeroY, plot };
 }

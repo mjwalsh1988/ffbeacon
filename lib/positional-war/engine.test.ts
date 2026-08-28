@@ -382,3 +382,125 @@ describe("unprojectableSlots", () => {
     expect(unprojectableSlots(withReserves, NON_STARTING_SLOTS, PULSE_SLOT_ELIGIBILITY)).toEqual([]);
   });
 });
+
+/**
+ * The tail tiebreak.
+ *
+ * With clampBelowReplacement on (the default), every player who never beats
+ * weekly replacement scores exactly 0.000 WAR and exactly 0.0 points above
+ * replacement. Measured against production, that was ranks 51 through 78 of
+ * one 12-team league's wide receiver curve: twenty-eight players tied on both
+ * sort keys, ordered by a uuid, and a dashboard that sorts by WAR inherited
+ * that ordering as if it meant something.
+ */
+describe("ranking the tail", () => {
+  /**
+   * A league whose bench runs far below replacement, so the bottom of every
+   * curve is a block of exact zeros. Ids are assigned in ASCENDING points
+   * order, so a player-id tiebreak and a projected-points tiebreak give
+   * opposite answers and the test can tell them apart.
+   */
+  function reversedIdLadder(position: PulsePosition, count: number): WarPlayerInput[] {
+    const out: WarPlayerInput[] = [];
+    for (let i = 0; i < count; i += 1) {
+      // Rank 1 has the most points and the LAST id alphabetically.
+      const points = 20 - i * 0.5;
+      const byWeek = new Map<number, { points: number; sigma: number }>();
+      for (let week = WEEKS.from; week <= WEEKS.to; week += 1) {
+        byWeek.set(week, { points: Math.max(0.5, points), sigma: Math.max(0.5, points) * CV[position] });
+      }
+      out.push({
+        playerId: `${position}-z${String(count - i).padStart(3, "0")}`,
+        sleeperId: `s${position}${i + 1}`,
+        slug: `${position.toLowerCase()}-${i + 1}`,
+        name: `${position}${i + 1}`,
+        team: null,
+        injuryStatus: null,
+        position,
+        byWeek,
+      });
+    }
+    return out;
+  }
+
+  it("orders players tied at zero wins by projected points, not by player id", () => {
+    const result = computeCurves(
+      inputFor(["QB", "RB", "RB", "WR", "WR", "BN", "BN"], 10, [
+        ...reversedIdLadder("QB", 30),
+        ...reversedIdLadder("RB", 40),
+        ...reversedIdLadder("WR", 40),
+      ]),
+    );
+
+    const wr = result.curves.find((c) => c.position === "WR")!;
+    const zeros = wr.curve.filter((p) => p.war === 0);
+    expect(zeros.length).toBeGreaterThan(1);
+
+    // Descending projected points across the whole zero block. Under the old
+    // player-id tiebreak this block came back in ASCENDING points order,
+    // because the fixture assigns ids in the opposite direction.
+    for (let i = 1; i < zeros.length; i += 1) {
+      expect(zeros[i - 1].projectedPointsPerWeek).toBeGreaterThanOrEqual(
+        zeros[i].projectedPointsPerWeek,
+      );
+    }
+  });
+
+  it("still produces a total, repeatable order when points tie too", () => {
+    // Two players identical in every respect except their id: the id is the
+    // last tiebreak and it still decides, so a recompute cannot reshuffle them.
+    const flat: WarPlayerInput[] = ["b", "a"].map((suffix) => {
+      const byWeek = new Map<number, { points: number; sigma: number }>();
+      for (let week = WEEKS.from; week <= WEEKS.to; week += 1) {
+        byWeek.set(week, { points: 1, sigma: 0.5 });
+      }
+      return {
+        playerId: `TE-${suffix}`,
+        sleeperId: `s-${suffix}`,
+        slug: `te-${suffix}`,
+        name: `TE ${suffix}`,
+        team: null,
+        injuryStatus: null,
+        position: "TE" as PulsePosition,
+        byWeek,
+      };
+    });
+
+    const players = [...ladder("QB", 20, 22, 0.4), ...ladder("TE", 20, 15, 0.32), ...flat];
+    const a = computeCurves(inputFor(["QB", "TE", "BN"], 10, players));
+    const b = computeCurves(inputFor(["QB", "TE", "BN"], 10, players));
+    const idsA = a.curves.find((c) => c.position === "TE")!.curve.map((p) => p.playerId);
+    const idsB = b.curves.find((c) => c.position === "TE")!.curve.map((p) => p.playerId);
+    expect(idsB).toEqual(idsA);
+    expect(idsA.indexOf("TE-a")).toBeLessThan(idsA.indexOf("TE-b"));
+  });
+
+  it("does not disturb the ordering of players who carry real wins", () => {
+    // The tiebreak only fires on an exact WAR tie, and WAR is strictly
+    // increasing in points above replacement, so nobody above replacement can
+    // be reordered by it.
+    const result = computeCurves(inputFor(["QB", "RB", "RB", "WR", "WR", "TE", "BN"], 12));
+    for (const curve of result.curves) {
+      const positive = curve.curve.filter((p) => p.war > 0);
+      for (let i = 1; i < positive.length; i += 1) {
+        expect(positive[i - 1].war).toBeGreaterThanOrEqual(positive[i].war);
+        expect(positive[i - 1].positionRank).toBeLessThan(positive[i].positionRank);
+      }
+    }
+  });
+});
+
+describe("stored curve depth", () => {
+  it("stores at least the 36 ranks the dashboard reads, even for a shallow position", () => {
+    // A 12-team league starts twelve kickers, so the depth multiple alone
+    // would store thirty. minDisplayDepth is what carries the last six, and
+    // the dashboard's chart, scatterplot and table all read the top 36.
+    const result = computeCurves(inputFor(["QB", "RB", "WR", "TE", "K", "DEF", "BN"], 12));
+    for (const curve of result.curves) {
+      // K and DEF pools are 34 and 32 deep in the fixture, so those cap at the
+      // pool rather than at the setting. Everything else reaches 36.
+      const poolCap = curve.position === "K" ? 34 : curve.position === "DEF" ? 32 : 36;
+      expect(curve.curve.length).toBeGreaterThanOrEqual(Math.min(36, poolCap));
+    }
+  });
+});

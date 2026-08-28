@@ -56,8 +56,13 @@ export const DESKTOP_BOX: ChartBox = {
   height: 360,
   padding: { t: 16, r: 16, b: 34, l: 42 },
   fontSize: 9,
-  pointRadius: 3,
-  activePointRadius: 4.5,
+  // Small. The line is the reading; a dot per player at every rank turned a
+  // 36-point series into a bead chain and buried the shape it was meant to
+  // show. Kept above zero rather than removed, because the dots are what makes
+  // a single-point series (a shallow pool) visible at all, and because the
+  // active point grows to mark where the readout is pointing.
+  pointRadius: 1.6,
+  activePointRadius: 4,
   markerRadius: 5.5,
   ringRadius: 7,
 };
@@ -77,7 +82,7 @@ const NARROW_BASE = {
   // leaves room to spare.
   padding: { t: 12, r: 12, b: 30, l: 32 },
   fontSize: 10,
-  pointRadius: 2.6,
+  pointRadius: 1.5,
   activePointRadius: 4,
   markerRadius: 5,
   ringRadius: 6.5,

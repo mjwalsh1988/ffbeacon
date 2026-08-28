@@ -23,7 +23,16 @@ export type WarSettings = {
    * line, which is why the validator floors it there.
    */
   displayDepthMultiple: number;
-  /** Floor on the cap, so a 12-team league's QB series is not six points long. */
+  /**
+   * Floor on the STORED curve depth.
+   *
+   * Must stay at or above WAR_CHART_MAX_RANK (36, in
+   * lib/positional-war/chart-geometry.ts), because the dashboard's chart,
+   * scatterplot and player table all read the top 36 at every position off
+   * the stored curve. It was 24, which left a 12-team league's kickers,
+   * defenses and tight ends 30 rows deep and the table three rows short of
+   * what it says it shows.
+   */
   minDisplayDepth: number;
   /** Fraction of rank-1 WAR that defines the cliff. */
   cliffThreshold: number;
@@ -34,15 +43,44 @@ export type WarSettings = {
    * Set false and a below-replacement player receives negative WAR. The
    * non-negativity acceptance criterion is deliberately void in that mode, and
    * the chart's y-domain must be computed from the data rather than assumed to
-   * start at zero.
+   * start at zero (lib/positional-war/chart-geometry.ts computeYDomain already
+   * does).
+   *
+   * THE DEFAULT STAYS TRUE, and the reasoning is worth keeping because the
+   * question comes back every time somebody sees a flat tail at zero.
+   *
+   * A negative range would order that tail, which is genuinely tempting. It
+   * would also make the number mean something else. Season WAR is a SUM over
+   * the weeks a player is projected for, so in the negative half the model
+   * would rank a deep backup projected all thirteen weeks below a rookie
+   * projected twice, purely because one had more weeks in which to lose. In
+   * the positive half that asymmetry is the point (more weeks is more chances
+   * to help). In the negative half it stops being a claim about football.
+   *
+   * There is also a fantasy-specific reason the floor is honest rather than
+   * merely convenient: nobody starts a below-replacement player when the
+   * replacement is on waivers, so the wins he costs you are not wins you would
+   * actually give up.
+   *
+   * The tail is ordered instead by the projected-points tiebreak in
+   * lib/positional-war/engine.ts, which is a real number rather than an
+   * invented deficit, and the two bottom tiers in lib/positional-war/tiers.ts
+   * name a below-replacement player from his own projected and replacement
+   * points, which are both stored on the curve.
    */
   clampBelowReplacement: boolean;
 };
 
 export const DEFAULT_WAR_SETTINGS: WarSettings = {
-  modelVersion: "war-1",
+  // war-2: the tail tiebreak in lib/positional-war/engine.ts moved from player
+  // id to projected points a week, and minDisplayDepth rose to 36. The first
+  // reorders players whose WAR ties at exactly zero; the second stores more of
+  // them. Both are already fingerprinted, so this bump is belt and braces for
+  // a deployment whose settings row overrides minDisplayDepth: without it,
+  // such a league would keep serving a curve ordered the old way.
+  modelVersion: "war-2",
   displayDepthMultiple: 2.5,
-  minDisplayDepth: 24,
+  minDisplayDepth: 36,
   cliffThreshold: 0.5,
   clampBelowReplacement: true,
 };

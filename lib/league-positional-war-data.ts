@@ -223,6 +223,105 @@ function validPlayerId(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && id !== "0";
 }
 
+/**
+ * Every rostered player in the league, mapped to whose team holds him.
+ *
+ * TWO QUERIES FOR THE WHOLE LEAGUE, not one per player and not one per team.
+ * The dashboard's table names a manager on every row, and doing that per row
+ * would be several hundred round trips on a page that already has a curve to
+ * draw. `rosters` is one row per team (eight to sixteen of them), each
+ * carrying its whole player list as an array, so the join happens in memory
+ * over data that was already one read.
+ *
+ * Unions player_ids, reserve_ids and taxi_ids for the same reason
+ * loadViewerOverlay does: a player on injured reserve or the taxi squad is
+ * still owned, and telling a reader he is a free agent because his manager
+ * stashed him would be wrong in the one direction that matters (it is the
+ * cue to go and get him).
+ *
+ * Wrapped in cache() so the dashboard's table and its scatterplot, which both
+ * mount on the same render, share one pair of queries.
+ */
+export const loadLeagueOwnership = cache(async function loadLeagueOwnership(
+  supabase: AnySupabase,
+  leagueRowId: string,
+): Promise<Map<string, { rosterId: number; manager: string | null }>> {
+  const [rostersRes, usersRes] = await Promise.all([
+    supabase
+      .from("rosters")
+      .select("sleeper_roster_id, owner_user_id, player_ids, reserve_ids, taxi_ids")
+      .eq("league_id", leagueRowId),
+    supabase
+      .from("league_users")
+      .select("sleeper_user_id, display_name")
+      .eq("league_id", leagueRowId),
+  ]);
+
+  const usernameByUserId = new Map(
+    (usersRes.data ?? []).map((u) => [u.sleeper_user_id, u.display_name as string | null]),
+  );
+
+  const out = new Map<string, { rosterId: number; manager: string | null }>();
+  for (const roster of rostersRes.data ?? []) {
+    const manager = roster.owner_user_id
+      ? (usernameByUserId.get(roster.owner_user_id) ?? null)
+      : null;
+    const entry = { rosterId: roster.sleeper_roster_id, manager };
+    for (const list of [roster.player_ids, roster.reserve_ids, roster.taxi_ids]) {
+      for (const id of asStringArray(list)) {
+        // First roster wins. Sleeper does not let two teams hold the same
+        // player, so a duplicate here would be mid-trade sync state; keeping
+        // the first is deterministic and the next pulse resolves it.
+        if (validPlayerId(id) && !out.has(id)) out.set(id, entry);
+      }
+    }
+  }
+  return out;
+});
+
+/**
+ * Current trade value for a set of players, at one (format, source).
+ *
+ * ONE QUERY for every player on the dashboard, against `player_value_trends`,
+ * which holds exactly one row per (player, format, source) with the current
+ * value on it. That is what the pre-calc table is for; reading
+ * `player_value_history` instead would mean one row per player per nightly
+ * snapshot, tens of thousands of rows, sitting right on PostgREST's 1000-row
+ * cap. Same reasoning, and the same table, as lib/faab/player-list.ts.
+ *
+ * The caller passes only the ids it will actually render (six positions capped
+ * at 36 is at most 216), so this stays one round trip well inside the cap.
+ * A player the source publishes no value for is simply absent from the map,
+ * and every consumer treats that as "no value", never as zero.
+ *
+ * Positional WAR itself does not vary by source or format (CLAUDE.md). This
+ * read is the one place on the page that does, because trade value is the
+ * other axis of the scatterplot and it is the reader's own market.
+ */
+export const loadCurveTradeValues = cache(async function loadCurveTradeValues(
+  supabase: AnySupabase,
+  playerIds: string[],
+  formatConfigId: string | null,
+  sourceSlug: string | null,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (playerIds.length === 0 || !formatConfigId || !sourceSlug) return out;
+
+  const { data, error } = await supabase
+    .from("player_value_trends")
+    .select("player_id, current_value")
+    .eq("format_config_id", formatConfigId)
+    .eq("source", sourceSlug)
+    .in("player_id", playerIds);
+  if (error || !data) return out;
+
+  for (const row of data) {
+    const value = numOrNull(row.current_value);
+    if (row.player_id && value !== null) out.set(row.player_id, value);
+  }
+  return out;
+});
+
 function asStringArray(value: Json | null | undefined): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v): v is string => typeof v === "string");

@@ -71,7 +71,7 @@ export function buildChartSummary(curves: readonly PlottableCurve[], teamCount: 
   const { scarcest, deepest } = selectScarcestAndDeepest(curves);
   // One short closing, not the full definition: the footnote under the same
   // chart carries that, and a screen reader reaches both.
-  const closing = `Replacement is the best player nobody in this ${teamCount}-team league starts.`;
+  const closing = `A replacement player is the best one at his position who would not make a starting lineup anywhere in this ${teamCount}-team league.`;
 
   if (!scarcest) {
     return `Not calculated for this league yet. ${closing}`;
@@ -82,12 +82,12 @@ export function buildChartSummary(curves: readonly PlottableCurve[], teamCount: 
   const halfWinRank = firstRankBelowHalfWin(scarcest);
   const scarcestSentence =
     scarcestWar !== null
-      ? `${cap(scarcestName)} is the scarcest position: the best one is worth ${scarcestWar} wins, and ${
+      ? `${cap(scarcestName)} is the hardest position to replace here: the best one should win you ${scarcestWar} more matchups than a replacement would, and ${
           halfWinRank !== null
-            ? `the drop-off passes half a win by ${scarcest.position}${halfWinRank}.`
-            : `every one this league starts stays above half a win.`
+            ? `that edge drops under half a matchup by ${scarcest.position}${halfWinRank}.`
+            : `every one this league starts stays above half a matchup.`
         }`
-      : `${cap(scarcestName)} is the scarcest position.`;
+      : `${cap(scarcestName)} is the hardest position to replace here.`;
 
   if (!deepest) {
     return `${scarcestSentence} ${closing}`;
@@ -98,8 +98,8 @@ export function buildChartSummary(curves: readonly PlottableCurve[], teamCount: 
   const maxGap = maxAdjacentGapWithinDemand(deepest);
   const deepestSentence =
     deepestWar !== null
-      ? `${cap(deepestName)} is the flattest: the best one is worth ${deepestWar} wins, and every starter is within ${maxGap.toFixed(2)} of the next.`
-      : `${cap(deepestName)} is the flattest.`;
+      ? `${cap(deepestName)} is the easiest: the best one is worth ${deepestWar} extra matchups, and every starter is within ${maxGap.toFixed(2)} of the next.`
+      : `${cap(deepestName)} is the easiest.`;
 
   return `${scarcestSentence} ${deepestSentence} ${closing}`;
 }
@@ -118,7 +118,7 @@ export function buildLegendHeadline(curve: PlottableCurve): string {
   if (curve.warRank1 === null || curve.curve.length === 0) {
     return `${curve.position}: not enough data yet`;
   }
-  return `${curve.position}: best is worth ${fmtWar(curve.warRank1)} wins, ${curve.structuralDemand} start`;
+  return `${curve.position}: best one adds ${fmtWar(curve.warRank1)} matchups, ${curve.structuralDemand} start`;
 }
 
 /**
@@ -138,8 +138,8 @@ export function buildOverlayPositionLine(
     return `No ranked ${name} on your roster.`;
   }
   const top = curve.warRank1 !== null ? fmtWar(curve.warRank1) : null;
-  const base = `Your best ${name} is ${name}${bestOwnedRank}, worth ${fmtWar(bestOwnedWar)} wins`;
-  return top !== null ? `${base}; ${name}1 is worth ${top}.` : `${base}.`;
+  const base = `Your best ${name} is ${name}${bestOwnedRank}, adding ${fmtWar(bestOwnedWar)} matchups`;
+  return top !== null ? `${base}; ${name}1 adds ${top}.` : `${base}.`;
 }
 
 /** The trailing line naming rostered players who rank past the chart's display depth. */
@@ -191,9 +191,12 @@ export function buildFootnote(input: FootnoteInput): string {
 
   const parts: string[] = [];
   if (weekClause) parts.push(weekClause);
-  parts.push(`Scored under this league's settings: ${scoringDescription}.`);
   parts.push(
-    `Replacement is the best player at each position nobody in this ${teamCount}-team league starts.`,
+    `Built from weekly projections for the rest of the season, not from what players have already done.`,
+  );
+  parts.push(`Scored under this league's own settings: ${scoringDescription}.`);
+  parts.push(
+    `A replacement player is the best one at his position who would not make a starting lineup anywhere in this ${teamCount}-team league.`,
   );
   if (excludedSlots.length > 0) {
     parts.push(`Sleeper does not project ${excludedSlots.join(", ")}, so they are excluded.`);
@@ -202,7 +205,7 @@ export function buildFootnote(input: FootnoteInput): string {
     const names = shallowPositions.join(", ");
     const one = shallowPositions.length === 1;
     parts.push(
-      `The ${names} pool ${one ? "is" : "are"} thinner than this league starts, so the curve understates ${one ? "its" : "their"} scarcity.`,
+      `There ${one ? "are" : "are"} fewer projected ${names} than this league starts, so the line understates how hard ${one ? "that position is" : "those positions are"} to replace.`,
     );
   }
   parts.push(
@@ -234,6 +237,20 @@ export function buildEmptyStateMessage(status: PositionalWarStatus | null): stri
     default:
       return "Not calculated for this league yet.";
   }
+}
+
+/**
+ * The line under a chart that stops short of a league's full pool.
+ *
+ * Says the number rather than implying it. "Top 36 at each position" is a
+ * statement a reader can check against the axis; "some positions run deeper"
+ * on its own leaves them wondering how much deeper and whether it matters.
+ * Null when nothing was cut, because a note about a cut that did not happen is
+ * noise.
+ */
+export function buildTruncationNote(maxRank: number, truncated: boolean): string | null {
+  if (!truncated) return null;
+  return `Showing the top ${maxRank} at each position. Below that every line is flat, because those players would not start anywhere in this league.`;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/server";
-import { buildChartGeometry } from "@/lib/positional-war/chart-geometry";
+import { buildChartGeometry, WAR_CHART_MAX_RANK } from "@/lib/positional-war/chart-geometry";
 import {
   BRAND,
   SIZE,
@@ -93,7 +93,13 @@ export async function GET(
 
   const geometry = buildChartGeometry({
     curves,
-    mode: "depth",
+    // The page's own default. A shared card that drew a different axis from
+    // the page it links to would be a different chart of the same league.
+    mode: "rank",
+    // The same cap the dashboard uses. This is the "any shareable image" half
+    // of applying the 36-rank limit consistently: without it the card would
+    // draw seventy-odd ranks of flat tail the page does not show.
+    maxRank: WAR_CHART_MAX_RANK,
     width: CHART.width,
     height: CHART.height,
     padding: { t: 16, r: 16, b: 16, l: 16 },

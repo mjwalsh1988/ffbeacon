@@ -19,8 +19,6 @@ import { TeamFilter } from "@/components/team-filter";
 import { LeagueLoadError } from "@/components/league-load-error";
 import { LeagueShell } from "@/components/league-shell";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
-import { PositionalWarSection } from "@/components/league-war/positional-war-section";
-import { WarRailSummary } from "@/components/league-war/war-rail-summary";
 import { PicksToggle } from "@/components/picks-toggle";
 import { RankModeToggle, type RankMode } from "@/components/power-pulse/rank-mode-toggle";
 import { Panel } from "@/components/dashboard-panel";
@@ -108,7 +106,6 @@ export default async function LeagueDeepViewPage({
     roster?: string;
     picks?: string;
     rank?: string;
-    war?: string;
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
@@ -119,7 +116,6 @@ export default async function LeagueDeepViewPage({
     roster: rosterParam,
     picks: picksParam,
     rank: rankParam,
-    war: warParam,
   } = await searchParams;
   const searchedUsername =
     typeof usernameParam === "string" && usernameParam.trim() ? usernameParam.trim() : null;
@@ -326,40 +322,6 @@ export default async function LeagueDeepViewPage({
               />
             </Suspense>
 
-            {/*
-              The rankings table says who is strong. The Positional WAR curve
-              says where strength in this league comes from, so it continues
-              the overview's argument rather than starting a new one.
-
-              It sits in the MAIN column rather than the rail because six
-              series, a y-axis, and a legend do not fit in the rail's 340px:
-              the series become indistinguishable, the tick labels collide, and
-              the legend toggles cannot hold their 44x44 tap target. The rail
-              carries the finding instead, as text, in WarRailSummary below.
-
-              Last in DOM order on the main column, so on a phone it lands
-              after the rankings. Its own Suspense boundary, so a slow or
-              failed curve never blocks the table above it.
-            */}
-            <Suspense fallback={<WarSkeleton />}>
-              <PositionalWarSection
-                supabase={supabase}
-                leagueRowId={league.id}
-                season={Number(league.season ?? 0)}
-                teamCount={league.total_rosters ?? 0}
-                rosterPositions={
-                  Array.isArray(league.roster_positions)
-                    ? (league.roster_positions as unknown[]).filter(
-                        (t): t is string => typeof t === "string",
-                      )
-                    : []
-                }
-                scoringSettings={(league.scoring_settings ?? {}) as Record<string, number>}
-                searchedUsername={searchedUsername}
-                focusedRosterId={focusedRosterId}
-                war={warParam}
-              />
-            </Suspense>
           </div>
 
           <aside
@@ -367,21 +329,21 @@ export default async function LeagueDeepViewPage({
             className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
           >
             {/*
-              A finding outranks a navigation list, so the summary card sits
-              above "Explore this league". It renders nothing at all when there
-              is no cached curve: the panel below already carries the honest
-              empty state, and an empty finding card is worse than no card.
-            */}
-            <Suspense fallback={null}>
-              <WarRailSummary
-                supabase={supabase}
-                leagueRowId={league.id}
-                season={Number(league.season ?? 0)}
-                searchedUsername={searchedUsername}
-                focusedRosterId={focusedRosterId}
-              />
-            </Suspense>
+              Positional WAR IS NOT ON THIS PAGE, and that is deliberate.
 
+              The chart, its rail summary card and the compute behind them all
+              lived here and all drew the same league the dedicated page draws.
+              One graph, two pages, and this is the page a reader lands on
+              first, so the overview spent a curve computation and a chunk of
+              vertical space restating something a tab away. Positional WAR now
+              lives at /leagues/[id]/positional-war (reachable from the section
+              nav above) and, as a preview, on Power Pulse, where scarcity is
+              context for the standings rather than a repeat.
+
+              The practical consequence, which is the point: this page no
+              longer awaits refreshPositionalWar at all, so a cold curve costs
+              the overview nothing.
+            */}
             <Panel eyebrow="Go deeper" title="Explore this league">
               <ul className="space-y-2">
                 <li>
@@ -405,7 +367,7 @@ export default async function LeagueDeepViewPage({
                     href={positionalWarHref}
                     icon={TrendingDown}
                     label="Positional WAR"
-                    hint="Which positions are scarce in this league"
+                    hint="Which positions are hard to replace here"
                   />
                 </li>
                 <li>
@@ -473,25 +435,6 @@ function RankingsSkeleton() {
   );
 }
 
-/**
- * Placeholder while the Positional WAR curve streams in. Announced politely so
- * a screen reader hears that work is in progress rather than sitting on
- * silence, matching RankingsSkeleton above. The shape stands in for the chart's
- * aspect ratio so the page does not jump when the real panel arrives.
- */
-function WarSkeleton() {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="rounded-modal border border-line bg-surface/50 p-6"
-    >
-      <p className="text-sm text-ink-muted">Loading Positional WAR</p>
-      <div aria-hidden="true" className="mt-4 h-56 animate-pulse rounded-card bg-base/60" />
-    </div>
-  );
-}
-
 function ExploreLink({
   href,
   icon: Icon,
@@ -554,10 +497,12 @@ async function TeamsPanel({
 }) {
   // Values, rankings, and the schedule land here, not in the page shell. The
   // header is already on screen while this runs.
-  // includePositionalWar: false. This boundary shows the RANKINGS TABLE, and a
-  // cold Positional WAR compute would hold that table up for about ten seconds
-  // for work the reader has not scrolled to yet. The curve's own boundary owns
-  // its own compute; see components/league-war/positional-war-section.tsx.
+  // includePositionalWar: false. The overview does not render Positional WAR
+  // at all any more (see the note in the rail above), so computing a curve
+  // here would hold this table up for about ten seconds to produce something
+  // nothing on this page reads. The dedicated page and the Power Pulse preview
+  // each own their own compute; see
+  // components/league-war/positional-war-section.tsx.
   await pulseLeagueDerived(createAdminClient(), leagueRowId, {
     resynced,
     includePositionalWar: false,

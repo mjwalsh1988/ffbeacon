@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildChartGeometry,
   parseAxisMode,
-  RANK_AXIS_CAP_MAX,
+  WAR_CHART_MAX_RANK,
+  WAR_PREVIEW_MAX_RANK,
   type ChartGeometry,
 } from "./chart-geometry";
 import type { PositionCurve, PulsePosition, WarCurvePoint } from "./types";
@@ -107,16 +108,20 @@ function inBounds(geometry: ChartGeometry): void {
 }
 
 describe("parseAxisMode", () => {
-  it("returns rank only for the literal string 'rank'", () => {
-    expect(parseAxisMode("rank")).toBe("rank");
+  it("returns depth only for the literal string 'depth'", () => {
+    expect(parseAxisMode("depth")).toBe("depth");
   });
 
-  it("falls back to depth for anything else, silently", () => {
-    expect(parseAxisMode("garbage")).toBe("depth");
-    expect(parseAxisMode(undefined)).toBe("depth");
-    expect(parseAxisMode(null)).toBe("depth");
-    expect(parseAxisMode(["rank", "depth"])).toBe("depth");
-    expect(parseAxisMode("")).toBe("depth");
+  it("falls back to rank for anything else, silently", () => {
+    expect(parseAxisMode("garbage")).toBe("rank");
+    expect(parseAxisMode(undefined)).toBe("rank");
+    expect(parseAxisMode(null)).toBe("rank");
+    expect(parseAxisMode(["depth", "rank"])).toBe("rank");
+    expect(parseAxisMode("")).toBe("rank");
+  });
+
+  it("still honours an older shared link carrying ?war=rank", () => {
+    expect(parseAxisMode("rank")).toBe("rank");
   });
 });
 
@@ -173,7 +178,11 @@ describe("buildChartGeometry: the replacement marker", () => {
       const demandPoint = s.points.find((p) => p.rank === original.structuralDemand);
       expect(demandPoint).toBeDefined();
       expect(s.markerAt!.x).toBeCloseTo(demandPoint!.x, 6);
-      expect(s.truncated).toBe(false);
+      // Every demand in this fixture is well inside the 36-rank cap, so no
+      // marker is clamped. RB and WR do run deeper than the cap, so their
+      // series report truncation; that is a statement about the tail, not
+      // about the marker.
+      expect(s.markerAt!.label.endsWith("+")).toBe(false);
     }
   });
 
@@ -230,8 +239,8 @@ describe("buildChartGeometry: series length and truncation", () => {
   });
 
   it("clamps the marker and labels with a trailing plus when demand exceeds the rank cap", () => {
-    // A very deep WR pool: 80 plotted players, so RANK_AXIS_CAP_MAX (60)
-    // binds, and a structural demand of 100 sits well past it.
+    // A very deep WR pool: 80 plotted players, so the 36-rank cap binds, and a
+    // structural demand of 100 sits well past it.
     const curve = makeCurve("WR", 100, seq(80, (r) => 1.0 - r * 0.01));
     const geometry = buildChartGeometry({
       curves: [curve],
@@ -243,7 +252,26 @@ describe("buildChartGeometry: series length and truncation", () => {
     const series = geometry.series[0];
     expect(series.truncated).toBe(true);
     expect(series.markerAt!.label).toBe("WR100+");
-    expect(series.points.length).toBe(60);
+    expect(series.points.length).toBe(WAR_CHART_MAX_RANK);
+    const lastPoint = series.points[series.points.length - 1];
+    expect(series.markerAt!.x).toBeCloseTo(lastPoint.x, 6);
+    assertAllFinite(geometry);
+  });
+
+  it("clamps the marker in DEPTH mode too when demand runs past the cap", () => {
+    // Depth mode used to pin the marker at x = 1.0 unconditionally, so a
+    // league starting more of a position than the chart plots got a boundary
+    // drawn to the right of where its own line stopped.
+    const curve = makeCurve("RB", 60, seq(80, (r) => 1.0 - r * 0.01));
+    const geometry = buildChartGeometry({
+      curves: [curve],
+      mode: "depth",
+      width: WIDTH,
+      height: HEIGHT,
+      padding: PADDING,
+    });
+    const series = geometry.series[0];
+    expect(series.markerAt!.label).toBe("RB60+");
     const lastPoint = series.points[series.points.length - 1];
     expect(series.markerAt!.x).toBeCloseTo(lastPoint.x, 6);
     assertAllFinite(geometry);
@@ -357,8 +385,8 @@ describe("buildChartGeometry: points stay inside the plot rectangle", () => {
   }
 });
 
-describe("RANK_AXIS_CAP_MAX", () => {
-  it("bounds the rank-mode domain at 60 regardless of a deeper pool", () => {
+describe("the rank cap", () => {
+  it("bounds the rank-mode domain at 36 regardless of a deeper pool", () => {
     const curve = makeCurve("WR", 20, seq(90, (r) => 1.0 - r * 0.01));
     const geometry = buildChartGeometry({
       curves: [curve],
@@ -368,6 +396,37 @@ describe("RANK_AXIS_CAP_MAX", () => {
       padding: PADDING,
     });
     const lastTick = geometry.xTicks[geometry.xTicks.length - 1];
-    expect(lastTick.label).toBe(String(RANK_AXIS_CAP_MAX));
+    expect(lastTick.label).toBe(String(WAR_CHART_MAX_RANK));
+    expect(geometry.series[0].points.length).toBe(WAR_CHART_MAX_RANK);
+  });
+
+  it("caps DEPTH mode at the same rank, so the toggle never changes who is plotted", () => {
+    const curves = [makeCurve("WR", 20, seq(90, (r) => 1.0 - r * 0.01))];
+    const rank = buildChartGeometry({ curves, mode: "rank", width: WIDTH, height: HEIGHT, padding: PADDING });
+    const depth = buildChartGeometry({ curves, mode: "depth", width: WIDTH, height: HEIGHT, padding: PADDING });
+    expect(depth.series[0].points.map((p) => p.rank)).toEqual(rank.series[0].points.map((p) => p.rank));
+    expect(depth.series[0].points.length).toBe(WAR_CHART_MAX_RANK);
+  });
+
+  it("honours a caller-supplied cap, which is how the Overview preview stops at 25", () => {
+    const curves = [makeCurve("WR", 20, seq(90, (r) => 1.0 - r * 0.01))];
+    const geometry = buildChartGeometry({
+      curves,
+      mode: "rank",
+      width: WIDTH,
+      height: HEIGHT,
+      padding: PADDING,
+      maxRank: WAR_PREVIEW_MAX_RANK,
+    });
+    expect(geometry.series[0].points.length).toBe(WAR_PREVIEW_MAX_RANK);
+    expect(geometry.xTicks[geometry.xTicks.length - 1].label).toBe(String(WAR_PREVIEW_MAX_RANK));
+  });
+
+  it("marks where zero wins sits when the domain includes it", () => {
+    const curves = sixPositionCurves();
+    const geometry = buildChartGeometry({ curves, mode: "rank", width: WIDTH, height: HEIGHT, padding: PADDING });
+    expect(geometry.zeroY).not.toBeNull();
+    expect(geometry.zeroY!).toBeGreaterThanOrEqual(geometry.plot.top);
+    expect(geometry.zeroY!).toBeLessThanOrEqual(geometry.plot.bottom);
   });
 });

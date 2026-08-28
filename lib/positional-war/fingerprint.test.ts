@@ -297,7 +297,9 @@ describe("digestsMatch", () => {
     ["scoringBase", { scoringBase: "pts_std" }],
     ["scoringUsable", { scoringUsable: !digest.scoringUsable }],
     ["scoringKeyCount", { scoringKeyCount: digest.scoringKeyCount + 1 }],
-    ["modelVersion", { modelVersion: "war-2" }],
+    // A literal that is deliberately not any real DEFAULT_WAR_SETTINGS value,
+    // so bumping the model version cannot turn this mutation into a no-op.
+    ["modelVersion", { modelVersion: "war-mutated-for-this-test" }],
   ];
 
   for (const [field, mutation] of mutations) {

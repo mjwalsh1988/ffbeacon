@@ -8861,3 +8861,232 @@ clean with both routes in the manifest. Migrations 0219 through 0223 applied to
 production and verified there. Supabase advisors report nothing against this
 feature. All 22 new and changed files are plain ASCII. Nothing committed, nothing
 pushed. HEAD is still d453334.
+
+================================================================================
+POSITIONAL WAR DASHBOARD (T-WAR-66 .. T-WAR-75)
+================================================================================
+
+The scarcity curve became a player-level dashboard: a cleaner wins-over-
+replacement chart, a trade-value scatterplot beside it, and a searchable,
+sortable player table under both, all driven by one position filter. The
+validated league-specific calculation is unchanged except where a task below
+says otherwise and says why.
+
+T-WAR-66 | completed | The oversized data-cache write, fixed by slicing the universe
+     | files: lib/positional-war/load.ts, lib/positional-war/load.test.ts
+     | The whole universe went into ONE unstable_cache entry. Measured against
+     | production (2026, weeks 1-17, ppr): 6.30 MiB, of which 6.08 MiB is
+     | 17,394 projection rows and their raw stat_line maps. Next refuses
+     | anything over 2 MiB, so the write failed on every cold load ("Failed to
+     | set Next.js data cache ... items over 2MB can not be cached") while the
+     | read still returned a freshly built universe. The layer never populated
+     | and every fingerprint miss rebuilt from Postgres.
+     | The stat lines cannot be dropped: each league rescores them under its own
+     | Sleeper settings, which is why the model does not vary by format or
+     | source.
+     | Now stored as several entries, split where the data partitions:
+     |   - one per (season, week) of projection rows. Largest measured slice
+     |     390 KiB, 19% of the limit, 5.2x headroom. Shared across every week
+     |     window AND every scoring base, because a projection row carries all
+     |     three scoring columns and its stat line.
+     |   - one for resolved players, keyed by a sha256 digest of the exact
+     |     player id set (227 KiB).
+     |   - one for accuracy, keyed by that digest plus the scoring base (113 KiB).
+     |   - one for defense splits, keyed by scoring base and its two seasons
+     |     (37 KiB).
+     | Keying the id-dependent entries by the id digest is what stops a partial
+     | cache silently shrinking the universe: an entry can only be reused for
+     | exactly the ids it was built from. The resolve also stores its dropped
+     | count and the assembly asserts resolved + dropped === asked.
+     | Guards: each week slice carries an exact per-week count guard BEFORE it
+     | can be stored, and the assembly still runs one uncached exact count over
+     | the whole window on every call, compared against the summed row counts
+     | the slices recorded. A stale, evicted or missing slice fails there.
+     | Also fixed, latent: the old window guard compared KEPT rows against the
+     | count while its own comment said it did not. player_id is nullable on
+     | player_weekly_projections, so one null row would have failed a complete
+     | read. The slice now records readCount separately.
+     | Structure: assembleUniverse() takes its four reads as an argument.
+     | directReaders go to Postgres; cachedReaders wrap the same four. So
+     | loadWarUniverse and loadWarUniverseUncached are the same function with
+     | different readers and cannot drift.
+     | verified: yes (24 load tests; byte-identical curves against three
+     |           production leagues; measured 15 misses cold, 0 warm)
+
+T-WAR-67 | completed | Position rank is the default axis, and every mode stops at 36
+     | files: lib/positional-war/chart-geometry.ts, chart-geometry.test.ts,
+     |        components/league-war/war-axis-toggle.tsx,
+     |        app/api/og/war/[league_id]/route.tsx
+     | parseAxisMode's default flipped to "rank"; `?war=depth` opts into the
+     | normalized mode and `?war=rank` still resolves to rank, so no shared link
+     | broke. buildChartGeometry gained maxRank (36 by default,
+     | WAR_PREVIEW_MAX_RANK 25 for the preview), applied in BOTH modes before
+     | anything else, so the y-domain, the ticks, the markers, the truncation
+     | flag, the spoken summary, the data table and the OG card all describe one
+     | population. The OG card moved to rank mode for the same reason.
+     | The replacement marker now clamps in depth mode too: it used to pin to
+     | x = 1.0 unconditionally, so a league starting more of a position than the
+     | chart plots got a boundary drawn past the end of its own line.
+     | geometry.zeroY is new, so the chart can mark zero without the caller
+     | inventing a scale.
+     | verified: yes (29 geometry tests)
+
+T-WAR-68 | completed | The arbitrary tail, ordered by a real number
+     | files: lib/positional-war/engine.ts, engine.test.ts,
+     |        lib/positional-war/default-settings.ts
+     | With clampBelowReplacement on (the default), every player who never beats
+     | weekly replacement scores exactly 0.000 WAR and 0.0 points above
+     | replacement. Measured in production, that was ranks 51-78 of one league's
+     | WR curve: twenty-eight players tied on both sort keys and ordered by
+     | uuid, so WR51 was Anthony Gould and WR74 was Rashod Bateman. A table that
+     | sorts by WAR would have inherited that as if it meant something.
+     | Tiebreak is now (WAR, points above replacement, projected points a week,
+     | player id). It cannot reorder anyone with positive WAR, because WAR is
+     | strictly increasing in points above replacement. After the change the
+     | same block reads 10.2, 10.0, 9.8, 9.7, 9.7, 9.5 points a week.
+     | verified: yes (35 engine tests, three of them new)
+
+T-WAR-69 | completed | The negative-WAR decision: the floor stays, and it is documented
+     | files: lib/positional-war/default-settings.ts (the clampBelowReplacement
+     |        doc), lib/positional-war/tiers.ts
+     | The reference screenshots show WAR down to about -0.5, so this was
+     | reviewed rather than assumed.
+     | KEEPING THE FLOOR. Season WAR is a SUM over the weeks a player is
+     | projected for. In the negative half that makes the model rank a deep
+     | backup projected all thirteen weeks BELOW a rookie projected twice,
+     | purely because one had more weeks in which to lose. In the positive half
+     | the same asymmetry is the point; in the negative half it stops being a
+     | claim about football. There is also a fantasy-specific reason: nobody
+     | starts a below-replacement player when the replacement is on waivers, so
+     | those are not wins anyone would actually give up.
+     | The problem the negatives would have solved (an unordered tail) is solved
+     | by T-WAR-68 instead, with a real number rather than an invented deficit.
+     | The setting stays configurable, and the chart's y-domain is still
+     | computed from the data, so turning it off still works.
+     | Below-replacement players are still NAMED: the tier reads
+     | projectedPointsPerWeek < replacementPointsPerWeek, both of which are
+     | stored on the curve point, so "Below replacement" is a fact off the same
+     | screen rather than a WAR sign.
+     | verified: yes (documented in code; tier tests cover both bottom bands)
+
+T-WAR-70 | completed | WAR tiers, league-relative by construction
+     | files: lib/positional-war/tiers.ts, tiers.test.ts
+     | Six tiers: League breaker, Elite, Strong advantage, Starter, Replacement
+     | level, Below replacement.
+     | The thresholds are NOT copied from the screenshots. Season WAR is a sum
+     | over the weeks that remain, so the same league in week 14 carries about a
+     | quarter of the WAR it carried in week 1 with no projection changed: any
+     | fixed threshold in wins would relabel the whole league every few weeks. A
+     | share of the best player's WAR is scale-free but hangs the ladder on one
+     | outlier.
+     | The anchor is the league's own starting jobs: every player ranking inside
+     | his position's structural demand, across all positions (about 120 in a
+     | 12-team league). League breaker is the top 2% of that distribution, Elite
+     | the top 10%, Strong advantage the top 25%, Starter at or above the least
+     | valuable starting job. It scales with team count and with lineup shape
+     | (superflex adds a dozen QB jobs, so QBs rise with no positional special
+     | case), and percentiles do not notice the window shrinking.
+     | The two bottom tiers are structural rather than percentile, because below
+     | the starters the question is not "where does he rank" but "is he better
+     | than a freely available player", and the curve carries both numbers.
+     | Guard: a league whose top starting job is worth 0.00 gets no ladder at
+     | all rather than a "League breaker" badge on a zero.
+     | verified: yes (16 tier tests, including the scale-free property)
+
+T-WAR-71 | completed | The trade value against wins scatterplot
+     | files: lib/positional-war/scatter-geometry.ts, scatter-geometry.test.ts,
+     |        components/league-war/war-scatter-chart.tsx
+     | X is current trade value at the league's resolved format and the reader's
+     | chosen source; Y is Positional WAR, which does not vary by source. Each
+     | position keeps its line-chart marker SHAPE as well as its colour, so
+     | position is never carried by hue alone.
+     | A player with no published value is NOT plotted at zero: he is excluded,
+     | counted in a stated line, and still listed in the table. A zero would
+     | make a false column against the y-axis and drag the trend line into it.
+     | The trend line is ordinary least squares and only appears at 20+ plotted
+     | players. Its sentence names the sample size and the explained spread, and
+     | below an r squared of 0.1 it reports no clear relationship rather than a
+     | weak one, because "weak" still invites a reader to lean on it.
+     | Nearest-point matching is two-dimensional here, unlike the line chart's
+     | x-only match: two players can share a value and sit a full win apart.
+     | verified: yes (19 scatter tests)
+
+T-WAR-72 | completed | The player table
+     | files: lib/positional-war/table.ts, table.test.ts,
+     |        components/league-war/war-player-table.tsx
+     | Player, position rank, NFL team, manager (or "Free agent"), tier,
+     | Positional WAR, points above replacement, wins per projected week,
+     | projected points a week, current trade value. Sortable on every numeric
+     | column with aria-sort on the active one, searchable by name, filtered by
+     | the shared position control, and downloadable as CSV.
+     | "PORP" is deliberately absent: an unexplained acronym in a header is a
+     | puzzle, not a label. The column reads "Pts over repl." and its accessible
+     | name reads the whole phrase.
+     | Nulls sort to the bottom in BOTH directions, because "we do not have this
+     | number" is neither a small number nor a large one.
+     | Ownership comes from ONE pair of queries over the whole league
+     | (loadLeagueOwnership), not one per row. Values come from ONE query
+     | against player_value_trends for exactly the rendered ids (at most 216).
+     | No N+1 on either.
+     | Mobile: the table keeps its natural width inside an overflow-x-auto
+     | region, the same construction app/tools/on-the-clock/available-list.tsx
+     | uses, so every column, header and sort button is reachable at 320px and
+     | nothing is hidden. The player cell additionally repeats position, team,
+     | manager and tier as a stacked line below sm, so a row's identity is there
+     | without scrolling sideways.
+     | verified: yes (16 table tests)
+
+T-WAR-73 | completed | One position filter for three surfaces
+     | files: components/league-war/war-dashboard.tsx,
+     |        components/league-war/positional-war-chart.tsx,
+     |        components/league-war/positional-war-panel.tsx,
+     |        components/league-war/positional-war-section.tsx
+     | QB, RB, WR and TE show by default; K and DEF are one press away and the
+     | legend says what each is worth. Three independent filters would let the
+     | three surfaces show three different populations while looking like one
+     | view.
+     | The chart is controlled when the dashboard drives it and uncontrolled
+     | when the preview mounts it, so one component draws both.
+     | Point markers shrank from radius 3 to 1.6 (2.6 to 1.5 narrow): a dot per
+     | player at 36 ranks turned the series into a bead chain. The active point
+     | still grows to 4.
+     | The panel gained a variant: "dashboard" for the dedicated page,
+     | "preview" for Power Pulse (25 ranks, its own complete data table, a link
+     | onward, no scatterplot or player table).
+     | verified: yes (full suite green; checked in the browser at 1600px)
+
+T-WAR-74 | completed | Positional WAR left the League Overview entirely
+     | files: app/leagues/[league_id]/page.tsx,
+     |        components/league-war/war-rail-summary.tsx (deleted)
+     | Owner decision, mid-task: the overview should not carry a graph the
+     | dedicated page already carries. The chart panel and the rail summary card
+     | are both gone, and war-rail-summary.tsx was deleted rather than left
+     | unreferenced. components/league-war/selection.ts stays; the chart summary
+     | and the OG card both still use it.
+     | The practical consequence: the overview no longer awaits
+     | refreshPositionalWar at all, so a cold curve costs the page nothing. Its
+     | client bundle is 6.34 kB.
+     | Discovery is the section nav plus the "Explore this league" link, whose
+     | hint now reads "Which positions are hard to replace here".
+     | verified: yes (overview HTML contains no chart; 200 in 4.86s)
+
+T-WAR-75 | completed | Plain-language copy, and the guide entries that were missing
+     | files: components/league-war/summary.ts, summary.test.ts,
+     |        app/leagues/[league_id]/positional-war/page.tsx,
+     |        components/league-war/war-axis-toggle.tsx,
+     |        supabase/migrations/0224_signal_guide_positional_war_dashboard.sql
+     | Every user-facing string assumes the reader has never met WAR. "Wins"
+     | became "matchups" in the summaries, the intro leads with what the number
+     | estimates, and both the intro and the footnote now say the calculation
+     | runs on PROJECTIONS for the games left to play rather than on production.
+     | Replacement level is always "the best player at his position who would
+     | not make a starting lineup anywhere in this league" and never an average
+     | bench or waiver player.
+     | Migration 0224: the league-positional-war guide page had a row and ZERO
+     | entries. It now carries five questions and two terms. The global
+     | "Positional WAR" term was rewritten with a plainer opening and the
+     | projections caveat it never had; its deeper paragraphs stay, because that
+     | entry is where the detailed methodology lives for advanced readers. The
+     | update is guarded on the body still being the shipped copy, so an admin
+     | edit survives.
+     | verified: yes (migration applied and read back; 7 entries live)

@@ -256,11 +256,31 @@ export function computeCurves(input: WarInput): WarResult {
 
     if (scored.length === 0) continue;
 
-    // Rank by WAR, ties broken by PAR, then by player id ascending so the order
-    // is total and a recompute cannot reshuffle two identical players.
+    // Rank by WAR, ties broken by PAR, then by projected points a week, then by
+    // player id ascending so the order is total and a recompute cannot
+    // reshuffle two identical players.
+    //
+    // THE PROJECTED-POINTS TIEBREAK IS NOT COSMETIC. With
+    // clampBelowReplacement on (the default), every player who never beats
+    // weekly replacement scores exactly 0.000 WAR and exactly 0.0 PAR, and in
+    // a real 12-team league that is most of the tail: measured against
+    // production, ranks 51 through 78 of one league's wide receiver curve were
+    // all 0.000. Falling straight to player id there ordered them by a uuid,
+    // so the curve asserted that one replacement-level receiver ranked ahead
+    // of another for no reason at all, and the player table sorted by WAR
+    // inherited that ordering as if it meant something.
+    //
+    // Projected points a week is a real, non-zero, honestly-ordered number for
+    // exactly those players. It never affects anyone with positive WAR (WAR is
+    // strictly increasing in PAR, so a WAR tie among above-replacement players
+    // is already a PAR tie and then a near-exact points tie), so this changes
+    // the ordering only where the previous ordering was arbitrary.
     scored.sort((a, b) => {
       if (b.war !== a.war) return b.war - a.war;
       if (b.par !== a.par) return b.par - a.par;
+      if (b.projectedPointsPerWeek !== a.projectedPointsPerWeek) {
+        return b.projectedPointsPerWeek - a.projectedPointsPerWeek;
+      }
       return a.player.playerId < b.player.playerId ? -1 : 1;
     });
 

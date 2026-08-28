@@ -5,11 +5,11 @@ import { useTransition } from "react";
 import type { WarAxisMode } from "@/lib/positional-war/chart-geometry";
 
 /**
- * Switches the Positional WAR chart's x-axis between relative depth (the
- * default, where every position's replacement boundary lands at the same
- * point so six curves are comparable) and raw position rank (where a
- * position's series simply ends where its data ends, which is the honest
- * picture of how many players at that position are worth anything at all).
+ * Switches the Positional WAR chart's x-axis between raw position rank (the
+ * default: "the twelfth best running back" is a thing a reader already knows
+ * how to think about, and a position's line simply ends where its data ends)
+ * and relative depth (where every position's replacement boundary lands at the
+ * same point, so positions with different starting counts compare directly).
  *
  * Modelled directly on components/power-pulse/rank-mode-toggle.tsx: real
  * radio semantics, a useTransition push that does not scroll, 44px minimum
@@ -22,7 +22,7 @@ import type { WarAxisMode } from "@/lib/positional-war/chart-geometry";
  * devices well past that line. Changed in both files together, so the two
  * still match.
  *
- * State lives in the URL (`?war=rank`; absent means depth), matching
+ * State lives in the URL (`?war=depth`; absent means rank), matching
  * `?rank=`, `?picks=`, and `?source=` on the same pages. This is a rendering
  * choice only: it never invalidates the cached curve and never changes the
  * fingerprint (E2-3).
@@ -36,7 +36,10 @@ export function WarAxisToggle({ mode }: { mode: WarAxisMode }) {
   const select = (next: WarAxisMode) => {
     if (next === mode) return;
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "rank") params.set("war", "rank");
+    // The default axis carries no parameter, so a link to the page a reader is
+    // looking at is the shortest one. `?war=rank` still resolves to rank for
+    // anyone holding an older link (see parseAxisMode).
+    if (next === "depth") params.set("war", "depth");
     else params.delete("war");
     const qs = params.toString();
     startTransition(() => {
@@ -48,14 +51,14 @@ export function WarAxisToggle({ mode }: { mode: WarAxisMode }) {
     // Short hints. These are read aloud every time the control is hovered or
     // focused, and a paragraph is a lot to hear before you can press a button.
     {
+      id: "rank",
+      label: "Position rank",
+      hint: "Plots the best, second best, and so on at each position.",
+    },
+    {
       id: "depth",
       label: "Relative depth",
       hint: "Lines every position up at its replacement point so they compare directly.",
-    },
-    {
-      id: "rank",
-      label: "Position rank",
-      hint: "Shows how far each position runs before it flattens.",
     },
   ];
 

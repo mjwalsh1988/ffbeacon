@@ -18,7 +18,7 @@
  * query path on every call.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
@@ -28,11 +28,42 @@ import { DB_CHUNK_CONCURRENCY } from "@/lib/power-pulse/load";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import type { WarUniverse, WarUniversePlayer } from "./load";
 
+/**
+ * The data cache, faked.
+ *
+ * `passthrough` behaves the way the old one-line mock did: calling the wrapped
+ * function every time, so the tests exercise the real query path. `missing`
+ * throws Next's own invariant, which is what a plain node process (the
+ * standalone `npm run calculate:positional-war` script) actually sees, and
+ * which the fallback in withDataCache exists to survive.
+ *
+ * Every key the module asks for is recorded, so a test can assert that two
+ * weeks get two entries and that an id-set-dependent entry is keyed by the
+ * ids and not by the window that produced them.
+ */
+const cacheState = vi.hoisted(() => ({
+  mode: "passthrough" as "passthrough" | "missing",
+  keys: [] as string[][],
+}));
+
 // vi.mock calls are hoisted by Vitest above every import in this file, so it
 // does not matter that the static "./load" import below is written first.
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
+  unstable_cache:
+    (fn: (...args: unknown[]) => unknown, keyParts: string[]) =>
+    async (...args: unknown[]) => {
+      cacheState.keys.push(keyParts);
+      if (cacheState.mode === "missing") {
+        throw new Error("Invariant: incrementalCache missing in unstable_cache");
+      }
+      return fn(...args);
+    },
 }));
+
+beforeEach(() => {
+  cacheState.mode = "passthrough";
+  cacheState.keys = [];
+});
 
 let activeClient: SupabaseClient<Database>;
 vi.mock("@/lib/supabase/server", () => ({
@@ -43,6 +74,7 @@ const {
   loadWarUniverse,
   loadWarUniverseUncached,
   loadProjectionsSnapshot,
+  playerIdSetDigest,
   truncateToHour,
   buildWarPlayers,
 } = await import("./load");
@@ -670,5 +702,201 @@ describe("loadWarUniverseUncached: one pass over the window", () => {
     });
 
     expect(universe.players[0][1].injuryStatus).toBeNull();
+  });
+});
+
+/**
+ * The sliced universe cache.
+ *
+ * The old single entry serialized to 6.30 MiB against production and Next
+ * refuses anything over 2 MiB, so the write failed on every cold load while
+ * the read still returned a freshly built universe: a cache layer that never
+ * populated and never complained loudly enough to notice. These tests pin the
+ * properties the split has to hold on to.
+ */
+describe("the sliced universe cache", () => {
+  function threeWeekClient() {
+    return fakeClient({
+      player_weekly_projections: table([
+        projectionRow("1", "p1", 5, 15, "2026-08-26T14:00:00.000Z"),
+        projectionRow("2", "p2", 5, 12, "2026-08-26T14:00:00.000Z"),
+        projectionRow("3", "p1", 6, 16, "2026-08-26T14:00:00.000Z"),
+        projectionRow("4", "p2", 6, 11, "2026-08-26T14:00:00.000Z"),
+        projectionRow("5", "p1", 7, 14, "2026-08-26T14:00:00.000Z"),
+      ]),
+      players: table([playerRow("p1", "RB", "1001"), playerRow("p2", "WR", "1002")]),
+      player_projection_accuracy: table([
+        {
+          player_id: "p1",
+          scoring: "pts_ppr",
+          season: null,
+          shrunk_multiplier: 1.05,
+          beat_rate: 0.6,
+          availability_rate: 0.9,
+          ratio_stdev: 0.3,
+          weeks_played: 12,
+        },
+      ]),
+      nfl_defense_vs_position: table([]),
+    });
+  }
+
+  const WINDOW = { season: 2026, fromWeek: 5, toWeek: 7, scoringBase: "pts_ppr" } as const;
+
+  it("stores one entry per week, plus one each for players, accuracy and defense", async () => {
+    activeClient = threeWeekClient();
+    await loadWarUniverse({ ...WINDOW });
+
+    const kinds = cacheState.keys.map((k) => k[0]);
+    expect(kinds.filter((k) => k === "positional-war-projection-week").length).toBe(3);
+    expect(kinds.filter((k) => k === "positional-war-players").length).toBe(1);
+    expect(kinds.filter((k) => k === "positional-war-accuracy").length).toBe(1);
+    expect(kinds.filter((k) => k === "positional-war-defense").length).toBe(1);
+  });
+
+  it("keys a week slice by season and week only, so windows and scoring bases share it", async () => {
+    activeClient = threeWeekClient();
+    await loadWarUniverse({ ...WINDOW });
+    const weekKeys = cacheState.keys.filter((k) => k[0] === "positional-war-projection-week");
+    // Nothing in a week's key mentions the window it was asked for or the
+    // scoring base: a projection row carries all three scoring columns and its
+    // raw stat line, so week 5 is week 5 either way.
+    for (const key of weekKeys) {
+      expect(key.join("|")).not.toContain("pts_ppr");
+    }
+    expect(weekKeys.map((k) => k[k.length - 1]).sort()).toEqual(["5", "6", "7"]);
+  });
+
+  it("keys the id-dependent entries by a digest of the ids, not by the window", async () => {
+    activeClient = threeWeekClient();
+    await loadWarUniverse({ ...WINDOW });
+    const digest = playerIdSetDigest(["p1", "p2"]);
+    const playersKey = cacheState.keys.find((k) => k[0] === "positional-war-players")!;
+    const accuracyKey = cacheState.keys.find((k) => k[0] === "positional-war-accuracy")!;
+    // An entry can only ever be reused for exactly the id set it was built
+    // from, so this window's projections can never be paired with another
+    // window's player map.
+    expect(playersKey).toContain(digest);
+    expect(accuracyKey).toContain(digest);
+    // Accuracy additionally varies by scoring base; players do not.
+    expect(accuracyKey).toContain("pts_ppr");
+    expect(playersKey).not.toContain("pts_ppr");
+  });
+
+  it("hashes the id set order-independently, so two windows in a different order share one entry", () => {
+    expect(playerIdSetDigest(["b", "a", "c"])).toBe(playerIdSetDigest(["a", "c", "b"]));
+    expect(playerIdSetDigest(["a", "b"])).not.toBe(playerIdSetDigest(["a", "b", "c"]));
+  });
+
+  it("returns exactly what the uncached path returns", async () => {
+    activeClient = threeWeekClient();
+    const cached = await loadWarUniverse({ ...WINDOW });
+    activeClient = threeWeekClient();
+    const direct = await loadWarUniverseUncached({ ...WINDOW });
+
+    // The Maps are rebuilt after the read, so compare the serializable shape.
+    expect({
+      players: [...cached.players.entries()],
+      projections: cached.projections,
+      accuracy: [...cached.accuracy.entries()],
+      defense: [...cached.defense.entries()],
+      defenseSeasons: cached.defenseSeasons,
+    }).toEqual(direct);
+  });
+
+  it("falls back to a direct read when this process has no data cache at all", async () => {
+    // What "npm run calculate:positional-war" sees. The memoization is a
+    // performance optimization, never a correctness requirement.
+    cacheState.mode = "missing";
+    activeClient = threeWeekClient();
+    const universe = await loadWarUniverse({ ...WINDOW });
+    expect(universe.projections.length).toBe(5);
+    expect(universe.players.size).toBe(2);
+  });
+
+  it("still throws on a real query failure rather than reading twice", async () => {
+    activeClient = fakeClient({
+      player_weekly_projections: () =>
+        makeBuilder((calls) => {
+          if (isCountQuery(calls)) return { data: [], error: null, count: 1 };
+          return { data: null, error: { message: "connection reset" }, count: null };
+        }),
+    });
+    await expect(loadWarUniverse({ ...WINDOW })).rejects.toThrow(/connection reset/);
+  });
+});
+
+describe("the completeness guards", () => {
+  it("throws when ONE week comes back short, before that week can be stored", async () => {
+    // The per-week guard: a truncated slice must never become the cache entry
+    // every later league reads back as the truth.
+    activeClient = fakeClient({
+      player_weekly_projections: () =>
+        makeBuilder((calls) => {
+          const isWeekQuery = calls.some((c) => c.method === "eq" && c.args[0] === "week");
+          if (isCountQuery(calls)) return { data: [], error: null, count: isWeekQuery ? 4 : 8 };
+          return {
+            data: [projectionRow("1", "p1", 5, 10, "2026-08-26T14:00:00.000Z")],
+            error: null,
+            count: null,
+          };
+        }),
+    });
+    await expect(
+      loadWarUniverse({ season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr" }),
+    ).rejects.toThrow(/week \d+ load incomplete/);
+  });
+
+  it("throws when the summed slices fall short of the live window count", async () => {
+    // The window guard, which runs against live Postgres on EVERY assembly.
+    // This is the one that catches a stale or evicted slice: each week's own
+    // count agrees with what it returned, and the window still does not add up.
+    activeClient = fakeClient({
+      player_weekly_projections: () =>
+        makeBuilder((calls) => {
+          const weekCall = calls.find((c) => c.method === "eq" && c.args[0] === "week");
+          if (isCountQuery(calls)) {
+            // Per week: one row, which is what the walk returns. Over the
+            // window: ten, which it does not.
+            return { data: [], error: null, count: weekCall ? 1 : 10 };
+          }
+          if (!weekCall) return { data: [], error: null, count: null };
+          const week = weekCall.args[1] as number;
+          return {
+            data: [
+              projectionRow("w" + String(week), "p1", week, 10, "2026-08-26T14:00:00.000Z"),
+            ],
+            error: null,
+            count: null,
+          };
+        }),
+    });
+    await expect(
+      loadWarUniverse({ season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr" }),
+    ).rejects.toThrow(/universe load incomplete: read 2 of 10/);
+  });
+
+  it("does not count a null player_id row as a missing row", async () => {
+    // player_weekly_projections.player_id is nullable. Postgres counts such a
+    // row and this module declines to keep it, so comparing kept rows against
+    // the count (which is what the pre-split guard actually did, despite a
+    // comment saying otherwise) would fail a complete read.
+    const rows = [
+      projectionRow("1", "p1", 5, 15, "2026-08-26T14:00:00.000Z"),
+      { ...projectionRow("2", "p2", 5, 12, "2026-08-26T14:00:00.000Z"), player_id: null },
+    ];
+    activeClient = fakeClient({
+      player_weekly_projections: table(rows),
+      players: table([playerRow("p1", "RB", "1001")]),
+      player_projection_accuracy: table([]),
+      nfl_defense_vs_position: table([]),
+    });
+    const universe = await loadWarUniverse({
+      season: 2026,
+      fromWeek: 5,
+      toWeek: 5,
+      scoringBase: "pts_ppr",
+    });
+    expect(universe.projections.length).toBe(1);
   });
 });

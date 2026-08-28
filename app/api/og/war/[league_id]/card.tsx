@@ -105,8 +105,8 @@ const POSITION_LONG_NAME: Record<PulsePosition, string> = {
 };
 
 /**
- * The card's one-sentence headline: "<Position> is the scarcest position in
- * this league." Uses selectScarcestAndDeepest() (imported, not
+ * The card's one-sentence headline: "<Position> is the hardest position to
+ * replace in this league." Uses selectScarcestAndDeepest() (imported, not
  * reimplemented) so this can never name a different position than the rail
  * summary card or the chart's own spoken summary would for the same league.
  * Returns null when nothing is plottable yet, matching
@@ -115,7 +115,9 @@ const POSITION_LONG_NAME: Record<PulsePosition, string> = {
 export function buildHeadline(curves: PositionCurve[]): string | null {
   const { scarcest } = selectScarcestAndDeepest(curves);
   if (!scarcest) return null;
-  return `${POSITION_LONG_NAME[scarcest.position]} is the scarcest position in this league.`;
+  // Wording matches components/league-war/summary.ts buildChartSummary, so the
+  // card and the page it links to say the same thing about the same league.
+  return `${POSITION_LONG_NAME[scarcest.position]} is the hardest position to replace in this league.`;
 }
 
 export type LegendRow = { position: PulsePosition; label: string; color: string };
