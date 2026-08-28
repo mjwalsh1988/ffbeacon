@@ -23,10 +23,19 @@
  *     legend text, the readout, or the data table rendered alongside it.
  *   - The legend is a row of real aria-pressed toggle buttons (chart-kit-
  *     legend.tsx SeriesToggleLegend), each carrying its own ranking as text.
- *   - Hover AND focus reveal the nearest point across the currently visible
- *     series, and that readout is pushed into an aria-live="polite" region so
- *     it reaches a screen reader whether the interaction was a pointer or a
- *     keyboard.
+ *   - Hover, click AND keyboard reveal a point, and that readout is pushed
+ *     into an aria-live="polite" region so it reaches a screen reader whether
+ *     the interaction was a pointer or a keyboard. Pointer TRAVEL is debounced;
+ *     a click, an arrow key and Enter announce at once, because those are a
+ *     reader choosing a point rather than passing over one.
+ *   - The pointer match is two-dimensional. It used to be x only, and since
+ *     every series carries a point at every rank, that made all but the first
+ *     visible line unreachable with a mouse: the tie at each x always resolved
+ *     to the same series, and switching the others off in the legend was the
+ *     only way to read them.
+ *   - Left and right arrows move ALONG one position's line; up and down move
+ *     ACROSS positions at the same rank. One flat x-sorted list meant following
+ *     a single position took four presses per player.
  *   - Hiding a series through the legend removes it from the <svg> only. The
  *     data table is not a prop of this component and is unaffected by legend
  *     state, so it always stays complete.
@@ -74,12 +83,17 @@ const READOUT_SPEAK_DELAY_MS = 200;
  * times in a row while somebody arrows along a curve, and every clause is
  * something a reader could not work out from the others.
  */
-function readoutText(row: WarTableRow, ordinal?: { index: number; total: number }): string {
+function readoutText(
+  row: WarTableRow,
+  ordinal?: { index: number; total: number; series: number; seriesTotal: number },
+): string {
   const parts = [
     `${row.name}, ${row.position}${row.positionRank}`,
-    `${row.war.toFixed(2)} wins over replacement`,
     WAR_TIER_LABEL[row.tier].toLowerCase(),
-    `${row.projectedPointsPerWeek.toFixed(1)} points a week against ${row.replacementPointsPerWeek.toFixed(1)}`,
+    `${row.war.toFixed(2)} matchups over replacement`,
+    `${row.pointsAboveReplacement.toFixed(1)} points above replacement`,
+    `${row.projectedPointsPerWeek.toFixed(1)} projected points a week against ${row.replacementPointsPerWeek.toFixed(1)}`,
+    `projected in ${row.weeksProjected} ${row.weeksProjected === 1 ? "week" : "weeks"}`,
   ];
   // Sleeper's injury designation, verbatim, the same one every other surface
   // shows. The overlay marks a player on IR or the taxi squad rather than
@@ -89,10 +103,18 @@ function readoutText(row: WarTableRow, ordinal?: { index: number; total: number 
   if (row.injuryStatus) parts.push(row.injuryStatus);
   parts.push(row.isYours ? "on your roster" : ownerLabel(row.owner).toLowerCase());
   // A null value is never spoken as a zero: the source publishes none for him.
-  if (row.tradeValue !== null) parts.push(`trade value ${Math.round(row.tradeValue)}`);
-  // Where the reader is in the sequence, so somebody stepping through thirty
-  // points by keyboard has a sense of position rather than an unbounded walk.
-  if (ordinal) parts.push(`${ordinal.index} of ${ordinal.total}`);
+  parts.push(
+    row.tradeValue !== null ? `trade value ${Math.round(row.tradeValue)}` : "no published trade value",
+  );
+  // Where the reader is, in BOTH directions. A cursor on this chart moves
+  // along one position's line and across positions, so "point 4 of 36 on line
+  // 2 of 4" is what tells somebody stepping through by keyboard where the
+  // arrows will take them next.
+  if (ordinal) {
+    parts.push(
+      `point ${ordinal.index} of ${ordinal.total} on line ${ordinal.series} of ${ordinal.seriesTotal}`,
+    );
+  }
   return parts.join(", ") + ".";
 }
 
@@ -212,52 +234,124 @@ export function PositionalWarChart({
     return map;
   }, [plottable]);
 
-  // Flattened, x-sorted list of every visible plotted point, for keyboard
-  // Arrow navigation and for nearest-point hover lookup.
-  const flatPoints = useMemo(() => {
-    const out: Array<{ x: number; y: number; playerId: string }> = [];
-    for (const series of geometry.series) {
-      for (const pt of series.points) out.push({ x: pt.x, y: pt.y, playerId: pt.playerId });
-    }
-    out.sort((a, b) => a.x - b.x);
-    return out;
-  }, [geometry]);
+  /**
+   * The visible series, each with its own plotted points, in canonical
+   * position order.
+   *
+   * Kept AS SERIES rather than flattened, which is the fix for two separate
+   * defects. See `nearestPoint` and the keyboard handler below.
+   */
+  const seriesPoints = useMemo(
+    () =>
+      geometry.series
+        .map((s) => ({ position: s.position, points: s.points }))
+        .filter((s) => s.points.length > 0),
+    [geometry],
+  );
+
+  /** playerId to its place in the grid, so the cursor is O(1) to locate. */
+  const pointIndex = useMemo(() => {
+    const map = new Map<string, { series: number; point: number }>();
+    seriesPoints.forEach((s, series) => {
+      s.points.forEach((p, point) => map.set(p.playerId, { series, point }));
+    });
+    return map;
+  }, [seriesPoints]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const nearestByX = (svgX: number): string | null => {
-    if (flatPoints.length === 0) return null;
-    let best = flatPoints[0];
-    let bestDist = Math.abs(best.x - svgX);
-    for (const p of flatPoints) {
-      const dist = Math.abs(p.x - svgX);
-      if (dist < bestDist) {
-        best = p;
-        bestDist = dist;
+  /**
+   * Whether the next announcement should skip the debounce.
+   *
+   * A pointer SWEEP should settle before it speaks; a click and a key press
+   * are deliberate and should speak at once. A ref rather than state, because
+   * flipping it must not itself cause a render.
+   */
+  const speakAtOnce = useRef(false);
+
+  /**
+   * The point nearest the pointer, by real two-dimensional distance.
+   *
+   * THIS USED TO MATCH ON X ALONE, and that made most of the chart
+   * unreachable. Every series has a point at every rank, so at any given x the
+   * four candidates were exactly tied, and the tie always resolved to whichever
+   * series came first in canonical order. Hovering anywhere on the plot
+   * selected a quarterback, whatever line the cursor was actually over, and the
+   * only way to read a running back was to switch every other position off in
+   * the legend.
+   *
+   * Distance in viewBox units, which is what the reader is pointing at: the
+   * scales are already applied, so this is the same "closest thing to my
+   * cursor" the scatterplot does.
+   */
+  const nearestPoint = (svgX: number, svgY: number): string | null => {
+    let best: string | null = null;
+    let bestDist = Infinity;
+    for (const series of seriesPoints) {
+      for (const p of series.points) {
+        const dx = p.x - svgX;
+        const dy = p.y - svgY;
+        const dist = dx * dx + dy * dy;
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = p.playerId;
+        }
       }
     }
-    return best.playerId;
+    return best;
   };
 
-  const handlePointerMove = (clientX: number) => {
+  const handlePointer = (clientX: number, clientY: number, immediate: boolean) => {
     const svg = containerRef.current?.querySelector("svg");
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    if (rect.width === 0) return;
+    if (rect.width === 0 || rect.height === 0) return;
     const svgX = ((clientX - rect.left) / rect.width) * box.width;
-    setActiveId(nearestByX(svgX));
+    const svgY = ((clientY - rect.top) / rect.height) * box.height;
+    const next = nearestPoint(svgX, svgY);
+    if (immediate) speakAtOnce.current = true;
+    setActiveId(next);
+    // A click on the point already announced re-announces it. The live region
+    // below is keyed on a counter for exactly this: a reader who taps a dot
+    // twice asked to hear it twice. The readout text does not change, so the
+    // effect will not run, which is also why the flag has to be cleared here:
+    // otherwise it would survive to make the next ordinary hover speak early.
+    if (immediate && next !== null && next === activeId) {
+      speakAtOnce.current = false;
+      setAnnounceNonce((n) => n + 1);
+    }
   };
 
-  const moveActiveByStep = (step: number) => {
-    if (flatPoints.length === 0) return;
-    const currentIndex = flatPoints.findIndex((p) => p.playerId === activeId);
-    const nextIndex =
-      currentIndex === -1
-        ? step > 0
-          ? 0
-          : flatPoints.length - 1
-        : Math.max(0, Math.min(flatPoints.length - 1, currentIndex + step));
-    setActiveId(flatPoints[nextIndex]?.playerId ?? null);
+  /**
+   * Move the cursor within the grid of (series, rank).
+   *
+   * ALONG a line with Left and Right, ACROSS lines with Up and Down. The old
+   * handler walked one flat list sorted by x, so Right stepped QB1, RB1, WR1,
+   * TE1, QB2, and following a single position meant pressing it four times
+   * between every player. Rank is kept when crossing to another line, clamped
+   * to that line's length, so a reader comparing the fourth best at each
+   * position can hold the rank and change the position.
+   */
+  const moveCursor = (deltaSeries: number, deltaPoint: number, jumpTo?: "start" | "end") => {
+    if (seriesPoints.length === 0) return;
+    speakAtOnce.current = true;
+    const current = activeId ? pointIndex.get(activeId) : undefined;
+    if (!current) {
+      setActiveId(seriesPoints[0].points[0]?.playerId ?? null);
+      return;
+    }
+    const nextSeries = Math.max(
+      0,
+      Math.min(seriesPoints.length - 1, current.series + deltaSeries),
+    );
+    const points = seriesPoints[nextSeries].points;
+    const target =
+      jumpTo === "start"
+        ? 0
+        : jumpTo === "end"
+          ? points.length - 1
+          : Math.max(0, Math.min(points.length - 1, current.point + deltaPoint));
+    setActiveId(points[target]?.playerId ?? null);
   };
 
   const legendItems: SeriesToggleItem[] = plottable.map((curve) => ({
@@ -269,23 +363,42 @@ export function PositionalWarChart({
   }));
 
   const active = activeId ? (rowById.get(activeId) ?? null) : null;
-  const activeIndex = activeId ? flatPoints.findIndex((p) => p.playerId === activeId) : -1;
-  const activeX = activeIndex >= 0 ? (flatPoints[activeIndex]?.x ?? null) : null;
+  const cursor = activeId ? pointIndex.get(activeId) : undefined;
+  const activeX = cursor ? (seriesPoints[cursor.series].points[cursor.point]?.x ?? null) : null;
   const readout = active
     ? readoutText(
         active,
-        activeIndex >= 0 ? { index: activeIndex + 1, total: flatPoints.length } : undefined,
+        cursor
+          ? {
+              index: cursor.point + 1,
+              total: seriesPoints[cursor.series].points.length,
+              series: cursor.series + 1,
+              seriesTotal: seriesPoints.length,
+            }
+          : undefined,
       )
     : "";
 
   // See the live region at the foot of this component for why this exists.
   const [spokenReadout, setSpokenReadout] = useState("");
+  const [announceNonce, setAnnounceNonce] = useState(0);
   useEffect(() => {
     if (readout === "") {
       setSpokenReadout("");
       return;
     }
-    const timer = setTimeout(() => setSpokenReadout(readout), READOUT_SPEAK_DELAY_MS);
+    // A click or a key press already declared itself deliberate, so it speaks
+    // now. Only pointer travel waits for the reader to settle.
+    if (speakAtOnce.current) {
+      speakAtOnce.current = false;
+      setSpokenReadout(readout);
+      setAnnounceNonce((n) => n + 1);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSpokenReadout(readout);
+      setAnnounceNonce((n) => n + 1);
+    }, READOUT_SPEAK_DELAY_MS);
     return () => clearTimeout(timer);
   }, [readout]);
 
@@ -358,28 +471,41 @@ export function PositionalWarChart({
         ref={containerRef}
         tabIndex={0}
         role="group"
-        aria-label="Wins over replacement chart. Arrow keys move through players, Home and End jump to the ends, Escape clears the readout."
+        aria-label="Wins over replacement chart. Click or tap a point to hear it. Left and right arrows move along one position's line, up and down arrows switch position at the same rank, Home and End jump to the ends of the line, Escape clears the readout."
         // touch-none lives here rather than on the <svg> below, because the svg
         // is pointer-events-none and therefore no longer the touch target: a
         // drag across the chart now lands on this element, and without it the
         // browser pans the page instead of moving the readout.
         className="mt-3 touch-none rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-        onPointerMove={(e) => handlePointerMove(e.clientX)}
-        onPointerDown={(e) => handlePointerMove(e.clientX)}
+        // A move only tracks; a press announces. That is the difference between
+        // sweeping across the chart and choosing a player on it.
+        onPointerMove={(e) => handlePointer(e.clientX, e.clientY, false)}
+        onPointerDown={(e) => handlePointer(e.clientX, e.clientY, true)}
         onPointerLeave={() => setActiveId(null)}
         onKeyDown={(e) => {
           if (e.key === "ArrowRight") {
             e.preventDefault();
-            moveActiveByStep(1);
+            moveCursor(0, 1);
           } else if (e.key === "ArrowLeft") {
             e.preventDefault();
-            moveActiveByStep(-1);
+            moveCursor(0, -1);
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            moveCursor(1, 0);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            moveCursor(-1, 0);
           } else if (e.key === "Home") {
             e.preventDefault();
-            setActiveId(flatPoints[0]?.playerId ?? null);
+            moveCursor(0, 0, "start");
           } else if (e.key === "End") {
             e.preventDefault();
-            setActiveId(flatPoints[flatPoints.length - 1]?.playerId ?? null);
+            moveCursor(0, 0, "end");
+          } else if (e.key === "Enter" || e.key === " ") {
+            // Re-announce whatever the cursor is on, for a reader who wants it
+            // repeated without moving.
+            e.preventDefault();
+            if (activeId) setAnnounceNonce((n) => n + 1);
           } else if (e.key === "Escape") {
             setActiveId(null);
           }
@@ -531,23 +657,28 @@ export function PositionalWarChart({
       {/* Visible readout, mirrored into the aria-live region below for screen readers. */}
       <p className="mt-2 min-h-[2.25rem] text-xs leading-relaxed text-ink-muted" aria-hidden="true">
         {active
-          ? `${active.name}, ${active.position}${active.positionRank}, ${WAR_TIER_LABEL[active.tier]}: ${active.war.toFixed(2)} wins, ${active.projectedPointsPerWeek.toFixed(1)} pts/wk vs ${active.replacementPointsPerWeek.toFixed(1)} replacement. ${active.isYours ? "Yours" : ownerLabel(active.owner)}${active.tradeValue !== null ? `, value ${Math.round(active.tradeValue)}` : ""}.`
-          : "Hover or focus the chart to read a player's numbers."}
+          ? `${active.name}, ${active.position}${active.positionRank}, ${WAR_TIER_LABEL[active.tier]}: ${active.war.toFixed(2)} matchups, ${active.projectedPointsPerWeek.toFixed(1)} pts/wk vs ${active.replacementPointsPerWeek.toFixed(1)} replacement. ${active.isYours ? "Yours" : ownerLabel(active.owner)}${active.tradeValue !== null ? `, value ${Math.round(active.tradeValue)}` : ""}.`
+          : "Click a point, or focus the chart and use the arrow keys, to read a player's numbers."}
       </p>
       {/*
-        The spoken readout is DEBOUNCED, and the visible one above is not.
+        POINTER TRAVEL IS DEBOUNCED. A CLICK AND A KEY PRESS ARE NOT.
 
-        The nearest point changes every five to fifteen CSS pixels of pointer
-        travel on a dense series, so an ordinary mouse sweep or a touch drag
-        across the chart would queue a dozen different sentences into a polite
-        live region inside a second. Sighted readers want the visible line to
-        track the pointer exactly; a screen reader wants the sentence for where
-        the pointer came to REST. Keyboard stepping is one point per press and
-        settles inside the delay either way, so it is unaffected.
+        The nearest point changes every few pixels of pointer travel on a dense
+        series, so an ordinary mouse sweep or a touch drag would queue a dozen
+        sentences into a polite live region inside a second. That is worth
+        waiting out. A click and an arrow key are not travel: the reader has
+        chosen a point and is asking for it, so those speak at once (see
+        speakAtOnce).
+
+        THE INNER <p> IS KEYED ON A COUNTER. A live region announces when its
+        contents CHANGE, so clicking the same dot twice, or pressing Enter to
+        hear the current one again, would be silent: the text is identical.
+        Bumping the key remounts the paragraph inside the region, which is a
+        mutation, so the request is honoured.
       */}
-      <p aria-live="polite" className="sr-only">
-        {spokenReadout}
-      </p>
+      <div aria-live="polite" className="sr-only">
+        <p key={announceNonce}>{spokenReadout}</p>
+      </div>
     </div>
   );
 }

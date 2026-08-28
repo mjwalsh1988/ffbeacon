@@ -23,9 +23,10 @@
  *
  * Accessibility: the <svg> is aria-hidden, the plot area is a labelled,
  * focusable group, arrow keys walk the dots in x order, and the readout is
- * mirrored into a polite live region on the same debounce the line chart uses.
- * The complete numbers live in the player table below, which is a real table
- * and is unaffected by anything this component does.
+ * mirrored into a polite live region. Pointer travel is debounced so a sweep
+ * announces once; a click, an arrow key and Enter are deliberate and announce
+ * at once. The complete numbers live in the player table below, which is a real
+ * table and is unaffected by anything this component does.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -46,7 +47,7 @@ function readoutText(row: WarTableRow, ordinal: { index: number; total: number }
   const parts = [
     `${row.name}, ${row.position}${row.positionRank}`,
     `trade value ${Math.round(row.tradeValue ?? 0)}`,
-    `${row.war.toFixed(2)} wins over replacement`,
+    `${row.war.toFixed(2)} matchups over replacement`,
     WAR_TIER_LABEL[row.tier].toLowerCase(),
     `${row.projectedPointsPerWeek.toFixed(1)} points a week`,
     row.isYours ? "on your roster" : ownerLabel(row.owner).toLowerCase(),
@@ -99,12 +100,22 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   /**
+   * Whether the next announcement should skip the debounce. A pointer sweep
+   * settles before it speaks; a click and a key press are deliberate and speak
+   * at once. Matches components/league-war/positional-war-chart.tsx.
+   */
+  const speakAtOnce = useRef(false);
+  const [announceNonce, setAnnounceNonce] = useState(0);
+
+  /**
    * Nearest dot to a pointer position, by real two-dimensional distance.
    *
-   * The line chart matches on x alone, because a line chart's x is the reading
-   * and every series has a point near it. A scatter has no such structure: two
-   * players can share a trade value and sit a full win apart, so matching on x
-   * would hand the reader whichever of them the sort happened to reach first.
+   * Two players can share a trade value and sit a full win apart, so matching
+   * on x alone would hand the reader whichever of them the sort happened to
+   * reach first. The line chart matched on x alone and had exactly that defect
+   * in a worse form (every series has a point at every rank, so three of four
+   * lines were unreachable by pointer); it uses this same two-dimensional match
+   * now.
    */
   const nearest = (svgX: number, svgY: number): string | null => {
     let best: string | null = null;
@@ -121,18 +132,28 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
     return best;
   };
 
-  const handlePointer = (clientX: number, clientY: number) => {
+  const handlePointer = (clientX: number, clientY: number, immediate: boolean) => {
     const svg = containerRef.current?.querySelector("svg");
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
     const svgX = ((clientX - rect.left) / rect.width) * box.width;
     const svgY = ((clientY - rect.top) / rect.height) * box.height;
-    setActiveId(nearest(svgX, svgY));
+    const next = nearest(svgX, svgY);
+    if (immediate) speakAtOnce.current = true;
+    setActiveId(next);
+    // Clicking the dot already announced re-announces it. The readout text
+    // does not change, so the effect below will not run, which is also why the
+    // flag is cleared here rather than left to survive into the next hover.
+    if (immediate && next !== null && next === activeId) {
+      speakAtOnce.current = false;
+      setAnnounceNonce((n) => n + 1);
+    }
   };
 
   const moveActiveByStep = (step: number) => {
     if (ordered.length === 0) return;
+    speakAtOnce.current = true;
     const currentIndex = ordered.findIndex((p) => p.playerId === activeId);
     const nextIndex =
       currentIndex === -1
@@ -156,7 +177,16 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
       setSpokenReadout("");
       return;
     }
-    const timer = setTimeout(() => setSpokenReadout(readout), READOUT_SPEAK_DELAY_MS);
+    if (speakAtOnce.current) {
+      speakAtOnce.current = false;
+      setSpokenReadout(readout);
+      setAnnounceNonce((n) => n + 1);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSpokenReadout(readout);
+      setAnnounceNonce((n) => n + 1);
+    }, READOUT_SPEAK_DELAY_MS);
     return () => clearTimeout(timer);
   }, [readout]);
 
@@ -175,10 +205,11 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
         ref={containerRef}
         tabIndex={0}
         role="group"
-        aria-label="Trade value against wins over replacement. Arrow keys move through players from cheapest to most expensive, Home and End jump to the ends, Escape clears the readout."
+        aria-label="Trade value against wins over replacement. Click or tap a dot to hear it. Arrow keys move through players from cheapest to most expensive, Home and End jump to the ends, Escape clears the readout."
         className="touch-none rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-        onPointerMove={(e) => handlePointer(e.clientX, e.clientY)}
-        onPointerDown={(e) => handlePointer(e.clientX, e.clientY)}
+        // A move only tracks; a press announces.
+        onPointerMove={(e) => handlePointer(e.clientX, e.clientY, false)}
+        onPointerDown={(e) => handlePointer(e.clientX, e.clientY, true)}
         onPointerLeave={() => setActiveId(null)}
         onKeyDown={(e) => {
           if (e.key === "ArrowRight" || e.key === "ArrowUp") {
@@ -193,6 +224,10 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
           } else if (e.key === "End") {
             e.preventDefault();
             setActiveId(ordered[ordered.length - 1]?.playerId ?? null);
+          } else if (e.key === "Enter" || e.key === " ") {
+            // Repeat the current point without moving.
+            e.preventDefault();
+            if (activeId) setAnnounceNonce((n) => n + 1);
           } else if (e.key === "Escape") {
             setActiveId(null);
           }
@@ -295,12 +330,16 @@ export function WarScatterChart({ rows }: { rows: WarTableRow[] }) {
 
       <p className="mt-2 min-h-[2.25rem] text-xs leading-relaxed text-ink-muted" aria-hidden="true">
         {active
-          ? `${active.name}, ${active.position}${active.positionRank}: value ${Math.round(active.tradeValue ?? 0)}, ${active.war.toFixed(2)} wins, ${active.projectedPointsPerWeek.toFixed(1)} pts/wk. ${active.isYours ? "Yours" : ownerLabel(active.owner)}.`
-          : "Hover or focus the chart to read a player's numbers."}
+          ? `${active.name}, ${active.position}${active.positionRank}: value ${Math.round(active.tradeValue ?? 0)}, ${active.war.toFixed(2)} matchups, ${active.projectedPointsPerWeek.toFixed(1)} pts/wk. ${active.isYours ? "Yours" : ownerLabel(active.owner)}.`
+          : "Click a dot, or focus the chart and use the arrow keys, to read a player's numbers."}
       </p>
-      <p aria-live="polite" className="sr-only">
-        {spokenReadout}
-      </p>
+      {/* Keyed on a counter so clicking the same dot twice, or pressing Enter
+          to hear the current one again, is honoured: a live region announces on
+          a change, and the text is identical. See the same note in
+          components/league-war/positional-war-chart.tsx. */}
+      <div aria-live="polite" className="sr-only">
+        <p key={announceNonce}>{spokenReadout}</p>
+      </div>
     </div>
   );
 }
