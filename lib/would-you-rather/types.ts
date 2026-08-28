@@ -43,6 +43,10 @@ export interface WyrAsset {
   sleeperId: string | null;
   /** Round number, for the pick glyph. Null for a player. */
   round: number | null;
+  /** Draft year, for a pick. Null for a player. */
+  pickSeason: number | null;
+  /** Where in the round a pick lands. Null for a player, or when unknown. */
+  pickSlot: "early" | "mid" | "late" | null;
   /**
    * Set when this asset moved as a dynasty STARTUP draft pick and became the
    * player taken at that seat. Both facts are shown, because the reader is
@@ -64,6 +68,14 @@ export interface WyrRound {
   week: number | null;
   /** Plain-language structural format, e.g. "12-team dynasty superflex PPR". */
   derivedLabel: string;
+  /**
+   * The same format in short forms, e.g. "Dynasty 12T SF PPR TEP, start 9".
+   *
+   * Built for the Discord poll question, where a reader is deciding on a button
+   * with no page around it and a first-round pick in a 10-team redraft is not
+   * the asset it is in a 12-team superflex dynasty.
+   */
+  formatShort: string;
   /** Roster-shape chips: team count, Start N, SF, per-position counts. */
   formatTags: FormatTag[];
   /** Scoring chips: PPR, TEP, per-position bonuses. */

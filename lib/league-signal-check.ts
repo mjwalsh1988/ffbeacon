@@ -46,7 +46,12 @@ import { runPipeline } from "@/lib/signal-check/pipeline";
 import { toBuilderView, type BuilderView } from "@/lib/signal-check/builder-view";
 import { buildPickPositionResolver } from "@/lib/league-pick-position";
 import { SignalCheckError } from "@/lib/signal-check/errors";
-import type { AnalysisInput, AssetInput, SideKey } from "@/lib/signal-check/types";
+import type {
+  AnalysisInput,
+  AssetInput,
+  PickPosition,
+  SideKey,
+} from "@/lib/signal-check/types";
 import {
   loadStartupPickIndex,
   collectStartupPickQueries,
@@ -62,6 +67,16 @@ export interface LeagueTradeAssetMeta {
   kind: "player" | "pick";
   sleeperId: string | null;
   round: number | null;
+  /**
+   * For a pick: the draft year, and where in the round it is expected to land.
+   *
+   * Both are already known here, and the only other place they exist is inside
+   * the rendered label ("2027 1st (mid)"). A consumer that needs to write the
+   * pick a different way, as the Discord poll does at 55 characters a side,
+   * would otherwise have to parse that sentence back apart.
+   */
+  season?: number | null;
+  pickPosition?: PickPosition | null;
   /**
    * The FF Beacon player id behind this asset, when there is one. Null for a
    * pick.
@@ -408,7 +423,14 @@ export async function analyzeLeagueTrades(
             }
           : { kind: "pick", season, round };
         sideAssets[side].push(asset);
-        assetMeta[side].push({ kind: "pick", sleeperId: null, round, playerId: null });
+        assetMeta[side].push({
+          kind: "pick",
+          sleeperId: null,
+          round,
+          playerId: null,
+          season,
+          pickPosition: placed?.position ?? null,
+        });
         unionAssets.push(asset);
       }
     }

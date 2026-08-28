@@ -14,6 +14,8 @@ function asset(name: string, over: Partial<WyrAsset> = {}): WyrAsset {
     detail: "WR, CIN",
     sleeperId: "1234",
     round: null,
+    pickSeason: null,
+    pickSlot: null,
     startupPick: null,
     ...over,
   };
@@ -26,6 +28,7 @@ function round(over: Partial<WyrRound> = {}): WyrRound {
     season: 2026,
     week: 3,
     derivedLabel: "Dynasty PPR Superflex TE Premium",
+    formatShort: "Dynasty 12T SF PPR TEP, start 9",
     formatTags: [],
     scoringTags: [],
     kind: "regular",
@@ -42,9 +45,44 @@ function round(over: Partial<WyrRound> = {}): WyrRound {
 
 const OPTS = { siteUrl: "https://ffbeacon.com", mentionRoleIds: [] as string[] };
 
+/**
+ * buildPollMessage returns null when a side cannot be named inside Discord's 55
+ * characters. Every case below is one that fits, so this asserts that and hands
+ * back a non-null message; the refusal has its own test.
+ */
+function mustBuild(
+  ...args: Parameters<typeof buildPollMessage>
+): NonNullable<ReturnType<typeof buildPollMessage>> {
+  const msg = buildPollMessage(...args);
+  if (!msg) throw new Error("expected buildPollMessage to produce a message");
+  return msg;
+}
+
+/** A big but postable trade: enough to exercise the body, not enough to refuse. */
+function busyRound() {
+  return round({
+    sides: {
+      a: [asset("Ja'Marr Chase"), asset("Bijan Robinson", { key: "a-1" })],
+      b: [
+        asset("Puka Nacua", { key: "b-0" }),
+        asset("Drake London", { key: "b-1" }),
+        asset("2027 1st", {
+          key: "b-2",
+          kind: "pick",
+          detail: "Draft pick (early)",
+          sleeperId: null,
+          round: 1,
+          pickSeason: 2027,
+          pickSlot: "early",
+        }),
+      ],
+    },
+  });
+}
+
 describe("buildPollMessage", () => {
   it("names the league and its format, and nobody else", () => {
-    const msg = buildPollMessage(round(), OPTS);
+    const msg = mustBuild(round(), OPTS);
     expect(msg.content).toContain("The Dynasty League");
     expect(msg.content).toContain("Dynasty PPR Superflex TE Premium");
     expect(msg.content).toContain("Team A receives");
@@ -54,22 +92,31 @@ describe("buildPollMessage", () => {
   });
 
   it("links back to the game", () => {
-    const msg = buildPollMessage(round(), OPTS);
+    const msg = mustBuild(round(), OPTS);
     expect(msg.content).toContain("https://ffbeacon.com/games/would-you-rather");
   });
 
-  it("asks one question with exactly two answers, A first", () => {
-    const msg = buildPollMessage(round(), OPTS);
-    expect(msg.poll?.question).toBe("Which side wins this trade?");
+  it("asks the league format, with exactly two answers, A first", () => {
+    const msg = mustBuild(round(), OPTS);
+    // The format is the question, because a first-round pick in a 10-team
+    // redraft is not the asset it is in a 12-team superflex dynasty and the
+    // button is where the reader is deciding.
+    expect(msg.poll?.question).toBe("Who wins? Dynasty 12T SF PPR TEP, start 9");
     expect(msg.poll?.answers).toHaveLength(2);
     // The order IS the mapping: Discord assigns answer id 1 to the first answer,
     // and the ingestion reads id 1 as side A. Swapping these swaps every vote.
-    expect(msg.poll?.answers[0].startsWith("Team A")).toBe(true);
-    expect(msg.poll?.answers[1].startsWith("Team B")).toBe(true);
+    expect(msg.poll?.answers[0].startsWith("A: ")).toBe(true);
+    expect(msg.poll?.answers[1].startsWith("B: ")).toBe(true);
+  });
+
+  it("names the players in full on the buttons when they fit", () => {
+    const msg = mustBuild(round(), OPTS);
+    expect(msg.poll?.answers[0]).toBe("A: Ja'Marr Chase");
+    expect(msg.poll?.answers[1]).toBe("B: Bijan Robinson");
   });
 
   it("labels a startup trade as one", () => {
-    const msg = buildPollMessage(
+    const msg = mustBuild(
       round({ kind: "startup", startupSeason: 2026 }),
       OPTS,
     );
@@ -77,7 +124,7 @@ describe("buildPollMessage", () => {
   });
 
   it("shows the seat a startup pick came from", () => {
-    const msg = buildPollMessage(
+    const msg = mustBuild(
       round({
         kind: "startup",
         startupSeason: 2026,
@@ -102,34 +149,35 @@ describe("buildPollMessage", () => {
   });
 
   it("keeps every answer inside Discord's 55 character cap", () => {
-    const many = Array.from({ length: 8 }, (_, i) =>
-      asset(`Christopher Bartholomew Longname ${i}`, { key: `a-${i}` }),
-    );
-    const msg = buildPollMessage(round({ sides: { a: many, b: many } }), OPTS);
+    const msg = mustBuild(busyRound(), OPTS);
     for (const answer of msg.poll?.answers ?? []) {
       expect(answer.length).toBeLessThanOrEqual(POLL_ANSWER_MAX);
     }
   });
 
-  it("keeps the body inside Discord's 2000 character cap", () => {
-    const many = Array.from({ length: 40 }, (_, i) =>
-      asset(`Player With A Very Long Name Indeed ${i}`, { key: `a-${i}` }),
+  it("refuses a trade it cannot name inside a poll answer, rather than trimming it", () => {
+    // Eight long, distinct names on one side survive no rung of the ladder. The
+    // answer is null so the caller takes a different trade: a button listing
+    // three of eight players describes a trade nobody proposed.
+    const many = Array.from({ length: 8 }, (_, i) =>
+      asset(`Christopher Bartholomew Longname ${i}`, { key: `a-${i}` }),
     );
-    const msg = buildPollMessage(round({ sides: { a: many, b: many } }), OPTS);
+    expect(buildPollMessage(round({ sides: { a: many, b: many } }), OPTS)).toBeNull();
+  });
+
+  it("keeps the body inside Discord's 2000 character cap", () => {
+    const msg = mustBuild(busyRound(), OPTS);
     expect((msg.content ?? "").length).toBeLessThanOrEqual(MESSAGE_CONTENT_MAX);
   });
 
   it("truncates with three periods, never the ellipsis character", () => {
-    const many = Array.from({ length: 8 }, (_, i) =>
-      asset(`Christopher Bartholomew Longname ${i}`, { key: `a-${i}` }),
-    );
-    const msg = buildPollMessage(round({ sides: { a: many, b: many } }), OPTS);
+    const msg = mustBuild(busyRound(), OPTS);
     const all = [msg.content ?? "", ...(msg.poll?.answers ?? [])].join("\n");
     expect(all).not.toContain("…");
   });
 
   it("pings only the roles it was given, and lists them for allowed_mentions", () => {
-    const msg = buildPollMessage(round(), {
+    const msg = mustBuild(round(), {
       ...OPTS,
       mentionRoleIds: ["123456789012345678"],
     });
@@ -142,7 +190,7 @@ describe("buildPollMessage", () => {
   });
 
   it("says 'nothing' rather than printing an empty list for a bare side", () => {
-    const msg = buildPollMessage(round({ sides: { a: [asset("Ja'Marr Chase")], b: [] } }), OPTS);
+    const msg = mustBuild(round({ sides: { a: [asset("Ja'Marr Chase")], b: [] } }), OPTS);
     expect(msg.content).toContain("- nothing");
     expect(msg.poll?.answers[1]).toContain("nothing");
   });
@@ -152,9 +200,9 @@ describe("buildPollMessage", () => {
     // deliberate blank line with it, and the posted message ran all four
     // sections together on consecutive lines. `toContain` assertions could not
     // see that, so the shape is asserted directly.
-    const msg = buildPollMessage(round(), OPTS);
+    const msg = mustBuild(round(), OPTS);
     const lines = (msg.content ?? "").split("\n");
-    expect(lines.filter((l) => l === "").length).toBe(3);
+    expect(lines.filter((l: string) => l === "").length).toBe(3);
     expect(lines[0]).toContain("Would You Rather?");
     expect(lines[1]).toContain("The Dynasty League");
     expect(lines[2]).toBe("");
@@ -162,7 +210,7 @@ describe("buildPollMessage", () => {
   });
 
   it("puts the mentions on their own line without eating the breaks", () => {
-    const msg = buildPollMessage(round(), {
+    const msg = mustBuild(round(), {
       ...OPTS,
       mentionRoleIds: ["123456789012345678"],
     });
@@ -171,11 +219,11 @@ describe("buildPollMessage", () => {
     expect(lines[1]).toBe("");
     expect(lines[2]).toContain("Would You Rather?");
     // Still three section breaks, plus the one after the mentions.
-    expect(lines.filter((l) => l === "").length).toBe(4);
+    expect(lines.filter((l: string) => l === "").length).toBe(4);
   });
 
   it("carries no manager identity of any kind", () => {
-    const msg = buildPollMessage(round(), OPTS);
+    const msg = mustBuild(round(), OPTS);
     const all = [msg.content ?? "", ...(msg.poll?.answers ?? [])].join("\n");
     // The only names the two parties ever get.
     expect(all).toContain("Team A");

@@ -39,6 +39,7 @@ import {
 import type { LeagueTradeSignalCheck } from "@/lib/league-signal-check";
 import { gradeLeagueTrades, tradeRosterPair, WYR_LEAGUE_COLUMNS, type WyrLeagueRow } from "./grade";
 import { useTeamNames } from "./side-names";
+import { compactLeagueFormat } from "./poll-text";
 import type {
   WyrAsset,
   WyrReview,
@@ -312,6 +313,11 @@ export async function loadRound(admin: Client, tradeId: string): Promise<LoadedR
     season: poolRow.season ?? league.season ?? null,
     week: poolRow.week,
     derivedLabel: describeDerivedFormat(deriveLeagueFormat(sleeperLeague)),
+    formatShort: compactLeagueFormat({
+      metadata: league.metadata,
+      total_rosters: league.total_rosters,
+      roster_positions: league.roster_positions,
+    }),
     formatTags: buildLeagueFormatTags({
       rosterPositions: league.roster_positions,
       scoringSettings: league.scoring_settings,
@@ -403,6 +409,8 @@ function assetsForSide(result: LeagueTradeSignalCheck, side: WyrSide): WyrAsset[
       detail: boardDetail(asset.detail),
       sleeperId: m?.sleeperId ?? null,
       round: m?.round ?? null,
+      pickSeason: m?.season ?? null,
+      pickSlot: m?.pickPosition ?? null,
       startupPick: m?.startupPick ?? null,
     };
   });

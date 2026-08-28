@@ -654,6 +654,9 @@ Module map:
 - `lib/would-you-rather/side-names.ts`: Signal Check's templates say "Side A";
   this surface has no other name for the parties, so the sentence is renamed on
   the way out, and only here.
+- `lib/would-you-rather/poll-text.ts`: Discord's 300 and 55 character caps, the
+  short format label behind the question, and the condensing ladder behind the
+  answers. Pure.
 
 Discord poll:
 - ONE HOURLY CRON, `/api/cron/would-you-rather-discord`, and the SCHEDULE lives
@@ -741,3 +744,31 @@ Discord poll:
   pretends to know who voted on Discord.
 - Answer order IS the mapping: Discord assigns answer id 1 to the first answer,
   and the ingestion reads id 1 as side A. Swapping the answers swaps every vote.
+- ABSOLUTE RULE: Discord's poll limits are HARD REJECTIONS, not truncations: 300
+  characters for the question and 55 for EACH answer
+  (https://docs.discord.com/developers/resources/poll). `lib/would-you-rather/
+  poll-text.ts` owns both numbers and everything that fits a trade inside them.
+- The QUESTION is the league format in short forms, "Who wins? Dynasty 12T SF
+  PPR TEP, start 9". A first-round pick in a 10-team redraft is not the asset it
+  is in a 12-team superflex dynasty, and the poll button is where the reader is
+  actually deciding, with no page around it. Parts that do not apply are dropped
+  rather than negated: no "SF No". Keeper leagues read as Keeper even though
+  they PRICE as redraft.
+- The ANSWERS are the assets, full player names wherever they fit, picks as
+  "27 1 (E)" (two-digit year, round, one letter for early/mid/late). Condensed
+  one rung at a time, first rung that fits wins: group identical picks, then
+  first initial and surname, then picks without their slot, then surnames only,
+  then picks as a count.
+- ABSOLUTE RULE: the LOSSLESS rung comes before any lossy one. Grouping two
+  identical picks says exactly what listing them twice said; shortening a name
+  does not. Do not reorder these so a name is shortened while an ungrouped pick
+  list is still on screen.
+- ABSOLUTE RULE: NOTHING IS EVER DROPPED FROM A SIDE TO MAKE IT FIT. No "and 2
+  more", no truncation of an answer. When no rung fits, `buildPollAnswer`
+  returns null, `buildPollMessage` returns null, and the poster takes a
+  DIFFERENT TRADE (up to `POST_ATTEMPTS`). An answer listing three of a side's
+  five players describes a trade nobody proposed, and a reader cannot tell that
+  from the real thing.
+- A rung that would make two people read the same is skipped, not used. Two
+  Browns become "Brown, Brown" at the surname rung, which is a worse thing to
+  say rather than a shorter way of saying the same thing.

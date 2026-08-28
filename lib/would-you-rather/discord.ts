@@ -76,6 +76,7 @@ import type { Database } from "@/lib/database.types";
 import { SITE } from "@/lib/site";
 import { fetchWebhookPoll, postWebhookMessage, type DiscordMessageInput } from "@/lib/discord";
 import { fetchPollAnswerVoters, hasDiscordBotToken } from "@/lib/discord-poll-voters";
+import { buildPollAnswer, buildPollQuestion, type PollAsset } from "./poll-text";
 import { loadRound, type LoadedRound } from "./round";
 import { easternSlot, isPostHour, pollClosesAt, shouldIngestNow } from "./schedule";
 import {
@@ -91,9 +92,10 @@ import type { WyrRound, WyrSide } from "./types";
 
 type Client = SupabaseClient<Database>;
 
-/** Discord's own limits. Text past these is rejected, so it is trimmed first. */
-const POLL_QUESTION_MAX = 300;
-const POLL_ANSWER_MAX = 55;
+/**
+ * The message body's own limit. The poll's two limits live in ./poll-text.ts
+ * beside the ladder that fits a trade inside them.
+ */
 const MESSAGE_CONTENT_MAX = 2000;
 
 /**
@@ -121,18 +123,19 @@ function truncate(text: string, max: number): string {
   return `${body.trimEnd()}${ELLIPSIS}`;
 }
 
-/** "Ja'Marr Chase, 2027 1st and 2 more" for one side. */
-function sideSummary(round: WyrRound, side: WyrSide, max: number): string {
-  const names = round.sides[side].map((a) => a.name);
-  if (names.length === 0) return "nothing";
-  let text = names.join(", ");
-  if (text.length <= max) return text;
-  for (let keep = names.length - 1; keep >= 1; keep -= 1) {
-    const rest = names.length - keep;
-    text = `${names.slice(0, keep).join(", ")} and ${rest} more`;
-    if (text.length <= max) return text;
-  }
-  return truncate(names[0], max);
+/** One side's assets, in the shape the answer builder wants. */
+function pollAssets(round: WyrRound, side: WyrSide): PollAsset[] {
+  return round.sides[side].map((a) =>
+    a.kind === "pick"
+      ? {
+          kind: "pick" as const,
+          season: a.pickSeason,
+          round: a.round,
+          slot: a.pickSlot,
+          label: a.name,
+        }
+      : { kind: "player" as const, name: a.name },
+  );
 }
 
 /** The full asset list for the message body, one line per asset. */
@@ -161,7 +164,7 @@ function sideLines(round: WyrRound, side: WyrSide): string {
 export function buildPollMessage(
   round: WyrRound,
   opts: { siteUrl: string; mentionRoleIds: string[] },
-): DiscordMessageInput {
+): DiscordMessageInput | null {
   const kindLabel = round.kind === "startup" ? "Startup draft trade" : "Trade";
   const where = [
     round.leagueName,
@@ -170,6 +173,14 @@ export function buildPollMessage(
   ]
     .filter(Boolean)
     .join(" - ");
+
+  // The buttons first, because either one failing means this trade cannot be
+  // posted at all and there is no point building the body. 55 characters is a
+  // hard rejection, and a button listing three of a side's five players would
+  // describe a trade nobody proposed.
+  const answerA = buildPollAnswer(pollAssets(round, "a"), "a");
+  const answerB = buildPollAnswer(pollAssets(round, "b"), "b");
+  if (!answerA || !answerB) return null;
 
   const mentions = opts.mentionRoleIds.map((id) => `<@&${id}>`).join(" ");
   const body = [
@@ -197,11 +208,13 @@ export function buildPollMessage(
     content: truncate(body, MESSAGE_CONTENT_MAX),
     allowedRoleIds: opts.mentionRoleIds,
     poll: {
-      question: truncate("Which side wins this trade?", POLL_QUESTION_MAX),
-      answers: [
-        truncate(`Team A: ${sideSummary(round, "a", POLL_ANSWER_MAX - 8)}`, POLL_ANSWER_MAX),
-        truncate(`Team B: ${sideSummary(round, "b", POLL_ANSWER_MAX - 8)}`, POLL_ANSWER_MAX),
-      ],
+      // The format, in short forms. A first-round pick in a 10-team redraft is
+      // not the asset it is in a 12-team superflex dynasty, and the button is
+      // where the reader is actually deciding.
+      question: buildPollQuestion(round.formatShort),
+      // Already inside 55 by construction; nothing here truncates, because a
+      // truncated answer is a wrong answer rather than a shorter one.
+      answers: [answerA.text, answerB.text],
       durationHours: 0, // replaced by the caller, which knows the setting
     },
   };
@@ -268,6 +281,16 @@ export interface RouteSummary {
 const PICK_WINDOW = 60;
 
 /**
+ * How many trades one tick will try before giving the hour up.
+ *
+ * A trade can be ruled out only after it is picked (it stopped building, or it
+ * cannot fit a poll button). Both are rare, so a handful of attempts is plenty,
+ * and a bound is what stops a pool of unpostable trades from turning one cron
+ * tick into an unbounded loop.
+ */
+const POST_ATTEMPTS = 5;
+
+/**
  * Post this hour's poll.
  *
  * ONE TRADE PER SCHEDULED HOUR, AND THE CHANNEL FOLLOWS THE TRADE. The pick is
@@ -301,11 +324,43 @@ export async function postScheduledPoll(
     // types that have a channel of their own. A trade nothing could carry is
     // left out of the pick rather than chosen and then dropped, which would
     // waste the hour.
-    const tradeId = await pickTradeForPoll(admin, postableCategories(settings));
-    if (!tradeId) return skip("No trade is available to post.");
+    //
+    // A few attempts, because two things can rule a trade out only after it has
+    // been picked: it may no longer build (its league or transaction went away
+    // on a resync), and it may not fit inside Discord's 55 characters an answer
+    // even fully condensed. Both mean "take a different trade" rather than
+    // "give up on the hour", so the pick is retried with the failures excluded.
+    const tried = new Set<string>();
+    let loaded: LoadedRound | null = null;
+    let message: DiscordMessageInput | null = null;
+    let lastReason = "No trade is available to post.";
 
-    const loaded = await loadRound(admin, tradeId);
-    if (!loaded) return skip("The chosen trade could not be built.");
+    for (let attempt = 0; attempt < POST_ATTEMPTS; attempt += 1) {
+      const tradeId = await pickTradeForPoll(admin, postableCategories(settings), tried);
+      if (!tradeId) break;
+      tried.add(tradeId);
+
+      const candidate = await loadRound(admin, tradeId);
+      if (!candidate) {
+        lastReason = "The chosen trade could not be built.";
+        continue;
+      }
+      const built = buildPollMessage(candidate.round, {
+        siteUrl: SITE.url,
+        mentionRoleIds: cfg.mention_role_ids,
+      });
+      if (!built) {
+        // Too many assets to name inside a poll button. Nothing is dropped from
+        // the trade to make it fit; a different trade is posted instead.
+        lastReason = "The trade was too large to fit a Discord poll answer.";
+        continue;
+      }
+      loaded = candidate;
+      message = built;
+      break;
+    }
+
+    if (!loaded || !message) return skip(lastReason);
 
     // THE CHANNEL SECOND, read off the league the trade came out of.
     const category = categoryForLeagueMetadata(loaded.league.metadata);
@@ -359,10 +414,6 @@ export async function postScheduledPoll(
       return { status: "error", reason: "Could not claim the schedule slot.", route };
     }
 
-    const message = buildPollMessage(loaded.round, {
-      siteUrl: SITE.url,
-      mentionRoleIds: cfg.mention_role_ids,
-    });
     const sent = await postWebhookMessage(webhookUrl, {
       ...message,
       poll: { ...message.poll!, durationHours: cfg.poll_hours },
@@ -444,6 +495,8 @@ export async function postScheduledPoll(
 async function pickTradeForPoll(
   admin: Client,
   categories: readonly LeagueCategoryKey[] | null,
+  /** Trades this tick has already tried and ruled out. */
+  exclude: ReadonlySet<string> = new Set(),
 ): Promise<string | null> {
   if (categories && categories.length === 0) return null;
 
@@ -457,7 +510,7 @@ async function pickTradeForPoll(
     .order("added_at", { ascending: false })
     .limit(PICK_WINDOW);
 
-  const rows = fresh ?? [];
+  const rows = (fresh ?? []).filter((r) => !exclude.has(r.id));
   if (rows.length > 0) {
     // Sorted in memory rather than in the query, because the vote total is the
     // sum of two columns and PostgREST cannot order on an expression. The
@@ -478,7 +531,7 @@ async function pickTradeForPoll(
     .order("discord_posted_at", { ascending: true })
     .limit(PICK_WINDOW);
 
-  const seen = again ?? [];
+  const seen = (again ?? []).filter((r) => !exclude.has(r.id));
   if (seen.length === 0) return null;
   // From the oldest quarter of that window, so a trade posted months ago comes
   // back before one posted last week, without it being the same one every time.
