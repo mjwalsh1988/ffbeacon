@@ -9,7 +9,12 @@ import {
   describeDerived,
 } from "@/lib/league-format-resolution";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
-import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
+import { loadPowerPulseView, buildPulseLeaders } from "@/lib/league-power-pulse-data";
+import { loadTransactionVolume } from "@/lib/league-transaction-volume";
+import { loadViewerCandidates } from "@/lib/league-positional-war-data";
+import { matchViewerRoster } from "@/lib/league-viewer";
+import { TransactionVolumePanel } from "@/components/league-overview/transaction-volume-panel";
+import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
 import { loadLeagueReadiness, type LeagueReadiness } from "@/lib/league-readiness";
 import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
 import { PreDraftNotice } from "@/components/power-pulse/pre-draft-notice";
@@ -325,6 +330,28 @@ export default async function LeagueDeepViewPage({
               />
             </Suspense>
 
+            {/*
+              TWO READINGS OF THE SAME LEAGUE, SIDE BY SIDE. Who keeps making
+              moves, and what the ranking table above cannot say. Both are
+              league-wide findings rather than navigation, which is why they sit
+              in the main column under the table instead of in the rail.
+
+              Its own boundary, and its own reads. The rankings table above does
+              not need either of these to paint, and neither of these should
+              wait on the table.
+            */}
+            <Suspense fallback={null}>
+              <OverviewInsights
+                leagueRowId={league.id}
+                leagueSeason={league.season != null ? String(league.season) : null}
+                formatSlug={formatSlug}
+                sourceSlug={sourceSlug}
+                searchedUsername={searchedUsername}
+                focusedRosterId={focusedRosterId}
+                transactionsHref={transactionsHref}
+                resynced={!pulseResult.cached}
+              />
+            </Suspense>
           </div>
 
           <aside
@@ -471,6 +498,107 @@ async function PulseFavoriteSection({
   const favorite = await loadPulseFavorite(supabase, leagueRowId, season);
   if (!favorite) return null;
   return <PulseFavoriteCard favorite={favorite} powerPulseHref={powerPulseHref} />;
+}
+
+/**
+ * The two-up findings row under the power rankings table.
+ *
+ * Transactions by team on the left, the Power Pulse superlatives on the right,
+ * fifty-fifty from lg up and stacked below it. When only one of the two has
+ * anything to say it takes the full width rather than leaving a hole, and when
+ * neither does the row does not render at all: a league that has made no moves
+ * and has no Power Pulse rows yet is better served by the table above it alone
+ * than by two panels explaining their own emptiness.
+ *
+ * WHY IT AWAITS pulseLeagueDerived. The awards read rows that the derived pass
+ * writes, and this boundary starts at the same moment the rankings one does. On
+ * a league's first open the cache is empty until that pass finishes, so without
+ * this await the panel would decide the league has no leaders and render
+ * nothing on exactly the load where the reader is watching. pulseLeagueDerived
+ * coalesces per league in-process, so this shares the rankings table's
+ * execution rather than starting a second sync.
+ *
+ * includePositionalWar: false, for the same reason every other caller on this
+ * page passes it: the curve belongs to the rail card's boundary, which owns
+ * that compute.
+ */
+async function OverviewInsights({
+  leagueRowId,
+  leagueSeason,
+  formatSlug,
+  sourceSlug,
+  searchedUsername,
+  focusedRosterId,
+  transactionsHref,
+  resynced,
+}: {
+  leagueRowId: string;
+  leagueSeason: string | null;
+  formatSlug: string | null;
+  sourceSlug: string | null;
+  searchedUsername: string | null;
+  focusedRosterId: number | null;
+  transactionsHref: string;
+  resynced: boolean;
+}) {
+  await pulseLeagueDerived(createAdminClient(), leagueRowId, {
+    resynced,
+    includePositionalWar: false,
+  });
+
+  const supabase = await createClient();
+
+  const formatConfigId = formatSlug
+    ? ((await supabase.from("format_configs").select("id").eq("slug", formatSlug).maybeSingle())
+        .data?.id ?? null)
+    : null;
+
+  const [volume, candidates, pulseView] = await Promise.all([
+    loadTransactionVolume(supabase, leagueRowId),
+    loadViewerCandidates(supabase, leagueRowId),
+    leagueSeason
+      ? loadPowerPulseView(supabase, leagueRowId, Number(leagueSeason), formatConfigId, sourceSlug)
+      : Promise.resolve(null),
+  ]);
+
+  const leaders = buildPulseLeaders(pulseView?.teams ?? []);
+  // A league can hold transactions and no roster rows for a moment during a
+  // cold sync, and a bar chart with no bars is not a chart.
+  const showVolume = volume.leagueTotal > 0 && volume.teams.length > 0;
+  const showLeaders = leaders.length > 0;
+  if (!showVolume && !showLeaders) return null;
+
+  const both = showVolume && showLeaders;
+
+  return (
+    // items-start, so the shorter panel keeps its own height instead of
+    // stretching to match the taller one and ending in dead space.
+    <div className={both ? "grid items-start gap-6 lg:grid-cols-2" : "grid gap-6"}>
+      {showVolume && (
+        <TransactionVolumePanel
+          volume={volume}
+          viewerRosterId={matchViewerRoster(candidates, searchedUsername, focusedRosterId)}
+          transactionsHref={transactionsHref}
+        />
+      )}
+      {showLeaders && (
+        <Panel
+          eyebrow="Superlatives"
+          title="League leaders"
+          helper="The things a rankings table cannot tell you."
+        >
+          {/* One card per row once this panel is sharing the column. The
+              default three-across assumes the full width of the Power Pulse
+              tab's main column, which is roughly four times what it gets
+              here. */}
+          <PulseLeaders
+            leaders={leaders}
+            columnsClassName={both ? "sm:grid-cols-2 lg:grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}
+          />
+        </Panel>
+      )}
+    </div>
+  );
 }
 
 function RankingsSkeleton() {

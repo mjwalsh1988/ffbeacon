@@ -93,7 +93,21 @@ const FALLBACK = {
   glow: "",
 };
 
-export function PulseLeaders({ leaders }: { leaders: PulseLeader[] }) {
+/**
+ * The Power Pulse tab gives this panel the full width of its main column, so
+ * three across is right there. The league overview gives it half of one, which
+ * is why the track count is a prop: Tailwind's breakpoints read the viewport,
+ * not the container, so a caller in a narrower slot has to say so.
+ */
+const DEFAULT_COLUMNS = "sm:grid-cols-2 xl:grid-cols-3";
+
+export function PulseLeaders({
+  leaders,
+  columnsClassName = DEFAULT_COLUMNS,
+}: {
+  leaders: PulseLeader[];
+  columnsClassName?: string;
+}) {
   if (leaders.length === 0) {
     return (
       <p className="text-sm text-ink-muted">
@@ -103,7 +117,7 @@ export function PulseLeaders({ leaders }: { leaders: PulseLeader[] }) {
   }
 
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <ul className={`grid gap-3 ${columnsClassName}`}>
       {leaders.map((leader) => {
         const theme = THEME[leader.id] ?? FALLBACK;
         const Icon = theme.icon;
