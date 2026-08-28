@@ -83,7 +83,10 @@ export function buildYourBestLine(
   ownsPastDepthAtPosition: boolean,
 ): string | null {
   if (bestOwned) {
-    return `Your best ${scarcestPosition} is ${scarcestPosition}${bestOwned.positionRank}, ${bestOwned.war.toFixed(2)} wins.`;
+    // "matchups", matching every other user-facing string in this feature
+    // (components/league-war/summary.ts). A reader should not meet two units
+    // for the same number on two cards of the same page.
+    return `Your best ${scarcestPosition} is ${scarcestPosition}${bestOwned.positionRank}, adding ${bestOwned.war.toFixed(2)} matchups.`;
   }
   if (ownsPastDepthAtPosition) {
     return `Your best ${scarcestPosition} ranks past this chart's depth.`;

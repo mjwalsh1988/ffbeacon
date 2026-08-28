@@ -120,7 +120,7 @@ describe("selectScarcestAndDeepest", () => {
 describe("buildYourBestLine", () => {
   it("names the viewer's best player when one is matched", () => {
     const line = buildYourBestLine("RB", { positionRank: 6, war: 0.94 }, false);
-    expect(line).toBe("Your best RB is RB6, 0.94 wins.");
+    expect(line).toBe("Your best RB is RB6, adding 0.94 matchups.");
   });
 
   it("says the player ranks past the chart's depth when unmatched but rostered at that position", () => {

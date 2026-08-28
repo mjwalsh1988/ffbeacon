@@ -18,6 +18,9 @@ import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import { TeamFilter } from "@/components/team-filter";
 import { LeagueLoadError } from "@/components/league-load-error";
 import { LeagueShell } from "@/components/league-shell";
+import { WarRailSection } from "@/components/league-war/positional-war-section";
+import { PulseFavoriteCard } from "@/components/league-rail/pulse-favorite-card";
+import { loadPulseFavorite } from "@/lib/league-pulse-favorite";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
 import { PicksToggle } from "@/components/picks-toggle";
 import { RankModeToggle, type RankMode } from "@/components/power-pulse/rank-mode-toggle";
@@ -329,21 +332,45 @@ export default async function LeagueDeepViewPage({
             className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
           >
             {/*
-              Positional WAR IS NOT ON THIS PAGE, and that is deliberate.
+              TWO FINDINGS, THEN THE LINKS. A finding outranks a navigation
+              list, so both cards sit above "Explore this league", and the one
+              that answers the question readers arrive with, "who wins my
+              league", leads.
 
-              The chart, its rail summary card and the compute behind them all
-              lived here and all drew the same league the dedicated page draws.
-              One graph, two pages, and this is the page a reader lands on
-              first, so the overview spent a curve computation and a chunk of
-              vertical space restating something a tab away. Positional WAR now
-              lives at /leagues/[id]/positional-war (reachable from the section
-              nav above) and, as a preview, on Power Pulse, where scarcity is
-              context for the standings rather than a repeat.
+              Each renders nothing at all when its data is not there yet: an
+              empty finding card is worse than no card, and both of the pages
+              they link to carry the honest reason.
 
-              The practical consequence, which is the point: this page no
-              longer awaits refreshPositionalWar at all, so a cold curve costs
-              the overview nothing.
+              THE FULL Positional WAR CHART IS STILL NOT ON THIS PAGE. The
+              thirty-six rank chart, the scatterplot, the player table and the
+              upgrade what-if all live at /leagues/[id]/positional-war. What
+              the rail carries is a condensed reading of that page's first
+              chart, in the space a rail has, with a link onward.
+
+              Separate boundaries, because they read different tables and
+              neither should hold the other up. The Positional WAR card owns
+              its own compute (see WarRailSection); the Power Pulse card reads
+              rows pulseLeagueDerived has already written.
             */}
+            <Suspense fallback={null}>
+              <PulseFavoriteSection
+                leagueRowId={league.id}
+                season={Number(league.season ?? 0)}
+                powerPulseHref={powerPulseHref}
+              />
+            </Suspense>
+
+            <Suspense fallback={null}>
+              <WarRailSection
+                supabase={supabase}
+                leagueRowId={league.id}
+                season={Number(league.season ?? 0)}
+                searchedUsername={searchedUsername}
+                focusedRosterId={focusedRosterId}
+                positionalWarHref={positionalWarHref}
+              />
+            </Suspense>
+
             <Panel eyebrow="Go deeper" title="Explore this league">
               <ul className="space-y-2">
                 <li>
@@ -418,6 +445,34 @@ export default async function LeagueDeepViewPage({
  * reader hears that work is in progress rather than sitting on silence, and
  * replaced in place the moment the real panel streams in.
  */
+/**
+ * The Power Pulse favorite card, with its own read, inside its own boundary.
+ *
+ * Opens its own cookie-bound client rather than taking one as a prop, so the
+ * card can sit inside a Suspense boundary that resolves independently of
+ * everything else in the rail. loadPulseFavorite is React-cached and keyed on
+ * primitives, so a render that mounts this twice still issues one set of
+ * queries.
+ *
+ * READ ONLY. Power Pulse is recomputed on demand through pulseLeague, gated by
+ * its own TTL (CLAUDE.md), and DerivedWork on this page already runs that. This
+ * component never computes; it renders whatever the last run wrote, or nothing.
+ */
+async function PulseFavoriteSection({
+  leagueRowId,
+  season,
+  powerPulseHref,
+}: {
+  leagueRowId: string;
+  season: number;
+  powerPulseHref: string;
+}) {
+  const supabase = await createClient();
+  const favorite = await loadPulseFavorite(supabase, leagueRowId, season);
+  if (!favorite) return null;
+  return <PulseFavoriteCard favorite={favorite} powerPulseHref={powerPulseHref} />;
+}
+
 function RankingsSkeleton() {
   return (
     <div
@@ -497,12 +552,8 @@ async function TeamsPanel({
 }) {
   // Values, rankings, and the schedule land here, not in the page shell. The
   // header is already on screen while this runs.
-  // includePositionalWar: false. The overview does not render Positional WAR
-  // at all any more (see the note in the rail above), so computing a curve
-  // here would hold this table up for about ten seconds to produce something
-  // nothing on this page reads. The dedicated page and the Power Pulse preview
-  // each own their own compute; see
-  // components/league-war/positional-war-section.tsx.
+  // includePositionalWar: false. The Teams tab renders no Positional WAR at
+  // all, so a curve computed here is work nothing on this tab reads.
   await pulseLeagueDerived(createAdminClient(), leagueRowId, {
     resynced,
     includePositionalWar: false,
@@ -633,7 +684,19 @@ async function PowerRankingsSection({
 }) {
   // Values, rankings, and the schedule land here, not in the page shell. The
   // header is already on screen while this runs.
-  await pulseLeagueDerived(createAdminClient(), leagueRowId, { resynced });
+  //
+  // includePositionalWar: false. THIS is the boundary that shows the rankings
+  // table, and a cold curve costs about ten seconds. The flag and the comment
+  // explaining it have been sitting on TeamsPanel since the feature shipped,
+  // which renders no rankings table and no curve, so the call that actually
+  // needed the flag never had it and the overview's primary content waited on
+  // a Positional WAR compute on every cold fingerprint. The rail card owns
+  // that compute now, behind its own boundary; see
+  // components/league-war/positional-war-section.tsx WarRailSection.
+  await pulseLeagueDerived(createAdminClient(), leagueRowId, {
+    resynced,
+    includePositionalWar: false,
+  });
 
   const supabase = await createClient();
 

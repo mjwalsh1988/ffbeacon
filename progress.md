@@ -9090,3 +9090,61 @@ T-WAR-75 | completed | Plain-language copy, and the guide entries that were miss
      | update is guarded on the body still being the shipped copy, so an admin
      | edit survives.
      | verified: yes (migration applied and read back; 7 entries live)
+
+T-WAR-76 | completed | The overview rail: two findings, and one of them is a chart
+     | files: components/league-war/war-rail-summary.tsx (restored, rewritten),
+     |        components/league-war/positional-war-section.tsx (WarRailSection),
+     |        components/league-rail/pulse-favorite-card.tsx (new),
+     |        lib/league-pulse-favorite.ts (new), lib/league-pulse-favorite.test.ts,
+     |        components/league-war/selection.ts, rail-summary.test.ts,
+     |        app/leagues/[league_id]/page.tsx
+     | Owner decision: the overview should carry the FINDING, not a second copy
+     | of the chart. T-WAR-74 removed both, which was one card too many.
+     | The Positional WAR card is back and is now a condensed reading of the
+     | dedicated page's first chart rather than three lines of prose: a
+     | sparkline of every position's curve (top 12 ranks, drawn by the same
+     | buildChartGeometry the full chart and the OG card use, so the rail cannot
+     | disagree with the page it links to), then a row per position carrying the
+     | series marker shape, the series colour, the position name, a bar, what
+     | the best one adds, and how many the league starts. Ordered by what the
+     | best one is worth, so the hardest position to replace leads. Colour
+     | carries nothing alone: shape, name and printed figure all repeat it, and
+     | the sparkline is aria-hidden with every value it draws present as a real
+     | table cell below it.
+     | Twelve ranks rather than thirty-six because the rail is 340px: a
+     | thirty-six point series is eight pixels a player and the drop-off the
+     | card exists to show flattens into noise. The card says so and links on.
+     | New card above it: who Power Pulse expects to win. Title favorite, the
+     | odds as the headline figure, the claim behind it in words, projected
+     | record and playoff odds, and a link to the full page. Ties are counted on
+     | the ROUNDED percentage the card prints, because two teams at 24.1% and
+     | 24.0% both read "24%" and a sole favorite beside a number another team
+     | also has is a lie a reader catches.
+     | Its read is deliberately NOT loadPowerPulseView: that joins five tables
+     | and decodes every team's weekly distribution, drivers and lineup to
+     | render a card that names one team. loadPulseFavorite reads the pulse
+     | cache and resolves identity for the ONE roster it names.
+     | Both render nothing at all when their data is not there yet.
+     | Copy: buildYourBestLine now says "matchups" like every other string in
+     | the feature, rather than "wins" on one card and "matchups" on the rest.
+     | verified: yes (8 new tests for the favorite picker, full suite green,
+     |           checked in the browser against a league with both cards, a
+     |           league with neither, and a viewer with and without a roster)
+
+T-WAR-77 | completed | includePositionalWar: false was on the wrong boundary, and always had been
+     | files: app/leagues/[league_id]/page.tsx
+     | Found in a dev server log while verifying T-WAR-76: one cold overview
+     | load computed the same league's curve TWICE, 1,114ms and 1,258ms.
+     | The flag exists so that the boundary showing the RANKINGS TABLE does not
+     | wait on a cold curve. Its comment says exactly that. It has been sitting
+     | on TeamsPanel since the feature shipped, which renders no rankings table
+     | and no curve, while PowerRankingsSection, which renders the overview's
+     | primary content, used the default `true` and awaited the compute on
+     | every cold fingerprint. The fix the flag was introduced for never applied
+     | to the page it was introduced for.
+     | The flag now sits on PowerRankingsSection. TeamsPanel keeps it too, with
+     | an accurate comment: that tab renders no Positional WAR either.
+     | After: the derived breakdown for a cold overview load carries no
+     | positional-war stage at all, and exactly one compute runs, behind
+     | WarRailSection's own boundary.
+     | verified: yes (dev log, same league, before and after)

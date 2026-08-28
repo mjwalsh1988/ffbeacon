@@ -27,6 +27,7 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { refreshPositionalWar } from "@/lib/league-positional-war";
 import { PositionalWarPanel } from "./positional-war-panel";
+import { WarRailSummary } from "./war-rail-summary";
 import { parseAxisMode } from "@/lib/positional-war/chart-geometry";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -92,6 +93,52 @@ export async function PositionalWarSection({
       sourceSlug={sourceSlug}
       sourceDisplay={sourceDisplay}
       formatDisplay={formatDisplay}
+    />
+  );
+}
+
+/**
+ * The rail card, with its own compute, inside its own boundary.
+ *
+ * Same construction and the same reasoning as PositionalWarSection above: the
+ * component that SHOWS the curve is the one that waits for it, so a cold
+ * fingerprint never holds up the rankings table beside it.
+ *
+ * WHY THE OVERVIEW COMPUTES A CURVE AGAIN. It stopped when Positional WAR left
+ * that page entirely. The rail card is back, and a card that renders nothing
+ * until somebody happens to open another tab is not a card. The cost profile is
+ * the one this file was built for: `refreshPositionalWar` gates itself on the
+ * fingerprint, the TTL and the retry backoff, so every view after the first
+ * costs a handful of selects, and the one view that does pay for a compute pays
+ * for it behind this boundary rather than in front of the table.
+ */
+export async function WarRailSection({
+  supabase,
+  leagueRowId,
+  season,
+  searchedUsername,
+  focusedRosterId,
+  positionalWarHref,
+}: {
+  supabase: SupabaseClient<Database>;
+  leagueRowId: string;
+  season: number;
+  searchedUsername: string | null;
+  focusedRosterId: number | null;
+  positionalWarHref: string;
+}) {
+  // Service role, because this writes. The card below reads through the
+  // caller's client, which is anon-scoped and correct for a public table.
+  await refreshPositionalWar(createAdminClient(), leagueRowId);
+
+  return (
+    <WarRailSummary
+      supabase={supabase}
+      leagueRowId={leagueRowId}
+      season={season}
+      searchedUsername={searchedUsername}
+      focusedRosterId={focusedRosterId}
+      positionalWarHref={positionalWarHref}
     />
   );
 }
