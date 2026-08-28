@@ -160,6 +160,16 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/games/signal-scout",
     badge: "Signal Scout",
   },
+  "would-you-rather": {
+    eyebrow: "Trade voting game",
+    headlineTop: "Two sides.",
+    headlineBottom: "One vote.",
+    subhead:
+      "A real trade out of a real league, with the names taken off. Call the winner, then see the room and the full grade.",
+    facts: ["Real trades", "Free to play", "No account for two"],
+    path: "/games/would-you-rather",
+    badge: "Would You Rather?",
+  },
   rankings: {
     eyebrow: "Player rankings",
     headlineTop: "Who is actually",

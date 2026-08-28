@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17";
+    PostgrestVersion: "14.5";
   };
   public: {
     Tables: {
@@ -5674,6 +5674,221 @@ export type Database = {
             columns: ["matchup_id"];
             isOneToOne: false;
             referencedRelation: "vote_matchups";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      would_you_rather_discord_polls: {
+        Row: {
+          closes_at: string;
+          discord_message_id: string | null;
+          error: string | null;
+          id: string;
+          ingested_votes_a: number | null;
+          ingested_votes_b: number | null;
+          metadata: Json | null;
+          posted_at: string;
+          results_ingested_at: string | null;
+          slot_key: string;
+          status: string;
+          trade_id: string;
+          webhook_id: string | null;
+        };
+        Insert: {
+          closes_at: string;
+          discord_message_id?: string | null;
+          error?: string | null;
+          id?: string;
+          ingested_votes_a?: number | null;
+          ingested_votes_b?: number | null;
+          metadata?: Json | null;
+          posted_at?: string;
+          results_ingested_at?: string | null;
+          slot_key: string;
+          status?: string;
+          trade_id: string;
+          webhook_id?: string | null;
+        };
+        Update: {
+          closes_at?: string;
+          discord_message_id?: string | null;
+          error?: string | null;
+          id?: string;
+          ingested_votes_a?: number | null;
+          ingested_votes_b?: number | null;
+          metadata?: Json | null;
+          posted_at?: string;
+          results_ingested_at?: string | null;
+          slot_key?: string;
+          status?: string;
+          trade_id?: string;
+          webhook_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "would_you_rather_discord_polls_trade_id_fkey";
+            columns: ["trade_id"];
+            isOneToOne: false;
+            referencedRelation: "would_you_rather_trades";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "would_you_rather_discord_polls_webhook_id_fkey";
+            columns: ["webhook_id"];
+            isOneToOne: false;
+            referencedRelation: "discord_webhooks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      would_you_rather_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      would_you_rather_trades: {
+        Row: {
+          added_at: string;
+          discord_posted_at: string | null;
+          discord_votes_a: number;
+          discord_votes_b: number;
+          graded: Json | null;
+          graded_at: string | null;
+          id: string;
+          is_startup: boolean;
+          last_served_at: string | null;
+          league_id: string;
+          season: number | null;
+          served_count: number;
+          side_a_asset_count: number;
+          side_a_roster_id: number;
+          side_b_asset_count: number;
+          side_b_roster_id: number;
+          sleeper_transaction_id: string;
+          status: string;
+          transaction_id: string;
+          votes_a: number;
+          votes_b: number;
+          week: number | null;
+        };
+        Insert: {
+          added_at?: string;
+          discord_posted_at?: string | null;
+          discord_votes_a?: number;
+          discord_votes_b?: number;
+          graded?: Json | null;
+          graded_at?: string | null;
+          id?: string;
+          is_startup?: boolean;
+          last_served_at?: string | null;
+          league_id: string;
+          season?: number | null;
+          served_count?: number;
+          side_a_asset_count?: number;
+          side_a_roster_id: number;
+          side_b_asset_count?: number;
+          side_b_roster_id: number;
+          sleeper_transaction_id: string;
+          status?: string;
+          transaction_id: string;
+          votes_a?: number;
+          votes_b?: number;
+          week?: number | null;
+        };
+        Update: {
+          added_at?: string;
+          discord_posted_at?: string | null;
+          discord_votes_a?: number;
+          discord_votes_b?: number;
+          graded?: Json | null;
+          graded_at?: string | null;
+          id?: string;
+          is_startup?: boolean;
+          last_served_at?: string | null;
+          league_id?: string;
+          season?: number | null;
+          served_count?: number;
+          side_a_asset_count?: number;
+          side_a_roster_id?: number;
+          side_b_asset_count?: number;
+          side_b_roster_id?: number;
+          sleeper_transaction_id?: string;
+          status?: string;
+          transaction_id?: string;
+          votes_a?: number;
+          votes_b?: number;
+          week?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "would_you_rather_trades_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "would_you_rather_trades_transaction_id_fkey";
+            columns: ["transaction_id"];
+            isOneToOne: true;
+            referencedRelation: "league_transactions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      would_you_rather_votes: {
+        Row: {
+          actor_key: string | null;
+          created_at: string;
+          guest_id: string | null;
+          id: string;
+          side: string;
+          trade_id: string;
+          user_id: string | null;
+        };
+        Insert: {
+          actor_key?: string | null;
+          created_at?: string;
+          guest_id?: string | null;
+          id?: string;
+          side: string;
+          trade_id: string;
+          user_id?: string | null;
+        };
+        Update: {
+          actor_key?: string | null;
+          created_at?: string;
+          guest_id?: string | null;
+          id?: string;
+          side?: string;
+          trade_id?: string;
+          user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "would_you_rather_votes_trade_id_fkey";
+            columns: ["trade_id"];
+            isOneToOne: false;
+            referencedRelation: "would_you_rather_trades";
             referencedColumns: ["id"];
           },
         ];

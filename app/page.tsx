@@ -551,7 +551,8 @@ function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
 
 type FeaturedGame = {
   /** Absent while the game is still being built. A card with no href renders
-   *  as a non-interactive "coming soon" placeholder rather than a dead link. */
+   *  as a non-interactive "coming soon" placeholder rather than a dead link.
+   *  Nothing is in that state right now; the branch stays for the next one. */
   href?: string;
   title: string;
   description: string;
@@ -572,11 +573,13 @@ const FEATURED_GAMES: FeaturedGame[] = [
     status: "New",
   },
   {
+    href: "/games/would-you-rather",
     title: "Would You Rather?",
     description:
-      "Two sides of a real trade, one vote. Call the winner round after round, then see how your read stacks up against everyone else who played.",
+      "A real trade out of a real league, with the managers' names taken off. Call the winner, then see how the room voted and what the full grade says.",
+    cta: "Call a trade",
     icon: Vote,
-    status: "Coming soon",
+    status: "New",
   },
 ];
 

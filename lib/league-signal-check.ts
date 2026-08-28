@@ -63,6 +63,17 @@ export interface LeagueTradeAssetMeta {
   sleeperId: string | null;
   round: number | null;
   /**
+   * The FF Beacon player id behind this asset, when there is one. Null for a
+   * pick.
+   *
+   * Carried because a consumer that wants anything else about the player (value
+   * trend, positional finish, age) would otherwise have to map the Sleeper id
+   * back through `players.external_ids` in a second query, having already been
+   * handed the id this function resolved. Would You Rather reads it for the
+   * 30-day value movement on its reveal.
+   */
+  playerId?: string | null;
+  /**
    * Set when this asset is a startup draft pick that was resolved into the
    * player at that seat. The card shows the seat alongside the player so a
    * reader can see both what moved and what it became.
@@ -300,7 +311,7 @@ export async function analyzeLeagueTrades(
       const side = rosterToSide(Number(rid));
       const asset: AssetInput = { kind: "player", playerId };
       sideAssets[side].push(asset);
-      assetMeta[side].push({ kind: "player", sleeperId: sid, round: null });
+      assetMeta[side].push({ kind: "player", sleeperId: sid, round: null, playerId });
       unionAssets.push(asset);
     }
 
@@ -372,6 +383,7 @@ export async function analyzeLeagueTrades(
             kind: "player",
             sleeperId: null,
             round,
+            playerId,
             startupPick: {
               label: startup.label ?? `${season} R${round}`,
               season,
@@ -396,7 +408,7 @@ export async function analyzeLeagueTrades(
             }
           : { kind: "pick", season, round };
         sideAssets[side].push(asset);
-        assetMeta[side].push({ kind: "pick", sleeperId: null, round });
+        assetMeta[side].push({ kind: "pick", sleeperId: null, round, playerId: null });
         unionAssets.push(asset);
       }
     }

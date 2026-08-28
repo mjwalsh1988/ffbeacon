@@ -21,12 +21,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/games" },
   title: "Free Fantasy Football Games",
   description:
-    "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Start with Signal Scout. Free, and no signup to play.",
+    "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Name a hidden player, or call the winner of a real trade. Free to play.",
   ...pageShareMetadata({
     key: "games",
     title: "Free Fantasy Football Games",
     description:
-      "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Start with Signal Scout. Free, and no signup to play.",
+      "Games built on live NFL data, so what you pick up playing them is worth something on Sunday. Name a hidden player, or call the winner of a real trade. Free to play.",
     path: "/games",
   }),
 };
@@ -57,12 +57,14 @@ const GAMES: Game[] = [
     status: "New",
   },
   {
+    href: "/games/would-you-rather",
     title: "Would You Rather?",
     tagline: "Two sides. One vote.",
     description:
-      "Two sides of a real trade, one vote. Call the winner round after round, then see how your read stacks up against everyone else who played.",
+      "A real trade out of a real league, with the managers' names taken off. Call the winner, then see how the room voted and what the full grade says.",
+    cta: "Call a trade",
     icon: Vote,
-    status: "Coming soon",
+    status: "New",
   },
 ];
 
@@ -99,8 +101,9 @@ export default function GamesPage() {
                   board, so what you learn playing carries straight into a draft.
                 </li>
                 <li>
-                  Nothing here needs an account. Sign in only if you want your streak
-                  and your place on a leaderboard kept.
+                  Signal Scout needs no account at all. Would You Rather gives you
+                  a few rounds first, then asks for one, so a vote can be counted
+                  once per person.
                 </li>
                 <li>
                   Each game is playable by keyboard, and every clue is text, so a round
@@ -138,7 +141,7 @@ export default function GamesPage() {
         <Panel
           eyebrow="The lineup"
           title="Choose a game to play"
-          helper="Playable games first. The rest arrive here as they are finished."
+          helper="Both are free, both run on the same data behind the rankings board."
         >
           <ul className="grid gap-4 lg:grid-cols-2" role="list">
             {GAMES.map((game) => (

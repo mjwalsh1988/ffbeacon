@@ -24,6 +24,7 @@ export type GuidePageKey =
   | "guides"
   | "games"
   | "signal-scout"
+  | "would-you-rather"
   | "player-profile"
   | "league-overview"
   | "league-team"
@@ -96,6 +97,11 @@ export const GUIDE_PAGES: GuidePageDef[] = [
   { key: "rankings", title: "Rankings", match: (p) => p === "/rankings" },
   // Games sub-routes before the games hub.
   { key: "signal-scout", title: "Signal Scout", match: (p) => p === "/games/signal-scout" },
+  {
+    key: "would-you-rather",
+    title: "Would You Rather?",
+    match: (p) => p === "/games/would-you-rather",
+  },
   { key: "games", title: "Games", match: (p) => p === "/games" },
   { key: "guides", title: "Guides", match: (p) => p === "/guides" || p.startsWith("/guides/") },
   // My Beacon sub-routes before the dashboard catch.

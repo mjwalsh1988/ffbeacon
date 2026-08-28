@@ -583,3 +583,94 @@ Transactions:
 - Tab on `/leagues/[sleeper_league_id]` shows the most recent 10 with a "View all transactions →" link.
 - Shared row component: `components/transaction-row.tsx`. Trades render the side-by-side analyzer with per-side totals and a verdict. Non-trades render adds / drops / picks / FAAB lists.
 - Trade analyzer lib: `lib/trade-analyzer.ts → analyzeTrade()`. Reads player values from `player_value_trends`; reads pick values from `draft_pick_values` keyed by the resolved pick source (always KTC today).
+
+## Would You Rather (the trade voting game)
+
+`/games/would-you-rather`. A real trade out of a synced Sleeper league, stripped
+of every name that identifies the two managers, put in front of a reader who
+calls the winner. After the vote: how the room voted, the full Signal Check
+verdict, and what that league's own numbers say about the pieces.
+
+ABSOLUTE RULE: NOTHING THAT HINTS AT THE ANSWER MAY REACH THE BROWSER BEFORE THE
+VOTE IS RECORDED. `WyrRound` (the board) carries names, positions, pick seats and
+the league's format, and carries no value, total, margin, verdict, confidence or
+tally. `WyrReview` (the reveal) is assembled by the vote route AFTER the vote row
+is written and returned in that response. Never pass review-shaped data to a
+client component as a prop: anything handed to one is serialized into the page's
+flight payload, where a reader can read it out of view-source before pressing a
+button. This is the same trap the Signal Scout leaderboard rail had to be pulled
+back out of.
+
+ABSOLUTE RULE: A VOTE IS NEVER COUNTED TWICE, AND THE DATABASE IS WHAT GUARANTEES
+IT. Two partial unique indexes on `would_you_rather_votes` (one keyed on
+`user_id`, one on `guest_id`; a single composite would not work, because a null
+in a unique tuple does not collide in Postgres). The insert is ATTEMPTED and a
+23505 is read as "already voted"; a "have they voted?" SELECT followed by an
+INSERT is a race two fast clicks win. A repeat returns the reveal for the side
+originally picked and burns no free vote.
+
+ABSOLUTE RULE: NOBODY IS NAMED. The two managers are Team A and Team B on the
+page, in the Discord poll, in the announcements and in every sentence of the
+review. `league_users` is never queried on this path, and the Power Pulse view's
+`teamName` and `ownerHandle` are dropped rather than carried into the DTO. Which
+roster is Team A is PINNED on the pool row (lowest Sleeper roster id first,
+matching how `lib/league-signal-check.ts` orders sides), so the label means the
+same roster everywhere, forever.
+
+ABSOLUTE RULE: this feature only READS `league_positional_war_cache` and
+`league_power_pulse_cache`. It never triggers a compute, and must never be made
+to: those are on-demand-only through the league deep view, for the scaling
+reasons stated in their own sections above. A league without curves gets an
+honest "not built yet" line, not a fabricated zero.
+
+The pool (`would_you_rather_trades`) holds only trades Signal Check has ALREADY
+graded successfully, so serving a round is a cheap read rather than a discovery.
+Topped up inline when it runs thin, in bulk by `npm run wyr:pool`, and from the
+admin panel. Retiring a trade never deletes its votes.
+
+Guests get `guest_vote_limit` rounds (2 by default) then the sign-in state. The
+allowance is checked BEFORE any grading work, so a reader who cannot vote never
+costs a query budget. It is a courtesy, not a security boundary; the tally's
+integrity rests on the unique indexes, not on the cookie.
+
+Module map:
+- `lib/would-you-rather/types.ts`: the two DTOs, and the line between them.
+- `lib/would-you-rather/settings.ts` / `default-settings.ts`: one global jsonb
+  row, same shape as `signal_scout_settings`. Admin-edited at
+  `/admin/would-you-rather`, validated server-side.
+- `lib/would-you-rather/grade.ts`: the one wrapper over `analyzeLeagueTrades`,
+  shared by the pool builder and the round loader so the pool can never admit a
+  trade the round loader would fail on.
+- `lib/would-you-rather/pool.ts`: sampling and grading. Random offset over uuid
+  order rather than `order by random()`, which PostgREST cannot express.
+- `lib/would-you-rather/round.ts`: selection, `loadRound`, `buildReview`.
+- `lib/would-you-rather/identity.ts` / `vote.ts`: who is voting, and the write.
+- `lib/would-you-rather/schedule.ts`: the Discord schedule, in Eastern. Pure.
+- `lib/would-you-rather/side-names.ts`: Signal Check's templates say "Side A";
+  this surface has no other name for the parties, so the sentence is renamed on
+  the way out, and only here.
+
+Discord poll:
+- ONE HOURLY CRON, `/api/cron/would-you-rather-discord`, and the SCHEDULE lives
+  in the admin panel. Ticking three hours is three posts a day; ticking one is
+  one. It is deliberately not three fixed cron entries: a cron expression cannot
+  express a time an admin picks without a deploy, and a UTC hour silently shifts
+  by one twice a year, so a job pinned to 12:00 UTC is 8am Eastern for seven
+  months and 7am for five with nobody told.
+- Off by default. Nothing posts until an admin chooses a webhook and turns it on.
+- A webhook, not the bot: Discord accepts a `poll` on a webhook execute, and
+  `GET /webhooks/{id}/{token}/messages/{id}` returns that poll's results
+  authenticated by the token already in the URL. No bot permission, channel id
+  or gateway connection is involved.
+- ABSOLUTE RULE: posting is claimed by `slot_key`, a unique Eastern
+  "YYYY-MM-DD-HH", and the row is written BEFORE the message is sent. A claim
+  taken after the work is a claim that does not stop the work.
+- ABSOLUTE RULE: ingestion is claimed by a conditional update on
+  `results_ingested_at`, and the trade's Discord totals are then RECOMPUTED as
+  the SUM of its polls rather than incremented. A sum cannot drift; an increment
+  run twice doubles a tally.
+- Discord's counts are aggregates with no voter identities attached, which is why
+  they live in their own columns rather than as rows in the votes table. Nothing
+  pretends to know who voted on Discord.
+- Answer order IS the mapping: Discord assigns answer id 1 to the first answer,
+  and the ingestion reads id 1 as side A. Swapping the answers swaps every vote.

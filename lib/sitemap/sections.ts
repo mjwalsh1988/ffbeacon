@@ -114,6 +114,7 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/tools/signal-check", priority: 0.6 },
   { path: "/games", priority: 0.4 },
   { path: "/games/signal-scout", priority: 0.4 },
+  { path: "/games/would-you-rather", priority: 0.4 },
   { path: "/about", priority: 0.4 },
   { path: "/author/michael", priority: 0.4 },
   { path: "/privacy", priority: 0.2 },

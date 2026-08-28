@@ -85,6 +85,11 @@ export const GAMES_NAV: NavChild[] = [
     href: "/games/signal-scout",
     description: "Decode the profile. Find the player.",
   },
+  {
+    label: "Would You Rather?",
+    href: "/games/would-you-rather",
+    description: "Two sides of a real trade. One vote.",
+  },
 ];
 
 export const PRIMARY_NAV: NavItem[] = [
@@ -159,6 +164,22 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["game", "games", "guess", "mystery", "player", "scout", "clues", "trivia"],
   },
   {
+    label: "Would You Rather?",
+    href: "/games/would-you-rather",
+    description: "Two sides of a real trade. One vote.",
+    keywords: [
+      "game",
+      "games",
+      "would you rather",
+      "vote",
+      "poll",
+      "trade",
+      "trades",
+      "who won",
+      "wyr",
+    ],
+  },
+  {
     label: "Games",
     href: "/games",
     description: "Free fantasy football games built on real data",
@@ -224,6 +245,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
     links: [
       { label: "All Games", href: "/games" },
       { label: "Signal Scout", href: "/games/signal-scout" },
+      { label: "Would You Rather?", href: "/games/would-you-rather" },
     ],
   },
   {

@@ -95,6 +95,7 @@ export type CronJobName =
   | "beacon-brief-curate"
   | "beacon-brief-worker"
   | "league-sync-worker"
+  | "would-you-rather-discord"
   | "rebuild-draft-value"
   | "cron-health";
 
@@ -223,6 +224,13 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "* * * * *",
     description:
       "Drains the Sync all queue from My Sleeper Leagues: up to four league pulses per run, paced, with backoff and a reaper for stalled jobs. Idle runs cost one indexed read.",
+  },
+  {
+    name: "would-you-rather-discord",
+    label: "Would You Rather Discord poll",
+    schedule: "0 * * * *",
+    description:
+      "Ticks hourly and almost always does nothing. Whether it posts is decided by the times an admin picked at /admin/would-you-rather, read in America/New_York, so the frequency is a setting rather than a cron expression and it holds its Eastern time across daylight saving. On a scheduled hour it posts one anonymised trade to Discord as a poll; on every tick it also folds any poll past its close time into that trade's tally, exactly once each. Off by default: nothing posts until a webhook is chosen and the toggle is turned on.",
   },
   {
     name: "cron-health",

@@ -64,6 +64,10 @@
     {
       "path": "/api/cron/league-sync-worker",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/would-you-rather-discord",
+      "schedule": "0 * * * *"
     }
   ]
 }

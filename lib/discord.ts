@@ -36,6 +36,44 @@ export interface DiscordEmbed {
   footer?: { text: string };
 }
 
+/**
+ * A poll attached to a new message.
+ *
+ * Discord accepts a poll on a webhook execute (not on an edit: a poll is fixed
+ * once posted, which is the point of it). The duration is in HOURS and Discord
+ * caps it at 32 days. Answer ids are assigned by Discord in the order the
+ * answers are sent, starting at 1, which is how the results below are matched
+ * back to the sides they belong to.
+ */
+export interface DiscordPollInput {
+  question: string;
+  answers: string[];
+  /** Hours the poll stays open. */
+  durationHours: number;
+}
+
+/** What Discord reports back for a poll on a message we fetch. */
+export interface DiscordPollResults {
+  /**
+   * Discord's raw poll object, exactly as returned. Stored so a disputed count
+   * has an audit trail and so a change in how Discord assigns answer ids can be
+   * re-derived rather than guessed at.
+   */
+  raw: unknown;
+  /**
+   * Discord seals a poll's numbers some time AFTER it expires rather than at
+   * the instant it does, so this is the flag to prefer and never the flag to
+   * wait on forever.
+   */
+  isFinalized: boolean;
+  /**
+   * Vote count per answer id. An answer nobody voted for can be MISSING from
+   * Discord's array rather than present with a zero, so callers must default a
+   * missing id to 0 instead of treating its absence as an error.
+   */
+  counts: Map<number, number>;
+}
+
 /** A binary file uploaded with the message (multipart). */
 export interface DiscordAttachment {
   filename: string;
@@ -53,6 +91,8 @@ export interface DiscordMessageInput {
    * multipart/form-data (payload_json + files[n]); otherwise it is plain JSON.
    */
   attachments?: DiscordAttachment[];
+  /** Only honoured on create. Discord ignores a poll on an edit. */
+  poll?: DiscordPollInput;
 }
 
 export type DiscordResult =
@@ -74,6 +114,19 @@ function buildBody(
   if (withIdentity) {
     body.username = BEACON_RELAY_USERNAME;
     body.avatar_url = beaconRelayAvatarUrl();
+  }
+  // A poll is likewise create-only, and it is its OWN condition rather than a
+  // passenger on the identity branch. Nesting it there happened to work and
+  // coupled two unrelated rules: a later change to when identity is set would
+  // have silently stopped sending polls.
+  if (withIdentity && input.poll) {
+    body.poll = {
+      question: { text: input.poll.question },
+      answers: input.poll.answers.map((text) => ({ poll_media: { text } })),
+      duration: input.poll.durationHours,
+      allow_multiselect: false,
+      layout_type: 1,
+    };
   }
   return body;
 }
@@ -235,6 +288,75 @@ export async function patchWebhookMessage(
       status: 0,
       retryAfterMs: null,
       error: err instanceof Error ? err.message : "discord patch failed",
+    };
+  }
+}
+
+/**
+ * Read a message back through the webhook that created it.
+ *
+ * The only reason this exists: a poll's results live on the message, and this
+ * endpoint returns them without a bot token or a channel id. `GET /webhooks/
+ * {id}/{token}/messages/{message_id}` is authenticated by the webhook token
+ * already in the URL, so nothing new has to be configured to read a poll we
+ * posted ourselves.
+ *
+ * A 404 means the message is gone (deleted in the channel, or the webhook was
+ * recreated). That is reported as a failure rather than as an empty poll,
+ * because "nobody voted" and "we cannot see it" are different answers and only
+ * one of them should ever be written into a tally.
+ */
+export type DiscordPollFetch =
+  | { ok: true; poll: DiscordPollResults | null }
+  | { ok: false; status: number; retryAfterMs: number | null; error: string };
+
+export async function fetchWebhookPoll(
+  webhookUrl: string,
+  messageId: string,
+): Promise<DiscordPollFetch> {
+  try {
+    const res = await fetch(
+      `${webhookUrl}/messages/${encodeURIComponent(messageId)}`,
+      { method: "GET", signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) },
+    );
+    const json = (await res.json().catch(() => null)) as {
+      poll?: {
+        results?: {
+          is_finalized?: boolean;
+          answer_counts?: Array<{ id?: number; count?: number }>;
+        };
+      };
+    } | null;
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        retryAfterMs: retryAfterMs(res, json),
+        error: `Discord message fetch ${res.status}`,
+      };
+    }
+    const results = json?.poll?.results;
+    if (!results) return { ok: true, poll: null };
+    const counts = new Map<number, number>();
+    for (const entry of results.answer_counts ?? []) {
+      if (typeof entry?.id === "number" && typeof entry?.count === "number") {
+        counts.set(entry.id, entry.count);
+      }
+    }
+    return {
+      ok: true,
+      poll: {
+        raw: json?.poll ?? null,
+        isFinalized: Boolean(results.is_finalized),
+        counts,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      retryAfterMs: null,
+      error: err instanceof Error ? err.message : "discord message fetch failed",
     };
   }
 }

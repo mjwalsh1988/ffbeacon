@@ -37,6 +37,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/brief/team": "Teams",
   "/games": "Games",
   "/games/signal-scout": "Signal Scout",
+  "/games/would-you-rather": "Would You Rather?",
   "/guides": "Guides",
   "/guides/fantasy-football-terms": "Fantasy Football Terms",
   "/guides/fantasy-football-draft-guide": "Draft Guide",

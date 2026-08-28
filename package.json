@@ -50,6 +50,7 @@
     "calculate:defense-splits": "tsx --env-file=.env.local scripts/calculate-defense-splits.ts",
     "calculate:projection-accuracy": "tsx --env-file=.env.local scripts/calculate-projection-accuracy.ts",
     "calculate:draft-value": "tsx --env-file=.env.local scripts/calculate-draft-value.ts",
+    "wyr:pool": "tsx --env-file=.env.local scripts/would-you-rather-pool.ts",
     "sync:stats:full": "npm run sync:stats && npm run calculate:finishes && npm run calculate:defense-splits && npm run calculate:projection-accuracy",
     "sync:ktc:full": "npm run sync:ktc && npm run seed:rankings && npm run calculate:trends",
     "sync:full": "npm run sync:ktc && npm run sync:fantasycalc && npm run sync:dynastyprocess && npm run seed:rankings && npm run calculate:trends",
