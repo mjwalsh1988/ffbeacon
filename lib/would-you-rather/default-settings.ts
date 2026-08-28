@@ -12,6 +12,8 @@
  * what the first message would say.
  */
 
+import type { LeagueCategoryKey } from "@/lib/league-category";
+
 export interface WouldYouRatherSettings {
   /** Master gate. Off means the page renders an "off right now" state. */
   game_enabled: boolean;
@@ -66,8 +68,28 @@ export interface WouldYouRatherSettings {
   discord: {
     /** Off by default. Nothing posts outward until an admin says so. */
     enabled: boolean;
-    /** A row in discord_webhooks. Null means nothing can post. */
+    /**
+     * The fallback channel. A row in discord_webhooks, or null.
+     *
+     * Used for any league type that has no channel of its own below. With every
+     * route left empty this is the single channel the game posted to before
+     * per-type routing existed, which is why it stays the fallback rather than
+     * being replaced by the routes.
+     */
     webhook_id: string | null;
+    /**
+     * One channel per league type, so a dynasty trade lands in the dynasty room
+     * and a best ball trade in the best ball room.
+     *
+     * A null entry means "use webhook_id". A league type with neither is not
+     * posted at all, which is a legible silence; dropping it into whichever
+     * channel happened to be configured is not.
+     *
+     * Two types pointed at the same webhook are ONE destination and share one
+     * post per scheduled hour. That is what keeps a single-webhook setup posting
+     * once an hour rather than four times. See lib/would-you-rather/routing.ts.
+     */
+    routes: Record<LeagueCategoryKey, string | null>;
     /**
      * Which hours of the day a poll goes out, in America/New_York, 0 to 23.
      *
@@ -112,6 +134,12 @@ export const DEFAULT_WOULD_YOU_RATHER_SETTINGS: WouldYouRatherSettings = {
   discord: {
     enabled: false,
     webhook_id: null,
+    routes: {
+      dynasty: null,
+      redraft: null,
+      "best-ball-dynasty": null,
+      "best-ball-redraft": null,
+    },
     post_hours: [8, 15, 20],
     poll_hours: 72,
     mention_role_ids: [],

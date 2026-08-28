@@ -13,6 +13,12 @@
  * labelled in America/New_York, which is what the cron reads, so the label and
  * the behaviour cannot drift apart at a daylight-saving boundary.
  *
+ * EACH LEAGUE TYPE CAN HAVE ITS OWN CHANNEL. Dynasty trades to the dynasty
+ * room, redraft to the redraft room, best ball to the best ball room. The trade
+ * is picked first and the channel follows from it, so this is a map of where
+ * things land rather than a set of slots that each have to be filled: a
+ * scheduled time still posts one trade, into whichever room matches it.
+ *
  * Accessibility: every control has a real label tied by id, each group is a
  * fieldset with a legend, the save result is announced through a polite live
  * region, and both the save and the two one-off actions are buttons rather than
@@ -28,6 +34,12 @@ import {
   type WouldYouRatherSettings,
 } from "@/lib/would-you-rather/default-settings";
 import { describePostHour, describeSchedule } from "@/lib/would-you-rather/schedule";
+import {
+  describeRouting,
+  WYR_CATEGORY_HINT,
+  WYR_CATEGORY_LABEL,
+  WYR_ROUTE_CATEGORIES,
+} from "@/lib/would-you-rather/routing";
 import {
   growPoolAction,
   postDiscordPollNowAction,
@@ -198,10 +210,51 @@ export function WouldYouRatherSettingsManager({
         />
 
         <WebhookSelect
+          label="Fallback channel"
           value={settings.discord.webhook_id}
           options={webhooks}
+          emptyLabel="No webhook selected"
+          hint="Used by any league type below that has no channel of its own. Leave it empty and only the types you route explicitly get picked at all."
           onChange={(id) => patch({ discord: { ...settings.discord, webhook_id: id } })}
         />
+
+        <fieldset className="rounded-card border border-line bg-base/40 p-4">
+          <legend className="px-1 text-xs font-medium text-ink">
+            A channel per league type
+          </legend>
+          <p className="mb-3 text-[11px] leading-relaxed text-ink-subtle">
+            Point each type at the room that plays it. A redraft manager reading a
+            dynasty trade has no way to price it. Each scheduled time still posts
+            one trade; this only decides where that trade lands. A type with no
+            channel here and no fallback is never picked.
+          </p>
+          <div className="space-y-4">
+            {WYR_ROUTE_CATEGORIES.map((category) => (
+              <WebhookSelect
+                key={category}
+                label={WYR_CATEGORY_LABEL[category]}
+                value={settings.discord.routes[category]}
+                options={webhooks}
+                emptyLabel="Same as the fallback channel"
+                hint={WYR_CATEGORY_HINT[category]}
+                onChange={(id) =>
+                  patch({
+                    discord: {
+                      ...settings.discord,
+                      routes: { ...settings.discord.routes, [category]: id },
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
+          <p className="mt-4 text-[11px] leading-relaxed text-ink-subtle">
+            Webhooks are added and edited at{" "}
+            <span className="text-ink">/admin/system/webhooks</span>. The URL itself
+            is a secret and is never sent to this page. A webhook switched off there
+            stops the types pointed at it.
+          </p>
+        </fieldset>
 
         <PostHours
           hours={settings.discord.post_hours}
@@ -227,6 +280,13 @@ export function WouldYouRatherSettingsManager({
           {settings.discord.enabled
             ? describeSchedule(settings.discord.post_hours)
             : "Posting is off, so nothing will post."}
+          {settings.discord.enabled && (
+            <>
+              {" "}
+              <span className="font-medium text-ink">Where it goes: </span>
+              {describeRouting(settings)}
+            </>
+          )}
         </p>
       </Group>
 
@@ -474,13 +534,28 @@ function NumberField({
   );
 }
 
+/**
+ * One webhook picker: the fallback channel, or one league type's channel.
+ *
+ * The empty option is not the same sentence in the two places it appears, which
+ * is why it is a prop. On the fallback it means "nothing is posted unless a
+ * type has its own channel"; on a league type it means "use the fallback". A
+ * shared "None" would have read as the first thing in both places and been
+ * wrong in one of them.
+ */
 function WebhookSelect({
+  label,
   value,
   options,
+  emptyLabel,
+  hint,
   onChange,
 }: {
+  label: string;
   value: string | null;
   options: WebhookOption[];
+  emptyLabel: string;
+  hint: string;
   onChange: (id: string | null) => void;
 }) {
   const id = useId();
@@ -488,7 +563,7 @@ function WebhookSelect({
   return (
     <div className="max-w-md">
       <label htmlFor={id} className="block text-xs font-medium text-ink-subtle">
-        Discord webhook
+        {label}
       </label>
       <select
         id={id}
@@ -497,7 +572,7 @@ function WebhookSelect({
         onChange={(e) => onChange(e.target.value || null)}
         className={inputCls}
       >
-        <option value="">No webhook selected</option>
+        <option value="">{emptyLabel}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>
             {option.label}
@@ -506,10 +581,7 @@ function WebhookSelect({
         ))}
       </select>
       <p id={hintId} className="mt-1 text-[11px] leading-relaxed text-ink-subtle">
-        Webhooks are added and edited at{" "}
-        <span className="text-ink">/admin/system/webhooks</span>. The URL itself is a
-        secret and is never sent to this page. A webhook that is switched off there
-        stops this poll too.
+        {hint}
       </p>
     </div>
   );

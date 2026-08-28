@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import { formatEastern, formatRelative } from "@/lib/datetime";
 import { describeSchedule } from "@/lib/would-you-rather/schedule";
+import { describeRouting } from "@/lib/would-you-rather/routing";
 import {
   loadWouldYouRatherSettings,
   WOULD_YOU_RATHER_SETTINGS_ID,
@@ -72,7 +73,7 @@ export default async function WouldYouRatherAdminPage() {
     admin
       .from("would_you_rather_discord_polls")
       .select(
-        "id, slot_key, posted_at, closes_at, results_ingested_at, ingested_votes_a, ingested_votes_b, status, error, discord_message_id",
+        "id, slot_key, route_key, webhook_id, posted_at, closes_at, results_ingested_at, ingested_votes_a, ingested_votes_b, status, error, discord_message_id",
       )
       .order("posted_at", { ascending: false })
       .limit(15),
@@ -95,6 +96,12 @@ export default async function WouldYouRatherAdminPage() {
     label: w.label,
     isActive: w.is_active,
   }));
+
+  // A poll row stores the webhook it used, not the channel's name. Naming it
+  // here is what lets an admin read the table as "which room got what" rather
+  // than as a column of uuids. A webhook deleted since the post has no name
+  // left to give, so the row says so instead of rendering a bare id.
+  const webhookLabels = new Map((webhookRows ?? []).map((w) => [w.id, w.label]));
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -121,7 +128,8 @@ export default async function WouldYouRatherAdminPage() {
           ? describeSchedule(settings.discord.post_hours)
           : "Switched off. Nothing is being posted."}{" "}
         The cron behind it ticks every hour and does nothing on an hour you have not
-        selected, so the frequency above is the whole schedule.
+        selected, so the frequency above is the whole schedule.{" "}
+        {settings.discord.enabled && describeRouting(settings)}
       </p>
 
       <div className="mt-8">
@@ -169,9 +177,10 @@ export default async function WouldYouRatherAdminPage() {
           Recent Discord polls
         </h2>
         <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
-          One row per poll, keyed by the Eastern hour it was posted for. Results are
-          read back once, some time after the poll closes, and added to that trade's
-          tally. A row that has been counted can never be counted again.
+          One row per poll, keyed by the Eastern hour it was posted for, with the
+          channel that hour's trade landed in. Results are read back once, some
+          time after the poll closes, and added to that trade's tally. A row that
+          has been counted can never be counted again.
         </p>
 
         {(polls ?? []).length === 0 ? (
@@ -189,13 +198,14 @@ export default async function WouldYouRatherAdminPage() {
             tabIndex={0}
             className="beacon-scroll mt-4 overflow-x-auto rounded-card border border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            <table className="w-full min-w-[42rem] text-sm">
+            <table className="w-full min-w-[48rem] text-sm">
               <caption className="sr-only">
                 Discord polls, newest first, with their vote counts and status.
               </caption>
               <thead>
                 <tr className="border-b border-line bg-surface-elevated/50 text-left">
                   <Th>Slot</Th>
+                  <Th>Channel</Th>
                   <Th>Posted</Th>
                   <Th>Closes</Th>
                   <Th>Counted</Th>
@@ -211,6 +221,12 @@ export default async function WouldYouRatherAdminPage() {
                         {poll.slot_key}
                       </span>
                     </th>
+                    <Td>
+                      {/* The FK nulls out when a webhook is deleted, so a row
+                          can outlive the channel it names. Said plainly rather
+                          than left blank or shown as a bare id. */}
+                      {webhookLabels.get(poll.webhook_id ?? "") ?? "Deleted webhook"}
+                    </Td>
                     <Td>{formatEastern(poll.posted_at)}</Td>
                     <Td>{formatEastern(poll.closes_at)}</Td>
                     <Td>

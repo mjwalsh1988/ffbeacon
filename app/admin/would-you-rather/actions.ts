@@ -10,6 +10,7 @@ import {
 } from "@/lib/would-you-rather/settings";
 import { countActivePool, growPool } from "@/lib/would-you-rather/pool";
 import { postScheduledPoll } from "@/lib/would-you-rather/discord";
+import { hasAnyWebhook } from "@/lib/would-you-rather/routing";
 
 const ADMIN_PATH = "/admin/would-you-rather";
 const GAME_PATH = "/games/would-you-rather";
@@ -104,9 +105,14 @@ export async function retireTradeAction(tradeId: string): Promise<ActionResult> 
  * hour" rule as the cron. That is deliberate: a test that bypassed the guard
  * would not be testing the thing that runs.
  *
+ * Which channel it lands in depends on the league type of the trade it happens
+ * to pick, exactly as a scheduled hour does. The result names that channel, so
+ * an admin checking a newly split setup can see where this one went rather than
+ * having to guess.
+ *
  * Every other gate still applies. It refuses while the game is off, while
- * Discord posting is off, or with no webhook chosen, because those are the
- * settings an admin would be testing and pretending they are not set would
+ * Discord posting is off, or with no webhook chosen anywhere, because those are
+ * the settings an admin would be testing and pretending they are not set would
  * teach them nothing.
  */
 export async function postDiscordPollNowAction(): Promise<ActionResult> {
@@ -117,7 +123,7 @@ export async function postDiscordPollNowAction(): Promise<ActionResult> {
   if (!settings.discord.enabled) {
     return { ok: false, error: "Discord posting is switched off. Turn it on and save first." };
   }
-  if (!settings.discord.webhook_id) {
+  if (!hasAnyWebhook(settings)) {
     return { ok: false, error: "No webhook is selected. Choose one and save first." };
   }
 
@@ -140,8 +146,12 @@ export async function postDiscordPollNowAction(): Promise<ActionResult> {
 
   revalidatePath(ADMIN_PATH);
   if (result.status === "posted") {
-    return { ok: true, message: `Posted. Discord message id ${result.messageId ?? "unknown"}.` };
+    // The channel is named, because "posted" alone leaves an admin who has just
+    // split their rooms to go and look in Discord to find out which one got it.
+    return {
+      ok: true,
+      message: `Posted to the ${result.route.label} channel. Discord message id ${result.messageId ?? "unknown"}.`,
+    };
   }
-  if (result.status === "skipped") return { ok: false, error: result.reason };
   return { ok: false, error: result.reason };
 }

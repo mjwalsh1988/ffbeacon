@@ -5689,6 +5689,7 @@ export type Database = {
           metadata: Json | null;
           posted_at: string;
           results_ingested_at: string | null;
+          route_key: string;
           slot_key: string;
           status: string;
           trade_id: string;
@@ -5704,6 +5705,7 @@ export type Database = {
           metadata?: Json | null;
           posted_at?: string;
           results_ingested_at?: string | null;
+          route_key?: string;
           slot_key: string;
           status?: string;
           trade_id: string;
@@ -5719,6 +5721,7 @@ export type Database = {
           metadata?: Json | null;
           posted_at?: string;
           results_ingested_at?: string | null;
+          route_key?: string;
           slot_key?: string;
           status?: string;
           trade_id?: string;
@@ -5776,6 +5779,7 @@ export type Database = {
           id: string;
           is_startup: boolean;
           last_served_at: string | null;
+          league_category: string | null;
           league_id: string;
           season: number | null;
           served_count: number;
@@ -5800,6 +5804,7 @@ export type Database = {
           id?: string;
           is_startup?: boolean;
           last_served_at?: string | null;
+          league_category?: string | null;
           league_id: string;
           season?: number | null;
           served_count?: number;
@@ -5824,6 +5829,7 @@ export type Database = {
           id?: string;
           is_startup?: boolean;
           last_served_at?: string | null;
+          league_category?: string | null;
           league_id?: string;
           season?: number | null;
           served_count?: number;

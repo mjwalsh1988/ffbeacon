@@ -40,6 +40,7 @@ import {
   WYR_LEAGUE_COLUMNS,
   type WyrLeagueRow,
 } from "./grade";
+import { categoryForLeagueMetadata } from "./routing";
 import type { WouldYouRatherSettings } from "./default-settings";
 
 type Client = SupabaseClient<Database>;
@@ -292,6 +293,13 @@ async function growPoolOnce(
       return nothing("Signal Check is switched off, so no trade can be graded.");
     }
 
+    // Which Discord channel these trades will post to, decided once for the
+    // whole league rather than per trade. Null when the league's raw Sleeper
+    // object has not been stored yet: the poster then serves the trade only to
+    // a channel that takes every league type, which is better than guessing a
+    // bucket and dropping a redraft trade into a dynasty room.
+    const leagueCategory = categoryForLeagueMetadata(league.metadata);
+
     const inserts = batch.flatMap((item) => {
       const result = graded.results.get(item.row.sleeper_transaction_id);
       if (!result) return [];
@@ -309,6 +317,7 @@ async function growPoolOnce(
       return [
         {
           league_id: item.row.league_id,
+          league_category: leagueCategory,
           transaction_id: item.row.id,
           sleeper_transaction_id: item.row.sleeper_transaction_id,
           season: item.row.season,

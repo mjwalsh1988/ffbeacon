@@ -646,6 +646,8 @@ Module map:
 - `lib/would-you-rather/round.ts`: selection, `loadRound`, `buildReview`.
 - `lib/would-you-rather/identity.ts` / `vote.ts`: who is voting, and the write.
 - `lib/would-you-rather/schedule.ts`: the Discord schedule, in Eastern. Pure.
+- `lib/would-you-rather/routing.ts`: which channel a league type posts to, and
+  which types are postable at all. Pure.
 - `lib/would-you-rather/side-names.ts`: Signal Check's templates say "Side A";
   this surface has no other name for the parties, so the sentence is renamed on
   the way out, and only here.
@@ -662,9 +664,38 @@ Discord poll:
   `GET /webhooks/{id}/{token}/messages/{id}` returns that poll's results
   authenticated by the token already in the URL. No bot permission, channel id
   or gateway connection is involved.
+- ONE CHANNEL PER LEAGUE TYPE. `settings.discord.routes` maps each of the four
+  `lib/league-category.ts` buckets (dynasty, redraft, best-ball-dynasty,
+  best-ball-redraft) to a webhook, with `settings.discord.webhook_id` as the
+  fallback for any bucket left unset.
+- ABSOLUTE RULE: THE TRADE IS PICKED FIRST AND THE CHANNEL FOLLOWS FROM IT. A
+  scheduled hour posts exactly ONE trade, chosen on its own merits, and the
+  channel is then read off the league that trade came out of. The channels are
+  NOT a quota: never iterate the webhooks and find a trade for each. A week
+  where the pool holds only dynasty trades is a week of dynasty-room posts, and
+  that is correct.
+- The pick, in `lib/would-you-rather/discord.ts pickTradeForPoll`: the newest
+  trades Discord has never posted, then the least-voted half of that window, at
+  random. When everything has been posted at least once, the ones Discord saw
+  longest ago come back around. Deliberately NOT the game page's `selectTradeId`,
+  which answers a different question (what THIS reader has not voted on).
+- ABSOLUTE RULE: the league type is READ, never guessed. It is written onto
+  `would_you_rather_trades.league_category` at pool time from the same
+  `categorizeLeague` rule the rest of the site uses, and is null when the
+  league's raw Sleeper object has not been stored. A null type routes to the
+  fallback or nowhere. Posting a redraft trade into a dynasty room is worse than
+  posting nothing.
+- ABSOLUTE RULE: a bucket with no webhook of its own AND no fallback is not
+  posted anywhere. It is never dropped into whichever channel happens to be
+  configured, and it is excluded from the CANDIDATE SET rather than picked and
+  then discarded, so an unroutable type never costs a scheduled hour. The admin
+  panel says out loud which buckets are unrouted.
 - ABSOLUTE RULE: posting is claimed by `slot_key`, a unique Eastern
   "YYYY-MM-DD-HH", and the row is written BEFORE the message is sent. A claim
-  taken after the work is a claim that does not stop the work.
+  taken after the work is a claim that does not stop the work. `route_key`
+  records which channel the poll went to and is deliberately NOT part of that
+  key: keying on the pair would let two ticks in the same hour both post as long
+  as they picked trades of different types.
 - ABSOLUTE RULE: ingestion is claimed by a conditional update on
   `results_ingested_at`, and the trade's Discord totals are then RECOMPUTED as
   the SUM of its polls rather than incremented. A sum cannot drift; an increment

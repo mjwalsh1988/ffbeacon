@@ -19,6 +19,7 @@ import {
   WYR_SETTING_BOUNDS,
   type WouldYouRatherSettings,
 } from "./default-settings";
+import { hasAnyWebhook } from "./routing";
 
 type Client = SupabaseClient<Database>;
 
@@ -36,6 +37,17 @@ const postHours = z
   .array(z.number().int().min(0).max(23))
   .max(b.post_hours_max_count)
   .transform((hours) => Array.from(new Set(hours)).sort((x, y) => x - y));
+
+/**
+ * A webhook id, or nothing.
+ *
+ * An empty string from a cleared <select> means the same thing as "no webhook
+ * chosen", so it is coerced rather than rejected. Shared by the fallback
+ * webhook and by each per-league-type route.
+ */
+const webhookId = z
+  .union([z.string().uuid(), z.literal(""), z.null()])
+  .transform((v) => (v ? v : null));
 
 export const wouldYouRatherSettingsSchema = z.object({
   game_enabled: z.boolean().default(d.game_enabled),
@@ -80,12 +92,18 @@ export const wouldYouRatherSettingsSchema = z.object({
   discord: z
     .object({
       enabled: z.boolean().default(d.discord.enabled),
-      // A uuid or nothing. An empty string from a cleared <select> is the same
-      // thing as "no webhook chosen", so it is coerced rather than rejected.
-      webhook_id: z
-        .union([z.string().uuid(), z.literal(""), z.null()])
-        .transform((v) => (v ? v : null))
-        .default(d.discord.webhook_id),
+      webhook_id: webhookId.default(d.discord.webhook_id),
+      // One channel per league type. Every key carries its own default, so a
+      // settings row written before routing existed parses into "no route set,
+      // fall back to webhook_id", which is exactly what it used to do.
+      routes: z
+        .object({
+          dynasty: webhookId.default(d.discord.routes.dynasty),
+          redraft: webhookId.default(d.discord.routes.redraft),
+          "best-ball-dynasty": webhookId.default(d.discord.routes["best-ball-dynasty"]),
+          "best-ball-redraft": webhookId.default(d.discord.routes["best-ball-redraft"]),
+        })
+        .default(d.discord.routes),
       post_hours: postHours.default(d.discord.post_hours),
       poll_hours: z
         .number()
@@ -117,12 +135,21 @@ export function validateWouldYouRatherSettings(raw: unknown): ValidateResult {
   }
   const settings = parsed.data as WouldYouRatherSettings;
 
-  // A cross-field rule the schema cannot express: turning the Discord post on
-  // with no webhook chosen and no hours picked would save a configuration that
-  // silently never posts, and the admin would have no way to tell that from a
-  // Discord outage.
-  if (settings.discord.enabled && !settings.discord.webhook_id) {
-    return { ok: false, error: "discord.webhook_id: choose a webhook before turning posting on." };
+  // Two cross-field rules the schema cannot express. Turning the Discord post
+  // on with no webhook anywhere, or with no hours picked, would save a
+  // configuration that silently never posts, and the admin would have no way to
+  // tell that from a Discord outage.
+  //
+  // "Anywhere" rather than specifically the fallback webhook: an admin who has
+  // given every league type its own channel and deliberately left the fallback
+  // empty has a complete configuration, and refusing it would force them to
+  // nominate a channel they want nothing posted to.
+  if (settings.discord.enabled && !hasAnyWebhook(settings)) {
+    return {
+      ok: false,
+      error:
+        "discord.webhook_id: choose a webhook, either per league type or as the fallback, before turning posting on.",
+    };
   }
   if (settings.discord.enabled && settings.discord.post_hours.length === 0) {
     return { ok: false, error: "discord.post_hours: pick at least one time of day." };

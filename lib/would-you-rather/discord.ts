@@ -7,7 +7,8 @@
  *
  *   postScheduledPoll   Is this hour one the admin selected? If so, and if this
  *                       slot has not already been posted, pick a trade and post
- *                       it as a poll.
+ *                       it as a poll to the channel its league type is pointed
+ *                       at.
  *   ingestClosedPolls   Any poll past its close time gets read back once and
  *                       its counts added to the trade.
  *
@@ -35,14 +36,35 @@
  * DISCORD'S COUNTS ARE AGGREGATES WITH NO IDENTITIES ATTACHED, which is why
  * they live in their own pair of columns rather than as rows in the votes
  * table. Nothing pretends to know who voted on Discord, and nothing tries.
+ *
+ * THE TRADE IS PICKED FIRST AND THE CHANNEL FOLLOWS FROM IT.
+ *   Each league type can have its own webhook, so a dynasty trade goes to the
+ *   dynasty room and a best ball trade to the best ball room. But the pick is
+ *   made on the trade's own merits, and the channel is read off the league it
+ *   came out of afterwards. The channels are NOT a quota: a scheduled hour is
+ *   never spent hunting for a trade of a particular type, and a week where the
+ *   pool holds nothing but dynasty trades is a week of dynasty-room posts,
+ *   which is an honest reflection of what the pool held.
+ *
+ *   The only way a channel constrains the pick is by not existing. A league
+ *   type with no webhook and no fallback is kept out of the candidate set, so
+ *   it costs silence in its own room rather than a wasted scheduled hour.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { SITE } from "@/lib/site";
 import { fetchWebhookPoll, postWebhookMessage, type DiscordMessageInput } from "@/lib/discord";
-import { loadRound, selectTradeId, type LoadedRound } from "./round";
+import { loadRound, type LoadedRound } from "./round";
 import { easternSlot, isPostHour, pollClosesAt, shouldIngestNow } from "./schedule";
+import {
+  categoryForLeagueMetadata,
+  hasAnyWebhook,
+  postableCategories,
+  webhookForCategory,
+  WYR_CATEGORY_LABEL,
+  type LeagueCategoryKey,
+} from "./routing";
 import type { WouldYouRatherSettings } from "./default-settings";
 import type { WyrRound, WyrSide } from "./types";
 
@@ -187,13 +209,43 @@ async function loadWebhookUrl(admin: Client, webhookId: string): Promise<string 
   return url;
 }
 
+/** What happened for one destination channel on one scheduled hour. */
+/** What happened on one scheduled hour, and which channel it went to. */
 export type PostOutcome =
-  | { status: "skipped"; reason: string }
-  | { status: "posted"; tradeId: string; slotKey: string; messageId: string | null }
-  | { status: "error"; reason: string };
+  | { status: "skipped"; reason: string; route: RouteSummary | null }
+  | {
+      status: "posted";
+      route: RouteSummary;
+      tradeId: string;
+      slotKey: string;
+      messageId: string | null;
+    }
+  | { status: "error"; reason: string; route: RouteSummary | null };
+
+/** The channel one poll went to, and the league type that sent it there. */
+export interface RouteSummary {
+  webhookId: string;
+  /** Null when the trade's league object has not been stored yet. */
+  category: LeagueCategoryKey | null;
+  /** "Dynasty", or "Unknown league type" when it could not be derived. */
+  label: string;
+}
 
 /**
- * Post one poll, if this hour is a scheduled one.
+ * How many recent trades the pick considers before choosing among them.
+ *
+ * A window rather than a single "best" row, so the channel does not get the
+ * same deal on consecutive days, and bounded so the query stays a small read.
+ */
+const PICK_WINDOW = 60;
+
+/**
+ * Post this hour's poll.
+ *
+ * ONE TRADE PER SCHEDULED HOUR, AND THE CHANNEL FOLLOWS THE TRADE. The pick is
+ * made on the trade's own merits and only then routed, so the channels are not
+ * a quota that has to be filled and a scheduled hour is never spent hunting for
+ * a trade of a particular type. See lib/would-you-rather/routing.ts.
  *
  * Never throws. The cron that calls it records the outcome and moves on to
  * ingestion; a Discord outage must not take the ingestion half down with it.
@@ -204,38 +256,57 @@ export async function postScheduledPoll(
   now: Date = new Date(),
 ): Promise<PostOutcome> {
   const cfg = settings.discord;
-  if (!settings.game_enabled) return { status: "skipped", reason: "The game is switched off." };
-  if (!cfg.enabled) return { status: "skipped", reason: "Discord posting is switched off." };
-  if (!cfg.webhook_id) return { status: "skipped", reason: "No webhook is selected." };
+  const skip = (reason: string): PostOutcome => ({ status: "skipped", reason, route: null });
+
+  if (!settings.game_enabled) return skip("The game is switched off.");
+  if (!cfg.enabled) return skip("Discord posting is switched off.");
+  if (!hasAnyWebhook(settings)) return skip("No webhook is selected for any league type.");
   if (!isPostHour(now, cfg.post_hours)) {
-    return { status: "skipped", reason: "This hour is not one of the scheduled times." };
+    return skip("This hour is not one of the scheduled times.");
   }
 
   const slot = easternSlot(now);
 
   try {
-    const webhookUrl = await loadWebhookUrl(admin, cfg.webhook_id);
-    if (!webhookUrl) {
-      return { status: "skipped", reason: "The selected webhook is missing or switched off." };
-    }
-
-    // Prefer a trade Discord has never seen, so the channel does not get the
-    // same deal twice while the pool still holds fresh ones.
-    const tradeId = await pickUnpostedTradeId(admin);
-    if (!tradeId) return { status: "skipped", reason: "No trade is available to post." };
+    // THE TRADE FIRST. Restricted only by what is postable at all: with a
+    // fallback webhook set that is everything, and without one it is the league
+    // types that have a channel of their own. A trade nothing could carry is
+    // left out of the pick rather than chosen and then dropped, which would
+    // waste the hour.
+    const tradeId = await pickTradeForPoll(admin, postableCategories(settings));
+    if (!tradeId) return skip("No trade is available to post.");
 
     const loaded = await loadRound(admin, tradeId);
-    if (!loaded) return { status: "skipped", reason: "The chosen trade could not be built." };
+    if (!loaded) return skip("The chosen trade could not be built.");
+
+    // THE CHANNEL SECOND, read off the league the trade came out of.
+    const category = categoryForLeagueMetadata(loaded.league.metadata);
+    const webhookId = webhookForCategory(settings, category);
+    const label = category ? WYR_CATEGORY_LABEL[category] : "Unknown league type";
+    if (!webhookId) {
+      return skip(`No channel is set for ${label.toLowerCase()} trades.`);
+    }
+    const route: RouteSummary = { webhookId, category, label };
+
+    const webhookUrl = await loadWebhookUrl(admin, webhookId);
+    if (!webhookUrl) {
+      return {
+        status: "skipped",
+        reason: `The ${label} webhook is missing or switched off.`,
+        route,
+      };
+    }
 
     // CLAIM THE SLOT BEFORE SENDING ANYTHING. A second tick inside this Eastern
     // hour collides on slot_key and gives up here, rather than after it has
-    // already posted a duplicate to the channel.
+    // already posted a duplicate.
     const closesAt = pollClosesAt(now, cfg.poll_hours);
     const { data: claimed, error: claimError } = await admin
       .from("would_you_rather_discord_polls")
       .insert({
         trade_id: loaded.pool.id,
-        webhook_id: cfg.webhook_id,
+        webhook_id: webhookId,
+        route_key: webhookId,
         slot_key: slot.key,
         posted_at: now.toISOString(),
         closes_at: closesAt.toISOString(),
@@ -245,11 +316,13 @@ export async function postScheduledPoll(
     if (claimError) {
       // 23505 on slot_key: somebody else already has this hour. Not an error.
       if (claimError.code === "23505") {
-        return { status: "skipped", reason: "This hour has already been posted." };
+        return { status: "skipped", reason: "This hour has already been posted.", route };
       }
-      return { status: "error", reason: claimError.message };
+      return { status: "error", reason: claimError.message, route };
     }
-    if (!claimed) return { status: "error", reason: "Could not claim the schedule slot." };
+    if (!claimed) {
+      return { status: "error", reason: "Could not claim the schedule slot.", route };
+    }
 
     const message = buildPollMessage(loaded.round, {
       siteUrl: SITE.url,
@@ -268,7 +341,7 @@ export async function postScheduledPoll(
         .from("would_you_rather_discord_polls")
         .update({ status: "error", error: sent.error.slice(0, 500) })
         .eq("id", claimed.id);
-      return { status: "error", reason: sent.error };
+      return { status: "error", reason: sent.error, route };
     }
 
     await Promise.all([
@@ -282,31 +355,82 @@ export async function postScheduledPoll(
         .eq("id", loaded.pool.id),
     ]);
 
-    return { status: "posted", tradeId: loaded.pool.id, slotKey: slot.key, messageId: sent.id };
+    return {
+      status: "posted",
+      route,
+      tradeId: loaded.pool.id,
+      slotKey: slot.key,
+      messageId: sent.id,
+    };
   } catch (err) {
     return {
       status: "error",
       reason: err instanceof Error ? err.message : "Discord post failed.",
+      route: null,
     };
   }
 }
 
-/** A pooled trade Discord has not seen, else any pooled trade. */
-async function pickUnpostedTradeId(admin: Client): Promise<string | null> {
-  // Most-served first among the ones Discord has not seen: a trade the site has
-  // already shown a lot is a trade proven to render and to be worth arguing
-  // about, which is what a channel post wants. One of forty at random from that
-  // set, so the channel does not get the same deal on consecutive days.
-  const { data } = await admin
+/**
+ * Which trade this hour gets.
+ *
+ * Recent, not posted lately, and short of votes, in that order of preference.
+ * Two passes:
+ *
+ *   1. The newest trades Discord has never seen. Among those, the ones the site
+ *      has collected fewest votes on, because a poll is worth most on a trade
+ *      the room has not settled yet, and a random pick from that half so the
+ *      channel does not get the same deal two days running.
+ *   2. Nothing new left, so the one Discord saw longest ago comes back around.
+ *
+ * `categories` is the postable set, not a preference. It is null in the normal
+ * case, and non-null only when there is no fallback webhook and some league
+ * type therefore has nowhere to go. Passing it never biases WHICH trade is
+ * picked among the routable ones; it only keeps unroutable ones out.
+ */
+async function pickTradeForPoll(
+  admin: Client,
+  categories: readonly LeagueCategoryKey[] | null,
+): Promise<string | null> {
+  if (categories && categories.length === 0) return null;
+
+  let freshQuery = admin
+    .from("would_you_rather_trades")
+    .select("id, votes_a, votes_b")
+    .eq("status", "active")
+    .is("discord_posted_at", null);
+  if (categories) freshQuery = freshQuery.in("league_category", categories);
+  const { data: fresh } = await freshQuery
+    .order("added_at", { ascending: false })
+    .limit(PICK_WINDOW);
+
+  const rows = fresh ?? [];
+  if (rows.length > 0) {
+    // Sorted in memory rather than in the query, because the vote total is the
+    // sum of two columns and PostgREST cannot order on an expression. The
+    // window is bounded above, so this is a sort of at most PICK_WINDOW rows.
+    const byVotes = [...rows].sort(
+      (a, b) => a.votes_a + a.votes_b - (b.votes_a + b.votes_b),
+    );
+    const leastVoted = byVotes.slice(0, Math.max(1, Math.ceil(byVotes.length / 2)));
+    return leastVoted[Math.floor(Math.random() * leastVoted.length)].id;
+  }
+
+  let staleQuery = admin
     .from("would_you_rather_trades")
     .select("id")
-    .eq("status", "active")
-    .is("discord_posted_at", null)
-    .order("served_count", { ascending: false })
-    .limit(40);
-  const rows = data ?? [];
-  if (rows.length > 0) return rows[Math.floor(Math.random() * rows.length)].id;
-  return selectTradeId(admin, new Set());
+    .eq("status", "active");
+  if (categories) staleQuery = staleQuery.in("league_category", categories);
+  const { data: stale } = await staleQuery
+    .order("discord_posted_at", { ascending: true })
+    .limit(PICK_WINDOW);
+
+  const seen = stale ?? [];
+  if (seen.length === 0) return null;
+  // From the oldest quarter of that window, so a trade posted months ago comes
+  // back before one posted last week, without it being the same one every time.
+  const oldest = seen.slice(0, Math.max(1, Math.ceil(seen.length / 4)));
+  return oldest[Math.floor(Math.random() * oldest.length)].id;
 }
 
 export interface IngestOutcome {

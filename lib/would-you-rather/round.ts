@@ -180,6 +180,11 @@ export async function loadVotedTradeIds(
  * has seen much, so a freshly pooled trade collects votes instead of sitting at
  * zero forever. The second is a uniform random window, so a voter who has
  * already worked through the least-served end still gets somewhere new to go.
+ *
+ * This is the GAME page's selector, and it does not filter by league type. The
+ * Discord poster has its own pick in lib/would-you-rather/discord.ts, which
+ * wants different things (what Discord has not posted lately, rather than what
+ * this reader has not voted on).
  */
 export async function selectTradeId(
   admin: Client,

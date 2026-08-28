@@ -5,6 +5,7 @@ import { recordCronRun } from "@/lib/cron-runs";
 import { loadWouldYouRatherSettings } from "@/lib/would-you-rather/settings";
 import { ingestClosedPolls, postScheduledPoll } from "@/lib/would-you-rather/discord";
 import { describeSchedule, easternSlot } from "@/lib/would-you-rather/schedule";
+import { describeRouting } from "@/lib/would-you-rather/routing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,12 @@ export const maxDuration = 120;
  *   during one morning would strand every poll that closed that week. So the
  *   post outcome is recorded and ingestion runs regardless.
  *
+ * ONE POST PER SCHEDULED HOUR, ROUTED BY THE TRADE.
+ *   Each league type can be pointed at its own webhook. The tick picks ONE
+ *   trade on its own merits and then posts it to whichever channel that trade's
+ *   league type is pointed at. The channels are not a quota, so a run of
+ *   dynasty trades is a run of posts in the dynasty room.
+ *
  * Auth: `Authorization: Bearer <CRON_SECRET>` only.
  */
 export async function GET(req: Request) {
@@ -55,6 +62,7 @@ export async function GET(req: Request) {
       return {
         easternHour: slot.key,
         schedule: describeSchedule(settings.discord.post_hours),
+        routing: describeRouting(settings),
         discordEnabled: settings.discord.enabled,
         post,
         ingest,
