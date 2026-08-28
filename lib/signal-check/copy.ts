@@ -10,7 +10,7 @@
 
 /** A pick whose slot we read off projected standings. */
 export const ESTIMATED_PICKS_NOTE =
-  "Sleeper does not say where a traded pick will land, so a pick here is slotted from the projected regular season finish of the team it came from: the top third of the standings sends late picks, the middle third mid, the bottom third early. It moves as the projection moves.";
+  "Sleeper does not say where a traded pick will land, so a pick here is slotted from the projected regular season finish of the team it came from: the top third of the standings sends late picks, the middle third mid, the bottom third early. A pick a season beyond the last finish we can project reuses that finish. It moves as the projection moves.";
 
 /** A pick we could not slot at all, so it is priced across the whole round. */
 export const BLENDED_PICKS_NOTE =

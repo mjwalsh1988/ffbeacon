@@ -91,6 +91,14 @@ async function loadPoolMax(
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
+/**
+ * How far back the pick-price read looks. Only the newest snapshot per pick is
+ * ever used; the window exists so the query cannot drag months of diary back
+ * with it. Generous enough to ride out a sync outage, and there is a fallback
+ * below for one longer than this.
+ */
+const PICK_VALUE_WINDOW_DAYS = 14;
+
 export async function buildValueResolver(
   supabase: Client,
   format: ResolvedFormat,
@@ -161,21 +169,40 @@ export async function buildValueResolver(
     const seasons = Array.from(new Set(wantedPicks.map((p) => p.season)));
     const rounds = Array.from(new Set(wantedPicks.map((p) => p.round)));
 
-    const loadPicks = async (sourceSlug: string) => {
-      const { data } = await supabase
+    // ONLY THE LAST FORTNIGHT OF SNAPSHOTS. draft_pick_values is a diary: the
+    // nightly sync ADDS a row per pick per day and never overwrites, so after a
+    // few months one season+round carries hundreds of rows and a trade touching
+    // several of them was pulling well over a thousand to read about six
+    // numbers. Worse, a query with no limit is silently capped at 1000 rows by
+    // PostgREST, so how many snapshots came back was a function of how much
+    // history existed. The dedupe below still only wants the newest row per
+    // pick, and a fortnight is thirteen days more than it needs.
+    const windowStart = new Date(Date.now() - PICK_VALUE_WINDOW_DAYS * 86_400_000).toISOString();
+
+    const loadPicks = async (sourceSlug: string, since: string | null) => {
+      let query = supabase
         .from("draft_pick_values")
         .select("season, round, pick_position, value, captured_at")
         .eq("format_config_id", format.configId)
         .eq("source", sourceSlug)
         .in("season", seasons)
-        .in("round", rounds)
-        .order("captured_at", { ascending: false });
+        .in("round", rounds);
+      if (since) query = query.gte("captured_at", since);
+      const { data } = await query.order("captured_at", { ascending: false });
       return data ?? [];
     };
 
-    let rows = await loadPicks(FFBEACON_SOURCE_SLUG);
+    // A window that comes back empty means the sync has not run inside it, not
+    // that the pick has no price. Falling back to the unwindowed query keeps a
+    // multi-day outage from silently stripping every pick out of a trade.
+    const loadPicksWithFallback = async (sourceSlug: string) => {
+      const recent = await loadPicks(sourceSlug, windowStart);
+      return recent.length > 0 ? recent : loadPicks(sourceSlug, null);
+    };
+
+    let rows = await loadPicksWithFallback(FFBEACON_SOURCE_SLUG);
     if (rows.length === 0) {
-      rows = await loadPicks(PICK_FALLBACK_SOURCE_SLUG);
+      rows = await loadPicksWithFallback(PICK_FALLBACK_SOURCE_SLUG);
       if (rows.length > 0) {
         pickSlug = PICK_FALLBACK_SOURCE_SLUG;
         pickDisplay = PICK_FALLBACK_SOURCE_DISPLAY;

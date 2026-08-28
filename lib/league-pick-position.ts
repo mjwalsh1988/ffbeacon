@@ -36,8 +36,10 @@
  *
  * WHAT IT REFUSES TO DO
  * A pick for season S is ordered by season S-1's finish, so a 2027 pick needs
- * 2026 projections. Anything further out (a 2028 pick today) has no standings to
- * read and stays on the blend. Same when Power Pulse has not run for the league,
+ * 2026 projections. One season further out, the newest order we hold is CARRIED
+ * FORWARD rather than thrown away. Past that carry it stays on the blend,
+ * because team strength regresses and a finish carried four years would be a
+ * guess wearing a read's clothes. Same when Power Pulse has not run for the league,
  * when the originating roster is unknown, or when the projection is degenerate
  * (a missing win total, or every team projected identically). Ranking a flat
  * projection would dress a coin flip up as a finish.
@@ -74,6 +76,14 @@ export interface PickPositionResolver {
 }
 
 /** The resolver that never resolves. Used when there is no league context. */
+/**
+ * How many seasons past the newest finish we hold a carried estimate for.
+ *
+ * One. Two would price a 2029 pick off a 2026 projection, and nothing about a
+ * roster three years out is that knowable.
+ */
+const CARRY_FORWARD_SEASONS = 1;
+
 export const NO_PICK_POSITIONS: PickPositionResolver = {
   resolve: () => null,
   ready: false,
@@ -199,22 +209,73 @@ export async function buildPickPositionResolver(
     const ready = projected.size > 0 || draftSlots.rosterToSlotBySeason.size > 0;
     if (!ready) return NO_PICK_POSITIONS;
 
+    /**
+     * The ordering that applies to ONE pick season, from either source.
+     *
+     * The two sources sit on different axes and it matters: a published draft is
+     * keyed by the season it drafts FOR, while a projection is keyed by the
+     * season whose standings set the order, which is the pick season minus one.
+     * Collapsing them into one function is what keeps the carry below from
+     * mixing them up.
+     */
+    const orderFor = (
+      pickSeason: number,
+      rosterId: number,
+    ): PickPositionEstimate | null => {
+      // A published draft order for that season is not a guess.
+      const slot = draftSlots.slotFor(pickSeason, rosterId);
+      const teamCount = draftSlots.rosterToSlotBySeason.get(pickSeason)?.size ?? 0;
+      if (slot != null) {
+        const position = positionFromDraftSlot(slot, teamCount);
+        if (position) return { position, estimated: false };
+      }
+      // Otherwise project it: a 2027 pick is ordered by the 2026 finish.
+      const position = projected.get(pickSeason - 1)?.get(rosterId);
+      return position ? { position, estimated: true } : null;
+    };
+
+    /**
+     * The furthest-out pick season anything can order, on the PICK-season axis.
+     * A published 2027 draft orders 2027; standings for 2026 also order 2027.
+     */
+    const orderableSeasons = [
+      ...draftSlots.rosterToSlotBySeason.keys(),
+      ...[...projected.keys()].map((standingsSeason) => standingsSeason + 1),
+    ];
+    const newestOrderable =
+      orderableSeasons.length > 0 ? Math.max(...orderableSeasons) : null;
+
     return {
       ready,
       resolve(originalRosterId: number, pickSeason: number): PickPositionEstimate | null {
         if (!Number.isInteger(pickSeason) || !Number.isInteger(originalRosterId)) return null;
 
-        // 1. A published draft order for that season is not a guess.
-        const slot = draftSlots.slotFor(pickSeason, originalRosterId);
-        const teamCount = draftSlots.rosterToSlotBySeason.get(pickSeason)?.size ?? 0;
-        if (slot != null) {
-          const position = positionFromDraftSlot(slot, teamCount);
-          if (position) return { position, estimated: false };
+        const direct = orderFor(pickSeason, originalRosterId);
+        if (direct) return direct;
+
+        // CARRY THE LAST KNOWN ORDER FORWARD, ONE SEASON, THEN STOP.
+        //
+        // A 2028 pick needs a 2027 order, which usually does not exist yet, and
+        // it used to fall straight to the whole-round blend. That threw away a
+        // real signal: a team about to bottom out is likelier to hold an early
+        // pick the year after than a coin flip is, and early against late is
+        // about 22% of a first, far more than the blend was costing.
+        //
+        // ONE SEASON, NOT ALL OF THEM, because team strength regresses. Carrying
+        // a finish four years would dress a guess up as a read, so past the
+        // carry the blend is the honest answer again.
+        if (
+          newestOrderable !== null &&
+          pickSeason > newestOrderable &&
+          pickSeason - newestOrderable <= CARRY_FORWARD_SEASONS
+        ) {
+          const carried = orderFor(newestOrderable, originalRosterId);
+          // Always an estimate, whatever it was carried from: a published 2027
+          // draft order says nothing certain about where 2028 lands.
+          if (carried) return { position: carried.position, estimated: true };
         }
 
-        // 2. Otherwise project it: a 2027 pick is ordered by the 2026 finish.
-        const position = projected.get(pickSeason - 1)?.get(originalRosterId);
-        return position ? { position, estimated: true } : null;
+        return null;
       },
     };
   } catch (err) {

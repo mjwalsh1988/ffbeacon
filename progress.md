@@ -9148,3 +9148,160 @@ T-WAR-77 | completed | includePositionalWar: false was on the wrong boundary, an
      | positional-war stage at all, and exactly one compute runs, behind
      | WarRailSection's own boundary.
      | verified: yes (dev log, same league, before and after)
+
+T-WYR-01 | completed | Would You Rather: the trade voting game, end to end
+     | files: supabase/migrations/0225_would_you_rather.sql,
+     |        supabase/migrations/0226_signal_guide_would_you_rather.sql,
+     |        lib/would-you-rather/*, lib/discord.ts, lib/league-signal-check.ts,
+     |        lib/cron-runs.ts, lib/site.ts, lib/nav-tree.ts, lib/breadcrumbs.ts,
+     |        lib/sitemap/sections.ts, lib/guide/registry.ts,
+     |        app/games/would-you-rather/*, app/api/games/would-you-rather/*,
+     |        app/api/cron/would-you-rather-discord/route.ts,
+     |        app/admin/would-you-rather/*, app/api/og/page/[key]/route.tsx,
+     |        app/games/page.tsx, app/page.tsx, app/globals.css, vercel.json,
+     |        scripts/would-you-rather-pool.ts, package.json
+     | A real trade out of a synced league, anonymised to Team A and Team B,
+     | put in front of a reader who calls the winner. The reveal is the whole
+     | product: the room's split, the full Signal Check verdict, and what that
+     | league's own Positional WAR curves, Power Pulse standings and 30-day
+     | value trends say about every piece.
+     | THE ANSWER NEVER REACHES THE BROWSER BEFORE THE VOTE. WyrRound carries
+     | names, positions, pick seats and the league's format and nothing else;
+     | WyrReview is built by the vote route AFTER the vote row is written and
+     | returned in that response. Nothing verdict-shaped is ever passed to a
+     | client component, so it cannot land in the page's flight payload. Checked
+     | against the served HTML: no marginPct, winnerSide, verdictLabel,
+     | explanation or tally anywhere in it.
+     | A VOTE CANNOT BE COUNTED TWICE. Two partial unique indexes on
+     | would_you_rather_votes, and the insert is attempted rather than preceded
+     | by a SELECT, so two clicks a few ms apart cannot both pass a check. A
+     | repeat returns the reveal for the side originally picked and burns no
+     | free vote.
+     | Guests get two rounds, then the sign-in state. The wall is checked before
+     | any grading work, so a reader who cannot vote never costs a query budget.
+     | The pool (would_you_rather_trades) holds only trades Signal Check has
+     | already graded successfully, so serving is a cheap read. Topped up
+     | inline when thin, in bulk by `npm run wyr:pool`, and from the admin
+     | panel. Startup draft trades are included and labelled, with each pick
+     | shown as the player taken at that seat.
+     | Discord: one hourly cron, and the SCHEDULE lives in the admin panel, in
+     | America/New_York. Ticking three hours is three posts a day; ticking one
+     | is one. Off by default. Posting is claimed by a unique Eastern
+     | date-hour slot key so a double tick cannot double post; ingestion is
+     | claimed by a conditional update on results_ingested_at and the trade's
+     | Discord totals are RECOMPUTED as a sum of its polls rather than
+     | incremented.
+     | verified: yes (RLS confirmed on all four tables against anon and
+     |           authenticated with begin/rollback; guards tested: 401 unauth
+     |           cron, 400 missing x-requested-with, 400 bad body, admin page
+     |           redirects; guest limit walked to the wall; double vote proved
+     |           idempotent; full suite green, 2,849 tests; typecheck and build
+     |           clean; played through on desktop and at 400px)
+
+T-WYR-02 | completed | Would You Rather: the four review agents' findings, fixed
+     | files: supabase/migrations/0227_would_you_rather_review_fixes.sql,
+     |        lib/would-you-rather/*, lib/discord.ts,
+     |        app/games/would-you-rather/*, app/admin/would-you-rather/*,
+     |        app/api/games/would-you-rather/*, app/games/page.tsx
+     | Implementation, security, accessibility and performance reviews ran
+     | independently against the shipped feature. What they found, and what
+     | changed:
+     | SECURITY. Ballot stuffing: resolveVoter mints a fresh guest id whenever
+     | the cookie is absent, so the free-vote count was always zero for a caller
+     | who simply sent none, and the only limit left was 30/min per IP. The
+     | allowance is now max(cookie count, actor count) where actor is the
+     | server-derived user:/ip: key, the Signal Scout shape. Verified: a loop
+     | with a fresh identity per request now hits the wall on its second vote.
+     | Uniqueness deliberately stays on the cookie so one office NAT is not one
+     | voter. Also: the counter trigger gained an UPDATE branch, and the stored
+     | webhook URL is re-validated at USE, not only when the admin form wrote it.
+     | ACCESSIBILITY. Two focus bugs that stranded a screen reader entirely.
+     | The reveal's focus anchor lived inside the results panel, which does not
+     | render when the community graph is switched off or when the tally is
+     | zero, so focus fell to body with nothing announced. Terminal states
+     | returned before the live region, discarding the message they had just
+     | queued. Now: one live region above every branch, every error announces,
+     | and focus moves to a REAL panel heading via Panel headingFocusable rather
+     | than an sr-only clipped box that gave a sighted keyboard user an
+     | invisible focus ring. Also fixed: the outcome was announced twice (focus
+     | + live region); the vote button's aria-label hid its own "Recording your
+     | vote" state; prefers-reduced-motion was read one commit late so the bars
+     | painted full, snapped to zero, then animated up; the losing bar measured
+     | 1.46:1 and the vote button's edge 2.2:1; the role-ids error was not
+     | associated with its field AND blur wiped the text the error named; the
+     | admin poll table could not be scrolled from the keyboard; Save disabled
+     | itself on success and dropped focus.
+     | CORRECTNESS. The "no Positional WAR curves" banner was inferred from
+     | which players matched, so it told a league that HAS curves it had none,
+     | and said the same when an admin had simply hidden the block. Now an
+     | explicit leagueHasWarCurves: true/false/null. formatNotice was computed
+     | and dropped, so a trade graded in a substituted format printed a
+     | confident margin with nothing saying the format was not the league's.
+     | The value bar guessed a direction on a neutral verdict (winnerSide null
+     | fell to the else branch) and showed Team B ahead every time. The Discord
+     | body's blank-line filter ate every paragraph break. And the vote route
+     | told a reader "nothing was recorded" when the vote HAD been recorded and
+     | only the reveal failed; it now degrades to the tally.
+     | PERFORMANCE. The same trade was graded twice per round (page, then vote
+     | seconds later) for a result that depends on nothing about the reader:
+     | about 15 round trips and 70ms of database time, wasted. The grade is now
+     | cached on the pool row with a one-hour TTL. Three measured index fixes:
+     | league_transactions(type,status,id) took the pool sampler's count from
+     | 96.8ms to 17.2ms and its window from 118.0ms to 2.2ms;
+     | players((external_ids->>'sleeper')) took mapSleeperPlayers from 27.4ms to
+     | 0.10ms on EVERY Signal Check grade site-wide; and the serving index now
+     | matches the query it was named for. growPool coalesces concurrent callers
+     | and backs off 60s after a fruitless pass, so a thin pool cannot make every
+     | render pay for it. The admin's Discord total was an unbounded select that
+     | PostgREST truncates at 1000.
+     | Also: dead fields removed (assetKeys, teamCount, changePct30d,
+     | positionRank, startupPick.season), retireTradeAction wired into a
+     | "recently served" list instead of sitting unused, guest_limit_reached
+     | moved from 401 to 403, and the ellipsis character and two middle dots
+     | replaced per the punctuation rule.
+     | verified: yes (2,876 tests green, typecheck and build clean, punctuation
+     |           and Positional WAR naming guards clean, stuffing loop refused,
+     |           trigger UPDATE branch proved with begin/rollback, grade cache
+     |           and actor keys confirmed populated, test votes cleaned up)
+
+T-WYR-03 | completed | Draft pick pricing: a 14 day window, and the last known order carried forward
+     | files: lib/signal-check/values.ts, lib/league-pick-position.ts,
+     |        lib/signal-check/copy.ts, lib/would-you-rather/round.ts
+     | Two changes to how picks get priced, both in shared Signal Check code, so
+     | they land on /tools/signal-check, the League Pulse transactions feed, the
+     | player-profile trades tab and Would You Rather alike.
+     | THE WINDOW. draft_pick_values is a diary: the nightly sync ADDS a row per
+     | pick per day and never overwrites, so after 94 days one season+round
+     | carries 282 rows and a trade touching four combinations pulled 1,128 to
+     | read six numbers. A query with no limit is silently capped at 1,000 by
+     | PostgREST, so how many snapshots came back was a function of how much
+     | history existed rather than of the trade. It was never wrong, because
+     | captured_at desc puts today's rows first, but it was one ordering change
+     | away from being wrong with no error anywhere. Now bounded to 14 days,
+     | with a fallback to the unbounded query when the window returns nothing,
+     | so a sync outage longer than the window cannot strip every pick out of a
+     | trade instead.
+     | THE CARRY. A pick for season S is ordered by S-1's finish, so a 2028 pick
+     | had nothing to read and fell to the whole-round blend. It now inherits
+     | the newest order we hold, for ONE season, then stops: team strength
+     | regresses and a finish carried four years would be a guess wearing a
+     | read's clothes. Early against late is about 22% of a first, so this is a
+     | far larger source of error than the blend it replaces.
+     | The first version of the carry read only Power Pulse projections and
+     | fired for almost nobody, because plenty of leagues order picks from a
+     | PUBLISHED DRAFT instead. The two sources sit on different axes (a draft
+     | is keyed by the season it drafts for, a projection by the season whose
+     | standings set the order) and orderFor() now collapses them so the carry
+     | cannot mix them up.
+     | Measured across 60 pooled trades: 2028 picks went from 0 slotted and 23
+     | blended to 18 slotted and 1 blended; 2026 and 2027 went to zero blended;
+     | 2029 correctly stays blended, being past the carry.
+     | COPY. The game board now reads "Draft pick (early)" rather than
+     | "Draft pick (mid, projected)" or "Draft pick, slot unknown". The slot
+     | stays because early against late is real information for the call being
+     | made; the bookkeeping goes, because a reader is judging a trade and not
+     | our slotting method. The full label and its footnote still sit at the
+     | bottom of the Signal Check verdict AFTER the vote, which is where an
+     | audit belongs. Signal Check's own surfaces are untouched.
+     | verified: yes (2,876 tests green, typecheck and build clean, measured
+     |           against 60 real pooled trades before and after)
