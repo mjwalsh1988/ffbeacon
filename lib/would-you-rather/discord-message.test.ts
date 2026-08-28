@@ -29,6 +29,15 @@ function round(over: Partial<WyrRound> = {}): WyrRound {
     week: 3,
     derivedLabel: "Dynasty PPR Superflex TE Premium",
     formatShort: "Dynasty 12T SF PPR TEP, start 9",
+    formatBullets: [
+      "Dynasty",
+      "2026 season",
+      "12 teams",
+      "Superflex",
+      "PPR",
+      "TE premium, plus 0.75 per catch",
+      "Starting lineup: 1 QB, 2 RB, 3 WR, 1 TE, 1 FLEX, 1 SF",
+    ],
     formatTags: [],
     scoringTags: [],
     kind: "regular",
@@ -81,19 +90,33 @@ function busyRound() {
 }
 
 describe("buildPollMessage", () => {
-  it("names the league and its format, and nobody else", () => {
+  it("sets out the format as bullets, and never the league's name", () => {
     const msg = mustBuild(round(), OPTS);
-    expect(msg.content).toContain("The Dynasty League");
-    expect(msg.content).toContain("Dynasty PPR Superflex TE Premium");
-    expect(msg.content).toContain("Team A receives");
-    expect(msg.content).toContain("Team B receives");
-    expect(msg.content).toContain("Ja'Marr Chase");
-    expect(msg.content).toContain("Bijan Robinson");
+    expect(msg.content).toContain("**League format**");
+    expect(msg.content).toContain("- Dynasty");
+    expect(msg.content).toContain("- 12 teams");
+    expect(msg.content).toContain("- Starting lineup: 1 QB, 2 RB, 3 WR, 1 TE, 1 FLEX, 1 SF");
+    // The league name identifies the room the trade came out of. This game
+    // names nobody, and that now includes the league.
+    expect(msg.content).not.toContain("The Dynasty League");
   });
 
-  it("links back to the game", () => {
+  it("puts each asset on its own line under its team heading", () => {
     const msg = mustBuild(round(), OPTS);
-    expect(msg.content).toContain("https://ffbeacon.com/games/would-you-rather");
+    const lines = (msg.content ?? "").split("\n");
+    const a = lines.indexOf("**Team A receives**");
+    const b = lines.indexOf("**Team B receives**");
+    expect(a).toBeGreaterThan(-1);
+    expect(b).toBeGreaterThan(a);
+    expect(lines[a + 1]).toBe("- Ja'Marr Chase (WR, CIN)");
+    expect(lines[b + 1]).toBe("- Bijan Robinson (RB, ATL)");
+  });
+
+  it("links back to the game inside angle brackets, so Discord shows no preview", () => {
+    const msg = mustBuild(round(), OPTS);
+    // Without the brackets Discord expands the link into an embed card taller
+    // than the trade above it, which pushes the poll itself off screen.
+    expect(msg.content).toContain("<https://ffbeacon.com/games/would-you-rather>");
   });
 
   it("asks the league format, with exactly two answers, A first", () => {
@@ -144,8 +167,8 @@ describe("buildPollMessage", () => {
       }),
       OPTS,
     );
-    expect(msg.content).toContain("via 1.02");
-    expect(msg.content).toContain("via 1.03, projected");
+    expect(msg.content).toContain(", via 1.02");
+    expect(msg.content).toContain(", via 1.03, projected");
   });
 
   it("keeps every answer inside Discord's 55 character cap", () => {
@@ -195,18 +218,18 @@ describe("buildPollMessage", () => {
     expect(msg.poll?.answers[1]).toContain("nothing");
   });
 
-  it("keeps the paragraph breaks between the header, the sides and the link", () => {
+  it("keeps the paragraph breaks between the header, the format, the sides and the link", () => {
     // A filter written to drop the absent mentions slot was dropping every
     // deliberate blank line with it, and the posted message ran all four
     // sections together on consecutive lines. `toContain` assertions could not
     // see that, so the shape is asserted directly.
     const msg = mustBuild(round(), OPTS);
     const lines = (msg.content ?? "").split("\n");
-    expect(lines.filter((l: string) => l === "").length).toBe(3);
+    expect(lines.filter((l: string) => l === "").length).toBe(4);
     expect(lines[0]).toContain("Would You Rather?");
-    expect(lines[1]).toContain("The Dynasty League");
-    expect(lines[2]).toBe("");
-    expect(lines[3]).toBe("**Team A receives**");
+    expect(lines[1]).toBe("");
+    expect(lines[2]).toBe("**League format**");
+    expect(lines[3]).toBe("- Dynasty");
   });
 
   it("puts the mentions on their own line without eating the breaks", () => {
@@ -218,8 +241,8 @@ describe("buildPollMessage", () => {
     expect(lines[0]).toBe("<@&123456789012345678>");
     expect(lines[1]).toBe("");
     expect(lines[2]).toContain("Would You Rather?");
-    // Still three section breaks, plus the one after the mentions.
-    expect(lines.filter((l: string) => l === "").length).toBe(4);
+    // Still four section breaks, plus the one after the mentions.
+    expect(lines.filter((l: string) => l === "").length).toBe(5);
   });
 
   it("carries no manager identity of any kind", () => {

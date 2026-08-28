@@ -138,16 +138,33 @@ function pollAssets(round: WyrRound, side: WyrSide): PollAsset[] {
   );
 }
 
-/** The full asset list for the message body, one line per asset. */
+/**
+ * The full asset list for the message body, ONE LINE PER ASSET.
+ *
+ * The poll buttons condense; this does not. It is the place a reader checks
+ * what actually moved, so every asset gets its own line with its position, its
+ * team and, for a startup pick, the seat it came from.
+ */
 function sideLines(round: WyrRound, side: WyrSide): string {
   const assets = round.sides[side];
   if (assets.length === 0) return "- nothing";
   return assets
     .map((a) => {
       const via = a.startupPick
-        ? ` (via ${a.startupPick.label}${a.startupPick.simulated ? ", projected" : ""})`
+        ? `, via ${a.startupPick.label}${a.startupPick.simulated ? ", projected" : ""}`
         : "";
-      const detail = a.detail ? ` - ${a.detail}` : "";
+      // A pick's own detail reads "Draft pick (early)", which next to a name
+      // that already says "2027 1st" nests one bracket inside another and adds
+      // nothing. The slot is the part worth keeping, so it is read off the
+      // asset rather than out of a sentence built for another surface.
+      const detail =
+        a.kind === "pick"
+          ? a.pickSlot
+            ? ` (${a.pickSlot})`
+            : ""
+          : a.detail
+            ? ` (${a.detail})`
+            : "";
       return `- ${a.name}${detail}${via}`;
     })
     .join("\n");
@@ -166,13 +183,6 @@ export function buildPollMessage(
   opts: { siteUrl: string; mentionRoleIds: string[] },
 ): DiscordMessageInput | null {
   const kindLabel = round.kind === "startup" ? "Startup draft trade" : "Trade";
-  const where = [
-    round.leagueName,
-    round.season ? String(round.season) : null,
-    round.derivedLabel,
-  ]
-    .filter(Boolean)
-    .join(" - ");
 
   // The buttons first, because either one failing means this trade cannot be
   // posted at all and there is no point building the body. 55 characters is a
@@ -185,13 +195,15 @@ export function buildPollMessage(
   const mentions = opts.mentionRoleIds.map((id) => `<@&${id}>`).join(" ");
   const body = [
   // null for the absent mentions line, NOT "". The empty strings below are
-  // deliberate paragraph breaks between the header, the two sides and the
-  // call to action, and a filter on "" removed all of them along with the
-  // one it was aimed at, posting every section run together on consecutive
+  // deliberate paragraph breaks between the header, the format, the two sides
+  // and the call to action, and a filter on "" removed all of them along with
+  // the one it was aimed at, posting every section run together on consecutive
   // lines.
     mentions ? `${mentions}\n` : null,
     `**Would You Rather? ${kindLabel}**`,
-    `${where}`,
+    "",
+    "**League format**",
+    round.formatBullets.map((b) => `- ${b}`).join("\n"),
     "",
     "**Team A receives**",
     sideLines(round, "a"),
@@ -199,7 +211,9 @@ export function buildPollMessage(
     "**Team B receives**",
     sideLines(round, "b"),
     "",
-    `Vote below, then see the full Signal Check breakdown: ${opts.siteUrl}/games/would-you-rather`,
+    // Angle brackets suppress Discord's link preview. Without them the embed
+    // card is taller than the trade above it and pushes the poll off screen.
+    `Vote below, then see the full Signal Check breakdown: <${opts.siteUrl}/games/would-you-rather>`,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");

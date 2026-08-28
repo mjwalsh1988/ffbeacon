@@ -76,6 +76,12 @@ export interface WyrRound {
    * the asset it is in a 12-team superflex dynasty.
    */
   formatShort: string;
+  /**
+   * The same facts one per line, for the Discord message body, which has room
+   * to spell them out. Never carries the league's name; nothing on this surface
+   * identifies the room a trade came out of.
+   */
+  formatBullets: string[];
   /** Roster-shape chips: team count, Start N, SF, per-position counts. */
   formatTags: FormatTag[];
   /** Scoring chips: PPR, TEP, per-position bonuses. */

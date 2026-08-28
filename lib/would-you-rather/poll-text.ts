@@ -75,14 +75,52 @@ const SLOT_LETTER: Record<"early" | "mid" | "late", string> = {
   late: "L",
 };
 
-/** Roster slots that are not really "starters" when counting lineup size. */
-const NOT_A_STARTER = new Set(["BN", "IR", "TAXI", "K", "DEF", "DST"]);
+/**
+ * Roster slots nobody starts. Everything else is a starting spot, KICKER AND
+ * DEFENCE INCLUDED.
+ *
+ * The site's own "Start N" chip excludes K and DEF (lib/league-format-tags.ts).
+ * This surface does not, because it also PRINTS the lineup, and a body listing
+ * a kicker under a heading that did not count it invites a reader to add the
+ * line up and get a different number.
+ */
+const NOT_A_STARTER = new Set(["BN", "IR", "TAXI"]);
 
-function startingSlotCount(rosterPositions: unknown): number {
-  if (!Array.isArray(rosterPositions)) return 0;
+/** Short names for the slots Sleeper uses, so a lineup fits on one line. */
+const SLOT_NAME: Record<string, string> = {
+  SUPER_FLEX: "SF",
+  REC_FLEX: "W/T FLEX",
+  WRRB_FLEX: "W/R FLEX",
+  IDP_FLEX: "IDP",
+  DST: "DEF",
+};
+
+function startingSlots(rosterPositions: unknown): string[] {
+  if (!Array.isArray(rosterPositions)) return [];
   return rosterPositions.filter(
     (p): p is string => typeof p === "string" && !NOT_A_STARTER.has(p),
-  ).length;
+  );
+}
+
+function startingSlotCount(rosterPositions: unknown): number {
+  return startingSlots(rosterPositions).length;
+}
+
+/**
+ * "1 QB, 2 RB, 3 WR, 2 TE, 2 FLEX, 1 SF".
+ *
+ * In the order the league lists them, which is the order the lineup is set in,
+ * rather than a position order of our own. A count of one is still written out,
+ * because "QB, 2 RB" reads as a typo next to "1 QB, 2 RB".
+ */
+function lineupSummary(rosterPositions: unknown): string | null {
+  const slots = startingSlots(rosterPositions);
+  if (slots.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const slot of slots) counts.set(slot, (counts.get(slot) ?? 0) + 1);
+  return Array.from(counts.entries())
+    .map(([slot, n]) => `${n} ${SLOT_NAME[slot] ?? slot}`)
+    .join(", ");
 }
 
 /**
@@ -138,6 +176,69 @@ export function compactLeagueFormat(league: {
   // Nothing derivable at all, which happens only for a league whose Sleeper
   // object has not been stored. Better than an empty question.
   return head || "Fantasy football";
+}
+
+/**
+ * The same facts as `compactLeagueFormat`, one per line, for the message body.
+ *
+ * The body has 2000 characters rather than 300, so nothing is abbreviated here:
+ * a reader deciding a trade should not have to know that TEP means tight ends
+ * are paid extra. The league's NAME is deliberately absent, from this and from
+ * the whole message. It identifies the room the trade came out of, and this
+ * game names nobody.
+ */
+export function leagueFormatBullets(league: {
+  metadata: unknown;
+  total_rosters: number | null;
+  roster_positions: unknown;
+  season?: number | null;
+}): string[] {
+  const sleeper = (league.metadata ?? {}) as SleeperLeague;
+  const hasSettings = Boolean(sleeper && typeof sleeper === "object" && sleeper.settings);
+  const bullets: string[] = [];
+
+  if (hasSettings) {
+    const bestBall = categorizeLeague(sleeper).startsWith("best-ball");
+    const keeper = deriveKeeperStyle(sleeper);
+    const base =
+      keeper === "dynasty" ? "Dynasty" : keeper === "keeper" ? "Keeper" : "Redraft";
+    bullets.push(bestBall ? `${base} best ball` : base);
+  }
+
+  if (league.season != null && Number.isFinite(league.season)) {
+    bullets.push(`${league.season} season`);
+  }
+
+  const teams = league.total_rosters;
+  if (teams != null && Number.isFinite(teams) && teams > 0) {
+    bullets.push(`${teams} teams`);
+  }
+
+  if (hasSettings) {
+    const derived = deriveLeagueFormat(sleeper);
+    if (derived.is_superflex) bullets.push("Superflex");
+    bullets.push(
+      derived.scoring_type === "ppr"
+        ? "PPR"
+        : derived.scoring_type === "half_ppr"
+          ? "Half PPR"
+          : "Standard scoring",
+    );
+    if (derived.is_tep) {
+      const bonus = Number(
+        (sleeper.scoring_settings as Record<string, unknown> | undefined)?.bonus_rec_te ?? 0,
+      );
+      bullets.push(
+        bonus > 0 ? `TE premium, plus ${bonus} per catch` : "TE premium",
+      );
+    }
+  }
+
+  const lineup = lineupSummary(league.roster_positions);
+  if (lineup) bullets.push(`Starting lineup: ${lineup}`);
+
+  // Never an empty block. A heading with nothing under it reads as a bug.
+  return bullets.length > 0 ? bullets : ["Format not recorded"];
 }
 
 /** "Who wins? Dynasty 12T SF PPR TEP, start 9", inside Discord's 300. */

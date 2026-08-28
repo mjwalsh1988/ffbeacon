@@ -3,6 +3,7 @@ import {
   buildPollAnswer,
   buildPollQuestion,
   compactLeagueFormat,
+  leagueFormatBullets,
   POLL_ANSWER_MAX,
   POLL_QUESTION_MAX,
   type PollAsset,
@@ -293,5 +294,84 @@ describe("buildPollAnswer", () => {
       expect(answer).not.toBeNull();
       expect(answer!.text.length).toBeLessThanOrEqual(POLL_ANSWER_MAX);
     }
+  });
+});
+
+describe("leagueFormatBullets", () => {
+  const REAL = {
+    metadata: {
+      settings: { type: 2, best_ball: 0 },
+      scoring_settings: { rec: 1, bonus_rec_te: 0.75 },
+      roster_positions: ["QB", "SUPER_FLEX"],
+    },
+    total_rosters: 12,
+    roster_positions: [
+      "QB", "RB", "RB", "WR", "WR", "WR", "TE", "TE",
+      "FLEX", "FLEX", "SUPER_FLEX", "BN", "BN", "BN",
+    ],
+    season: 2026,
+  };
+
+  it("spells the format out one fact per line", () => {
+    expect(leagueFormatBullets(REAL)).toEqual([
+      "Dynasty",
+      "2026 season",
+      "12 teams",
+      "Superflex",
+      "PPR",
+      "TE premium, plus 0.75 per catch",
+      "Starting lineup: 1 QB, 2 RB, 3 WR, 2 TE, 2 FLEX, 1 SF",
+    ]);
+  });
+
+  it("counts kicker and defence as starting spots, since it prints them", () => {
+    // The site's own "Start N" chip leaves them out. Here the lineup is printed
+    // beside the count, so a reader adding the line up has to get the same
+    // number back.
+    const bullets = leagueFormatBullets({
+      ...REAL,
+      roster_positions: ["QB", "RB", "WR", "TE", "K", "DEF", "BN"],
+    });
+    expect(bullets).toContain("Starting lineup: 1 QB, 1 RB, 1 WR, 1 TE, 1 K, 1 DEF");
+  });
+
+  it("leaves out what does not apply rather than negating it", () => {
+    const bullets = leagueFormatBullets({
+      metadata: {
+        settings: { type: 0 },
+        scoring_settings: { rec: 0.5 },
+        roster_positions: [],
+      },
+      total_rosters: 10,
+      roster_positions: ["QB", "RB", "BN"],
+      season: null,
+    });
+    expect(bullets).toEqual([
+      "Redraft",
+      "10 teams",
+      "Half PPR",
+      "Starting lineup: 1 QB, 1 RB",
+    ]);
+    expect(bullets.join(" ")).not.toContain("Superflex");
+    expect(bullets.join(" ")).not.toContain("season");
+  });
+
+  it("names a best ball room as one", () => {
+    const bullets = leagueFormatBullets({
+      ...REAL,
+      metadata: { ...REAL.metadata, settings: { type: 2, best_ball: 1 } },
+    });
+    expect(bullets[0]).toBe("Dynasty best ball");
+  });
+
+  it("never returns an empty list, so the heading always has something under it", () => {
+    expect(
+      leagueFormatBullets({ metadata: null, total_rosters: null, roster_positions: null }),
+    ).toEqual(["Format not recorded"]);
+  });
+
+  it("carries no league name", () => {
+    const named = { ...REAL, metadata: { ...REAL.metadata, name: "The Dynasty League" } };
+    expect(leagueFormatBullets(named).join(" ")).not.toContain("Dynasty League");
   });
 });

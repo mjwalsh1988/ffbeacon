@@ -39,7 +39,7 @@ import {
 import type { LeagueTradeSignalCheck } from "@/lib/league-signal-check";
 import { gradeLeagueTrades, tradeRosterPair, WYR_LEAGUE_COLUMNS, type WyrLeagueRow } from "./grade";
 import { useTeamNames } from "./side-names";
-import { compactLeagueFormat } from "./poll-text";
+import { compactLeagueFormat, leagueFormatBullets } from "./poll-text";
 import type {
   WyrAsset,
   WyrReview,
@@ -317,6 +317,12 @@ export async function loadRound(admin: Client, tradeId: string): Promise<LoadedR
       metadata: league.metadata,
       total_rosters: league.total_rosters,
       roster_positions: league.roster_positions,
+    }),
+    formatBullets: leagueFormatBullets({
+      metadata: league.metadata,
+      total_rosters: league.total_rosters,
+      roster_positions: league.roster_positions,
+      season: poolRow.season ?? league.season ?? null,
     }),
     formatTags: buildLeagueFormatTags({
       rosterPositions: league.roster_positions,
