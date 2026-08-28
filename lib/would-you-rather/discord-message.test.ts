@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPollMessage } from "./discord";
+import { buildPollMessage, discordTally, discordVoteRows, pollCloseStatus } from "./discord";
 import type { WyrAsset, WyrRound } from "./types";
 
 /** Discord's own caps. A message past either of these is rejected outright. */
@@ -184,5 +184,112 @@ describe("buildPollMessage", () => {
     // against a future field being added to WyrRound and rendered here.
     expect(all.toLowerCase()).not.toContain("sleeper.app");
     expect(all).not.toContain("roster_id");
+  });
+});
+
+/**
+ * How a poll row describes itself once it is closed out.
+ *
+ * 'error' means the message never landed. It does NOT decide whether the trade
+ * can go out again; `voters_resolved` and the trade's identity gap do.
+ */
+describe("pollCloseStatus", () => {
+  it("closes a clean read as ingested", () => {
+    expect(pollCloseStatus({ note: null, reachedDiscord: true, votersResolved: true })).toBe(
+      "ingested",
+    );
+  });
+
+  it("marks a message that never reached Discord as an error", () => {
+    expect(
+      pollCloseStatus({
+        note: "No Discord message id was recorded.",
+        reachedDiscord: false,
+        votersResolved: false,
+      }),
+    ).toBe("error");
+  });
+
+  it("does not call a posted poll an error just because the read went badly", () => {
+    // Real people may have voted on this one. Calling it an error would
+    // misdescribe it; the note carries what actually happened.
+    expect(
+      pollCloseStatus({
+        note: "The bot cannot read that poll (403).",
+        reachedDiscord: true,
+        votersResolved: false,
+      }),
+    ).toBe("ingested");
+  });
+});
+
+/**
+ * Turning Discord's two voter lists into rows.
+ *
+ * The database's unique index on (trade_id, discord_user_id) is what stops a
+ * repeat vote across polls. This is the pass before it: whatever cannot be
+ * attributed to exactly one side does not become a row at all.
+ */
+describe("discordVoteRows", () => {
+  it("keeps one row per voter, on the side they picked", () => {
+    const { rows, dropped } = discordVoteRows({ a: ["1", "2"], b: ["3"] });
+    expect(dropped).toEqual([]);
+    expect(rows).toEqual([
+      { discordUserId: "1", side: "a" },
+      { discordUserId: "2", side: "a" },
+      { discordUserId: "3", side: "b" },
+    ]);
+  });
+
+  it("drops anyone listed under both answers rather than guessing a side", () => {
+    const { rows, dropped } = discordVoteRows({ a: ["1", "2"], b: ["2", "3"] });
+    expect(dropped).toEqual(["2"]);
+    expect(rows).toEqual([
+      { discordUserId: "1", side: "a" },
+      { discordUserId: "3", side: "b" },
+    ]);
+  });
+
+  it("collapses a voter Discord listed twice under one answer", () => {
+    const { rows } = discordVoteRows({ a: ["7", "7"], b: [] });
+    expect(rows).toEqual([{ discordUserId: "7", side: "a" }]);
+  });
+
+  it("returns nothing for a poll nobody voted on", () => {
+    expect(discordVoteRows({ a: [], b: [] })).toEqual({ rows: [], dropped: [] });
+  });
+});
+
+/**
+ * The trade's Discord total: one per identified person, plus the raw counts
+ * from polls that could only be counted.
+ */
+describe("discordTally", () => {
+  it("counts one per identified voter", () => {
+    expect(
+      discordTally([{ side: "a" }, { side: "a" }, { side: "b" }], []),
+    ).toEqual({ a: 2, b: 1 });
+  });
+
+  it("adds the totals from polls whose voters could not be read", () => {
+    expect(
+      discordTally(
+        [{ side: "a" }],
+        [{ ingested_votes_a: 10, ingested_votes_b: 4 }],
+      ),
+    ).toEqual({ a: 11, b: 4 });
+  });
+
+  it("treats a missing count as a zero rather than dropping the poll", () => {
+    expect(discordTally([], [{ ingested_votes_a: null, ingested_votes_b: 3 }])).toEqual({
+      a: 0,
+      b: 3,
+    });
+  });
+
+  it("is a recompute, so the same input always gives the same answer", () => {
+    const identified = [{ side: "a" }, { side: "b" }];
+    const counted = [{ ingested_votes_a: 2, ingested_votes_b: 2 }];
+    expect(discordTally(identified, counted)).toEqual(discordTally(identified, counted));
   });
 });

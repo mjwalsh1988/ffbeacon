@@ -648,6 +648,9 @@ Module map:
 - `lib/would-you-rather/schedule.ts`: the Discord schedule, in Eastern. Pure.
 - `lib/would-you-rather/routing.ts`: which channel a league type posts to, and
   which types are postable at all. Pure.
+- `lib/discord-poll-voters.ts`: the bot-authenticated, paginated read of who
+  voted on one poll answer. Every failure is a reason, never a throw, because
+  the caller has an aggregate fallback.
 - `lib/would-you-rather/side-names.ts`: Signal Check's templates say "Side A";
   this surface has no other name for the parties, so the sentence is renamed on
   the way out, and only here.
@@ -676,9 +679,42 @@ Discord poll:
   that is correct.
 - The pick, in `lib/would-you-rather/discord.ts pickTradeForPoll`: the newest
   trades Discord has never posted, then the least-voted half of that window, at
-  random. When everything has been posted at least once, the ones Discord saw
-  longest ago come back around. Deliberately NOT the game page's `selectTradeId`,
-  which answers a different question (what THIS reader has not voted on).
+  random. Deliberately NOT the game page's `selectTradeId`, which answers a
+  different question (what THIS reader has not voted on).
+- ABSOLUTE RULE: A DISCORD VOTE IS COUNTED BY VOTER, NOT BY TOTAL, AND ONE
+  PERSON COUNTS ONCE PER TRADE. The webhook can only read `answer_counts`, a
+  number per answer, and a number cannot be deduplicated. The voters themselves
+  come from a second, channel-scoped, BOT-authenticated endpoint,
+  `GET /channels/{channel_id}/polls/{message_id}/answers/{answer_id}`, paginated
+  100 at a time with `after` (`lib/discord-poll-voters.ts`). Each voter becomes a
+  row in `would_you_rather_discord_votes`, and the unique index on
+  (trade_id, discord_user_id) is the guarantee: a repeat vote on the same trade
+  is not inserted and does not move the tally, however many polls that trade has
+  had and however many times ingestion runs.
+- ABSOLUTE RULE: capture `discord_channel_id` and the two `answer_id`s from the
+  webhook CREATE response (`wait=true`) and store them on the poll row. The
+  voters endpoint is channel-scoped and a webhook URL does not name its channel,
+  so neither is recoverable afterwards. Read the answer ids back rather than
+  assuming 1 and 2; `DEFAULT_ANSWER_ID` exists only for rows written before this
+  was captured.
+- ABSOLUTE RULE: when the bot cannot read a poll (not in that server, cannot see
+  the channel, rate limited, no `DISCORD_BOT_TOKEN`), fall back to the aggregate
+  counts AND set `would_you_rather_trades.discord_identity_gap`. That trade is
+  never posted again: we do not know who voted on it, so a repeat voter on a
+  later poll would be invisible. The flag is the line between the trades the
+  guarantee covers and the ones it cannot, and it is why the second pick pass
+  (bring a good trade back around) is safe at all.
+- ABSOLUTE RULE: `recomputeDiscordTally` is a RECOMPUTE and the two halves must
+  not overlap. One per distinct voter row, plus the raw totals from polls where
+  `voters_resolved = false` only. Adding a resolved poll's totals on top of its
+  own rows counts every one of its voters twice.
+- A poll is closed as `'error'` ONLY when the message never reached Discord. One
+  that reached Discord and then read back badly closes as `'ingested'` with the
+  note saying what happened, because calling it an error would misdescribe a
+  poll real people voted on. `pollCloseStatus()` is the one place that decides.
+- Within one poll Discord enforces one vote per person for us: the post sets
+  `allow_multiselect: false`. A voter appearing under BOTH answers is therefore
+  impossible, and `discordVoteRows()` drops them rather than guessing a side.
 - ABSOLUTE RULE: the league type is READ, never guessed. It is written onto
   `would_you_rather_trades.league_category` at pool time from the same
   `categorizeLeague` rule the rest of the site uses, and is null when the

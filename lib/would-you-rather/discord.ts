@@ -37,6 +37,26 @@
  * they live in their own pair of columns rather than as rows in the votes
  * table. Nothing pretends to know who voted on Discord, and nothing tries.
  *
+ * BUT THE NAMES ARE AVAILABLE, FROM A DIFFERENT DOOR, and that is how a repeat
+ * vote is stopped. `GET /channels/{id}/polls/{message}/answers/{answer}` returns
+ * the voters themselves rather than a count. It is channel-scoped and needs the
+ * bot rather than the webhook, which is why the channel id and the answer ids
+ * are captured from the create response and stored on the poll row: neither can
+ * be recovered afterwards.
+ *
+ *   Each voter becomes a row in would_you_rather_discord_votes, and the unique
+ *   index on (trade_id, discord_user_id) is the guarantee. Somebody who already
+ *   answered a poll on this trade is not inserted again, so a second vote adds
+ *   nothing to the tally, however many times the trade has been posted and
+ *   however many times ingestion runs.
+ *
+ *   When the bot cannot read a poll (not in that server, cannot see the
+ *   channel, rate limited, not configured) the aggregate counts are used
+ *   instead. They are right for that one poll, because Discord dedupes within a
+ *   poll itself, but they carry no names, so the trade is flagged
+ *   `discord_identity_gap` and is never posted again. That flag is the line
+ *   between the trades the guarantee covers and the ones it cannot.
+ *
  * THE TRADE IS PICKED FIRST AND THE CHANNEL FOLLOWS FROM IT.
  *   Each league type can have its own webhook, so a dynasty trade goes to the
  *   dynasty room and a best ball trade to the best ball room. But the pick is
@@ -55,6 +75,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { SITE } from "@/lib/site";
 import { fetchWebhookPoll, postWebhookMessage, type DiscordMessageInput } from "@/lib/discord";
+import { fetchPollAnswerVoters, hasDiscordBotToken } from "@/lib/discord-poll-voters";
 import { loadRound, type LoadedRound } from "./round";
 import { easternSlot, isPostHour, pollClosesAt, shouldIngestNow } from "./schedule";
 import {
@@ -75,8 +96,15 @@ const POLL_QUESTION_MAX = 300;
 const POLL_ANSWER_MAX = 55;
 const MESSAGE_CONTENT_MAX = 2000;
 
-/** Answer ids Discord assigns, in the order answers are sent. */
-const ANSWER_ID: Record<WyrSide, number> = { a: 1, b: 2 };
+/**
+ * The answer ids Discord assigns in practice, in the order answers are sent.
+ *
+ * A FALLBACK, NOT THE SOURCE OF TRUTH. Every poll posted from now on records
+ * the ids Discord actually returned (`answer_id_a` / `answer_id_b`), because
+ * assuming 1 and 2 is an assumption about somebody else's API. These are used
+ * only for rows written before that was captured.
+ */
+const DEFAULT_ANSWER_ID: Record<WyrSide, number> = { a: 1, b: 2 };
 
 /** The three periods a truncated string ends with. Never the ellipsis character. */
 const ELLIPSIS = "...";
@@ -314,9 +342,16 @@ export async function postScheduledPoll(
       .select("id")
       .maybeSingle();
     if (claimError) {
-      // 23505 on slot_key: somebody else already has this hour. Not an error.
+      // Both unique indexes on this table are guards doing their job rather
+      // than failures, so a 23505 is a skip. Named apart where Postgres tells
+      // us which one fired, because "this hour is taken" and "this trade has
+      // already been to Discord" send an admin looking in different places.
       if (claimError.code === "23505") {
-        return { status: "skipped", reason: "This hour has already been posted.", route };
+        const detail = `${claimError.message} ${claimError.details ?? ""}`;
+        const reason = detail.includes("one_per_trade")
+          ? "That trade has already been posted to Discord once."
+          : "This hour has already been posted.";
+        return { status: "skipped", reason, route };
       }
       return { status: "error", reason: claimError.message, route };
     }
@@ -347,7 +382,17 @@ export async function postScheduledPoll(
     await Promise.all([
       admin
         .from("would_you_rather_discord_polls")
-        .update({ discord_message_id: sent.id })
+        .update({
+          discord_message_id: sent.id,
+          // Captured here or never. The endpoint that says WHO voted is
+          // channel-scoped, a webhook URL does not name its channel, and the
+          // create response is the only place Discord hands it over. Same for
+          // the answer ids: read back rather than assumed, so a vote stays
+          // attributed to the right side.
+          discord_channel_id: sent.channelId,
+          answer_id_a: sent.pollAnswerIds?.[0] ?? null,
+          answer_id_b: sent.pollAnswerIds?.[1] ?? null,
+        })
         .eq("id", claimed.id),
       admin
         .from("would_you_rather_trades")
@@ -374,14 +419,22 @@ export async function postScheduledPoll(
 /**
  * Which trade this hour gets.
  *
- * Recent, not posted lately, and short of votes, in that order of preference.
- * Two passes:
+ * Two passes.
  *
  *   1. The newest trades Discord has never seen. Among those, the ones the site
  *      has collected fewest votes on, because a poll is worth most on a trade
  *      the room has not settled yet, and a random pick from that half so the
  *      channel does not get the same deal two days running.
- *   2. Nothing new left, so the one Discord saw longest ago comes back around.
+ *   2. Nothing new left, so a good trade comes back around: the ones Discord
+ *      saw longest ago, ONLY where every poll for that trade was read by voter.
+ *
+ * WHY THE SECOND PASS IS SAFE NOW. A repeat poll used to mean a repeat voter
+ * counted twice, because Discord's totals carry no names. The voters are now
+ * read by name and deduplicated by the database on
+ * (trade_id, discord_user_id), so somebody who already called this trade adds
+ * nothing the second time. `discord_identity_gap` marks the trades that
+ * guarantee does not cover: any trade with a poll we could only count. Those
+ * are excluded here and never posted again.
  *
  * `categories` is the postable set, not a preference. It is null in the normal
  * case, and non-null only when there is no fallback webhook and some league
@@ -409,23 +462,23 @@ async function pickTradeForPoll(
     // Sorted in memory rather than in the query, because the vote total is the
     // sum of two columns and PostgREST cannot order on an expression. The
     // window is bounded above, so this is a sort of at most PICK_WINDOW rows.
-    const byVotes = [...rows].sort(
-      (a, b) => a.votes_a + a.votes_b - (b.votes_a + b.votes_b),
-    );
+    const byVotes = [...rows].sort((a, b) => a.votes_a + a.votes_b - (b.votes_a + b.votes_b));
     const leastVoted = byVotes.slice(0, Math.max(1, Math.ceil(byVotes.length / 2)));
     return leastVoted[Math.floor(Math.random() * leastVoted.length)].id;
   }
 
-  let staleQuery = admin
+  let againQuery = admin
     .from("would_you_rather_trades")
     .select("id")
-    .eq("status", "active");
-  if (categories) staleQuery = staleQuery.in("league_category", categories);
-  const { data: stale } = await staleQuery
+    .eq("status", "active")
+    .eq("discord_identity_gap", false)
+    .not("discord_posted_at", "is", null);
+  if (categories) againQuery = againQuery.in("league_category", categories);
+  const { data: again } = await againQuery
     .order("discord_posted_at", { ascending: true })
     .limit(PICK_WINDOW);
 
-  const seen = stale ?? [];
+  const seen = again ?? [];
   if (seen.length === 0) return null;
   // From the oldest quarter of that window, so a trade posted months ago comes
   // back before one posted last week, without it being the same one every time.
@@ -437,6 +490,8 @@ export interface IngestOutcome {
   checked: number;
   ingested: number;
   votesAdded: number;
+  /** Polls whose voters were read by name rather than counted in the aggregate. */
+  identified: number;
   /** Polls that are closed but whose numbers Discord has not sealed yet. */
   waiting: number;
   errors: string[];
@@ -444,6 +499,19 @@ export interface IngestOutcome {
 
 /**
  * Fold every closed poll's results into its trade, exactly once each.
+ *
+ * TWO WAYS TO COUNT, AND THE FIRST IS TRIED FIRST.
+ *   By voter. The bot reads the list of Discord users behind each answer and
+ *   each one becomes a row, deduplicated by the database on
+ *   (trade_id, discord_user_id). That is what makes a second vote on the same
+ *   trade uncountable: the insert simply does not take.
+ *
+ *   By total. Discord's `answer_counts` through the webhook, which is all the
+ *   webhook can see. Used when the bot cannot read the poll (not in that
+ *   server, cannot view the channel, rate limited, not configured). The numbers
+ *   are still right for that one poll, because Discord dedupes within a poll
+ *   itself, but they carry no names, so the trade is flagged with
+ *   `discord_identity_gap` and never goes to Discord again.
  *
  * Cheap when there is nothing to do: the partial index on
  * (closes_at) where results_ingested_at is null means the sweep touches only
@@ -454,13 +522,22 @@ export async function ingestClosedPolls(
   settings: WouldYouRatherSettings,
   now: Date = new Date(),
 ): Promise<IngestOutcome> {
-  const outcome: IngestOutcome = { checked: 0, ingested: 0, votesAdded: 0, waiting: 0, errors: [] };
+  const outcome: IngestOutcome = {
+    checked: 0,
+    ingested: 0,
+    votesAdded: 0,
+    identified: 0,
+    waiting: 0,
+    errors: [],
+  };
   const webhookCache = new Map<string, string | null>();
 
   try {
     const { data: pending, error } = await admin
       .from("would_you_rather_discord_polls")
-      .select("id, trade_id, webhook_id, discord_message_id, closes_at")
+      .select(
+        "id, trade_id, webhook_id, discord_message_id, discord_channel_id, answer_id_a, answer_id_b, closes_at",
+      )
       .is("results_ingested_at", null)
       .lte("closes_at", now.toISOString())
       .order("closes_at", { ascending: true })
@@ -477,15 +554,15 @@ export async function ingestClosedPolls(
         // The post failed before Discord gave us an id, so there is nothing to
         // read. Closed out rather than retried forever, with zeroes recorded so
         // the row states plainly that it contributed nothing.
-        await closeOutPoll(
-          admin,
-          poll.id,
-          0,
-          0,
-          now,
-          "No Discord message id was recorded.",
-          null,
-        );
+        //
+        // 'error' here is load-bearing: it is what says the message never
+        // landed. Correct, because nobody saw this one.
+        await closeOutPoll(admin, poll.id, 0, 0, now, {
+          note: "No Discord message id was recorded.",
+          reachedDiscord: false,
+          votersResolved: false,
+          raw: null,
+        });
         continue;
       }
 
@@ -512,15 +589,18 @@ export async function ingestClosedPolls(
         continue;
       }
       if (!fetched.poll) {
-        await closeOutPoll(
-          admin,
-          poll.id,
-          0,
-          0,
-          now,
-          "Discord returned no poll on that message.",
-          null,
-        );
+        // The message EXISTS and simply carries no readable poll, so this one
+        // did reach Discord and people may well have voted on it. Closed out as
+        // ingested-with-a-note rather than as an error, and flagged as
+        // unidentified so the trade is never posted again: we have no way to
+        // recognise anyone who voted on it.
+        await closeOutPoll(admin, poll.id, 0, 0, now, {
+          note: "Discord returned no poll on that message.",
+          reachedDiscord: true,
+          votersResolved: false,
+          raw: null,
+        });
+        await markIdentityGap(admin, poll.trade_id);
         continue;
       }
 
@@ -530,25 +610,46 @@ export async function ingestClosedPolls(
         continue;
       }
 
+      // The authoritative answer ids, recorded when the poll was created. Older
+      // rows predate them, so they fall back to the 1 and 2 Discord assigns in
+      // practice, which is what the aggregate read has always assumed.
+      const answerIdA = poll.answer_id_a ?? DEFAULT_ANSWER_ID.a;
+      const answerIdB = poll.answer_id_b ?? DEFAULT_ANSWER_ID.b;
+
       // A missing answer id means nobody picked it, which is a zero rather than
       // an absence of data.
-      const votesA = fetched.poll.counts.get(ANSWER_ID.a) ?? 0;
-      const votesB = fetched.poll.counts.get(ANSWER_ID.b) ?? 0;
+      const totalA = fetched.poll.counts.get(answerIdA) ?? 0;
+      const totalB = fetched.poll.counts.get(answerIdB) ?? 0;
 
-      const claimed = await closeOutPoll(
-        admin,
-        poll.id,
-        votesA,
-        votesB,
-        now,
-        null,
-        fetched.poll.raw,
-      );
+      const voters = await readPollVoters(poll.discord_channel_id, poll.discord_message_id, {
+        a: answerIdA,
+        b: answerIdB,
+      });
+
+      const claimed = await closeOutPoll(admin, poll.id, totalA, totalB, now, {
+        note: voters.ok ? null : voters.reason,
+        reachedDiscord: true,
+        votersResolved: voters.ok,
+        raw: fetched.poll.raw,
+      });
       if (!claimed) continue; // Another worker got there first.
+
+      if (voters.ok) {
+        // The rows are written AFTER the claim, so only the worker that won the
+        // claim writes them. Duplicates are ignored rather than treated as an
+        // error, which is the whole point: a person who already has a row for
+        // this trade keeps the one they have.
+        const added = await recordDiscordVoters(admin, poll.trade_id, poll.id, voters);
+        outcome.identified += 1;
+        outcome.votesAdded += added;
+      } else {
+        outcome.errors.push(voters.reason);
+        await markIdentityGap(admin, poll.trade_id);
+        outcome.votesAdded += totalA + totalB;
+      }
 
       await recomputeDiscordTally(admin, poll.trade_id);
       outcome.ingested += 1;
-      outcome.votesAdded += votesA + votesB;
     }
   } catch (err) {
     outcome.errors.push(err instanceof Error ? err.message : "Poll ingestion failed.");
@@ -557,32 +658,203 @@ export async function ingestClosedPolls(
   return outcome;
 }
 
+type PollVoters =
+  | { ok: true; a: string[]; b: string[] }
+  | { ok: false; reason: string };
+
+/**
+ * Both answers' voter lists, or one reason why neither could be read.
+ *
+ * All or nothing on purpose. Reading one side and failing on the other would
+ * produce a lopsided tally that looks like a real result, so a partial read is
+ * discarded and the poll falls back to its totals.
+ */
+async function readPollVoters(
+  channelId: string | null,
+  messageId: string,
+  answerIds: { a: number; b: number },
+): Promise<PollVoters> {
+  if (!channelId) {
+    // Posted before the channel id was captured, so there is nothing to ask.
+    return { ok: false, reason: "No Discord channel id was recorded for that poll." };
+  }
+  if (!hasDiscordBotToken()) {
+    return { ok: false, reason: "DISCORD_BOT_TOKEN is not set, so voters cannot be read." };
+  }
+
+  // Sequential rather than parallel: two reads against one Discord rate limit
+  // bucket, and a burst is the thing that gets throttled.
+  const a = await fetchPollAnswerVoters({ channelId, messageId, answerId: answerIds.a });
+  if (!a.ok) return { ok: false, reason: a.reason };
+  const b = await fetchPollAnswerVoters({ channelId, messageId, answerId: answerIds.b });
+  if (!b.ok) return { ok: false, reason: b.reason };
+  return { ok: true, a: a.userIds, b: b.userIds };
+}
+
+/**
+ * Write one row per Discord voter, and return how many were genuinely new.
+ *
+ * `ignoreDuplicates` against the unique index on (trade_id, discord_user_id) is
+ * what drops a repeat vote. Somebody who answered an earlier poll on this same
+ * trade already has a row, so their second vote is not inserted and does not
+ * move the tally, which is exactly the behaviour a count could never give.
+ *
+ * A voter appearing under BOTH answers is dropped rather than guessed at. It
+ * should be impossible (the poll is posted with allow_multiselect false), so
+ * seeing it means the read is not describing what we think it is.
+ */
+export interface DiscordVoteRow {
+  discordUserId: string;
+  side: WyrSide;
+}
+
+/**
+ * Turn two voter lists into the rows to write.
+ *
+ * Deduplicates within the read as well as across it. A voter under BOTH answers
+ * is dropped rather than guessed at: the poll is posted with
+ * `allow_multiselect: false`, so it should be impossible, and seeing it means
+ * the read is not describing what we think it is. A voter listed twice under
+ * the same answer keeps one row, because Discord paginating oddly should not
+ * turn one person into two votes before the database ever sees them.
+ */
+export function discordVoteRows(voters: { a: string[]; b: string[] }): {
+  rows: DiscordVoteRow[];
+  dropped: string[];
+} {
+  const bSide = new Set(voters.b);
+  const dropped = Array.from(new Set(voters.a.filter((id) => bSide.has(id))));
+  const drop = new Set(dropped);
+
+  const rows: DiscordVoteRow[] = [];
+  const claimed = new Set<string>();
+  for (const [side, ids] of [
+    ["a", voters.a],
+    ["b", voters.b],
+  ] as const) {
+    for (const id of ids) {
+      if (drop.has(id) || claimed.has(id)) continue;
+      claimed.add(id);
+      rows.push({ discordUserId: id, side });
+    }
+  }
+  return { rows, dropped };
+}
+
+async function recordDiscordVoters(
+  admin: Client,
+  tradeId: string,
+  pollId: string,
+  voters: { a: string[]; b: string[] },
+): Promise<number> {
+  const { rows, dropped } = discordVoteRows(voters);
+  if (dropped.length > 0) {
+    console.warn(
+      `[would-you-rather] ${dropped.length} Discord voters appear under both answers; dropping them`,
+    );
+  }
+  if (rows.length === 0) return 0;
+
+  const { data, error } = await admin
+    .from("would_you_rather_discord_votes")
+    .upsert(
+      rows.map((r) => ({
+        trade_id: tradeId,
+        poll_id: pollId,
+        discord_user_id: r.discordUserId,
+        side: r.side,
+      })),
+      { onConflict: "trade_id,discord_user_id", ignoreDuplicates: true },
+    )
+    .select("id");
+  if (error) {
+    console.warn("[would-you-rather] could not record Discord voters", error.message);
+    return 0;
+  }
+  return data?.length ?? 0;
+}
+
+/**
+ * Mark a trade as one whose Discord votes are not fully attributable.
+ *
+ * It can never be posted again. Some of its votes are known only as a total, so
+ * a person who voted on that poll would be invisible on the next one and would
+ * be counted a second time.
+ */
+async function markIdentityGap(admin: Client, tradeId: string): Promise<void> {
+  const { error } = await admin
+    .from("would_you_rather_trades")
+    .update({ discord_identity_gap: true })
+    .eq("id", tradeId);
+  if (error) {
+    console.warn("[would-you-rather] could not flag an identity gap", error.message);
+  }
+}
+
 /**
  * Claim a poll for ingestion and record its numbers.
  *
  * The `.is("results_ingested_at", null)` filter is the claim: two workers
  * racing on the same poll, only one of them matches a row, and only that one
  * goes on to touch the tally. Returns whether this caller won.
+ *
+ * THE FINAL STATUS DECIDES WHETHER THE TRADE CAN GO OUT AGAIN, which is why
+ * `reachedDiscord` is a separate flag from `note` rather than inferred from it.
+ * The partial unique index in migration 0230 excludes 'error' rows, so marking
+ * a poll 'error' hands its trade back to the pool. That is right when the
+ * message never reached Discord and wrong the moment it did: people may have
+ * voted, and their votes would be counted again alongside a second poll's.
+ * A poll that reached Discord therefore closes as 'ingested' whatever went
+ * wrong afterwards, with the note saying what.
  */
+export interface PollCloseOutcome {
+  /** What went wrong, or null when nothing did. Written to `error`. */
+  note: string | null;
+  /** Whether Discord accepted the message. See the note on closeOutPoll. */
+  reachedDiscord: boolean;
+  /** Whether this poll's voters were read by name rather than only counted. */
+  votersResolved: boolean;
+}
+
+/**
+ * The terminal status for a poll.
+ *
+ * 'error' ONLY when the message never reached Discord, so the row reads as an
+ * attempt nobody saw. A poll that did reach Discord closes as 'ingested'
+ * however badly the read went afterwards, with the note saying what happened;
+ * calling it an error would misdescribe a poll real people voted on.
+ *
+ * Whether its trade may go out again is a SEPARATE question, answered by
+ * `voters_resolved` and the trade's `discord_identity_gap`, not by this.
+ */
+export function pollCloseStatus(outcome: PollCloseOutcome): "ingested" | "error" {
+  return outcome.note && !outcome.reachedDiscord ? "error" : "ingested";
+}
+
 async function closeOutPoll(
   admin: Client,
   pollId: string,
   votesA: number,
   votesB: number,
   now: Date,
-  errorText: string | null,
-  /** Discord's raw poll object. Preserved verbatim; never modified afterwards. */
-  raw: unknown,
+  outcome: PollCloseOutcome & {
+    /** Discord's raw poll object. Preserved verbatim; never modified after. */
+    raw: unknown;
+  },
 ): Promise<boolean> {
   const { data } = await admin
     .from("would_you_rather_discord_polls")
     .update({
       results_ingested_at: now.toISOString(),
+      // The totals are recorded even when the voters were read by name. They
+      // are Discord's own figure, they are the audit trail for the per-voter
+      // rows, and a disagreement between the two is worth being able to see.
       ingested_votes_a: votesA,
       ingested_votes_b: votesB,
-      status: errorText ? "error" : "ingested",
-      error: errorText?.slice(0, 500) ?? null,
-      metadata: (raw ?? null) as never,
+      voters_resolved: outcome.votersResolved,
+      status: pollCloseStatus(outcome),
+      error: outcome.note?.slice(0, 500) ?? null,
+      metadata: (outcome.raw ?? null) as never,
     })
     .eq("id", pollId)
     .is("results_ingested_at", null)
@@ -591,28 +863,68 @@ async function closeOutPoll(
 }
 
 /**
- * Set a trade's Discord totals to the SUM of its ingested polls.
+ * Recompute a trade's Discord totals from scratch, from both kinds of evidence.
  *
- * A sum rather than an increment, so running this twice, or running it after a
- * poll row is corrected by hand, lands on the same number both times. An
- * increment is the version that quietly doubles a tally.
+ * One distinct person per row where the voters were read by name, plus the raw
+ * totals from any poll we could only count. The two halves cannot overlap: a
+ * poll contributes to one or the other, never both.
+ *
+ * RECOMPUTED, NEVER INCREMENTED. Running this twice, running it after a poll
+ * row is corrected by hand, or two workers running it at once all land on the
+ * same number. An increment is the version that quietly doubles a tally.
+ *
+ * The per-voter half is where the guarantee lives: the rows are deduplicated by
+ * the database on (trade_id, discord_user_id), so somebody who answered two
+ * polls on the same trade is one row and counts once.
  */
 async function recomputeDiscordTally(admin: Client, tradeId: string): Promise<void> {
-  const { data } = await admin
-    .from("would_you_rather_discord_polls")
-    .select("ingested_votes_a, ingested_votes_b")
-    .eq("trade_id", tradeId)
-    .not("results_ingested_at", "is", null);
-  let a = 0;
-  let b = 0;
-  for (const row of data ?? []) {
-    a += row.ingested_votes_a ?? 0;
-    b += row.ingested_votes_b ?? 0;
-  }
+  const [{ data: voters }, { data: counted }] = await Promise.all([
+    admin
+      .from("would_you_rather_discord_votes")
+      .select("side")
+      .eq("trade_id", tradeId),
+    // Only the polls that were NOT read by voter. Adding a resolved poll's
+    // totals on top of its own rows would count every one of its voters twice.
+    admin
+      .from("would_you_rather_discord_polls")
+      .select("ingested_votes_a, ingested_votes_b")
+      .eq("trade_id", tradeId)
+      .eq("voters_resolved", false)
+      .not("results_ingested_at", "is", null),
+  ]);
+
+  const { a, b } = discordTally(voters ?? [], counted ?? []);
+
   await admin
     .from("would_you_rather_trades")
     .update({ discord_votes_a: a, discord_votes_b: b })
     .eq("id", tradeId);
+}
+
+/**
+ * One distinct person per identified row, plus the raw totals from the polls
+ * that could only be counted.
+ *
+ * Separated out because it is the arithmetic the whole feature rests on and it
+ * is worth being able to test without a database. The two inputs cannot
+ * overlap: a poll is either read by voter or counted, and only the counted ones
+ * are passed in here.
+ */
+export function discordTally(
+  identified: Array<{ side: string | null }>,
+  counted: Array<{ ingested_votes_a: number | null; ingested_votes_b: number | null }>,
+): { a: number; b: number } {
+  let a = 0;
+  let b = 0;
+  for (const row of identified) {
+    if (row.side === "a") a += 1;
+    else if (row.side === "b") b += 1;
+  }
+  for (const row of counted) {
+    a += row.ingested_votes_a ?? 0;
+    b += row.ingested_votes_b ?? 0;
+  }
+  return { a, b };
 }
 
 export type { LoadedRound };

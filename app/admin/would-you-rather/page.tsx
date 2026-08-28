@@ -73,7 +73,7 @@ export default async function WouldYouRatherAdminPage() {
     admin
       .from("would_you_rather_discord_polls")
       .select(
-        "id, slot_key, route_key, webhook_id, posted_at, closes_at, results_ingested_at, ingested_votes_a, ingested_votes_b, status, error, discord_message_id",
+        "id, slot_key, route_key, webhook_id, posted_at, closes_at, results_ingested_at, ingested_votes_a, ingested_votes_b, voters_resolved, status, error, discord_message_id",
       )
       .order("posted_at", { ascending: false })
       .limit(15),
@@ -180,7 +180,10 @@ export default async function WouldYouRatherAdminPage() {
           One row per poll, keyed by the Eastern hour it was posted for, with the
           channel that hour's trade landed in. Results are read back once, some
           time after the poll closes, and added to that trade's tally. A row that
-          has been counted can never be counted again.
+          has been counted can never be counted again. "By voter" means we read
+          who voted and can drop anyone who has already called that trade;
+          "totals only" means we could not, and that trade will not be posted
+          again.
         </p>
 
         {(polls ?? []).length === 0 ? (
@@ -198,7 +201,7 @@ export default async function WouldYouRatherAdminPage() {
             tabIndex={0}
             className="beacon-scroll mt-4 overflow-x-auto rounded-card border border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
           >
-            <table className="w-full min-w-[48rem] text-sm">
+            <table className="w-full min-w-[54rem] text-sm">
               <caption className="sr-only">
                 Discord polls, newest first, with their vote counts and status.
               </caption>
@@ -209,6 +212,7 @@ export default async function WouldYouRatherAdminPage() {
                   <Th>Posted</Th>
                   <Th>Closes</Th>
                   <Th>Counted</Th>
+                  <Th>How</Th>
                   <Th>Votes</Th>
                   <Th>Status</Th>
                 </tr>
@@ -233,6 +237,20 @@ export default async function WouldYouRatherAdminPage() {
                       {poll.results_ingested_at
                         ? formatRelative(poll.results_ingested_at)
                         : "Not yet"}
+                    </Td>
+                    <Td>
+                      {/* Only meaningful once the poll has been read back, so
+                          an open poll says nothing rather than claiming the
+                          default of false is a finding. */}
+                      {poll.results_ingested_at ? (
+                        poll.voters_resolved ? (
+                          <span className="text-signal-success">By voter</span>
+                        ) : (
+                          <span className="text-ink-muted">Totals only</span>
+                        )
+                      ) : (
+                        <span className="text-ink-subtle">Open</span>
+                      )}
                     </Td>
                     <Td>
                       {poll.results_ingested_at ? (

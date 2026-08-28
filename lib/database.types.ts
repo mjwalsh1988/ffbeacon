@@ -5680,7 +5680,10 @@ export type Database = {
       };
       would_you_rather_discord_polls: {
         Row: {
+          answer_id_a: number | null;
+          answer_id_b: number | null;
           closes_at: string;
+          discord_channel_id: string | null;
           discord_message_id: string | null;
           error: string | null;
           id: string;
@@ -5693,10 +5696,14 @@ export type Database = {
           slot_key: string;
           status: string;
           trade_id: string;
+          voters_resolved: boolean;
           webhook_id: string | null;
         };
         Insert: {
+          answer_id_a?: number | null;
+          answer_id_b?: number | null;
           closes_at: string;
+          discord_channel_id?: string | null;
           discord_message_id?: string | null;
           error?: string | null;
           id?: string;
@@ -5709,10 +5716,14 @@ export type Database = {
           slot_key: string;
           status?: string;
           trade_id: string;
+          voters_resolved?: boolean;
           webhook_id?: string | null;
         };
         Update: {
+          answer_id_a?: number | null;
+          answer_id_b?: number | null;
           closes_at?: string;
+          discord_channel_id?: string | null;
           discord_message_id?: string | null;
           error?: string | null;
           id?: string;
@@ -5725,6 +5736,7 @@ export type Database = {
           slot_key?: string;
           status?: string;
           trade_id?: string;
+          voters_resolved?: boolean;
           webhook_id?: string | null;
         };
         Relationships: [
@@ -5740,6 +5752,48 @@ export type Database = {
             columns: ["webhook_id"];
             isOneToOne: false;
             referencedRelation: "discord_webhooks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      would_you_rather_discord_votes: {
+        Row: {
+          created_at: string;
+          discord_user_id: string;
+          id: string;
+          poll_id: string;
+          side: string;
+          trade_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          discord_user_id: string;
+          id?: string;
+          poll_id: string;
+          side: string;
+          trade_id: string;
+        };
+        Update: {
+          created_at?: string;
+          discord_user_id?: string;
+          id?: string;
+          poll_id?: string;
+          side?: string;
+          trade_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "would_you_rather_discord_votes_poll_id_fkey";
+            columns: ["poll_id"];
+            isOneToOne: false;
+            referencedRelation: "would_you_rather_discord_polls";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "would_you_rather_discord_votes_trade_id_fkey";
+            columns: ["trade_id"];
+            isOneToOne: false;
+            referencedRelation: "would_you_rather_trades";
             referencedColumns: ["id"];
           },
         ];
@@ -5771,6 +5825,7 @@ export type Database = {
       would_you_rather_trades: {
         Row: {
           added_at: string;
+          discord_identity_gap: boolean;
           discord_posted_at: string | null;
           discord_votes_a: number;
           discord_votes_b: number;
@@ -5796,6 +5851,7 @@ export type Database = {
         };
         Insert: {
           added_at?: string;
+          discord_identity_gap?: boolean;
           discord_posted_at?: string | null;
           discord_votes_a?: number;
           discord_votes_b?: number;
@@ -5821,6 +5877,7 @@ export type Database = {
         };
         Update: {
           added_at?: string;
+          discord_identity_gap?: boolean;
           discord_posted_at?: string | null;
           discord_votes_a?: number;
           discord_votes_b?: number;

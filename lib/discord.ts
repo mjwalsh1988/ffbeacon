@@ -99,6 +99,33 @@ export type DiscordResult =
   | { ok: true; id: string | null }
   | { ok: false; status: number; retryAfterMs: number | null; error: string };
 
+/**
+ * What a successful post tells us about the message Discord created.
+ *
+ * A superset of DiscordResult's ok branch, so `ok`, `id` and `error` read the
+ * same at every call site. The extra two matter only to a caller that wants to
+ * come back later and ask WHO voted on a poll:
+ *
+ *   channelId       The poll voters endpoint is channel-scoped
+ *                   (/channels/{id}/polls/...), and a webhook URL does not name
+ *                   its channel. Discord puts it in the create response, which
+ *                   we already ask for with wait=true, so it costs nothing to
+ *                   keep and cannot be recovered later without it.
+ *   pollAnswerIds   Discord's OWN ids for the answers, in the order we sent
+ *                   them. Answer ids happen to be 1 and 2 today, and reading
+ *                   them back rather than assuming that is what keeps a vote
+ *                   attributed to the right side if Discord ever numbers them
+ *                   differently.
+ */
+export type DiscordPostResult =
+  | {
+      ok: true;
+      id: string | null;
+      channelId: string | null;
+      pollAnswerIds: number[] | null;
+    }
+  | { ok: false; status: number; retryAfterMs: number | null; error: string };
+
 function buildBody(
   input: DiscordMessageInput,
   withIdentity: boolean,
@@ -184,11 +211,18 @@ function retryAfterMs(res: Response, json: unknown): number | null {
   return null;
 }
 
-/** Post a new webhook message; returns the created message id (wait=true). */
+/**
+ * Post a new webhook message.
+ *
+ * wait=true, so Discord returns the message it created rather than an empty
+ * 204. That is where the message id comes from, and also the channel id and the
+ * poll's answer ids, which a later read of who voted needs and which nothing
+ * else hands back.
+ */
 export async function postWebhookMessage(
   webhookUrl: string,
   input: DiscordMessageInput,
-): Promise<DiscordResult> {
+): Promise<DiscordPostResult> {
   try {
     const req = buildRequest(input, true);
     const res = await fetch(`${webhookUrl}?wait=true`, {
@@ -206,8 +240,22 @@ export async function postWebhookMessage(
         error: `Discord post ${res.status}`,
       };
     }
-    const id = (json as { id?: string } | null)?.id ?? null;
-    return { ok: true, id };
+    const created = json as {
+      id?: string;
+      channel_id?: string;
+      poll?: { answers?: Array<{ answer_id?: number }> };
+    } | null;
+    const answerIds = (created?.poll?.answers ?? [])
+      .map((a) => a?.answer_id)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+    return {
+      ok: true,
+      id: created?.id ?? null,
+      channelId: created?.channel_id ?? null,
+      // Null rather than [] when there was no poll, so "this message had no
+      // poll" and "the poll had no answers" stay distinguishable.
+      pollAnswerIds: answerIds.length > 0 ? answerIds : null,
+    };
   } catch (err) {
     return {
       ok: false,
