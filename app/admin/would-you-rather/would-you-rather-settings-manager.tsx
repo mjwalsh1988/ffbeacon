@@ -407,9 +407,10 @@ export function WouldYouRatherSettingsManager({
             {running ? "Working" : "Post a poll to Discord now"}
           </button>
           <p className="mt-1.5 max-w-xl text-[11px] leading-relaxed text-ink-subtle">
-            For checking a webhook. It skips only the clock: the once-per-Eastern-hour
-            guard still applies, so a second press inside the same hour is refused,
-            and it needs posting turned on and saved first.
+            Sends a real poll, and is not rate limited: press it as many times as
+            you want and each press sends a different trade. The once-per-hour rule
+            applies to the scheduled post only. It needs posting turned on and
+            saved first.
           </p>
         </div>
       </Group>

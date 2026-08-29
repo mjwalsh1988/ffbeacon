@@ -5693,7 +5693,7 @@ export type Database = {
           posted_at: string;
           results_ingested_at: string | null;
           route_key: string;
-          slot_key: string;
+          slot_key: string | null;
           status: string;
           trade_id: string;
           voters_resolved: boolean;
@@ -5713,7 +5713,7 @@ export type Database = {
           posted_at?: string;
           results_ingested_at?: string | null;
           route_key?: string;
-          slot_key: string;
+          slot_key?: string | null;
           status?: string;
           trade_id: string;
           voters_resolved?: boolean;
@@ -5733,7 +5733,7 @@ export type Database = {
           posted_at?: string;
           results_ingested_at?: string | null;
           route_key?: string;
-          slot_key?: string;
+          slot_key?: string | null;
           status?: string;
           trade_id?: string;
           voters_resolved?: boolean;

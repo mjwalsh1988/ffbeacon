@@ -729,12 +729,30 @@ Discord poll:
   configured, and it is excluded from the CANDIDATE SET rather than picked and
   then discarded, so an unroutable type never costs a scheduled hour. The admin
   panel says out loud which buckets are unrouted.
-- ABSOLUTE RULE: posting is claimed by `slot_key`, a unique Eastern
+- ABSOLUTE RULE: a SCHEDULED post is claimed by `slot_key`, a unique Eastern
   "YYYY-MM-DD-HH", and the row is written BEFORE the message is sent. A claim
   taken after the work is a claim that does not stop the work. `route_key`
   records which channel the poll went to and is deliberately NOT part of that
   key: keying on the pair would let two ticks in the same hour both post as long
   as they picked trades of different types.
+- A MANUAL post from the admin panel is NOT rate limited and must not be. It
+  passes `{ manual: true }`, skips the hour gate, and writes a NULL `slot_key`;
+  the unique index covers non-null keys only (migration 0232). The once-per-hour
+  rule exists to stop a retried CRON TICK from posting an hour twice, and a
+  person pressing a button is not a duplicate cron tick. A null slot_key is also
+  how a row says it claimed no schedule slot, so no extra column is needed.
+- ABSOLUTE RULE: every poll must reach a terminal state. A 404 on read-back
+  means the Discord message is GONE, which is a settled fact rather than a bad
+  moment, so the poll closes as `status = 'deleted'` with zeroes. Left open it
+  would be retried hourly forever AND hold a place in the ingestion sweep, which
+  reads the 25 oldest unresolved polls: twenty five of them would stop ingestion
+  for every other poll. `INGEST_GIVE_UP_MS` (14 days, far beyond the 6-hour
+  finalize grace) is the same backstop for every other permanent failure.
+- A deleted poll does NOT set `discord_identity_gap`, and its trade can go out
+  again. That is safe precisely because it contributed nothing: a fresh poll
+  counts each person once. A poll ABANDONED after 14 days does set the gap when
+  it had a message id, because that message may still exist and may have been
+  voted on.
 - ABSOLUTE RULE: ingestion is claimed by a conditional update on
   `results_ingested_at`, and the trade's Discord totals are then RECOMPUTED as
   the SUM of its polls rather than incremented. A sum cannot drift; an increment

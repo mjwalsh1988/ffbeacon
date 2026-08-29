@@ -20,10 +20,14 @@
  * used elsewhere for membership and guild stats and is deliberately left out
  * of this path.
  *
- * A VOTE CANNOT BE COUNTED TWICE, AND NEITHER CAN A POLL BE POSTED TWICE.
- *   Posting is claimed by `slot_key`, an Eastern "date-hour" string with a
- *   unique index on it. Two cron ticks inside the same Eastern hour, a retry,
- *   or two regions firing at once all collide on that key and only one posts.
+ * A VOTE CANNOT BE COUNTED TWICE, AND NEITHER CAN A SCHEDULED POLL BE POSTED
+ * TWICE.
+ *   A scheduled post is claimed by `slot_key`, an Eastern "date-hour" string
+ *   with a unique index over the non-null values. Two cron ticks inside the same
+ *   Eastern hour, a retry, or two regions firing at once all collide on that key
+ *   and only one posts. A MANUAL post from the admin panel writes no slot_key,
+ *   so it claims nothing and is not limited: that guard is aimed at a duplicate
+ *   cron tick, and a person pressing a button is not one.
  *   The row is written BEFORE the message is sent, for the same reason the
  *   league refresh endpoint writes its rate-limit row first: a claim taken
  *   after the work is a claim that does not stop the work.
@@ -305,6 +309,22 @@ const PICK_WINDOW = 60;
 const POST_ATTEMPTS = 5;
 
 /**
+ * How long after a poll closes we keep trying to read it before giving up.
+ *
+ * A 404 is settled the moment it arrives, and this is the backstop for
+ * everything that is not: a webhook switched off and never switched back, a
+ * Discord endpoint that answers 500 forever, a token rotated out from under us.
+ * Each of those leaves a row unresolved, and an unresolved row keeps its place
+ * in this sweep's window (ordered by closes_at ascending, limit 25) for as long
+ * as it exists. Twenty five of them would stop ingestion for every other poll.
+ *
+ * Fourteen days is far beyond any honest wait. A poll that Discord never seals
+ * is taken as it stands after POLL_FINALIZE_GRACE_MS, six hours, so nothing
+ * legitimate is anywhere near this.
+ */
+const INGEST_GIVE_UP_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
  * Post this hour's poll.
  *
  * ONE TRADE PER SCHEDULED HOUR, AND THE CHANNEL FOLLOWS THE TRADE. The pick is
@@ -319,6 +339,7 @@ export async function postScheduledPoll(
   admin: Client,
   settings: WouldYouRatherSettings,
   now: Date = new Date(),
+  opts: { manual?: boolean } = {},
 ): Promise<PostOutcome> {
   const cfg = settings.discord;
   const skip = (reason: string): PostOutcome => ({ status: "skipped", reason, route: null });
@@ -326,7 +347,11 @@ export async function postScheduledPoll(
   if (!settings.game_enabled) return skip("The game is switched off.");
   if (!cfg.enabled) return skip("Discord posting is switched off.");
   if (!hasAnyWebhook(settings)) return skip("No webhook is selected for any league type.");
-  if (!isPostHour(now, cfg.post_hours)) {
+  // The clock, and the once-per-hour claim below it, belong to the SCHEDULE. An
+  // admin pressing a button is not a retried cron tick, and telling them the
+  // hour is taken when they want to send a second trade was the guard aimed at
+  // the wrong thing.
+  if (!opts.manual && !isPostHour(now, cfg.post_hours)) {
     return skip("This hour is not one of the scheduled times.");
   }
 
@@ -397,6 +422,12 @@ export async function postScheduledPoll(
     // CLAIM THE SLOT BEFORE SENDING ANYTHING. A second tick inside this Eastern
     // hour collides on slot_key and gives up here, rather than after it has
     // already posted a duplicate.
+    //
+    // A MANUAL POST CLAIMS NO SLOT AT ALL, and writes a null slot_key. The
+    // unique index covers non-null keys only (migration 0232), so an admin can
+    // send as many as they like while the schedule keeps its one post an hour.
+    // A null slot_key is also how the row says what it is: a post nobody
+    // scheduled.
     const closesAt = pollClosesAt(now, cfg.poll_hours);
     const { data: claimed, error: claimError } = await admin
       .from("would_you_rather_discord_polls")
@@ -404,7 +435,7 @@ export async function postScheduledPoll(
         trade_id: loaded.pool.id,
         webhook_id: webhookId,
         route_key: webhookId,
-        slot_key: slot.key,
+        slot_key: opts.manual ? null : slot.key,
         posted_at: now.toISOString(),
         closes_at: closesAt.toISOString(),
       })
@@ -559,6 +590,10 @@ export interface IngestOutcome {
   votesAdded: number;
   /** Polls whose voters were read by name rather than counted in the aggregate. */
   identified: number;
+  /** Polls whose Discord message has been deleted, closed out unread. */
+  deleted: number;
+  /** Polls given up on after too long unreadable. */
+  abandoned: number;
   /** Polls that are closed but whose numbers Discord has not sealed yet. */
   waiting: number;
   errors: string[];
@@ -594,6 +629,8 @@ export async function ingestClosedPolls(
     ingested: 0,
     votesAdded: 0,
     identified: 0,
+    deleted: 0,
+    abandoned: 0,
     waiting: 0,
     errors: [],
   };
@@ -616,6 +653,24 @@ export async function ingestClosedPolls(
 
     for (const poll of pending ?? []) {
       outcome.checked += 1;
+
+      // Nothing may sit in this sweep forever. Whatever has kept this poll
+      // unreadable for a fortnight is not going to stop, and every hour it
+      // stays it holds a place other polls need.
+      if (now.getTime() - new Date(poll.closes_at).getTime() > INGEST_GIVE_UP_MS) {
+        await closeOutPoll(admin, poll.id, 0, 0, now, {
+          note: "Gave up reading this poll after 14 days; its votes were never counted.",
+          reachedDiscord: Boolean(poll.discord_message_id),
+          votersResolved: false,
+          raw: null,
+        });
+        // Unlike a deleted message, this one may still exist and may still have
+        // been voted on, so the trade is held back from going out again: a
+        // repeat voter on a second poll would be invisible to us.
+        if (poll.discord_message_id) await markIdentityGap(admin, poll.trade_id);
+        outcome.abandoned += 1;
+        continue;
+      }
 
       if (!poll.discord_message_id) {
         // The post failed before Discord gave us an id, so there is nothing to
@@ -649,9 +704,30 @@ export async function ingestClosedPolls(
 
       const fetched = await fetchWebhookPoll(webhookUrl, poll.discord_message_id);
       if (!fetched.ok) {
-        // A failed request is not evidence about the poll. Left alone so the
+        if (fetched.status === 404) {
+          // THE MESSAGE IS GONE, which is a settled fact rather than a bad
+          // moment. Somebody deleted the poll (or the webhook it was posted
+          // through). Nothing was read and nothing ever will be, so the row is
+          // closed out here instead of being retried every hour for the rest of
+          // its life and holding a place in this very sweep while it does.
+          //
+          // The trade is deliberately NOT flagged with an identity gap: this
+          // poll contributed nothing, so a fresh one counts each person once
+          // and there is no double count to prevent.
+          await closeOutPoll(admin, poll.id, 0, 0, now, {
+            note: "The Discord message was deleted, so its votes could not be read.",
+            reachedDiscord: true,
+            votersResolved: false,
+            messageDeleted: true,
+          raw: null,
+          });
+          outcome.deleted += 1;
+          continue;
+        }
+        // Any other failure is not evidence about the poll. Left alone so the
         // next hourly sweep tries again, exactly as Power Pulse refuses to
-        // conclude anything from a failed Sleeper call.
+        // conclude anything from a failed Sleeper call. `giveUpAt` below is
+        // what stops that retry running forever.
         outcome.errors.push(fetched.error);
         continue;
       }
@@ -881,20 +957,31 @@ export interface PollCloseOutcome {
   reachedDiscord: boolean;
   /** Whether this poll's voters were read by name rather than only counted. */
   votersResolved: boolean;
+  /** Whether the message itself is gone from Discord. */
+  messageDeleted?: boolean;
 }
 
 /**
- * The terminal status for a poll.
+ * The terminal status for a poll. Three honest answers, and they are different.
+ *
+ * 'deleted' when the message is gone from Discord. Nothing was read and nothing
+ * ever will be, so calling it 'ingested' would claim we counted something and
+ * 'error' would blame the post for a message somebody removed afterwards.
  *
  * 'error' ONLY when the message never reached Discord, so the row reads as an
- * attempt nobody saw. A poll that did reach Discord closes as 'ingested'
- * however badly the read went afterwards, with the note saying what happened;
- * calling it an error would misdescribe a poll real people voted on.
+ * attempt nobody saw.
+ *
+ * 'ingested' otherwise, including when the message reached Discord and the read
+ * went badly afterwards; the note carries what happened. Calling that an error
+ * would misdescribe a poll real people voted on.
  *
  * Whether its trade may go out again is a SEPARATE question, answered by
  * `voters_resolved` and the trade's `discord_identity_gap`, not by this.
  */
-export function pollCloseStatus(outcome: PollCloseOutcome): "ingested" | "error" {
+export function pollCloseStatus(
+  outcome: PollCloseOutcome,
+): "ingested" | "error" | "deleted" {
+  if (outcome.messageDeleted) return "deleted";
   return outcome.note && !outcome.reachedDiscord ? "error" : "ingested";
 }
 

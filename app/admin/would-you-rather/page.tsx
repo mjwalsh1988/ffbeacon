@@ -178,12 +178,14 @@ export default async function WouldYouRatherAdminPage() {
         </h2>
         <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
           One row per poll, keyed by the Eastern hour it was posted for, with the
-          channel that hour's trade landed in. Results are read back once, some
-          time after the poll closes, and added to that trade's tally. A row that
-          has been counted can never be counted again. "By voter" means we read
-          who voted and can drop anyone who has already called that trade;
+          channel that hour's trade landed in. A poll sent by hand claims no hour,
+          which is why that button is not rate limited. Results are read back
+          once, some time after the poll closes, and added to that trade's tally;
+          a row that has been counted can never be counted again. "By voter" means
+          we read who voted and can drop anyone who has already called that trade;
           "totals only" means we could not, and that trade will not be posted
-          again.
+          again. A poll marked deleted had its Discord message removed before we
+          could read it, so its votes are gone and nothing was counted.
         </p>
 
         {(polls ?? []).length === 0 ? (
@@ -221,9 +223,15 @@ export default async function WouldYouRatherAdminPage() {
                 {(polls ?? []).map((poll) => (
                   <tr key={poll.id} className="border-b border-line/60 last:border-0">
                     <th scope="row" className="px-3 py-2.5 text-left align-top font-normal">
-                      <span className="font-mono text-xs tabular-nums text-ink-muted">
-                        {poll.slot_key}
-                      </span>
+                      {/* A manual post claims no schedule slot, which is what a
+                          null slot_key means and why it is not rate limited. */}
+                      {poll.slot_key ? (
+                        <span className="font-mono text-xs tabular-nums text-ink-muted">
+                          {poll.slot_key}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-ink-subtle">Sent by hand</span>
+                      )}
                     </th>
                     <Td>
                       {/* The FK nulls out when a webhook is deleted, so a row
@@ -268,7 +276,9 @@ export default async function WouldYouRatherAdminPage() {
                             ? "border-signal-danger/50 bg-signal-danger/10 text-signal-danger"
                             : poll.status === "ingested"
                               ? "border-signal-success/50 bg-signal-success/10 text-signal-success"
-                              : "border-line text-ink-muted"
+                              : poll.status === "deleted"
+                                ? "border-signal-warning/50 bg-signal-warning/10 text-signal-warning"
+                                : "border-line text-ink-muted"
                         }`}
                       >
                         {poll.status}

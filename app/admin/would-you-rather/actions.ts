@@ -98,19 +98,23 @@ export async function retireTradeAction(tradeId: string): Promise<ActionResult> 
 }
 
 /**
- * Post a poll to Discord right now, ignoring the clock.
+ * Post a poll to Discord right now, as many times as an admin wants.
  *
- * FOR TESTING A WEBHOOK, AND IT SAYS SO ON THE BUTTON. It runs the real path,
- * so it claims a slot key and is subject to the same "one post per Eastern
- * hour" rule as the cron. That is deliberate: a test that bypassed the guard
- * would not be testing the thing that runs.
+ * NOT RATE LIMITED, ON PURPOSE. It runs the real posting path, but it does not
+ * claim a schedule slot: the once-per-Eastern-hour rule exists to stop a
+ * RETRIED CRON TICK from posting the same hour twice, and a person pressing a
+ * button is not a duplicate cron tick. Pressing it three times sends three
+ * trades. See the manual branch in lib/would-you-rather/discord.ts.
+ *
+ * Each press picks a different trade, because the picker never returns one
+ * Discord has already been sent, so this cannot spam the same deal.
  *
  * Which channel it lands in depends on the league type of the trade it happens
  * to pick, exactly as a scheduled hour does. The result names that channel, so
  * an admin checking a newly split setup can see where this one went rather than
  * having to guess.
  *
- * Every other gate still applies. It refuses while the game is off, while
+ * The settings gates still apply. It refuses while the game is off, while
  * Discord posting is off, or with no webhook chosen anywhere, because those are
  * the settings an admin would be testing and pretending they are not set would
  * teach them nothing.
@@ -127,22 +131,11 @@ export async function postDiscordPollNowAction(): Promise<ActionResult> {
     return { ok: false, error: "No webhook is selected. Choose one and save first." };
   }
 
-  // The hour gate is the one thing bypassed, by handing the poster a settings
-  // object whose schedule includes the hour it is being run in. Everything else
-  // (the slot claim, the webhook lookup, the trade pick) runs exactly as the
-  // cron runs it.
-  const now = new Date();
-  const result = await postScheduledPoll(
-    admin,
-    {
-      ...settings,
-      discord: {
-        ...settings.discord,
-        post_hours: Array.from({ length: 24 }, (_, hour) => hour),
-      },
-    },
-    now,
-  );
+  // The clock and the slot claim are the two things a manual post skips, and
+  // the poster is told so directly rather than being handed a doctored schedule
+  // to fool it. Everything else (the webhook lookup, the trade pick, the poll
+  // build, the answer length check) runs exactly as the cron runs it.
+  const result = await postScheduledPoll(admin, settings, new Date(), { manual: true });
 
   revalidatePath(ADMIN_PATH);
   if (result.status === "posted") {

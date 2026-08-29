@@ -271,6 +271,31 @@ describe("pollCloseStatus", () => {
     );
   });
 
+  it("calls a poll whose message was removed deleted, not ingested and not an error", () => {
+    // Nothing was read and nothing ever will be. "Ingested" would claim we
+    // counted something; "error" would blame the post for a message somebody
+    // removed hours later.
+    expect(
+      pollCloseStatus({
+        note: "The Discord message was deleted, so its votes could not be read.",
+        reachedDiscord: true,
+        votersResolved: false,
+        messageDeleted: true,
+      }),
+    ).toBe("deleted");
+  });
+
+  it("prefers deleted over error when the message never landed and is also gone", () => {
+    expect(
+      pollCloseStatus({
+        note: "gone",
+        reachedDiscord: false,
+        votersResolved: false,
+        messageDeleted: true,
+      }),
+    ).toBe("deleted");
+  });
+
   it("marks a message that never reached Discord as an error", () => {
     expect(
       pollCloseStatus({
