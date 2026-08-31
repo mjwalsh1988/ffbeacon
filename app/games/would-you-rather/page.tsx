@@ -161,7 +161,6 @@ export default async function WouldYouRatherPage() {
               detail: "Site and Discord",
               accent: "purple",
             },
-            { label: "Cost", value: "$0", detail: "Two rounds without an account" },
           ]}
         />
       </PageBody>
