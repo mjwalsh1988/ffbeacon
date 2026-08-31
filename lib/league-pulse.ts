@@ -516,6 +516,139 @@ async function syncTransactions(
   await upsertTransactions(supabase, leagueRowId, transactions, season);
 }
 
+/**
+ * The stored rows whose Sleeper key is absent from the latest payload.
+ *
+ * Split out and pure because the rule is one line and the reason for it is not.
+ * See pruneStaleRosters below.
+ */
+export function orphanRowIds(
+  stored: Array<{ id: string; key: string | number | null }>,
+  keptKeys: Array<string | number>,
+): string[] {
+  const kept = new Set(keptKeys.map((k) => String(k)));
+  return stored.filter((row) => !kept.has(String(row.key))).map((row) => row.id);
+}
+
+/**
+ * Drop roster rows Sleeper no longer returns.
+ *
+ * Every child write in this file is an upsert, which adds and updates the rows
+ * the payload names and leaves everything else exactly where it was. That is
+ * correct for a league whose shape never changes and wrong the moment one does.
+ * A 16-team league cut to 12 kept four ownerless roster rows indefinitely, and
+ * every reader that counts teams by reading this table (the deep view, the
+ * trade-value ranking, Power Pulse's season simulation) went on believing there
+ * were sixteen. Power Pulse simulated a 16-team bracket against a 12-team
+ * schedule and stored playoff odds for every real manager off the back of it.
+ *
+ * ABSOLUTE RULE: an empty payload is never evidence about a league. lib/sleeper.ts
+ * collapses a failed request into `[]`, so "Sleeper has no rosters" and "Sleeper
+ * did not answer" arrive here as the same value, and pruning against an empty
+ * payload would empty a healthy league on one timeout. The caller already
+ * returns early on a zero-length payload; the length check below is the second
+ * lock on that same door and must not be removed.
+ *
+ * A failed prune is logged, not thrown. A stale row is a wrong number on a page;
+ * a thrown sync is no page at all.
+ */
+async function pruneStaleRosters(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  keptRosterIds: number[],
+): Promise<void> {
+  if (keptRosterIds.length === 0) return;
+  const { data, error } = await supabase
+    .from("rosters")
+    .select("id, sleeper_roster_id")
+    .eq("league_id", leagueRowId);
+  if (error) {
+    console.warn(`[pulseLeague] roster prune read failed: ${error.message}`);
+    return;
+  }
+  const orphans = orphanRowIds(
+    (data ?? []).map((r) => ({ id: r.id, key: r.sleeper_roster_id })),
+    keptRosterIds,
+  );
+  if (orphans.length === 0) return;
+  // league_power_rankings_cache and league_power_pulse_cache both cascade off
+  // rosters.id, so the derived rows for a removed team go with it.
+  const { error: delErr } = await supabase.from("rosters").delete().in("id", orphans);
+  if (delErr) {
+    console.warn(`[pulseLeague] roster prune delete failed: ${delErr.message}`);
+    return;
+  }
+  console.log(
+    `[pulseLeague] removed ${orphans.length} roster row(s) league ${leagueRowId} no longer has`,
+  );
+}
+
+/** Drop member rows Sleeper no longer returns. Same contract as pruneStaleRosters. */
+async function pruneStaleLeagueUsers(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  keptUserIds: string[],
+): Promise<void> {
+  if (keptUserIds.length === 0) return;
+  const { data, error } = await supabase
+    .from("league_users")
+    .select("id, sleeper_user_id")
+    .eq("league_id", leagueRowId);
+  if (error) {
+    console.warn(`[pulseLeague] member prune read failed: ${error.message}`);
+    return;
+  }
+  const orphans = orphanRowIds(
+    (data ?? []).map((u) => ({ id: u.id, key: u.sleeper_user_id })),
+    keptUserIds,
+  );
+  if (orphans.length === 0) return;
+  const { error: delErr } = await supabase.from("league_users").delete().in("id", orphans);
+  if (delErr) {
+    console.warn(`[pulseLeague] member prune delete failed: ${delErr.message}`);
+    return;
+  }
+  console.log(
+    `[pulseLeague] removed ${orphans.length} member row(s) league ${leagueRowId} no longer has`,
+  );
+}
+
+/**
+ * Drop draft rows Sleeper no longer returns. Same contract as pruneStaleRosters.
+ *
+ * A commissioner who deletes and recreates a draft gets a new draft_id, and the
+ * abandoned one stays in our copy forever otherwise, which puts a draft board
+ * on screen for a draft that no longer exists.
+ */
+async function pruneStaleLeagueDrafts(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  keptDraftIds: string[],
+): Promise<void> {
+  if (keptDraftIds.length === 0) return;
+  const { data, error } = await supabase
+    .from("league_drafts")
+    .select("id, sleeper_draft_id")
+    .eq("league_id", leagueRowId);
+  if (error) {
+    console.warn(`[pulseLeague] draft prune read failed: ${error.message}`);
+    return;
+  }
+  const orphans = orphanRowIds(
+    (data ?? []).map((d) => ({ id: d.id, key: d.sleeper_draft_id })),
+    keptDraftIds,
+  );
+  if (orphans.length === 0) return;
+  const { error: delErr } = await supabase.from("league_drafts").delete().in("id", orphans);
+  if (delErr) {
+    console.warn(`[pulseLeague] draft prune delete failed: ${delErr.message}`);
+    return;
+  }
+  console.log(
+    `[pulseLeague] removed ${orphans.length} draft row(s) league ${leagueRowId} no longer has`,
+  );
+}
+
 async function upsertRosters(
   supabase: ServiceClient,
   leagueRowId: string,
@@ -587,6 +720,12 @@ async function upsertRosters(
     .from("rosters")
     .upsert(rows, { onConflict: "league_id,sleeper_roster_id" });
   if (error) throw new Error(`rosters upsert failed: ${error.message}`);
+
+  await pruneStaleRosters(
+    supabase,
+    leagueRowId,
+    rosters.map((r) => r.roster_id),
+  );
 }
 
 async function upsertLeagueUsers(
@@ -620,6 +759,12 @@ async function upsertLeagueUsers(
     .from("league_users")
     .upsert(rows, { onConflict: "league_id,sleeper_user_id" });
   if (error) throw new Error(`league_users upsert failed: ${error.message}`);
+
+  await pruneStaleLeagueUsers(
+    supabase,
+    leagueRowId,
+    users.map((u) => u.user_id),
+  );
 }
 
 async function upsertTransactions(
@@ -748,6 +893,12 @@ async function upsertLeagueDrafts(
     .from("league_drafts")
     .upsert(deduped, { onConflict: "sleeper_draft_id" });
   if (error) throw new Error(`league_drafts upsert failed: ${error.message}`);
+
+  await pruneStaleLeagueDrafts(
+    supabase,
+    leagueRowId,
+    deduped.map((d) => d.sleeper_draft_id),
+  );
 }
 
 /**
