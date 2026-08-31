@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
+import { computeAgeYears } from "@/lib/player-age";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -12,6 +13,14 @@ export type ResolvedPlayer = {
   full_name: string;
   position: string;
   team: string | null;
+  /**
+   * Whole years from `players.birth_date`, null when the birth date is missing.
+   * Carried so the dynasty half of lib/roster-badges.ts can tell a cheap
+   * 22-year-old apart from a cheap 31-year-old; nothing displays it.
+   */
+  age: number | null;
+  /** Seasons played, null when Sleeper has not published one. Same purpose. */
+  years_experience: number | null;
 };
 
 export type TrendLite = {
@@ -62,6 +71,12 @@ export type TeamCardData = {
   /** Keyed by player.id (uuid). Plain Record so this struct survives the
    * server → client component boundary (Maps don't serialize via Next.js). */
   trends: Record<string, TrendLite>;
+  /**
+   * player.id (uuid) → rank at that player's own position, for this league's
+   * format and the reader's source. Drives the star beside a top-of-position
+   * player (lib/roster-badges.ts). Shared across every team in the league, the
+   * same way `trends` is; a player absent from the map is simply unranked. */
+  playerPositionRanks: Record<string, number>;
   draftPicks: DraftPickAsset[];
   /** player.id (uuid) of every starter. */
   starterIds: string[];
@@ -156,7 +171,9 @@ export async function loadLeagueTeamCards(
   ]);
   const rosters = rostersRes.data ?? [];
   const users = usersRes.data ?? [];
-  const cache = (cacheRes.data ?? []) as Array<{ roster_id: string } & CacheRow>;
+  const cache = (cacheRes.data ?? []) as Array<
+    { roster_id: string } & CacheRow
+  >;
 
   const usersById = new Map(users.map((u) => [u.sleeper_user_id, u]));
   const cacheByRoster = new Map(cache.map((c) => [c.roster_id, c]));
@@ -212,18 +229,26 @@ export async function loadLeagueTeamCards(
   }
   const allPlayers = await resolvePlayers(supabase, Array.from(allSleeperIds));
 
-  const allPlayerIds = Array.from(new Set([...allPlayers.values()].map((p) => p.id)));
-  const allTrends: Record<string, TrendLite> =
+  const allPlayerIds = Array.from(
+    new Set([...allPlayers.values()].map((p) => p.id)),
+  );
+  const [allTrends, allPositionRanks] =
     formatConfigId && sourceSlug
-      ? await loadTrends(supabase, allPlayerIds, formatConfigId, sourceSlug)
-      : {};
+      ? await Promise.all([
+          loadTrends(supabase, allPlayerIds, formatConfigId, sourceSlug),
+          loadPositionRanks(supabase, allPlayerIds, formatConfigId, sourceSlug),
+        ])
+      : [{} as Record<string, TrendLite>, {} as Record<string, number>];
 
   const out: TeamCardData[] = [];
   for (const r of rosters) {
     const user = r.owner_user_id ? usersById.get(r.owner_user_id) : null;
-    const teamName = user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`;
+    const teamName =
+      user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`;
     const ownerDisplayName =
-      user?.display_name && user.team_name && user.team_name !== user.display_name
+      user?.display_name &&
+      user.team_name &&
+      user.team_name !== user.display_name
         ? user.display_name
         : null;
 
@@ -255,7 +280,10 @@ export async function loadLeagueTeamCards(
       cacheRow: cache,
       players,
       trends: allTrends,
-      draftPicks: filterPicks(((r.draft_pick_assets ?? []) as DraftPickAsset[]) || []),
+      playerPositionRanks: allPositionRanks,
+      draftPicks: filterPicks(
+        ((r.draft_pick_assets ?? []) as DraftPickAsset[]) || [],
+      ),
       starterIds,
       rosterIdToTeamName,
       rosterIdToOwnerUsername,
@@ -293,9 +321,18 @@ export async function loadLeagueTeamCards(
     key: "starter" | "bench" | "picks" | "total";
     valueOf: (t: TeamCardData) => number;
   }[] = [
-    { key: "starter", valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.starter_value) : 0) },
-    { key: "bench", valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.bench_value) : 0) },
-    { key: "picks", valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.picks_value) : 0) },
+    {
+      key: "starter",
+      valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.starter_value) : 0),
+    },
+    {
+      key: "bench",
+      valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.bench_value) : 0),
+    },
+    {
+      key: "picks",
+      valueOf: (t) => (t.cacheRow ? Number(t.cacheRow.picks_value) : 0),
+    },
     { key: "total", valueOf: (t) => effectiveTotal(t.cacheRow) },
   ];
   for (const { key, valueOf } of STAT_GETTERS) {
@@ -322,7 +359,8 @@ export async function loadLeagueTeamCards(
       .filter((t) => t.cacheRow)
       .map((t) => ({
         team: t,
-        total: Number(t.cacheRow!.total_value) - Number(t.cacheRow!.picks_value),
+        total:
+          Number(t.cacheRow!.total_value) - Number(t.cacheRow!.picks_value),
         starter: Number(t.cacheRow!.starter_value),
       }))
       .sort((a, b) => b.total - a.total || b.starter - a.starter);
@@ -368,14 +406,13 @@ export async function resolvePlayers(
   for (let i = 0; i < sleeperIds.length; i += CHUNK) {
     const chunk = sleeperIds.slice(i, i + CHUNK);
     const ors = chunk
-      .flatMap((id) => [
-        `external_ids->>sleeper.eq.${id}`,
-        `slug.like.*-${id}`,
-      ])
+      .flatMap((id) => [`external_ids->>sleeper.eq.${id}`, `slug.like.*-${id}`])
       .join(",");
     const { data } = await supabase
       .from("players")
-      .select("id, slug, first_name, last_name, full_name, position, team, external_ids")
+      .select(
+        "id, slug, first_name, last_name, full_name, position, team, external_ids, birth_date, years_experience",
+      )
       .or(ors);
     for (const p of data ?? []) {
       const ext = (p.external_ids as Record<string, unknown>) ?? {};
@@ -390,11 +427,47 @@ export async function resolvePlayers(
           full_name: p.full_name ?? `${p.first_name} ${p.last_name}`.trim(),
           position: p.position,
           team: p.team,
+          age: computeAgeYears(p.birth_date),
+          years_experience: p.years_experience ?? null,
         });
       }
     }
   }
   return map;
+}
+
+/**
+ * player.id → position_rank for one (format, source).
+ *
+ * `rankings` holds exactly one season at a time (see lib/seed-rankings.ts), so
+ * this deliberately does NOT filter on season or week: pinning a season here is
+ * the silent-staleness trap that file documents. Chunked for the same reason
+ * `loadTrends` is, since a PostgREST `in` list of several hundred uuids
+ * overflows the URL.
+ */
+export async function loadPositionRanks(
+  supabase: AnySupabase,
+  playerIds: string[],
+  formatConfigId: string,
+  source: string,
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  if (playerIds.length === 0) return out;
+  const CHUNK = 300;
+  for (let i = 0; i < playerIds.length; i += CHUNK) {
+    const chunk = playerIds.slice(i, i + CHUNK);
+    const { data } = await supabase
+      .from("rankings")
+      .select("player_id, position_rank")
+      .eq("format_config_id", formatConfigId)
+      .eq("source", source)
+      .in("player_id", chunk);
+    for (const row of data ?? []) {
+      if (row.position_rank != null)
+        out[row.player_id] = Number(row.position_rank);
+    }
+  }
+  return out;
 }
 
 /** Current value + 7d movement per player for one (format, source). Exported
@@ -420,7 +493,8 @@ export async function loadTrends(
       out[row.player_id] = {
         current_value: Number(row.current_value),
         change_7d: row.change_7d != null ? Number(row.change_7d) : null,
-        change_7d_pct: row.change_7d_pct != null ? Number(row.change_7d_pct) : null,
+        change_7d_pct:
+          row.change_7d_pct != null ? Number(row.change_7d_pct) : null,
         trend_7d: (row.trend_7d as TrendLite["trend_7d"]) ?? null,
       };
     }

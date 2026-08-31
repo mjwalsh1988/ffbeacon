@@ -254,6 +254,7 @@ export default async function TeamDetailPage({
           valueIsBeacon={effectiveSourceSlug === "ffbeacon"}
           teamStatus={teamStatus}
           sourceSlug={effectiveSourceSlug}
+          isDynasty={isDynasty}
         />
 
         {/* Head-to-head, with this league already attached. The Breakdown reads

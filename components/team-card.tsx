@@ -8,8 +8,15 @@ import { CopyLinkButton } from "@/components/copy-link-button";
 import { ownerLine } from "@/lib/team-label";
 import { formatValue } from "@/lib/format-value";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { RosterBadge } from "@/components/roster-badge";
 import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { TeamStatus } from "@/lib/league-team-status";
+import {
+  dropBadgeLabel,
+  dropCandidateIds,
+  isTopAtPosition,
+  topBadgeLabel,
+} from "@/lib/roster-badges";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import type {
   DraftPickAsset,
@@ -42,6 +49,12 @@ type TeamCardProps = {
   /** Resolved value source for the league view, pinned onto the share image
    * URL so the image someone else opens shows the same numbers this card does. */
   sourceSlug?: string | null;
+  /**
+   * Dynasty league, derived from the league's own Sleeper settings by the page.
+   * It changes which players the cut mark is willing to name: a dynasty roster
+   * holds cheap young players on purpose. See lib/roster-badges.ts.
+   */
+  isDynasty?: boolean;
 };
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE"] as const;
@@ -89,10 +102,13 @@ export function TeamCard({
   valueIsBeacon = false,
   teamStatus = null,
   sourceSlug = null,
+  isDynasty = false,
 }: TeamCardProps) {
   const HeadingTag = headingLevel;
   const collapsible = typeof onToggleExpand === "function";
-  const expanded = collapsible ? expandedProp ?? false : expandedProp ?? true;
+  const expanded = collapsible
+    ? (expandedProp ?? false)
+    : (expandedProp ?? true);
 
   const {
     sleeperRosterId,
@@ -109,6 +125,7 @@ export function TeamCard({
     rosterIdToOwnerUsername,
     positionValues,
     positionRanks,
+    playerPositionRanks,
     teamCount,
     statRanks,
     includePicks,
@@ -116,7 +133,39 @@ export function TeamCard({
   } = data;
 
   const starterSet = useMemo(() => new Set(starterIds), [starterIds]);
-  const grouped = useMemo(() => groupByPosition(players, trends), [players, trends]);
+  const grouped = useMemo(
+    () => groupByPosition(players, trends),
+    [players, trends],
+  );
+
+  /* The cut marks. Derived across the WHOLE roster rather than per position
+     column: "the three worst on this team" is a claim about the team, and
+     computing it inside each column would name three quarterbacks, three
+     receivers, and so on.
+
+     Narrowed to the four positions this card RENDERS. A kicker or a defense is
+     on the roster array but has no column to appear in, and in a source that
+     prices them they would be the three cheapest names on any team, quietly
+     taking every slot and leaving no badge on screen at all. */
+  const dropIds = useMemo(
+    () =>
+      dropCandidateIds(
+        players
+          .filter((p) =>
+            (POSITION_ORDER as readonly string[]).includes(p.position),
+          )
+          .map((p) => ({
+            id: p.id,
+            value: trends[p.id]?.current_value ?? null,
+            isStarter: starterSet.has(p.id),
+            age: p.age,
+            yearsExperience: p.years_experience,
+            positionRank: playerPositionRanks[p.id] ?? null,
+          })),
+        { isDynasty },
+      ),
+    [players, trends, starterSet, playerPositionRanks, isDynasty],
+  );
   const sortedPicks = useMemo(
     () =>
       [...draftPicks].sort((a, b) => {
@@ -171,7 +220,9 @@ export function TeamCard({
         >
           {displayOverallRank != null && (
             <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-card border border-brand-purple/40 bg-brand-purple/10 shadow-[0_0_18px_-8px_rgba(168,85,247,0.7)]">
-              <span className="sr-only">Power ranking {displayOverallRank}</span>
+              <span className="sr-only">
+                Power ranking {displayOverallRank}
+              </span>
               <span
                 aria-hidden="true"
                 className="text-[7px] font-bold uppercase tracking-[0.14em] text-brand-purple/70"
@@ -199,7 +250,8 @@ export function TeamCard({
                 manager who never set a team name. */}
             {ownerLine(teamName, ownerDisplayName || ownerSleeperUsername) && (
               <p className="mt-0.5 truncate text-xs text-ink-subtle">
-                Owner: {ownerLine(teamName, ownerDisplayName || ownerSleeperUsername)}
+                Owner:{" "}
+                {ownerLine(teamName, ownerDisplayName || ownerSleeperUsername)}
               </p>
             )}
             {teamStatus && (
@@ -226,17 +278,53 @@ export function TeamCard({
           {/* Positional + total ranks (top-3 cyan / bottom-3 purple highlight). */}
           {cacheRow && (
             <ul aria-label="Position rankings" className={statStrip}>
-              <RankTile label="QB" rank={positionRanks.QB} teamCount={teamCount} count={grouped.QB.length} countLabel="players" />
-              <RankTile label="RB" rank={positionRanks.RB} teamCount={teamCount} count={grouped.RB.length} countLabel="players" />
-              <RankTile label="WR" rank={positionRanks.WR} teamCount={teamCount} count={grouped.WR.length} countLabel="players" />
-              <RankTile label="TE" rank={positionRanks.TE} teamCount={teamCount} count={grouped.TE.length} countLabel="players" />
+              <RankTile
+                label="QB"
+                rank={positionRanks.QB}
+                teamCount={teamCount}
+                count={grouped.QB.length}
+                countLabel="players"
+              />
+              <RankTile
+                label="RB"
+                rank={positionRanks.RB}
+                teamCount={teamCount}
+                count={grouped.RB.length}
+                countLabel="players"
+              />
+              <RankTile
+                label="WR"
+                rank={positionRanks.WR}
+                teamCount={teamCount}
+                count={grouped.WR.length}
+                countLabel="players"
+              />
+              <RankTile
+                label="TE"
+                rank={positionRanks.TE}
+                teamCount={teamCount}
+                count={grouped.TE.length}
+                countLabel="players"
+              />
               {includePicks && (
-                <RankTile label="PICKS" rank={statRanks.picks} teamCount={teamCount} count={sortedPicks.length} countLabel="picks" />
+                <RankTile
+                  label="PICKS"
+                  rank={statRanks.picks}
+                  teamCount={teamCount}
+                  count={sortedPicks.length}
+                  countLabel="picks"
+                />
               )}
-              <RankTile label="TOTAL" rank={statRanks.total} teamCount={teamCount} count={null} countLabel="" />
+              <RankTile
+                label="TOTAL"
+                rank={statRanks.total}
+                teamCount={teamCount}
+                count={null}
+                countLabel=""
+              />
               {/* TODO(transactions phase): add a TRADES rank chip here once
-                * league_transactions ingestion ships (trades count + league rank
-                * with the same top-3/bottom-3 tier highlight). */}
+               * league_transactions ingestion ships (trades count + league rank
+               * with the same top-3/bottom-3 tier highlight). */}
             </ul>
           )}
         </div>
@@ -322,11 +410,7 @@ export function TeamCard({
 
       {/* Roster + picks, single horizontal grid of columns. Hidden when collapsed. */}
       {expanded && (
-        <div
-          id={regionId}
-          role="region"
-          aria-labelledby={headingId}
-        >
+        <div id={regionId} role="region" aria-labelledby={headingId}>
           <div
             className={`grid gap-3 p-4 sm:grid-cols-2 sm:gap-4 sm:p-5 ${
               includePicks ? "lg:grid-cols-5" : "lg:grid-cols-4"
@@ -342,6 +426,9 @@ export function TeamCard({
                 rank={positionRanks[pos]}
                 teamCount={teamCount}
                 valueIsBeacon={valueIsBeacon}
+                playerPositionRanks={playerPositionRanks}
+                dropIds={dropIds}
+                isDynasty={isDynasty}
               />
             ))}
             {includePicks && (
@@ -387,6 +474,9 @@ function PositionColumn({
   rank,
   teamCount,
   valueIsBeacon,
+  playerPositionRanks,
+  dropIds,
+  isDynasty,
 }: {
   position: ValuedPosition;
   players: ResolvedPlayer[];
@@ -395,6 +485,11 @@ function PositionColumn({
   rank: number | null;
   teamCount: number;
   valueIsBeacon: boolean;
+  /** player.id → rank at that position, for the star. */
+  playerPositionRanks: Record<string, number>;
+  /** Decided once for the whole roster by the card above. */
+  dropIds: Set<string>;
+  isDynasty: boolean;
 }) {
   const rankLabel = rank != null ? ordinal(rank) : "-";
   const denominator = teamCount > 0 ? ` of ${teamCount}` : "";
@@ -409,7 +504,9 @@ function PositionColumn({
     >
       <header className="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2">
         <h3 className="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wider">
-          <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.16em] ${POSITION_BADGE[position]}`}>
+          <span
+            className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.16em] ${POSITION_BADGE[position]}`}
+          >
             {position}
           </span>
           <span className="font-mono text-[11px] text-ink-subtle">
@@ -418,20 +515,24 @@ function PositionColumn({
           </span>
         </h3>
         <p className="font-mono text-xs font-semibold tabular-nums text-ink">
-          <BeaconValue show={valueIsBeacon}>{formatValue(totalValue)}</BeaconValue>
+          <BeaconValue show={valueIsBeacon}>
+            {formatValue(totalValue)}
+          </BeaconValue>
         </p>
       </header>
       {players.length === 0 ? (
-        <p className="px-3 py-3 text-xs italic text-ink-subtle">No {position}s</p>
+        <p className="px-3 py-3 text-xs italic text-ink-subtle">
+          No {position}s
+        </p>
       ) : (
         <ul className="divide-y divide-line/60">
           {players.map((p) => {
             const starter = starterSet.has(p.id);
+            const posRank = playerPositionRanks[p.id] ?? null;
+            const isTop = isTopAtPosition(posRank);
+            const isDrop = dropIds.has(p.id);
             return (
-              <li
-                key={p.id}
-                className="flex items-center gap-2 px-3 py-1.5"
-              >
+              <li key={p.id} className="flex items-center gap-2 px-3 py-1.5">
                 {/* Decorative headshot: the name text beside it is the label. */}
                 <span aria-hidden="true" className="shrink-0">
                   <PlayerHeadshot
@@ -448,6 +549,28 @@ function PositionColumn({
                 >
                   {p.full_name}
                 </span>
+                {/* At most one of these ever renders, by construction: a cut
+                    candidate is never a top-of-position player. */}
+                {isTop && posRank != null && (
+                  <RosterBadge
+                    kind="top"
+                    content={topBadgeLabel({
+                      name: p.full_name,
+                      position: p.position,
+                      positionRank: posRank,
+                    })}
+                  />
+                )}
+                {isDrop && (
+                  <RosterBadge
+                    kind="drop"
+                    content={dropBadgeLabel({
+                      name: p.full_name,
+                      isDynasty,
+                      excludesStarters: true,
+                    })}
+                  />
+                )}
                 <span
                   className="flex-shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-subtle"
                   aria-label={`Team ${p.team ?? "free agent"}`}
@@ -489,7 +612,8 @@ function PicksColumn({
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const canToggle = picks.length > PICKS_COLLAPSED_MAX;
-  const visible = expanded || !canToggle ? picks : picks.slice(0, PICKS_COLLAPSED_MAX);
+  const visible =
+    expanded || !canToggle ? picks : picks.slice(0, PICKS_COLLAPSED_MAX);
   const hiddenCount = picks.length - visible.length;
 
   return (
@@ -512,43 +636,46 @@ function PicksColumn({
       ) : (
         <>
           <ul id={listId} className="divide-y divide-line/60">
-          {visible.map((p, i) => {
-            const isOwn = p.original_roster_id === ownRosterId;
-            // Prefer the Sleeper username over team_name for attribution.
-            // Falls through to team name, then numeric roster id if neither resolved.
-            const username = !isOwn ? rosterIdToOwnerUsername[p.original_roster_id] : null;
-            const teamFallback = !isOwn
-              ? rosterIdToTeamName[p.original_roster_id] ?? `Team ${p.original_roster_id}`
-              : null;
-            const attribution = isOwn
-              ? "Own pick"
-              : username
-                ? `via @${username}`
-                : `via ${teamFallback}`;
-            const pickLabel = p.pick_label
-              ? `${p.season} R${p.pick_label}`
-              : `${p.season} R${p.round}`;
-            return (
-              <li
-                key={`${p.season}-${p.round}-${p.original_roster_id}-${i}`}
-                className="flex items-baseline gap-2 px-3 py-1.5"
-              >
-                <span
-                  className="flex-shrink-0 font-mono text-sm font-medium text-ink"
-                  aria-label={
-                    p.pick_label
-                      ? `${p.season} round ${p.round}, slot ${p.slot}`
-                      : `${p.season} round ${p.round}`
-                  }
+            {visible.map((p, i) => {
+              const isOwn = p.original_roster_id === ownRosterId;
+              // Prefer the Sleeper username over team_name for attribution.
+              // Falls through to team name, then numeric roster id if neither resolved.
+              const username = !isOwn
+                ? rosterIdToOwnerUsername[p.original_roster_id]
+                : null;
+              const teamFallback = !isOwn
+                ? (rosterIdToTeamName[p.original_roster_id] ??
+                  `Team ${p.original_roster_id}`)
+                : null;
+              const attribution = isOwn
+                ? "Own pick"
+                : username
+                  ? `via @${username}`
+                  : `via ${teamFallback}`;
+              const pickLabel = p.pick_label
+                ? `${p.season} R${p.pick_label}`
+                : `${p.season} R${p.round}`;
+              return (
+                <li
+                  key={`${p.season}-${p.round}-${p.original_roster_id}-${i}`}
+                  className="flex items-baseline gap-2 px-3 py-1.5"
                 >
-                  {pickLabel}
-                </span>
-                <span className="ml-auto truncate text-right text-[10px] text-ink-subtle">
-                  {attribution}
-                </span>
-              </li>
-            );
-          })}
+                  <span
+                    className="flex-shrink-0 font-mono text-sm font-medium text-ink"
+                    aria-label={
+                      p.pick_label
+                        ? `${p.season} round ${p.round}, slot ${p.slot}`
+                        : `${p.season} round ${p.round}`
+                    }
+                  >
+                    {pickLabel}
+                  </span>
+                  <span className="ml-auto truncate text-right text-[10px] text-ink-subtle">
+                    {attribution}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
           {canToggle && (
             <button
@@ -582,8 +709,12 @@ function PicksColumn({
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 lg:flex-none">
-      <dt className="text-[9px] font-bold uppercase tracking-wider text-ink-subtle">{label}</dt>
-      <dd className="font-mono text-sm font-bold leading-none tabular-nums text-ink">{value}</dd>
+      <dt className="text-[9px] font-bold uppercase tracking-wider text-ink-subtle">
+        {label}
+      </dt>
+      <dd className="font-mono text-sm font-bold leading-none tabular-nums text-ink">
+        {value}
+      </dd>
     </div>
   );
 }
@@ -624,7 +755,10 @@ function RankTile({
       : tier === "bottom"
         ? " (bottom three in league)"
         : "";
-  const rankFull = rank != null && teamCount > 0 ? `${ordinal(rank)} of ${teamCount}` : "unranked";
+  const rankFull =
+    rank != null && teamCount > 0
+      ? `${ordinal(rank)} of ${teamCount}`
+      : "unranked";
   // One cell of the segmented stat bar: a stacked label + rank. Top/bottom-three
   // cells get a faint tier wash so strong/weak spots pop; the rank number
   // carries the tier color. Full "of N" + count detail lives in the aria-label.
@@ -647,7 +781,10 @@ function RankTile({
   );
 }
 
-function rankTier(rank: number | null, teamCount: number): "top" | "bottom" | "mid" | "unknown" {
+function rankTier(
+  rank: number | null,
+  teamCount: number,
+): "top" | "bottom" | "mid" | "unknown" {
   if (rank == null || teamCount === 0) return "unknown";
   if (rank <= 3) return "top";
   if (rank > teamCount - 3) return "bottom";
@@ -673,7 +810,8 @@ function groupByPosition(
   }
   for (const pos of POSITION_ORDER) {
     grouped[pos].sort(
-      (a, b) => (trends[b.id]?.current_value ?? 0) - (trends[a.id]?.current_value ?? 0),
+      (a, b) =>
+        (trends[b.id]?.current_value ?? 0) - (trends[a.id]?.current_value ?? 0),
     );
   }
   return grouped;

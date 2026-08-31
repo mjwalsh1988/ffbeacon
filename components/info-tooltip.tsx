@@ -1,7 +1,50 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import { Info } from "lucide-react";
+
+/**
+ * Close an open tooltip on Escape and on a pointer press outside its trigger.
+ *
+ * Shared by every tooltip in this file and by the roster badges in
+ * components/roster-badge.tsx, which follow the same contract. It exists so the
+ * dismissal behaviour cannot drift between them: a tooltip that closes on
+ * Escape in one place and traps focus in another is worse than either.
+ *
+ * `setOpen` comes straight from useState, so its identity is stable and the
+ * effect re-subscribes only when `open` actually changes.
+ */
+export function useTooltipDismiss(
+  open: boolean,
+  setOpen: Dispatch<SetStateAction<boolean>>,
+  triggerRef: RefObject<HTMLElement | null>,
+) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+      }
+    };
+    const onDocPointer = (e: PointerEvent) => {
+      if (!triggerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDocPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDocPointer);
+    };
+  }, [open, setOpen, triggerRef]);
+}
 
 /**
  * Site-wide accessible info tooltip primitive.
@@ -47,27 +90,7 @@ export function InfoTooltip({
 }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setOpen(false);
-      }
-    };
-    const onDocPointer = (e: PointerEvent) => {
-      if (!buttonRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onDocPointer);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onDocPointer);
-    };
-  }, [open]);
+  useTooltipDismiss(open, setOpen, buttonRef);
 
   const alignClass =
     align === "start"
@@ -156,29 +179,16 @@ export function ValueTooltip({
 }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setOpen(false);
-      }
-    };
-    const onDocPointer = (e: PointerEvent) => {
-      if (!buttonRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onDocPointer);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onDocPointer);
-    };
-  }, [open]);
+  useTooltipDismiss(open, setOpen, buttonRef);
 
   const alignClass =
-    align === "start" ? "left-0" : align === "end" ? "right-0" : "left-1/2 -translate-x-1/2";
-  const placementClass = placement === "above" ? "bottom-full mb-1.5" : "top-full mt-1.5";
+    align === "start"
+      ? "left-0"
+      : align === "end"
+        ? "right-0"
+        : "left-1/2 -translate-x-1/2";
+  const placementClass =
+    placement === "above" ? "bottom-full mb-1.5" : "top-full mt-1.5";
 
   return (
     <span className="relative inline-flex">

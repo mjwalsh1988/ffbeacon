@@ -5,10 +5,12 @@ import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
 import {
   resolvePlayers,
   loadTrends,
+  loadPositionRanks,
   type CacheRow,
   type DraftPickAsset,
   type ValuedPosition,
 } from "@/lib/league-view-data";
+import { dropCandidateIds, isTopAtPosition } from "@/lib/roster-badges";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -29,6 +31,14 @@ export type ShareCardPlayer = {
   value: number;
   /** True when the player sits in a starting slot on the synced roster. */
   starter: boolean;
+  /**
+   * Inside the top 14 at their position for this (format, source). Drives the
+   * star on the share image, from the same rule the roster cards use
+   * (lib/roster-badges.ts).
+   */
+  topAtPosition: boolean;
+  /** One of the roster's three cut candidates, by the same shared rule. */
+  dropCandidate: boolean;
 };
 
 export type ShareCardPick = {
@@ -85,6 +95,13 @@ export async function loadTeamShareCard(
   leagueStatus: string | null,
   /** Whether pick values count toward the totals shown on the card. */
   includePicks = true,
+  /**
+   * Dynasty league. Changes which players the cut mark names: a dynasty roster
+   * holds cheap young players on purpose, so they are set aside. Deliberately
+   * NOT inferred from `includePicks`, which is a reader's toggle rather than a
+   * fact about the league.
+   */
+  isDynasty = false,
 ): Promise<TeamShareCard | null> {
   const [rostersRes, usersRes, cacheRes, slotIndex] = await Promise.all([
     supabase
@@ -117,11 +134,15 @@ export async function loadTeamShareCard(
 
   const users = usersRes.data ?? [];
   const usersById = new Map(users.map((u) => [u.sleeper_user_id, u]));
-  const cache = (cacheRes.data ?? []) as Array<{ roster_id: string } & CacheRow>;
+  const cache = (cacheRes.data ?? []) as Array<
+    { roster_id: string } & CacheRow
+  >;
   const cacheByRoster = new Map(cache.map((c) => [c.roster_id, c]));
   const row = cacheByRoster.get(target.id) ?? null;
 
-  const owner = target.owner_user_id ? usersById.get(target.owner_user_id) : null;
+  const owner = target.owner_user_id
+    ? usersById.get(target.owner_user_id)
+    : null;
   const teamName = formatTeamLabel({
     teamName: owner?.team_name,
     username: owner?.display_name,
@@ -131,29 +152,59 @@ export async function loadTeamShareCard(
   // Only this roster's players get resolved and priced.
   const sleeperIds = asStringArray(target.player_ids);
   const resolved = await resolvePlayers(supabase, sleeperIds);
-  const playerIds = Array.from(new Set([...resolved.values()].map((p) => p.id)));
-  const trends =
+  const playerIds = Array.from(
+    new Set([...resolved.values()].map((p) => p.id)),
+  );
+  // The ranks ride ALONGSIDE the values rather than after them. Both need the
+  // resolved player ids and neither needs the other, so the badge data costs
+  // one more small row set inside a round trip the card was already paying for.
+  const [trends, positionRankById] =
     formatConfigId && sourceSlug
-      ? await loadTrends(supabase, playerIds, formatConfigId, sourceSlug)
-      : {};
+      ? await Promise.all([
+          loadTrends(supabase, playerIds, formatConfigId, sourceSlug),
+          loadPositionRanks(supabase, playerIds, formatConfigId, sourceSlug),
+        ])
+      : [{}, {} as Record<string, number>];
 
   const starterSet = new Set(asStringArray(target.starter_ids));
+
+  /* The cut marks, decided across the four positions this card RENDERS, exactly
+     as components/team-card.tsx does it. A kicker priced by the source would
+     otherwise take all three slots and leave no mark on the image. */
+  const shown = sleeperIds
+    .map((sid) => ({ sid, player: resolved.get(sid) }))
+    .filter(
+      (e): e is { sid: string; player: NonNullable<typeof e.player> } =>
+        !!e.player &&
+        SHARE_CARD_POSITIONS.includes(e.player.position as ValuedPosition),
+    );
+  const dropIds = dropCandidateIds(
+    shown.map(({ sid, player }) => ({
+      id: player.id,
+      value: trends[player.id]?.current_value ?? null,
+      isStarter: starterSet.has(sid),
+      age: player.age,
+      yearsExperience: player.years_experience,
+      positionRank: positionRankById[player.id] ?? null,
+    })),
+    { isDynasty },
+  );
+
   const grouped: Record<ValuedPosition, ShareCardPlayer[]> = {
     QB: [],
     RB: [],
     WR: [],
     TE: [],
   };
-  for (const sid of sleeperIds) {
-    const p = resolved.get(sid);
-    if (!p) continue;
-    if (!(p.position in grouped)) continue;
+  for (const { sid, player: p } of shown) {
     grouped[p.position as ValuedPosition].push({
       name: p.full_name,
       position: p.position,
       team: p.team,
       value: trends[p.id]?.current_value ?? 0,
       starter: starterSet.has(sid),
+      topAtPosition: isTopAtPosition(positionRankById[p.id] ?? null),
+      dropCandidate: dropIds.has(p.id),
     });
   }
   for (const pos of SHARE_CARD_POSITIONS) {
@@ -164,12 +215,14 @@ export async function loadTeamShareCard(
   // one small row per roster rather than a second pass over their players.
   const positionRanks = rankPositions(rosters, cacheByRoster);
 
-  const positions: ShareCardPositionGroup[] = SHARE_CARD_POSITIONS.map((pos) => ({
-    position: pos,
-    players: grouped[pos],
-    value: positionValue(row, pos),
-    rank: positionRanks[pos].get(target.id) ?? null,
-  }));
+  const positions: ShareCardPositionGroup[] = SHARE_CARD_POSITIONS.map(
+    (pos) => ({
+      position: pos,
+      players: grouped[pos],
+      value: positionValue(row, pos),
+      rank: positionRanks[pos].get(target.id) ?? null,
+    }),
+  );
 
   const rosterIdToHandle = new Map<number, string | null>();
   const rosterIdToTeamName = new Map<number, string>();
@@ -241,7 +294,10 @@ function rankPositions(
   };
   for (const pos of SHARE_CARD_POSITIONS) {
     rosters
-      .map((r) => ({ id: r.id, value: positionValue(cacheByRoster.get(r.id) ?? null, pos) }))
+      .map((r) => ({
+        id: r.id,
+        value: positionValue(cacheByRoster.get(r.id) ?? null, pos),
+      }))
       .sort((a, b) => b.value - a.value)
       .forEach((entry, i) => {
         if (entry.value > 0) out[pos].set(entry.id, i + 1);
@@ -297,10 +353,13 @@ function buildPicks(
   return filtered
     .map((p) => {
       const slot =
-        p.slot ?? slotIndex.slotFor(Number(p.season), Number(p.original_roster_id));
+        p.slot ??
+        slotIndex.slotFor(Number(p.season), Number(p.original_roster_id));
       const pickLabel =
         p.pick_label ??
-        (slot != null ? `${Number(p.round)}.${String(slot).padStart(2, "0")}` : null);
+        (slot != null
+          ? `${Number(p.round)}.${String(slot).padStart(2, "0")}`
+          : null);
       return { ...p, slot: slot ?? null, pick_label: pickLabel };
     })
     .sort((a, b) => {
@@ -315,13 +374,22 @@ function buildPicks(
     })
     .map((p) => {
       const isOwn = p.original_roster_id === ownRosterId;
-      const handle = isOwn ? null : rosterIdToHandle.get(p.original_roster_id) ?? null;
+      const handle = isOwn
+        ? null
+        : (rosterIdToHandle.get(p.original_roster_id) ?? null);
       const fallback = isOwn
         ? null
-        : rosterIdToTeamName.get(p.original_roster_id) ?? `Team ${p.original_roster_id}`;
+        : (rosterIdToTeamName.get(p.original_roster_id) ??
+          `Team ${p.original_roster_id}`);
       return {
-        label: p.pick_label ? `${p.season} R${p.pick_label}` : `${p.season} R${p.round}`,
-        attribution: isOwn ? "Own pick" : handle ? `via @${handle}` : `via ${fallback}`,
+        label: p.pick_label
+          ? `${p.season} R${p.pick_label}`
+          : `${p.season} R${p.round}`,
+        attribution: isOwn
+          ? "Own pick"
+          : handle
+            ? `via @${handle}`
+            : `via ${fallback}`,
         isOwn,
       };
     });

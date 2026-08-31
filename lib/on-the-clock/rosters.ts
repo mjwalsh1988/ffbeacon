@@ -46,6 +46,16 @@ export interface RosterPlayerLite {
   value: number;
   /** Overall pick number it was taken at (stable key + ordering). */
   pickNo: number;
+  /**
+   * Rank at this player's own position on the FF Beacon board, null when the
+   * board does not carry them. Drives the star beside a top-of-position player
+   * (lib/roster-badges.ts).
+   */
+  positionRank: number | null;
+  /** Whole years, null when unknown. Only the dynasty cut rule reads it. */
+  age: number | null;
+  /** Seasons played, null when unknown. Same reader, same reason. */
+  yearsExperience: number | null;
 }
 
 /** One future draft pick a team currently owns, valued from FF Beacon pick values. */
@@ -138,14 +148,38 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
   // Player value lookups from the FF Beacon board (by player id, then sleeper id).
   const valByPlayerId = new Map<string, number>();
   const valBySleeperId = new Map<string, number>();
+  // The whole board row, for the fields the roster badges read (position rank,
+  // age, experience). Same two-key fallback as the value lookup, so a pick that
+  // resolves by sleeper id gets its rank too.
+  const rowByPlayerId = new Map<string, RankedPlayer>();
+  const rowBySleeperId = new Map<string, RankedPlayer>();
   for (const p of valueBoard) {
     valByPlayerId.set(p.playerId, p.value);
-    if (p.sleeperId) valBySleeperId.set(p.sleeperId, p.value);
+    rowByPlayerId.set(p.playerId, p);
+    if (p.sleeperId) {
+      valBySleeperId.set(p.sleeperId, p.value);
+      rowBySleeperId.set(p.sleeperId, p);
+    }
   }
-  const playerValue = (playerId: string | null, sleeperId: string | null): number => {
-    if (playerId && valByPlayerId.has(playerId)) return valByPlayerId.get(playerId)!;
-    if (sleeperId && valBySleeperId.has(sleeperId)) return valBySleeperId.get(sleeperId)!;
+  const playerValue = (
+    playerId: string | null,
+    sleeperId: string | null,
+  ): number => {
+    if (playerId && valByPlayerId.has(playerId))
+      return valByPlayerId.get(playerId)!;
+    if (sleeperId && valBySleeperId.has(sleeperId))
+      return valBySleeperId.get(sleeperId)!;
     return 0;
+  };
+  const boardRow = (
+    playerId: string | null,
+    sleeperId: string | null,
+  ): RankedPlayer | null => {
+    if (playerId && rowByPlayerId.has(playerId))
+      return rowByPlayerId.get(playerId)!;
+    if (sleeperId && rowBySleeperId.has(sleeperId))
+      return rowBySleeperId.get(sleeperId)!;
+    return null;
   };
 
   // FF Beacon published pick value for a (season, round) at the round's mid bucket
@@ -179,7 +213,9 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
   }
   for (const t of tradedPicks) {
     if (t.season <= draftSeason) continue; // futures only
-    const entry = futureOwner.get(`${t.season}|${t.round}|${t.originalRosterId}`);
+    const entry = futureOwner.get(
+      `${t.season}|${t.round}|${t.originalRosterId}`,
+    );
     // Only mutate picks inside our baseline horizon; deep-future trades are ignored
     // so the view stays bounded (rare, and would have no baseline to value against).
     if (entry) entry.current = t.currentOwnerRosterId;
@@ -191,8 +227,10 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
     if (pk.rosterId == null) continue;
     const position = coercePosition(pk.position);
     if (!position) continue; // only valued positions QB/RB/WR/TE
-    const name = `${pk.firstName ?? ""} ${pk.lastName ?? ""}`.trim() || "Unknown player";
+    const name =
+      `${pk.firstName ?? ""} ${pk.lastName ?? ""}`.trim() || "Unknown player";
     const arr = playersByRoster.get(pk.rosterId) ?? [];
+    const row = boardRow(pk.playerId, pk.sleeperPlayerId);
     arr.push({
       playerId: pk.playerId,
       sleeperId: pk.sleeperPlayerId,
@@ -201,6 +239,9 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
       team: pk.team,
       value: playerValue(pk.playerId, pk.sleeperPlayerId),
       pickNo: pk.pickNo,
+      positionRank: row?.positionRank ?? null,
+      age: row?.age ?? null,
+      yearsExperience: row?.yearsExperience ?? null,
     });
     playersByRoster.set(pk.rosterId, arr);
   }
@@ -218,7 +259,9 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
       round: fp.round,
       originalRosterId: fp.original,
       isOwn,
-      viaTeamName: isOwn ? null : ownerNameByRosterId[fp.original] ?? `Team ${fp.original}`,
+      viaTeamName: isOwn
+        ? null
+        : (ownerNameByRosterId[fp.original] ?? `Team ${fp.original}`),
       value,
     });
     picksByOwner.set(fp.current, arr);
@@ -226,10 +269,21 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
 
   const rollups: TeamRollup[] = rosters.map((r) => {
     const rid = r.rosterId;
-    const players: Record<RosterPosition, RosterPlayerLite[]> = { QB: [], RB: [], WR: [], TE: [] };
-    for (const pl of playersByRoster.get(rid) ?? []) players[pl.position].push(pl);
+    const players: Record<RosterPosition, RosterPlayerLite[]> = {
+      QB: [],
+      RB: [],
+      WR: [],
+      TE: [],
+    };
+    for (const pl of playersByRoster.get(rid) ?? [])
+      players[pl.position].push(pl);
 
-    const positionTotals: Record<RosterPosition, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
+    const positionTotals: Record<RosterPosition, number> = {
+      QB: 0,
+      RB: 0,
+      WR: 0,
+      TE: 0,
+    };
     let playersValue = 0;
     let playerCount = 0;
     for (const pos of ROSTER_POSITIONS) {
@@ -244,7 +298,9 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
       .slice()
       .sort(
         (a, b) =>
-          a.season - b.season || a.round - b.round || a.originalRosterId - b.originalRosterId,
+          a.season - b.season ||
+          a.round - b.round ||
+          a.originalRosterId - b.originalRosterId,
       );
     const futurePicksValue = futurePicks.reduce((s, p) => s + p.value, 0);
 
@@ -253,7 +309,9 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
     // Suppress the custom team name when it just echoes the username (so leagues
     // with no custom team name don't show the same text twice).
     const teamName =
-      rawTeamName && rawTeamName.toLowerCase() !== ownerName.toLowerCase() ? rawTeamName : null;
+      rawTeamName && rawTeamName.toLowerCase() !== ownerName.toLowerCase()
+        ? rawTeamName
+        : null;
 
     return {
       rosterId: rid,
@@ -271,7 +329,9 @@ export function buildTeamRollups(input: TeamRollupInput): TeamRollup[] {
     };
   });
 
-  rollups.sort((a, b) => b.totalValue - a.totalValue || b.playersValue - a.playersValue);
+  rollups.sort(
+    (a, b) => b.totalValue - a.totalValue || b.playersValue - a.playersValue,
+  );
   rollups.forEach((r, i) => (r.rank = i + 1));
   return rollups;
 }

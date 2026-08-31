@@ -459,6 +459,7 @@ export default async function LeagueDeepViewPage({
             leagueStatus={league.status ?? null}
             includePicks={includePicks}
             showPicksToggle={showPicksToggle}
+            isDynasty={isDynasty}
             resynced={!pulseResult.cached}
           />
         </Suspense>
@@ -663,6 +664,7 @@ async function TeamsPanel({
   leagueStatus,
   includePicks,
   showPicksToggle,
+  isDynasty,
   resynced,
 }: {
   leagueRowId: string;
@@ -675,6 +677,9 @@ async function TeamsPanel({
   leagueStatus: string | null;
   includePicks: boolean;
   showPicksToggle: boolean;
+  /** Derived from the league's own Sleeper settings, never the global format
+   * toggle. Decides which players the roster cut mark is willing to name. */
+  isDynasty: boolean;
   /** True when the core sync just contacted Sleeper, so history needs a pull. */
   resynced: boolean;
 }) {
@@ -771,6 +776,7 @@ async function TeamsPanel({
         valueIsBeacon={sourceSlug === "ffbeacon"}
         statusByRoster={statusByRoster}
         sourceSlug={sourceSlug}
+        isDynasty={isDynasty}
       />
     </section>
   );

@@ -26,6 +26,9 @@ export type TeamFilterProps = {
   statusByRoster?: Record<string, TeamStatus>;
   /** Resolved value source, forwarded to each card's share image link. */
   sourceSlug?: string | null;
+  /** Dynasty league, forwarded to each card so the cut mark applies the
+   * dynasty rule (young players are held on purpose, so they are never named). */
+  isDynasty?: boolean;
 };
 
 /**
@@ -43,24 +46,29 @@ export function TeamFilter({
   valueIsBeacon = false,
   statusByRoster = {},
   sourceSlug = null,
+  isDynasty = false,
 }: TeamFilterProps) {
   const ownerRosterId = useMemo(
     () => matchViewerRoster(teams, searchedUsername, focusedRosterId),
     [teams, searchedUsername, focusedRosterId],
   );
 
-  const [selectedRosterIds, setSelectedRosterIds] = useState<Set<number>>(() => {
-    if (ownerRosterId != null) return new Set([ownerRosterId]);
-    return new Set(teams.map((t) => t.sleeperRosterId));
-  });
+  const [selectedRosterIds, setSelectedRosterIds] = useState<Set<number>>(
+    () => {
+      if (ownerRosterId != null) return new Set([ownerRosterId]);
+      return new Set(teams.map((t) => t.sleeperRosterId));
+    },
+  );
 
   // Newly-toggled-on teams default to collapsed so a wall of expanded rosters
   // can't bury the user's own team. The searched-username's team auto-expands
   // on first paint; everything else starts as a one-line header card.
-  const [expandedRosterIds, setExpandedRosterIds] = useState<Set<number>>(() => {
-    if (ownerRosterId != null) return new Set([ownerRosterId]);
-    return new Set();
-  });
+  const [expandedRosterIds, setExpandedRosterIds] = useState<Set<number>>(
+    () => {
+      if (ownerRosterId != null) return new Set([ownerRosterId]);
+      return new Set();
+    },
+  );
 
   const overallRankByRoster = useMemo(() => {
     const m: Record<number, number | null> = {};
@@ -162,9 +170,9 @@ export function TeamFilter({
         >
           <h3 className="text-lg font-semibold text-ink">No teams selected</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
-            Click a <span className="font-semibold text-ink">team chip</span> above to display
-            that team&apos;s roster, values, and position rankings. Toggle on multiple chips to
-            compare teams side-by-side.
+            Click a <span className="font-semibold text-ink">team chip</span>{" "}
+            above to display that team&apos;s roster, values, and position
+            rankings. Toggle on multiple chips to compare teams side-by-side.
           </p>
         </div>
       ) : (
@@ -181,6 +189,7 @@ export function TeamFilter({
                 valueIsBeacon={valueIsBeacon}
                 teamStatus={statusByRoster[t.rosterRowId] ?? null}
                 sourceSlug={sourceSlug}
+                isDynasty={isDynasty}
               />
             </li>
           ))}

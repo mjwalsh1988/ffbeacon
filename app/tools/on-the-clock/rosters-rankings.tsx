@@ -13,7 +13,7 @@
  * the right rail while this tab is open.
  */
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   Activity,
   ChevronDown,
@@ -25,7 +25,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
+import { RosterBadge } from "@/components/roster-badge";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
+import {
+  dropBadgeLabel,
+  dropCandidateIds,
+  isTopAtPosition,
+  topBadgeLabel,
+} from "@/lib/roster-badges";
 import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
 import {
   ROSTER_POSITIONS,
@@ -139,13 +146,17 @@ export function RostersRankings({
         <div className="min-w-0">
           {/* h2, matching every other view. This one opened at h3 with no
               h2 above it, so the outline skipped a level here and nowhere else. */}
-          <h2 id="otc-rosters-title" className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
+          <h2
+            id="otc-rosters-title"
+            className="text-xl font-bold tracking-tight text-ink sm:text-2xl"
+          >
             Rosters and rankings
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Every team so far by FF Beacon value: drafted players plus their future draft picks.
-            {showMine ? " Your team only." : " Ordered by power ranking."} Future pick values are
-            estimates.
+            Every team so far by FF Beacon value: drafted players plus their
+            future draft picks.
+            {showMine ? " Your team only." : " Ordered by power ranking."}{" "}
+            Future pick values are estimates.
           </p>
         </div>
         <div
@@ -158,7 +169,9 @@ export function RostersRankings({
             aria-pressed={subView === "all"}
             onClick={() => setSubView("all")}
             className={`inline-flex min-h-11 items-center px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan ${
-              subView === "all" ? "bg-beacon text-black" : "bg-base text-ink-muted hover:text-ink"
+              subView === "all"
+                ? "bg-beacon text-black"
+                : "bg-base text-ink-muted hover:text-ink"
             }`}
           >
             Power rankings
@@ -185,19 +198,19 @@ export function RostersRankings({
           aria-label="Order teams by"
           className="inline-flex overflow-hidden rounded-card border border-line"
         >
-          {(
-            [
-              { id: "value" as const, label: "Order by value" },
-              { id: "pulse" as const, label: "Order by Draft Pulse" },
-            ]
-          ).map(({ id, label }) => (
+          {[
+            { id: "value" as const, label: "Order by value" },
+            { id: "pulse" as const, label: "Order by Draft Pulse" },
+          ].map(({ id, label }) => (
             <button
               key={id}
               type="button"
               aria-pressed={sortBy === id}
               onClick={() => onSortChange(id)}
               className={`inline-flex min-h-11 items-center px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan ${
-                sortBy === id ? "bg-beacon text-black" : "bg-base text-ink-muted hover:text-ink"
+                sortBy === id
+                  ? "bg-beacon text-black"
+                  : "bg-base text-ink-muted hover:text-ink"
               }`}
             >
               {label}
@@ -214,8 +227,8 @@ export function RostersRankings({
 
       {!hasMine && (
         <p className="rounded-card border border-dashed border-line bg-surface/40 px-3 py-2 text-xs text-ink-subtle">
-          We could not detect which team is yours, so the My team view is unavailable. Make a pick
-          or check your Sleeper username to enable it.
+          We could not detect which team is yours, so the My team view is
+          unavailable. Make a pick or check your Sleeper username to enable it.
         </p>
       )}
 
@@ -225,6 +238,7 @@ export function RostersRankings({
           pulse={pulseById.get(myTeam.rosterId) ?? null}
           status={statusFor(myTeam.rosterId)}
           teamCount={teams.length}
+          isDynasty={isDynasty}
         />
       ) : (
         <ol role="list" className="space-y-3">
@@ -235,6 +249,7 @@ export function RostersRankings({
                 pulse={pulseById.get(t.rosterId) ?? null}
                 status={statusFor(t.rosterId)}
                 teamCount={teams.length}
+                isDynasty={isDynasty}
               />
             </li>
           ))}
@@ -249,12 +264,15 @@ function TeamRosterCard({
   pulse,
   status,
   teamCount,
+  isDynasty = false,
 }: {
   team: TeamRollup;
   pulse: DraftPulseTeam | null;
   status: TeamStatus | null;
   /** Teams in the draft, so a rank reads "1st of 12" rather than a bare "1st". */
   teamCount: number;
+  /** Changes which players the cut mark names. See lib/roster-badges.ts. */
+  isDynasty?: boolean;
 }) {
   const headingId = `otc-team-${team.rosterId}`;
   const ofCount = teamCount > 0 ? ` of ${teamCount}` : "";
@@ -266,7 +284,9 @@ function TeamRosterCard({
     <article
       aria-labelledby={headingId}
       className={`overflow-hidden rounded-card border bg-surface/60 ${
-        team.isYou ? "border-brand-purple/60 ring-1 ring-inset ring-brand-purple/40" : "border-line"
+        team.isYou
+          ? "border-brand-purple/60 ring-1 ring-inset ring-brand-purple/40"
+          : "border-line"
       }`}
     >
       {/* Stacked on phones, one row from lg up. The four numbers used to sit as
@@ -341,7 +361,11 @@ function TeamRosterCard({
               tone="cyan"
             />
           )}
-          <StatTile icon={Users} label="Drafted" value={String(team.playerCount)} />
+          <StatTile
+            icon={Users}
+            label="Drafted"
+            value={String(team.playerCount)}
+          />
           <StatTile
             icon={Layers}
             label={`Future pick${team.futurePicks.length === 1 ? "" : "s"}`}
@@ -351,7 +375,7 @@ function TeamRosterCard({
       </header>
 
       <div className="p-4">
-        <TeamPositionGrid team={team} />
+        <TeamPositionGrid team={team} isDynasty={isDynasty} />
       </div>
     </article>
   );
@@ -407,7 +431,33 @@ function StatTile({
  * picks column (with its show-more toggle) for one team. Exported so the board view
  * can render the connected user's roster with the exact same layout as this tab.
  */
-export function TeamPositionGrid({ team }: { team: TeamRollup }) {
+export function TeamPositionGrid({
+  team,
+  isDynasty = false,
+}: {
+  team: TeamRollup;
+  isDynasty?: boolean;
+}) {
+  /* The cut marks, decided across the WHOLE roster rather than inside each
+     column: "the three worst on this team" is a claim about the team, and
+     deciding it per column would name three quarterbacks and three receivers.
+     A draft room has no starting lineup, so nobody is excluded for being one,
+     and the copy says "on this roster" instead of naming a lineup. */
+  const dropIds = useMemo(() => {
+    const everyone = ROSTER_POSITIONS.flatMap((pos) => team.players[pos]);
+    return dropCandidateIds(
+      everyone.map((p) => ({
+        id: String(p.pickNo),
+        value: p.value,
+        isStarter: false,
+        age: p.age,
+        yearsExperience: p.yearsExperience,
+        positionRank: p.positionRank,
+      })),
+      { isDynasty },
+    );
+  }, [team, isDynasty]);
+
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       {ROSTER_POSITIONS.map((pos) => (
@@ -416,9 +466,14 @@ export function TeamPositionGrid({ team }: { team: TeamRollup }) {
           position={pos}
           players={team.players[pos]}
           total={team.positionTotals[pos]}
+          dropIds={dropIds}
+          isDynasty={isDynasty}
         />
       ))}
-      <FuturePicksColumn picks={team.futurePicks} total={team.futurePicksValue} />
+      <FuturePicksColumn
+        picks={team.futurePicks}
+        total={team.futurePicksValue}
+      />
     </div>
   );
 }
@@ -427,10 +482,15 @@ function PositionColumn({
   position,
   players,
   total,
+  dropIds,
+  isDynasty,
 }: {
   position: RosterPosition;
   players: RosterPlayerLite[];
   total: number;
+  /** Decided once for the whole roster by the grid above, keyed on pick number. */
+  dropIds: Set<string>;
+  isDynasty: boolean;
 }) {
   return (
     // A group, not a section. As a section each of these becomes a landmark,
@@ -447,20 +507,54 @@ function PositionColumn({
         >
           {position}
         </span>
-        <span className="font-mono text-xs font-semibold tabular-nums text-ink">{fmt(total)}</span>
+        <span className="font-mono text-xs font-semibold tabular-nums text-ink">
+          {fmt(total)}
+        </span>
       </header>
       {players.length === 0 ? (
-        <p className="px-3 py-3 text-xs italic text-ink-subtle">No {position}s</p>
+        <p className="px-3 py-3 text-xs italic text-ink-subtle">
+          No {position}s
+        </p>
       ) : (
         <ul className="divide-y divide-line/60">
           {players.map((p) => (
             <li key={p.pickNo} className="flex items-center gap-2 px-3 py-1.5">
               <span aria-hidden="true" className="shrink-0">
-                <PlayerHeadshot sleeperId={p.sleeperId} name="" position={p.position} size={22} />
+                <PlayerHeadshot
+                  sleeperId={p.sleeperId}
+                  name=""
+                  position={p.position}
+                  size={22}
+                />
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={p.name}>
+              <span
+                className="min-w-0 flex-1 truncate text-sm font-medium text-ink"
+                title={p.name}
+              >
                 {p.name}
               </span>
+              {/* At most one of these ever renders: a cut candidate is never a
+                  top-of-position player. */}
+              {isTopAtPosition(p.positionRank) && p.positionRank != null && (
+                <RosterBadge
+                  kind="top"
+                  content={topBadgeLabel({
+                    name: p.name,
+                    position: p.position,
+                    positionRank: p.positionRank,
+                  })}
+                />
+              )}
+              {dropIds.has(String(p.pickNo)) && (
+                <RosterBadge
+                  kind="drop"
+                  content={dropBadgeLabel({
+                    name: p.name,
+                    isDynasty,
+                    excludesStarters: false,
+                  })}
+                />
+              )}
               <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-subtle">
                 {p.value > 0 ? fmt(p.value) : "-"}
               </span>
@@ -474,11 +568,18 @@ function PositionColumn({
 
 const PICKS_COLLAPSED_MAX = 5;
 
-function FuturePicksColumn({ picks, total }: { picks: RosterFuturePick[]; total: number }) {
+function FuturePicksColumn({
+  picks,
+  total,
+}: {
+  picks: RosterFuturePick[];
+  total: number;
+}) {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const canToggle = picks.length > PICKS_COLLAPSED_MAX;
-  const visible = expanded || !canToggle ? picks : picks.slice(0, PICKS_COLLAPSED_MAX);
+  const visible =
+    expanded || !canToggle ? picks : picks.slice(0, PICKS_COLLAPSED_MAX);
   const hiddenCount = picks.length - visible.length;
 
   return (
@@ -495,10 +596,14 @@ function FuturePicksColumn({ picks, total }: { picks: RosterFuturePick[]; total:
         <span className="rounded-md bg-ink/10 px-1.5 py-0.5 text-[11px] font-bold tracking-[0.16em] text-ink">
           PICKS
         </span>
-        <span className="font-mono text-xs font-semibold tabular-nums text-ink">{fmt(total)}</span>
+        <span className="font-mono text-xs font-semibold tabular-nums text-ink">
+          {fmt(total)}
+        </span>
       </header>
       {picks.length === 0 ? (
-        <p className="px-3 py-3 text-xs italic text-ink-subtle">No future picks</p>
+        <p className="px-3 py-3 text-xs italic text-ink-subtle">
+          No future picks
+        </p>
       ) : (
         <>
           <ul id={listId} className="divide-y divide-line/60">
