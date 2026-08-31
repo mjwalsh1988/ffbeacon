@@ -47,12 +47,25 @@ vi.mock("@/lib/positional-war/share", () => ({
 // changed" without duplicating the hashing logic. digestsMatch is untouched
 // since only lib/positional-war/share.ts (tested separately) reads it.
 vi.mock("@/lib/positional-war/fingerprint", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/positional-war/fingerprint")>();
+  const actual =
+    await importOriginal<typeof import("@/lib/positional-war/fingerprint")>();
   return {
     ...actual,
-    warFingerprint: (input: { season: number; fromWeek: number; toWeek: number; teamCount: number; scoringSettings: unknown }) =>
+    warFingerprint: (input: {
+      season: number;
+      fromWeek: number;
+      toWeek: number;
+      teamCount: number;
+      scoringSettings: unknown;
+    }) =>
       `fp:${input.season}:${input.fromWeek}:${input.toWeek}:${input.teamCount}:${JSON.stringify(input.scoringSettings)}`,
-    warInputsDigest: (input: { season: number; fromWeek: number; toWeek: number; teamCount: number; modelVersion: string }) => ({
+    warInputsDigest: (input: {
+      season: number;
+      fromWeek: number;
+      toWeek: number;
+      teamCount: number;
+      modelVersion: string;
+    }) => ({
       season: input.season,
       fromWeek: input.fromWeek,
       toWeek: input.toWeek,
@@ -81,7 +94,11 @@ import {
 import { getNflState } from "@/lib/sleeper";
 import { loadLeague } from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
-import { loadWarUniverse, loadProjectionsSnapshot, buildWarPlayers } from "@/lib/positional-war/load";
+import {
+  loadWarUniverse,
+  loadProjectionsSnapshot,
+  buildWarPlayers,
+} from "@/lib/positional-war/load";
 import { computeCurves } from "@/lib/positional-war/engine";
 import { resolveSharedCurves } from "@/lib/positional-war/share";
 
@@ -98,15 +115,31 @@ function fakeLeague(overrides: Partial<Record<string, unknown>> = {}) {
     name: "Test League",
     season: 2026,
     status: "in_season",
-    rosterPositions: ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN", "BN"],
+    rosterPositions: [
+      "QB",
+      "RB",
+      "RB",
+      "WR",
+      "WR",
+      "WR",
+      "TE",
+      "FLEX",
+      "K",
+      "DEF",
+      "BN",
+      "BN",
+    ],
     scoringSettings: { rec: 1 },
     playoffTeams: 6,
     playoffWeekStart: 15,
+    playoffRoundType: 0,
     ...overrides,
   };
 }
 
-function fakePowerPulseSettings(overrides: Partial<Record<string, unknown>> = {}) {
+function fakePowerPulseSettings(
+  overrides: Partial<Record<string, unknown>> = {},
+) {
   return {
     modelVersion: "pp-1",
     reliability: { blend: 0.5 },
@@ -153,7 +186,15 @@ function fakeCurve(position: string) {
       },
     ],
     weeklyDiagnostics: [
-      { week: 9, seatedCount: 24, replacement: 8.5, avgSeated: 12.1, deficit: 3.6, muRef: 110, sigmaRef: 22 },
+      {
+        week: 9,
+        seatedCount: 24,
+        replacement: 8.5,
+        avgSeated: 12.1,
+        deficit: 3.6,
+        muRef: 110,
+        sigmaRef: 22,
+      },
     ],
   } as never;
 }
@@ -192,7 +233,8 @@ function makeFakeClient(
     const builder = {
       select: () => builder,
       eq: () => builder,
-      maybeSingle: () => Promise.resolve({ data: opts.leaguesRow ?? null, error: null }),
+      maybeSingle: () =>
+        Promise.resolve({ data: opts.leaguesRow ?? null, error: null }),
       update: (payload: Record<string, unknown>) => {
         calls.push(`leagues.update:${Object.keys(payload).sort().join(",")}`);
         leagueUpdates.push(payload);
@@ -207,7 +249,10 @@ function makeFakeClient(
       select: () => builder,
       eq: () => {
         calls.push("rosters.count");
-        return Promise.resolve({ count: opts.rosterCount ?? null, error: null });
+        return Promise.resolve({
+          count: opts.rosterCount ?? null,
+          error: null,
+        });
       },
     };
     return builder;
@@ -221,7 +266,10 @@ function makeFakeClient(
       limit: () => builder,
       maybeSingle: () => {
         calls.push("cache.select");
-        return Promise.resolve({ data: cacheDeleted ? null : (opts.cacheRow ?? null), error: null });
+        return Promise.resolve({
+          data: cacheDeleted ? null : (opts.cacheRow ?? null),
+          error: null,
+        });
       },
       delete: () => ({
         eq: () => ({
@@ -257,7 +305,9 @@ function wireOkPipeline() {
     season: "2026",
   } as never);
   vi.mocked(loadPowerPulseSettings).mockResolvedValue(fakePowerPulseSettings());
-  vi.mocked(loadProjectionsSnapshot).mockResolvedValue("2026-10-01T12:00:00.000Z");
+  vi.mocked(loadProjectionsSnapshot).mockResolvedValue(
+    "2026-10-01T12:00:00.000Z",
+  );
   vi.mocked(loadWarUniverse).mockResolvedValue({
     players: new Map(),
     projections: [],
@@ -266,11 +316,16 @@ function wireOkPipeline() {
     defenseSeasons: [2025, 2024],
   } as never);
   vi.mocked(buildWarPlayers).mockReturnValue([{ playerId: "p1" } as never]);
-  vi.mocked(computeCurves).mockReturnValue({ curves: [fakeCurve("QB"), fakeCurve("RB")], excludedSlots: [] });
-  vi.mocked(resolveSharedCurves).mockImplementation(async (_supabase, params) => {
-    const curves = await params.compute();
-    return { ok: true, curves, shared: false, collision: false };
+  vi.mocked(computeCurves).mockReturnValue({
+    curves: [fakeCurve("QB"), fakeCurve("RB")],
+    excludedSlots: [],
   });
+  vi.mocked(resolveSharedCurves).mockImplementation(
+    async (_supabase, params) => {
+      const curves = await params.compute();
+      return { ok: true, curves, shared: false, collision: false };
+    },
+  );
 }
 
 beforeEach(() => {
@@ -289,15 +344,32 @@ afterEach(() => {
 /* ---------------------------------------------------------------------- */
 
 describe("classifyPositionalWarResult", () => {
-  const cases: Array<[string, PositionalWarResult, "ok" | "skipped" | "settled" | "error"]> = [
+  const cases: Array<
+    [string, PositionalWarResult, "ok" | "skipped" | "settled" | "error"]
+  > = [
     [
       "ok, no skipped reason",
-      { ok: true, positions: 6, season: 2026, fromWeek: 9, toWeek: 14, shared: false },
+      {
+        ok: true,
+        positions: 6,
+        season: 2026,
+        fromWeek: 9,
+        toWeek: 14,
+        shared: false,
+      },
       "ok",
     ],
     [
       "unknown team count",
-      { ok: true, positions: 0, season: 2026, fromWeek: 9, toWeek: 14, shared: false, skipped: "unknown team count" },
+      {
+        ok: true,
+        positions: 0,
+        season: 2026,
+        fromWeek: 9,
+        toWeek: 14,
+        shared: false,
+        skipped: "unknown team count",
+      },
       "skipped",
     ],
     [
@@ -326,7 +398,11 @@ describe("classifyPositionalWarResult", () => {
       },
       "settled",
     ],
-    ["ok: false", { ok: false, error: "positional war curves upsert failed: boom" }, "error"],
+    [
+      "ok: false",
+      { ok: false, error: "positional war curves upsert failed: boom" },
+      "error",
+    ],
   ];
 
   for (const [label, result, expected] of cases) {
@@ -373,7 +449,9 @@ describe("classifyPositionalWarResult", () => {
       toWeek: 14,
       shared: true,
     };
-    expect(classifyPositionalWarResult(result).detail).toBe("6 positions, shared");
+    expect(classifyPositionalWarResult(result).detail).toBe(
+      "6 positions, shared",
+    );
   });
 });
 
@@ -384,14 +462,20 @@ describe("classifyPositionalWarResult", () => {
 describe("calculateLeaguePositionalWar: empty week window", () => {
   it("sets 'settled' and deletes existing cache rows, without touching the universe", async () => {
     wireOkPipeline();
-    vi.mocked(loadLeague).mockResolvedValue(fakeLeague({ playoffWeekStart: 9 }) as never); // toWeek=8 < fromWeek=9
-    const { client, calls } = makeFakeClient({ cacheRow: { fingerprint: "old" } });
+    vi.mocked(loadLeague).mockResolvedValue(
+      fakeLeague({ playoffWeekStart: 9 }) as never,
+    ); // toWeek=8 < fromWeek=9
+    const { client, calls } = makeFakeClient({
+      cacheRow: { fingerprint: "old" },
+    });
 
     const result = await calculateLeaguePositionalWar(client, LEAGUE_ROW_ID);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.skipped).toMatch(/^no regular season weeks remaining from week/);
+    expect(result.skipped).toMatch(
+      /^no regular season weeks remaining from week/,
+    );
     expect(classifyPositionalWarResult(result).status).toBe("settled");
     expect(calls).toContain("cache.delete");
     expect(loadWarUniverse).not.toHaveBeenCalled();
@@ -406,7 +490,10 @@ describe("calculateLeaguePositionalWar: empty week window", () => {
 describe("calculateLeaguePositionalWar: transient skips", () => {
   it("'unknown team count' when total_rosters is null and no rosters are stored, never defaults to 12", async () => {
     wireOkPipeline();
-    const { client, calls } = makeFakeClient({ rosterCount: 0, cacheRow: { fingerprint: "old" } });
+    const { client, calls } = makeFakeClient({
+      rosterCount: 0,
+      cacheRow: { fingerprint: "old" },
+    });
 
     const result = await calculateLeaguePositionalWar(client, LEAGUE_ROW_ID);
 
@@ -429,35 +516,49 @@ describe("calculateLeaguePositionalWar: transient skips", () => {
     expect(result.skipped).toBeUndefined();
     // teamCount flowed from the roster count into the model.
     expect(computeCurves).toHaveBeenCalledWith(
-      expect.objectContaining({ league: expect.objectContaining({ teamCount: 10 }) }),
+      expect.objectContaining({
+        league: expect.objectContaining({ teamCount: 10 }),
+      }),
     );
   });
 
   it("uses total_rosters over a disagreeing stored roster count, and logs the discrepancy", async () => {
     wireOkPipeline();
     vi.mocked(loadLeague).mockResolvedValue(fakeLeague() as never);
-    const { client } = makeFakeClient({ rosterCount: 10, leaguesRow: { total_rosters: 12 } });
+    const { client } = makeFakeClient({
+      rosterCount: 10,
+      leaguesRow: { total_rosters: 12 },
+    });
 
     const result = await calculateLeaguePositionalWar(client, LEAGUE_ROW_ID);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(computeCurves).toHaveBeenCalledWith(
-      expect.objectContaining({ league: expect.objectContaining({ teamCount: 12 }) }),
+      expect.objectContaining({
+        league: expect.objectContaining({ teamCount: 12 }),
+      }),
     );
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("disagrees"));
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("disagrees"),
+    );
   });
 
   it("'no weekly projections stored' when no projections snapshot exists", async () => {
     wireOkPipeline();
     vi.mocked(loadProjectionsSnapshot).mockResolvedValue(null);
-    const { client, calls } = makeFakeClient({ rosterCount: 12, cacheRow: { fingerprint: "old" } });
+    const { client, calls } = makeFakeClient({
+      rosterCount: 12,
+      cacheRow: { fingerprint: "old" },
+    });
 
     const result = await calculateLeaguePositionalWar(client, LEAGUE_ROW_ID);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.skipped).toMatch(/^no weekly projections stored for 2026 from week/);
+    expect(result.skipped).toMatch(
+      /^no weekly projections stored for 2026 from week/,
+    );
     expect(classifyPositionalWarResult(result).status).toBe("skipped");
     expect(calls).not.toContain("cache.delete");
   });
@@ -515,23 +616,33 @@ describe("calculateLeaguePositionalWar: source independence", () => {
 describe("refreshPositionalWar: a throw inside the engine", () => {
   it("sets status 'error', writes the message, stamps attempted_at, leaves existing rows alone, and does not throw", async () => {
     wireOkPipeline();
-    vi.mocked(resolveSharedCurves).mockImplementation(async (_supabase, params) => {
-      await params.compute(); // propagate whatever compute() throws
-      throw new Error("unreachable");
-    });
+    vi.mocked(resolveSharedCurves).mockImplementation(
+      async (_supabase, params) => {
+        await params.compute(); // propagate whatever compute() throws
+        throw new Error("unreachable");
+      },
+    );
     vi.mocked(computeCurves).mockImplementation(() => {
       throw new Error("engine exploded");
     });
 
     const { client, calls, leagueUpdates } = makeFakeClient({
-      leaguesRow: { season: 2026, positional_war_status: null, positional_war_attempted_at: null },
+      leaguesRow: {
+        season: 2026,
+        positional_war_status: null,
+        positional_war_attempted_at: null,
+      },
       rosterCount: 12,
       cacheRow: { fingerprint: "old" },
     });
 
-    await expect(refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true })).resolves.toBeUndefined();
+    await expect(
+      refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true }),
+    ).resolves.toBeUndefined();
 
-    const verdictUpdate = leagueUpdates.find((u) => u.positional_war_status === "error");
+    const verdictUpdate = leagueUpdates.find(
+      (u) => u.positional_war_status === "error",
+    );
     expect(verdictUpdate?.positional_war_detail).toBe("engine exploded");
     expect(verdictUpdate?.positional_war_succeeded_at).toBeUndefined();
     expect(calls).not.toContain("cache.delete");
@@ -600,7 +711,9 @@ describe("refreshPositionalWar backoff", () => {
       },
       rosterCount: 12,
     });
-    vi.mocked(loadLeague).mockResolvedValue(fakeLeague({ playoffWeekStart: 9 }) as never);
+    vi.mocked(loadLeague).mockResolvedValue(
+      fakeLeague({ playoffWeekStart: 9 }) as never,
+    );
 
     await refreshPositionalWar(client, LEAGUE_ROW_ID);
 
@@ -656,7 +769,9 @@ describe("refreshPositionalWar backoff bypasses", () => {
     // Different scoring settings than whatever produced the stored
     // fingerprint below: the cheap fingerprint recompute will differ from
     // "some-other-fingerprint", triggering the bypass.
-    vi.mocked(loadLeague).mockResolvedValue(fakeLeague({ scoringSettings: { rec: 1, pass_td: 6 } }) as never);
+    vi.mocked(loadLeague).mockResolvedValue(
+      fakeLeague({ scoringSettings: { rec: 1, pass_td: 6 } }) as never,
+    );
     const { client } = makeFakeClient({
       leaguesRow: {
         season: 2026,
@@ -679,8 +794,14 @@ describe("refreshPositionalWar backoff bypasses", () => {
     // Stored triple says fromWeek=9 (toWeek=8, empty window); live NFL state
     // has moved to week 10, so the window is no longer empty and the triple
     // no longer matches.
-    vi.mocked(getNflState).mockResolvedValue({ week: 10, season_type: "regular", season: "2026" } as never);
-    vi.mocked(loadLeague).mockResolvedValue(fakeLeague({ playoffWeekStart: 12 }) as never);
+    vi.mocked(getNflState).mockResolvedValue({
+      week: 10,
+      season_type: "regular",
+      season: "2026",
+    } as never);
+    vi.mocked(loadLeague).mockResolvedValue(
+      fakeLeague({ playoffWeekStart: 12 }) as never,
+    );
     const { client } = makeFakeClient({
       leaguesRow: {
         season: 2026,
@@ -688,7 +809,9 @@ describe("refreshPositionalWar backoff bypasses", () => {
         positional_war_status: "settled",
         positional_war_detail:
           "no regular season weeks remaining from week 9 [settled season=2026 fromWeek=9 toWeek=8]",
-        positional_war_attempted_at: new Date(Date.now() - 60_000).toISOString(),
+        positional_war_attempted_at: new Date(
+          Date.now() - 60_000,
+        ).toISOString(),
       },
       rosterCount: 12,
     });
@@ -707,37 +830,55 @@ describe("refreshPositionalWar write ordering", () => {
   it("stamps attempted_at, then resolves the shared curves, then stamps the verdict with succeeded_at", async () => {
     wireOkPipeline();
     const { client, calls, leagueUpdates } = makeFakeClient({
-      leaguesRow: { season: 2026, positional_war_status: null, positional_war_attempted_at: null },
+      leaguesRow: {
+        season: 2026,
+        positional_war_status: null,
+        positional_war_attempted_at: null,
+      },
       rosterCount: 12,
     });
 
     await refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true });
 
-    const attemptedIdx = calls.indexOf("leagues.update:positional_war_attempted_at");
+    const attemptedIdx = calls.indexOf(
+      "leagues.update:positional_war_attempted_at",
+    );
     const verdictIdx = calls.findIndex(
-      (c) => c.startsWith("leagues.update:") && c.includes("positional_war_succeeded_at"),
+      (c) =>
+        c.startsWith("leagues.update:") &&
+        c.includes("positional_war_succeeded_at"),
     );
 
     expect(attemptedIdx).toBeGreaterThanOrEqual(0);
     expect(verdictIdx).toBeGreaterThan(attemptedIdx);
     expect(resolveSharedCurves).toHaveBeenCalledTimes(1);
 
-    const verdictUpdate = leagueUpdates.find((u) => "positional_war_succeeded_at" in u);
+    const verdictUpdate = leagueUpdates.find(
+      (u) => "positional_war_succeeded_at" in u,
+    );
     expect(verdictUpdate?.positional_war_status).toBe("ok");
   });
 
   it("does not stamp succeeded_at when the run ends in 'error'", async () => {
     wireOkPipeline();
-    vi.mocked(resolveSharedCurves).mockRejectedValue(new Error("db unreachable"));
+    vi.mocked(resolveSharedCurves).mockRejectedValue(
+      new Error("db unreachable"),
+    );
 
     const { client, leagueUpdates } = makeFakeClient({
-      leaguesRow: { season: 2026, positional_war_status: null, positional_war_attempted_at: null },
+      leaguesRow: {
+        season: 2026,
+        positional_war_status: null,
+        positional_war_attempted_at: null,
+      },
       rosterCount: 12,
     });
 
     await refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true });
 
-    const verdictUpdate = leagueUpdates.find((u) => "positional_war_status" in u);
+    const verdictUpdate = leagueUpdates.find(
+      (u) => "positional_war_status" in u,
+    );
     expect(verdictUpdate?.positional_war_status).toBe("error");
     expect(verdictUpdate?.positional_war_succeeded_at).toBeUndefined();
   });
@@ -750,16 +891,24 @@ describe("refreshPositionalWar write ordering", () => {
 describe("settled verdict detail encoding", () => {
   it("encodes (season, fromWeek, toWeek) into positional_war_detail", async () => {
     wireOkPipeline();
-    vi.mocked(loadLeague).mockResolvedValue(fakeLeague({ playoffWeekStart: 9 }) as never); // toWeek=8 < fromWeek=9
+    vi.mocked(loadLeague).mockResolvedValue(
+      fakeLeague({ playoffWeekStart: 9 }) as never,
+    ); // toWeek=8 < fromWeek=9
 
     const { client, leagueUpdates } = makeFakeClient({
-      leaguesRow: { season: 2026, positional_war_status: null, positional_war_attempted_at: null },
+      leaguesRow: {
+        season: 2026,
+        positional_war_status: null,
+        positional_war_attempted_at: null,
+      },
       rosterCount: 12,
     });
 
     await refreshPositionalWar(client, LEAGUE_ROW_ID, { force: true });
 
-    const verdictUpdate = leagueUpdates.find((u) => u.positional_war_status === "settled");
+    const verdictUpdate = leagueUpdates.find(
+      (u) => u.positional_war_status === "settled",
+    );
     expect(verdictUpdate?.positional_war_detail).toBe(
       "no regular season weeks remaining from week 9 [settled season=2026 fromWeek=9 toWeek=8]",
     );
@@ -794,7 +943,9 @@ describe("positionalWarIsStale", () => {
       rosterCount: 12,
     });
 
-    const stale = await positionalWarIsStale(client, LEAGUE_ROW_ID, 2026, () => Promise.resolve(null));
+    const stale = await positionalWarIsStale(client, LEAGUE_ROW_ID, 2026, () =>
+      Promise.resolve(null),
+    );
     expect(stale).toBe(true);
   });
 });

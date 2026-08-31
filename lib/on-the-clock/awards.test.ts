@@ -8,7 +8,9 @@ import { DEFAULT_ON_THE_CLOCK_SETTINGS } from "./default-settings";
 
 // --- fixtures ---------------------------------------------------------------
 
-function rollup(over: Partial<TeamRollup> & { rosterId: number; ownerName: string }): TeamRollup {
+function rollup(
+  over: Partial<TeamRollup> & { rosterId: number; ownerName: string },
+): TeamRollup {
   return {
     rosterId: over.rosterId,
     ownerName: over.ownerName,
@@ -25,7 +27,11 @@ function rollup(over: Partial<TeamRollup> & { rosterId: number; ownerName: strin
   };
 }
 
-function player(playerId: string, value: number, sleeperId: string): RankedPlayer {
+function player(
+  playerId: string,
+  value: number,
+  sleeperId: string,
+): RankedPlayer {
   return {
     playerId,
     sleeperId,
@@ -40,7 +46,9 @@ function player(playerId: string, value: number, sleeperId: string): RankedPlaye
   };
 }
 
-function pick(over: Partial<ShapedPick> & { pickNo: number; rosterId: number }): ShapedPick {
+function pick(
+  over: Partial<ShapedPick> & { pickNo: number; rosterId: number },
+): ShapedPick {
   return {
     pickNo: over.pickNo,
     round: over.round ?? 1,
@@ -57,7 +65,9 @@ function pick(over: Partial<ShapedPick> & { pickNo: number; rosterId: number }):
   };
 }
 
-function txn(over: Partial<HistoryTransaction> & { transactionId: string }): HistoryTransaction {
+function txn(
+  over: Partial<HistoryTransaction> & { transactionId: string },
+): HistoryTransaction {
   return {
     transactionId: over.transactionId,
     status: over.status ?? "complete",
@@ -72,12 +82,31 @@ function txn(over: Partial<HistoryTransaction> & { transactionId: string }): His
 }
 
 const ROLLUPS: TeamRollup[] = [
-  rollup({ rosterId: 1, ownerName: "Alpha", playersValue: 5000, playerCount: 3, isYou: true }),
-  rollup({ rosterId: 2, ownerName: "Bravo", playersValue: 3000, playerCount: 3 }),
-  rollup({ rosterId: 3, ownerName: "Cara", playersValue: 1000, playerCount: 3 }),
+  rollup({
+    rosterId: 1,
+    ownerName: "Alpha",
+    playersValue: 5000,
+    playerCount: 3,
+    isYou: true,
+  }),
+  rollup({
+    rosterId: 2,
+    ownerName: "Bravo",
+    playersValue: 3000,
+    playerCount: 3,
+  }),
+  rollup({
+    rosterId: 3,
+    ownerName: "Cara",
+    playersValue: 1000,
+    playerCount: 3,
+  }),
 ];
 
-const AVATARS = { 1: "av1", 2: null, 3: "av3" } as Record<number, string | null>;
+const AVATARS = { 1: "av1", 2: null, 3: "av3" } as Record<
+  number,
+  string | null
+>;
 
 /** A three-player board with ADP, so the surplus curve has something to price against. */
 const BOARD = [
@@ -87,7 +116,11 @@ const BOARD = [
 ];
 
 function ctx(): TradeHistoryContext {
-  const board = [player("A", 100, "sA"), player("B", 300, "sB"), player("C", 250, "sC")];
+  const board = [
+    player("A", 100, "sA"),
+    player("B", 300, "sB"),
+    player("C", 250, "sC"),
+  ];
   return {
     valueBoard: board,
     available: board,
@@ -126,11 +159,12 @@ function find(awards: ReturnType<typeof computeDraftAwards>, id: string) {
 
 describe("computeDraftAwards", () => {
   it("returns every enabled award in product order", () => {
-    const awards = computeDraftAwards(baseInput());
+    // Dynasty, so the one dynasty-only award is present. A redraft league is
+    // deliberately one card shorter rather than one card emptier.
+    const awards = computeDraftAwards(baseInput({ isDynasty: true }));
     expect(awards.map((a) => a.id)).toEqual([
       "most-active-trader",
       "most-successful-trader",
-      "first-starting-roster",
       "most-boring",
       "best-drafter",
       "worst-drafter",
@@ -141,6 +175,14 @@ describe("computeDraftAwards", () => {
       "iron-man",
       "steal-of-draft",
       "reach-of-draft",
+      "round-steals",
+      "most-balanced",
+      "most-top-heavy",
+      "bye-week-nightmare",
+      "against-the-room",
+      "late-round-haul",
+      "toughest-schedule",
+      "scarcity-read",
     ]);
   });
 
@@ -149,7 +191,10 @@ describe("computeDraftAwards", () => {
       baseInput({
         settings: {
           ...DEFAULT_ON_THE_CLOCK_SETTINGS,
-          awards: { ...DEFAULT_ON_THE_CLOCK_SETTINGS.awards, enabled: { "boom-bust": false } },
+          awards: {
+            ...DEFAULT_ON_THE_CLOCK_SETTINGS.awards,
+            enabled: { "boom-bust": false },
+          },
         },
       }),
     );
@@ -192,8 +237,18 @@ describe("computeDraftAwards", () => {
 
   it("names the steal and the reach of the draft as single picks", () => {
     const picks = [
-      pick({ pickNo: 20, rosterId: 2, sleeperPlayerId: "sB", lastName: "Steal" }),
-      pick({ pickNo: 1, rosterId: 1, sleeperPlayerId: "sA", lastName: "Reach" }),
+      pick({
+        pickNo: 20,
+        rosterId: 2,
+        sleeperPlayerId: "sB",
+        lastName: "Steal",
+      }),
+      pick({
+        pickNo: 1,
+        rosterId: 1,
+        sleeperPlayerId: "sA",
+        lastName: "Reach",
+      }),
     ];
     const awards = computeDraftAwards(
       baseInput({
@@ -218,7 +273,12 @@ describe("computeDraftAwards", () => {
 
   it("leaves the projection-backed awards pending with no Draft Pulse", () => {
     const awards = computeDraftAwards(baseInput({ pulseTeams: [] }));
-    for (const id of ["best-starting-lineup", "most-reliable", "boom-bust", "iron-man"]) {
+    for (const id of [
+      "best-starting-lineup",
+      "most-reliable",
+      "boom-bust",
+      "iron-man",
+    ]) {
       const award = find(awards, id);
       expect(award.pending).toBe(true);
       expect(award.pendingLabel).toContain("projections");
@@ -226,9 +286,16 @@ describe("computeDraftAwards", () => {
   });
 
   it("keeps the Long Game award out of a redraft league entirely", () => {
-    const award = find(computeDraftAwards(baseInput({ isDynasty: false })), "long-game");
-    expect(award.pending).toBe(true);
-    expect(award.pendingLabel).toContain("redraft");
+    // Not emitted, rather than emitted permanently pending. There is no future
+    // to build toward in a redraft league, so the card could never be won, and
+    // "up for grabs" is a promise the reader would wait on forever.
+    const awards = computeDraftAwards(baseInput({ isDynasty: false }));
+    expect(awards.map((a) => a.id)).not.toContain("long-game");
+  });
+
+  it("still emits it in a dynasty league", () => {
+    const awards = computeDraftAwards(baseInput({ isDynasty: true }));
+    expect(awards.map((a) => a.id)).toContain("long-game");
   });
 
   it("leaves both drafter awards pending when no ADP data exists for the draft", () => {
@@ -250,7 +317,10 @@ describe("computeDraftAwards", () => {
     // the market, so Bravo has no ADP-eligible picks and Alpha lacks a rival.
     const picks = [
       pick({ pickNo: 30, rosterId: 1, sleeperPlayerId: "sB" }),
-      { ...pick({ pickNo: 5, rosterId: 2, sleeperPlayerId: "sC" }), isKeeper: true },
+      {
+        ...pick({ pickNo: 5, rosterId: 2, sleeperPlayerId: "sC" }),
+        isKeeper: true,
+      },
     ];
     const awards = computeDraftAwards(
       baseInput({ picks, adpBySleeperId: { sB: 44, sC: 28 } }),
@@ -334,14 +404,21 @@ describe("computeDraftAwards", () => {
     }
     for (let i = 0; i < 3; i++) {
       transactions.push(
-        txn({ transactionId: `b${i}`, rosterIds: [2, 3], adds: { sC: 2 }, drops: { sC: 3 } }),
+        txn({
+          transactionId: `b${i}`,
+          rosterIds: [2, 3],
+          adds: { sC: 2 },
+          drops: { sC: 3 },
+        }),
       );
     }
     const awards = computeDraftAwards(baseInput({ transactions }));
     const success = find(awards, "most-successful-trader");
     expect(success.pending).toBe(false);
     expect(success.claimants.map((c) => c.ownerName)).toEqual(["Bravo"]);
-    expect(success.metricLabel).toBe("+250 avg value per trade across 3 trades");
+    expect(success.metricLabel).toBe(
+      "+250 avg value per trade across 3 trades",
+    );
   });
 
   it("relaxes the trade minimum to two when no team has three", () => {
@@ -362,12 +439,16 @@ describe("computeDraftAwards", () => {
     const success = find(awards, "most-successful-trader");
     expect(success.pending).toBe(false);
     expect(success.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
-    expect(success.metricLabel).toBe("+200 avg value per trade across 2 trades");
+    expect(success.metricLabel).toBe(
+      "+200 avg value per trade across 2 trades",
+    );
   });
 
   it("stays pending for the value award when the board context is missing", () => {
     const transactions = [txn({ transactionId: "t1", rosterIds: [1, 2] })];
-    const awards = computeDraftAwards(baseInput({ transactions, tradeContext: null }));
+    const awards = computeDraftAwards(
+      baseInput({ transactions, tradeContext: null }),
+    );
     const success = find(awards, "most-successful-trader");
     expect(success.pending).toBe(true);
     expect(success.pendingLabel).toMatch(/loading/i);
@@ -375,31 +456,18 @@ describe("computeDraftAwards", () => {
     expect(find(awards, "most-active-trader").pending).toBe(false);
   });
 
-  it("awards the first team to fill every required starting slot", () => {
-    // 1 QB / 1 RB / 1 WR starting lineup (no K/DEF). Alpha finishes at pick 5.
+  it("no longer emits the retired starting-roster award", () => {
+    // It measured who assembled a legal lineup earliest, which in a snake draft
+    // mostly measures who took a kicker in the ninth round: a bad decision the
+    // award was congratulating. Old snapshots still render it from their frozen
+    // payload; nothing computes it any more.
     const draftSettings = { teams: 3, slots_qb: 1, slots_rb: 1, slots_wr: 1 };
     const picks = [
       pick({ pickNo: 1, rosterId: 1, position: "QB" }),
-      pick({ pickNo: 2, rosterId: 2, position: "QB" }),
       pick({ pickNo: 3, rosterId: 1, position: "RB" }),
-      pick({ pickNo: 4, rosterId: 2, position: "RB" }),
       pick({ pickNo: 5, rosterId: 1, position: "WR" }),
-      pick({ pickNo: 6, rosterId: 2, position: "WR" }),
     ];
     const awards = computeDraftAwards(baseInput({ draftSettings, picks }));
-    const full = find(awards, "first-starting-roster");
-    expect(full.pending).toBe(false);
-    expect(full.claimants.map((c) => c.ownerName)).toEqual(["Alpha"]);
-    expect(full.metricLabel).toBe("Filled at pick 5");
-  });
-
-  it("keeps the starting-roster award pending until a lineup is complete", () => {
-    const draftSettings = { teams: 3, slots_qb: 1, slots_rb: 1, slots_wr: 1 };
-    const picks = [
-      pick({ pickNo: 1, rosterId: 1, position: "QB" }),
-      pick({ pickNo: 2, rosterId: 1, position: "RB" }),
-    ];
-    const awards = computeDraftAwards(baseInput({ draftSettings, picks }));
-    expect(find(awards, "first-starting-roster").pending).toBe(true);
+    expect(awards.map((a) => a.id)).not.toContain("first-starting-roster");
   });
 });

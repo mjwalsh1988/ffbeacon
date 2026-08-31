@@ -68,6 +68,14 @@ export type LeagueRow = {
   scoringSettings: ScoringSettings;
   playoffTeams: number;
   playoffWeekStart: number;
+  /**
+   * Sleeper's playoff_round_type. 0 is one week per round, 1 is two weeks for
+   * every round, 2 is two weeks for the championship round only. It changes who
+   * wins, not just how long it takes: a two-week round sums two draws, which
+   * cuts the spread by about 30 percent and hands the better team a real edge
+   * that a single week does not.
+   */
+  playoffRoundType: number;
 };
 
 export type RosterRow = {
@@ -144,7 +152,9 @@ export type DefenseRow = {
 
 function asStringArray(value: Json | null | undefined): string[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((v): v is string => typeof v === "string" && v.length > 0 && v !== "0");
+  return value.filter(
+    (v): v is string => typeof v === "string" && v.length > 0 && v !== "0",
+  );
 }
 
 function intOrNull(v: unknown): number | null {
@@ -190,7 +200,9 @@ export async function loadLeague(
 ): Promise<LeagueRow | null> {
   const { data, error } = await supabase
     .from("leagues")
-    .select("id, sleeper_league_id, name, season, status, roster_positions, scoring_settings, metadata")
+    .select(
+      "id, sleeper_league_id, name, season, status, roster_positions, scoring_settings, metadata",
+    )
     .eq("id", leagueRowId)
     .maybeSingle();
   if (error || !data) return null;
@@ -209,6 +221,9 @@ export async function loadLeague(
     // Sleeper defaults: a six-team field starting in week 15.
     playoffTeams: positiveIntOrNull(settings.playoff_teams) ?? 6,
     playoffWeekStart: positiveIntOrNull(settings.playoff_week_start) ?? 15,
+    // Zero is a real value here (one week per round) rather than an absent one,
+    // so intOrNull, not positiveIntOrNull.
+    playoffRoundType: intOrNull(settings.playoff_round_type) ?? 0,
   };
 }
 
@@ -230,7 +245,9 @@ export async function loadRosters(
       .eq("league_id", leagueRowId),
   ]);
 
-  const usersById = new Map((usersRes.data ?? []).map((u) => [u.sleeper_user_id, u]));
+  const usersById = new Map(
+    (usersRes.data ?? []).map((u) => [u.sleeper_user_id, u]),
+  );
 
   return (rostersRes.data ?? []).map((r) => {
     const user = r.owner_user_id ? usersById.get(r.owner_user_id) : null;
@@ -245,7 +262,8 @@ export async function loadRosters(
       losses: Number(r.losses ?? 0),
       ties: Number(r.ties ?? 0),
       pointsFor: Number(r.points_for ?? 0),
-      teamName: user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`,
+      teamName:
+        user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`,
       ownerUserId: r.owner_user_id ?? null,
       ownerHandle: user?.display_name ?? null,
       ownerAvatarId: user?.avatar ?? null,
@@ -285,9 +303,12 @@ export async function loadPlayers(
       .join(",");
     const { data, error } = await supabase
       .from("players")
-      .select("id, slug, first_name, last_name, full_name, position, team, external_ids, metadata")
+      .select(
+        "id, slug, first_name, last_name, full_name, position, team, external_ids, metadata",
+      )
       .or(ors);
-    if (error) throw new Error(`power pulse player resolve failed: ${error.message}`);
+    if (error)
+      throw new Error(`power pulse player resolve failed: ${error.message}`);
 
     for (const p of data ?? []) {
       const ext = (p.external_ids as Record<string, unknown>) ?? {};
@@ -299,16 +320,20 @@ export async function loadPlayers(
       const position = (p.position ?? "").toUpperCase();
       if (!valid.has(position)) continue;
 
-      const meta = (p.metadata as { sleeper?: Record<string, unknown> } | null)?.sleeper ?? {};
+      const meta =
+        (p.metadata as { sleeper?: Record<string, unknown> } | null)?.sleeper ??
+        {};
       out.set(sid, {
         playerId: p.id,
         sleeperId: sid,
         name:
-          p.full_name ?? (`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.slug),
+          p.full_name ??
+          (`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.slug),
         position: position as PulsePosition,
         team: p.team,
         injuryStatus:
-          typeof meta.injury_status === "string" && meta.injury_status.length > 0
+          typeof meta.injury_status === "string" &&
+          meta.injury_status.length > 0
             ? meta.injury_status
             : null,
         depthOrder: intOrNull(meta.depth_chart_order),
@@ -389,7 +414,8 @@ async function loadProjectionsChunk(
     if (toWeek !== undefined) q = q.lte("week", toWeek);
     if (cursor !== null) q = q.gt("id", cursor);
     const { data, error } = await q;
-    if (error) throw new Error(`power pulse projection load failed: ${error.message}`);
+    if (error)
+      throw new Error(`power pulse projection load failed: ${error.message}`);
     if (!data || data.length === 0) break;
     for (const row of data) {
       if (!row.player_id) continue;
@@ -438,8 +464,10 @@ export async function loadProjections(
   // keeps its own count-then-page walk unchanged, including its own guard,
   // so a short read in one chunk still fails the whole call exactly as
   // before; only the wall-clock ordering across chunks has changed.
-  const perChunk = await mapWithConcurrency(chunks, DB_CHUNK_CONCURRENCY, (chunk) =>
-    loadProjectionsChunk(supabase, chunk, season, fromWeek, toWeek),
+  const perChunk = await mapWithConcurrency(
+    chunks,
+    DB_CHUNK_CONCURRENCY,
+    (chunk) => loadProjectionsChunk(supabase, chunk, season, fromWeek, toWeek),
   );
   return perChunk.flat();
 }
@@ -463,16 +491,23 @@ export async function loadAccuracy(
   // (capped) rather than one after another, matching loadProjections above.
   // Positional WAR asks this for 1,083 players, four chunks deep, and paid
   // four serial round trips for what is one wave.
-  const perChunk = await mapWithConcurrency(chunks, DB_CHUNK_CONCURRENCY, async (chunk) => {
-    const { data, error } = await supabase
-      .from("player_projection_accuracy")
-      .select("player_id, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, weeks_played")
-      .eq("scoring", scoring)
-      .is("season", null)
-      .in("player_id", chunk);
-    if (error) throw new Error(`power pulse accuracy load failed: ${error.message}`);
-    return data ?? [];
-  });
+  const perChunk = await mapWithConcurrency(
+    chunks,
+    DB_CHUNK_CONCURRENCY,
+    async (chunk) => {
+      const { data, error } = await supabase
+        .from("player_projection_accuracy")
+        .select(
+          "player_id, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, weeks_played",
+        )
+        .eq("scoring", scoring)
+        .is("season", null)
+        .in("player_id", chunk);
+      if (error)
+        throw new Error(`power pulse accuracy load failed: ${error.message}`);
+      return data ?? [];
+    },
+  );
 
   for (const data of perChunk) {
     for (const row of data) {
@@ -506,7 +541,8 @@ export async function loadDefenseSplits(
     .select("team, season, position, multiplier, games_sampled")
     .eq("scoring", scoring)
     .in("season", seasons);
-  if (error) throw new Error(`power pulse defense split load failed: ${error.message}`);
+  if (error)
+    throw new Error(`power pulse defense split load failed: ${error.message}`);
 
   for (const row of data ?? []) {
     out.set(`${row.team}|${row.season}|${row.position}`, {
@@ -535,9 +571,13 @@ export async function loadSchedule(
     .eq("league_id", leagueRowId)
     .eq("season", season)
     .order("week", { ascending: true });
-  if (error) throw new Error(`power pulse schedule load failed: ${error.message}`);
+  if (error)
+    throw new Error(`power pulse schedule load failed: ${error.message}`);
 
-  const byWeek = new Map<number, { matchups: Map<number, number[]>; isFinal: boolean }>();
+  const byWeek = new Map<
+    number,
+    { matchups: Map<number, number[]>; isFinal: boolean }
+  >();
   const setLineups = new Map<string, string[]>();
 
   for (const row of data ?? []) {
@@ -546,7 +586,10 @@ export async function loadSchedule(
     setLineups.set(`${week}|${rosterId}`, asStringArray(row.starter_ids));
 
     if (row.matchup_id === null || row.matchup_id === undefined) continue;
-    const entry = byWeek.get(week) ?? { matchups: new Map<number, number[]>(), isFinal: false };
+    const entry = byWeek.get(week) ?? {
+      matchups: new Map<number, number[]>(),
+      isFinal: false,
+    };
     const list = entry.matchups.get(Number(row.matchup_id)) ?? [];
     list.push(rosterId);
     entry.matchups.set(Number(row.matchup_id), list);
@@ -555,7 +598,9 @@ export async function loadSchedule(
   }
 
   const weeks: ScheduleWeek[] = [];
-  for (const [week, entry] of [...byWeek.entries()].sort((a, b) => a[0] - b[0])) {
+  for (const [week, entry] of [...byWeek.entries()].sort(
+    (a, b) => a[0] - b[0],
+  )) {
     const opponents = new Map<number, number>();
     for (const pair of entry.matchups.values()) {
       if (pair.length !== 2) continue;

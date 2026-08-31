@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { injuryMultiplier, projectPlayerWeek, LONG_TERM_INJURY_STATUSES } from "./project";
+import {
+  injuryMultiplier,
+  projectPlayerWeek,
+  LONG_TERM_INJURY_STATUSES,
+} from "./project";
 import { DEFAULT_POWER_PULSE_SETTINGS } from "./default-settings";
 import type { ProjectionRow } from "./load";
 
@@ -18,11 +22,17 @@ describe("injuryMultiplier: season-long designations", () => {
     // The correction that produced pp-3. A season-long tag carries no timeline;
     // Sleeper's per-week availability does, and it is the better answer.
     // Jordyn Tyson is on IR and Sleeper projects him 10.7 a week from week 5.
-    expect(injuryMultiplier("IR", 17, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(1);
-    expect(injuryMultiplier("PUP", 12, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(1);
+    expect(
+      injuryMultiplier("IR", 17, CURRENT_WEEK, S, { sourcePricedIn: true }),
+    ).toBe(1);
+    expect(
+      injuryMultiplier("PUP", 12, CURRENT_WEEK, S, { sourcePricedIn: true }),
+    ).toBe(1);
     // Josh Jacobs, DNR, projected about 14 a week from week 2. Zeroing him
     // moved his team from seventh in its league to last.
-    expect(injuryMultiplier("DNR", 8, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(1);
+    expect(
+      injuryMultiplier("DNR", 8, CURRENT_WEEK, S, { sourcePricedIn: true }),
+    ).toBe(1);
   });
 
   it("covers every designation the set claims to cover", () => {
@@ -42,8 +52,12 @@ describe("injuryMultiplier: season-long designations", () => {
 
 describe("injuryMultiplier: week-to-week designations", () => {
   it("discounts only the current week when nothing else priced it in", () => {
-    expect(injuryMultiplier("Questionable", CURRENT_WEEK, CURRENT_WEEK, S)).toBe(0.9);
-    expect(injuryMultiplier("Questionable", CURRENT_WEEK + 1, CURRENT_WEEK, S)).toBe(1);
+    expect(
+      injuryMultiplier("Questionable", CURRENT_WEEK, CURRENT_WEEK, S),
+    ).toBe(0.9);
+    expect(
+      injuryMultiplier("Questionable", CURRENT_WEEK + 1, CURRENT_WEEK, S),
+    ).toBe(1);
   });
 
   it("stands down when the source already priced the injury in", () => {
@@ -51,20 +65,30 @@ describe("injuryMultiplier: week-to-week designations", () => {
     // healthy figure. Applying another 0.9 discounts one injury twice and makes
     // every banged-up starter look worse than the market thinks he is.
     expect(
-      injuryMultiplier("Questionable", CURRENT_WEEK, CURRENT_WEEK, S, { sourcePricedIn: true }),
+      injuryMultiplier("Questionable", CURRENT_WEEK, CURRENT_WEEK, S, {
+        sourcePricedIn: true,
+      }),
     ).toBe(1);
     expect(
-      injuryMultiplier("Doubtful", CURRENT_WEEK, CURRENT_WEEK, S, { sourcePricedIn: true }),
+      injuryMultiplier("Doubtful", CURRENT_WEEK, CURRENT_WEEK, S, {
+        sourcePricedIn: true,
+      }),
     ).toBe(1);
   });
 
   it("leaves a healthy player alone either way", () => {
     expect(injuryMultiplier(null, CURRENT_WEEK, CURRENT_WEEK, S)).toBe(1);
-    expect(injuryMultiplier(null, CURRENT_WEEK, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(1);
+    expect(
+      injuryMultiplier(null, CURRENT_WEEK, CURRENT_WEEK, S, {
+        sourcePricedIn: true,
+      }),
+    ).toBe(1);
   });
 
   it("ignores a designation the settings have no opinion about", () => {
-    expect(injuryMultiplier("Probable-ish", CURRENT_WEEK, CURRENT_WEEK, S)).toBe(1);
+    expect(
+      injuryMultiplier("Probable-ish", CURRENT_WEEK, CURRENT_WEEK, S),
+    ).toBe(1);
   });
 
   it("still fires when the settings switch injuries off entirely", () => {
@@ -107,7 +131,10 @@ function project(row: ProjectionRow | undefined, injuryStatus: string | null) {
 
 describe("projectPlayerWeek", () => {
   it("returns a hard zero for an out row, with no multipliers applied", () => {
-    const result = project(projection({ availability: "out", ppr: 0, halfPpr: 0, std: 0 }), "IR");
+    const result = project(
+      projection({ availability: "out", ppr: 0, halfPpr: 0, std: 0 }),
+      "IR",
+    );
     expect(result).not.toBeNull();
     expect(result?.points).toBe(0);
     expect(result?.sigma).toBe(0);
@@ -148,7 +175,12 @@ describe("projectPlayerWeek", () => {
     expect(out?.points).toBe(0);
 
     const back = project(
-      projection({ availability: "projected", ppr: 10.7, halfPpr: 10.7, std: 10.7 }),
+      projection({
+        availability: "projected",
+        ppr: 10.7,
+        halfPpr: 10.7,
+        std: 10.7,
+      }),
       "IR",
     );
     expect(back?.points).toBeCloseTo(10.7, 5);
@@ -159,7 +191,12 @@ describe("projectPlayerWeek", () => {
     // opinion, so the designation is the only signal there is. A source that
     // publishes a number without saying whether the player suits up lands here.
     const noOpinion = project(
-      projection({ availability: "unprojected", ppr: 8.9, halfPpr: 8.9, std: 8.9 }),
+      projection({
+        availability: "unprojected",
+        ppr: 8.9,
+        halfPpr: 8.9,
+        std: 8.9,
+      }),
       "IR",
     );
     expect(noOpinion?.points).toBe(0);

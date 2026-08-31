@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_POWER_PULSE_SETTINGS } from "./default-settings";
 import { PULSE_POSITIONS } from "./types";
+import { curveFor } from "./variance-curve";
 
 /**
  * The fallback variance figures are MEASURED, and this is the measurement.
@@ -15,13 +16,13 @@ import { PULSE_POSITIONS } from "./types";
  * numbers are the only thing standing between a team's projected record and a
  * spread somebody invented.
  */
-const MEASURED_2025: Record<string, number> = {
-  QB: 0.423,
-  RB: 0.589,
-  WR: 0.566,
-  TE: 0.646,
-  K: 0.51,
-  DEF: 0.804,
+const MEASURED_STARTABLE: Record<string, number> = {
+  QB: 0.414,
+  RB: 0.527,
+  WR: 0.548,
+  TE: 0.573,
+  K: 0.507,
+  DEF: 0.718,
 };
 
 describe("variance.defaultCv", () => {
@@ -29,12 +30,15 @@ describe("variance.defaultCv", () => {
 
   it("covers every position the engine can start", () => {
     for (const position of PULSE_POSITIONS) {
-      expect(cv[position], `${position} has no fallback variance`).toBeGreaterThan(0);
+      expect(
+        cv[position],
+        `${position} has no fallback variance`,
+      ).toBeGreaterThan(0);
     }
   });
 
-  it("matches what 2025 actually did, within a rounding step", () => {
-    for (const [position, measured] of Object.entries(MEASURED_2025)) {
+  it("matches the startable-range measurement, within a rounding step", () => {
+    for (const [position, measured] of Object.entries(MEASURED_STARTABLE)) {
       expect(
         Math.abs(cv[position as keyof typeof cv] - measured),
         `${position} fallback ${cv[position as keyof typeof cv]} is not the measured ${measured}`,
@@ -48,12 +52,21 @@ describe("variance.defaultCv", () => {
     expect(cv.DEF).toBeGreaterThan(cv.TE);
   });
 
-  it("does not let a wide receiver be treated as more erratic than a running back", () => {
-    // The old default had WR at 0.65 against RB at 0.55, which is backwards:
-    // 2025 measured WR at 0.566 and RB at 0.589. A league starts three or more
-    // receivers, so overstating them inflated every team's weekly spread and
-    // pushed every matchup closer to a coin flip.
-    expect(cv.WR).toBeLessThan(cv.RB);
+  it("is only the last resort, so the curve has to exist for every position", () => {
+    for (const position of PULSE_POSITIONS) {
+      expect(
+        curveFor("pts_ppr", position).length,
+        `${position} has no PPR curve, so every fallback player at it uses one flat number`,
+      ).toBeGreaterThan(1);
+    }
+  });
+
+  it("keeps receivers more volatile than running backs, which is what the startable range says", () => {
+    // Measuring the top 36 at every position let RB25-48, a pool of committee
+    // backs, set the figure for bell cows and made running backs read as the
+    // more volatile position. Across the range where starters actually live it
+    // is the other way round at every band, because volume is stability.
+    expect(cv.WR).toBeGreaterThan(cv.RB);
   });
 
   it("stays inside the clamp the engine applies to measured values", () => {

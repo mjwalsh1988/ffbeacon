@@ -24,7 +24,12 @@ function rollup(rosterId: number): TeamRollup {
   } as unknown as TeamRollup;
 }
 
-function pulse(rosterId: number, points: number, filled: number): DraftPulseTeam {
+function pulse(
+  rosterId: number,
+  points: number,
+  filled: number,
+  waiverPointsShare = 0,
+): DraftPulseTeam {
   return {
     rosterId,
     meanStartingPoints: points,
@@ -39,13 +44,22 @@ function pulse(rosterId: number, points: number, filled: number): DraftPulseTeam
     projectedCount: 15,
     unprojectedCount: 0,
     startersFilled: filled,
+    waiverFilledSlots: waiverPointsShare > 0 ? 1 : 0,
+    waiverPointsShare,
+    assumedSignings: [],
+    worstByeWeek: null,
+    scheduleStrength: null,
   };
 }
 
-function grade(teams: Array<{ id: number; points: number; filled: number }>) {
+function grade(
+  teams: Array<{ id: number; points: number; filled: number; waiver?: number }>,
+) {
   return computeDraftGrades({
     rollups: teams.map((t) => rollup(t.id)),
-    pulseTeams: teams.map((t) => pulse(t.id, t.points, t.filled)),
+    pulseTeams: teams.map((t) =>
+      pulse(t.id, t.points, t.filled, t.waiver ?? 0),
+    ),
     pickSurpluses: [],
     tradeMarginByRoster: new Map(),
     startingSlotCount: SLOT_COUNT,
@@ -60,23 +74,24 @@ const constructionOf = (g: ReturnType<typeof computeDraftGrades>[number]) =>
 
 describe("roster construction, when nobody actually has a construction problem", () => {
   /**
-   * The measured case. Every team in a real twelve-team league filled either
-   * 9.9 or 10.0 of its ten starting slots, a one percent difference, and the
-   * curve turned it into component scores of 41 and 90 carrying nearly a fifth
-   * of each grade. The team with the second best starting lineup in the room
-   * scored 41; the team with the worst scored 90.
+   * The measured case. Every team in a real twelve-team league sat within half
+   * a percent of the others, and the curve turned that into component scores of
+   * 41 and 90 carrying nearly a fifth of each grade. The team with the second
+   * best starting lineup in the room scored 41; the team with the worst scored
+   * 90.
    */
   const league = [
-    { id: 1, points: 156, filled: 9.94 },
-    { id: 2, points: 150, filled: 10 },
-    { id: 3, points: 148, filled: 9.96 },
-    { id: 4, points: 145, filled: 10 },
-    { id: 5, points: 143, filled: 9.93 },
+    { id: 1, points: 156, filled: 10, waiver: 0.004 },
+    { id: 2, points: 150, filled: 10, waiver: 0 },
+    { id: 3, points: 148, filled: 10, waiver: 0.003 },
+    { id: 4, points: 145, filled: 10, waiver: 0 },
+    { id: 5, points: 143, filled: 10, waiver: 0.005 },
   ];
 
   it("does not spread teams across the scale over a fraction of a slot", () => {
     const scores = grade(league).map(constructionOf);
-    const spread = Math.max(...(scores as number[])) - Math.min(...(scores as number[]));
+    const spread =
+      Math.max(...(scores as number[])) - Math.min(...(scores as number[]));
     expect(spread).toBeLessThan(2);
   });
 
@@ -94,27 +109,47 @@ describe("roster construction, when nobody actually has a construction problem",
   });
 });
 
-describe("roster construction, when someone genuinely has a hole", () => {
-  it("still separates a team that cannot fill its lineup", () => {
+describe("roster construction, when a team genuinely depends on the wire", () => {
+  it("separates a team leaning on replacement-level players", () => {
     const graded = grade([
-      { id: 1, points: 150, filled: 10 },
-      { id: 2, points: 150, filled: 10 },
-      // Missing a starter in most weeks. This is the difference the component
-      // exists to report, and it has to survive the guard.
-      { id: 3, points: 150, filled: 9 },
+      { id: 1, points: 150, filled: 10, waiver: 0 },
+      { id: 2, points: 150, filled: 10, waiver: 0 },
+      // A fifth of this team's weekly points come from players it does not own.
+      // That is the difference the component exists to report, and it has to
+      // survive the small-spread guard.
+      { id: 3, points: 150, filled: 10, waiver: 0.2 },
     ]);
-    const full = constructionOf(graded.find((g) => g.rosterId === 1)!)!;
-    const short = constructionOf(graded.find((g) => g.rosterId === 3)!)!;
-    expect(full - short).toBeGreaterThan(20);
+    const own = constructionOf(graded.find((g) => g.rosterId === 1)!)!;
+    const borrowed = constructionOf(graded.find((g) => g.rosterId === 3)!)!;
+    expect(own - borrowed).toBeGreaterThan(20);
   });
 
-  it("drops a team with a real hole below its equals overall", () => {
+  it("drops a wire-dependent team below its equals overall", () => {
     const graded = grade([
-      { id: 1, points: 150, filled: 10 },
-      { id: 2, points: 150, filled: 10 },
-      { id: 3, points: 150, filled: 9 },
+      { id: 1, points: 150, filled: 10, waiver: 0 },
+      { id: 2, points: 150, filled: 10, waiver: 0 },
+      { id: 3, points: 150, filled: 10, waiver: 0.2 },
     ]);
     expect(graded[graded.length - 1].rosterId).toBe(3);
+  });
+
+  it("charges a shallow redraft hole far less than a deep dynasty one", () => {
+    // The whole point. The same missing tight end is a two percent dependency in
+    // a league where six playable ones are unrostered and a twenty percent one
+    // where the position is gone. The grade should follow the scarcity, and
+    // nothing here has to know which kind of league it is looking at.
+    const shallow = grade([
+      { id: 1, points: 150, filled: 10, waiver: 0 },
+      { id: 2, points: 150, filled: 10, waiver: 0.02 },
+    ]);
+    const deep = grade([
+      { id: 1, points: 150, filled: 10, waiver: 0 },
+      { id: 2, points: 150, filled: 10, waiver: 0.2 },
+    ]);
+    const penalty = (g: ReturnType<typeof computeDraftGrades>) =>
+      constructionOf(g.find((t) => t.rosterId === 1)!)! -
+      constructionOf(g.find((t) => t.rosterId === 2)!)!;
+    expect(penalty(deep)).toBeGreaterThan(penalty(shallow));
   });
 });
 
@@ -124,9 +159,9 @@ describe("the starting lineup component", () => {
     // look like this, and when one does the honest answer is that the draft
     // separated nobody.
     const graded = grade([
-      { id: 1, points: 150.0, filled: 10 },
-      { id: 2, points: 149.95, filled: 10 },
-      { id: 3, points: 149.9, filled: 10 },
+      { id: 1, points: 150.0, filled: 10, waiver: 0 },
+      { id: 2, points: 149.95, filled: 10, waiver: 0 },
+      { id: 3, points: 149.9, filled: 10, waiver: 0 },
     ]);
     const lineup = graded.map(
       (g) => g.components.find((c) => c.key === "lineup")?.score ?? 0,
@@ -136,13 +171,72 @@ describe("the starting lineup component", () => {
 
   it("still curves a room that genuinely spread out", () => {
     const graded = grade([
-      { id: 1, points: 165, filled: 10 },
-      { id: 2, points: 150, filled: 10 },
-      { id: 3, points: 138, filled: 10 },
+      { id: 1, points: 165, filled: 10, waiver: 0 },
+      { id: 2, points: 150, filled: 10, waiver: 0 },
+      { id: 3, points: 138, filled: 10, waiver: 0 },
     ]);
     const lineup = graded.map(
       (g) => g.components.find((c) => c.key === "lineup")?.score ?? 0,
     );
     expect(Math.max(...lineup) - Math.min(...lineup)).toBeGreaterThan(30);
+  });
+});
+
+describe("format-aware weights", () => {
+  const room = [
+    { id: 1, points: 165, filled: 10, waiver: 0 },
+    { id: 2, points: 150, filled: 10, waiver: 0 },
+    { id: 3, points: 138, filled: 10, waiver: 0 },
+  ];
+
+  const gradeAs = (isDynasty: boolean) =>
+    computeDraftGrades({
+      rollups: room.map((t) => rollup(t.id)),
+      pulseTeams: room.map((t) => pulse(t.id, t.points, t.filled, t.waiver)),
+      pickSurpluses: [],
+      tradeMarginByRoster: new Map(),
+      startingSlotCount: SLOT_COUNT,
+      isDynasty,
+      settings: SETTINGS,
+      inProgress: false,
+    });
+
+  const weightOfLineup = (isDynasty: boolean) =>
+    gradeAs(isDynasty)[0].components.find((c) => c.key === "lineup")?.weight ??
+    0;
+
+  it("inverts which component leads, which is the whole design", () => {
+    // A dynasty startup is largely an asset exercise, so beating the market
+    // leads. A redraft draft has one job, to assemble a lineup that wins games
+    // this season, so the lineup leads and the market drops to what it is here:
+    // the means rather than the end.
+    expect(SETTINGS.weights.market).toBeGreaterThan(SETTINGS.weights.lineup);
+    expect(SETTINGS.redraftWeights.lineup).toBeGreaterThan(
+      SETTINGS.redraftWeights.market,
+    );
+    expect(SETTINGS.redraftWeights.lineup).toBeGreaterThan(
+      SETTINGS.weights.lineup * 1.4,
+    );
+  });
+
+  it("carries that through to the weight a graded team actually sees", () => {
+    expect(weightOfLineup(false)).toBeGreaterThan(weightOfLineup(true));
+  });
+
+  it("still says the future component is missing rather than switched off", () => {
+    // future keeps a weight in redraft on purpose: the component reports its own
+    // absence, which tells the reader something, and a zero weight would report
+    // it as an admin decision, which would not be true.
+    const why =
+      gradeAs(false)[0].omitted.find((o) => o.key === "future")?.why ?? "";
+    expect(why).not.toContain("Switched off");
+  });
+
+  it("grades every team on the same weights inside one league", () => {
+    const grades = gradeAs(false);
+    const lineupWeights = grades.map(
+      (g) => g.components.find((c) => c.key === "lineup")?.weight ?? 0,
+    );
+    expect(new Set(lineupWeights).size).toBe(1);
   });
 });

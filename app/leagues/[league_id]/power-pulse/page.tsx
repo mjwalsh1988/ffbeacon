@@ -4,13 +4,19 @@ import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
-import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
+import {
+  resolveLeagueContext,
+  describeDerived,
+} from "@/lib/league-format-resolution";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import {
   buildPulseLeaders,
   loadPowerPulseView,
 } from "@/lib/league-power-pulse-data";
-import { describeLeagueScoring, type ScoringSettings } from "@/lib/league-scoring";
+import {
+  describeLeagueScoring,
+  type ScoringSettings,
+} from "@/lib/league-scoring";
 import {
   buildLeagueFormatTags,
   buildLeagueScoringTags,
@@ -29,6 +35,11 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { loadLeagueReadiness } from "@/lib/league-readiness";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { formatEastern } from "@/lib/datetime";
+import {
+  emphasisForCategory,
+  type LeagueEmphasis,
+} from "@/lib/league-emphasis";
+import { categorizeLeague } from "@/lib/league-category";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +82,9 @@ export default async function LeaguePowerPulsePage({
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
   const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim() ? sp.username.trim() : null;
+    typeof sp.username === "string" && sp.username.trim()
+      ? sp.username.trim()
+      : null;
 
   // Core pulse only: the league, its rosters and its members. The derived half
   // is what computes Power Pulse when it is stale, and that is the slow part, so
@@ -113,10 +126,23 @@ export default async function LeaguePowerPulsePage({
     typeof resolveLeagueContext
   >[1];
   const resolvedSource = await resolveSourceSlug(supabase, sp.source);
-  const context = await resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug);
+  const context = await resolveLeagueContext(
+    adminClient,
+    sleeperLeague,
+    resolvedSource.slug,
+  );
   const coverageOk = context.coverage !== "none";
 
-  const settings = (league.metadata as { settings?: Record<string, number> } | null)?.settings ?? {};
+  // Which number this league's readers came for. The ordering is Power Pulse
+  // either way; this decides what the value column is CALLED, because in a
+  // redraft league it is a bargaining position rather than a standing.
+  const emphasis = emphasisForCategory(
+    sleeperLeague ? categorizeLeague(sleeperLeague as never) : null,
+  );
+
+  const settings =
+    (league.metadata as { settings?: Record<string, number> } | null)
+      ?.settings ?? {};
   // Same rule the engine applies in lib/power-pulse/load.ts: Sleeper leaves this
   // at zero on a league whose bracket is not set up, and a cut line drawn at
   // seed zero would tell every team it misses the playoffs while the simulation
@@ -139,7 +165,9 @@ export default async function LeaguePowerPulsePage({
     teamCount: league.total_rosters,
   });
   const scoringTags = buildLeagueScoringTags(league.scoring_settings);
-  const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
+  const lastPulsed = league.last_pulsed_at
+    ? new Date(league.last_pulsed_at)
+    : null;
   const mastheadProps: LeagueMastheadProps = {
     leagueName: league.name,
     season: league.season ?? null,
@@ -154,9 +182,13 @@ export default async function LeaguePowerPulsePage({
     formatDisplay: coverageOk ? context.formatDisplay : "N/A",
     derivedLabel: describeDerived(context.derived),
     fallbackDisplay:
-      context.coverage === "fallback" ? context.fallback?.derivedDisplay ?? null : null,
+      context.coverage === "fallback"
+        ? (context.fallback?.derivedDisplay ?? null)
+        : null,
     pickSourceDisplay:
-      coverageOk && context.pickSource && context.pickSource.slug !== context.sourceSlug
+      coverageOk &&
+      context.pickSource &&
+      context.pickSource.slug !== context.sourceSlug
         ? context.pickSource.display
         : null,
   };
@@ -171,7 +203,10 @@ export default async function LeaguePowerPulsePage({
       activeTab="power-pulse"
       searchedUsername={searchedUsername}
       homeHref={homeHref}
-      crumbs={[{ label: league.name, href: leagueHref }, { label: "Power Pulse" }]}
+      crumbs={[
+        { label: league.name, href: leagueHref },
+        { label: "Power Pulse" },
+      ]}
       copyHref={`/leagues/${sleeperLeagueId}/power-pulse`}
       copyAriaLabel="Copy link to this league's Power Pulse"
       otherLeagues={otherLeagues}
@@ -241,6 +276,7 @@ export default async function LeaguePowerPulsePage({
             scoringDescription={scoringDescription}
             playoffTeams={playoffTeams}
             valueLabel={valueLabel}
+            emphasis={emphasis}
             powerPulseStatus={league.power_pulse_status ?? null}
             powerPulseDetail={league.power_pulse_detail ?? null}
             teamCount={league.total_rosters ?? 0}
@@ -293,12 +329,16 @@ async function IntroChips({
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
       <Chip
-        label={view.preseason ? "Preseason" : `Through week ${view.throughWeek}`}
+        label={
+          view.preseason ? "Preseason" : `Through week ${view.throughWeek}`
+        }
         accent
       />
       <Chip label={`${view.teams.length} teams`} />
       <Chip label={scoringDescription} />
-      {view.generatedAt && <Chip label={`Updated ${formatEastern(view.generatedAt)}`} />}
+      {view.generatedAt && (
+        <Chip label={`Updated ${formatEastern(view.generatedAt)}`} />
+      )}
     </div>
   );
 }
@@ -324,6 +364,7 @@ async function PowerPulseBody({
   scoringDescription,
   playoffTeams,
   valueLabel,
+  emphasis,
   powerPulseStatus,
   powerPulseDetail,
   teamCount,
@@ -343,6 +384,8 @@ async function PowerPulseBody({
   scoringDescription: string;
   playoffTeams: number;
   valueLabel: string | null;
+  /** Whether this league reads value as a standing or as trade leverage. */
+  emphasis: LeagueEmphasis;
   powerPulseStatus: string | null;
   powerPulseDetail: string | null;
   /** For the Positional WAR panel's copy and footnote. */
@@ -386,51 +429,55 @@ async function PowerPulseBody({
 
   return (
     <>
-        {readiness.preDraft ? (
-          <div className="mt-6 space-y-6">
-            <PreDraftNotice
-              readiness={readiness}
-              teams={preDraftTeams}
-              season={seasonLabel}
-            />
-          </div>
-        ) : !view ? (
-          <div className="mt-6">
-            <PowerPulseEmptyState status={powerPulseStatus} detail={powerPulseDetail} />
-          </div>
-        ) : (
-          // Rail on the RIGHT, matching the overview tab. The masthead above
-          // already names the league on every section, so what is left in the
-          // rail is supplementary and reads better after the rankings when the
-          // grid collapses to one column on a phone.
-          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-              {/* Main column: the rankings, then who those rankings say wins,
+      {readiness.preDraft ? (
+        <div className="mt-6 space-y-6">
+          <PreDraftNotice
+            readiness={readiness}
+            teams={preDraftTeams}
+            season={seasonLabel}
+          />
+        </div>
+      ) : !view ? (
+        <div className="mt-6">
+          <PowerPulseEmptyState
+            status={powerPulseStatus}
+            detail={powerPulseDetail}
+          />
+        </div>
+      ) : (
+        // Rail on the RIGHT, matching the overview tab. The masthead above
+        // already names the league on every section, so what is left in the
+        // rail is supplementary and reads better after the rankings when the
+        // grid collapses to one column on a phone.
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          {/* Main column: the rankings, then who those rankings say wins,
                   then the standings and the awards. The champion sits between
                   the ranking and the projected finish because it is the bridge
                   between them: the table shows the order, the card argues what
                   that order means. */}
-              <div className="min-w-0 space-y-6">
-                <Panel
-                  eyebrow="The ranking"
-                  title="Power Pulse rankings"
-                  helper="Ranked by expected performance. The value column compares that to each team's trade-value rank."
-                  bodyClassName="p-0"
-                  glow
-                >
-                  <PulseRankingsTable
-                    teams={view.teams}
-                    sleeperLeagueId={sleeperLeagueId}
-                    searchedUsername={searchedUsername}
-                    valueLabel={valueLabel}
-                  />
-                </Panel>
+          <div className="min-w-0 space-y-6">
+            <Panel
+              eyebrow="The ranking"
+              title="Power Pulse rankings"
+              helper="Ranked by expected performance. The value column compares that to each team's trade-value rank."
+              bodyClassName="p-0"
+              glow
+            >
+              <PulseRankingsTable
+                teams={view.teams}
+                sleeperLeagueId={sleeperLeagueId}
+                searchedUsername={searchedUsername}
+                valueLabel={valueLabel}
+                emphasis={emphasis}
+              />
+            </Panel>
 
-                <ProjectedChampion
-                  teams={view.teams}
-                  simulationRuns={pulseSettings.simulation.runs}
-                />
+            <ProjectedChampion
+              teams={view.teams}
+              simulationRuns={pulseSettings.simulation.runs}
+            />
 
-                {/* The same panel and the same cached rows as the overview.
+            {/* The same panel and the same cached rows as the overview.
                     This page is its better second home: the rail already
                     carries HowPowerPulseWorks, which is where model
                     explanation belongs, and a reader who came here to
@@ -439,24 +486,24 @@ async function PowerPulseBody({
 
                     Its own Suspense boundary, so a missing curve never blocks
                     the standings below it. */}
-                <Suspense fallback={<WarSkeleton />}>
-                  <PositionalWarBlock
-                    leagueRowId={leagueRowId}
-                    leagueName={leagueName}
-                    season={season}
-                    teamCount={teamCount}
-                    rosterPositions={rosterPositions}
-                    scoringSettings={scoringSettings}
-                    searchedUsername={searchedUsername}
-                    exploreHref={
-                      searchedUsername
-                        ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
-                        : `/leagues/${sleeperLeagueId}/positional-war`
-                    }
-                  />
-                </Suspense>
+            <Suspense fallback={<WarSkeleton />}>
+              <PositionalWarBlock
+                leagueRowId={leagueRowId}
+                leagueName={leagueName}
+                season={season}
+                teamCount={teamCount}
+                rosterPositions={rosterPositions}
+                scoringSettings={scoringSettings}
+                searchedUsername={searchedUsername}
+                exploreHref={
+                  searchedUsername
+                    ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
+                    : `/leagues/${sleeperLeagueId}/positional-war`
+                }
+              />
+            </Suspense>
 
-                {/* "Regular season" is doing real work in this title. The
+            {/* "Regular season" is doing real work in this title. The
                     champion card above ranks by title odds, which are decided in
                     the bracket, and the two orders legitimately disagree: a team
                     can lead this table on the back of an easy schedule and still
@@ -464,37 +511,40 @@ async function PowerPulseBody({
                     the other qualifiers. Without the qualifier a reader sees
                     themselves first here, somebody else named champion above,
                     and no way to tell which one is wrong. Neither is. */}
-                <Panel
-                  eyebrow="Where this ends up"
-                  title="Projected final regular season standings"
-                  helper={`Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
-                  bodyClassName="p-0"
-                >
-                  <ProjectedStandings teams={view.teams} playoffTeams={playoffTeams} />
-                </Panel>
+            <Panel
+              eyebrow="Where this ends up"
+              title="Projected final regular season standings"
+              helper={`Ordered by expected wins, so a hard schedule can drop a strong roster below the ${playoffTeams}-team cut.`}
+              bodyClassName="p-0"
+            >
+              <ProjectedStandings
+                teams={view.teams}
+                playoffTeams={playoffTeams}
+              />
+            </Panel>
 
-                <Panel
-                  eyebrow="Superlatives"
-                  title="League leaders"
-                  helper="The things a rankings table cannot tell you."
-                >
-                  <PulseLeaders leaders={buildPulseLeaders(view.teams)} />
-                </Panel>
-              </div>
+            <Panel
+              eyebrow="Superlatives"
+              title="League leaders"
+              helper="The things a rankings table cannot tell you."
+            >
+              <PulseLeaders leaders={buildPulseLeaders(view.teams)} />
+            </Panel>
+          </div>
 
-              {/* Right rail: the numbers behind the numbers, and how they were
+          {/* Right rail: the numbers behind the numbers, and how they were
                   reached. */}
-              <aside
-                aria-label="League snapshot and methodology"
-                className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
-              >
-                <HowPowerPulseWorks
-                  scoringDescription={scoringDescription}
-                  preseason={view.preseason}
-                />
-              </aside>
-            </div>
-        )}
+          <aside
+            aria-label="League snapshot and methodology"
+            className="space-y-6 xl:sticky xl:top-[5.5rem] xl:self-start"
+          >
+            <HowPowerPulseWorks
+              scoringDescription={scoringDescription}
+              preseason={view.preseason}
+            />
+          </aside>
+        </div>
+      )}
     </>
   );
 }
@@ -521,10 +571,21 @@ const getPulseData = cache(
     // Readiness first: a league that has not drafted, or that Sleeper has not
     // paired up yet, has no honest numbers to show and gets the waiting state
     // instead of a table of zeroes. See lib/league-readiness.ts.
-    const readiness = await loadLeagueReadiness(supabase, leagueRowId, season, status);
+    const readiness = await loadLeagueReadiness(
+      supabase,
+      leagueRowId,
+      season,
+      status,
+    );
     const view = readiness.preDraft
       ? null
-      : await loadPowerPulseView(supabase, leagueRowId, season, formatConfigId, sourceSlug);
+      : await loadPowerPulseView(
+          supabase,
+          leagueRowId,
+          season,
+          formatConfigId,
+          sourceSlug,
+        );
     return { readiness, view };
   },
 );
@@ -582,7 +643,8 @@ function PowerPulseEmptyState({
   }
 
   if (status === "settled") {
-    const seasonOver = detail?.startsWith("no regular season games remaining") ?? false;
+    const seasonOver =
+      detail?.startsWith("no regular season games remaining") ?? false;
     if (seasonOver) {
       return (
         <Panel
@@ -591,8 +653,8 @@ function PowerPulseEmptyState({
           helper="There is nothing left to project."
         >
           <p className="text-sm text-ink-muted">
-            Every regular season game for this league has been played, so
-            Power Pulse has no remaining schedule to score.
+            Every regular season game for this league has been played, so Power
+            Pulse has no remaining schedule to score.
           </p>
         </Panel>
       );
@@ -619,9 +681,9 @@ function PowerPulseEmptyState({
         helper="The next sync brings what's missing."
       >
         <p className="text-sm text-ink-muted">
-          Sleeper has not published everything this needs yet: rosters,
-          weekly projections, or this week's schedule. Nothing is broken,
-          check back after the next sync.
+          Sleeper has not published everything this needs yet: rosters, weekly
+          projections, or this week's schedule. Nothing is broken, check back
+          after the next sync.
         </p>
       </Panel>
     );
@@ -635,8 +697,8 @@ function PowerPulseEmptyState({
       helper="This runs on the first load after a league syncs."
     >
       <p className="text-sm text-ink-muted">
-        We need Sleeper's weekly projections and this league's schedule
-        first. Both arrive on the next sync, so try again in a moment.
+        We need Sleeper's weekly projections and this league's schedule first.
+        Both arrive on the next sync, so try again in a moment.
       </p>
     </Panel>
   );
@@ -646,7 +708,9 @@ function Chip({ label, accent = false }: { label: string; accent?: boolean }) {
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
-        accent ? "border-brand-cyan/40 text-brand-cyan" : "border-line text-ink-muted"
+        accent
+          ? "border-brand-cyan/40 text-brand-cyan"
+          : "border-line text-ink-muted"
       }`}
     >
       {label}
@@ -713,7 +777,10 @@ function WarSkeleton() {
       className="rounded-modal border border-line bg-surface/50 p-6"
     >
       <p className="text-sm text-ink-muted">Loading Positional WAR</p>
-      <div aria-hidden="true" className="mt-4 h-56 animate-pulse rounded-card bg-base/60" />
+      <div
+        aria-hidden="true"
+        className="mt-4 h-56 animate-pulse rounded-card bg-base/60"
+      />
     </div>
   );
 }

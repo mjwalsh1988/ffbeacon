@@ -149,11 +149,34 @@ export const DEFAULT_ON_THE_CLOCK_SETTINGS: OnTheClockSettings = {
 
   grades: {
     enabled: true,
+    // Dynasty. A startup is largely an asset-acquisition exercise, and beating
+    // the market is most of what separates a good one from a bad one.
     weights: {
       market: 0.28,
       lineup: 0.26,
       construction: 0.14,
       reliability: 0.1,
+      future: 0.12,
+      trades: 0.1,
+    },
+    // Redraft, which is grading a different thing. The draft has one job, to
+    // assemble a lineup that wins games this season, so the lineup itself leads
+    // and market value drops to what it actually is here: the means, not the end.
+    //
+    // `future` keeps a weight rather than being zeroed. A redraft league has no
+    // future assets, so the component reports itself absent and its weight
+    // redistributes across the rest, which is both the right arithmetic and the
+    // right sentence: "this league has no future picks to hold" tells a reader
+    // something, and "switched off in the grade settings" does not.
+    //
+    // After that redistribution a redraft draft is graded roughly 42% on the
+    // lineup it built and 21% on the market, against 30% and 32% for a dynasty
+    // startup. That inversion is the whole point.
+    redraftWeights: {
+      market: 0.2,
+      lineup: 0.4,
+      construction: 0.18,
+      reliability: 0.08,
       future: 0.12,
       trades: 0.1,
     },

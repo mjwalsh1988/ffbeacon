@@ -31,14 +31,23 @@ import {
   DRAFT_PULSE_VERSION,
   type DraftPulseResult,
 } from "./draft-pulse";
-import { computeMarginal, DEFAULT_MARGINAL_SETTINGS, type MarginalSettings } from "./marginal";
+import {
+  computeMarginal,
+  DEFAULT_MARGINAL_SETTINGS,
+  type MarginalSettings,
+} from "./marginal";
+import { rosteredPlayerIds } from "./waiver-replacement";
 import {
   getProjectionBoard,
   projectionDataVersion,
   type ProjectionBoard,
 } from "./projection-board";
 import type { ShapedDraftCache } from "./types";
-import type { PulseMarginalPayload, PulsePayload, PulsePlayerSummary } from "./pulse-types";
+import type {
+  PulseMarginalPayload,
+  PulsePayload,
+  PulsePlayerSummary,
+} from "./pulse-types";
 
 export type { PulseMarginalPayload, PulsePayload, PulsePlayerSummary };
 
@@ -63,10 +72,14 @@ export const MAX_MARGINAL_CANDIDATES_CEILING = 300;
 // ---------------------------------------------------------------------------
 
 const NFL_STATE_TTL_MS = 10 * 60 * 1000;
-let nflStateCache: { at: number; state: Awaited<ReturnType<typeof getNflState>> } | null = null;
+let nflStateCache: {
+  at: number;
+  state: Awaited<ReturnType<typeof getNflState>>;
+} | null = null;
 
 async function cachedNflState() {
-  if (nflStateCache && Date.now() - nflStateCache.at < NFL_STATE_TTL_MS) return nflStateCache.state;
+  if (nflStateCache && Date.now() - nflStateCache.at < NFL_STATE_TTL_MS)
+    return nflStateCache.state;
   const state = await getNflState();
   nflStateCache = { at: Date.now(), state };
   return state;
@@ -80,13 +93,46 @@ async function cachedNflState() {
  * what is left. A draft for a season already gone gets week 1 and no remaining
  * weeks, which the projection board will report as an empty slate.
  */
+/**
+ * Sleeper's own default when a league has not configured a playoff start.
+ * Matches lib/power-pulse/load.ts so the two features cannot disagree about a
+ * league that never set one.
+ */
+export const DEFAULT_PLAYOFF_WEEK_START = 15;
+
+/**
+ * The last week of a league's regular season, from Sleeper's playoff_week_start.
+ *
+ * Exported because it is the one place that knows a non-positive value means
+ * "this league has no playoffs" rather than "week zero". Sleeper's own default
+ * when a league has not configured playoffs is week 15, which is what every
+ * caller falls back to.
+ */
+export function regularSeasonThroughWeek(
+  playoffWeekStart: number | null | undefined,
+): number {
+  const positive =
+    typeof playoffWeekStart === "number" &&
+    Number.isFinite(playoffWeekStart) &&
+    playoffWeekStart > 1
+      ? playoffWeekStart
+      : DEFAULT_PLAYOFF_WEEK_START;
+  return positive - 1;
+}
+
 export async function resolveFromWeek(
   season: number,
   playoffWeekStart: number | null,
 ): Promise<number> {
   if (season > Number(currentNflSeason())) return 1;
   const state = await cachedNflState();
-  return resolveCurrentWeek(state, season, playoffWeekStart ?? 15);
+  // Same guard as regularSeasonThroughWeek: a zero here would ask
+  // resolveCurrentWeek to treat the whole season as postseason.
+  return resolveCurrentWeek(
+    state,
+    season,
+    regularSeasonThroughWeek(playoffWeekStart) + 1,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -165,8 +211,12 @@ async function resolveContext(
     const season = Number(cache.draft.season);
     if (!Number.isFinite(season)) return null;
 
-    const fromWeek = await resolveFromWeek(season, cache.draft.playoffWeekStart);
-    const scoringEstimated = Object.keys(cache.draft.scoringSettings).length === 0;
+    const fromWeek = await resolveFromWeek(
+      season,
+      cache.draft.playoffWeekStart,
+    );
+    const scoringEstimated =
+      Object.keys(cache.draft.scoringSettings).length === 0;
 
     // The projection board is the only expensive step, and it is cached across
     // every league that scores the same way, so it almost never runs.
@@ -199,9 +249,15 @@ async function resolveContext(
     // of a draft: once the pick count stops moving, the snapshot finalizer would
     // freeze it permanently, and the grades read their lineup component from it.
     // The league's last regular season week, the same span Power Pulse averages.
-    // Sleeper's own default is 15 when a league has not set one, matching
-    // resolveFromWeek above.
-    const throughWeek = (cache.draft.playoffWeekStart ?? 15) - 1;
+    //
+    // Zero is a REAL VALUE and not an absent one, which `?? 15` does not catch.
+    // A guillotine, best ball or bracket league has no playoffs and Sleeper
+    // stores `playoff_week_start: 0` for it; four of the leagues synced here do.
+    // Read literally that yields a through-week of -1, every week is filtered
+    // out of the average, and every team in the league scores zero. Power Pulse
+    // has always used positiveIntOrNull for this column; this is the same guard
+    // by the same reasoning.
+    const throughWeek = regularSeasonThroughWeek(cache.draft.playoffWeekStart);
 
     // dataVersion BELONGS in the version, and its absence is the whole reason a
     // completed draft room could sit on numbers a day and a half old. The other
@@ -217,7 +273,10 @@ async function resolveContext(
       `w${throughWeek}`,
       dataVersion,
     ].join("|");
-    const throughPickNo = cache.picks.reduce((m, p) => Math.max(m, p.pickNo), 0);
+    const throughPickNo = cache.picks.reduce(
+      (m, p) => Math.max(m, p.pickNo),
+      0,
+    );
 
     const { data: cached } = await admin
       .from("on_the_clock_pulse_cache")
@@ -235,13 +294,20 @@ async function resolveContext(
     }
 
     if (!pulse) {
+      const teams = [...rosters.entries()].map(([rosterId, playerIds]) => ({
+        rosterId,
+        playerIds,
+      }));
       pulse = computeDraftPulse({
-        teams: [...rosters.entries()].map(([rosterId, playerIds]) => ({ rosterId, playerIds })),
+        teams,
         rosterPositions: cache.draft.rosterPositions,
         fallbackSlots,
         board,
         display: settings.display,
         throughWeek,
+        // Everything anyone in this league owns, which is what makes the leftover
+        // pool a WAIVER wire rather than the whole player universe.
+        rosteredPlayerIds: rosteredPlayerIds(teams),
       });
       const { error } = await admin.from("on_the_clock_pulse_cache").upsert(
         {
@@ -253,7 +319,8 @@ async function resolveContext(
         },
         { onConflict: "sleeper_draft_id" },
       );
-      if (error) console.error("[on-the-clock/pulse] cache write failed", error.message);
+      if (error)
+        console.error("[on-the-clock/pulse] cache write failed", error.message);
     }
 
     const leagueSlots = startingSlots(cache.draft.rosterPositions);
@@ -408,7 +475,10 @@ export async function getDraftPulseWithVintage(
   admin: Client,
   draftId: string,
   opts: { includePreDraftRoster: boolean },
-): Promise<{ pulse: DraftPulseResult | null; projectionComputedAt: string | null }> {
+): Promise<{
+  pulse: DraftPulseResult | null;
+  projectionComputedAt: string | null;
+}> {
   const context = await resolveContext(admin, draftId, opts);
   return {
     pulse: context?.pulse ?? null,

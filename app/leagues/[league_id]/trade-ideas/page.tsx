@@ -5,7 +5,10 @@ import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
-import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
+import {
+  resolveLeagueContext,
+  describeDerived,
+} from "@/lib/league-format-resolution";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
 import {
   buildLeagueFormatTags,
@@ -14,7 +17,10 @@ import {
 import { LeagueShell } from "@/components/league-shell";
 import { Panel } from "@/components/dashboard-panel";
 import { TradeFinder, type PlayerOption } from "@/components/trade-finder";
-import { ModeTabs, type TradeIdeasMode } from "@/components/trade-ideas/mode-tabs";
+import {
+  ModeTabs,
+  type TradeIdeasMode,
+} from "@/components/trade-ideas/mode-tabs";
 import { EvaluationState } from "@/components/trade-ideas/evaluation-states";
 import { TradeVerdict } from "@/components/trade-ideas/trade-verdict";
 import { YourTeamPanel } from "@/components/trade-ideas/your-team-panel";
@@ -46,6 +52,11 @@ import {
 } from "@/lib/trade-impact/evaluate";
 import { loadPositionalWarContext } from "@/lib/trade-impact/positional-war-context";
 import type { TradeProposal } from "@/lib/trade-impact/types";
+import {
+  emphasisForCategory,
+  type LeagueEmphasis,
+} from "@/lib/league-emphasis";
+import { categorizeLeague } from "@/lib/league-category";
 import {
   TRADE_POSITIONS,
   readTradePosition,
@@ -144,7 +155,9 @@ export default async function LeagueTradeFinderPage({
   const sp = await searchParams;
   const mode: TradeIdeasMode = sp.mode === "build" ? "build" : "suggested";
   const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim() ? sp.username.trim() : null;
+    typeof sp.username === "string" && sp.username.trim()
+      ? sp.username.trim()
+      : null;
   const rosterParam = (() => {
     if (typeof sp.roster !== "string" || !sp.roster.trim()) return null;
     const n = Number.parseInt(sp.roster, 10);
@@ -199,7 +212,9 @@ export default async function LeagueTradeFinderPage({
   );
   const coverageOk = context.coverage !== "none";
 
-  const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
+  const lastPulsed = league.last_pulsed_at
+    ? new Date(league.last_pulsed_at)
+    : null;
   const mastheadProps = {
     leagueName: league.name,
     season: league.season ?? null,
@@ -218,9 +233,13 @@ export default async function LeagueTradeFinderPage({
     formatDisplay: coverageOk ? context.formatDisplay : "N/A",
     derivedLabel: describeDerived(context.derived),
     fallbackDisplay:
-      context.coverage === "fallback" ? (context.fallback?.derivedDisplay ?? null) : null,
+      context.coverage === "fallback"
+        ? (context.fallback?.derivedDisplay ?? null)
+        : null,
     pickSourceDisplay:
-      coverageOk && context.pickSource && context.pickSource.slug !== context.sourceSlug
+      coverageOk &&
+      context.pickSource &&
+      context.pickSource.slug !== context.sourceSlug
         ? context.pickSource.display
         : null,
   };
@@ -231,7 +250,10 @@ export default async function LeagueTradeFinderPage({
       activeTab="trade-ideas"
       searchedUsername={searchedUsername}
       homeHref={homeHref}
-      crumbs={[{ label: league.name, href: leagueHref }, { label: "Trade Ideas" }]}
+      crumbs={[
+        { label: league.name, href: leagueHref },
+        { label: "Trade Ideas" },
+      ]}
       copyHref={`/leagues/${sleeperLeagueId}/trade-ideas`}
       copyAriaLabel="Copy link to this league's Trade Ideas"
       otherLeagues={otherLeagues}
@@ -292,6 +314,9 @@ export default async function LeagueTradeFinderPage({
               // no reason to wait on them.
               <Suspense fallback={<BuilderSkeleton />}>
                 <BuildSection
+                  emphasis={emphasisForCategory(
+                    categorizeLeague(sleeperLeague as never),
+                  )}
                   sleeperLeagueId={sleeperLeagueId}
                   leagueRowId={league.id}
                   resynced={!pulseResult.cached}
@@ -486,13 +511,17 @@ async function TradeFinderSection({
   // Stored passes are read through the reader's own session client, so the owner
   // policies scope them. A signed-out reader has none, and their passes live in
   // the component for the visit.
-  const declined = isSignedIn ? await loadDeclinedKeys(supabase, sleeperLeagueId) : [];
+  const declined = isSignedIn
+    ? await loadDeclinedKeys(supabase, sleeperLeagueId)
+    : [];
 
   // The consolidation model, read from the same admin settings Signal Check and
   // the search action use. Without it this first paint would be assembled by
   // plain addition while every later search used the quality gate, so the tab
   // would open on a deal its own Search button could not reproduce.
-  const signalCheckSettings = await loadSignalCheckSettings(adminClient).catch(() => null);
+  const signalCheckSettings = await loadSignalCheckSettings(adminClient).catch(
+    () => null,
+  );
   const qualityConfig =
     signalCheckSettings && signalCheckSettings.qualityEnabled
       ? signalCheckSettings.quality
@@ -543,16 +572,22 @@ async function TradeFinderSection({
       else theirPlayers.push(option);
     }
   }
-  const byLabel = (a: PlayerOption, b: PlayerOption) => a.label.localeCompare(b.label);
+  const byLabel = (a: PlayerOption, b: PlayerOption) =>
+    a.label.localeCompare(b.label);
   myPlayers.sort(byLabel);
   theirPlayers.sort(byLabel);
-  const availablePositions = TRADE_POSITIONS.filter((p) => positionsHeld.has(p));
+  const availablePositions = TRADE_POSITIONS.filter((p) =>
+    positionsHeld.has(p),
+  );
 
   // Read only: the six rows league_positional_war_cache already holds for this
   // league season, or an empty map on a league with no cached curve yet. Never
   // a compute trigger, and cache()'d so BuildSection's read of the same league
   // season is one query rather than two.
-  const positionalWarByPlayer = await loadPositionalWarContext(leagueRowId, season);
+  const positionalWarByPlayer = await loadPositionalWarContext(
+    leagueRowId,
+    season,
+  );
 
   return (
     <TradeFinder
@@ -564,7 +599,10 @@ async function TradeFinderSection({
       // What makes "Open in builder" possible on a card: the builder needs to
       // know whose side of the deal is whose, and only the page knows that.
       myRosterId={myRosterId}
-      myTeamName={finderLeague.teams.find((t) => t.rosterId === myRosterId)?.teamName ?? null}
+      myTeamName={
+        finderLeague.teams.find((t) => t.rosterId === myRosterId)?.teamName ??
+        null
+      }
       myPlayers={myPlayers}
       theirPlayers={theirPlayers}
       availablePositions={availablePositions}
@@ -620,6 +658,7 @@ async function BuildSection({
   searchedUsername,
   rosterParam,
   proposalParams,
+  emphasis,
 }: {
   sleeperLeagueId: string;
   leagueRowId: string;
@@ -629,6 +668,8 @@ async function BuildSection({
   searchedUsername: string | null;
   rosterParam: number | null;
   proposalParams: ProposalParams;
+  /** Names the value half for this league. See lib/league-emphasis.ts. */
+  emphasis: LeagueEmphasis;
 }) {
   // The cheap outer meter, before any read. Loose enough that no real reader
   // meets it; see lib/trade-impact/rate-limit.ts for why it exists at all.
@@ -723,11 +764,15 @@ async function BuildSection({
   const theirTeam =
     decoded.proposal === null
       ? null
-      : (teams.find((t) => t.rosterId === decoded.proposal?.theirRosterId) ?? null);
+      : (teams.find((t) => t.rosterId === decoded.proposal?.theirRosterId) ??
+        null);
 
   /** The builder with nothing in it. Where an unusable link sends the reader. */
   const emptyBuilderHref = (() => {
-    const qs = new URLSearchParams({ mode: "build", roster: String(myRosterId) });
+    const qs = new URLSearchParams({
+      mode: "build",
+      roster: String(myRosterId),
+    });
     if (searchedUsername) qs.set("username", searchedUsername);
     if (sourceSlug) qs.set("source", sourceSlug);
     return `/leagues/${sleeperLeagueId}/trade-ideas?${qs.toString()}`;
@@ -737,10 +782,13 @@ async function BuildSection({
   const retryHref =
     decoded.proposal === null
       ? emptyBuilderHref
-      : `/leagues/${sleeperLeagueId}/trade-ideas?${encodeProposalQuery(decoded.proposal, {
-          searchedUsername,
-          source: sourceSlug,
-        })}#trade-evaluation`;
+      : `/leagues/${sleeperLeagueId}/trade-ideas?${encodeProposalQuery(
+          decoded.proposal,
+          {
+            searchedUsername,
+            source: sourceSlug,
+          },
+        )}#trade-evaluation`;
 
   return (
     <div className="space-y-6">
@@ -793,8 +841,8 @@ async function BuildSection({
             {decoded.droppedTokens === 1
               ? "One piece of it"
               : `${decoded.droppedTokens} pieces of it`}{" "}
-            could not be read, so the trade below is smaller than the one that was
-            shared with you.
+            could not be read, so the trade below is smaller than the one that
+            was shared with you.
           </p>
         )}
         {decoded.proposal === null ? (
@@ -814,6 +862,7 @@ async function BuildSection({
               theirTeamLabel={theirTeam?.teamName ?? "The other team"}
               retryHref={retryHref}
               builderHref={emptyBuilderHref}
+              emphasis={emphasis}
             />
           </Suspense>
         )}
@@ -843,6 +892,7 @@ async function ProposalEvaluation({
   theirTeamLabel,
   retryHref,
   builderHref,
+  emphasis,
 }: {
   sleeperLeagueId: string;
   leagueRowId: string;
@@ -856,6 +906,8 @@ async function ProposalEvaluation({
   theirTeamLabel: string;
   retryHref: string;
   builderHref: string;
+  /** Names the value half for this league. See lib/league-emphasis.ts. */
+  emphasis: LeagueEmphasis;
 }) {
   const supabase = await createClient();
   const adminClient = createAdminClient();
@@ -909,24 +961,38 @@ async function ProposalEvaluation({
       return <EvaluationState kind="rate-limited" retryHref={retryHref} />;
     }
 
-    result = await evaluateValidatedTrade(supabase, adminClient, validated.validated);
+    result = await evaluateValidatedTrade(
+      supabase,
+      adminClient,
+      validated.validated,
+    );
   } catch (err) {
     console.error("[trade-ideas] server-rendered evaluation failed", err);
     return <EvaluationState kind="error" retryHref={retryHref} />;
   }
 
   if (!result.ok) {
-    return <EvaluationState kind="error" message={result.error} retryHref={retryHref} />;
+    return (
+      <EvaluationState
+        kind="error"
+        message={result.error}
+        retryHref={retryHref}
+      />
+    );
   }
 
   // Read only: the six rows league_positional_war_cache already holds for this
   // league season, or an empty map on a league with no cached curve yet. Same
   // cache()'d read TradeFinderSection makes, so a reader who has visited both
   // modes on this request pays for one query.
-  const positionalWarByPlayer = await loadPositionalWarContext(leagueRowId, season);
+  const positionalWarByPlayer = await loadPositionalWarContext(
+    leagueRowId,
+    season,
+  );
 
   return (
     <TradeVerdict
+      emphasis={emphasis}
       impact={result.impact}
       myTeamLabel={myTeamLabel}
       theirTeamLabel={theirTeamLabel}
@@ -974,7 +1040,9 @@ async function YourTeamRail({
   );
   if (!finderLeague || finderLeague.myRosterId === null) return null;
 
-  const me = finderLeague.teams.find((t) => t.rosterId === finderLeague.myRosterId);
+  const me = finderLeague.teams.find(
+    (t) => t.rosterId === finderLeague.myRosterId,
+  );
   if (!me) return null;
 
   const supabase = await createClient();
@@ -988,7 +1056,8 @@ async function YourTeamRail({
           formatConfigId,
           sourceSlug,
         );
-  const pulse = view?.teams.find((t) => t.sleeperRosterId === me.rosterId) ?? null;
+  const pulse =
+    view?.teams.find((t) => t.sleeperRosterId === me.rosterId) ?? null;
 
   // The lowest-scoring player in the optimal lineup: the slot a trade has the
   // most room to improve. Named by his position rather than by a slot token,

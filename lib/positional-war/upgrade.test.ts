@@ -57,7 +57,10 @@ const REGULAR_WEEKS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 // ---------------------------------------------------------------------------
 
 const supabaseState = vi.hoisted(() => ({
-  leagueRow: { id: "league-row-1", season: 2026 } as { id: string; season: number } | null,
+  leagueRow: { id: "league-row-1", season: 2026 } as {
+    id: string;
+    season: number;
+  } | null,
 }));
 
 function makeFakeSupabase() {
@@ -67,7 +70,12 @@ function makeFakeSupabase() {
         select() {
           return {
             eq() {
-              return { maybeSingle: async () => ({ data: supabaseState.leagueRow, error: null }) };
+              return {
+                maybeSingle: async () => ({
+                  data: supabaseState.leagueRow,
+                  error: null,
+                }),
+              };
             },
           };
         },
@@ -96,6 +104,7 @@ function league(overrides: Partial<LeagueRow> = {}): LeagueRow {
     scoringSettings: {},
     playoffTeams: 4,
     playoffWeekStart: PLAYOFF_WEEK_START,
+    playoffRoundType: 0,
     ...overrides,
   };
 }
@@ -137,12 +146,60 @@ const RIVAL_ROSTERS = [
 const ALL_ROSTERS = [VIEWER_ROSTER, ...RIVAL_ROSTERS];
 
 const PLAYER_DB: Record<string, PlayerRow> = {
-  "s-qb1": { playerId: "p-qb1", sleeperId: "s-qb1", name: "Owned QB", position: "QB", team: "AAA", injuryStatus: null, depthOrder: 1 },
-  "s-rb1": { playerId: "p-rb1", sleeperId: "s-rb1", name: "Owned RB", position: "RB", team: "AAA", injuryStatus: null, depthOrder: 1 },
-  "s-wr1": { playerId: "p-wr1", sleeperId: "s-wr1", name: "Owned WR", position: "WR", team: "AAA", injuryStatus: null, depthOrder: 1 },
-  "s-te1": { playerId: "p-te1", sleeperId: "s-te1", name: "Owned TE", position: "TE", team: "AAA", injuryStatus: null, depthOrder: 1 },
-  "s-qb-target": { playerId: "p-qb-target", sleeperId: "s-qb-target", name: "Target QB", position: "QB", team: "BBB", injuryStatus: null, depthOrder: 1 },
-  "s-qb-second": { playerId: "p-qb-second", sleeperId: "s-qb-second", name: "Second QB", position: "QB", team: "CCC", injuryStatus: null, depthOrder: 2 },
+  "s-qb1": {
+    playerId: "p-qb1",
+    sleeperId: "s-qb1",
+    name: "Owned QB",
+    position: "QB",
+    team: "AAA",
+    injuryStatus: null,
+    depthOrder: 1,
+  },
+  "s-rb1": {
+    playerId: "p-rb1",
+    sleeperId: "s-rb1",
+    name: "Owned RB",
+    position: "RB",
+    team: "AAA",
+    injuryStatus: null,
+    depthOrder: 1,
+  },
+  "s-wr1": {
+    playerId: "p-wr1",
+    sleeperId: "s-wr1",
+    name: "Owned WR",
+    position: "WR",
+    team: "AAA",
+    injuryStatus: null,
+    depthOrder: 1,
+  },
+  "s-te1": {
+    playerId: "p-te1",
+    sleeperId: "s-te1",
+    name: "Owned TE",
+    position: "TE",
+    team: "AAA",
+    injuryStatus: null,
+    depthOrder: 1,
+  },
+  "s-qb-target": {
+    playerId: "p-qb-target",
+    sleeperId: "s-qb-target",
+    name: "Target QB",
+    position: "QB",
+    team: "BBB",
+    injuryStatus: null,
+    depthOrder: 1,
+  },
+  "s-qb-second": {
+    playerId: "p-qb-second",
+    sleeperId: "s-qb-second",
+    name: "Second QB",
+    position: "QB",
+    team: "CCC",
+    injuryStatus: null,
+    depthOrder: 2,
+  },
 };
 
 /** Points per remaining week, by FF Beacon player id. Deliberately static: no randomness anywhere in this file lives outside simulateSeason's seeded generator. */
@@ -202,7 +259,14 @@ const CURVE_QB_DEFAULT: PositionCurve = {
 const CURVE_QB_FALLBACK: PositionCurve = {
   ...CURVE_QB_DEFAULT,
   curve: [
-    { ...CURVE_QB_DEFAULT.curve[0], playerId: "p-qb1", sleeperId: "s-qb1", name: "Owned QB", positionRank: 1, war: 1.5 },
+    {
+      ...CURVE_QB_DEFAULT.curve[0],
+      playerId: "p-qb1",
+      sleeperId: "s-qb1",
+      name: "Owned QB",
+      positionRank: 1,
+      war: 1.5,
+    },
     { ...CURVE_QB_DEFAULT.curve[0], positionRank: 2 },
   ],
 };
@@ -210,7 +274,15 @@ const CURVE_QB_FALLBACK: PositionCurve = {
 /** Every ranked player at the position is already the viewer's. */
 const CURVE_QB_ALL_OWNED: PositionCurve = {
   ...CURVE_QB_DEFAULT,
-  curve: [{ ...CURVE_QB_DEFAULT.curve[0], playerId: "p-qb1", sleeperId: "s-qb1", name: "Owned QB", positionRank: 1 }],
+  curve: [
+    {
+      ...CURVE_QB_DEFAULT.curve[0],
+      playerId: "p-qb1",
+      sleeperId: "s-qb1",
+      name: "Owned QB",
+      positionRank: 1,
+    },
+  ],
 };
 
 const VIEWER_CANDIDATES: ViewerCandidate[] = [
@@ -220,7 +292,11 @@ const VIEWER_CANDIDATES: ViewerCandidate[] = [
   { sleeperRosterId: 4, ownerSleeperUsername: "rival4" },
 ];
 
-function weeklyDistribution(weeks: number[], mean: number, sigma: number): WeeklyDistribution {
+function weeklyDistribution(
+  weeks: number[],
+  mean: number,
+  sigma: number,
+): WeeklyDistribution {
   return new Map(weeks.map((w) => [w, { mean, sigma }]));
 }
 
@@ -264,14 +340,17 @@ function warView(curve: PositionCurve): WarView {
 
 const loadCachedWeeklyMock = vi.fn(async () => defaultCachedWeekly());
 vi.mock("@/lib/trade-impact/load", () => ({
-  loadCachedWeekly: (...args: unknown[]) => loadCachedWeeklyMock(...(args as [])),
+  loadCachedWeekly: (...args: unknown[]) =>
+    loadCachedWeeklyMock(...(args as [])),
 }));
 
 const loadPositionalWarViewMock = vi.fn(async () => warView(CURVE_QB_DEFAULT));
 const loadViewerCandidatesMock = vi.fn(async () => VIEWER_CANDIDATES);
 vi.mock("@/lib/league-positional-war-data", () => ({
-  loadPositionalWarView: (...args: unknown[]) => loadPositionalWarViewMock(...(args as [])),
-  loadViewerCandidates: (...args: unknown[]) => loadViewerCandidatesMock(...(args as [])),
+  loadPositionalWarView: (...args: unknown[]) =>
+    loadPositionalWarViewMock(...(args as [])),
+  loadViewerCandidates: (...args: unknown[]) =>
+    loadViewerCandidatesMock(...(args as [])),
 }));
 
 const claimWarUpgradeSlotMock = vi.fn(async () => true);
@@ -283,16 +362,24 @@ vi.mock("@/lib/positional-war/rate-limit", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./rate-limit")>();
   return {
     ...actual,
-    claimWarUpgradeSlot: (...args: unknown[]) => claimWarUpgradeSlotMock(...(args as [])),
+    claimWarUpgradeSlot: (...args: unknown[]) =>
+      claimWarUpgradeSlotMock(...(args as [])),
     claimWarUpgradeEntrySlot: (...args: unknown[]) =>
       claimWarUpgradeEntrySlotMock(...(args as [])),
   };
 });
 
-const getNflStateMock = vi.fn(async () => ({ week: CURRENT_WEEK, season_type: "regular", season: String(SEASON) }));
+const getNflStateMock = vi.fn(async () => ({
+  week: CURRENT_WEEK,
+  season_type: "regular",
+  season: String(SEASON),
+}));
 vi.mock("@/lib/sleeper", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/sleeper")>();
-  return { ...actual, getNflState: (...args: unknown[]) => getNflStateMock(...(args as [])) };
+  return {
+    ...actual,
+    getNflState: (...args: unknown[]) => getNflStateMock(...(args as [])),
+  };
 });
 
 let currentLeague = league();
@@ -312,7 +399,10 @@ vi.mock("@/lib/power-pulse/load", () => ({
   loadProjections: async (): Promise<ProjectionRow[]> => [],
   loadAccuracy: async (): Promise<Map<string, AccuracyRow>> => new Map(),
   loadDefenseSplits: async (): Promise<Map<string, DefenseRow>> => new Map(),
-  loadSchedule: async () => ({ weeks: scheduleWeeks(REGULAR_WEEKS), setLineups: new Map() }),
+  loadSchedule: async () => ({
+    weeks: scheduleWeeks(REGULAR_WEEKS),
+    setLineups: new Map(),
+  }),
 }));
 
 vi.mock("@/lib/power-pulse/settings", () => ({
@@ -324,7 +414,13 @@ vi.mock("@/lib/power-pulse/settings", () => ({
 
 vi.mock("@/lib/power-pulse/project", () => ({
   reliabilityMultiplier: () => 1,
-  projectPlayerWeek: ({ subject, week }: { subject: { playerId: string }; week: number }) => {
+  projectPlayerWeek: ({
+    subject,
+    week,
+  }: {
+    subject: { playerId: string };
+    week: number;
+  }) => {
     const points = POINTS_BY_PLAYER[subject.playerId] ?? 5;
     return {
       week,
@@ -348,7 +444,9 @@ beforeEach(() => {
   currentLeague = league();
   currentRosters = ALL_ROSTERS;
   loadCachedWeeklyMock.mockImplementation(async () => defaultCachedWeekly());
-  loadPositionalWarViewMock.mockImplementation(async () => warView(CURVE_QB_DEFAULT));
+  loadPositionalWarViewMock.mockImplementation(async () =>
+    warView(CURVE_QB_DEFAULT),
+  );
   loadViewerCandidatesMock.mockImplementation(async () => VIEWER_CANDIDATES);
   claimWarUpgradeSlotMock.mockImplementation(async () => true);
   claimWarUpgradeEntrySlotMock.mockImplementation(async () => true);
@@ -448,7 +546,8 @@ describe("E1b-2: the viewer's roster is re-derived, never trusted from the paylo
   });
 
   it("the action refuses a forged roster id end to end and spends no rate-limit slot", async () => {
-    const { requestUpgradeWhatIf } = await import("../../app/leagues/[league_id]/positional-war/actions");
+    const { requestUpgradeWhatIf } =
+      await import("../../app/leagues/[league_id]/positional-war/actions");
     const outcome = await requestUpgradeWhatIf({
       sleeperLeagueId: SLEEPER_LEAGUE_ID,
       position: "QB",
@@ -467,7 +566,8 @@ describe("E1b-2: the viewer's roster is re-derived, never trusted from the paylo
 
 describe("E1b-3: a malformed payload consumes no rate-limit slot", () => {
   it("rejects a malformed payload before any claim", async () => {
-    const { requestUpgradeWhatIf } = await import("../../app/leagues/[league_id]/positional-war/actions");
+    const { requestUpgradeWhatIf } =
+      await import("../../app/leagues/[league_id]/positional-war/actions");
     const outcome = await requestUpgradeWhatIf({
       sleeperLeagueId: "not-a-sleeper-id",
       position: "NOT_A_POSITION",
@@ -489,7 +589,8 @@ describe("E1b-3: a malformed payload consumes no rate-limit slot", () => {
     // free. The outer meter is what stops a caller sending shaped garbage in a
     // loop from spending our database for nothing.
     claimWarUpgradeEntrySlotMock.mockImplementation(async () => false);
-    const { requestUpgradeWhatIf } = await import("../../app/leagues/[league_id]/positional-war/actions");
+    const { requestUpgradeWhatIf } =
+      await import("../../app/leagues/[league_id]/positional-war/actions");
     const outcome = await requestUpgradeWhatIf({
       sleeperLeagueId: "1234567890",
       position: "QB",
@@ -516,7 +617,8 @@ describe("E1b-5: six presses in one minute produce five answers and one refusal"
       return claimed <= WAR_UPGRADE_MAX;
     });
 
-    const { requestUpgradeWhatIf } = await import("../../app/leagues/[league_id]/positional-war/actions");
+    const { requestUpgradeWhatIf } =
+      await import("../../app/leagues/[league_id]/positional-war/actions");
     const outcomes = [];
     for (let i = 0; i < 6; i += 1) {
       outcomes.push(
@@ -530,8 +632,12 @@ describe("E1b-5: six presses in one minute produce five answers and one refusal"
       );
     }
 
-    const rateLimited = outcomes.filter((o) => !o.ok && o.reason === "rate-limited");
-    const notRateLimited = outcomes.filter((o) => o.ok || o.reason !== "rate-limited");
+    const rateLimited = outcomes.filter(
+      (o) => !o.ok && o.reason === "rate-limited",
+    );
+    const notRateLimited = outcomes.filter(
+      (o) => o.ok || o.reason !== "rate-limited",
+    );
     expect(rateLimited).toHaveLength(1);
     expect(notRateLimited).toHaveLength(5);
     expect(outcomes[5]).toEqual({ ok: false, reason: "rate-limited" });
@@ -559,7 +665,9 @@ describe("runUpgradeWhatIf", () => {
   });
 
   it("skips a player already on the viewer's roster and says so (fell back one rank)", async () => {
-    loadPositionalWarViewMock.mockImplementation(async () => warView(CURVE_QB_FALLBACK));
+    loadPositionalWarViewMock.mockImplementation(async () =>
+      warView(CURVE_QB_FALLBACK),
+    );
     const { runUpgradeWhatIf } = await loadModule();
     const outcome = await runUpgradeWhatIf(fakeSupabase, {
       sleeperLeagueId: SLEEPER_LEAGUE_ID,
@@ -574,7 +682,9 @@ describe("runUpgradeWhatIf", () => {
   });
 
   it("reports unavailable when every ranked player at the position is already the viewer's", async () => {
-    loadPositionalWarViewMock.mockImplementation(async () => warView(CURVE_QB_ALL_OWNED));
+    loadPositionalWarViewMock.mockImplementation(async () =>
+      warView(CURVE_QB_ALL_OWNED),
+    );
     const { runUpgradeWhatIf } = await loadModule();
     const outcome = await runUpgradeWhatIf(fakeSupabase, {
       sleeperLeagueId: SLEEPER_LEAGUE_ID,
@@ -611,7 +721,9 @@ describe("runUpgradeWhatIf", () => {
   });
 
   it("surfaces a null simulateWithReplacements as unavailable, never as zero", async () => {
-    vi.spyOn(whatIfModule, "simulateWithReplacements").mockReturnValueOnce(null);
+    vi.spyOn(whatIfModule, "simulateWithReplacements").mockReturnValueOnce(
+      null,
+    );
     const { runUpgradeWhatIf } = await loadModule();
     const outcome = await runUpgradeWhatIf(fakeSupabase, {
       sleeperLeagueId: SLEEPER_LEAGUE_ID,
@@ -681,7 +793,8 @@ describe("runUpgradeWhatIf", () => {
     expect(outcome.ok).toBe(true);
 
     expect(whatIfModule.simulateWithReplacements).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(whatIfModule.simulateWithReplacements).mock.calls[0][0];
+    const call = vi.mocked(whatIfModule.simulateWithReplacements).mock
+      .calls[0][0];
 
     // Exactly one roster changes: the viewer's.
     expect(call.replacements.size).toBe(1);

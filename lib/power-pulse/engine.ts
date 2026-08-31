@@ -18,9 +18,22 @@
 
 import type { PowerPulseSettings } from "./default-settings";
 import { projectPlayerWeek, reliabilityMultiplier } from "./project";
-import { buildOptimalLineup, lineupSigma, scoreSetLineup, startingSlots } from "./lineup";
+import {
+  buildOptimalLineup,
+  lineupSigma,
+  scoreSetLineup,
+  startingSlots,
+} from "./lineup";
 import type { LineupCandidate } from "./lineup";
-import { clamp, mean, rankDescending, round, stdev, zScores, zToDisplay } from "./math";
+import {
+  clamp,
+  mean,
+  rankDescending,
+  round,
+  stdev,
+  zScores,
+  zToDisplay,
+} from "./math";
 import { simulateSeason, type SimTeam } from "./simulate";
 import type {
   AccuracyRow,
@@ -108,7 +121,12 @@ export type PowerPulseTeamResult = {
   components: {
     positionPoints: Record<string, number>;
     positionRanks: Record<string, number | null>;
-    starters: Array<{ playerId: string; name: string; position: string; points: number }>;
+    starters: Array<{
+      playerId: string;
+      name: string;
+      position: string;
+      points: number;
+    }>;
     depthDropoffPct: number;
     unfilledSlotRate: number;
     formRatio: number | null;
@@ -127,10 +145,19 @@ type PlayerWeek = {
 
 type TeamWork = {
   roster: RosterRow;
-  players: Array<{ player: PlayerRow; accuracy: AccuracyRow | null; reliability: number }>;
+  players: Array<{
+    player: PlayerRow;
+    accuracy: AccuracyRow | null;
+    reliability: number;
+  }>;
   /** Keyed by week, then FF Beacon player id. */
   byWeek: Map<number, Map<string, PlayerWeek>>;
-  weekLineups: Array<{ week: number; total: number; sigma: number; unfilled: number }>;
+  weekLineups: Array<{
+    week: number;
+    total: number;
+    sigma: number;
+    unfilled: number;
+  }>;
   meanPoints: number;
   sigma: number;
   lineupEfficiency: number | null;
@@ -140,11 +167,18 @@ type TeamWork = {
   unfilledSlotRate: number;
   formRatio: number | null;
   positionPoints: Record<PulsePosition, number>;
-  starters: Array<{ playerId: string; name: string; position: string; points: number }>;
+  starters: Array<{
+    playerId: string;
+    name: string;
+    position: string;
+    points: number;
+  }>;
   usedLeagueScoring: boolean;
 };
 
-export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[] {
+export function computePowerPulse(
+  input: PowerPulseInput,
+): PowerPulseTeamResult[] {
   const { league, rosters, players, settings, currentWeek } = input;
   if (rosters.length === 0) return [];
 
@@ -154,20 +188,25 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
   // Projections indexed for O(1) lookup.
   const projectionsByPlayer = new Map<string, Map<number, ProjectionRow>>();
   for (const row of input.projections) {
-    const byWeek = projectionsByPlayer.get(row.playerId) ?? new Map<number, ProjectionRow>();
+    const byWeek =
+      projectionsByPlayer.get(row.playerId) ?? new Map<number, ProjectionRow>();
     byWeek.set(row.week, row);
     projectionsByPlayer.set(row.playerId, byWeek);
   }
 
   const remainingWeeks: number[] = [];
-  for (let w = currentWeek; w <= lastRegularWeek; w += 1) remainingWeeks.push(w);
+  for (let w = currentWeek; w <= lastRegularWeek; w += 1)
+    remainingWeeks.push(w);
 
   // ---------- pass 1: project every player, build every lineup ----------
 
   const work: TeamWork[] = [];
 
   for (const roster of rosters) {
-    const ineligible = new Set([...roster.reserveSleeperIds, ...roster.taxiSleeperIds]);
+    const ineligible = new Set([
+      ...roster.reserveSleeperIds,
+      ...roster.taxiSleeperIds,
+    ]);
     const rosterPlayers = roster.playerSleeperIds
       .filter((sid) => !ineligible.has(sid))
       .map((sid) => players.get(sid))
@@ -242,7 +281,9 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
       K: 0,
       DEF: 0,
     };
-    const nameById = new Map(enriched.map((e) => [e.player.playerId, e.player]));
+    const nameById = new Map(
+      enriched.map((e) => [e.player.playerId, e.player]),
+    );
 
     for (const week of remainingWeeks) {
       const candidates = candidatesFor(week);
@@ -309,7 +350,8 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
         points: round(slot.points, 2),
       });
     }
-    const reliability = reliabilityWeight > 0 ? reliabilityWeighted / reliabilityWeight : 1;
+    const reliability =
+      reliabilityWeight > 0 ? reliabilityWeighted / reliabilityWeight : 1;
 
     // ----- depth: what happens when the best starter at a position misses -----
     // Removing a player and refilling the lineup measures real replaceability,
@@ -322,9 +364,13 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
           .filter((c) => c.position === position)
           .sort((a, b) => b.points - a.points)[0];
         if (!best) continue;
-        const without = upcomingCandidates.filter((c) => c.playerId !== best.playerId);
+        const without = upcomingCandidates.filter(
+          (c) => c.playerId !== best.playerId,
+        );
         const reduced = buildOptimalLineup(slots, without);
-        dropPcts.push((upcomingLineup.total - reduced.total) / upcomingLineup.total);
+        dropPcts.push(
+          (upcomingLineup.total - reduced.total) / upcomingLineup.total,
+        );
       }
     }
     const depthDropoffPct = dropPcts.length > 0 ? mean(dropPcts) : 0;
@@ -360,12 +406,16 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
 
   const meanByRoster = new Map<number, number>();
   const sigmaByRoster = new Map<number, number>();
-  const weeklyByRoster = new Map<number, Map<number, { mean: number; sigma: number }>>();
+  const weeklyByRoster = new Map<
+    number,
+    Map<number, { mean: number; sigma: number }>
+  >();
   for (const team of work) {
     meanByRoster.set(team.roster.sleeperRosterId, team.meanPoints);
     sigmaByRoster.set(team.roster.sleeperRosterId, team.sigma);
     const weekMap = new Map<number, { mean: number; sigma: number }>();
-    for (const w of team.weekLineups) weekMap.set(w.week, { mean: w.total, sigma: w.sigma });
+    for (const w of team.weekLineups)
+      weekMap.set(w.week, { mean: w.total, sigma: w.sigma });
     weeklyByRoster.set(team.roster.sleeperRosterId, weekMap);
   }
 
@@ -375,7 +425,8 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
 
   // Only unplayed regular season weeks feed the simulation.
   const upcomingSchedule = input.schedule.filter(
-    (w) => !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
+    (w) =>
+      !w.isFinal && w.week >= currentWeek && w.week < league.playoffWeekStart,
   );
 
   const simTeams: SimTeam[] = work.map((team) => ({
@@ -394,6 +445,7 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
     seed: settings.simulation.seed,
     playoffTeams: league.playoffTeams,
     playoffWeekStart: league.playoffWeekStart,
+    playoffRoundType: league.playoffRoundType,
   });
 
   // Strength of schedule and the per-week preview.
@@ -409,15 +461,20 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
       const opponentId = week.opponents.get(rosterId) ?? null;
       const mine = weeklyByRoster.get(rosterId)?.get(week.week);
       const theirs =
-        opponentId !== null ? weeklyByRoster.get(opponentId)?.get(week.week) : undefined;
+        opponentId !== null
+          ? weeklyByRoster.get(opponentId)?.get(week.week)
+          : undefined;
 
       let winProb: number | null = null;
       if (mine && theirs) {
-        const combined = Math.sqrt(mine.sigma * mine.sigma + theirs.sigma * theirs.sigma);
+        const combined = Math.sqrt(
+          mine.sigma * mine.sigma + theirs.sigma * theirs.sigma,
+        );
         winProb =
           combined > 0
             ? // Same normal approximation the simulation samples from.
-              0.5 * (1 + erf((mine.mean - theirs.mean) / (combined * Math.SQRT2)))
+              0.5 *
+              (1 + erf((mine.mean - theirs.mean) / (combined * Math.SQRT2)))
             : mine.mean > theirs.mean
               ? 1
               : 0.5;
@@ -427,14 +484,20 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
       detail.push({
         week: week.week,
         opponentRosterId: opponentId,
-        opponentName: opponentId !== null ? teamNameByRoster.get(opponentId) ?? null : null,
+        opponentName:
+          opponentId !== null
+            ? (teamNameByRoster.get(opponentId) ?? null)
+            : null,
         mean: round(mine?.mean ?? 0, 2),
         sigma: round(mine?.sigma ?? 0, 2),
         winProb: winProb === null ? null : round(winProb, 4),
       });
     }
 
-    sosByRoster.set(rosterId, opponentMeans.length > 0 ? mean(opponentMeans) : 0);
+    sosByRoster.set(
+      rosterId,
+      opponentMeans.length > 0 ? mean(opponentMeans) : 0,
+    );
     weeklyDetail.set(rosterId, detail);
   }
 
@@ -489,11 +552,12 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
         };
       })();
 
-  const composite = work.map((_, i) =>
-    activeWeights.points * zPoints[i] +
-    activeWeights.schedule * zSchedule[i] +
-    activeWeights.depth * zDepth[i] +
-    activeWeights.form * zForm[i],
+  const composite = work.map(
+    (_, i) =>
+      activeWeights.points * zPoints[i] +
+      activeWeights.schedule * zSchedule[i] +
+      activeWeights.depth * zDepth[i] +
+      activeWeights.form * zForm[i],
   );
   const zComposite = zScores(composite);
 
@@ -508,9 +572,13 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
   const pointsRanks = rankDescending(rawPoints);
   const scheduleRanks = rankDescending(rawSchedule);
   const depthRanks = rankDescending(rawDepth);
-  const formRanks = hasForm ? rankDescending(work.map((t) => t.formRatio)) : work.map(() => null);
+  const formRanks = hasForm
+    ? rankDescending(work.map((t) => t.formRatio))
+    : work.map(() => null);
   // Rank 1 = hardest remaining schedule.
-  const sosRanks = rankDescending(work.map((t) => sosByRoster.get(t.roster.sleeperRosterId) ?? 0));
+  const sosRanks = rankDescending(
+    work.map((t) => sosByRoster.get(t.roster.sleeperRosterId) ?? 0),
+  );
   const efficiencyRanks = rankDescending(work.map((t) => t.lineupEfficiency));
   const reliabilityRanks = rankDescending(work.map((t) => t.reliability));
 
@@ -519,13 +587,18 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
   // twelve-way tie for first that means nothing.
   const startablePositions = new Set<PulsePosition>();
   for (const slot of slots) {
-    for (const position of PULSE_SLOT_ELIGIBILITY[slot] ?? []) startablePositions.add(position);
+    for (const position of PULSE_SLOT_ELIGIBILITY[slot] ?? [])
+      startablePositions.add(position);
   }
 
   const positionRankLookup: Record<string, (number | null)[]> = {};
   for (const position of PULSE_POSITIONS) {
     positionRankLookup[position] = startablePositions.has(position)
-      ? rankDescending(work.map((t) => (t.positionPoints[position] > 0 ? t.positionPoints[position] : null)))
+      ? rankDescending(
+          work.map((t) =>
+            t.positionPoints[position] > 0 ? t.positionPoints[position] : null,
+          ),
+        )
       : work.map(() => null);
   }
 
@@ -571,9 +644,11 @@ export function computePowerPulse(input: PowerPulseInput): PowerPulseTeamResult[
       lastPlaceOdds: round(sim?.lastPlaceOdds ?? 0, 4),
       sosPoints: round(sosByRoster.get(rosterId) ?? 0, 2),
       sosRank: sosRanks[i],
-      lineupEfficiency: team.lineupEfficiency === null ? null : round(team.lineupEfficiency, 4),
+      lineupEfficiency:
+        team.lineupEfficiency === null ? null : round(team.lineupEfficiency, 4),
       lineupEfficiencyRank: efficiencyRanks[i],
-      lineupPointsLost: team.lineupPointsLost === null ? null : round(team.lineupPointsLost, 2),
+      lineupPointsLost:
+        team.lineupPointsLost === null ? null : round(team.lineupPointsLost, 2),
       reliabilityScore: round(team.reliability, 4),
       reliabilityRank: reliabilityRanks[i],
       weekly: weeklyDetail.get(rosterId) ?? [],
@@ -602,7 +677,9 @@ function erf(x: number): number {
   const t = 1 / (1 + 0.3275911 * a);
   const y =
     1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) *
+      t +
+      0.254829592) *
       t *
       Math.exp(-a * a);
   return sign * y;
@@ -623,7 +700,10 @@ function ordinal(n: number): string {
  * from a number into an argument, and it is the part a screen reader can read
  * usefully. Ordered strongest first, capped at four.
  */
-function buildDrivers(result: PowerPulseTeamResult, teamCount: number): PowerPulseDriver[] {
+function buildDrivers(
+  result: PowerPulseTeamResult,
+  teamCount: number,
+): PowerPulseDriver[] {
   const drivers: PowerPulseDriver[] = [];
   const top = Math.max(1, Math.ceil(teamCount / 4));
   const bottom = teamCount - top + 1;
@@ -634,7 +714,10 @@ function buildDrivers(result: PowerPulseTeamResult, teamCount: number): PowerPul
       detail: `${ordinal(result.scorePointsRank)} in projected points per week at ${result.expectedPointsPerWeek.toFixed(1)}.`,
       tone: "good",
     });
-  } else if (result.scorePointsRank !== null && result.scorePointsRank >= bottom) {
+  } else if (
+    result.scorePointsRank !== null &&
+    result.scorePointsRank >= bottom
+  ) {
     drivers.push({
       label: "Not enough weekly scoring",
       detail: `${ordinal(result.scorePointsRank)} of ${teamCount} at ${result.expectedPointsPerWeek.toFixed(1)} projected points per week.`,
@@ -703,13 +786,19 @@ function buildDrivers(result: PowerPulseTeamResult, teamCount: number): PowerPul
     });
   }
 
-  if (result.components.formRatio !== null && result.components.formRatio > 1.08) {
+  if (
+    result.components.formRatio !== null &&
+    result.components.formRatio > 1.08
+  ) {
     drivers.push({
       label: "Running hot",
       detail: `Scoring ${((result.components.formRatio - 1) * 100).toFixed(0)}% above projection over the last three weeks.`,
       tone: "good",
     });
-  } else if (result.components.formRatio !== null && result.components.formRatio < 0.92) {
+  } else if (
+    result.components.formRatio !== null &&
+    result.components.formRatio < 0.92
+  ) {
     drivers.push({
       label: "Running cold",
       detail: `Scoring ${((1 - result.components.formRatio) * 100).toFixed(0)}% below projection over the last three weeks.`,

@@ -18,6 +18,7 @@ import type {
 import { DEFAULT_ON_THE_CLOCK_SETTINGS } from "@/lib/on-the-clock/default-settings";
 import { formatEastern } from "@/lib/datetime";
 import { saveOnTheClockSettings, resetOnTheClockSettings } from "./actions";
+import type { AwardId } from "@/lib/on-the-clock/awards";
 
 const inputCls =
   "mt-1 min-h-11 w-full rounded-card border border-line bg-base px-3 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
@@ -25,24 +26,42 @@ const labelCls = "block text-xs font-medium text-ink-subtle";
 
 /* Controlled number input with a local text buffer (lets decimals be typed without
    the parsed value fighting the keystrokes). Same pattern as the FAAB manager. */
-/** Every award the room can hand out, for the on/off grid. */
-const AWARD_TOGGLES: { id: string; label: string }[] = [
+/**
+ * Every award the room can hand out, for the on/off grid.
+ *
+ * TYPED AS AwardId, not as string. It was `string`, so the compiler happily let
+ * this list keep an award that no longer exists and miss seven that do: a
+ * retired id rendered a toggle that controlled nothing, and every new award was
+ * unswitchable from the admin panel because it had no row here. Typing it means
+ * the next award that lands without a toggle is a build error.
+ */
+const AWARD_TOGGLES: { id: AwardId; label: string }[] = [
   { id: "most-active-trader", label: "Most Active Trader" },
   { id: "most-successful-trader", label: "Most Successful Trader" },
-  { id: "first-starting-roster", label: "First to Fill Starting Roster" },
   { id: "most-boring", label: "Most Boring League Mate" },
   { id: "best-drafter", label: "Best Drafter" },
   { id: "worst-drafter", label: "Worst Drafter" },
   { id: "best-starting-lineup", label: "Best Starting Lineup" },
-  { id: "long-game", label: "Best Long-Term Build (dynasty)" },
+  { id: "long-game", label: "Best Long-Term Build (dynasty only)" },
   { id: "most-reliable", label: "Most Reliable Roster" },
   { id: "boom-bust", label: "Most Volatile Roster" },
   { id: "iron-man", label: "Most Available Roster" },
   { id: "steal-of-draft", label: "Steal of the Draft" },
   { id: "reach-of-draft", label: "Reach of the Draft" },
+  { id: "round-steals", label: "Most Rounds Won" },
+  { id: "most-balanced", label: "Most Balanced Roster" },
+  { id: "most-top-heavy", label: "Most Top Heavy Roster" },
+  { id: "bye-week-nightmare", label: "Bye Week Nightmare" },
+  { id: "against-the-room", label: "Zigged When They Zagged" },
+  { id: "late-round-haul", label: "Best Late Round Haul" },
+  { id: "toughest-schedule", label: "Toughest Schedule Drafted" },
+  { id: "scarcity-read", label: "Best Scarcity Read" },
 ];
 
-const GRADE_WEIGHTS: { key: keyof OnTheClockSettings["grades"]["weights"]; label: string }[] = [
+const GRADE_WEIGHTS: {
+  key: keyof OnTheClockSettings["grades"]["weights"];
+  label: string;
+}[] = [
   { key: "market", label: "Value vs market" },
   { key: "lineup", label: "Starting lineup" },
   { key: "construction", label: "Roster construction" },
@@ -120,7 +139,9 @@ function Field({
   // call sites and relying on nobody forgetting it.
   const described =
     hint && isValidElement(children)
-      ? cloneElement(children as ReactElement<{ describedBy?: string }>, { describedBy: hintId })
+      ? cloneElement(children as ReactElement<{ describedBy?: string }>, {
+          describedBy: hintId,
+        })
       : children;
   return (
     <div>
@@ -240,7 +261,10 @@ function CollapsibleSection({
 function LockedNote({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-start gap-2 rounded-card border border-line bg-base/50 px-3 py-2 text-sm text-ink-muted">
-      <Lock aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-ink-subtle" />
+      <Lock
+        aria-hidden="true"
+        className="mt-0.5 h-4 w-4 shrink-0 text-ink-subtle"
+      />
       <span>{children}</span>
     </p>
   );
@@ -275,17 +299,32 @@ export function OnTheClockSettingsManager({
   const patchLimits = (next: Partial<OnTheClockSettings["limits"]>) =>
     setSettings((s) => ({ ...s, limits: { ...s.limits, ...next } }));
   const patchRec = (next: Partial<OnTheClockSettings["recommendation"]>) =>
-    setSettings((s) => ({ ...s, recommendation: { ...s.recommendation, ...next } }));
-  const patchWeights = (next: Partial<OnTheClockSettings["recommendation"]["weights"]>) =>
     setSettings((s) => ({
       ...s,
-      recommendation: { ...s.recommendation, weights: { ...s.recommendation.weights, ...next } },
+      recommendation: { ...s.recommendation, ...next },
+    }));
+  const patchWeights = (
+    next: Partial<OnTheClockSettings["recommendation"]["weights"]>,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      recommendation: {
+        ...s.recommendation,
+        weights: { ...s.recommendation.weights, ...next },
+      },
     }));
   const patchDstk = (next: Partial<OnTheClockSettings["dstk"]>) =>
     setSettings((s) => ({ ...s, dstk: { ...s.dstk, ...next } }));
-  const patchPosAdjust = (next: Partial<OnTheClockSettings["positionAdjust"]>) =>
-    setSettings((s) => ({ ...s, positionAdjust: { ...s.positionAdjust, ...next } }));
-  const patchTargets = (next: Partial<OnTheClockSettings["positionFallbackTargets"]>) =>
+  const patchPosAdjust = (
+    next: Partial<OnTheClockSettings["positionAdjust"]>,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      positionAdjust: { ...s.positionAdjust, ...next },
+    }));
+  const patchTargets = (
+    next: Partial<OnTheClockSettings["positionFallbackTargets"]>,
+  ) =>
     setSettings((s) => ({
       ...s,
       positionFallbackTargets: { ...s.positionFallbackTargets, ...next },
@@ -298,7 +337,9 @@ export function OnTheClockSettingsManager({
     setSettings((s) => ({ ...s, awards: { ...s.awards, ...next } }));
   const patchGrades = (next: Partial<OnTheClockSettings["grades"]>) =>
     setSettings((s) => ({ ...s, grades: { ...s.grades, ...next } }));
-  const patchGradeWeights = (next: Partial<OnTheClockSettings["grades"]["weights"]>) =>
+  const patchGradeWeights = (
+    next: Partial<OnTheClockSettings["grades"]["weights"]>,
+  ) =>
     setSettings((s) => ({
       ...s,
       grades: { ...s.grades, weights: { ...s.grades.weights, ...next } },
@@ -311,8 +352,13 @@ export function OnTheClockSettingsManager({
       awards: { ...s.awards, enabled: { ...s.awards.enabled, [id]: enabled } },
     }));
 
-  const patchValueIndicators = (next: Partial<OnTheClockSettings["valueIndicators"]>) =>
-    setSettings((s) => ({ ...s, valueIndicators: { ...s.valueIndicators, ...next } }));
+  const patchValueIndicators = (
+    next: Partial<OnTheClockSettings["valueIndicators"]>,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      valueIndicators: { ...s.valueIndicators, ...next },
+    }));
 
   // Changing the preset seeds the need + value weights, mirroring the plan's presets.
   const setAggressiveness = (preset: TeamNeedAggressiveness) =>
@@ -323,7 +369,11 @@ export function OnTheClockSettingsManager({
         recommendation: {
           ...s.recommendation,
           aggressiveness: preset,
-          weights: { ...s.recommendation.weights, need, value: Math.round((1 - need) * 100) / 100 },
+          weights: {
+            ...s.recommendation.weights,
+            need,
+            value: Math.round((1 - need) * 100) / 100,
+          },
         },
       };
     });
@@ -344,7 +394,10 @@ export function OnTheClockSettingsManager({
     setSettings((s) => ({
       ...DEFAULT_ON_THE_CLOCK_SETTINGS,
       // Keep the current launch state so a reset never silently flips the tool.
-      feature: { ...DEFAULT_ON_THE_CLOCK_SETTINGS.feature, enabled: s.feature.enabled },
+      feature: {
+        ...DEFAULT_ON_THE_CLOCK_SETTINGS.feature,
+        enabled: s.feature.enabled,
+      },
     }));
     setStatus(
       "Settings reset to recommended defaults in this form (the on/off state is kept). Nothing is saved until you press Save settings.",
@@ -474,21 +527,25 @@ export function OnTheClockSettingsManager({
       >
         <div className="space-y-2">
           <LockedNote>
-            Player values always come from <span className="font-medium text-ink">FF Beacon</span>.
-            The draft room does not use the global source toggle.
+            Player values always come from{" "}
+            <span className="font-medium text-ink">FF Beacon</span>. The draft
+            room does not use the global source toggle.
           </LockedNote>
           <LockedNote>
-            The scoring format is detected automatically from each Sleeper league (the closest FF
-            Beacon format is used when there is no exact match).
+            The scoring format is detected automatically from each Sleeper
+            league (the closest FF Beacon format is used when there is no exact
+            match).
           </LockedNote>
           <LockedNote>
-            Defenses and kickers always appear in the board, lists, and picks. Whether they can be
-            recommended is controlled under Recommendation engine below.
+            Defenses and kickers always appear in the board, lists, and picks.
+            Whether they can be recommended is controlled under Recommendation
+            engine below.
           </LockedNote>
           <LockedNote>
-            The player pool (all players vs rookies only) is inferred automatically: redraft leagues
-            always show everyone; dynasty drafts with 6 rounds or fewer are treated as rookie
-            drafts. There is no manual toggle.
+            The player pool (all players vs rookies only) is inferred
+            automatically: redraft leagues always show everyone; dynasty drafts
+            with 6 rounds or fewer are treated as rookie drafts. There is no
+            manual toggle.
           </LockedNote>
         </div>
       </SectionCard>
@@ -507,7 +564,9 @@ export function OnTheClockSettingsManager({
             <NumberInput
               id={`${ids}-adpthreshold`}
               value={settings.valueIndicators.thresholdPicks}
-              onChange={(n) => patchValueIndicators({ thresholdPicks: Math.round(n) })}
+              onChange={(n) =>
+                patchValueIndicators({ thresholdPicks: Math.round(n) })
+              }
               step="1"
               min={1}
             />
@@ -538,7 +597,10 @@ export function OnTheClockSettingsManager({
                 id={`${ids}-buildmode-default`}
                 value={settings.buildMode.defaultMode}
                 onChange={(e) =>
-                  patchBuildMode({ defaultMode: e.target.value as OnTheClockSettings["buildMode"]["defaultMode"] })
+                  patchBuildMode({
+                    defaultMode: e.target
+                      .value as OnTheClockSettings["buildMode"]["defaultMode"],
+                  })
                 }
                 className={inputCls}
               >
@@ -741,7 +803,9 @@ export function OnTheClockSettingsManager({
               <NumberInput
                 id={`${ids}-aw-trades`}
                 value={settings.awards.minSuccessfulTraderTrades}
-                onChange={(n) => patchAwards({ minSuccessfulTraderTrades: Math.round(n) })}
+                onChange={(n) =>
+                  patchAwards({ minSuccessfulTraderTrades: Math.round(n) })
+                }
                 step="1"
                 min={1}
               />
@@ -767,7 +831,9 @@ export function OnTheClockSettingsManager({
               <NumberInput
                 id={`${ids}-aw-weeks`}
                 value={settings.awards.minAccuracyWeeks}
-                onChange={(n) => patchAwards({ minAccuracyWeeks: Math.round(n) })}
+                onChange={(n) =>
+                  patchAwards({ minAccuracyWeeks: Math.round(n) })
+                }
                 step="1"
                 min={0}
               />
@@ -780,7 +846,9 @@ export function OnTheClockSettingsManager({
               <NumberInput
                 id={`${ids}-aw-players`}
                 value={settings.awards.minPlayersForLineupAwards}
-                onChange={(n) => patchAwards({ minPlayersForLineupAwards: Math.round(n) })}
+                onChange={(n) =>
+                  patchAwards({ minPlayersForLineupAwards: Math.round(n) })
+                }
                 step="1"
                 min={1}
               />
@@ -838,12 +906,17 @@ export function OnTheClockSettingsManager({
               Component weights
             </legend>
             <p className="mb-3 text-[11px] text-ink-subtle">
-              They do not have to sum to one. A component with no data for a team is dropped and the
-              rest are renormalized, so a redraft league simply has no future-assets component.
+              They do not have to sum to one. A component with no data for a
+              team is dropped and the rest are renormalized, so a redraft league
+              simply has no future-assets component.
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {GRADE_WEIGHTS.map((w) => (
-                <Field key={w.key} label={w.label} htmlFor={`${ids}-gw-${w.key}`}>
+                <Field
+                  key={w.key}
+                  label={w.label}
+                  htmlFor={`${ids}-gw-${w.key}`}
+                >
                   <NumberInput
                     id={`${ids}-gw-${w.key}`}
                     value={settings.grades.weights[w.key]}
@@ -898,7 +971,9 @@ export function OnTheClockSettingsManager({
             <NumberInput
               id={`${ids}-al-tier`}
               value={settings.alerts.tierCliffRemaining}
-              onChange={(n) => patchAlerts({ tierCliffRemaining: Math.round(n) })}
+              onChange={(n) =>
+                patchAlerts({ tierCliffRemaining: Math.round(n) })
+              }
               step="1"
               min={1}
             />
@@ -934,10 +1009,12 @@ export function OnTheClockSettingsManager({
           />
 
           <fieldset>
-            <legend className="text-sm font-semibold text-ink">How aggressive Team Need is</legend>
+            <legend className="text-sm font-semibold text-ink">
+              How aggressive Team Need is
+            </legend>
             <p className="mt-1 text-xs text-ink-subtle">
-              Picking a preset sets the value and need weights below. You can still fine-tune them
-              after.
+              Picking a preset sets the value and need weights below. You can
+              still fine-tune them after.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Aggressiveness preset" htmlFor={`${ids}-aggr`}>
@@ -949,9 +1026,13 @@ export function OnTheClockSettingsManager({
                   }
                   className={inputCls}
                 >
-                  <option value="conservative">Conservative (lean toward best value)</option>
+                  <option value="conservative">
+                    Conservative (lean toward best value)
+                  </option>
                   <option value="balanced">Balanced</option>
-                  <option value="aggressive">Aggressive (lean toward filling needs)</option>
+                  <option value="aggressive">
+                    Aggressive (lean toward filling needs)
+                  </option>
                 </select>
               </Field>
             </div>
@@ -1010,9 +1091,12 @@ export function OnTheClockSettingsManager({
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-semibold text-ink">Format priority boosts</legend>
+            <legend className="text-sm font-semibold text-ink">
+              Format priority boosts
+            </legend>
             <p className="mt-1 text-xs text-ink-subtle">
-              Extra weight for positions that matter more in certain league types.
+              Extra weight for positions that matter more in certain league
+              types.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
@@ -1043,24 +1127,36 @@ export function OnTheClockSettingsManager({
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-semibold text-ink">Defense and kicker recommendations</legend>
+            <legend className="text-sm font-semibold text-ink">
+              Defense and kicker recommendations
+            </legend>
             <p className="mt-1 text-xs text-ink-subtle">
-              DEF and K always appear in the room. These control whether and when they can be the
-              Team Need pick.
+              DEF and K always appear in the room. These control whether and
+              when they can be the Team Need pick.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="When to recommend DEF/K" htmlFor={`${ids}-dstkbehav`}>
+              <Field
+                label="When to recommend DEF/K"
+                htmlFor={`${ids}-dstkbehav`}
+              >
                 <select
                   id={`${ids}-dstkbehav`}
                   value={settings.dstk.recommendBehavior}
                   onChange={(e) =>
-                    patchDstk({ recommendBehavior: e.target.value as DstkRecommendBehavior })
+                    patchDstk({
+                      recommendBehavior: e.target
+                        .value as DstkRecommendBehavior,
+                    })
                   }
                   className={inputCls}
                 >
-                  <option value="suppress_until_need">Only late, when the roster needs one</option>
+                  <option value="suppress_until_need">
+                    Only late, when the roster needs one
+                  </option>
                   <option value="never">Never recommend DEF/K</option>
-                  <option value="always_allowed">Treat like any other position</option>
+                  <option value="always_allowed">
+                    Treat like any other position
+                  </option>
                 </select>
               </Field>
               <div className="flex items-end">
@@ -1109,9 +1205,10 @@ export function OnTheClockSettingsManager({
         blurb="The in-draft Trade Builder compares the value of two sides of a deal."
       >
         <LockedNote>
-          Trade values are read from the same FF Beacon board. Draft pick values are projected from
-          the board and shown as estimates. The projection settings (discounts and caps) are fixed in
-          code for now and are not adjustable here.
+          Trade values are read from the same FF Beacon board. Draft pick values
+          are projected from the board and shown as estimates. The projection
+          settings (discounts and caps) are fixed in code for now and are not
+          adjustable here.
         </LockedNote>
       </SectionCard>
 
@@ -1153,12 +1250,15 @@ export function OnTheClockSettingsManager({
       >
         <div className="space-y-6">
           <fieldset>
-            <legend className="text-sm font-semibold text-ink">Cache cleanup window</legend>
+            <legend className="text-sm font-semibold text-ink">
+              Cache cleanup window
+            </legend>
             <p className="mt-1 text-xs text-ink-subtle">
-              Drafts and their picks are kept permanently. They are what this tool watched happen, a
-              finished draft can still be opened and locked later, and re-syncing cannot recover the
-              moment a pick landed. The nightly cleanup only clears the projection cache, which is
-              rebuilt from data we still hold.
+              Drafts and their picks are kept permanently. They are what this
+              tool watched happen, a finished draft can still be opened and
+              locked later, and re-syncing cannot recover the moment a pick
+              landed. The nightly cleanup only clears the projection cache,
+              which is rebuilt from data we still hold.
             </p>
             <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
@@ -1169,7 +1269,9 @@ export function OnTheClockSettingsManager({
                 <NumberInput
                   id={`${ids}-projectionretention`}
                   value={settings.cache.projectionRetentionHours}
-                  onChange={(n) => patchCache({ projectionRetentionHours: Math.round(n) })}
+                  onChange={(n) =>
+                    patchCache({ projectionRetentionHours: Math.round(n) })
+                  }
                   step="1"
                   min={24}
                 />
@@ -1187,7 +1289,9 @@ export function OnTheClockSettingsManager({
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-ink">Current settings (read-only)</p>
+            <p className="text-sm font-semibold text-ink">
+              Current settings (read-only)
+            </p>
             <pre className="mt-1 max-h-72 overflow-auto rounded-card border border-line bg-base/60 p-3 text-[11px] leading-relaxed text-ink-muted">
               {JSON.stringify(settings, null, 2)}
             </pre>

@@ -42,8 +42,15 @@ export const onTheClockSettingsSchema = z.object({
 
   sourceFormat: z
     .object({
-      defaultRankingSource: z.string().min(1).nullable().default(d.sourceFormat.defaultRankingSource),
-      defaultFormatFallback: z.string().min(1).default(d.sourceFormat.defaultFormatFallback),
+      defaultRankingSource: z
+        .string()
+        .min(1)
+        .nullable()
+        .default(d.sourceFormat.defaultRankingSource),
+      defaultFormatFallback: z
+        .string()
+        .min(1)
+        .default(d.sourceFormat.defaultFormatFallback),
     })
     .default(d.sourceFormat),
 
@@ -81,7 +88,9 @@ export const onTheClockSettingsSchema = z.object({
 
   cache: z
     .object({
-      projectionRetentionHours: positiveInt.default(d.cache.projectionRetentionHours),
+      projectionRetentionHours: positiveInt.default(
+        d.cache.projectionRetentionHours,
+      ),
     })
     .default(d.cache),
 
@@ -103,7 +112,9 @@ export const onTheClockSettingsSchema = z.object({
           reach: nonNegative.default(d.recommendation.weights.reach),
         })
         .default(d.recommendation.weights),
-      maxReachTierBreak: nonNegative.default(d.recommendation.maxReachTierBreak),
+      maxReachTierBreak: nonNegative.default(
+        d.recommendation.maxReachTierBreak,
+      ),
     })
     .default(d.recommendation),
 
@@ -119,8 +130,14 @@ export const onTheClockSettingsSchema = z.object({
 
   positionAdjust: z
     .object({
-      superflexQbMultiplier: z.number().positive().default(d.positionAdjust.superflexQbMultiplier),
-      tePremiumMultiplier: z.number().positive().default(d.positionAdjust.tePremiumMultiplier),
+      superflexQbMultiplier: z
+        .number()
+        .positive()
+        .default(d.positionAdjust.superflexQbMultiplier),
+      tePremiumMultiplier: z
+        .number()
+        .positive()
+        .default(d.positionAdjust.tePremiumMultiplier),
     })
     .default(d.positionAdjust),
 
@@ -145,7 +162,9 @@ export const onTheClockSettingsSchema = z.object({
 
   mappingVisibility: z
     .object({
-      showUnmappedPanel: z.boolean().default(d.mappingVisibility.showUnmappedPanel),
+      showUnmappedPanel: z
+        .boolean()
+        .default(d.mappingVisibility.showUnmappedPanel),
     })
     .default(d.mappingVisibility),
 
@@ -155,7 +174,10 @@ export const onTheClockSettingsSchema = z.object({
       defaultMode: buildMode.default(d.buildMode.defaultMode),
       pointsWeightEmpty: unitInterval.default(d.buildMode.pointsWeightEmpty),
       pointsWeightFull: unitInterval.default(d.buildMode.pointsWeightFull),
-      competePointsBoost: z.number().positive().default(d.buildMode.competePointsBoost),
+      competePointsBoost: z
+        .number()
+        .positive()
+        .default(d.buildMode.competePointsBoost),
       rebuildPointsCap: unitInterval.default(d.buildMode.rebuildPointsCap),
       youthWeight: nonNegative.default(d.buildMode.youthWeight),
       upsideWeight: nonNegative.default(d.buildMode.upsideWeight),
@@ -176,10 +198,14 @@ export const onTheClockSettingsSchema = z.object({
   awards: z
     .object({
       enabled: z.record(z.string(), z.boolean()).default(d.awards.enabled),
-      minSuccessfulTraderTrades: positiveInt.default(d.awards.minSuccessfulTraderTrades),
+      minSuccessfulTraderTrades: positiveInt.default(
+        d.awards.minSuccessfulTraderTrades,
+      ),
       minAdpPicks: positiveInt.default(d.awards.minAdpPicks),
       minAccuracyWeeks: nonNegativeInt.default(d.awards.minAccuracyWeeks),
-      minPlayersForLineupAwards: positiveInt.default(d.awards.minPlayersForLineupAwards),
+      minPlayersForLineupAwards: positiveInt.default(
+        d.awards.minPlayersForLineupAwards,
+      ),
     })
     .default(d.awards),
 
@@ -196,6 +222,22 @@ export const onTheClockSettingsSchema = z.object({
           trades: nonNegative.default(d.grades.weights.trades),
         })
         .default(d.grades.weights),
+      // Redraft grades a different thing and weighs the components differently.
+      // Optional on purpose: a settings row written before this existed keeps
+      // grading every league on the one set it has, rather than picking up a
+      // split its author never chose.
+      redraftWeights: z
+        .object({
+          market: nonNegative.default(d.grades.redraftWeights.market),
+          lineup: nonNegative.default(d.grades.redraftWeights.lineup),
+          construction: nonNegative.default(
+            d.grades.redraftWeights.construction,
+          ),
+          reliability: nonNegative.default(d.grades.redraftWeights.reliability),
+          future: nonNegative.default(d.grades.redraftWeights.future),
+          trades: nonNegative.default(d.grades.redraftWeights.trades),
+        })
+        .default(d.grades.redraftWeights),
       absoluteBlend: unitInterval.default(d.grades.absoluteBlend),
     })
     .default(d.grades)
@@ -209,6 +251,18 @@ export const onTheClockSettingsSchema = z.object({
           g.weights.trades >
         0,
       { message: "at least one grade component must carry weight" },
+    )
+    .refine(
+      (g) =>
+        !g.redraftWeights ||
+        g.redraftWeights.market +
+          g.redraftWeights.lineup +
+          g.redraftWeights.construction +
+          g.redraftWeights.reliability +
+          g.redraftWeights.future +
+          g.redraftWeights.trades >
+          0,
+      { message: "at least one redraft grade component must carry weight" },
     ),
 
   alerts: z
@@ -227,17 +281,27 @@ export const onTheClockSettingsSchema = z.object({
 export type ParsedOnTheClockSettings = z.infer<typeof onTheClockSettingsSchema>;
 
 export type ValidateResult =
-  | { ok: true; settings: OnTheClockSettings }
-  | { ok: false; error: string };
+  { ok: true; settings: OnTheClockSettings } | { ok: false; error: string };
 
 /** Round and clamp n into [min, max]; falls back to `fallback` if not finite. */
-function clampInt(n: unknown, min: number, max: number, fallback: number): number {
-  const v = typeof n === "number" && Number.isFinite(n) ? Math.round(n) : fallback;
+function clampInt(
+  n: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  const v =
+    typeof n === "number" && Number.isFinite(n) ? Math.round(n) : fallback;
   return Math.min(max, Math.max(min, v));
 }
 
 /** Clamp a float into [min, max]; falls back to `fallback` if not finite. */
-function clampFloat(n: unknown, min: number, max: number, fallback: number): number {
+function clampFloat(
+  n: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
   const v = typeof n === "number" && Number.isFinite(n) ? n : fallback;
   return Math.min(max, Math.max(min, v));
 }
@@ -249,9 +313,16 @@ function clampFloat(n: unknown, min: number, max: number, fallback: number): num
  * Unknown / unwired keys are passed through untouched. lockSeconds is additionally
  * clamped to never exceed cooldownSeconds so the schema refinement always holds.
  */
-export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSettings {
+export function clampOnTheClockSettings(
+  raw: OnTheClockSettings,
+): OnTheClockSettings {
   const dd = DEFAULT_ON_THE_CLOCK_SETTINGS;
-  const cooldownSeconds = clampInt(raw.sync?.cooldownSeconds, 5, 600, dd.sync.cooldownSeconds);
+  const cooldownSeconds = clampInt(
+    raw.sync?.cooldownSeconds,
+    5,
+    600,
+    dd.sync.cooldownSeconds,
+  );
   const lockSeconds = Math.min(
     cooldownSeconds,
     clampInt(raw.sync?.lockSeconds, 1, 120, dd.sync.lockSeconds),
@@ -261,7 +332,12 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
   // manual claim in Postgres and would spend requests to be told so.
   const autoRefreshSeconds = Math.max(
     cooldownSeconds,
-    clampInt(raw.sync?.autoRefreshSeconds, 15, 1800, dd.sync.autoRefreshSeconds),
+    clampInt(
+      raw.sync?.autoRefreshSeconds,
+      15,
+      1800,
+      dd.sync.autoRefreshSeconds,
+    ),
   );
   return {
     ...raw,
@@ -274,7 +350,8 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
       // back to the default rather than to false. A payload written before this
       // key existed would otherwise switch every open room's refresh off on the
       // next admin save of anything at all.
-      autoRefreshEnabled: raw.sync?.autoRefreshEnabled ?? dd.sync.autoRefreshEnabled,
+      autoRefreshEnabled:
+        raw.sync?.autoRefreshEnabled ?? dd.sync.autoRefreshEnabled,
       autoRefreshSeconds,
     },
     cache: {
@@ -290,7 +367,12 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
     },
     limits: {
       ...raw.limits,
-      maxActiveLeagues: clampInt(raw.limits?.maxActiveLeagues, 1, 100, dd.limits.maxActiveLeagues),
+      maxActiveLeagues: clampInt(
+        raw.limits?.maxActiveLeagues,
+        1,
+        100,
+        dd.limits.maxActiveLeagues,
+      ),
       maxAvailablePlayers: clampInt(
         raw.limits?.maxAvailablePlayers,
         10,
@@ -301,9 +383,24 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
     recommendation: {
       ...raw.recommendation,
       weights: {
-        value: clampFloat(raw.recommendation?.weights?.value, 0, 10, dd.recommendation.weights.value),
-        need: clampFloat(raw.recommendation?.weights?.need, 0, 10, dd.recommendation.weights.need),
-        reach: clampFloat(raw.recommendation?.weights?.reach, 0, 10, dd.recommendation.weights.reach),
+        value: clampFloat(
+          raw.recommendation?.weights?.value,
+          0,
+          10,
+          dd.recommendation.weights.value,
+        ),
+        need: clampFloat(
+          raw.recommendation?.weights?.need,
+          0,
+          10,
+          dd.recommendation.weights.need,
+        ),
+        reach: clampFloat(
+          raw.recommendation?.weights?.reach,
+          0,
+          10,
+          dd.recommendation.weights.reach,
+        ),
       },
       maxReachTierBreak: clampFloat(
         raw.recommendation?.maxReachTierBreak,
@@ -314,8 +411,18 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
     },
     dstk: {
       ...raw.dstk,
-      minRoundForDst: clampInt(raw.dstk?.minRoundForDst, 1, 50, dd.dstk.minRoundForDst),
-      minRoundForK: clampInt(raw.dstk?.minRoundForK, 1, 50, dd.dstk.minRoundForK),
+      minRoundForDst: clampInt(
+        raw.dstk?.minRoundForDst,
+        1,
+        50,
+        dd.dstk.minRoundForDst,
+      ),
+      minRoundForK: clampInt(
+        raw.dstk?.minRoundForK,
+        1,
+        50,
+        dd.dstk.minRoundForK,
+      ),
     },
     positionAdjust: {
       ...raw.positionAdjust,
@@ -341,19 +448,54 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
       ),
     },
     positionFallbackTargets: {
-      QB: clampInt(raw.positionFallbackTargets?.QB, 0, 20, dd.positionFallbackTargets.QB),
-      RB: clampInt(raw.positionFallbackTargets?.RB, 0, 20, dd.positionFallbackTargets.RB),
-      WR: clampInt(raw.positionFallbackTargets?.WR, 0, 20, dd.positionFallbackTargets.WR),
-      TE: clampInt(raw.positionFallbackTargets?.TE, 0, 20, dd.positionFallbackTargets.TE),
-      FLEX: clampInt(raw.positionFallbackTargets?.FLEX, 0, 20, dd.positionFallbackTargets.FLEX),
+      QB: clampInt(
+        raw.positionFallbackTargets?.QB,
+        0,
+        20,
+        dd.positionFallbackTargets.QB,
+      ),
+      RB: clampInt(
+        raw.positionFallbackTargets?.RB,
+        0,
+        20,
+        dd.positionFallbackTargets.RB,
+      ),
+      WR: clampInt(
+        raw.positionFallbackTargets?.WR,
+        0,
+        20,
+        dd.positionFallbackTargets.WR,
+      ),
+      TE: clampInt(
+        raw.positionFallbackTargets?.TE,
+        0,
+        20,
+        dd.positionFallbackTargets.TE,
+      ),
+      FLEX: clampInt(
+        raw.positionFallbackTargets?.FLEX,
+        0,
+        20,
+        dd.positionFallbackTargets.FLEX,
+      ),
       SUPER_FLEX: clampInt(
         raw.positionFallbackTargets?.SUPER_FLEX,
         0,
         20,
         dd.positionFallbackTargets.SUPER_FLEX,
       ),
-      K: clampInt(raw.positionFallbackTargets?.K, 0, 20, dd.positionFallbackTargets.K),
-      DEF: clampInt(raw.positionFallbackTargets?.DEF, 0, 20, dd.positionFallbackTargets.DEF),
+      K: clampInt(
+        raw.positionFallbackTargets?.K,
+        0,
+        20,
+        dd.positionFallbackTargets.K,
+      ),
+      DEF: clampInt(
+        raw.positionFallbackTargets?.DEF,
+        0,
+        20,
+        dd.positionFallbackTargets.DEF,
+      ),
     },
     buildMode: {
       ...dd.buildMode,
@@ -376,34 +518,92 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
         3,
         dd.buildMode.competePointsBoost,
       ),
-      rebuildPointsCap: clampFloat(raw.buildMode?.rebuildPointsCap, 0, 1, dd.buildMode.rebuildPointsCap),
-      youthWeight: clampFloat(raw.buildMode?.youthWeight, 0, 2, dd.buildMode.youthWeight),
-      upsideWeight: clampFloat(raw.buildMode?.upsideWeight, 0, 2, dd.buildMode.upsideWeight),
-      competeValueTilt: clampFloat(raw.buildMode?.competeValueTilt, 0, 2, dd.buildMode.competeValueTilt),
-      rebuildValueTilt: clampFloat(raw.buildMode?.rebuildValueTilt, 0, 2, dd.buildMode.rebuildValueTilt),
+      rebuildPointsCap: clampFloat(
+        raw.buildMode?.rebuildPointsCap,
+        0,
+        1,
+        dd.buildMode.rebuildPointsCap,
+      ),
+      youthWeight: clampFloat(
+        raw.buildMode?.youthWeight,
+        0,
+        2,
+        dd.buildMode.youthWeight,
+      ),
+      upsideWeight: clampFloat(
+        raw.buildMode?.upsideWeight,
+        0,
+        2,
+        dd.buildMode.upsideWeight,
+      ),
+      competeValueTilt: clampFloat(
+        raw.buildMode?.competeValueTilt,
+        0,
+        2,
+        dd.buildMode.competeValueTilt,
+      ),
+      rebuildValueTilt: clampFloat(
+        raw.buildMode?.rebuildValueTilt,
+        0,
+        2,
+        dd.buildMode.rebuildValueTilt,
+      ),
     },
     marginal: {
       ...dd.marginal,
       ...raw.marginal,
-      insuranceWeight: clampFloat(raw.marginal?.insuranceWeight, 0, 2, dd.marginal.insuranceWeight),
-      dropoffWeight: clampFloat(raw.marginal?.dropoffWeight, 0, 2, dd.marginal.dropoffWeight),
-      minStarterRisk: clampFloat(raw.marginal?.minStarterRisk, 0, 1, dd.marginal.minStarterRisk),
+      insuranceWeight: clampFloat(
+        raw.marginal?.insuranceWeight,
+        0,
+        2,
+        dd.marginal.insuranceWeight,
+      ),
+      dropoffWeight: clampFloat(
+        raw.marginal?.dropoffWeight,
+        0,
+        2,
+        dd.marginal.dropoffWeight,
+      ),
+      minStarterRisk: clampFloat(
+        raw.marginal?.minStarterRisk,
+        0,
+        1,
+        dd.marginal.minStarterRisk,
+      ),
       // The ceiling is a real cost control: each candidate costs a full lineup
       // rebuild for every remaining week, so this is what bounds the request.
-      maxCandidates: clampInt(raw.marginal?.maxCandidates, 10, 300, dd.marginal.maxCandidates),
+      maxCandidates: clampInt(
+        raw.marginal?.maxCandidates,
+        10,
+        300,
+        dd.marginal.maxCandidates,
+      ),
     },
     awards: {
       ...dd.awards,
       ...raw.awards,
-      enabled: raw.awards?.enabled && typeof raw.awards.enabled === "object" ? raw.awards.enabled : {},
+      enabled:
+        raw.awards?.enabled && typeof raw.awards.enabled === "object"
+          ? raw.awards.enabled
+          : {},
       minSuccessfulTraderTrades: clampInt(
         raw.awards?.minSuccessfulTraderTrades,
         1,
         20,
         dd.awards.minSuccessfulTraderTrades,
       ),
-      minAdpPicks: clampInt(raw.awards?.minAdpPicks, 1, 30, dd.awards.minAdpPicks),
-      minAccuracyWeeks: clampInt(raw.awards?.minAccuracyWeeks, 0, 60, dd.awards.minAccuracyWeeks),
+      minAdpPicks: clampInt(
+        raw.awards?.minAdpPicks,
+        1,
+        30,
+        dd.awards.minAdpPicks,
+      ),
+      minAccuracyWeeks: clampInt(
+        raw.awards?.minAccuracyWeeks,
+        0,
+        60,
+        dd.awards.minAccuracyWeeks,
+      ),
       minPlayersForLineupAwards: clampInt(
         raw.awards?.minPlayersForLineupAwards,
         1,
@@ -415,19 +615,49 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
       ...dd.grades,
       ...raw.grades,
       weights: {
-        market: clampFloat(raw.grades?.weights?.market, 0, 1, dd.grades.weights.market),
-        lineup: clampFloat(raw.grades?.weights?.lineup, 0, 1, dd.grades.weights.lineup),
+        market: clampFloat(
+          raw.grades?.weights?.market,
+          0,
+          1,
+          dd.grades.weights.market,
+        ),
+        lineup: clampFloat(
+          raw.grades?.weights?.lineup,
+          0,
+          1,
+          dd.grades.weights.lineup,
+        ),
         construction: clampFloat(
           raw.grades?.weights?.construction,
           0,
           1,
           dd.grades.weights.construction,
         ),
-        reliability: clampFloat(raw.grades?.weights?.reliability, 0, 1, dd.grades.weights.reliability),
-        future: clampFloat(raw.grades?.weights?.future, 0, 1, dd.grades.weights.future),
-        trades: clampFloat(raw.grades?.weights?.trades, 0, 1, dd.grades.weights.trades),
+        reliability: clampFloat(
+          raw.grades?.weights?.reliability,
+          0,
+          1,
+          dd.grades.weights.reliability,
+        ),
+        future: clampFloat(
+          raw.grades?.weights?.future,
+          0,
+          1,
+          dd.grades.weights.future,
+        ),
+        trades: clampFloat(
+          raw.grades?.weights?.trades,
+          0,
+          1,
+          dd.grades.weights.trades,
+        ),
       },
-      absoluteBlend: clampFloat(raw.grades?.absoluteBlend, 0, 1, dd.grades.absoluteBlend),
+      absoluteBlend: clampFloat(
+        raw.grades?.absoluteBlend,
+        0,
+        1,
+        dd.grades.absoluteBlend,
+      ),
     },
     alerts: {
       ...dd.alerts,
@@ -438,8 +668,18 @@ export function clampOnTheClockSettings(raw: OnTheClockSettings): OnTheClockSett
         clampInt(raw.alerts?.runWindow, 2, 40, dd.alerts.runWindow),
         clampInt(raw.alerts?.runThreshold, 2, 40, dd.alerts.runThreshold),
       ),
-      tierCliffRemaining: clampInt(raw.alerts?.tierCliffRemaining, 1, 20, dd.alerts.tierCliffRemaining),
-      maxGoneBefore: clampInt(raw.alerts?.maxGoneBefore, 1, 60, dd.alerts.maxGoneBefore),
+      tierCliffRemaining: clampInt(
+        raw.alerts?.tierCliffRemaining,
+        1,
+        20,
+        dd.alerts.tierCliffRemaining,
+      ),
+      maxGoneBefore: clampInt(
+        raw.alerts?.maxGoneBefore,
+        1,
+        60,
+        dd.alerts.maxGoneBefore,
+      ),
     },
   };
 }
@@ -469,7 +709,8 @@ export function validateOnTheClockSettings(raw: unknown): ValidateResult {
  */
 const SETTINGS_CACHE_TTL_MS = 30_000;
 
-let settingsCache: { loadedAtMs: number; settings: OnTheClockSettings } | null = null;
+let settingsCache: { loadedAtMs: number; settings: OnTheClockSettings } | null =
+  null;
 
 /** Drop the memo, so the next read goes to the database. Used after a save. */
 export function invalidateOnTheClockSettingsCache(): void {
@@ -485,7 +726,9 @@ export function invalidateOnTheClockSettingsCache(): void {
  * is cached; a failed one falls back to defaults for that request alone rather
  * than pinning the tool to its defaults for the next half minute.
  */
-export async function loadOnTheClockSettings(supabase: Client): Promise<OnTheClockSettings> {
+export async function loadOnTheClockSettings(
+  supabase: Client,
+): Promise<OnTheClockSettings> {
   const now = Date.now();
   if (settingsCache && now - settingsCache.loadedAtMs < SETTINGS_CACHE_TTL_MS) {
     return settingsCache.settings;
@@ -501,7 +744,10 @@ export async function loadOnTheClockSettings(supabase: Client): Promise<OnTheClo
 
   const parsed = onTheClockSettingsSchema.safeParse(data.settings);
   if (!parsed.success) {
-    console.error("[on-the-clock] stored settings invalid, using defaults", parsed.error.issues);
+    console.error(
+      "[on-the-clock] stored settings invalid, using defaults",
+      parsed.error.issues,
+    );
     return { ...DEFAULT_ON_THE_CLOCK_SETTINGS };
   }
   const settings = parsed.data as OnTheClockSettings;

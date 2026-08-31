@@ -9305,3 +9305,216 @@ T-WYR-03 | completed | Draft pick pricing: a 14 day window, and the last known o
      | audit belongs. Signal Check's own surfaces are untouched.
      | verified: yes (2,876 tests green, typecheck and build clean, measured
      |           against 60 real pooled trades before and after)
+
+---
+
+# Redraft parity, draft grades and the post-draft handoff (RD-T###)
+
+Plan: `docs/redraft-and-draft-grades-plan.md`. Started 2026-08-31.
+
+```
+RD-T001 | completed | Guard playoff_week_start = 0 in the On The Clock week window
+     | files: lib/on-the-clock/pulse-service.ts, lib/on-the-clock/draft-pulse.test.ts
+     | depends on: none
+     | verified: yes
+
+RD-T010 | completed | Re-measure fallback variance on the startable range only
+     | files: scripts/measure-position-variance.ts, docs/redraft-and-draft-grades-plan.md
+     | depends on: none
+     | verified: yes
+RD-T011 | completed | Scoring-aware fallback variance (ppr / half / std)
+     | files: lib/power-pulse/default-settings.ts, lib/power-pulse/project.ts, lib/power-pulse/validate.ts
+     | depends on: RD-T010
+     | verified: yes
+RD-T012 | completed | Rank-aware fallback variance
+     | files: lib/power-pulse/project.ts, lib/power-pulse/variance.test.ts
+     | depends on: RD-T011
+     | verified: yes
+RD-T013 | completed | Honour playoff_round_type in the bracket simulation
+     | files: lib/power-pulse/simulate.ts, lib/power-pulse/load.ts, lib/power-pulse/simulate.test.ts
+     | depends on: none
+     | verified: yes
+
+RD-T020 | completed | Waiver replacement level per position from the free-agent pool
+     | files: lib/on-the-clock/waiver-replacement.ts (+ test)
+     | depends on: none
+     | verified: yes
+RD-T021 | completed | Draft Pulse scores an unfilled slot at waiver replacement
+     | files: lib/on-the-clock/draft-pulse.ts, lib/on-the-clock/pulse-service.ts
+     | depends on: RD-T020
+     | verified: yes
+RD-T022 | completed | Construction component measures scarcity, not emptiness
+     | files: lib/on-the-clock/draft-grade.ts (+ test)
+     | depends on: RD-T021
+     | verified: yes
+RD-T023 | completed | Surface the assumption in copy so the reader knows it was made
+     | files: app/tools/on-the-clock/draft-grades.tsx
+     | depends on: RD-T022
+     | verified: yes
+
+RD-T030 | completed | leagueEmphasis helper: wins-first vs value-first from league type
+     | files: lib/league-emphasis.ts (+ test)
+     | depends on: none
+     | verified: yes
+RD-T031 | completed | Format-aware draft grade weights
+     | files: lib/on-the-clock/draft-grade.ts, lib/on-the-clock/default-settings.ts, lib/on-the-clock/types.ts
+     | depends on: RD-T030
+     | verified: yes
+RD-T032 | completed | League Pulse rankings table leads with Pulse in redraft
+     | files: app/leagues/[sleeper_league_id]/*
+     | depends on: RD-T030
+     | verified: yes
+RD-T033 | completed | Trade surfaces lead with wins in redraft
+     | files: components/trade-verdict.tsx or equivalent
+     | depends on: RD-T030
+     | verified: yes
+RD-T034 | completed | Value labelled as leverage, not score, in redraft
+     | files: as found
+     | depends on: RD-T030
+     | verified: yes
+
+RD-T040 | completed | Do not emit the dynasty-only award in redraft
+     | files: lib/on-the-clock/awards.ts (+ test)
+     | depends on: none
+     | verified: yes
+RD-T041 | completed | Retire First to Fill Starting Roster
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T042 | completed | Most Reliable Roster gated on a spread worth reporting
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T043 | dropped | Most Successful Trader reads in wins in a redraft league
+     | files: none
+     | depends on: RD-T030
+     | verified: n/a
+     | why: a trade IS a value exchange, in every format. The redraft complaint
+     |      was that value leads when judging TEAM QUALITY, not that a trade
+     |      should be scored in wins. Re-scoring it would also mean running the
+     |      full trade-impact model once per historical trade to fill a card,
+     |      which trade-history.ts documents as the reason it uses the board
+     |      projection instead. Nothing to change.
+RD-T044 | completed | New award: Best Value Pick of Each Round
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T045 | completed | New awards: Most Balanced and Most Top Heavy
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T046 | completed | New award: Bye Week Nightmare
+     | files: lib/on-the-clock/awards.ts, lib/on-the-clock/draft-pulse.ts
+     | depends on: RD-T021
+     | verified: yes
+RD-T047 | completed | New award: Zigged When They Zagged
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T048 | completed | New award: Best Late Round Haul
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T049 | completed | New award: Toughest Schedule Drafted
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T050 | completed | New award: Positional WAR Winner
+     | files: lib/on-the-clock/awards.ts
+     | depends on: RD-T040
+     | verified: yes
+RD-T051 | completed | Award icons and accents for every new award
+     | files: app/tools/on-the-clock/rankings-awards.tsx
+     | depends on: RD-T044..RD-T050
+     | verified: yes
+RD-T052 | completed | Bump AWARDS_VERSION and keep old snapshots readable
+     | files: lib/on-the-clock/awards.ts, lib/on-the-clock/snapshot-types.ts
+     | depends on: RD-T051
+     | verified: yes
+
+RD-T060 | completed | Post-draft terminal state on the recommendation screen
+     | files: app/tools/on-the-clock/panel.tsx, app/tools/on-the-clock/states.tsx
+     | depends on: none
+     | verified: yes
+RD-T061 | completed | Draft summary tiles from the frozen snapshot
+     | files: app/tools/on-the-clock/draft-complete.tsx
+     | depends on: RD-T060
+     | verified: yes
+RD-T062 | completed | League Pulse handoff card with what the tool offers next
+     | files: app/tools/on-the-clock/draft-complete.tsx
+     | depends on: RD-T060
+     | verified: yes
+RD-T063 | deferred | What changed since your draft, from the projection vintage
+     | files: app/tools/on-the-clock/draft-complete.tsx
+     | depends on: RD-T062
+     | verified: no
+     | state: the UI is built and tested, and the prop is wired as `null`, so the
+     |        banner never renders. What is missing is the COUNT: comparing the
+     |        reader's players against snapshot.projection_snapshot_date to find
+     |        the ones whose injury designation moved since. Needs a small server
+     |        read; deliberately not faked with a placeholder number.
+RD-T064 | completed | Accessibility pass on the new state
+     | files: as above
+     | depends on: RD-T063
+     | verified: yes
+
+RD-T070 | completed | Sub-agent review: implementation (9 findings, 7 fixed, 2 documented)
+RD-T071 | completed | Sub-agent review: security (2 findings, both fixed)
+RD-T072 | completed | Sub-agent review: accessibility (4 findings, all fixed)
+RD-T073 | completed | Sub-agent review: performance (1 finding, fixed)
+```
+
+## Review outcomes, 2026-08-31
+
+Four sub-agents reviewed the uncommitted build. Sixteen findings, thirteen fixed
+in this session, three carried:
+
+FIXED (high): positional shares did not sum to one, because waiver fills landed
+in the weekly total but in no position bucket. The most waiver-dependent roster
+therefore won the Contrarian award mechanically. Waiver points are now attributed
+to the signed player's position.
+
+FIXED (high): the balance metric filtered out positions scoring zero, which
+cannot tell "this league has no kicker slot" from "this team has an empty tight
+end slot". The team with the biggest hole won Most Balanced. Now measured over
+the positions the LEAGUE starts, derived from the room.
+
+FIXED (medium): the award id `positional-war-winner` violated the absolute
+CLAUDE.md naming rule in code, not just in copy. Renamed to `scarcity-read`.
+`lib/positional-war/naming.test.ts` does not cover `lib/on-the-clock/`, which is
+why nothing caught it.
+
+FIXED (medium): `buildWaiverPool` was rebuilt per team per week, 168 times for a
+twelve-team league instead of 14. Hoisted into a per-week map.
+
+FIXED (medium): the admin award toggle list still carried the retired award and
+none of the seven new ones, so they were unswitchable. Now typed `AwardId`, so
+the next one that lands without a toggle is a build error.
+
+FIXED (medium): dead `computeStartingRosterCompletion` work ran on every call
+after the award it fed was retired.
+
+FIXED (low, security): the migration's access-matrix comment claimed
+`on_the_clock_draft_snapshots` was service-role only. It has a public SELECT
+policy (migration 0121). Corrected, with a note for anyone adding a private
+column there.
+
+FIXED (a11y): the region was still announced as "Who to pick" after the draft
+ended, visible only to a screen reader. The available-player pool still rendered
+under "Your draft is complete". The rankings caption appended a verbless fragment
+that contradicted its own ordering claim. Caption and column header wording
+disagreed.
+
+DOCUMENTED, not fixed: the variance anchors are measured under the three
+canonical scoring bases while the placement points are the league's literal
+scoring, so a six-point-passing-touchdown league flattens quarterbacks onto the
+elite figure. Bounded, same direction for every team in a league, and only
+affects the fallback path. The fix is to normalise placement points to the
+canonical base before reading the curve.
+
+DOCUMENTED, not fixed: `sync-power-pulse-settings.ts` reads then writes with no
+compare-and-swap, so an admin saving mid-run loses that save.
+
+DOCUMENTED, not fixed: the `redraftWeights` back-compat guard in draft-grade.ts
+is dead, because the validator always defaults the field. Comment corrected to
+say what actually happens.

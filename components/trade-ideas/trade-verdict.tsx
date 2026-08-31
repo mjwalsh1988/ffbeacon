@@ -1,5 +1,8 @@
 import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react";
-import { PLAYER_PHOTO_RADIUS, PlayerHeadshot } from "@/components/player-headshot";
+import {
+  PLAYER_PHOTO_RADIUS,
+  PlayerHeadshot,
+} from "@/components/player-headshot";
 import { Panel } from "@/components/dashboard-panel";
 // The one ordinal in the codebase. Two hand-rolled ternaries is how "3th" got
 // onto a pick badge in the first place.
@@ -11,6 +14,7 @@ import { PickTag } from "@/components/trade-ideas/pick-tag";
 import { TradeOutcomePanel } from "@/components/trade-ideas/trade-outcome";
 import { buildTradeOutcome } from "@/lib/trade-impact/outcome";
 import type { PositionalWarContext } from "@/lib/trade-impact/asset-notes";
+import type { LeagueEmphasis } from "@/lib/league-emphasis";
 import type {
   ImpactGaps,
   ResolvedAsset,
@@ -62,7 +66,8 @@ import type {
 const UNAVAILABLE = "Not available";
 
 const GAP_COPY = {
-  lineup: "No weekly projections in this league, so lineup impact is unavailable.",
+  lineup:
+    "No weekly projections in this league, so lineup impact is unavailable.",
   simulation: "No regular season games left, so the odds are unavailable.",
   picks: "This league has no published pick values.",
 } as const;
@@ -106,6 +111,7 @@ export function TradeVerdict({
   theirTeamLabel,
   sleeperLeagueId,
   positionalWarByPlayer,
+  emphasis,
 }: {
   impact: TradeImpact;
   myTeamLabel: string;
@@ -114,6 +120,11 @@ export function TradeVerdict({
   sleeperLeagueId: string;
   /** Read only; see lib/trade-impact/positional-war-context.ts. */
   positionalWarByPlayer?: Map<string, PositionalWarContext>;
+  /**
+   * Names the value half for this league. Wins lead in every format; this only
+   * decides whether the second tab reads "Value" or "Leverage".
+   */
+  emphasis?: LeagueEmphasis;
 }) {
   const mine = impact.mine;
   const outcome = buildTradeOutcome(mine, impact.gaps);
@@ -250,7 +261,7 @@ export function TradeVerdict({
         sleeperLeagueId={sleeperLeagueId}
         positionalWarByPlayer={positionalWarByPlayer}
       />
-      <VerdictTabs impact={impactTab} value={valueTab} />
+      <VerdictTabs impact={impactTab} value={valueTab} emphasis={emphasis} />
     </div>
   );
 }
@@ -321,7 +332,9 @@ function PerformanceBody({
 
       <div className="mt-4">
         {noLineup ? (
-          <p className="text-sm leading-relaxed text-ink-muted">{GAP_COPY.lineup}</p>
+          <p className="text-sm leading-relaxed text-ink-muted">
+            {GAP_COPY.lineup}
+          </p>
         ) : (
           <ImpactWeeks weeks={t.weeks} teamName={teamName} />
         )}
@@ -372,7 +385,9 @@ function BeforeAfterTile({
           and puts the whole group at risk of being dropped from the list
           structure a screen reader builds. Same shape as the tiles in
           components/league-schedule/team-season.tsx. */}
-      <dd className={`mt-0.5 font-mono text-base font-bold tabular-nums ${color}`}>
+      <dd
+        className={`mt-0.5 font-mono text-base font-bold tabular-nums ${color}`}
+      >
         {before.toFixed(digits)} to {after.toFixed(digits)}
         <span className="mt-0.5 block font-mono text-[10px] font-normal leading-tight tabular-nums text-ink-muted">
           {fmtSigned(delta, digits)} {changeSuffix}
@@ -416,15 +431,19 @@ function OddsTile({
       <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">
         {label}
       </dt>
-      <dd className={`mt-0.5 font-mono text-base font-bold tabular-nums ${color}`}>
+      <dd
+        className={`mt-0.5 font-mono text-base font-bold tabular-nums ${color}`}
+      >
         {fmtOdds(before)} to {fmtOdds(after)}
         <span className="mt-0.5 block font-sans text-[10px] font-normal leading-tight text-ink-muted">
           {points === 0 ? (
             "no change"
           ) : (
             <>
-              <span className="font-mono tabular-nums">{fmtSigned(points)}</span> on the
-              odds
+              <span className="font-mono tabular-nums">
+                {fmtSigned(points)}
+              </span>{" "}
+              on the odds
             </>
           )}
         </span>
@@ -465,13 +484,27 @@ function ValueBody({ impact }: { impact: TradeImpact }) {
   return (
     <div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <AssetColumn title="You get" tone="in" assets={t.incoming} total={valueIn} />
-        <AssetColumn title="You send" tone="out" assets={t.outgoing} total={valueOut} />
+        <AssetColumn
+          title="You get"
+          tone="in"
+          assets={t.incoming}
+          total={valueIn}
+        />
+        <AssetColumn
+          title="You send"
+          tone="out"
+          assets={t.outgoing}
+          total={valueOut}
+        />
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <PlainTile label="Value in" value={fmtValue(valueIn)} accent="cyan" />
-        <PlainTile label="Value out" value={fmtValue(valueOut)} accent="purple" />
+        <PlainTile
+          label="Value out"
+          value={fmtValue(valueOut)}
+          accent="purple"
+        />
         <PlainTile
           label="Gap"
           value={`${gapPct}%`}
@@ -501,8 +534,8 @@ function ValueBody({ impact }: { impact: TradeImpact }) {
       </dl>
 
       <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-        Your roster goes from {fmtValue(t.valueBefore)} to {fmtValue(t.valueAfter)}, a
-        change of {fmtSigned(t.valueDelta)}.{" "}
+        Your roster goes from {fmtValue(t.valueBefore)} to{" "}
+        {fmtValue(t.valueAfter)}, a change of {fmtSigned(t.valueDelta)}.{" "}
         {/* ageDelta compares the two SIDES of the deal, not two states of the
             roster: it is the value-weighted age of what you receive against
             what you send, and it knows nothing about the other players you
@@ -527,7 +560,10 @@ function ValueBody({ impact }: { impact: TradeImpact }) {
             {impact.grade.verdictLabel}
           </p>
           <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-            {stripVerdictPrefix(impact.grade.explanation, impact.grade.verdictLabel)}
+            {stripVerdictPrefix(
+              impact.grade.explanation,
+              impact.grade.verdictLabel,
+            )}
           </p>
           <p className="mt-1.5 text-xs text-ink-muted">
             {[
@@ -542,8 +578,8 @@ function ValueBody({ impact }: { impact: TradeImpact }) {
         </div>
       ) : (
         <p className="mt-4 rounded-card border border-line bg-base/50 p-3 text-sm leading-relaxed text-ink-muted">
-          Signal Check has no second opinion on this deal, so the values above are the
-          only pricing shown.
+          Signal Check has no second opinion on this deal, so the values above
+          are the only pricing shown.
         </p>
       )}
     </div>
@@ -572,7 +608,9 @@ function PlainTile({
       <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-subtle">
         {label}
       </dt>
-      <dd className={`mt-0.5 font-mono text-base font-bold tabular-nums ${color}`}>
+      <dd
+        className={`mt-0.5 font-mono text-base font-bold tabular-nums ${color}`}
+      >
         {value}
         {sub && (
           <span className="mt-0.5 block font-sans text-[10px] font-normal leading-tight text-ink-subtle">
@@ -624,7 +662,9 @@ function AssetColumn({
         {title}
       </h4>
       {assets.length === 0 ? (
-        <p className="mt-2.5 text-sm text-ink-muted">Nothing on this side yet.</p>
+        <p className="mt-2.5 text-sm text-ink-muted">
+          Nothing on this side yet.
+        </p>
       ) : (
         <ul className="mt-2.5 space-y-2">
           {assets.map((asset) => (
@@ -681,7 +721,9 @@ function AssetRow({ asset }: { asset: ResolvedAsset }) {
   const detail = [asset.position, asset.team].filter(Boolean).join(", ");
   const figures = [
     `value ${fmtValue(asset.value)}`,
-    asset.projPoints !== null ? `${asset.projPoints.toFixed(1)} pts/wk` : "no projection",
+    asset.projPoints !== null
+      ? `${asset.projPoints.toFixed(1)} pts/wk`
+      : "no projection",
     asset.age !== null ? `age ${asset.age.toFixed(1)}` : null,
     asset.isInactive ? "cannot start, on IR or taxi" : null,
   ].filter(Boolean) as string[];
@@ -759,7 +801,8 @@ function TheirSide({ team, gaps }: { team: TeamImpact; gaps: ImpactGaps }) {
               Their playoff odds
             </dt>
             <dd className="mt-0.5 font-mono text-base font-bold tabular-nums text-ink">
-              {fmtOdds(team.playoffOddsBefore)} to {fmtOdds(team.playoffOddsAfter)}
+              {fmtOdds(team.playoffOddsBefore)} to{" "}
+              {fmtOdds(team.playoffOddsAfter)}
             </dd>
           </div>
         )}

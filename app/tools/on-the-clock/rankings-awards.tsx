@@ -32,16 +32,39 @@ import {
   Trophy,
   Zap,
   type LucideIcon,
+  Gift,
+  Scale,
+  Mountain,
+  CalendarX,
+  Shuffle,
+  PackageOpen,
+  Swords,
+  TrendingUp,
 } from "lucide-react";
 import { SleeperAvatar } from "@/components/sleeper-avatar";
-import type { Award, AwardClaimant, AwardId } from "@/lib/on-the-clock/awards";
+import type {
+  Award,
+  AwardClaimant,
+  AwardId,
+  RetiredAwardId,
+} from "@/lib/on-the-clock/awards";
 import { EmptyCard, ErrorCard, LoadingCard, NotStartedCard } from "./states";
 
 /** Per-award visual identity: icon + accent classes (FF Beacon dark brand). */
-const AWARD_THEME: Record<
-  AwardId,
-  { icon: LucideIcon; accentText: string; accentBorder: string; accentBg: string; glow: string }
-> = {
+type AwardTheme = {
+  icon: LucideIcon;
+  accentText: string;
+  accentBorder: string;
+  accentBg: string;
+  glow: string;
+};
+
+/**
+ * Keyed by every LIVE award plus every retired one, because a frozen snapshot
+ * still carries the awards that existed when it was written and a missing key
+ * would render a card with no icon rather than a card that reads as historical.
+ */
+const AWARD_THEME: Record<AwardId | RetiredAwardId, AwardTheme> = {
   "most-active-trader": {
     icon: Flame,
     accentText: "text-amber-300",
@@ -133,6 +156,62 @@ const AWARD_THEME: Record<
     accentBg: "bg-amber-400/10",
     glow: "shadow-[0_0_60px_-40px_rgba(251,191,36,0.9)]",
   },
+  "round-steals": {
+    icon: Gift,
+    accentText: "text-amber-300",
+    accentBorder: "border-amber-400/50",
+    accentBg: "bg-amber-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(251,191,36,0.9)]",
+  },
+  "most-balanced": {
+    icon: Scale,
+    accentText: "text-brand-cyan",
+    accentBorder: "border-brand-cyan/50",
+    accentBg: "bg-brand-cyan/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(34,211,238,0.9)]",
+  },
+  "most-top-heavy": {
+    icon: Mountain,
+    accentText: "text-orange-300",
+    accentBorder: "border-orange-400/50",
+    accentBg: "bg-orange-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(253,186,116,0.9)]",
+  },
+  "bye-week-nightmare": {
+    icon: CalendarX,
+    accentText: "text-rose-300",
+    accentBorder: "border-rose-400/50",
+    accentBg: "bg-rose-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(251,113,133,0.9)]",
+  },
+  "against-the-room": {
+    icon: Shuffle,
+    accentText: "text-violet-300",
+    accentBorder: "border-violet-400/50",
+    accentBg: "bg-violet-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(196,181,253,0.9)]",
+  },
+  "late-round-haul": {
+    icon: PackageOpen,
+    accentText: "text-emerald-300",
+    accentBorder: "border-emerald-400/50",
+    accentBg: "bg-emerald-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(52,211,153,0.9)]",
+  },
+  "toughest-schedule": {
+    icon: Swords,
+    accentText: "text-red-300",
+    accentBorder: "border-red-400/50",
+    accentBg: "bg-red-400/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(252,165,165,0.9)]",
+  },
+  "scarcity-read": {
+    icon: TrendingUp,
+    accentText: "text-brand-purple",
+    accentBorder: "border-brand-purple/50",
+    accentBg: "bg-brand-purple/10",
+    glow: "shadow-[0_0_60px_-40px_rgba(168,85,247,0.9)]",
+  },
 };
 
 /** Awards that depend on the league's trades, used to show a loading-aware note. */
@@ -192,18 +271,23 @@ export function RankingsAwards({
     <div className="space-y-8">
       <section aria-labelledby="otc-awards-title" className="space-y-4">
         <div className="min-w-0">
-          <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl" id="otc-awards-title">
+          <h2
+            className="text-xl font-bold tracking-tight text-ink sm:text-2xl"
+            id="otc-awards-title"
+          >
             Draft awards
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Live hardware for your league. Holders change on every sync as the picks and trades roll
-            in.
+            Live hardware for your league. Holders change on every sync as the
+            picks and trades roll in.
           </p>
         </div>
 
         {tradesError ? (
           <div className="space-y-2">
-            <ErrorCard message={`Trades could not load, so the trade awards are paused. ${tradesError}`} />
+            <ErrorCard
+              message={`Trades could not load, so the trade awards are paused. ${tradesError}`}
+            />
             <button
               type="button"
               onClick={onRetryTrades}
@@ -235,7 +319,6 @@ export function RankingsAwards({
           ))}
         </ul>
       </section>
-
     </div>
   );
 }
@@ -245,8 +328,13 @@ export function RankingsAwards({
 // ---------------------------------------------------------------------------
 
 /** Concise live-region summary of the awards state. */
-function awardsStatus(awards: Award[], tradesLoading: boolean, tradesError: boolean): string {
-  if (tradesError) return "Trades could not load, so the trade awards are paused.";
+function awardsStatus(
+  awards: Award[],
+  tradesLoading: boolean,
+  tradesError: boolean,
+): string {
+  if (tradesError)
+    return "Trades could not load, so the trade awards are paused.";
   if (tradesLoading) return "Loading trades to grade the trade awards.";
   const earned = awards.filter((a) => !a.pending).length;
   return `${earned} of ${awards.length} awards claimed so far.`;
@@ -289,10 +377,15 @@ function AwardCard({
           <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${theme.accentText}`}>
+          <p
+            className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${theme.accentText}`}
+          >
             {award.category}
           </p>
-          <h3 id={labelId} className="text-base font-bold leading-tight tracking-tight text-ink">
+          <h3
+            id={labelId}
+            className="text-base font-bold leading-tight tracking-tight text-ink"
+          >
             {award.title}
           </h3>
         </div>
@@ -328,9 +421,13 @@ function AwardCard({
                 player and the slot sit under the claimant. */}
             {award.pickHighlight && (
               <p className="rounded-card border border-line bg-base/40 px-2.5 py-1.5 text-xs text-ink">
-                <span className="font-semibold">{award.pickHighlight.playerName}</span>
-                {award.pickHighlight.position ? `, ${award.pickHighlight.position}` : ""} at pick{" "}
-                {award.pickHighlight.pickNo}
+                <span className="font-semibold">
+                  {award.pickHighlight.playerName}
+                </span>
+                {award.pickHighlight.position
+                  ? `, ${award.pickHighlight.position}`
+                  : ""}{" "}
+                at pick {award.pickHighlight.pickNo}
               </p>
             )}
             {extra > 0 && (
@@ -340,7 +437,9 @@ function AwardCard({
             )}
           </div>
         )}
-        <p className="mt-3 text-xs leading-relaxed text-ink-muted">{award.description}</p>
+        <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+          {award.description}
+        </p>
       </div>
     </article>
   );
@@ -350,11 +449,17 @@ function ClaimantRow({ claimant }: { claimant: AwardClaimant }) {
   return (
     <li className="flex items-center gap-2.5">
       <span aria-hidden="true" className="shrink-0">
-        <SleeperAvatar avatarId={claimant.avatar} title={claimant.ownerName} size={32} />
+        <SleeperAvatar
+          avatarId={claimant.avatar}
+          title={claimant.ownerName}
+          size={32}
+        />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-baseline gap-x-1.5">
-          <span className="truncate text-sm font-bold text-ink">{claimant.ownerName}</span>
+          <span className="truncate text-sm font-bold text-ink">
+            {claimant.ownerName}
+          </span>
           {claimant.isYou && (
             <span className="shrink-0 rounded-full border border-brand-cyan/40 bg-brand-cyan/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-cyan">
               You
@@ -362,7 +467,9 @@ function ClaimantRow({ claimant }: { claimant: AwardClaimant }) {
           )}
         </span>
         {claimant.teamName && (
-          <span className="block truncate text-xs text-ink-muted">{claimant.teamName}</span>
+          <span className="block truncate text-xs text-ink-muted">
+            {claimant.teamName}
+          </span>
         )}
       </span>
     </li>

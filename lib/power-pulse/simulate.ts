@@ -39,7 +39,18 @@ export type SimOptions = {
   playoffTeams: number;
   /** First playoff week. From Sleeper settings.playoff_week_start. */
   playoffWeekStart: number;
+  /**
+   * Sleeper's playoff_round_type. 0 is one week per round, 1 is two weeks for
+   * every round, 2 is two weeks for the championship round only. Absent is
+   * treated as 0, which is what this simulated before it read the setting.
+   */
+  playoffRoundType?: number;
 };
+
+/** Sleeper's three playoff round shapes. */
+const ROUND_ONE_WEEK = 0;
+const ROUND_TWO_WEEKS = 1;
+const ROUND_TWO_WEEK_FINAL = 2;
 
 /** Next power of two at or above n. Drives how many first-round byes exist. */
 function nextPowerOfTwo(n: number): number {
@@ -67,10 +78,21 @@ export function simulateSeason(
   teams.forEach((t, i) => index.set(t.sleeperRosterId, i));
 
   const playoffTeams = Math.max(0, Math.min(options.playoffTeams, n));
-  const byeCount = playoffTeams > 0 ? nextPowerOfTwo(playoffTeams) - playoffTeams : 0;
+  const byeCount =
+    playoffTeams > 0 ? nextPowerOfTwo(playoffTeams) - playoffTeams : 0;
 
   // Only regular season weeks drive seeding.
-  const regularSeason = schedule.filter((w) => w.week < options.playoffWeekStart);
+  const regularSeason = schedule.filter(
+    (w) => w.week < options.playoffWeekStart,
+  );
+
+  const roundType = options.playoffRoundType ?? ROUND_ONE_WEEK;
+  /** How many weeks one round runs, given whether it is the championship. */
+  const weeksForRound = (isFinal: boolean): number => {
+    if (roundType === ROUND_TWO_WEEKS) return 2;
+    if (roundType === ROUND_TWO_WEEK_FINAL && isFinal) return 2;
+    return 1;
+  };
 
   const rng = createRng(options.seed);
 
@@ -128,25 +150,45 @@ export function simulateSeason(
 
     const field = order.slice(0, playoffTeams);
     for (const i of field) madePlayoffs[i] += 1;
-    for (let i = 0; i < byeCount && i < field.length; i += 1) gotBye[field[i]] += 1;
+    for (let i = 0; i < byeCount && i < field.length; i += 1)
+      gotBye[field[i]] += 1;
 
     // Bracket. Teams holding a first-round bye sit out round one; after that
     // the field is reseeded every round so the top remaining seed always draws
     // the bottom remaining seed.
     const seedOf = new Map<number, number>();
     field.forEach((teamIndex, seed) => seedOf.set(teamIndex, seed));
-    const bySeed = (a: number, b: number) => (seedOf.get(a) ?? 0) - (seedOf.get(b) ?? 0);
+    const bySeed = (a: number, b: number) =>
+      (seedOf.get(a) ?? 0) - (seedOf.get(b) ?? 0);
+
+    /**
+     * One team's score for a round, over however many weeks that round runs.
+     *
+     * A two-week round is not cosmetic. Summing two independent draws leaves the
+     * mean doubled but the spread only sqrt(2) times wider, so the noise falls
+     * by about 30 percent relative to the gap between two teams and the better
+     * roster wins more often. Eleven of the leagues synced here use round type
+     * 1 or 2, and simulating all of them as single weeks overstated how random
+     * their postseason is, which lands directly on title odds.
+     */
+    const roundScore = (team: number, weeksInRound: number): number => {
+      let total = 0;
+      for (let w = 0; w < weeksInRound; w += 1) {
+        total += normalDraw(rng, teams[team].mean, teams[team].sigma);
+      }
+      return total;
+    };
 
     /** Pair best against worst; an odd team out advances unopposed. */
-    const playRound = (entrants: number[]): number[] => {
+    const playRound = (entrants: number[], weeksInRound: number): number[] => {
       const winners: number[] = [];
       let lo = 0;
       let hi = entrants.length - 1;
       while (lo < hi) {
         const a = entrants[lo];
         const b = entrants[hi];
-        const scoreA = normalDraw(rng, teams[a].mean, teams[a].sigma);
-        const scoreB = normalDraw(rng, teams[b].mean, teams[b].sigma);
+        const scoreA = roundScore(a, weeksInRound);
+        const scoreB = roundScore(b, weeksInRound);
         winners.push(scoreA >= scoreB ? a : b);
         lo += 1;
         hi -= 1;
@@ -158,12 +200,14 @@ export function simulateSeason(
     let remaining = field.slice();
     if (byeCount > 0 && remaining.length > byeCount) {
       const onBye = remaining.slice(0, byeCount);
-      const playIn = playRound(remaining.slice(byeCount));
+      const playIn = playRound(remaining.slice(byeCount), weeksForRound(false));
       remaining = [...onBye, ...playIn].sort(bySeed);
     }
     // Each pass at least halves the field (rounded up), so this terminates.
     while (remaining.length > 1) {
-      remaining = playRound(remaining);
+      // The final is the round that leaves exactly one team standing, which is
+      // the one with two entrants. Round type 2 lengthens only that one.
+      remaining = playRound(remaining, weeksForRound(remaining.length <= 2));
     }
     if (remaining.length === 1) wonTitle[remaining[0]] += 1;
   }

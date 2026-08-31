@@ -2,6 +2,10 @@
 
 import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 import { Scale, TrendingUp } from "lucide-react";
+import {
+  emphasisForDynastyFlag,
+  type LeagueEmphasis,
+} from "@/lib/league-emphasis";
 
 /**
  * The two halves of a trade evaluation, one at a time.
@@ -43,25 +47,62 @@ import { Scale, TrendingUp } from "lucide-react";
 
 type TabKey = "impact" | "value";
 
-const TABS: {
+/**
+ * The order, which never varies. Only the LABELS change with league format, so
+ * the keyboard handler reads this rather than closing over the labelled array:
+ * a useCallback with empty deps over a per-render array is a stale closure
+ * waiting to happen, even where the values it reads happen to be constant.
+ */
+const TAB_ORDER: TabKey[] = ["impact", "value"];
+
+/**
+ * The tabs, in order. "Your season" is first in EVERY league, dynasty included,
+ * because who wins games is the question everywhere.
+ *
+ * What changes with format is what the second tab is called. In a dynasty
+ * league the value of an asset is a standing a reader is genuinely managing
+ * across seasons; in a redraft league it is only what a player would fetch in a
+ * deal, and calling that tab "Value" invites a redraft reader to weigh it as a
+ * verdict on the trade when the verdict is on the first tab.
+ */
+function tabsFor(emphasis: LeagueEmphasis): {
   key: TabKey;
   label: string;
   sub: string;
   Icon: typeof Scale;
-}[] = [
-  { key: "impact", label: "Your season", sub: "Lineup and wins", Icon: TrendingUp },
-  { key: "value", label: "Value", sub: "What it is worth", Icon: Scale },
-];
+}[] {
+  return [
+    {
+      key: "impact",
+      label: "Your season",
+      sub: "Lineup and wins",
+      Icon: TrendingUp,
+    },
+    {
+      key: "value",
+      label: emphasis.winsFirst ? "Leverage" : "Value",
+      sub: emphasis.winsFirst ? "What it would fetch" : "What it is worth",
+      Icon: Scale,
+    },
+  ];
+}
 
 export function VerdictTabs({
   impact,
   value,
+  emphasis = emphasisForDynastyFlag(true),
 }: {
   /** The lineup and season half, server rendered. */
   impact: ReactNode;
   /** The trade value half plus the Signal Check second opinion. */
   value: ReactNode;
+  /**
+   * Names the value tab for this league. Defaults to the dynasty wording, which
+   * is what every caller rendered before this existed.
+   */
+  emphasis?: LeagueEmphasis;
 }) {
+  const TABS = tabsFor(emphasis);
   const [active, setActive] = useState<TabKey>("impact");
   const baseId = useId();
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -69,21 +110,26 @@ export function VerdictTabs({
   const tabId = (key: TabKey) => `${baseId}-tab-${key}`;
   const panelId = (key: TabKey) => `${baseId}-panel-${key}`;
 
-  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    const order = TABS.map((t) => t.key);
-    const current = order.indexOf(
-      (document.activeElement?.getAttribute("data-tab-key") as TabKey) ?? "impact",
-    );
-    if (current < 0) return;
-    let next = -1;
-    if (event.key === "ArrowRight") next = (current + 1) % order.length;
-    else if (event.key === "ArrowLeft") next = (current - 1 + order.length) % order.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = order.length - 1;
-    if (next < 0) return;
-    event.preventDefault();
-    refs.current[order[next]]?.focus();
-  }, []);
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const order = TAB_ORDER;
+      const current = order.indexOf(
+        (document.activeElement?.getAttribute("data-tab-key") as TabKey) ??
+          "impact",
+      );
+      if (current < 0) return;
+      let next = -1;
+      if (event.key === "ArrowRight") next = (current + 1) % order.length;
+      else if (event.key === "ArrowLeft")
+        next = (current - 1 + order.length) % order.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = order.length - 1;
+      if (next < 0) return;
+      event.preventDefault();
+      refs.current[order[next]]?.focus();
+    },
+    [],
+  );
 
   return (
     <div>
@@ -148,7 +194,9 @@ export function VerdictTabs({
                 )}
                 <span
                   className={`flex items-center gap-1.5 text-sm font-semibold transition-colors ${
-                    selected ? "text-ink" : "text-ink-muted group-hover:text-ink"
+                    selected
+                      ? "text-ink"
+                      : "text-ink-muted group-hover:text-ink"
                   }`}
                 >
                   <Icon

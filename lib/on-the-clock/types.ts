@@ -34,9 +34,7 @@ export type TeamNeedAggressiveness = "conservative" | "balanced" | "aggressive";
  *  - always_allowed: eligible like any other position (not recommended default)
  */
 export type DstkRecommendBehavior =
-  | "suppress_until_need"
-  | "never"
-  | "always_allowed";
+  "suppress_until_need" | "never" | "always_allowed";
 
 export interface FeatureSettings {
   /** Master on/off for the public tool. Ships OFF (see default-settings.ts). */
@@ -247,17 +245,35 @@ export interface AwardsSettings {
   minPlayersForLineupAwards: number;
 }
 
+/** One set of component weights. Normalized at use, so they need not sum to 1. */
+export interface GradeWeights {
+  market: number;
+  lineup: number;
+  construction: number;
+  reliability: number;
+  future: number;
+  trades: number;
+}
+
 export interface GradeSettings {
   enabled: boolean;
-  /** Component weights. Normalized at use, so they need not sum to 1. */
-  weights: {
-    market: number;
-    lineup: number;
-    construction: number;
-    reliability: number;
-    future: number;
-    trades: number;
-  };
+  /** Component weights for a dynasty league. */
+  weights: GradeWeights;
+  /**
+   * Component weights for a redraft league, which is grading a different thing.
+   *
+   * A dynasty startup is largely an asset-acquisition exercise, so beating the
+   * market is most of the answer. A redraft draft has exactly one job, which is
+   * to assemble a starting lineup that wins games this season; value captured
+   * against ADP is a means to that and not the end of it. Getting a receiver
+   * forty picks late is only a good draft if it also produced a team.
+   *
+   * The validator defaults it, so a stored row written before this existed
+   * still parses into a complete document. draft-grade.ts still guards for its
+   * absence, because a caller can hand computeDraftGrades a settings object it
+   * built by hand.
+   */
+  redraftWeights: GradeWeights;
   /**
    * How much of the final grade is absolute rather than curved within the
    * league. 0 is a pure curve, which guarantees somebody gets an F even in a

@@ -6,7 +6,7 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "migrate:power-pulse-pp3": "tsx --env-file=.env.local scripts/migrate-power-pulse-pp3.ts",
+    "sync:power-pulse-settings": "tsx --env-file=.env.local scripts/sync-power-pulse-settings.ts",
     "dev": "next dev",
     "prebuild": "tsx scripts/check-reserved-routes.ts",
     "build": "next build",

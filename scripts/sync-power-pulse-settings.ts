@@ -1,5 +1,9 @@
 /**
- * One-time settings migration: advance the stored Power Pulse row to pp-3.
+ * Advance the stored Power Pulse settings row to whatever the code now defaults to.
+ *
+ * Deliberately NOT named after a model version. It reads DEFAULT_POWER_PULSE_SETTINGS
+ * at run time, so it stays correct across every future bump without being edited;
+ * it went out to pp-3 and to pp-4 without a line changing.
  *
  * WHY A SCRIPT AND NOT A MIGRATION
  * `mergePowerPulseSettings` layers the stored row OVER the code defaults, so a
@@ -21,22 +25,34 @@
  * arrive to find caches already labelled pp-3 and would not recompute a single
  * league, which is precisely the staleness the version exists to prevent.
  *
+ * CONCURRENCY
+ * The read and the write are not one transaction, so an admin who saves
+ * /admin/power-pulse in the seconds between them has that save overwritten. This
+ * is a deploy-time script run by one person against a single-row table, so a
+ * compare-and-swap would be ceremony around a race nobody is in; the honest
+ * mitigation is to run it when nobody is editing, and the preview run tells you
+ * exactly what it is about to change first.
+ *
  * SAFETY
  * Every field is advanced only where the stored value still equals its pp-2
  * default. A figure an admin has genuinely tuned since is left alone and named
  * in the output, so a deliberate override is never silently overwritten.
  * Idempotent: a second run reports nothing left to do.
  *
- *   npm run migrate:power-pulse-pp3            preview, writes nothing
- *   npm run migrate:power-pulse-pp3 -- --apply
+ *   npm run sync:power-pulse-settings            preview, writes nothing
+ *   npm run sync:power-pulse-settings -- --apply
  */
 
 import { getServiceClient } from "./_supabase";
 import { DEFAULT_POWER_PULSE_SETTINGS } from "../lib/power-pulse/default-settings";
 import type { PulsePosition } from "../lib/power-pulse/types";
 
-/** What pp-2 held, so a hand-tuned value is distinguishable from an untouched one. */
-const PP2_DEFAULTS = {
+/**
+ * The values the LAST shipped defaults held, which is what makes a hand-tuned
+ * figure distinguishable from one nobody ever touched. Update this only when a
+ * previous default is superseded, never to match the new one.
+ */
+const SUPERSEDED_DEFAULTS = {
   modelVersion: "pp-2",
   defaultCv: { QB: 0.35, RB: 0.55, WR: 0.65, TE: 0.7, K: 0.5, DEF: 0.75 } as Record<
     PulsePosition,
@@ -69,7 +85,7 @@ async function main(): Promise<void> {
   const changes: Change[] = [];
   const kept: Kept[] = [];
 
-  if (stored.modelVersion === PP2_DEFAULTS.modelVersion) {
+  if (stored.modelVersion === SUPERSEDED_DEFAULTS.modelVersion) {
     changes.push({
       path: "modelVersion",
       from: stored.modelVersion,
@@ -89,8 +105,8 @@ async function main(): Promise<void> {
 
   const variance = (stored.variance ?? {}) as Record<string, unknown>;
   const cv = (variance.defaultCv ?? {}) as Record<string, number>;
-  for (const position of Object.keys(PP2_DEFAULTS.defaultCv) as PulsePosition[]) {
-    const old = PP2_DEFAULTS.defaultCv[position];
+  for (const position of Object.keys(SUPERSEDED_DEFAULTS.defaultCv) as PulsePosition[]) {
+    const old = SUPERSEDED_DEFAULTS.defaultCv[position];
     const next = DEFAULT_POWER_PULSE_SETTINGS.variance.defaultCv[position];
     if (cv[position] === next) continue;
     if (cv[position] === old) {
@@ -111,7 +127,7 @@ async function main(): Promise<void> {
   for (const k of kept) console.log(`  keep    ${k.path} = ${String(k.value)} (${k.reason})`);
 
   if (changes.length === 0) {
-    console.log("Nothing to change. The stored row already matches pp-3.");
+    console.log("Nothing to change. The stored row already matches the code defaults.");
     return;
   }
 
@@ -132,6 +148,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error("[migrate-power-pulse-pp3]", err instanceof Error ? err.message : err);
+  console.error("[sync-power-pulse-settings]", err instanceof Error ? err.message : err);
   process.exit(1);
 });

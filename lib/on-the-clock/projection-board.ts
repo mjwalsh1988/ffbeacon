@@ -31,10 +31,18 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { closestScoringBase, type ScoringSettings } from "@/lib/league-scoring";
-import { loadAccuracy, loadDefenseSplits, type AccuracyRow, type ProjectionRow } from "@/lib/power-pulse/load";
+import {
+  loadAccuracy,
+  loadDefenseSplits,
+  type AccuracyRow,
+  type ProjectionRow,
+} from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
-import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
+import {
+  projectPlayerWeek,
+  reliabilityMultiplier,
+} from "@/lib/power-pulse/project";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 
 type Client = SupabaseClient<Database>;
@@ -161,8 +169,13 @@ export function scoringSignature(
 async function loadPlayerFacts(
   supabase: Client,
   playerIds: string[],
-): Promise<Map<string, { position: PulsePosition; injuryStatus: string | null }>> {
-  const out = new Map<string, { position: PulsePosition; injuryStatus: string | null }>();
+): Promise<
+  Map<string, { position: PulsePosition; injuryStatus: string | null }>
+> {
+  const out = new Map<
+    string,
+    { position: PulsePosition; injuryStatus: string | null }
+  >();
   const valid = new Set<string>(PULSE_POSITIONS);
   const CHUNK = 300;
   for (let i = 0; i < playerIds.length; i += CHUNK) {
@@ -171,8 +184,11 @@ async function loadPlayerFacts(
       .from("players")
       .select("id, position, injury_status:metadata->sleeper->>injury_status")
       .in("id", chunk)
-      .overrideTypes<{ id: string; position: string | null; injury_status: string | null }[]>();
-    if (error) throw new Error(`otc projection player load failed: ${error.message}`);
+      .overrideTypes<
+        { id: string; position: string | null; injury_status: string | null }[]
+      >();
+    if (error)
+      throw new Error(`otc projection player load failed: ${error.message}`);
     for (const p of data ?? []) {
       const position = (p.position ?? "").toUpperCase();
       if (!valid.has(position)) continue;
@@ -268,7 +284,11 @@ export async function buildProjectionBoard(
   const settings = params.settings ?? (await loadPowerPulseSettings(supabase));
   const scoringBase = closestScoringBase(params.scoringSettings);
 
-  const projections = await loadAllProjections(supabase, params.season, params.fromWeek);
+  const projections = await loadAllProjections(
+    supabase,
+    params.season,
+    params.fromWeek,
+  );
   const playerIds = [...new Set(projections.map((p) => p.playerId))];
   const facts = await loadPlayerFacts(supabase, playerIds);
 
@@ -337,7 +357,10 @@ export async function buildProjectionBoard(
 
   return {
     version: PROJECTION_BOARD_VERSION,
-    scoringSignature: scoringSignature(params.scoringSettings, settings.modelVersion),
+    scoringSignature: scoringSignature(
+      params.scoringSettings,
+      settings.modelVersion,
+    ),
     season: params.season,
     fromWeek: params.fromWeek,
     weeks: [...weekSet].sort((a, b) => a - b),
@@ -396,7 +419,11 @@ const parsedBoards = new Map<string, { at: number; board: ProjectionBoard }>();
  * another 24, so a board could be served at twice its TTL and miss a whole
  * nightly projection refresh.
  */
-function rememberBoard(key: string, board: ProjectionBoard, computedAt: number): void {
+function rememberBoard(
+  key: string,
+  board: ProjectionBoard,
+  computedAt: number,
+): void {
   parsedBoards.delete(key);
   parsedBoards.set(key, { at: computedAt, board });
   while (parsedBoards.size > PARSED_BOARD_LIMIT) {
@@ -487,8 +514,12 @@ export async function getProjectionBoard(
   },
 ): Promise<ProjectionBoard> {
   const settings = params.settings ?? (await loadPowerPulseSettings(admin));
-  const dataVersion = params.dataVersion ?? (await projectionDataVersion(admin, params.season));
-  const signature = scoringSignature(params.scoringSettings, settings.modelVersion);
+  const dataVersion =
+    params.dataVersion ?? (await projectionDataVersion(admin, params.season));
+  const signature = scoringSignature(
+    params.scoringSettings,
+    settings.modelVersion,
+  );
   // The fingerprint is in the in-process key too, so a warm process cannot serve
   // a board the database has already been told to rebuild.
   const key = `${signature}|${params.season}|${params.fromWeek}|${dataVersion}`;
@@ -550,7 +581,11 @@ export async function getProjectionBoard(
     );
     // A failed cache write costs a recompute next time; it must never fail the
     // request that produced a perfectly good board.
-    if (error) console.error("[on-the-clock/projection-board] cache write failed", error.message);
+    if (error)
+      console.error(
+        "[on-the-clock/projection-board] cache write failed",
+        error.message,
+      );
     return board;
   })();
 

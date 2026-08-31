@@ -12,11 +12,16 @@
  * both import it; neither owns it.
  */
 
-import { scoreWithFallback, type ScoringSettings } from "@/lib/league-scoring";
+import {
+  closestScoringBase,
+  scoreWithFallback,
+  type ScoringSettings,
+} from "@/lib/league-scoring";
 import type { PowerPulseSettings } from "./default-settings";
 import { clamp } from "./math";
 import type { AccuracyRow, DefenseRow, ProjectionRow } from "./load";
 import type { PulsePosition } from "./types";
+import { curveFor, cvForPoints } from "./variance-curve";
 
 /**
  * Injury designations that keep a player out for the rest of the season rather
@@ -48,7 +53,10 @@ export function opponentMultiplier(
 ): number {
   if (!settings.opponent.enabled || !opponentTeam) return 1;
 
-  const weights = [settings.opponent.currentSeasonWeight, settings.opponent.priorSeasonWeight];
+  const weights = [
+    settings.opponent.currentSeasonWeight,
+    settings.opponent.priorSeasonWeight,
+  ];
   let weighted = 0;
   let totalWeight = 0;
   seasons.slice(0, 2).forEach((season, i) => {
@@ -85,8 +93,10 @@ export function availabilityMultiplier(
   accuracy: AccuracyRow | null,
   settings: PowerPulseSettings,
 ): number {
-  if (!settings.availability.enabled || accuracy?.availabilityRate == null) return 1;
-  const damped = 1 - settings.availability.damping * (1 - accuracy.availabilityRate);
+  if (!settings.availability.enabled || accuracy?.availabilityRate == null)
+    return 1;
+  const damped =
+    1 - settings.availability.damping * (1 - accuracy.availabilityRate);
   return clamp(damped, settings.availability.minMultiplier, 1);
 }
 
@@ -150,20 +160,54 @@ export function injuryMultiplier(
   return week === currentWeek ? multiplier : 1;
 }
 
-/** Per-week coefficient of variation for one player. */
+/**
+ * Per-week coefficient of variation for one player.
+ *
+ * A player with enough graded weeks uses his OWN measured spread, and always
+ * has. Everything below is about the other third of the pool, the ones with no
+ * history: rookies, role changes, anyone Sleeper has only just started
+ * projecting.
+ *
+ * The fallback used to be one number per position. It is now read off a curve
+ * keyed on the player's own projected points and on the league's scoring base,
+ * because both change the answer materially and a single number could not carry
+ * either. See lib/power-pulse/variance-curve.ts for the measurements and for why
+ * points rather than rank.
+ *
+ * `defaultCv` survives as the last resort, for a position with no curve or a
+ * player with no projected points to place on one. It is never the first answer.
+ */
 export function coefficientOfVariation(
   position: PulsePosition,
   accuracy: AccuracyRow | null,
   settings: PowerPulseSettings,
+  opts: { projectedPoints?: number | null; scoringBase?: string } = {},
 ): number {
-  const fallback = settings.variance.defaultCv[position] ?? 0.6;
-  if (
-    accuracy?.ratioStdev == null ||
-    accuracy.weeksPlayed < settings.variance.minGamesForMeasured
-  ) {
-    return fallback;
+  const measured =
+    accuracy?.ratioStdev != null &&
+    accuracy.weeksPlayed >= settings.variance.minGamesForMeasured;
+  if (measured) {
+    return clamp(
+      accuracy!.ratioStdev!,
+      settings.variance.minCv,
+      settings.variance.maxCv,
+    );
   }
-  return clamp(accuracy.ratioStdev, settings.variance.minCv, settings.variance.maxCv);
+
+  const { projectedPoints, scoringBase } = opts;
+  if (typeof projectedPoints === "number" && Number.isFinite(projectedPoints)) {
+    const anchors = curveFor(scoringBase ?? "pts_ppr", position);
+    const fromCurve = cvForPoints(anchors, projectedPoints);
+    if (fromCurve !== null) {
+      return clamp(fromCurve, settings.variance.minCv, settings.variance.maxCv);
+    }
+  }
+
+  return clamp(
+    settings.variance.defaultCv[position] ?? 0.6,
+    settings.variance.minCv,
+    settings.variance.maxCv,
+  );
 }
 
 /** What the caller needs to know about a player to project them. */
@@ -264,13 +308,33 @@ export function projectPlayerWeek({
   // our own week-to-week discount must not fire on top of it. A season-long
   // designation still overrides everything: see injuryMultiplier.
   const sourcePricedIn = projection.availability === "projected";
-  const injMult = injuryMultiplier(subject.injuryStatus, week, currentWeek, settings, {
-    sourcePricedIn,
-  });
+  const injMult = injuryMultiplier(
+    subject.injuryStatus,
+    week,
+    currentWeek,
+    settings,
+    {
+      sourcePricedIn,
+    },
+  );
   const availMult = availabilityMultiplier(accuracy, settings);
 
-  const points = Math.max(0, scored.points * oppMult * reliability * availMult * injMult);
-  const cv = coefficientOfVariation(subject.position, accuracy, settings);
+  const points = Math.max(
+    0,
+    scored.points * oppMult * reliability * availMult * injMult,
+  );
+  // The curve is read off the player's RAW projected points, before our own
+  // multipliers. A receiver discounted to 6 because he is Questionable this week
+  // is still a WR1 in every other respect, and pricing his volatility as a WR60
+  // would compound one adjustment into two.
+  // Derived here rather than passed in. Every caller already holds the scoring
+  // map and closestScoringBase is two comparisons, so a parameter would only
+  // create a way for a caller to hand this function a base that disagrees with
+  // the scoring it is simultaneously being asked to score under.
+  const cv = coefficientOfVariation(subject.position, accuracy, settings, {
+    projectedPoints: scored.points,
+    scoringBase: closestScoringBase(scoringSettings),
+  });
 
   return {
     week,

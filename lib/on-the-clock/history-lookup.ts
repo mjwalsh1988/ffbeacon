@@ -30,7 +30,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { FFBEACON_SOURCE_SLUG, FFBEACON_SOURCE_DISPLAY } from "@/lib/signal-check/format";
+import {
+  FFBEACON_SOURCE_SLUG,
+  FFBEACON_SOURCE_DISPLAY,
+} from "@/lib/signal-check/format";
 import { computeAgeDecimal } from "@/lib/player-age";
 import {
   ageFromBirthDate,
@@ -74,7 +77,8 @@ export function classifySnapshotSource(
     new Date(completedAtMs).toISOString().slice(0, 10);
   if (sameDay) return "exact";
   if (chosenMs > completedAtMs) return "next_available";
-  if (draftStartAtMs !== null && chosenMs >= draftStartAtMs) return "during_draft";
+  if (draftStartAtMs !== null && chosenMs >= draftStartAtMs)
+    return "during_draft";
   return "previous";
 }
 
@@ -109,10 +113,15 @@ export function deriveSnapshotConfidence(params: {
    */
   projectionDateMs?: number | null;
 }): SnapshotConfidence {
-  const { valueSource, valueDateMs, adpSource, adpDateMs, completedAtMs } = params;
-  if (valueSource === "current_fallback" || adpSource === "current_fallback") return "low";
+  const { valueSource, valueDateMs, adpSource, adpDateMs, completedAtMs } =
+    params;
+  if (valueSource === "current_fallback" || adpSource === "current_fallback")
+    return "low";
 
-  const closeEnough = (kind: SnapshotSourceKind, dateMs: number | null): boolean => {
+  const closeEnough = (
+    kind: SnapshotSourceKind,
+    dateMs: number | null,
+  ): boolean => {
     if (kind === "exact" || kind === "during_draft") return true;
     if (dateMs === null || completedAtMs === null) return false;
     return Math.abs(completedAtMs - dateMs) <= 7 * DAY_MS;
@@ -172,7 +181,9 @@ export interface HistoricalBoard {
   source: SnapshotSourceKind;
 }
 
-function readSleeperId(externalIds: Record<string, unknown> | null): string | null {
+function readSleeperId(
+  externalIds: Record<string, unknown> | null,
+): string | null {
   const v = externalIds?.sleeper;
   if (typeof v === "string" && v) return v;
   if (typeof v === "number") return String(v);
@@ -211,11 +222,14 @@ async function fetchClosestValueRows(
       .range(page * PAGE, page * PAGE + PAGE - 1);
     if (targetIso) {
       query =
-        direction === "before" ? query.lte("captured_at", targetIso) : query.gt("captured_at", targetIso);
+        direction === "before"
+          ? query.lte("captured_at", targetIso)
+          : query.gt("captured_at", targetIso);
     }
 
     const { data, error } = await query;
-    if (error) throw new Error(`historical value lookup failed: ${error.message}`);
+    if (error)
+      throw new Error(`historical value lookup failed: ${error.message}`);
     const rows = (data ?? []) as unknown as ValueJoinRow[];
     if (rows.length === 0) break;
 
@@ -225,7 +239,11 @@ async function fetchClosestValueRows(
     for (const row of rows) {
       if (!byPlayer.has(row.player_id)) byPlayer.set(row.player_id, row);
       const ts = Date.parse(row.captured_at);
-      if (boundaryMs !== null && Number.isFinite(ts) && Math.abs(boundaryMs - ts) > BATCH_WINDOW_MS) {
+      if (
+        boundaryMs !== null &&
+        Number.isFinite(ts) &&
+        Math.abs(boundaryMs - ts) > BATCH_WINDOW_MS
+      ) {
         pastWindow = true;
       }
     }
@@ -264,7 +282,12 @@ export async function resolveHistoricalBoard(
   if (!format) return null;
 
   // 1. closest at-or-before the target; 2. closest after; 3. current.
-  let batch = await fetchClosestValueRows(admin, format.id, targetIso, "before");
+  let batch = await fetchClosestValueRows(
+    admin,
+    format.id,
+    targetIso,
+    "before",
+  );
   let usedTarget = targetIso;
   let after = false;
   if (batch.byPlayer.size === 0 && targetIso) {
@@ -283,11 +306,17 @@ export async function resolveHistoricalBoard(
       ? "current_fallback"
       : after
         ? "next_available"
-        : classifySnapshotSource(batch.boundaryMs, completedAtMs, draftStartAtMs);
+        : classifySnapshotSource(
+            batch.boundaryMs,
+            completedAtMs,
+            draftStartAtMs,
+          );
 
   // Re-rank by value (the durable historical ordering).
   const rows = [...batch.byPlayer.values()].sort(
-    (a, b) => Number(b.value) - Number(a.value) || a.player_id.localeCompare(b.player_id),
+    (a, b) =>
+      Number(b.value) - Number(a.value) ||
+      a.player_id.localeCompare(b.player_id),
   );
 
   const now = new Date();
@@ -309,7 +338,11 @@ export async function resolveHistoricalBoard(
       positionRank: posCounts[position],
       tier: 1, // re-tiered below once the board size is known
       value: Number(row.value),
-      isRookie: deriveIsRookie(pl.years_experience, pl.draft_year, rookieSeasonNum),
+      isRookie: deriveIsRookie(
+        pl.years_experience,
+        pl.draft_year,
+        rookieSeasonNum,
+      ),
       yearsExperience: pl.years_experience ?? undefined,
       age: ageFromBirthDate(pl.birth_date, now),
       ageDecimal: computeAgeDecimal(pl.birth_date, now) ?? undefined,
@@ -322,7 +355,8 @@ export async function resolveHistoricalBoard(
   // Deterministic 6-bucket tiers by overall rank (the live board's editorial
   // tiers are not preserved historically; this keeps the field meaningful).
   const perTier = Math.max(1, Math.ceil(players.length / 6));
-  for (const p of players) p.tier = Math.min(6, Math.ceil(p.overallRank / perTier));
+  for (const p of players)
+    p.tier = Math.min(6, Math.ceil(p.overallRank / perTier));
 
   // Pick values: latest batch at-or-before the target, else the latest overall.
   let picksQuery = admin
@@ -350,7 +384,10 @@ export async function resolveHistoricalBoard(
     pickValues: shapePickValues(pickRows ?? []),
     formatSlug: format.slug,
     formatLabel: format.display_name || FFBEACON_SOURCE_DISPLAY,
-    capturedAt: batch.boundaryMs !== null ? new Date(batch.boundaryMs).toISOString() : null,
+    capturedAt:
+      batch.boundaryMs !== null
+        ? new Date(batch.boundaryMs).toISOString()
+        : null,
     source,
   };
 }
@@ -383,7 +420,9 @@ export async function pickValueFormatWithData(
 ): Promise<string | null> {
   const { data: formats } = await admin
     .from("format_configs")
-    .select("id, slug, display_name, league_type, scoring_type, is_superflex, display_order")
+    .select(
+      "id, slug, display_name, league_type, scoring_type, is_superflex, display_order",
+    )
     .eq("is_active", true);
   if (!formats || formats.length === 0) return null;
 
@@ -451,7 +490,8 @@ async function pickSnapshotDate(
       .order("snapshot_date", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (before.data?.snapshot_date) return { date: before.data.snapshot_date, after: false };
+    if (before.data?.snapshot_date)
+      return { date: before.data.snapshot_date, after: false };
     const afterRow = await admin
       .from("player_market_snapshots")
       .select("snapshot_date")
@@ -460,7 +500,8 @@ async function pickSnapshotDate(
       .order("snapshot_date", { ascending: true })
       .limit(1)
       .maybeSingle();
-    if (afterRow.data?.snapshot_date) return { date: afterRow.data.snapshot_date, after: true };
+    if (afterRow.data?.snapshot_date)
+      return { date: afterRow.data.snapshot_date, after: true };
     return { date: null, after: false };
   }
   const latest = await admin
@@ -523,7 +564,8 @@ export async function resolveAdpSnapshot(
     for (const row of data) {
       const map = row.adp as Record<string, unknown> | null;
       const v = Number(map?.[key]);
-      if (Number.isFinite(v) && v > 0) adpBySleeperId[row.sleeper_player_id] = v;
+      if (Number.isFinite(v) && v > 0)
+        adpBySleeperId[row.sleeper_player_id] = v;
     }
     if (Object.keys(adpBySleeperId).length === 0) continue;
 
@@ -534,7 +576,12 @@ export async function resolveAdpSnapshot(
         : picked.after
           ? "next_available"
           : classifySnapshotSource(chosenMs, completedAtMs, draftStartAtMs);
-    return { adpBySleeperId, adpKey: key, snapshotDate: picked.date, source: source_ };
+    return {
+      adpBySleeperId,
+      adpKey: key,
+      snapshotDate: picked.date,
+      source: source_,
+    };
   }
 
   return { ...EMPTY_ADP, snapshotDate: sleeper.date ?? rookie.date };

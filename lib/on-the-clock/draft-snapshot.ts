@@ -25,7 +25,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { getAllSleeperTransactions, getSleeperLeague } from "@/lib/sleeper";
-import { adpFormatKeyCandidates, attachAdpToPlayers, classifyPickValue, pickValueDelta } from "./adp";
+import {
+  adpFormatKeyCandidates,
+  attachAdpToPlayers,
+  classifyPickValue,
+  pickValueDelta,
+} from "./adp";
 import { computeDraftAwards, type Award } from "./awards";
 import { computeDraftGrades, type DraftGrade } from "./draft-grade";
 import { buildMarketCurve, computePickSurplus } from "./surplus";
@@ -49,7 +54,10 @@ import {
   type AdpSnapshot,
   type HistoricalBoard,
 } from "./history-lookup";
-import { normalizeTradedPicks, resolveCurrentDraftPicks } from "./pick-ownership";
+import {
+  normalizeTradedPicks,
+  resolveCurrentDraftPicks,
+} from "./pick-ownership";
 import { buildTeamRollups } from "./rosters";
 import { performDraftSync } from "./sleeper-sync";
 import type { DraftSnapshotPayload, FrozenBoard } from "./snapshot-types";
@@ -59,9 +67,12 @@ import type { OnTheClockSettings, ShapedDraftCache } from "./types";
 import { DEFAULT_ON_THE_CLOCK_SETTINGS } from "./default-settings";
 
 type Client = SupabaseClient<Database>;
-type SnapshotRow = Database["public"]["Tables"]["on_the_clock_draft_snapshots"]["Row"];
-type SnapshotInsert = Database["public"]["Tables"]["on_the_clock_draft_snapshots"]["Insert"];
-type PickSnapshotInsert = Database["public"]["Tables"]["on_the_clock_pick_snapshots"]["Insert"];
+type SnapshotRow =
+  Database["public"]["Tables"]["on_the_clock_draft_snapshots"]["Row"];
+type SnapshotInsert =
+  Database["public"]["Tables"]["on_the_clock_draft_snapshots"]["Insert"];
+type PickSnapshotInsert =
+  Database["public"]["Tables"]["on_the_clock_pick_snapshots"]["Insert"];
 
 /** Same cap as the live transactions route: a pathological league stays bounded. */
 const MAX_SNAPSHOT_TRADES = 250;
@@ -101,18 +112,26 @@ function rowToPayload(row: SnapshotRow): DraftSnapshotPayload {
     formatLabel: row.format_label,
     draftCompletedAt: row.draft_completed_at,
     finalizedAt: row.finalized_at,
-    valueSnapshotSource: (row.value_snapshot_source as DraftSnapshotPayload["valueSnapshotSource"]) ?? null,
-    adpSnapshotSource: (row.adp_snapshot_source as DraftSnapshotPayload["adpSnapshotSource"]) ?? null,
+    valueSnapshotSource:
+      (row.value_snapshot_source as DraftSnapshotPayload["valueSnapshotSource"]) ??
+      null,
+    adpSnapshotSource:
+      (row.adp_snapshot_source as DraftSnapshotPayload["adpSnapshotSource"]) ??
+      null,
     valueSnapshotDate: row.value_snapshot_date,
     adpSnapshotDate: row.adp_snapshot_date,
     adpFormatKey: row.adp_format_key,
-    confidence: (row.snapshot_confidence as DraftSnapshotPayload["confidence"]) ?? "low",
+    confidence:
+      (row.snapshot_confidence as DraftSnapshotPayload["confidence"]) ?? "low",
     board: row.board as unknown as FrozenBoard,
     cache: row.draft as unknown as ShapedDraftCache,
     transactions: (row.transactions as unknown as HistoryTransaction[]) ?? [],
     awards: (row.awards as unknown as Award[]) ?? [],
     grades: (row.grades as unknown as DraftGrade[]) ?? [],
-    pulse: row.pulse && Object.keys(row.pulse).length > 0 ? (row.pulse as unknown as DraftPulseResult) : null,
+    pulse:
+      row.pulse && Object.keys(row.pulse).length > 0
+        ? (row.pulse as unknown as DraftPulseResult)
+        : null,
     snapshotVersion: Number(row.snapshot_version) || 1,
   };
 }
@@ -145,8 +164,17 @@ export async function getOrCreateDraftSnapshot(
     .select("*")
     .eq("sleeper_draft_id", draftId)
     .maybeSingle();
-  if (readErr) return { status: "error", message: `snapshot read failed: ${readErr.message}` };
-  if (existing) return { status: "ready", snapshot: rowToPayload(existing), created: false };
+  if (readErr)
+    return {
+      status: "error",
+      message: `snapshot read failed: ${readErr.message}`,
+    };
+  if (existing)
+    return {
+      status: "ready",
+      snapshot: rowToPayload(existing),
+      created: false,
+    };
 
   // 2. Ensure the draft cache exists and reflects a completed draft. The sync
   //    goes through the shared durable lock, so concurrent opens collapse.
@@ -161,7 +189,11 @@ export async function getOrCreateDraftSnapshot(
     });
     cache = await readDraftCache(admin, draftId);
   }
-  if (!cache) return { status: "error", message: "Could not load this draft from Sleeper." };
+  if (!cache)
+    return {
+      status: "error",
+      message: "Could not load this draft from Sleeper.",
+    };
 
   const derived = deriveDraftState(cache, null);
   if (!derived.complete) return { status: "not-complete" };
@@ -180,7 +212,8 @@ export async function getOrCreateDraftSnapshot(
   const rawDraft = (cacheRow?.metadata ?? {}) as Record<string, unknown>;
   const completedAtMs = msFrom(rawDraft.last_picked);
   const draftStartAtMs = msFrom(rawDraft.start_time);
-  const completedAtIso = completedAtMs !== null ? new Date(completedAtMs).toISOString() : null;
+  const completedAtIso =
+    completedAtMs !== null ? new Date(completedAtMs).toISOString() : null;
 
   // 4. Format: caller hint first, else re-detect from the Sleeper league.
   let formatSlug = params.formatSlug ?? null;
@@ -227,7 +260,10 @@ export async function getOrCreateDraftSnapshot(
 
   // Resolve a board without ever throwing: a DB error (timeout) becomes null so the
   // fallback chain below can still lock the draft with current data.
-  const tryBoard = async (slug: string, targetIso: string | null): Promise<HistoricalBoard | null> => {
+  const tryBoard = async (
+    slug: string,
+    targetIso: string | null,
+  ): Promise<HistoricalBoard | null> => {
     try {
       return await resolveHistoricalBoard(admin, {
         formatSlug: slug,
@@ -278,7 +314,10 @@ export async function getOrCreateDraftSnapshot(
         }
       }
     } catch (err) {
-      console.error("[on-the-clock/draft-snapshot] value-format fallback failed", err);
+      console.error(
+        "[on-the-clock/draft-snapshot] value-format fallback failed",
+        err,
+      );
     }
   }
   if (!board) return { status: "no-board" };
@@ -291,12 +330,19 @@ export async function getOrCreateDraftSnapshot(
   try {
     adp = await resolveAdpSnapshot(admin, {
       keyCandidates: adpFormatKeyCandidates(formatSlug, pool),
-      targetDate: usingCurrentValues ? null : completedAtIso ? completedAtIso.slice(0, 10) : null,
+      targetDate: usingCurrentValues
+        ? null
+        : completedAtIso
+          ? completedAtIso.slice(0, 10)
+          : null,
       completedAtMs,
       draftStartAtMs,
     });
   } catch (err) {
-    console.error("[on-the-clock/draft-snapshot] ADP lookup failed; locking without ADP", err);
+    console.error(
+      "[on-the-clock/draft-snapshot] ADP lookup failed; locking without ADP",
+      err,
+    );
     adp = { ...EMPTY_ADP };
   }
 
@@ -320,10 +366,14 @@ export async function getOrCreateDraftSnapshot(
   //    (an in-season trade months later must never flip Most Active Trader).
   //    Trades with no timestamp are kept (dropping them could lose real draft
   //    trades); the cutoff is recorded in metadata for auditability.
-  const allTrades = shapeLeagueTrades(await getAllSleeperTransactions(leagueId));
+  const allTrades = shapeLeagueTrades(
+    await getAllSleeperTransactions(leagueId),
+  );
   const trades = (
     completedAtMs !== null
-      ? allTrades.filter((t) => t.createdAt === null || t.createdAt <= completedAtMs)
+      ? allTrades.filter(
+          (t) => t.createdAt === null || t.createdAt <= completedAtMs,
+        )
       : allTrades
   ).slice(0, MAX_SNAPSHOT_TRADES);
 
@@ -332,15 +382,23 @@ export async function getOrCreateDraftSnapshot(
   const valueBySleeperId = new Map<string, { value: number; rank: number }>();
   for (const p of players) {
     valueByPlayerId.set(p.playerId, { value: p.value, rank: p.overallRank });
-    if (p.sleeperId) valueBySleeperId.set(p.sleeperId, { value: p.value, rank: p.overallRank });
+    if (p.sleeperId)
+      valueBySleeperId.set(p.sleeperId, {
+        value: p.value,
+        rank: p.overallRank,
+      });
   }
   const threshold = settings.valueIndicators.thresholdPicks;
   const pickRows: PickSnapshotInsert[] = cache.picks.map((pk) => {
     const boardEntry =
       (pk.playerId ? valueByPlayerId.get(pk.playerId) : undefined) ??
-      (pk.sleeperPlayerId ? valueBySleeperId.get(pk.sleeperPlayerId) : undefined) ??
+      (pk.sleeperPlayerId
+        ? valueBySleeperId.get(pk.sleeperPlayerId)
+        : undefined) ??
       null;
-    const pickAdp = pk.sleeperPlayerId ? (adp.adpBySleeperId[pk.sleeperPlayerId] ?? null) : null;
+    const pickAdp = pk.sleeperPlayerId
+      ? (adp.adpBySleeperId[pk.sleeperPlayerId] ?? null)
+      : null;
     const delta = pickValueDelta(pk.pickNo, pickAdp);
     const verdict = pk.isKeeper ? null : classifyPickValue(delta, threshold);
     return {
@@ -371,9 +429,12 @@ export async function getOrCreateDraftSnapshot(
   const customTeamNameByRosterId: Record<number, string | null> = {};
   const avatarByRosterId: Record<number, string | null> = {};
   for (const r of cache.rosters) {
-    const user = r.ownerId ? cache.users.find((u) => u.userId === r.ownerId) : undefined;
+    const user = r.ownerId
+      ? cache.users.find((u) => u.userId === r.ownerId)
+      : undefined;
     teamNameByRosterId[r.rosterId] = user?.displayName ?? `Team ${r.rosterId}`;
-    ownerNameByRosterId[r.rosterId] = user?.displayName || user?.username || `Team ${r.rosterId}`;
+    ownerNameByRosterId[r.rosterId] =
+      user?.displayName || user?.username || `Team ${r.rosterId}`;
     customTeamNameByRosterId[r.rosterId] = user?.teamName ?? null;
     avatarByRosterId[r.rosterId] = user?.avatar ?? null;
   }
@@ -480,15 +541,21 @@ export async function getOrCreateDraftSnapshot(
   // 9. Provenance + persistence. Upserts keep concurrent first-opens idempotent
   //    (both compute from the same frozen inputs; last write wins harmlessly).
   const valueDateMs = board.capturedAt ? Date.parse(board.capturedAt) : null;
-  const adpDateMs = adp.snapshotDate ? Date.parse(`${adp.snapshotDate}T12:00:00.000Z`) : null;
-  const projectionDateMs = projectionComputedAt ? Date.parse(projectionComputedAt) : null;
+  const adpDateMs = adp.snapshotDate
+    ? Date.parse(`${adp.snapshotDate}T12:00:00.000Z`)
+    : null;
+  const projectionDateMs = projectionComputedAt
+    ? Date.parse(projectionComputedAt)
+    : null;
   const confidence = deriveSnapshotConfidence({
     valueSource: board.source,
     valueDateMs,
     adpSource: adp.source,
     adpDateMs,
     completedAtMs,
-    projectionDateMs: Number.isFinite(projectionDateMs) ? projectionDateMs : null,
+    projectionDateMs: Number.isFinite(projectionDateMs)
+      ? projectionDateMs
+      : null,
   });
   const finalizedAt = new Date().toISOString();
 
@@ -545,7 +612,10 @@ export async function getOrCreateDraftSnapshot(
     .from("on_the_clock_draft_snapshots")
     .upsert(draftRow, { onConflict: "sleeper_draft_id" });
   if (insertErr) {
-    return { status: "error", message: `snapshot write failed: ${insertErr.message}` };
+    return {
+      status: "error",
+      message: `snapshot write failed: ${insertErr.message}`,
+    };
   }
   if (pickRows.length > 0) {
     const { error: pickErr } = await admin
@@ -553,7 +623,10 @@ export async function getOrCreateDraftSnapshot(
       .upsert(pickRows, { onConflict: "sleeper_draft_id,pick_no" });
     if (pickErr) {
       // The draft row is the render source; pick rows are analytic. Log, keep going.
-      console.error("[on-the-clock/draft-snapshot] pick snapshot write failed", pickErr.message);
+      console.error(
+        "[on-the-clock/draft-snapshot] pick snapshot write failed",
+        pickErr.message,
+      );
     }
   }
 

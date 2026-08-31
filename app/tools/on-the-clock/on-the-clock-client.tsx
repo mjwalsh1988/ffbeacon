@@ -24,7 +24,14 @@
  * board and flagged estimated). No mock panels remain.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ArrowLeft, Gauge, LayoutGrid, List, WifiOff } from "lucide-react";
 import type {
   BuildMode,
@@ -35,7 +42,11 @@ import type {
   ShapedPick,
   SyncStatus,
 } from "@/lib/on-the-clock/types";
-import type { BoardResult, DraftPosition, RankedPlayer } from "@/lib/on-the-clock/board-types";
+import type {
+  BoardResult,
+  DraftPosition,
+  RankedPlayer,
+} from "@/lib/on-the-clock/board-types";
 import type { SimulatedPick } from "@/lib/on-the-clock/adp-sim";
 import type { TeamRollup } from "@/lib/on-the-clock/rosters";
 import type { Award } from "@/lib/on-the-clock/awards";
@@ -71,7 +82,10 @@ import {
   type OtcPulsePayload,
 } from "@/lib/on-the-clock/client";
 import type { PulsePlayerSummary } from "@/lib/on-the-clock/pulse-types";
-import type { HistoryTransaction, TradeHistoryContext } from "@/lib/on-the-clock/trade-history";
+import type {
+  HistoryTransaction,
+  TradeHistoryContext,
+} from "@/lib/on-the-clock/trade-history";
 import {
   deriveDraftState,
   mapRealtimePickRow,
@@ -93,7 +107,10 @@ import { buildTradeCatalog } from "@/lib/on-the-clock/trade-analyzer";
 import { buildTeamRollups } from "@/lib/on-the-clock/rosters";
 import { computeDraftAwards } from "@/lib/on-the-clock/awards";
 import { computeDraftGrades } from "@/lib/on-the-clock/draft-grade";
-import { buildMarketCurve, computePickSurplus } from "@/lib/on-the-clock/surplus";
+import {
+  buildMarketCurve,
+  computePickSurplus,
+} from "@/lib/on-the-clock/surplus";
 import { tradeMarginsFor } from "@/lib/on-the-clock/trade-margins";
 import {
   goneBefore,
@@ -101,11 +118,21 @@ import {
   simulateRemainingDraft,
   survivorsAt,
 } from "@/lib/on-the-clock/adp-sim";
-import { detectRun, detectTierCliffs, turnAlert } from "@/lib/on-the-clock/draft-alerts";
+import {
+  detectRun,
+  detectTierCliffs,
+  turnAlert,
+} from "@/lib/on-the-clock/draft-alerts";
 import type { GoneBeforeEntry } from "@/lib/on-the-clock/draft-alerts";
-import { buildRecapText, computePassedOn } from "@/lib/on-the-clock/draft-recap";
+import {
+  buildRecapText,
+  computePassedOn,
+} from "@/lib/on-the-clock/draft-recap";
 import type { ResolveContext } from "@/lib/on-the-clock/trade-assets";
-import { buildPickValueLookup, lookupPickValue } from "@/lib/on-the-clock/trade-analyzer";
+import {
+  buildPickValueLookup,
+  lookupPickValue,
+} from "@/lib/on-the-clock/trade-analyzer";
 import {
   normalizeTradedPicks,
   resolveCurrentDraftPicks,
@@ -117,7 +144,10 @@ import { DraftViewSheet } from "./draft-view-sheet";
 import { UsernameGate } from "./username-gate";
 import { LeaguePicker } from "./league-picker";
 import { PoolNotice, markPoolNoticeSeen, poolNoticeSeen } from "./pool-notice";
-import { ReportFormatDialog, type FormatReportContext } from "./report-format-dialog";
+import {
+  ReportFormatDialog,
+  type FormatReportContext,
+} from "./report-format-dialog";
 import { StepRail } from "./step-rail";
 import { CommandHeader } from "./command-header";
 import { PlayerSpotlight, type SpotlightExtras } from "./player-spotlight";
@@ -134,10 +164,16 @@ import { RankingsAwards } from "./rankings-awards";
 import { DraftPulseBoard } from "./draft-pulse-board";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
 import { DraftGrades } from "./draft-grades";
+import { DraftComplete } from "./draft-complete";
 import { DraftAlertAnnouncer, DraftRadar } from "./draft-radar";
 import { BuildModeSelector, BuildModeNotice } from "./build-mode-selector";
 import { PassedOnPanel, RecapBox, RoomSummary } from "./draft-extras";
-import { readBuildMode, writeBuildMode, readWatchlist, writeWatchlist } from "./draft-prefs";
+import {
+  readBuildMode,
+  writeBuildMode,
+  readWatchlist,
+  writeWatchlist,
+} from "./draft-prefs";
 import { TradeHistory } from "./trade-history";
 import { LoadingCard, ErrorCard, EmptyCard } from "./states";
 
@@ -189,21 +225,60 @@ type LiveStatus = "off" | "connecting" | "live" | "unavailable";
  * answers rather than restating its title.
  */
 const VIEWS: ReadonlyArray<DraftRailView<View>> = [
-  { id: "pick", label: "Who to pick", hint: "Your next pick, and why", icon: "target" },
-  { id: "drafted", label: "Board", hint: "Every pick so far", icon: "listChecks" },
-  { id: "rosters", label: "Rosters", hint: "What each team has taken", icon: "users" },
-  { id: "pulse", label: "Draft Pulse", hint: "How each roster is shaping up", icon: "gauge" },
-  { id: "history", label: "Trades", hint: "Picks and players that changed hands", icon: "history" },
-  { id: "trade", label: "Trade Builder", hint: "Price a deal before you offer it", icon: "swap" },
-  { id: "rankings", label: "Awards", hint: "Standouts of the draft so far", icon: "trophy" },
-  { id: "grades", label: "Grades", hint: "How every team drafted", icon: "graduationCap" },
+  {
+    id: "pick",
+    label: "Who to pick",
+    hint: "Your next pick, and why",
+    icon: "target",
+  },
+  {
+    id: "drafted",
+    label: "Board",
+    hint: "Every pick so far",
+    icon: "listChecks",
+  },
+  {
+    id: "rosters",
+    label: "Rosters",
+    hint: "What each team has taken",
+    icon: "users",
+  },
+  {
+    id: "pulse",
+    label: "Draft Pulse",
+    hint: "How each roster is shaping up",
+    icon: "gauge",
+  },
+  {
+    id: "history",
+    label: "Trades",
+    hint: "Picks and players that changed hands",
+    icon: "history",
+  },
+  {
+    id: "trade",
+    label: "Trade Builder",
+    hint: "Price a deal before you offer it",
+    icon: "swap",
+  },
+  {
+    id: "rankings",
+    label: "Awards",
+    hint: "Standouts of the draft so far",
+    icon: "trophy",
+  },
+  {
+    id: "grades",
+    label: "Grades",
+    hint: "How every team drafted",
+    icon: "graduationCap",
+  },
 ];
 
 /** Label for one view, for the heading that names the region it renders into. */
-const VIEW_LABELS = Object.fromEntries(VIEWS.map((v) => [v.id, v.label])) as Record<
-  View,
-  string
->;
+const VIEW_LABELS = Object.fromEntries(
+  VIEWS.map((v) => [v.id, v.label]),
+) as Record<View, string>;
 
 // Frozen empties, shared by reference. A fresh [] or new Map() every render is
 // what defeats a child's useMemo, which is the whole point of the block below.
@@ -235,7 +310,11 @@ const NO_PULSE_TEAMS: DraftPulseTeam[] = [];
  * one of them is open, because that feed is its own Sleeper fan-out (a walk of
  * the weekly transaction endpoints) rather than a field on the draft cache.
  */
-const VIEWS_READING_TRADES: ReadonlySet<View> = new Set<View>(["history", "rankings", "grades"]);
+const VIEWS_READING_TRADES: ReadonlySet<View> = new Set<View>([
+  "history",
+  "rankings",
+  "grades",
+]);
 
 /**
  * The floor between two refetches of the trade feed.
@@ -277,7 +356,8 @@ const BOARD_MIN_REFRESH_MS = 24 * 60 * 60_000;
 /** Coerce a Sleeper pick/roster position string to one of the six draft buckets. */
 function coercePosition(pos: string | null): DraftPosition | null {
   const p = (pos ?? "").toUpperCase();
-  if (p === "QB" || p === "RB" || p === "WR" || p === "TE" || p === "K") return p;
+  if (p === "QB" || p === "RB" || p === "WR" || p === "TE" || p === "K")
+    return p;
   if (p === "DEF" || p === "DST") return "DEF";
   if (p === "PK") return "K";
   return null;
@@ -333,7 +413,10 @@ export function OnTheClockClient({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
-  const lookupRef = useRef<{ username: string; season: string }>({ username: "", season: defaultSeason });
+  const lookupRef = useRef<{ username: string; season: string }>({
+    username: "",
+    season: defaultSeason,
+  });
 
   // ----- draft room -----
   const [league, setLeague] = useState<LeagueCard | null>(null);
@@ -366,10 +449,14 @@ export function OnTheClockClient({
   const activeDraftIdRef = useRef<string | null>(null);
 
   // ----- trade history (lazy-loaded when the tab opens; cached per league) -----
-  const [tradeHistory, setTradeHistory] = useState<HistoryTransaction[] | null>(null);
+  const [tradeHistory, setTradeHistory] = useState<HistoryTransaction[] | null>(
+    null,
+  );
   const [tradeHistoryTruncated, setTradeHistoryTruncated] = useState(false);
   const [tradeHistoryLoading, setTradeHistoryLoading] = useState(false);
-  const [tradeHistoryError, setTradeHistoryError] = useState<string | null>(null);
+  const [tradeHistoryError, setTradeHistoryError] = useState<string | null>(
+    null,
+  );
   // The league id whose trades are loaded (or claimed in-flight), so the tab does
   // not refetch on every render. Reset to null to force a reload.
   const historyLoadedFor = useRef<string | null>(null);
@@ -403,7 +490,9 @@ export function OnTheClockClient({
   }, [cache]);
 
   // ----- realtime -----
-  const [liveStatus, setLiveStatus] = useState<LiveStatus>(realtimeEnabled ? "connecting" : "off");
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>(
+    realtimeEnabled ? "connecting" : "off",
+  );
 
   // ----- Draft Pulse + projections (lazy; never blocks the room) -----
   const [pulse, setPulse] = useState<ResolvedPulse | null>(null);
@@ -422,7 +511,9 @@ export function OnTheClockClient({
   const pulseSignature = useRef<string>("");
 
   // ----- build mode + watchlist (per draft, in localStorage) -----
-  const [buildMode, setBuildMode] = useState<BuildMode>(settings.buildMode.defaultMode);
+  const [buildMode, setBuildMode] = useState<BuildMode>(
+    settings.buildMode.defaultMode,
+  );
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
   const [rosterSort, setRosterSort] = useState<"value" | "pulse">("value");
 
@@ -465,7 +556,9 @@ export function OnTheClockClient({
     region.focus({ preventScroll: true });
     region.scrollIntoView({
       block: "start",
-      behavior: window.matchMedia(REDUCED_MOTION_QUERY).matches ? "auto" : "smooth",
+      behavior: window.matchMedia(REDUCED_MOTION_QUERY).matches
+        ? "auto"
+        : "smooth",
     });
   }, [view]);
   const [draftedMode, setDraftedMode] = useState<DraftedMode>("board");
@@ -500,7 +593,10 @@ export function OnTheClockClient({
   // are three hundred lines further down, so it reaches them through this ref
   // rather than by reordering the file around one callback.
   const runSyncRef = useRef<SyncRunner>(async () => null);
-  const runSyncStable = useCallback<SyncRunner>((trigger) => runSyncRef.current(trigger), []);
+  const runSyncStable = useCallback<SyncRunner>(
+    (trigger) => runSyncRef.current(trigger),
+    [],
+  );
 
   // Seeded from the server render and then kept current by every response, so a
   // room that has been open since before the owner changed the interval follows
@@ -521,7 +617,8 @@ export function OnTheClockClient({
   }, []);
 
   const syncClock = useDraftSync({
-    active: step === "room" && league !== null && !snapshotMode && !draftComplete,
+    active:
+      step === "room" && league !== null && !snapshotMode && !draftComplete,
     autoEnabled: autoRefreshEnabled,
     autoRefreshSeconds: autoSeconds,
     runSync: runSyncStable,
@@ -547,7 +644,8 @@ export function OnTheClockClient({
    * markup whatever this value is.
    */
   const [railInSheet, setRailInSheet] = useState(
-    () => typeof window !== "undefined" && !window.matchMedia(RAIL_QUERY).matches,
+    () =>
+      typeof window !== "undefined" && !window.matchMedia(RAIL_QUERY).matches,
   );
   useEffect(() => {
     const mq = window.matchMedia(RAIL_QUERY);
@@ -564,9 +662,10 @@ export function OnTheClockClient({
   // Snapshot mode uses the threshold the draft was GRADED with (frozen at
   // finalize), so a later admin tuning can never change a finalized draft's
   // icons or verdicts; live mode uses the current setting.
-  const adpThreshold = snapshot !== null
-    ? snapshot.thresholdPicks
-    : settings.valueIndicators.thresholdPicks;
+  const adpThreshold =
+    snapshot !== null
+      ? snapshot.thresholdPicks
+      : settings.valueIndicators.thresholdPicks;
 
   const activeBoard: BoardResult | null = useMemo(() => {
     if (!snapshot) return board;
@@ -598,7 +697,8 @@ export function OnTheClockClient({
     ? snapshot.playerPool
     : inferPlayerPool({ formatSlug: league?.formatSlug, rounds: draftRounds });
 
-  const rawBoardPlayers = activeBoard?.status === "ok" ? activeBoard.players : NO_PLAYERS;
+  const rawBoardPlayers =
+    activeBoard?.status === "ok" ? activeBoard.players : NO_PLAYERS;
   const picks = cache?.picks ?? NO_PICKS;
 
   // Attach the projection summary to every board player that has one. A player
@@ -638,7 +738,8 @@ export function OnTheClockClient({
   const adpBySleeperId = useMemo(() => {
     const map: Record<string, number> = {};
     for (const pl of rawBoardPlayers) {
-      if (pl.sleeperId && typeof pl.adp === "number") map[pl.sleeperId] = pl.adp;
+      if (pl.sleeperId && typeof pl.adp === "number")
+        map[pl.sleeperId] = pl.adp;
     }
     return map;
   }, [rawBoardPlayers]);
@@ -650,13 +751,17 @@ export function OnTheClockClient({
     () =>
       pulse
         ? Object.fromEntries(
-            Object.entries(pulse.players).map(([id, p]) => [id, { ppw: p.ppw, br: p.br }]),
+            Object.entries(pulse.players).map(([id, p]) => [
+              id,
+              { ppw: p.ppw, br: p.br },
+            ]),
           )
         : null,
     [pulse],
   );
 
-  const detectedFormatSlug = activeBoard?.formatSlug ?? league?.formatSlug ?? "";
+  const detectedFormatSlug =
+    activeBoard?.formatSlug ?? league?.formatSlug ?? "";
   const isDynasty = /dynasty/i.test(detectedFormatSlug);
   const tradeReady = activeBoard?.status === "ok";
 
@@ -666,7 +771,11 @@ export function OnTheClockClient({
   // than asked. See the plan's answer to question 4.
   const isStartup = pool === "everyone";
   const modeSelectable = settings.buildMode.enabled && isDynasty && isStartup;
-  const effectiveMode: BuildMode = modeSelectable ? buildMode : isDynasty ? "balanced" : "compete";
+  const effectiveMode: BuildMode = modeSelectable
+    ? buildMode
+    : isDynasty
+      ? "balanced"
+      : "compete";
 
   // Transaction-aware pick ownership: every current-draft pick (any owner) plus
   // concrete traded future picks, resolved from the cached Sleeper traded_picks.
@@ -704,8 +813,11 @@ export function OnTheClockClient({
     // Owner Sleeper avatar id, used by the award cards. Null when unset.
     const avatarByRosterId: Record<number, string | null> = {};
     for (const r of cache?.rosters ?? []) {
-      const user = r.ownerId ? cache?.users.find((u) => u.userId === r.ownerId) : undefined;
-      teamNameByRosterId[r.rosterId] = user?.displayName ?? `Team ${r.rosterId}`;
+      const user = r.ownerId
+        ? cache?.users.find((u) => u.userId === r.ownerId)
+        : undefined;
+      teamNameByRosterId[r.rosterId] =
+        user?.displayName ?? `Team ${r.rosterId}`;
       rollupOwnerNameByRosterId[r.rosterId] =
         user?.displayName || user?.username || `Team ${r.rosterId}`;
       rollupTeamNameByRosterId[r.rosterId] = user?.teamName ?? null;
@@ -734,7 +846,12 @@ export function OnTheClockClient({
   );
 
   const myNextPick = useMemo(
-    () => nextPickForRoster(currentPicks, derivedState?.myRosterId ?? null, onTheClockPickNo || 1),
+    () =>
+      nextPickForRoster(
+        currentPicks,
+        derivedState?.myRosterId ?? null,
+        onTheClockPickNo || 1,
+      ),
     [currentPicks, derivedState?.myRosterId, onTheClockPickNo],
   );
 
@@ -756,7 +873,16 @@ export function OnTheClockClient({
         isDynastyFormat: isDynasty,
         settings,
       }),
-    [cache, derivedState, available, simulatedRemaining, myNextPick, pool, isDynasty, settings],
+    [
+      cache,
+      derivedState,
+      available,
+      simulatedRemaining,
+      myNextPick,
+      pool,
+      isDynasty,
+      settings,
+    ],
   );
 
   const picksUntilNext = pulseInputs?.picksUntilNext ?? null;
@@ -770,10 +896,16 @@ export function OnTheClockClient({
   // the two disagree.
   const myRosterNames = useMemo(() => {
     const names: Record<string, string> = {};
-    if (!cache || derivedState?.myRosterId === null || derivedState === null) return names;
+    if (!cache || derivedState?.myRosterId === null || derivedState === null)
+      return names;
     for (const pk of cache.picks) {
-      if (pk.rosterId !== null && pk.rosterId === derivedState.myRosterId && pk.playerId) {
-        names[pk.playerId] = `${pk.firstName ?? ""} ${pk.lastName ?? ""}`.trim() || "a starter";
+      if (
+        pk.rosterId !== null &&
+        pk.rosterId === derivedState.myRosterId &&
+        pk.playerId
+      ) {
+        names[pk.playerId] =
+          `${pk.firstName ?? ""} ${pk.lastName ?? ""}`.trim() || "a starter";
       }
     }
     return names;
@@ -799,10 +931,13 @@ export function OnTheClockClient({
     // Sleeper id.
     let seededPositions: DraftPosition[] = [];
     if (isDynasty && derivedState.myRosterId !== null) {
-      const myRoster = cache.rosters.find((r) => r.rosterId === derivedState.myRosterId);
+      const myRoster = cache.rosters.find(
+        (r) => r.rosterId === derivedState.myRosterId,
+      );
       if (myRoster) {
         const posBySleeperId = new Map<string, DraftPosition>();
-        for (const pl of boardPlayers) if (pl.sleeperId) posBySleeperId.set(pl.sleeperId, pl.position);
+        for (const pl of boardPlayers)
+          if (pl.sleeperId) posBySleeperId.set(pl.sleeperId, pl.position);
         seededPositions = myRoster.players
           .map((id) => posBySleeperId.get(id) ?? null)
           .filter((p): p is DraftPosition => p !== null);
@@ -819,7 +954,9 @@ export function OnTheClockClient({
       myDraftedPositions,
       seededPositions,
       rosterKnown:
-        derivedState.mySlot > 0 || myDraftedPositions.length > 0 || seededPositions.length > 0,
+        derivedState.mySlot > 0 ||
+        myDraftedPositions.length > 0 ||
+        seededPositions.length > 0,
       currentRound: derivedState.onTheClockRound,
       settings,
       mode: effectiveMode,
@@ -854,8 +991,12 @@ export function OnTheClockClient({
 
   // Season finishes, keyed by "<format>|<playerId>" so switching leagues cannot
   // serve one format's scoring under another's label.
-  const [finishCache, setFinishCache] = useState<Record<string, SeasonFinish[]>>({});
-  const [finishScoringLabel, setFinishScoringLabel] = useState<string | undefined>(undefined);
+  const [finishCache, setFinishCache] = useState<
+    Record<string, SeasonFinish[]>
+  >({});
+  const [finishScoringLabel, setFinishScoringLabel] = useState<
+    string | undefined
+  >(undefined);
   const [finishesLoading, setFinishesLoading] = useState(false);
   // Ids already asked about. A player with no finish rows is a real answer, so
   // this must not retry him on every re-render.
@@ -879,7 +1020,10 @@ export function OnTheClockClient({
   // on a fresh array identity, which changes on every pick.
   const bestPlayerId = rec?.best.player?.playerId;
   const needPlayerId = rec?.need.player?.playerId;
-  const spotlightIdKey = [bestPlayerId, needPlayerId === bestPlayerId ? undefined : needPlayerId]
+  const spotlightIdKey = [
+    bestPlayerId,
+    needPlayerId === bestPlayerId ? undefined : needPlayerId,
+  ]
     .filter(Boolean)
     .join(",");
 
@@ -893,9 +1037,12 @@ export function OnTheClockClient({
   useEffect(() => {
     if (!detectedFormatSlug) return;
     const ids = spotlightIdKey ? spotlightIdKey.split(",") : [];
-    const missing = ids.filter((id) => !requestedFinishes.current.has(`${detectedFormatSlug}|${id}`));
+    const missing = ids.filter(
+      (id) => !requestedFinishes.current.has(`${detectedFormatSlug}|${id}`),
+    );
     if (missing.length === 0) return;
-    for (const id of missing) requestedFinishes.current.add(`${detectedFormatSlug}|${id}`);
+    for (const id of missing)
+      requestedFinishes.current.add(`${detectedFormatSlug}|${id}`);
 
     finishesInFlight.current += 1;
     setFinishesLoading(true);
@@ -908,13 +1055,15 @@ export function OnTheClockClient({
       // change try again, and cannot loop, because this effect only re-runs when
       // the id list itself changes.
       if (!res.ok) {
-        for (const id of missing) requestedFinishes.current.delete(`${detectedFormatSlug}|${id}`);
+        for (const id of missing)
+          requestedFinishes.current.delete(`${detectedFormatSlug}|${id}`);
         return;
       }
       setFinishScoringLabel(res.data.scoringLabel);
       setFinishCache((prev) => {
         const next = { ...prev };
-        for (const b of res.data.briefs) next[`${detectedFormatSlug}|${b.playerId}`] = b.finishes;
+        for (const b of res.data.briefs)
+          next[`${detectedFormatSlug}|${b.playerId}`] = b.finishes;
         return next;
       });
     });
@@ -922,8 +1071,15 @@ export function OnTheClockClient({
 
   // The argument for each card. Pure, and rebuilt only when something it reads
   // actually changed, because it runs on every realtime pick otherwise.
-  const spotlightExtras = useMemo((): { best: SpotlightExtras; need: SpotlightExtras } => {
-    const blank: SpotlightExtras = { rationale: [], caveat: null, finishes: [] };
+  const spotlightExtras = useMemo((): {
+    best: SpotlightExtras;
+    need: SpotlightExtras;
+  } => {
+    const blank: SpotlightExtras = {
+      rationale: [],
+      caveat: null,
+      finishes: [],
+    };
     if (!rec) return { best: blank, need: blank };
 
     const openSlots = rec.positionNeeds.map((n) => n.label);
@@ -948,7 +1104,9 @@ export function OnTheClockClient({
         filledSlot: card.filledSlot,
         openSlots,
         picksUntilNext,
-        displacedName: displacedId ? (myRosterNames[displacedId] ?? null) : null,
+        displacedName: displacedId
+          ? (myRosterNames[displacedId] ?? null)
+          : null,
         adpThreshold,
         finishes: finishCache[`${detectedFormatSlug}|${player.playerId}`] ?? [],
         // The league's real shape, not a boolean.
@@ -976,7 +1134,8 @@ export function OnTheClockClient({
         finishes: input.finishes,
         finishScoringLabel,
         finishesLoading:
-          finishesLoading && !(`${detectedFormatSlug}|${player.playerId}` in finishCache),
+          finishesLoading &&
+          !(`${detectedFormatSlug}|${player.playerId}` in finishCache),
       };
     };
 
@@ -1015,7 +1174,15 @@ export function OnTheClockClient({
         .filter((a): a is NonNullable<typeof a> => a !== null)
         .sort((a, b) => b.severity - a.severity)
         .slice(0, 5),
-    [picksUntilNext, myNextPick, picks, settings.alerts, tradeReady, available, onTheClockPickNo],
+    [
+      picksUntilNext,
+      myNextPick,
+      picks,
+      settings.alerts,
+      tradeReady,
+      available,
+      onTheClockPickNo,
+    ],
   );
 
   const goneList = useMemo(() => {
@@ -1023,12 +1190,17 @@ export function OnTheClockClient({
     // Indexed once. This used to spread the whole simulation into an array and
     // scan it per listed player, which is the same 400-entry walk a dozen times.
     const byPlayerId = new Map<string, SimulatedPick>();
-    for (const sp of simulatedRemaining.values()) byPlayerId.set(sp.player.playerId, sp);
+    for (const sp of simulatedRemaining.values())
+      byPlayerId.set(sp.player.playerId, sp);
     return goneBefore(simulatedRemaining, myNextPick.overall)
       .slice(0, settings.alerts.maxGoneBefore)
       .map((player) => {
         const found = byPlayerId.get(player.playerId);
-        return { player, atPick: found?.overall ?? 0, adpKnown: found?.adpKnown ?? false };
+        return {
+          player,
+          atPick: found?.overall ?? 0,
+          adpKnown: found?.adpKnown ?? false,
+        };
       });
   }, [myNextPick, simulatedRemaining, settings.alerts.maxGoneBefore]);
 
@@ -1076,7 +1248,11 @@ export function OnTheClockClient({
   // rather than replacing a working list with an error. The first load of a
   // league is never quiet, because there is nothing to keep.
   const loadBoard = useCallback(
-    async (card: LeagueCard, poolForAdp: PlayerPool, opts?: { quiet?: boolean }) => {
+    async (
+      card: LeagueCard,
+      poolForAdp: PlayerPool,
+      opts?: { quiet?: boolean },
+    ) => {
       const quiet = opts?.quiet === true;
       if (activeDraftIdRef.current !== card.draftId) return;
       if (!card.formatSlug) {
@@ -1167,7 +1343,8 @@ export function OnTheClockClient({
         // Both countdowns start on the DRAFT's clock, not on this tab's arrival:
         // someone opening the room forty seconds into the shared window sees
         // twenty seconds left, the same as everyone already in it.
-        if (result.data.autoRefreshSeconds > 0) setAutoSeconds(result.data.autoRefreshSeconds);
+        if (result.data.autoRefreshSeconds > 0)
+          setAutoSeconds(result.data.autoRefreshSeconds);
         noteSyncAttempt({
           manualRemainingSeconds: result.data.cooldownRemainingSeconds,
           autoRemainingSeconds: result.data.autoRemainingSeconds,
@@ -1188,7 +1365,9 @@ export function OnTheClockClient({
         }
         if (!poolNoticeSeen(card.draftId)) setPoolNoticeOpen(true);
       } else {
-        setDraftError(result.ok ? "We could not load that draft." : result.message);
+        setDraftError(
+          result.ok ? "We could not load that draft." : result.message,
+        );
         // Arm the clock on the way out. selectLeague has just cleared it, and
         // without this the room that failed to open would never try again on its
         // own: no timer, no countdown, and a Sync button as the only way back.
@@ -1333,7 +1512,8 @@ export function OnTheClockClient({
         // The button holds rather than reopening the instant the failure lands.
         // A 429 carries the server's own retry window; anything else gets a few
         // seconds so a bad connection cannot be hammered.
-        const hold = result.status === 429 ? (result.retryAfterSeconds ?? 60) : 5;
+        const hold =
+          result.status === 429 ? (result.retryAfterSeconds ?? 60) : 5;
         return {
           manualRemainingSeconds: hold,
           autoRemainingSeconds: 0,
@@ -1352,7 +1532,9 @@ export function OnTheClockClient({
       // zero and there is genuinely nothing new to say. A null cache means the
       // server found nothing had changed and sent no board at all.
       const onScreen = cacheRef.current?.picks.length ?? 0;
-      const landed = data.cache ? Math.max(0, data.cache.picks.length - onScreen) : 0;
+      const landed = data.cache
+        ? Math.max(0, data.cache.picks.length - onScreen)
+        : 0;
       if (data.cache) {
         const fresh = data.cache;
         // Replaced only when something in it actually differs.
@@ -1364,7 +1546,9 @@ export function OnTheClockClient({
         // rollups would rebuild, all to arrive back where they started. Every
         // viewer would pay that once a minute for the whole draft. The stamp
         // itself lives in a ref for exactly this reason.
-        setCache((prev) => (prev && sameDraftCacheContent(prev, fresh) ? prev : fresh));
+        setCache((prev) =>
+          prev && sameDraftCacheContent(prev, fresh) ? prev : fresh,
+        );
       }
 
       if (trigger === "manual" || landed > 0 || status === "error") {
@@ -1375,7 +1559,9 @@ export function OnTheClockClient({
           error: data.error,
         });
         setSyncMessage(
-          landed > 0 ? `${landed} new ${landed === 1 ? "pick" : "picks"}. ${line}` : line,
+          landed > 0
+            ? `${landed} new ${landed === 1 ? "pick" : "picks"}. ${line}`
+            : line,
         );
       }
 
@@ -1451,14 +1637,20 @@ export function OnTheClockClient({
               ...prev,
               picks,
               draft:
-                pickCount === prev.draft.pickCount ? prev.draft : { ...prev.draft, pickCount },
+                pickCount === prev.draft.pickCount
+                  ? prev.draft
+                  : { ...prev.draft, pickCount },
             };
           });
         },
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setLiveStatus("live");
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        else if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        ) {
           setLiveStatus("unavailable");
         }
       });
@@ -1472,7 +1664,12 @@ export function OnTheClockClient({
   // is opened for a league (the awards need the league's trades too). Snapshot
   // mode never fetches: the frozen trades were set when the snapshot loaded. -----
   useEffect(() => {
-    if ((view !== "history" && view !== "rankings" && view !== "grades") || !league || snapshot) return;
+    if (
+      (view !== "history" && view !== "rankings" && view !== "grades") ||
+      !league ||
+      snapshot
+    )
+      return;
     if (historyLoadedFor.current === league.leagueId) return;
     void loadTradeHistory(league.leagueId);
   }, [view, league, snapshot, loadTradeHistory]);
@@ -1522,7 +1719,9 @@ export function OnTheClockClient({
         // a fresh map, including the first response of a room.
         const players =
           payload.players ??
-          (payload.boardEtag === boardEtagRef.current ? playersRef.current : {});
+          (payload.boardEtag === boardEtagRef.current
+            ? playersRef.current
+            : {});
         boardEtagRef.current = payload.boardEtag;
         playersRef.current = players;
         setPulse({ ...payload, players });
@@ -1539,19 +1738,16 @@ export function OnTheClockClient({
   // Stable, so the memo on AvailableList actually holds. An inline arrow here is
   // a new function every render, which is enough on its own to re-sort 600 rows
   // on every incoming pick.
-  const onToggleWatch = useCallback(
-    (playerId: string) => {
-      setWatchlist((prev) => {
-        // Computed outside the updater on purpose: the updater must stay pure,
-        // and StrictMode runs it twice.
-        const next = new Set(prev);
-        if (next.has(playerId)) next.delete(playerId);
-        else next.add(playerId);
-        return next;
-      });
-    },
-    [],
-  );
+  const onToggleWatch = useCallback((playerId: string) => {
+    setWatchlist((prev) => {
+      // Computed outside the updater on purpose: the updater must stay pure,
+      // and StrictMode runs it twice.
+      const next = new Set(prev);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }, []);
 
   // Persisting is a side effect, so it belongs in an effect rather than inside
   // the state updater. Skipped on the first render for a league, which is the
@@ -1612,8 +1808,8 @@ export function OnTheClockClient({
             </div>
           </div>
           <p className="mt-2 text-sm text-ink-muted">
-            Enter your Sleeper username to load every draft you are in, whether drafting
-            now, pre-draft, or completed, and step into the cockpit.
+            Enter your Sleeper username to load every draft you are in, whether
+            drafting now, pre-draft, or completed, and step into the cockpit.
           </p>
 
           <div className="mt-6">
@@ -1629,7 +1825,7 @@ export function OnTheClockClient({
             />
           </div>
         </div>
-      </div>
+      </div>,
     );
   }
 
@@ -1679,9 +1875,9 @@ export function OnTheClockClient({
             </div>
           </div>
           <p className="mt-2 text-sm text-ink-muted">
-            Actively drafting leagues lead the list, with pre-draft and completed drafts
-            below. Open a completed draft to review its results, grades, trades, and
-            awards.
+            Actively drafting leagues lead the list, with pre-draft and
+            completed drafts below. Open a completed draft to review its
+            results, grades, trades, and awards.
           </p>
 
           <div className="mt-6">
@@ -1698,7 +1894,7 @@ export function OnTheClockClient({
             />
           </div>
         </div>
-      </div>
+      </div>,
     );
   }
 
@@ -1714,7 +1910,7 @@ export function OnTheClockClient({
         <div className="mt-4">
           <LoadingCard label="Loading the draft room..." />
         </div>
-      </div>
+      </div>,
     );
   }
   // `derivedState` and `rec` are non-null exactly when `cache` is, so this one
@@ -1735,7 +1931,7 @@ export function OnTheClockClient({
             </button>
           )}
         </div>
-      </div>
+      </div>,
     );
   }
 
@@ -1748,7 +1944,9 @@ export function OnTheClockClient({
     avatarByRosterId,
   } = rosterNames;
 
-  const activeBoardLoading = snapshotMode ? false : boardLoading || snapshotLoading;
+  const activeBoardLoading = snapshotMode
+    ? false
+    : boardLoading || snapshotLoading;
   const activeBoardError = snapshotMode ? null : boardError;
 
   // The roster that currently owns the on-the-clock pick (trade-aware). When a pick
@@ -1756,7 +1954,8 @@ export function OnTheClockClient({
   // owner. Null when the draft is complete or ownership could not be resolved.
   const onTheClockPick =
     derived.onTheClockPickNo > 0
-      ? currentPicks.find((p) => p.overall === derived.onTheClockPickNo) ?? null
+      ? (currentPicks.find((p) => p.overall === derived.onTheClockPickNo) ??
+        null)
       : null;
   const onTheClockOwnerRosterId = onTheClockPick?.currentOwnerRosterId ?? null;
 
@@ -1777,7 +1976,8 @@ export function OnTheClockClient({
     derived.onTheClockPickNo > 0
       ? `pick ${derived.onTheClockPickNo} overall, R${derived.onTheClockRound}.${derived.onTheClockPickInRound}`
       : "no picks remaining";
-  const yourSeatLabel = derived.mySlot > 0 ? `You, Seat ${derived.mySlot}` : "Team not detected";
+  const yourSeatLabel =
+    derived.mySlot > 0 ? `You, Seat ${derived.mySlot}` : "Team not detected";
 
   const modeNotice = modeSelectable
     ? null
@@ -1861,7 +2061,8 @@ export function OnTheClockClient({
   // picks are discounted projections. Built only while the tab is open so the
   // realtime re-render on every pick stays cheap elsewhere.
   const tradeHistoryContext: TradeHistoryContext | null =
-    (view === "history" || view === "rankings" || view === "grades") && tradeReady
+    (view === "history" || view === "rankings" || view === "grades") &&
+    tradeReady
       ? {
           valueBoard: boardPlayers,
           available: excludeDrafted(boardPlayers, draftCache.picks),
@@ -1925,7 +2126,9 @@ export function OnTheClockClient({
   // and throws this away, after sorting the whole 800-player board to build a
   // market curve for nothing.
   const gradesNeedSurplus =
-    view === "grades" && draftStarted && !(snapshotMode && snapshot.snapshotVersion >= 2);
+    view === "grades" &&
+    draftStarted &&
+    !(snapshotMode && snapshot.snapshotVersion >= 2);
   const gradesContext =
     gradesNeedSurplus && tradeReady
       ? (() => {
@@ -1948,12 +2151,21 @@ export function OnTheClockClient({
   const grades =
     snapshotMode && snapshot.snapshotVersion >= 2
       ? snapshot.grades
-      : view === "grades" && tradeReady && settings.grades.enabled
+      : // Also on the PICK view once the draft is over: that view becomes the
+        // completion screen, and the completion screen leads with the reader's
+        // own grade. Still gated on tradeReady, so it never grades a half-loaded
+        // room, and still not computed on any other tab.
+        (view === "grades" || (view === "pick" && !draftInProgress)) &&
+          tradeReady &&
+          settings.grades.enabled
         ? computeDraftGrades({
             rollups: teamRollups,
             pulseTeams,
             pickSurpluses: gradesContext,
-            tradeMarginByRoster: tradeMarginsFor(tradeHistory ?? [], tradeHistoryContext),
+            tradeMarginByRoster: tradeMarginsFor(
+              tradeHistory ?? [],
+              tradeHistoryContext,
+            ),
             startingSlotCount: pulse?.slots.length ?? 0,
             isDynasty,
             settings: settings.grades,
@@ -2003,11 +2215,13 @@ export function OnTheClockClient({
   // Whether the room is currently refreshing itself. Read by the sync panel and
   // by the note that appears when Realtime drops, which would otherwise tell a
   // reader to press Sync for updates the room is already fetching.
-  const autoRefreshActive = autoRefreshEnabled && !syncClock.autoStopped && !draftComplete;
+  const autoRefreshActive =
+    autoRefreshEnabled && !syncClock.autoStopped && !draftComplete;
 
   // Format/source chips: source is ALWAYS FF Beacon (forced); format is auto-detected
   // from the Sleeper league. Use the league's detected label until the board confirms it.
-  const formatLabel = activeBoard?.formatLabel ?? league?.formatLabel ?? "Detecting...";
+  const formatLabel =
+    activeBoard?.formatLabel ?? league?.formatLabel ?? "Detecting...";
   const formatIsClosest = league?.formatIsClosest ?? false;
   const sourceActive = activeBoard ? activeBoard.sourceActive : true;
 
@@ -2049,7 +2263,9 @@ export function OnTheClockClient({
         ? `Our pick for you is ${needCard.player.name}, ${needCard.player.position}. ${needCard.reason}`
         : "",
       alerts.length > 0 ? alerts.map((a) => a.message).join(" ") : "",
-      derived.lastPick ? `Last pick: ${lastPickLabelFor(derived.lastPick)}.` : "",
+      derived.lastPick
+        ? `Last pick: ${lastPickLabelFor(derived.lastPick)}.`
+        : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -2088,7 +2304,10 @@ export function OnTheClockClient({
         boardReady={tradeReady}
         headingLevel={headingLevel}
       />
-      <BestRemainingByPosition players={available} headingLevel={headingLevel} />
+      <BestRemainingByPosition
+        players={available}
+        headingLevel={headingLevel}
+      />
       <Panel eyebrow="Your team" title="Your draft" headingLevel={headingLevel}>
         <MyDraft
           picks={draftCache.picks}
@@ -2232,8 +2451,9 @@ export function OnTheClockClient({
             active yet. Dev/admin-facing; the board still renders. */}
         {activeBoard && !sourceActive && (
           <p className="mt-2 rounded-card border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            Admin: FF Beacon values are not marked active in the source registry yet.
-            On The Clock is showing them anyway because it forces FF Beacon.
+            Admin: FF Beacon values are not marked active in the source registry
+            yet. On The Clock is showing them anyway because it forces FF
+            Beacon.
           </p>
         )}
 
@@ -2241,7 +2461,9 @@ export function OnTheClockClient({
             container width: the right rail is hidden so the content has room. */}
         <div
           className={`mt-4 grid gap-5 ${
-            view === "rosters" || boardFull ? "" : "xl:grid-cols-[minmax(0,1fr)_360px]"
+            view === "rosters" || boardFull
+              ? ""
+              : "xl:grid-cols-[minmax(0,1fr)_360px]"
           }`}
         >
           {/* ---- Main content area: switches between views ---- */}
@@ -2259,7 +2481,11 @@ export function OnTheClockClient({
                 // site drawer mid-clock. It rides in this bar so the two share
                 // one docked position instead of covering each other.
                 leading={
-                  <DraftViewSheet views={VIEWS} activeView={view} onSelect={selectView} />
+                  <DraftViewSheet
+                    views={VIEWS}
+                    activeView={view}
+                    onSelect={selectView}
+                  />
                 }
               >
                 {renderSidebarPanels(3)}
@@ -2275,107 +2501,171 @@ export function OnTheClockClient({
               hidden={view !== "pick"}
               className="xl:scroll-mt-24 space-y-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
             >
+              {/* The region's accessible name, and the only one a screen
+                  reader gets. It has to stop saying "Who to pick" the moment
+                  there is nobody left to pick: the sighted reader sees the new
+                  heading and the label is invisible to them, so a stale string
+                  here is a defect only the screen reader user ever meets. The
+                  completion screen supplies its own visible h2, so this one is
+                  suppressed rather than duplicated. */}
               <h2 id="otc-view-pick-title" className="sr-only">
-                {VIEW_LABELS.pick}
+                {draftInProgress ? VIEW_LABELS.pick : "Draft complete"}
               </h2>
-              <section aria-labelledby="draft-signal-title">
-                <div className="mb-3">
-                  <h2
-                    id="draft-signal-title"
-                    className="text-xl font-bold tracking-tight text-ink sm:text-2xl"
-                  >
-                    Draft signal
-                  </h2>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    Who to pick right now.{" "}
-                    <span className="font-medium text-ink">Best Available</span> is the highest FF
-                    Beacon value left on your real board.{" "}
-                    <span className="font-medium text-ink">Team Need</span> weighs that value against
-                    the holes in your lineup and your league format.
-                  </p>
-                </div>
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                  {modeSelectable ? (
-                    <BuildModeSelector
-                      mode={buildMode}
-                      onChange={(next) => {
-                        setBuildMode(next);
-                        if (league) writeBuildMode(league.draftId, next);
-                      }}
+              {/* Once there is nobody left to pick, this view stops being a
+                  recommendation surface and becomes the handoff into League
+                  Pulse. Two spotlight cards reasoning about an empty board under
+                  a heading that says "Who to pick right now" reads as broken,
+                  and it leaves the reader at a dead end at the moment they care
+                  most about the team they just built. */}
+              {!draftInProgress ? (
+                <DraftComplete
+                  leagueName={league?.name ?? "This league"}
+                  season={draftCache.draft.season}
+                  sleeperLeagueId={draftCache.draft.sleeperLeagueId}
+                  myGrade={
+                    derived.myRosterId === null
+                      ? null
+                      : (grades.find(
+                          (g) => g.rosterId === derived.myRosterId,
+                        ) ?? null)
+                  }
+                  myPulse={
+                    derived.myRosterId === null
+                      ? null
+                      : (pulseTeams.find(
+                          (t) => t.rosterId === derived.myRosterId,
+                        ) ?? null)
+                  }
+                  teamCount={teamRollups.length}
+                  onGoToView={selectView}
+                  changedSinceDraft={null}
+                />
+              ) : (
+                <section aria-labelledby="draft-signal-title">
+                  <div className="mb-3">
+                    <h2
+                      id="draft-signal-title"
+                      className="text-xl font-bold tracking-tight text-ink sm:text-2xl"
+                    >
+                      Draft signal
+                    </h2>
+                    <p className="mt-1 text-sm text-ink-muted">
+                      Who to pick right now.{" "}
+                      <span className="font-medium text-ink">
+                        Best Available
+                      </span>{" "}
+                      is the highest FF Beacon value left on your real board.{" "}
+                      <span className="font-medium text-ink">Team Need</span>{" "}
+                      weighs that value against the holes in your lineup and
+                      your league format.
+                    </p>
+                  </div>
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    {modeSelectable ? (
+                      <BuildModeSelector
+                        mode={buildMode}
+                        onChange={(next) => {
+                          setBuildMode(next);
+                          if (league) writeBuildMode(league.draftId, next);
+                        }}
+                      />
+                    ) : (
+                      <BuildModeNotice reason={modeNotice ?? ""} />
+                    )}
+                    {/* Which engine answered, stated rather than implied. A room
+                      reasoning from value alone should say so. */}
+                    <p className="text-xs text-ink-subtle">
+                      {rec.engine === "points"
+                        ? `Weighing projected points and FF Beacon value${
+                            rec.pointsWeight > 0
+                              ? `, ${Math.round(rec.pointsWeight * 100)}% on points right now`
+                              : ""
+                          }.`
+                        : pulseLoading
+                          ? "Loading weekly projections..."
+                          : "No weekly projections, so this is value and scarcity only."}
+                    </p>
+                  </div>
+                  {recommendationsAlign && bestCard.player ? (
+                    // Value and need point at the same player: show one aligned card,
+                    // never demote the user to a worse runner-up.
+                    <PlayerSpotlight
+                      data={needCard}
+                      variant="aligned"
+                      {...spotlightExtras.need}
                     />
                   ) : (
-                    <BuildModeNotice reason={modeNotice ?? ""} />
+                    // Two full peers, not a hero and a footnote. Team Need is the
+                    // card most drafters act on, and it used to be a single line of
+                    // name and value with no reasoning attached to it at all.
+                    <div className="space-y-4">
+                      <PlayerSpotlight
+                        data={bestCard}
+                        variant="best"
+                        {...spotlightExtras.best}
+                      />
+                      <PlayerSpotlight
+                        data={needCard}
+                        variant="need"
+                        {...spotlightExtras.need}
+                      />
+                    </div>
                   )}
-                  {/* Which engine answered, stated rather than implied. A room
-                      reasoning from value alone should say so. */}
-                  <p className="text-xs text-ink-subtle">
-                    {rec.engine === "points"
-                      ? `Weighing projected points and FF Beacon value${
-                          rec.pointsWeight > 0
-                            ? `, ${Math.round(rec.pointsWeight * 100)}% on points right now`
-                            : ""
-                        }.`
-                      : pulseLoading
-                        ? "Loading weekly projections..."
-                        : "No weekly projections, so this is value and scarcity only."}
-                  </p>
-                </div>
-                {recommendationsAlign && bestCard.player ? (
-                  // Value and need point at the same player: show one aligned card,
-                  // never demote the user to a worse runner-up.
-                  <PlayerSpotlight data={needCard} variant="aligned" {...spotlightExtras.need} />
-                ) : (
-                  // Two full peers, not a hero and a footnote. Team Need is the
-                  // card most drafters act on, and it used to be a single line of
-                  // name and value with no reasoning attached to it at all.
-                  <div className="space-y-4">
-                    <PlayerSpotlight data={bestCard} variant="best" {...spotlightExtras.best} />
-                    <PlayerSpotlight data={needCard} variant="need" {...spotlightExtras.need} />
-                  </div>
-                )}
-              </section>
+                </section>
+              )}
 
-              <Panel
-                eyebrow="The pool"
-                title="Available players"
-                helper="Sorted by FF Beacon value. Drafted players drop off automatically."
-              >
-                {activeBoardLoading ? (
-                  <LoadingCard label="Loading the FF Beacon board..." />
-                ) : activeBoardError ? (
-                  <ErrorCard message={activeBoardError} />
-                ) : !activeBoard || activeBoard.status === "source-unavailable" ? (
-                  <EmptyCard
-                    title="FF Beacon values are not set up."
-                    body="Admin: the FF Beacon source row is missing from the source registry."
-                  />
-                ) : activeBoard.status !== "ok" ? (
-                  <EmptyCard
-                    title={`No FF Beacon rankings for ${activeBoard.formatLabel} yet.`}
-                    body="The board and picks still work. Values appear once this format's FF Beacon rankings publish."
-                  />
-                ) : available.length === 0 ? (
-                  <EmptyCard
-                    title={pool === "rookies" ? "No rookies available." : "No players available."}
-                    body={
-                      pool === "rookies"
-                        ? "No ranked first-year players for this format yet. Check back once rookie values publish."
-                        : "Every ranked player in this pool has been drafted."
-                    }
-                  />
-                ) : (
-                  <AvailableList
-                    players={available}
-                    adpThreshold={adpThreshold}
-                    adpAvailable={Boolean(activeBoard?.adpFormatKey)}
-                    orderScore={rec.orderScore}
-                    mode={effectiveMode}
-                    projectionsAvailable={pulse !== null}
-                    watchlist={watchlist}
-                    onToggleWatch={onToggleWatch}
-                  />
-                )}
-              </Panel>
+              {/* The pool of available players belongs to a draft in progress.
+                  After the last pick there is nothing to draft them into, and
+                  leaving it under "Your draft is complete" is the same dead end
+                  the completion screen exists to remove. */}
+              {draftInProgress ? (
+                <Panel
+                  eyebrow="The pool"
+                  title="Available players"
+                  helper="Sorted by FF Beacon value. Drafted players drop off automatically."
+                >
+                  {activeBoardLoading ? (
+                    <LoadingCard label="Loading the FF Beacon board..." />
+                  ) : activeBoardError ? (
+                    <ErrorCard message={activeBoardError} />
+                  ) : !activeBoard ||
+                    activeBoard.status === "source-unavailable" ? (
+                    <EmptyCard
+                      title="FF Beacon values are not set up."
+                      body="Admin: the FF Beacon source row is missing from the source registry."
+                    />
+                  ) : activeBoard.status !== "ok" ? (
+                    <EmptyCard
+                      title={`No FF Beacon rankings for ${activeBoard.formatLabel} yet.`}
+                      body="The board and picks still work. Values appear once this format's FF Beacon rankings publish."
+                    />
+                  ) : available.length === 0 ? (
+                    <EmptyCard
+                      title={
+                        pool === "rookies"
+                          ? "No rookies available."
+                          : "No players available."
+                      }
+                      body={
+                        pool === "rookies"
+                          ? "No ranked first-year players for this format yet. Check back once rookie values publish."
+                          : "Every ranked player in this pool has been drafted."
+                      }
+                    />
+                  ) : (
+                    <AvailableList
+                      players={available}
+                      adpThreshold={adpThreshold}
+                      adpAvailable={Boolean(activeBoard?.adpFormatKey)}
+                      orderScore={rec.orderScore}
+                      mode={effectiveMode}
+                      projectionsAvailable={pulse !== null}
+                      watchlist={watchlist}
+                      onToggleWatch={onToggleWatch}
+                    />
+                  )}
+                </Panel>
+              ) : null}
             </div>
 
             {/* View: Drafted players (LIVE from the synced cache) */}
@@ -2403,114 +2693,123 @@ export function OnTheClockClient({
                   every open grade card the moment a user changed tabs. */}
               {view === "drafted" && (
                 <>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
-                    Drafted players
-                  </h2>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    Everyone taken so far, live from the draft. View it as a board or as a list.
-                  </p>
-                </div>
-                <div
-                  role="group"
-                  aria-label="Drafted players layout"
-                  className="inline-flex overflow-hidden rounded-card border border-line"
-                >
-                  {(
-                    [
-                      { id: "board", label: "Board", icon: LayoutGrid },
-                      { id: "list", label: "List", icon: List },
-                    ] as Array<{ id: DraftedMode; label: string; icon: typeof LayoutGrid }>
-                  ).map(({ id, label, icon: Icon }) => {
-                    const active = draftedMode === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => setDraftedMode(id)}
-                        className={`inline-flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan ${
-                          active ? "bg-beacon text-black" : "bg-base text-ink-muted hover:text-ink"
-                        }`}
-                      >
-                        <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {draftedMode === "board" ? (
-                <>
-                  {/* Row 1 stays within the container; only the board (Row 2)
-                      breaks out to the full viewport width. */}
-                  {/* Row 1: room status (1/3) beside best remaining (2/3, two-column). */}
-                  <div className="mb-5 grid gap-5 lg:grid-cols-3">
-                    <div className="lg:col-span-1">
-                      <DraftRoomStatus
-                        instanceId="room-status-board"
-                        draft={draftCache.draft}
-                        onTheClockTeam={onTheClockTeam}
-                        onTheClockRound={derived.onTheClockRound}
-                        onTheClockPickInRound={derived.onTheClockPickInRound}
-                        onTheClockOverallPickNo={derived.onTheClockPickNo}
-                        isYourTurn={isYourTurn}
-                        lastPickLabel={lastPickLabelFor(derived.lastPick)}
-                      />
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
+                        Drafted players
+                      </h2>
+                      <p className="mt-1 text-sm text-ink-muted">
+                        Everyone taken so far, live from the draft. View it as a
+                        board or as a list.
+                      </p>
                     </div>
-                    <div className="lg:col-span-2">
-                      {/* Its own id: below xl the Quick info sheet holds a
-                          second copy of this panel, and two elements cannot
-                          share one. */}
-                      <BestRemainingByPosition
-                        players={available}
-                        columns={2}
-                        instanceId="otc-best-remaining-board"
-                      />
+                    <div
+                      role="group"
+                      aria-label="Drafted players layout"
+                      className="inline-flex overflow-hidden rounded-card border border-line"
+                    >
+                      {(
+                        [
+                          { id: "board", label: "Board", icon: LayoutGrid },
+                          { id: "list", label: "List", icon: List },
+                        ] as Array<{
+                          id: DraftedMode;
+                          label: string;
+                          icon: typeof LayoutGrid;
+                        }>
+                      ).map(({ id, label, icon: Icon }) => {
+                        const active = draftedMode === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => setDraftedMode(id)}
+                            className={`inline-flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan ${
+                              active
+                                ? "bg-beacon text-black"
+                                : "bg-base text-ink-muted hover:text-ink"
+                            }`}
+                          >
+                            <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                            {label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Row 2: the board, broken out to the full viewport width. */}
-                  <div className="relative left-1/2 w-screen -translate-x-1/2 px-6 sm:px-8 lg:px-10">
+                  {draftedMode === "board" ? (
+                    <>
+                      {/* Row 1 stays within the container; only the board (Row 2)
+                      breaks out to the full viewport width. */}
+                      {/* Row 1: room status (1/3) beside best remaining (2/3, two-column). */}
+                      <div className="mb-5 grid gap-5 lg:grid-cols-3">
+                        <div className="lg:col-span-1">
+                          <DraftRoomStatus
+                            instanceId="room-status-board"
+                            draft={draftCache.draft}
+                            onTheClockTeam={onTheClockTeam}
+                            onTheClockRound={derived.onTheClockRound}
+                            onTheClockPickInRound={
+                              derived.onTheClockPickInRound
+                            }
+                            onTheClockOverallPickNo={derived.onTheClockPickNo}
+                            isYourTurn={isYourTurn}
+                            lastPickLabel={lastPickLabelFor(derived.lastPick)}
+                          />
+                        </div>
+                        <div className="lg:col-span-2">
+                          {/* Its own id: below xl the Quick info sheet holds a
+                          second copy of this panel, and two elements cannot
+                          share one. */}
+                          <BestRemainingByPosition
+                            players={available}
+                            columns={2}
+                            instanceId="otc-best-remaining-board"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Row 2: the board, broken out to the full viewport width. */}
+                      <div className="relative left-1/2 w-screen -translate-x-1/2 px-6 sm:px-8 lg:px-10">
+                        <Panel
+                          eyebrow="Every seat"
+                          title="Draft board"
+                          helper="Seats across, rounds down. Each cell shows the pick and who was taken."
+                          bodyClassName="px-0 sm:px-0"
+                        >
+                          <DraftBoard
+                            draft={draftCache.draft}
+                            picks={draftCache.picks}
+                            currentPicks={currentPicks}
+                            teamNameByRosterId={teamNameByRosterId}
+                            connectedUserSlot={derived.mySlot}
+                            onTheClockPickNo={derived.onTheClockPickNo}
+                            lastPickNo={derived.lastPick?.pickNo ?? 0}
+                            adpBySleeperId={adpBySleeperId}
+                            adpThreshold={adpThreshold}
+                          />
+                        </Panel>
+                      </div>
+                    </>
+                  ) : (
                     <Panel
-                      eyebrow="Every seat"
-                      title="Draft board"
-                      helper="Seats across, rounds down. Each cell shows the pick and who was taken."
-                      bodyClassName="px-0 sm:px-0"
+                      eyebrow="History"
+                      title="All picks"
+                      helper="Every pick in order."
                     >
-                      <DraftBoard
-                        draft={draftCache.draft}
+                      <PickList
                         picks={draftCache.picks}
-                        currentPicks={currentPicks}
+                        users={draftCache.users}
+                        draft={draftCache.draft}
                         teamNameByRosterId={teamNameByRosterId}
-                        connectedUserSlot={derived.mySlot}
-                        onTheClockPickNo={derived.onTheClockPickNo}
-                        lastPickNo={derived.lastPick?.pickNo ?? 0}
+                        connectedUserId={myUserId ?? ""}
                         adpBySleeperId={adpBySleeperId}
                         adpThreshold={adpThreshold}
                       />
                     </Panel>
-                  </div>
-                </>
-              ) : (
-                <Panel
-                  eyebrow="History"
-                  title="All picks"
-                  helper="Every pick in order."
-                >
-                  <PickList
-                    picks={draftCache.picks}
-                    users={draftCache.users}
-                    draft={draftCache.draft}
-                    teamNameByRosterId={teamNameByRosterId}
-                    connectedUserId={myUserId ?? ""}
-                    adpBySleeperId={adpBySleeperId}
-                    adpThreshold={adpThreshold}
-                  />
-                </Panel>
-              )}
+                  )}
                 </>
               )}
             </div>
@@ -2568,7 +2867,9 @@ export function OnTheClockClient({
                     ? (snapshot.pulse?.slotsEstimated ?? false)
                     : (pulse?.slotsEstimated ?? false)
                 }
-                scoringEstimated={snapshotMode ? false : (pulse?.scoringEstimated ?? false)}
+                scoringEstimated={
+                  snapshotMode ? false : (pulse?.scoringEstimated ?? false)
+                }
                 pulseLoading={pulseLoading}
               />
             </div>
@@ -2595,7 +2896,8 @@ export function OnTheClockClient({
                 truncated={tradeHistoryTruncated}
                 onRefresh={() => {
                   // Snapshot mode never refetches: the trades are frozen.
-                  if (league && !snapshotMode) void loadTradeHistory(league.leagueId);
+                  if (league && !snapshotMode)
+                    void loadTradeHistory(league.leagueId);
                 }}
               />
             </div>
@@ -2656,7 +2958,8 @@ export function OnTheClockClient({
                 tradesLoading={tradeHistoryLoading}
                 tradesError={tradeHistoryError}
                 onRetryTrades={() => {
-                  if (league && !snapshotMode) void loadTradeHistory(league.leagueId);
+                  if (league && !snapshotMode)
+                    void loadTradeHistory(league.leagueId);
                 }}
               />
             </div>
@@ -2700,16 +3003,20 @@ export function OnTheClockClient({
                         What your picks cost you
                       </h2>
                       <p className="mb-3 mt-1 max-w-2xl text-sm text-ink-muted">
-                        Every pick of yours where a more valuable player was still sitting there,
-                        measured at the values this draft is graded against. Most drafts have
-                        several; the number worth arguing about is the size of the gap.
+                        Every pick of yours where a more valuable player was
+                        still sitting there, measured at the values this draft
+                        is graded against. Most drafts have several; the number
+                        worth arguing about is the size of the gap.
                       </p>
                       <PassedOnPanel entries={passedOn} />
                     </section>
                   )}
 
                   <section aria-labelledby="otc-recap-title">
-                    <h2 id="otc-recap-title" className="text-lg font-bold tracking-tight text-ink">
+                    <h2
+                      id="otc-recap-title"
+                      className="text-lg font-bold tracking-tight text-ink"
+                    >
                       Recap for the league chat
                     </h2>
                     <p className="mb-3 mt-1 max-w-2xl text-sm text-ink-muted">
@@ -2728,7 +3035,10 @@ export function OnTheClockClient({
               the Quick info sheet above, and rendering both would put two
               copies of every panel id in the document. ---- */}
           {!railInSheet && view !== "rosters" && !boardFull && (
-            <aside aria-label="Draft room panels" className="space-y-5 xl:sticky xl:top-32 xl:self-start">
+            <aside
+              aria-label="Draft room panels"
+              className="space-y-5 xl:sticky xl:top-32 xl:self-start"
+            >
               {renderSidebarPanels(2)}
             </aside>
           )}
@@ -2747,10 +3057,14 @@ export function OnTheClockClient({
 function buildSnapshotNotice(s: DraftSnapshotPayload): string {
   const bits: string[] = [`Locked ${formatEastern(s.finalizedAt)}.`];
   if (s.valueSnapshotDate) {
-    bits.push(`FF Beacon values from ${formatEasternDate(s.valueSnapshotDate)}.`);
+    bits.push(
+      `FF Beacon values from ${formatEasternDate(s.valueSnapshotDate)}.`,
+    );
   }
   if (s.adpSnapshotDate) {
-    bits.push(`Sleeper ADP from ${formatEasternDate(`${s.adpSnapshotDate}T12:00:00.000Z`)}.`);
+    bits.push(
+      `Sleeper ADP from ${formatEasternDate(`${s.adpSnapshotDate}T12:00:00.000Z`)}.`,
+    );
   }
   if (s.confidence === "low") {
     bits.push(
@@ -2760,7 +3074,9 @@ function buildSnapshotNotice(s: DraftSnapshotPayload): string {
     s.valueSnapshotSource === "next_available" ||
     s.adpSnapshotSource === "next_available"
   ) {
-    bits.push("Some inputs use the nearest snapshot after the draft (estimated).");
+    bits.push(
+      "Some inputs use the nearest snapshot after the draft (estimated).",
+    );
   }
   return bits.join(" ");
 }
@@ -2822,7 +3138,15 @@ function derivePulseInputs(args: {
   nextPickNo: number | null;
   picksUntilNext: number | null;
 } | null {
-  const { cache, derivedState, available, simulated, myNextPick, pool, settings } = args;
+  const {
+    cache,
+    derivedState,
+    available,
+    simulated,
+    myNextPick,
+    pool,
+    settings,
+  } = args;
   if (!cache || !derivedState) return null;
 
   const picksUntilNext =

@@ -25,9 +25,14 @@ import { SleeperAvatar } from "@/components/sleeper-avatar";
 import { TeamStatusBadge } from "@/components/team-status-badge";
 import type { PulseTeam } from "@/lib/league-power-pulse-data";
 import { PulseDetail, ordinal, pct } from "./pulse-detail";
+import type { LeagueEmphasis } from "@/lib/league-emphasis";
 
 /** Colour ramp for the headline score. Always paired with the number itself. */
-function scoreTone(score: number): { text: string; ring: string; glow: string } {
+function scoreTone(score: number): {
+  text: string;
+  ring: string;
+  glow: string;
+} {
   if (score >= 70)
     return {
       text: "text-brand-cyan",
@@ -62,7 +67,9 @@ function DivergenceChip({ team }: { team: PulseTeam }) {
       <span className="font-mono text-xs tabular-nums text-ink">
         {ordinal(team.valueRank)}
       </span>
-      <span className={`font-mono text-[10px] font-semibold tabular-nums ${cls}`}>
+      <span
+        className={`font-mono text-[10px] font-semibold tabular-nums ${cls}`}
+      >
         {word}
       </span>
     </span>
@@ -74,12 +81,24 @@ export function PulseRankingsTable({
   sleeperLeagueId,
   searchedUsername,
   valueLabel,
+  emphasis,
 }: {
   teams: PulseTeam[];
   sleeperLeagueId: string;
   searchedUsername: string | null;
   /** e.g. "Dynasty PPR Superflex via FF Beacon". Shown in the value header. */
   valueLabel: string | null;
+  /**
+   * What the asset-value column is called in this league, and why.
+   *
+   * The ordering does not change: this table leads with Power Pulse in every
+   * league because who wins games is the question everywhere. What changes is
+   * the NAME. In a dynasty league the value column is a standing a reader is
+   * genuinely managing; in a redraft league it is what a player would fetch in a
+   * trade, and calling it a rank invites a reader to treat it as a second
+   * scoreboard that nobody in that league is keeping.
+   */
+  emphasis: LeagueEmphasis;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sheetTeam, setSheetTeam] = useState<PulseTeam | null>(null);
@@ -104,18 +123,29 @@ export function PulseRankingsTable({
 
   return (
     <>
+      {/* The hint sits here as its own sentence rather than inside the caption.
+          Appended to a column enumeration it read as a fragment with no verb,
+          and in a redraft league it closed with a second, contradictory claim
+          about how the table is ordered. */}
+      <p className="mb-3 text-xs leading-relaxed text-ink-muted">
+        {emphasis.valueHint}
+      </p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">
             Power Pulse rankings, ordered by Power Pulse score. Columns: rank,
             team, Power Pulse score, outlook (competing, mid-table, or
-            rebuilding), trade value rank with the difference between the two
-            rankings, projected record, playoff odds, and lineup efficiency.
-            Activate a team to open its full breakdown.
+            rebuilding), {emphasis.winsFirst ? "leverage" : "value"} rank with
+            the difference between the two rankings, projected record, playoff
+            odds, and lineup efficiency. Activate a team to open its full
+            breakdown.
           </caption>
           <thead className="bg-surface text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             <tr>
-              <th scope="col" className="w-px whitespace-nowrap px-2 py-3 text-center">
+              <th
+                scope="col"
+                className="w-px whitespace-nowrap px-2 py-3 text-center"
+              >
                 #
               </th>
               <th scope="col" className="px-3 py-3">
@@ -124,7 +154,10 @@ export function PulseRankingsTable({
               <th scope="col" className="px-3 py-3 text-center">
                 Pulse
               </th>
-              <th scope="col" className="hidden px-3 py-3 text-left md:table-cell">
+              <th
+                scope="col"
+                className="hidden px-3 py-3 text-left md:table-cell"
+              >
                 Outlook
               </th>
               <th
@@ -132,15 +165,24 @@ export function PulseRankingsTable({
                 className="hidden px-3 py-3 text-right md:table-cell"
                 title={valueLabel ?? undefined}
               >
-                Value rank
+                {emphasis.winsFirst ? "Leverage rank" : "Value rank"}
               </th>
-              <th scope="col" className="hidden px-3 py-3 text-center lg:table-cell">
+              <th
+                scope="col"
+                className="hidden px-3 py-3 text-center lg:table-cell"
+              >
                 Proj.
               </th>
-              <th scope="col" className="hidden px-3 py-3 text-center md:table-cell">
+              <th
+                scope="col"
+                className="hidden px-3 py-3 text-center md:table-cell"
+              >
                 Playoffs
               </th>
-              <th scope="col" className="hidden px-3 py-3 text-center lg:table-cell">
+              <th
+                scope="col"
+                className="hidden px-3 py-3 text-center lg:table-cell"
+              >
                 Lineup
               </th>
               <th scope="col" className="w-px px-2 py-3">
@@ -190,7 +232,11 @@ export function PulseRankingsTable({
 
                     <td className="hidden px-3 py-2.5 md:table-cell">
                       {team.status ? (
-                        <TeamStatusBadge status={team.status} size="sm" compact />
+                        <TeamStatusBadge
+                          status={team.status}
+                          size="sm"
+                          compact
+                        />
                       ) : (
                         <span className="text-xs text-ink-subtle">--</span>
                       )}
@@ -211,13 +257,17 @@ export function PulseRankingsTable({
                     </td>
 
                     <td className="hidden px-3 py-2.5 text-center font-mono text-xs tabular-nums text-ink-muted lg:table-cell">
-                      {team.lineupEfficiency === null ? "--" : pct(team.lineupEfficiency)}
+                      {team.lineupEfficiency === null
+                        ? "--"
+                        : pct(team.lineupEfficiency)}
                     </td>
 
                     <td className="w-px px-2 py-2.5">
                       <button
                         type="button"
-                        onClick={() => setExpanded(isOpen ? null : team.rosterRowId)}
+                        onClick={() =>
+                          setExpanded(isOpen ? null : team.rosterRowId)
+                        }
                         aria-expanded={isOpen}
                         aria-controls={detailId}
                         aria-label={`${isOpen ? "Hide" : "Show"} the full breakdown for ${team.teamName}`}
@@ -230,7 +280,11 @@ export function PulseRankingsTable({
 
                   {isOpen && (
                     <tr className="hidden md:table-row">
-                      <td colSpan={9} id={detailId} className="bg-base/40 px-5 py-5">
+                      <td
+                        colSpan={9}
+                        id={detailId}
+                        className="bg-base/40 px-5 py-5"
+                      >
                         <PulseDetail
                           team={team}
                           teamCount={teamCount}
@@ -250,7 +304,11 @@ export function PulseRankingsTable({
       <BottomSheet
         open={sheetTeam !== null}
         onClose={() => setSheetTeam(null)}
-        label={sheetTeam ? `${sheetTeam.teamName} Power Pulse breakdown` : "Team breakdown"}
+        label={
+          sheetTeam
+            ? `${sheetTeam.teamName} Power Pulse breakdown`
+            : "Team breakdown"
+        }
         labelledBy={sheetTeam ? sheetHeadingId : undefined}
         showClose={false}
       >
@@ -277,7 +335,8 @@ export function PulseRankingsTable({
                   {sheetTeam.valueRank !== null && (
                     <>
                       <span className="mx-1.5 text-ink-subtle">and</span>
-                      {ordinal(sheetTeam.valueRank)} by value
+                      {ordinal(sheetTeam.valueRank)} by{" "}
+                      {emphasis.winsFirst ? "leverage" : "value"}
                     </>
                   )}
                 </p>
@@ -341,7 +400,9 @@ function TeamIdentity({ team }: { team: PulseTeam }) {
         size={32}
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-ink">{team.teamName}</span>
+        <span className="block truncate text-sm font-medium text-ink">
+          {team.teamName}
+        </span>
         {ownerLine(team.teamName, team.ownerHandle) && (
           <span className="block truncate text-[11px] text-ink-subtle">
             {ownerLine(team.teamName, team.ownerHandle)}
@@ -356,10 +417,16 @@ function PlayoffCell({ odds }: { odds: number | null }) {
   if (odds === null) return <span className="text-xs text-ink-subtle">--</span>;
   const percent = Math.round(odds * 100);
   const tone =
-    percent >= 60 ? "text-signal-success" : percent >= 25 ? "text-ink" : "text-ink-subtle";
+    percent >= 60
+      ? "text-signal-success"
+      : percent >= 25
+        ? "text-ink"
+        : "text-ink-subtle";
   return (
     <span className="inline-flex flex-col items-center gap-1">
-      <span className={`font-mono text-xs font-bold tabular-nums ${tone}`}>{percent}%</span>
+      <span className={`font-mono text-xs font-bold tabular-nums ${tone}`}>
+        {percent}%
+      </span>
       <span
         aria-hidden="true"
         className="h-1 w-12 overflow-hidden rounded-full bg-base"

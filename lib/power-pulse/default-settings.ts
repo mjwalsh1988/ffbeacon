@@ -10,7 +10,10 @@
  */
 
 import type { PulsePosition } from "./types";
-import { DEFAULT_WAR_SETTINGS, type WarSettings } from "@/lib/positional-war/default-settings";
+import {
+  DEFAULT_WAR_SETTINGS,
+  type WarSettings,
+} from "@/lib/positional-war/default-settings";
 
 // Re-exported so one document has one type: callers reading PowerPulseSettings
 // never need to also import from lib/positional-war/default-settings.
@@ -150,6 +153,13 @@ export type PowerPulseSettings = {
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
+  // pp-4 (2026-08-31): the volatility fallback is now a measured curve rather
+  // than one number per position. It varies with the player's own projected
+  // points and with the league's scoring base, because both change the answer
+  // and neither could be carried by a single figure. Receivers are more volatile
+  // than running backs across the whole startable range, which the previous
+  // sample had backwards. See lib/power-pulse/variance-curve.ts.
+  //
   // pp-3 (2026-08-31): two corrections, both measured rather than tuned.
   //
   // A season-long injury designation no longer overrides a per-week projection.
@@ -163,7 +173,7 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   //
   // Both change what a score means, so cached pp-2 rows are stale by definition
   // and every league rescores on next view.
-  modelVersion: "pp-3",
+  modelVersion: "pp-4",
 
   weights: {
     points: 0.55,
@@ -219,29 +229,30 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   },
 
   variance: {
-    // MEASURED, not estimated. Each figure is the median week-to-week
-    // coefficient of variation (a player's own standard deviation over his own
-    // mean) across the top 36 scorers at that position in the 2025 regular
-    // season, from player_stats, requiring 12 games and more than 5 points a
-    // game so a fringe player's noise does not set the number.
+    // LAST RESORT ONLY, and no longer the usual answer.
     //
-    // The originals were plausible guesses and four of the six were wrong in a
-    // way that mattered. Wide receiver was the worst at 0.65 against a measured
-    // 0.57, and a league starts three or more of them, so the overstatement
-    // inflated every team's weekly spread and pushed every matchup closer to a
-    // coin flip. Quarterback ran the other way, 0.35 against a measured 0.42.
+    // The fallback for a player with no measured history is now read off a
+    // curve keyed on his own projected points and on the league's scoring base
+    // (lib/power-pulse/variance-curve.ts). These single numbers are what remains
+    // for a position with no curve, or a player carrying no projected points to
+    // place on one.
     //
-    // Ordering still reads the way the old comment described it: quarterbacks
-    // are the steadiest and defenses the most volatile. Only the magnitudes
-    // moved. These are the fallbacks for players with no measured history of
-    // their own; a player with eight or more graded weeks uses his own.
+    // They are the median week-to-week coefficient of variation across the
+    // STARTABLE range at each position, 2023 through 2025, from player_stats:
+    // the top 36 running backs and receivers, 24 quarterbacks, 18 tight ends,
+    // 14 kickers and defenses. The startable range is the correction that
+    // matters. Measuring the top 36 at every position weighted RB25-48, a pool
+    // of committee backs whose usage genuinely swings week to week, equally with
+    // the bell cows, and that alone made running backs read as more volatile
+    // than receivers. Inside the range where starters live, receivers are the
+    // more volatile position at every band, because volume is stability.
     defaultCv: {
-      QB: 0.42,
-      RB: 0.59,
-      WR: 0.57,
-      TE: 0.65,
-      K: 0.51,
-      DEF: 0.8,
+      QB: 0.414,
+      RB: 0.527,
+      WR: 0.548,
+      TE: 0.573,
+      K: 0.507,
+      DEF: 0.718,
     },
     minGamesForMeasured: 8,
     minCv: 0.15,
@@ -269,7 +280,8 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
  */
 export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
   const base = DEFAULT_POWER_PULSE_SETTINGS;
-  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return base;
+  if (!stored || typeof stored !== "object" || Array.isArray(stored))
+    return base;
   const s = stored as Record<string, unknown>;
 
   const obj = <T extends object>(key: string, fallback: T): T => {
@@ -279,7 +291,8 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
   };
 
   return {
-    modelVersion: typeof s.modelVersion === "string" ? s.modelVersion : base.modelVersion,
+    modelVersion:
+      typeof s.modelVersion === "string" ? s.modelVersion : base.modelVersion,
     weights: obj("weights", base.weights),
     recency: obj("recency", base.recency),
     reliability: obj("reliability", base.reliability),
@@ -289,7 +302,10 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
       ...obj("injury", base.injury),
       multipliers: {
         ...base.injury.multipliers,
-        ...(((s.injury as Record<string, unknown>)?.multipliers as Record<string, number>) ?? {}),
+        ...(((s.injury as Record<string, unknown>)?.multipliers as Record<
+          string,
+          number
+        >) ?? {}),
       },
     },
     opponent: obj("opponent", base.opponent),

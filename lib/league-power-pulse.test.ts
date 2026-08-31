@@ -82,11 +82,14 @@ function fakeLeague(overrides: Partial<Record<string, unknown>> = {}) {
     scoringSettings: {},
     playoffTeams: 12,
     playoffWeekStart: 15,
+    playoffRoundType: 0,
     ...overrides,
   };
 }
 
-function fakeTeam(overrides: Partial<PowerPulseTeamResult> = {}): PowerPulseTeamResult {
+function fakeTeam(
+  overrides: Partial<PowerPulseTeamResult> = {},
+): PowerPulseTeamResult {
   return {
     rosterRowId: "roster-1",
     sleeperRosterId: 1,
@@ -136,10 +139,12 @@ function fakeTeam(overrides: Partial<PowerPulseTeamResult> = {}): PowerPulseTeam
  * touch directly. Records every operation in `calls`, in the order it happened,
  * so write-ordering assertions (E8-4) do not depend on inspecting timestamps.
  */
-function makeFakeClient(opts: {
-  leaguesRow?: Record<string, unknown> | null;
-  cacheRow?: Record<string, unknown> | null;
-} = {}) {
+function makeFakeClient(
+  opts: {
+    leaguesRow?: Record<string, unknown> | null;
+    cacheRow?: Record<string, unknown> | null;
+  } = {},
+) {
   const calls: string[] = [];
   const leagueUpdates: Array<Record<string, unknown>> = [];
 
@@ -203,7 +208,9 @@ function wireOkPipeline() {
     season_type: "regular",
     season: "2026",
   } as never);
-  vi.mocked(loadPowerPulseSettings).mockResolvedValue({ modelVersion: "v1" } as never);
+  vi.mocked(loadPowerPulseSettings).mockResolvedValue({
+    modelVersion: "v1",
+  } as never);
   vi.mocked(syncLeagueMatchups).mockResolvedValue({
     ok: true,
     weeksFetched: [5],
@@ -241,8 +248,14 @@ afterEach(() => {
 /* ---------------------------------------------------------------------- */
 
 describe("classifyPowerPulseResult", () => {
-  const cases: Array<[string, PowerPulseResult, "ok" | "skipped" | "settled" | "error"]> = [
-    ["ok, no skipped reason", { ok: true, teams: 10, season: 2026, currentWeek: 5 }, "ok"],
+  const cases: Array<
+    [string, PowerPulseResult, "ok" | "skipped" | "settled" | "error"]
+  > = [
+    [
+      "ok, no skipped reason",
+      { ok: true, teams: 10, season: 2026, currentWeek: 5 },
+      "ok",
+    ],
     [
       "incomplete schedule fetch",
       {
@@ -256,12 +269,24 @@ describe("classifyPowerPulseResult", () => {
     ],
     [
       "no rosters",
-      { ok: true, teams: 0, season: 2026, currentWeek: 5, skipped: "no rosters" },
+      {
+        ok: true,
+        teams: 0,
+        season: 2026,
+        currentWeek: 5,
+        skipped: "no rosters",
+      },
       "skipped",
     ],
     [
       "no teams scored",
-      { ok: true, teams: 0, season: 2026, currentWeek: 5, skipped: "no teams scored" },
+      {
+        ok: true,
+        teams: 0,
+        season: 2026,
+        currentWeek: 5,
+        skipped: "no teams scored",
+      },
       "skipped",
     ],
     [
@@ -277,7 +302,13 @@ describe("classifyPowerPulseResult", () => {
     ],
     [
       "no published schedule",
-      { ok: true, teams: 0, season: 2026, currentWeek: 1, skipped: "no published schedule" },
+      {
+        ok: true,
+        teams: 0,
+        season: 2026,
+        currentWeek: 1,
+        skipped: "no published schedule",
+      },
       "settled",
     ],
     [
@@ -302,7 +333,11 @@ describe("classifyPowerPulseResult", () => {
       },
       "settled",
     ],
-    ["ok: false", { ok: false, error: "power pulse upsert failed: boom" }, "error"],
+    [
+      "ok: false",
+      { ok: false, error: "power pulse upsert failed: boom" },
+      "error",
+    ],
   ];
 
   for (const [label, result, expected] of cases) {
@@ -380,7 +415,14 @@ describe("powerPulseIsStale backoff early return", () => {
     });
     const getCurrentWeek = vi.fn().mockResolvedValue(5);
 
-    const stale = await powerPulseIsStale(client, LEAGUE_ROW_ID, 2026, 15, getCurrentWeek, "v1");
+    const stale = await powerPulseIsStale(
+      client,
+      LEAGUE_ROW_ID,
+      2026,
+      15,
+      getCurrentWeek,
+      "v1",
+    );
     expect(stale).toBe(true);
   });
 });
@@ -557,17 +599,23 @@ describe("refreshPowerPulse write ordering (E8-4)", () => {
 
     await refreshPowerPulse(client, LEAGUE_ROW_ID, { force: true });
 
-    const attemptedIdx = calls.indexOf("leagues.update:power_pulse_attempted_at");
+    const attemptedIdx = calls.indexOf(
+      "leagues.update:power_pulse_attempted_at",
+    );
     const upsertIdx = calls.indexOf("cache.upsert");
     const verdictIdx = calls.findIndex(
-      (c) => c.startsWith("leagues.update:") && c.includes("power_pulse_succeeded_at"),
+      (c) =>
+        c.startsWith("leagues.update:") &&
+        c.includes("power_pulse_succeeded_at"),
     );
 
     expect(attemptedIdx).toBeGreaterThanOrEqual(0);
     expect(upsertIdx).toBeGreaterThan(attemptedIdx);
     expect(verdictIdx).toBeGreaterThan(upsertIdx);
 
-    const verdictUpdate = leagueUpdates.find((u) => "power_pulse_succeeded_at" in u);
+    const verdictUpdate = leagueUpdates.find(
+      (u) => "power_pulse_succeeded_at" in u,
+    );
     expect(verdictUpdate?.power_pulse_status).toBe("ok");
   });
 
@@ -622,7 +670,9 @@ describe("settled verdict detail encoding", () => {
 
     await refreshPowerPulse(client, LEAGUE_ROW_ID, { force: true });
 
-    const verdictUpdate = leagueUpdates.find((u) => u.power_pulse_status === "settled");
+    const verdictUpdate = leagueUpdates.find(
+      (u) => u.power_pulse_status === "settled",
+    );
     expect(verdictUpdate?.power_pulse_detail).toBe(
       "no published schedule [settled season=2026 week=5 playoffStart=15]",
     );

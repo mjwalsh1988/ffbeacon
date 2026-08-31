@@ -44,12 +44,7 @@ import type { GradeSettings } from "./types";
 export const GRADE_VERSION = 1;
 
 export type GradeComponentKey =
-  | "market"
-  | "lineup"
-  | "construction"
-  | "reliability"
-  | "future"
-  | "trades";
+  "market" | "lineup" | "construction" | "reliability" | "future" | "trades";
 
 export interface GradeComponent {
   key: GradeComponentKey;
@@ -125,7 +120,9 @@ function curveScores(values: number[]): number[] {
   // The same z-score and the same display mapping Power Pulse uses. zScores
   // returns 0 for a flat set, and zToDisplay(0) is the midpoint, so the
   // everyone-identical case still lands on 50 without a special branch.
-  return zScores(values).map((z) => zToDisplay(z, { min: 0, max: 100, sharpness: 1 }));
+  return zScores(values).map((z) =>
+    zToDisplay(z, { min: 0, max: 100, sharpness: 1 }),
+  );
 }
 
 /** Letter for a 0 to 100 composite. */
@@ -211,14 +208,18 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     raw: new Map(),
     anchor: new Map(),
     evidence: new Map(),
-    absentReason: "Sleeper ADP is not available for this draft, so there is no market to measure against.",
+    absentReason:
+      "Sleeper ADP is not available for this draft, so there is no market to measure against.",
   };
   for (const id of rosterIds) {
     const entry = surplusTotals.get(id);
     if (!entry || entry.count === 0) continue;
     const perPick = entry.average;
     market.raw.set(id, perPick);
-    market.anchor.set(id, 50 + 50 * Math.max(-1, Math.min(1, perPick / MARKET_REFERENCE)));
+    market.anchor.set(
+      id,
+      50 + 50 * Math.max(-1, Math.min(1, perPick / MARKET_REFERENCE)),
+    );
     market.evidence.set(
       id,
       entry.total >= 0
@@ -233,7 +234,8 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     raw: new Map(),
     anchor: new Map(),
     evidence: new Map(),
-    absentReason: "Weekly projections are not available for this league, so lineups could not be scored.",
+    absentReason:
+      "Weekly projections are not available for this league, so lineups could not be scored.",
     // Two points a week. Less than that between the best and worst starting
     // lineup in a room means the draft did not separate anyone, and saying
     // otherwise would be inventing a difference.
@@ -243,7 +245,10 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     const t = pulseById.get(id);
     if (!t || t.projectedCount === 0) continue;
     lineup.raw.set(id, t.meanStartingPoints);
-    const perSlot = input.startingSlotCount > 0 ? t.meanStartingPoints / input.startingSlotCount : 0;
+    const perSlot =
+      input.startingSlotCount > 0
+        ? t.meanStartingPoints / input.startingSlotCount
+        : 0;
     lineup.anchor.set(id, 100 * clamp01(perSlot / LINEUP_REFERENCE));
     lineup.evidence.set(
       id,
@@ -252,31 +257,45 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
   }
 
   // ---- construction ----
+  //
+  // WHAT THIS MEASURES NOW, AND WHY IT CHANGED
+  // It used to count filled starting slots. That asked the wrong question twice
+  // over. In a real twelve-team league every team lands between 0.99 and 1.00 of
+  // its slots, so the number carried no information and the curve amplified a
+  // rounding boundary into a fifth of everyone's grade. And in the leagues where
+  // it DID separate teams it was wrong to: a redraft manager who finished
+  // without a tight end has a waiver claim to make, not a hole in his roster.
+  //
+  // So it now measures the COST of depending on the wire rather than the count
+  // of holes. A team whose lineup is entirely its own scores 100. A team leaning
+  // on replacement-level players for a fifth of its weekly output scores far
+  // lower, and the size of the penalty is set by real scarcity: a streamed tight
+  // end in a shallow redraft league costs a point or two, an empty superflex
+  // slot in a deep dynasty costs the whole slot, and neither is asserted.
   const construction: RawComponent = {
     key: "construction",
     raw: new Map(),
     anchor: new Map(),
     evidence: new Map(),
-    absentReason: "The league's starting lineup could not be read, so construction was not scored.",
-    // Half a starting slot, expressed as the share of the lineup it represents,
-    // so a ten-slot league needs a 0.05 spread and a fourteen-slot league needs
-    // 0.036. Half a slot is the smallest gap a reader would call a real
-    // difference in roster construction; below it the teams are the same and the
-    // anchor says so.
-    minSpread: input.startingSlotCount > 0 ? 0.5 / input.startingSlotCount : undefined,
+    absentReason:
+      "The league's starting lineup could not be read, so construction was not scored.",
+    // Two percent of weekly output. Below that the teams genuinely are the same
+    // and the curve would be scaling noise, which is the failure this whole
+    // guard exists to prevent.
+    minSpread: 0.02,
   };
   if (input.startingSlotCount > 0) {
     for (const id of rosterIds) {
       const t = pulseById.get(id);
       if (!t) continue;
-      const filled = clamp01(t.startersFilled / input.startingSlotCount);
-      construction.raw.set(id, filled);
-      construction.anchor.set(id, filled * 100);
+      const ownShare = clamp01(1 - t.waiverPointsShare);
+      construction.raw.set(id, ownShare);
+      construction.anchor.set(id, ownShare * 100);
       construction.evidence.set(
         id,
-        filled >= 0.999
-          ? `Fills every one of the ${input.startingSlotCount} starting spots this league requires.`
-          : `Fills ${t.startersFilled.toFixed(1)} of ${input.startingSlotCount} starting spots in the average week.`,
+        t.waiverFilledSlots < 0.05
+          ? `Their own draft covers all ${input.startingSlotCount} starting spots every week.`
+          : `Leans on the waiver wire for ${(t.waiverPointsShare * 100).toFixed(0)}% of their weekly points, filling ${t.waiverFilledSlots.toFixed(1)} starting ${t.waiverFilledSlots < 1.05 ? "spot" : "spots"} in the average week.`,
       );
     }
   }
@@ -287,7 +306,8 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     raw: new Map(),
     anchor: new Map(),
     evidence: new Map(),
-    absentReason: "None of these starters have enough projection history to score reliability.",
+    absentReason:
+      "None of these starters have enough projection history to score reliability.",
     // Six points of beat rate. A team's figure is a points-weighted average over
     // about ten starters, each measured across roughly thirty graded weeks, which
     // puts its standard error near 0.03. Anything under two of those is sampling
@@ -342,7 +362,10 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     if (entry.trades === 0) continue;
     const perTrade = entry.total / entry.trades;
     trades.raw.set(rosterId, perTrade);
-    trades.anchor.set(rosterId, 50 + 50 * Math.max(-1, Math.min(1, perTrade / MARKET_REFERENCE)));
+    trades.anchor.set(
+      rosterId,
+      50 + 50 * Math.max(-1, Math.min(1, perTrade / MARKET_REFERENCE)),
+    );
     trades.evidence.set(
       rosterId,
       entry.total >= 0
@@ -351,7 +374,14 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     );
   }
 
-  const components: RawComponent[] = [market, lineup, construction, reliability, future, trades];
+  const components: RawComponent[] = [
+    market,
+    lineup,
+    construction,
+    reliability,
+    future,
+    trades,
+  ];
 
   // Curve each component across the teams that HAVE it, then blend with its
   // anchor. A team missing a component is not scored on it at all.
@@ -364,7 +394,8 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     // component, and a league where they are all genuinely poor still scores
     // them all poorly, because the anchor is absolute.
     const worthCurving =
-      component.minSpread === undefined || spreadOf(values) >= component.minSpread;
+      component.minSpread === undefined ||
+      spreadOf(values) >= component.minSpread;
     const curved = worthCurving ? curveScores(values) : values.map(() => 50);
     const out = new Map<number, number>();
     ids.forEach((id, i) => {
@@ -372,20 +403,34 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
       out.set(
         id,
         worthCurving
-          ? (1 - settings.absoluteBlend) * curved[i] + settings.absoluteBlend * anchor
+          ? (1 - settings.absoluteBlend) * curved[i] +
+              settings.absoluteBlend * anchor
           : anchor,
       );
     });
     scored.set(component.key, out);
   }
 
+  // Redraft grades a different thing, so it weighs the components differently.
+  //
+  // The guard is for a caller that builds a GradeSettings object by hand, not
+  // for stored rows: the validator defaults redraftWeights, so a settings row
+  // written before it existed parses with the stock split rather than keeping
+  // the dynasty one. That is a real consequence worth knowing. An admin who
+  // tuned `weights` and never saw this field gets stock redraft weights on
+  // redraft leagues until they tune it too.
+  const weights =
+    !input.isDynasty && settings.redraftWeights
+      ? settings.redraftWeights
+      : settings.weights;
+
   const weightOf: Record<GradeComponentKey, number> = {
-    market: settings.weights.market,
-    lineup: settings.weights.lineup,
-    construction: settings.weights.construction,
-    reliability: settings.weights.reliability,
-    future: settings.weights.future,
-    trades: settings.weights.trades,
+    market: weights.market,
+    lineup: weights.lineup,
+    construction: weights.construction,
+    reliability: weights.reliability,
+    future: weights.future,
+    trades: weights.trades,
   };
 
   const bestByRoster = new Map<number, PickSurplus>();
@@ -411,7 +456,10 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
           label: LABELS[component.key],
           // A component the admin has zeroed is not a component with no data,
           // and reporting the data reason for it would be untrue.
-          why: weight <= 0 ? "Switched off in the grade settings." : component.absentReason,
+          why:
+            weight <= 0
+              ? "Switched off in the grade settings."
+              : component.absentReason,
         });
         continue;
       }
@@ -428,9 +476,12 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     // Redistribute: the weights that survived are renormalized so a team missing
     // a component is judged on what it does have rather than scored zero on what
     // it does not.
-    for (const c of present) c.weight = totalWeight > 0 ? round(c.weight / totalWeight, 3) : 0;
+    for (const c of present)
+      c.weight = totalWeight > 0 ? round(c.weight / totalWeight, 3) : 0;
     const composite =
-      totalWeight > 0 ? present.reduce((sum, c) => sum + c.score * c.weight, 0) : 50;
+      totalWeight > 0
+        ? present.reduce((sum, c) => sum + c.score * c.weight, 0)
+        : 50;
 
     const pulse = pulseById.get(r.rosterId) ?? null;
     const best = bestByRoster.get(r.rosterId) ?? null;
@@ -449,11 +500,19 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
       review: "",
       bestPick:
         best && best.surplus > 0
-          ? { playerName: best.playerName, pickNo: best.pickNo, surplus: Math.round(best.surplus) }
+          ? {
+              playerName: best.playerName,
+              pickNo: best.pickNo,
+              surplus: Math.round(best.surplus),
+            }
           : null,
       worstPick:
         worst && worst.surplus < 0
-          ? { playerName: worst.playerName, pickNo: worst.pickNo, surplus: Math.round(worst.surplus) }
+          ? {
+              playerName: worst.playerName,
+              pickNo: worst.pickNo,
+              surplus: Math.round(worst.surplus),
+            }
           : null,
       biggestHole: pulse?.weakestSlot ?? null,
     };
@@ -499,7 +558,11 @@ const SLOT_WORDS: Record<string, string> = {
  * frozen into a snapshot reproduces exactly and every sentence traces to a
  * number in the components above it.
  */
-function buildReview(grade: DraftGrade, teamCount: number, input: DraftGradeInput): string {
+function buildReview(
+  grade: DraftGrade,
+  teamCount: number,
+  input: DraftGradeInput,
+): string {
   const parts: string[] = [];
   const where = `${ordinalish(grade.rank)} of ${teamCount}`;
 
@@ -512,7 +575,10 @@ function buildReview(grade: DraftGrade, teamCount: number, input: DraftGradeInpu
   // because that is the thing that actually decided the letter.
   const sorted = grade.components
     .slice()
-    .sort((a, b) => Math.abs(b.score - 50) * b.weight - Math.abs(a.score - 50) * a.weight);
+    .sort(
+      (a, b) =>
+        Math.abs(b.score - 50) * b.weight - Math.abs(a.score - 50) * a.weight,
+    );
   const driver = sorted[0];
   if (driver?.evidence) parts.push(driver.evidence);
   const second = sorted[1];
