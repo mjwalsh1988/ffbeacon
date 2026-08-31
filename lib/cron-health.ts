@@ -22,6 +22,15 @@
  * is therefore per cadence rather than one global window: a minute-by-minute
  * worker's history is worth a week, a nightly job's is worth a year.
  *
+ * AND THEN THE LID DID NOT CLOSE
+ * That retention pass ran nightly for months and deleted nothing. By 2026-08-31
+ * the table was 157,853 rows and 71 MB, still growing at the original rate, and
+ * the only trace was `pruneError: "[object Object]"` in a cron result nobody had
+ * cause to open. Two independent mistakes in the batch size, both described at
+ * PRUNE_BATCH below, and a stringification that threw the diagnosis away. The
+ * lesson worth keeping is the third one: an error path that cannot say what went
+ * wrong is the same as no error path.
+ *
  * Everything in this file that can be pure is pure, so the schedule reasoning is
  * testable without a database or a clock. The two functions that touch rows are
  * at the bottom, past the divider.
@@ -194,16 +203,33 @@ export function isStaleRunning(startedAt: string, nowMs: number): boolean {
  * The database half. Everything above is pure; everything below touches rows.
  * ------------------------------------------------------------------------- */
 
-/** Rows read and deleted per round trip. */
-const PRUNE_BATCH = 2000;
+/**
+ * Rows read and deleted per round trip.
+ *
+ * 200, and the number is load-bearing rather than a taste. The delete names its
+ * rows by primary key in the QUERY STRING, so the batch size is really a URL
+ * length: a uuid costs about 39 characters there, and PostgREST sits behind a
+ * 16KB header limit. This shipped at 2000, which is a 78KB request line, and
+ * every prune since has died inside undici with UND_ERR_HEADERS_OVERFLOW before
+ * the request ever left the machine. 200 ids is roughly 8KB, half the ceiling.
+ *
+ * It also has to stay at or below PostgREST's 1000-row response cap, which the
+ * old value silently breached from the other direction: `.limit(2000)` returned
+ * 1000 rows, `1000 < room` read as "that was the last page", and the loop broke
+ * after one iteration. Two bugs pointing the same way, so the table never lost
+ * a single row.
+ */
+export const PRUNE_BATCH = 200;
 /**
  * Ceiling on one run's deletions.
  *
  * PostgREST runs each statement under an 8-second timeout, so a single unbounded
  * delete over a six-figure table would be killed halfway and roll back. Batching
  * is what makes the work possible at all; this cap is what keeps one run inside
- * the route's maxDuration. The first run after this ships has a large backlog to
- * clear and will hit the cap, and the next night takes the rest.
+ * the route's maxDuration: 40,000 rows is 200 select-and-delete pairs, measured
+ * at about 460ms each against production, so roughly 95 seconds of a 300-second
+ * budget. A large backlog takes several nights to clear, which is fine for
+ * housekeeping.
  */
 const PRUNE_MAX_PER_RUN = 40_000;
 
@@ -213,6 +239,28 @@ export type PruneOutcome = {
   capped: boolean;
   byWindow: Array<{ retentionDays: number; jobs: number; deleted: number }>;
 };
+
+/**
+ * Turn whatever the client rejected with into something a log line can read.
+ *
+ * Every failure on this path arrives as a plain object, not an Error: PostgREST
+ * returns `{message, details, hint, code}` and a transport failure is wrapped in
+ * the same shape. The caller stringifies with `String(err)`, so for a year the
+ * only record of a prune that had never once succeeded was the literal text
+ * `[object Object]` in the cron result, which is indistinguishable from no
+ * diagnosis at all. The hint is included because Supabase puts the actual
+ * remedy there.
+ */
+function asError(raw: unknown, context: string): Error {
+  if (raw instanceof Error) return raw;
+  const parts =
+    raw && typeof raw === "object"
+      ? (["message", "code", "details", "hint"] as const)
+          .map((k) => (raw as Record<string, unknown>)[k])
+          .filter((v): v is string => typeof v === "string" && v.length > 0)
+      : [String(raw)];
+  return new Error(`${context}: ${parts.join(" | ") || "no detail returned"}`);
+}
 
 /**
  * Delete ledger rows past their job's retention window.
@@ -261,13 +309,13 @@ export async function pruneCronRuns(
         .lt("started_at", cutoff)
         .neq("status", "running")
         .limit(room);
-      if (error) throw error;
+      if (error) throw asError(error, "selecting expired cron_runs ids");
 
       const ids = (data ?? []).map((r) => r.id);
       if (ids.length === 0) break;
 
       const { error: delErr } = await supabase.from("cron_runs").delete().in("id", ids);
-      if (delErr) throw delErr;
+      if (delErr) throw asError(delErr, `deleting ${ids.length} cron_runs rows`);
 
       deletedHere += ids.length;
       out.deleted += ids.length;

@@ -385,9 +385,9 @@ function freshnessTone(result: FreshnessResult): { label: string; className: str
   if (result.level === "unknown") {
     return { label: "No rows", className: "border-line bg-surface text-ink-muted" };
   }
-  if (result.outOfSeason) {
+  if (result.idleReason) {
     return {
-      label: "Off season",
+      label: result.outOfSeason ? "Off season" : "Before kickoff",
       className: "border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan",
     };
   }
@@ -482,6 +482,8 @@ function DataFreshnessSection({
 
               {result.level === "stale" ? (
                 <p className="mt-3 text-sm leading-relaxed text-signal-danger">{result.matters}</p>
+              ) : result.idleReason ? (
+                <p className="mt-3 text-sm leading-relaxed text-ink-muted">{result.idleReason}</p>
               ) : null}
             </li>
           );

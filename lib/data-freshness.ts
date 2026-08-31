@@ -23,11 +23,24 @@
  * is supposed to move. A stale table is reported whether or not a job exists,
  * whether or not it ran, and whether or not it said it succeeded.
  *
+ * WHAT A STALE TABLE IS NOT
+ * A table can also sit still because the SOURCE has nothing new, and calling
+ * that a failure is how an alert stops being read. On 2026-08-30 Sleeper flipped
+ * its live state from preseason week 3 to regular season week 1, nine days
+ * before the first regular season game. The stats sync kept running green and
+ * kept writing nothing, correctly, because no regular season game had been
+ * played, and player_stats crossed the 48-hour line and mailed an alert that
+ * would have repeated every night until kickoff. `kickoffGated` is the narrow
+ * exemption for that window: only while Sleeper says "regular" and its own
+ * published season start date is still in the future. Preseason is judged
+ * normally, so a real preseason stats failure is still reported.
+ *
  * Pure functions first; the one that touches rows is at the bottom.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
+import { getNflState } from "./sleeper";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -51,6 +64,12 @@ export type FreshnessSpec = {
   matters: string;
   /** Only check inside these months (1-12). Seasonal tables are idle by design. */
   months?: number[];
+  /**
+   * Exempt while the live phase says "regular" and the first regular season
+   * game has not been played. Nothing writes a stat line in that window, so
+   * silence is the correct behaviour rather than a symptom.
+   */
+  kickoffGated?: boolean;
 };
 
 export type FreshnessResult = {
@@ -64,6 +83,12 @@ export type FreshnessResult = {
   matters: string;
   /** True when the table is out of season and was therefore not judged. */
   outOfSeason: boolean;
+  /**
+   * Why the table was exempted from judgement, or null when it was judged.
+   * Shown instead of a status so a reader is told which reason applies rather
+   * than being left to infer it from a green badge.
+   */
+  idleReason: string | null;
 };
 
 /**
@@ -117,6 +142,7 @@ export const FRESHNESS_SPECS: readonly FreshnessSpec[] = [
     label: "Player stats",
     maxAgeHours: 48,
     months: [1, 2, 8, 9, 10, 11, 12],
+    kickoffGated: true,
     matters:
       "Actual production, which feeds projection accuracy and opponent strength. Idle by design outside the season.",
   },
@@ -129,13 +155,54 @@ export function isInSeason(spec: FreshnessSpec, nowMs: number): boolean {
   return spec.months.includes(month);
 }
 
+/** The part of Sleeper's live state the kickoff gate reads. */
+export type SeasonPhase = {
+  season_type: string;
+  season_start_date?: string | null;
+};
+
+/**
+ * True when the live phase is the regular season and its first game has not
+ * been played yet.
+ *
+ * Sleeper advances `season_type` to "regular" as soon as the preseason ends,
+ * which in 2026 was nine days before the opener. Both endpoints are honest in
+ * that window and both return nothing: there is no regular season week 1 stat
+ * line on 2026-08-31. Anything reading regular season stats is therefore idle
+ * by construction, not broken.
+ *
+ * The gate is deliberately narrow. Preseason is NOT covered, because preseason
+ * games do produce stat lines and a sync that stopped writing them during
+ * August is a genuine failure worth an email. An unavailable or unparseable
+ * state returns false, so a Sleeper outage makes the watchdog stricter rather
+ * than quieter: losing an alert is worse than sending one.
+ */
+export function isBeforeKickoff(state: SeasonPhase | null | undefined, nowMs: number): boolean {
+  if (!state || state.season_type !== "regular") return false;
+  const start = state.season_start_date;
+  if (!start) return false;
+  // Sleeper publishes a bare date. Treat it as UTC midnight, which is earlier
+  // than any kickoff in any US zone, so the gate lifts before the first game
+  // rather than after it.
+  const startMs = Date.parse(`${start}T00:00:00Z`);
+  if (!Number.isFinite(startMs)) return false;
+  return nowMs < startMs;
+}
+
 /** Grade one table from its newest row. Pure, so the thresholds are testable. */
 export function gradeFreshness(
   spec: FreshnessSpec,
   newestAt: string | null,
   nowMs: number,
+  state: SeasonPhase | null = null,
 ): FreshnessResult {
   const outOfSeason = !isInSeason(spec, nowMs);
+  const beforeKickoff = spec.kickoffGated === true && isBeforeKickoff(state, nowMs);
+  const idleReason = outOfSeason
+    ? "Out of season this month."
+    : beforeKickoff
+      ? "The regular season has not kicked off yet, so there is nothing to write."
+      : null;
   const base = {
     label: spec.label,
     table: spec.table as string,
@@ -143,6 +210,7 @@ export function gradeFreshness(
     maxAgeHours: spec.maxAgeHours,
     matters: spec.matters,
     outOfSeason,
+    idleReason,
   };
 
   if (newestAt === null) {
@@ -158,7 +226,7 @@ export function gradeFreshness(
   }
 
   const ageHours = Math.max(0, (nowMs - writtenMs) / HOUR_MS);
-  if (outOfSeason) return { ...base, level: "fresh", ageHours };
+  if (idleReason !== null) return { ...base, level: "fresh", ageHours };
   return { ...base, level: ageHours > spec.maxAgeHours ? "stale" : "fresh", ageHours };
 }
 
@@ -200,6 +268,10 @@ export async function checkDataFreshness(
   nowMs: number = Date.now(),
   specs: readonly FreshnessSpec[] = FRESHNESS_SPECS,
 ): Promise<FreshnessResult[]> {
+  // One memoised call, and only when a spec actually asks for it. A failure
+  // returns null, which grades every table strictly rather than quietly.
+  const state = specs.some((s) => s.kickoffGated) ? await getNflState() : null;
+
   const results = await Promise.all(
     specs.map(async (spec) => {
       try {
@@ -212,13 +284,13 @@ export async function checkDataFreshness(
           .overrideTypes<Record<string, string | null>>();
         if (error) throw error;
         const newestAt = data ? ((data as Record<string, string | null>)[spec.column] ?? null) : null;
-        return gradeFreshness(spec, newestAt, nowMs);
+        return gradeFreshness(spec, newestAt, nowMs, state);
       } catch (err) {
         console.error(
           `[data-freshness] could not read ${spec.table}, so its freshness is unknown:`,
           err instanceof Error ? err.message : JSON.stringify(err),
         );
-        return gradeFreshness(spec, null, nowMs);
+        return gradeFreshness(spec, null, nowMs, state);
       }
     }),
   );

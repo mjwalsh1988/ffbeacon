@@ -6,6 +6,7 @@ import {
   isStaleRunning,
   HIGH_FREQUENCY_RETENTION_DAYS,
   STANDARD_RETENTION_DAYS,
+  PRUNE_BATCH,
 } from "./cron-health";
 
 /** 2026-08-24T18:00:00Z. August, so the seasonal stats sync is in season. */
@@ -132,5 +133,30 @@ describe("isStaleRunning", () => {
 
   it("does not flag an unreadable timestamp", () => {
     expect(isStaleRunning("not a date", AUG)).toBe(false);
+  });
+});
+
+/**
+ * The prune batch size is not a taste, it is two hard limits at once, and it
+ * shipped violating both. These assertions are the record of what the number
+ * has to satisfy so nobody raises it again for throughput.
+ */
+describe("PRUNE_BATCH", () => {
+  it("stays inside PostgREST's 1000-row response cap", () => {
+    // Above the cap the select silently returns 1000, the loop reads the short
+    // page as the last page, and it breaks after one iteration.
+    expect(PRUNE_BATCH).toBeLessThanOrEqual(1000);
+  });
+
+  it("keeps the delete's id list inside the 16KB header limit", () => {
+    // The delete names its rows by primary key in the query string. A uuid plus
+    // its separator costs 39 characters there, measured against production.
+    const BYTES_PER_ID = 39;
+    const HEADER_LIMIT = 16 * 1024;
+    expect(PRUNE_BATCH * BYTES_PER_ID).toBeLessThan(HEADER_LIMIT / 2);
+  });
+
+  it("is large enough that a nightly run makes real progress", () => {
+    expect(PRUNE_BATCH).toBeGreaterThanOrEqual(100);
   });
 });

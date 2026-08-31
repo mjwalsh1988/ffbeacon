@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   FRESHNESS_SPECS,
   gradeFreshness,
+  isBeforeKickoff,
   isInSeason,
   staleOnly,
   type FreshnessSpec,
@@ -26,7 +27,12 @@ const SEASONAL: FreshnessSpec = {
   table: "player_stats",
   label: "Player stats",
   months: [1, 2, 8, 9, 10, 11, 12],
+  kickoffGated: true,
 };
+
+/** The state Sleeper actually returned in the gap that produced the false alarm. */
+const REGULAR_BEFORE_KICKOFF = { season_type: "regular", season_start_date: "2026-09-09" };
+const PRESEASON = { season_type: "pre", season_start_date: "2026-09-09" };
 
 function hoursAgo(nowMs: number, hours: number): string {
   return new Date(nowMs - hours * HOUR).toISOString();
@@ -117,5 +123,71 @@ describe("FRESHNESS_SPECS registry", () => {
       expect(spec.matters.length, `${spec.table} has no "matters" text`).toBeGreaterThan(20);
       expect(spec.maxAgeHours).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("isBeforeKickoff", () => {
+  it("is true once Sleeper says regular and the opener has not been played", () => {
+    // 2026-08-31, the day the false alarm went out. Sleeper had already moved to
+    // regular season week 1, nine days early, and no stat line existed.
+    expect(isBeforeKickoff(REGULAR_BEFORE_KICKOFF, Date.parse("2026-08-31T16:00:00Z"))).toBe(true);
+  });
+
+  it("is false from the opener onward", () => {
+    expect(isBeforeKickoff(REGULAR_BEFORE_KICKOFF, Date.parse("2026-09-09T00:00:00Z"))).toBe(false);
+    expect(isBeforeKickoff(REGULAR_BEFORE_KICKOFF, Date.parse("2026-10-01T00:00:00Z"))).toBe(false);
+  });
+
+  it("does not cover the preseason, which does produce stat lines", () => {
+    expect(isBeforeKickoff(PRESEASON, Date.parse("2026-08-20T16:00:00Z"))).toBe(false);
+  });
+
+  it("is false when the state is missing or unparseable, so a Sleeper outage never mutes an alert", () => {
+    expect(isBeforeKickoff(null, AUGUST)).toBe(false);
+    expect(isBeforeKickoff({ season_type: "regular" }, AUGUST)).toBe(false);
+    expect(isBeforeKickoff({ season_type: "regular", season_start_date: "soon" }, AUGUST)).toBe(
+      false,
+    );
+  });
+});
+
+describe("the kickoff gate on player stats", () => {
+  const BEFORE_OPENER = Date.parse("2026-08-31T16:00:00Z");
+
+  it("does not call the stats table stale in the gap before week 1", () => {
+    // 55 hours since the last write, which is over the 48-hour limit, and the
+    // email that went out on this data was wrong.
+    const r = gradeFreshness(SEASONAL, hoursAgo(BEFORE_OPENER, 55), BEFORE_OPENER, {
+      ...REGULAR_BEFORE_KICKOFF,
+    });
+    expect(r.level).toBe("fresh");
+    expect(r.idleReason).toContain("kicked off");
+  });
+
+  it("still reports a genuinely stale stats table during the preseason", () => {
+    const r = gradeFreshness(SEASONAL, hoursAgo(BEFORE_OPENER, 55), BEFORE_OPENER, { ...PRESEASON });
+    expect(r.level).toBe("stale");
+    expect(r.idleReason).toBeNull();
+  });
+
+  it("resumes judging the moment the opener arrives", () => {
+    const inSeason = Date.parse("2026-09-20T16:00:00Z");
+    const r = gradeFreshness(SEASONAL, hoursAgo(inSeason, 55), inSeason, {
+      ...REGULAR_BEFORE_KICKOFF,
+    });
+    expect(r.level).toBe("stale");
+  });
+
+  it("leaves ungated tables alone in the same window", () => {
+    const r = gradeFreshness(SPEC, hoursAgo(BEFORE_OPENER, 55), BEFORE_OPENER, {
+      ...REGULAR_BEFORE_KICKOFF,
+    });
+    expect(r.level).toBe("stale");
+  });
+
+  it("names the out-of-season reason ahead of the kickoff one", () => {
+    const r = gradeFreshness(SEASONAL, hoursAgo(MAY, 2000), MAY, { ...REGULAR_BEFORE_KICKOFF });
+    expect(r.outOfSeason).toBe(true);
+    expect(r.idleReason).toContain("Out of season");
   });
 });
