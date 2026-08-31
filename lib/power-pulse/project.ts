@@ -20,8 +20,10 @@ import type { PulsePosition } from "./types";
 
 /**
  * Injury designations that keep a player out for the rest of the season rather
- * than one week. A Questionable tag should not suppress a player's week 12
- * projection in September; an IR stash should.
+ * than one week, and are therefore worth applying to a week the SOURCE has said
+ * nothing about. A Questionable tag in September tells you nothing about week
+ * 12; an IR tag does. Neither overrides a week the source has answered for
+ * itself: see injuryMultiplier below.
  */
 export const LONG_TERM_INJURY_STATUSES = new Set([
   "IR",
@@ -91,26 +93,45 @@ export function availabilityMultiplier(
 /**
  * Injury multiplier for a specific week.
  *
- * Two designations, two different jobs.
+ * ONE RULE DOES THE WORK: a per-week opinion beats a season-long tag.
  *
- * A season-long designation (IR, PUP, ...) zeroes every remaining week, and it
- * does so REGARDLESS of what the projection says. That is the safety net: if a
- * player is on IR and a live projection still shows points, the projection is
- * the thing that is wrong, and the designation wins. It is the check that would
- * have caught Ricky Pearsall reading 8.9 points a week while on season-ending
- * IR, even before the projections sync learned to store a zero.
+ * `injuryStatus` on a player row is a single flag with no timeline. It says a
+ * player is on IR; it cannot say when he is back. Sleeper's `availability` is
+ * per week and it CAN, so when Sleeper has published an opinion about this
+ * particular week, that opinion wins, whichever designation the player carries.
  *
- * A week-to-week designation (Questionable, Doubtful) is different, because
- * Sleeper has ALREADY priced it into the number it published. Tank Dell is
- * listed Questionable and projected 6.42, not his healthy figure. Applying our
- * own 0.9 on top of that discounts one injury twice and makes every banged-up
- * starter look worse than the market thinks he is. So when the projection came
- * from a source that prices availability in, `sourcePricedIn` is true and the
- * week-to-week multiplier stands down.
+ * That was not always true here, and the old behaviour was doing real damage. A
+ * season-long designation used to zero every remaining week REGARDLESS of the
+ * projection. Measured against the live board on 2026-08-31:
  *
- * It still fires when nothing priced it in: a projection we derived ourselves,
- * a stale row, or any future source that publishes a number without an opinion
- * on whether the player suits up.
+ *   Jordyn Tyson   IR    Sleeper: out weeks 1-4, then 10.7 a week from week 5.
+ *                        We scored him 0.0 for all fourteen weeks.
+ *   Josh Jacobs    DNR   Sleeper: out week 1, then about 14 a week after.
+ *                        We scored him 0.0, which by itself moved his team
+ *                        from seventh in its league to last.
+ *
+ * Sleeper was publishing a return timeline in both cases and we were deleting
+ * it, using the less informative source to overrule the more informative one.
+ *
+ * THE SAFETY NET IS NOT LOST, IT MOVED
+ * The net existed for Ricky Pearsall: on season-ending IR while a stale row
+ * still showed 8.9 points a week. That case is now caught upstream and better.
+ * `classifyRow` in lib/sync-weekly-projections.ts writes `availability: "out"`
+ * for exactly that shape (a scheduled game, no points, and a designation), and
+ * `projectPlayerWeek` short circuits an "out" week to a real zero before this
+ * function is ever called. Pearsall reads zero in every week of 2026 through
+ * that path, not this one.
+ *
+ * So the designation still fires wherever the source has NO per-week opinion:
+ * an `unprojected` week, a projection we derived ourselves, or any future source
+ * that publishes a number without saying whether the player suits up. What it no
+ * longer does is contradict a source that has already answered the question.
+ *
+ * A week-to-week designation (Questionable, Doubtful) obeys the same rule for
+ * the same reason. Tank Dell is listed Questionable and projected 6.42, not his
+ * healthy figure, so applying our own 0.9 on top would discount one injury
+ * twice. Absent a source opinion it applies to the current week only, because a
+ * Questionable tag in September says nothing about week 12.
  */
 export function injuryMultiplier(
   status: string | null,
@@ -123,8 +144,9 @@ export function injuryMultiplier(
   const key = status.toUpperCase();
   const multiplier = settings.injury.multipliers[key];
   if (multiplier === undefined) return 1;
-  if (LONG_TERM_INJURY_STATUSES.has(key)) return multiplier;
+  // The source answered for this week. Nothing here knows better.
   if (opts.sourcePricedIn) return 1;
+  if (LONG_TERM_INJURY_STATUSES.has(key)) return multiplier;
   return week === currentWeek ? multiplier : 1;
 }
 

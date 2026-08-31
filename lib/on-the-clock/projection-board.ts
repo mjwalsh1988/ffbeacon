@@ -45,11 +45,25 @@ const PAGE = 1000;
  * Bump when the SHAPE or the MEANING of a cached payload changes, so stale rows
  * are ignored rather than rendered. The Power Pulse settings' own modelVersion is
  * folded into the signature separately, so an admin tuning also invalidates.
+ *
+ * otc-proj-2 (2026-08-31): the sweep now reads each row's `availability`, which
+ * it had never selected, so every cached payload was built with our own injury
+ * discounts firing on numbers Sleeper had already discounted.
  */
-export const PROJECTION_BOARD_VERSION = "otc-proj-1";
+export const PROJECTION_BOARD_VERSION = "otc-proj-2";
 
-/** How long a cached sweep stays fresh. Projections sync nightly. */
+/**
+ * How long a cached sweep stays fresh when nothing underneath it has moved.
+ *
+ * The TTL is now the BACKSTOP rather than the mechanism. `projectionDataVersion`
+ * below is what actually invalidates: it fingerprints the two syncs the sweep is
+ * built from, so a rebuild happens the moment either writes, and never happens
+ * on a day neither does.
+ */
 export const PROJECTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Returned when a fingerprint read fails, so the TTL alone governs. */
+const UNKNOWN_DATA_VERSION = "unknown";
 
 /** One week of one player's projected output, in the league's own scoring. */
 export interface ProjectedWeekLite {
@@ -91,6 +105,14 @@ export interface ProjectionBoard {
   weeks: number[];
   /** The stored-points fallback base the accuracy rows were read for. */
   scoringBase: string;
+  /**
+   * When this sweep was computed, ISO. Provenance rather than decoration: a
+   * completed draft's snapshot dates its value and ADP inputs and calls itself
+   * high confidence, and until this existed it had no way to date the
+   * projections that drive its lineup component, its ranks and five of its
+   * awards. Absent on a payload cached before otc-proj-2.
+   */
+  computedAt?: string;
   /** Keyed by FF Beacon player id. A missing key means "no projection", not zero. */
   players: Record<string, PlayerProjection>;
 }
@@ -169,6 +191,16 @@ async function loadPlayerFacts(
 /**
  * Every weekly projection row for a season from `fromWeek` on. Paged, because a
  * full season is well past Supabase's silent 1000-row cap.
+ *
+ * `availability` is not optional, whatever ProjectionRow's type says. Omitting
+ * it is how the draft room and the Power Pulse page came to disagree about the
+ * same injured player in two directions at once. projectPlayerWeek reads it to
+ * decide whether the SOURCE has already priced a designation in, and an absent
+ * value means "nobody priced this in", so leaving the column unselected made the
+ * draft room apply our own Questionable discount on top of a number Sleeper had
+ * already discounted, and made it overrule a return timeline the Power Pulse
+ * page honours. Same model, same player, different answer, for no reason a
+ * reader could see.
  */
 async function loadAllProjections(
   supabase: Client,
@@ -180,7 +212,7 @@ async function loadAllProjections(
     const { data, error } = await supabase
       .from("player_weekly_projections")
       .select(
-        "player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
+        "player_id, week, opponent, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, availability",
       )
       .eq("season", season)
       .eq("season_type", "regular")
@@ -200,6 +232,7 @@ async function loadAllProjections(
         ppr: numOrNull(row.projected_pts_ppr),
         halfPpr: numOrNull(row.projected_pts_half_ppr),
         std: numOrNull(row.projected_pts_std),
+        availability: row.availability,
       });
     }
     if (data.length < PAGE) break;
@@ -309,6 +342,7 @@ export async function buildProjectionBoard(
     fromWeek: params.fromWeek,
     weeks: [...weekSet].sort((a, b) => a - b),
     scoringBase,
+    computedAt: new Date().toISOString(),
     players,
   };
 }
@@ -372,6 +406,64 @@ function rememberBoard(key: string, board: ProjectionBoard, computedAt: number):
   }
 }
 
+/**
+ * A fingerprint of the data the sweep is built from.
+ *
+ * WHY A KEY MADE OF TIMESTAMPS AND NOT A TIMER
+ * The cache key was (scoring signature, season, from week), and the freshness
+ * test was a 24-hour timer. Nothing in either notices that
+ * `sync-weekly-projections` rewrote every row at 12:01 UTC, or that
+ * `sync-sleeper-players` wrote a new injury designation at 06:00. Worse, the
+ * Draft Pulse built on top is keyed on the draft's PICK COUNT, which stops
+ * moving forever the moment a draft completes, so a finished draft room never
+ * recomputed at all.
+ *
+ * Measured on 2026-08-31 in one league: the board was built at 01:23, the player
+ * sync at 06:00 moved five players to IR, DNR or PUP, and the projection sync at
+ * 12:01 moved 388 of 603 players, 68 of them by over a point a week. The draft
+ * room and the League Pulse page were then up to 8 points a week apart about
+ * rosters that had not changed a single player.
+ *
+ * Two indexed `order by updated_at desc limit 1` reads, run together. They cost
+ * one round trip and they replace a whole class of "why do these two screens
+ * disagree" with an answer that cannot drift. A failed read degrades to
+ * UNKNOWN_DATA_VERSION, which leaves the TTL in charge rather than either
+ * rebuilding on every request or pinning a stale payload forever.
+ */
+export async function projectionDataVersion(
+  admin: Client,
+  season: number,
+): Promise<string> {
+  const [projections, players] = await Promise.all([
+    admin
+      .from("player_weekly_projections")
+      .select("updated_at")
+      .eq("season", season)
+      .eq("season_type", "regular")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("players")
+      .select("updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (projections.error || players.error) {
+    console.warn(
+      "[on-the-clock/projection-board] could not fingerprint the source data, falling back to the TTL:",
+      projections.error?.message ?? players.error?.message,
+    );
+    return UNKNOWN_DATA_VERSION;
+  }
+
+  const p = projections.data?.updated_at ?? "none";
+  const d = players.data?.updated_at ?? "none";
+  return `${p}|${d}`;
+}
+
 export async function getProjectionBoard(
   admin: Client,
   params: {
@@ -385,11 +477,21 @@ export async function getProjectionBoard(
      * trip per request.
      */
     settings?: PowerPulseSettings;
+    /**
+     * The fingerprint from projectionDataVersion. The caller usually has it
+     * already (resolveContext folds the same value into its own cache key, so
+     * the two can never invalidate at different moments), and passing it through
+     * saves a round trip per request.
+     */
+    dataVersion?: string;
   },
 ): Promise<ProjectionBoard> {
   const settings = params.settings ?? (await loadPowerPulseSettings(admin));
+  const dataVersion = params.dataVersion ?? (await projectionDataVersion(admin, params.season));
   const signature = scoringSignature(params.scoringSettings, settings.modelVersion);
-  const key = `${signature}|${params.season}|${params.fromWeek}`;
+  // The fingerprint is in the in-process key too, so a warm process cannot serve
+  // a board the database has already been told to rebuild.
+  const key = `${signature}|${params.season}|${params.fromWeek}|${dataVersion}`;
 
   const memo = parsedBoards.get(key);
   if (memo && Date.now() - memo.at < PROJECTION_CACHE_TTL_MS) {
@@ -407,7 +509,7 @@ export async function getProjectionBoard(
   const task = (async (): Promise<ProjectionBoard> => {
     const { data } = await admin
       .from("on_the_clock_projection_cache")
-      .select("payload, computed_at")
+      .select("payload, computed_at, data_version")
       .eq("scoring_signature", signature)
       .eq("season", params.season)
       .eq("from_week", params.fromWeek)
@@ -416,8 +518,12 @@ export async function getProjectionBoard(
     if (data?.payload) {
       const computedAt = new Date(data.computed_at).getTime();
       const fresh = Date.now() - computedAt < PROJECTION_CACHE_TTL_MS;
+      // A stored row from before the fingerprint existed reads as null, and a
+      // null must not silently satisfy the check, so it is compared as a value
+      // rather than skipped when absent.
+      const sameData = (data.data_version ?? null) === dataVersion;
       const payload = data.payload as unknown as ProjectionBoard;
-      if (fresh && payload?.version === PROJECTION_BOARD_VERSION) {
+      if (fresh && sameData && payload?.version === PROJECTION_BOARD_VERSION) {
         rememberBoard(key, payload, computedAt);
         return payload;
       }
@@ -437,6 +543,7 @@ export async function getProjectionBoard(
         from_week: params.fromWeek,
         payload: board as unknown as Json,
         player_count: Object.keys(board.players).length,
+        data_version: dataVersion,
         computed_at: new Date().toISOString(),
       },
       { onConflict: "scoring_signature,season,from_week" },

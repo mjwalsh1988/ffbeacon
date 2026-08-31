@@ -2821,6 +2821,7 @@ export type Database = {
           league_name: string | null;
           metadata: Json;
           player_pool: string;
+          projection_snapshot_date: string | null;
           pulse: Json;
           rounds: number | null;
           season: string;
@@ -2852,6 +2853,7 @@ export type Database = {
           league_name?: string | null;
           metadata?: Json;
           player_pool?: string;
+          projection_snapshot_date?: string | null;
           pulse?: Json;
           rounds?: number | null;
           season: string;
@@ -2883,6 +2885,7 @@ export type Database = {
           league_name?: string | null;
           metadata?: Json;
           player_pool?: string;
+          projection_snapshot_date?: string | null;
           pulse?: Json;
           rounds?: number | null;
           season?: string;
@@ -3081,6 +3084,7 @@ export type Database = {
       on_the_clock_projection_cache: {
         Row: {
           computed_at: string;
+          data_version: string | null;
           from_week: number;
           payload: Json;
           player_count: number;
@@ -3089,6 +3093,7 @@ export type Database = {
         };
         Insert: {
           computed_at?: string;
+          data_version?: string | null;
           from_week: number;
           payload?: Json;
           player_count?: number;
@@ -3097,6 +3102,7 @@ export type Database = {
         };
         Update: {
           computed_at?: string;
+          data_version?: string | null;
           from_week?: number;
           payload?: Json;
           player_count?: number;

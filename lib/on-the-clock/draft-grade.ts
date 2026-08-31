@@ -155,6 +155,37 @@ interface RawComponent {
   evidence: Map<number, string>;
   /** Why the component is absent, when it is absent for everyone. */
   absentReason: string;
+  /**
+   * The smallest spread, in this component's own RAW units, that is worth
+   * curving. Below it the curve is skipped and the anchor stands alone.
+   *
+   * WHY THIS HAD TO EXIST
+   * A z-score has no idea whether the differences it is scaling are real. It
+   * divides by whatever standard deviation it finds, so a set of values that are
+   * all but identical gets stretched across the whole display range exactly as
+   * hard as a set that genuinely disagrees. zScores guards only the perfectly
+   * flat case, at a tolerance of 1e-9, and a nearly flat case sails straight
+   * through it.
+   *
+   * Roster construction is where that bit. Its raw value is the share of
+   * starting slots a team fills in the average week, and in a real twelve-team
+   * league every team lands between 0.99 and 1.00. The curve turned that one
+   * percent into component scores of 41 and 90, carrying roughly a fifth of each
+   * team's grade: the team with the second best starting lineup in the room
+   * scored 41 for construction, and the team with the worst scored 90. Nobody in
+   * that league had a construction problem. The number was measuring which side
+   * of a rounding boundary a bye week fell on.
+   *
+   * Undefined means always curve, which is right for a component whose raw
+   * values genuinely spread out.
+   */
+  minSpread?: number;
+}
+
+/** Spread of a set of raw values. Zero for one value or none. */
+function spreadOf(values: number[]): number {
+  if (values.length < 2) return 0;
+  return Math.max(...values) - Math.min(...values);
 }
 
 function fmt(n: number): string {
@@ -203,6 +234,10 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     anchor: new Map(),
     evidence: new Map(),
     absentReason: "Weekly projections are not available for this league, so lineups could not be scored.",
+    // Two points a week. Less than that between the best and worst starting
+    // lineup in a room means the draft did not separate anyone, and saying
+    // otherwise would be inventing a difference.
+    minSpread: 2,
   };
   for (const id of rosterIds) {
     const t = pulseById.get(id);
@@ -223,6 +258,12 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     anchor: new Map(),
     evidence: new Map(),
     absentReason: "The league's starting lineup could not be read, so construction was not scored.",
+    // Half a starting slot, expressed as the share of the lineup it represents,
+    // so a ten-slot league needs a 0.05 spread and a fourteen-slot league needs
+    // 0.036. Half a slot is the smallest gap a reader would call a real
+    // difference in roster construction; below it the teams are the same and the
+    // anchor says so.
+    minSpread: input.startingSlotCount > 0 ? 0.5 / input.startingSlotCount : undefined,
   };
   if (input.startingSlotCount > 0) {
     for (const id of rosterIds) {
@@ -247,6 +288,11 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
     anchor: new Map(),
     evidence: new Map(),
     absentReason: "None of these starters have enough projection history to score reliability.",
+    // Six points of beat rate. A team's figure is a points-weighted average over
+    // about ten starters, each measured across roughly thirty graded weeks, which
+    // puts its standard error near 0.03. Anything under two of those is sampling
+    // noise, and a 0 to 100 curve over sampling noise is worse than no component.
+    minSpread: 0.06,
   };
   for (const id of rosterIds) {
     const t = pulseById.get(id);
@@ -312,11 +358,23 @@ export function computeDraftGrades(input: DraftGradeInput): DraftGrade[] {
   const scored = new Map<GradeComponentKey, Map<number, number>>();
   for (const component of components) {
     const ids = [...component.raw.keys()];
-    const curved = curveScores(ids.map((id) => component.raw.get(id) as number));
+    const values = ids.map((id) => component.raw.get(id) as number);
+    // A spread too small to mean anything is not curved. Every team then takes
+    // its anchor, which is the honest answer: they really are the same on this
+    // component, and a league where they are all genuinely poor still scores
+    // them all poorly, because the anchor is absolute.
+    const worthCurving =
+      component.minSpread === undefined || spreadOf(values) >= component.minSpread;
+    const curved = worthCurving ? curveScores(values) : values.map(() => 50);
     const out = new Map<number, number>();
     ids.forEach((id, i) => {
       const anchor = component.anchor.get(id) ?? curved[i];
-      out.set(id, (1 - settings.absoluteBlend) * curved[i] + settings.absoluteBlend * anchor);
+      out.set(
+        id,
+        worthCurving
+          ? (1 - settings.absoluteBlend) * curved[i] + settings.absoluteBlend * anchor
+          : anchor,
+      );
     });
     scored.set(component.key, out);
   }

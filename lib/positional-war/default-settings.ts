@@ -72,13 +72,22 @@ export type WarSettings = {
 };
 
 export const DEFAULT_WAR_SETTINGS: WarSettings = {
-  // war-2: the tail tiebreak in lib/positional-war/engine.ts moved from player
-  // id to projected points a week, and minDisplayDepth rose to 36. The first
-  // reorders players whose WAR ties at exactly zero; the second stores more of
-  // them. Both are already fingerprinted, so this bump is belt and braces for
-  // a deployment whose settings row overrides minDisplayDepth: without it,
-  // such a league would keep serving a curve ordered the old way.
-  modelVersion: "war-2",
+  // war-3: the PROJECTIONS underneath moved, and this version is the only thing
+  // that can say so. Positional WAR reuses the Power Pulse projection stack, and
+  // pp-3 changed two things inside it: a season-long injury designation no
+  // longer overrules a per-week projection (a player Sleeper projects at 10.7 a
+  // week from week 5 was being scored 0.0 for the whole season), and the
+  // fallback variance figures are now measured from 2025 rather than estimated.
+  //
+  // The fingerprint deliberately does not hash the projection table, so neither
+  // change would have invalidated a single cached curve. The 12-hour TTL would
+  // have bounded it, but a league viewed inside that window would have served a
+  // curve built on numbers the rest of the site had already corrected.
+  //
+  // war-2, for the record: the tail tiebreak in lib/positional-war/engine.ts
+  // moved from player id to projected points a week, and minDisplayDepth rose
+  // to 36.
+  modelVersion: "war-3",
   displayDepthMultiple: 2.5,
   minDisplayDepth: 36,
   cliffThreshold: 0.5,

@@ -150,13 +150,20 @@ export type PowerPulseSettings = {
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
-  // pp-2 (2026-08-25): availability now comes from Sleeper rather than from a
-  // player row that had not been refreshed since May. A week Sleeper declines to
-  // project for a designated player scores a real zero, and our own week-to-week
-  // injury discount no longer stacks on top of a number Sleeper already
-  // discounted. Both change what a score means, so cached pp-1 rows are stale by
-  // definition and every league rescores on next view.
-  modelVersion: "pp-2",
+  // pp-3 (2026-08-31): two corrections, both measured rather than tuned.
+  //
+  // A season-long injury designation no longer overrides a per-week projection.
+  // Sleeper publishes a return timeline (out through week 4, projected from week
+  // 5) and we were deleting it, scoring Jordyn Tyson at 0.0 for fourteen weeks
+  // against Sleeper's own 10.7 a week from week 5, and Josh Jacobs at 0.0
+  // against about 14. See injuryMultiplier in ./project.ts.
+  //
+  // The fallback variance figures are now the ones measured from our own 2025
+  // player_stats rather than estimates. See variance.defaultCv below.
+  //
+  // Both change what a score means, so cached pp-2 rows are stale by definition
+  // and every league rescores on next view.
+  modelVersion: "pp-3",
 
   weights: {
     points: 0.55,
@@ -212,16 +219,29 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   },
 
   variance: {
-    // Quarterbacks are the steadiest week to week; tight ends and defenses are
-    // the most volatile. These are the fallbacks for players with no measured
-    // history of their own.
+    // MEASURED, not estimated. Each figure is the median week-to-week
+    // coefficient of variation (a player's own standard deviation over his own
+    // mean) across the top 36 scorers at that position in the 2025 regular
+    // season, from player_stats, requiring 12 games and more than 5 points a
+    // game so a fringe player's noise does not set the number.
+    //
+    // The originals were plausible guesses and four of the six were wrong in a
+    // way that mattered. Wide receiver was the worst at 0.65 against a measured
+    // 0.57, and a league starts three or more of them, so the overstatement
+    // inflated every team's weekly spread and pushed every matchup closer to a
+    // coin flip. Quarterback ran the other way, 0.35 against a measured 0.42.
+    //
+    // Ordering still reads the way the old comment described it: quarterbacks
+    // are the steadiest and defenses the most volatile. Only the magnitudes
+    // moved. These are the fallbacks for players with no measured history of
+    // their own; a player with eight or more graded weeks uses his own.
     defaultCv: {
-      QB: 0.35,
-      RB: 0.55,
-      WR: 0.65,
-      TE: 0.7,
-      K: 0.5,
-      DEF: 0.75,
+      QB: 0.42,
+      RB: 0.59,
+      WR: 0.57,
+      TE: 0.65,
+      K: 0.51,
+      DEF: 0.8,
     },
     minGamesForMeasured: 8,
     minCv: 0.15,

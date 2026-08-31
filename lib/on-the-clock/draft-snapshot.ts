@@ -29,7 +29,7 @@ import { adpFormatKeyCandidates, attachAdpToPlayers, classifyPickValue, pickValu
 import { computeDraftAwards, type Award } from "./awards";
 import { computeDraftGrades, type DraftGrade } from "./draft-grade";
 import { buildMarketCurve, computePickSurplus } from "./surplus";
-import { getDraftPulseOnly } from "./pulse-service";
+import { getDraftPulseWithVintage } from "./pulse-service";
 import { tradeMarginsFor } from "./trade-margins";
 import type { DraftPulseResult } from "./draft-pulse";
 import { readDraftCache } from "./cache";
@@ -423,10 +423,13 @@ export async function getOrCreateDraftSnapshot(
   // the right trade. A snapshot is permanent, and a permanent record saying "we
   // could not project this draft" beats one that quietly graded on less.
   let pulse: DraftPulseResult | null = null;
+  let projectionComputedAt: string | null = null;
   try {
-    pulse = await getDraftPulseOnly(admin, draftId, {
+    const withVintage = await getDraftPulseWithVintage(admin, draftId, {
       includePreDraftRoster: pool === "rookies",
     });
+    pulse = withVintage.pulse;
+    projectionComputedAt = withVintage.projectionComputedAt;
   } catch (err) {
     console.error("[on-the-clock/draft-snapshot] draft pulse failed", err);
   }
@@ -478,12 +481,14 @@ export async function getOrCreateDraftSnapshot(
   //    (both compute from the same frozen inputs; last write wins harmlessly).
   const valueDateMs = board.capturedAt ? Date.parse(board.capturedAt) : null;
   const adpDateMs = adp.snapshotDate ? Date.parse(`${adp.snapshotDate}T12:00:00.000Z`) : null;
+  const projectionDateMs = projectionComputedAt ? Date.parse(projectionComputedAt) : null;
   const confidence = deriveSnapshotConfidence({
     valueSource: board.source,
     valueDateMs,
     adpSource: adp.source,
     adpDateMs,
     completedAtMs,
+    projectionDateMs: Number.isFinite(projectionDateMs) ? projectionDateMs : null,
   });
   const finalizedAt = new Date().toISOString();
 
@@ -506,6 +511,7 @@ export async function getOrCreateDraftSnapshot(
     adp_snapshot_source: adp.source,
     value_snapshot_date: board.capturedAt,
     adp_snapshot_date: adp.snapshotDate,
+    projection_snapshot_date: projectionComputedAt,
     snapshot_confidence: confidence,
     board: frozenBoard as unknown as Json,
     draft: cache as unknown as Json,

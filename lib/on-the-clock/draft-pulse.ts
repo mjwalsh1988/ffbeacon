@@ -22,6 +22,21 @@
  * Pure. Every projection arrives precomputed from projection-board.ts, which runs
  * the Power Pulse model, so a Draft Pulse number and a Power Pulse number can
  * never disagree about what a player is projected to do.
+ *
+ * SAME WEEKS AS POWER PULSE, WHICH THEY WERE NOT
+ * The board carries every week it has projections for, weeks 1 to 18, and it is
+ * shared across every league that scores the same way, so it cannot know where
+ * any one league's regular season ends. This averaged all eighteen of them while
+ * Power Pulse averaged the fourteen regular season weeks, and the gap was not
+ * cosmetic: weeks 15 to 18 carry no NFL byes, so including them fills every
+ * lineup every week and quietly hides the bye-week thinness that separates a
+ * deep roster from a top-heavy one. Measured across one twelve-team league it
+ * moved teams by 0.1 to 2.3 points a week and swapped two pairs of ranks.
+ *
+ * `throughWeek` is the league's last regular season week, and the caller reads
+ * it from the same playoff_week_start Power Pulse uses. Absent, every week on
+ * the board is used, which is the old behaviour and is right for a caller that
+ * genuinely has no schedule.
  */
 
 import { buildOptimalLineup, lineupSigma, startingSlots, type LineupCandidate } from "@/lib/power-pulse/lineup";
@@ -31,7 +46,7 @@ import type { PlayerProjection, ProjectionBoard } from "./projection-board";
 import { weekFor } from "./week-index";
 
 /** Bump when the meaning of a Draft Pulse score changes. */
-export const DRAFT_PULSE_VERSION = "otc-pulse-1";
+export const DRAFT_PULSE_VERSION = "otc-pulse-2";
 
 /** One team's roster as the draft currently stands. */
 export interface DraftPulseTeamInput {
@@ -94,6 +109,12 @@ export interface DraftPulseInput {
   fallbackSlots: string[];
   board: ProjectionBoard;
   display: { min: number; max: number; sharpness: number };
+  /**
+   * Last regular season week to average over, from the league's own
+   * playoff_week_start minus one. Weeks past it are dropped so a Draft Pulse
+   * covers the same span as a Power Pulse. Omit only when no schedule is known.
+   */
+  throughWeek?: number;
 }
 
 const ZERO_POSITION_POINTS: Record<PulsePosition, number> = {
@@ -135,7 +156,13 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
   const fromLeague = startingSlots(input.rosterPositions);
   const slotsEstimated = fromLeague.length === 0;
   const slots = slotsEstimated ? input.fallbackSlots : fromLeague;
-  const weeks = input.board.weeks;
+  const through = input.throughWeek;
+  const weeks =
+    through === undefined ? input.board.weeks : input.board.weeks.filter((w) => w <= through);
+
+  // The unrounded mean per team, captured alongside the display value so the
+  // ordering below is decided by the model rather than by the rounding.
+  const rawMeans: number[] = [];
 
   const teams: DraftPulseTeam[] = input.teams.map((team) => {
     const known: PlayerProjection[] = [];
@@ -147,6 +174,7 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
     }
 
     if (slots.length === 0 || weeks.length === 0 || known.length === 0) {
+      rawMeans.push(0);
       return {
         rosterId: team.rosterId,
         meanStartingPoints: 0,
@@ -230,6 +258,7 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
     const positionPoints: Record<PulsePosition, number> = { ...ZERO_POSITION_POINTS };
     for (const pos of PULSE_POSITIONS) positionPoints[pos] = round(mean(positionTotals[pos]), 1);
 
+    rawMeans.push(mean(weeklyTotals));
     return {
       rosterId: team.rosterId,
       meanStartingPoints: round(mean(weeklyTotals), 1),
@@ -243,13 +272,22 @@ export function computeDraftPulse(input: DraftPulseInput): DraftPulseResult {
       starterWeeksPlayed: weeksWeight > 0 ? round(weeksWeighted / weeksWeight, 1) : null,
       projectedCount: known.length,
       unprojectedCount: unprojected,
-      startersFilled: round(mean(filledCounts), 1),
+      // Two decimals, not one. The grade's roster-construction component is a
+      // curve over this number divided by the slot count, and at one decimal a
+      // twelve-team league lands on exactly two values, 9.9 and 10.0. That is a
+      // one percent difference, and the curve was turning it into a 49-point
+      // component gap carrying nearly a fifth of every team's grade.
+      startersFilled: round(mean(filledCounts), 2),
     };
   });
 
-  const values = teams.map((t) => t.meanStartingPoints);
-  const ranks = rankDescending(values);
-  const zs = zScores(values);
+  // Ranked and z-scored on the UNROUNDED mean, the same correction Power Pulse
+  // made for the same reason: meanStartingPoints is rounded to a tenth for
+  // display, and two teams the model separates by 0.04 points would otherwise
+  // tie, leaving a table with two fourths and no fifth in an order decided by
+  // whatever sequence the rows arrived in.
+  const ranks = rankDescending(rawMeans);
+  const zs = zScores(rawMeans);
   teams.forEach((t, i) => {
     t.rank = ranks[i] ?? teams.length;
     t.score = zToDisplay(zs[i], input.display);

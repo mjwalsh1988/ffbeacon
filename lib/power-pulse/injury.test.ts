@@ -7,26 +7,29 @@ const S = DEFAULT_POWER_PULSE_SETTINGS;
 const CURRENT_WEEK = 5;
 
 describe("injuryMultiplier: season-long designations", () => {
-  it("zeroes every remaining week, not just the next one", () => {
-    // An IR stash is out in week 5 and still out in week 17. This is the guard
-    // that would have caught Ricky Pearsall even before the projections sync
-    // learned to store a zero.
+  it("zeroes every remaining week the source has no opinion about", () => {
+    // An IR stash with no per-week signal is out in week 5 and still out in
+    // week 17. A Questionable tag would only touch week 5.
     expect(injuryMultiplier("IR", CURRENT_WEEK, CURRENT_WEEK, S)).toBe(0);
     expect(injuryMultiplier("IR", 17, CURRENT_WEEK, S)).toBe(0);
   });
 
-  it("wins even when the projection claims the player is playing", () => {
-    // The whole point of the safety net: a live projection alongside a
-    // season-ending designation means the PROJECTION is the stale thing.
-    expect(injuryMultiplier("IR", 17, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(0);
-    expect(injuryMultiplier("PUP", 12, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(0);
+  it("stands down for a week the source has already answered", () => {
+    // The correction that produced pp-3. A season-long tag carries no timeline;
+    // Sleeper's per-week availability does, and it is the better answer.
+    // Jordyn Tyson is on IR and Sleeper projects him 10.7 a week from week 5.
+    expect(injuryMultiplier("IR", 17, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(1);
+    expect(injuryMultiplier("PUP", 12, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(1);
+    // Josh Jacobs, DNR, projected about 14 a week from week 2. Zeroing him
+    // moved his team from seventh in its league to last.
+    expect(injuryMultiplier("DNR", 8, CURRENT_WEEK, S, { sourcePricedIn: true })).toBe(1);
   });
 
   it("covers every designation the set claims to cover", () => {
     for (const status of LONG_TERM_INJURY_STATUSES) {
       expect(
-        injuryMultiplier(status, 18, CURRENT_WEEK, S, { sourcePricedIn: true }),
-        `${status} did not zero a future week`,
+        injuryMultiplier(status, 18, CURRENT_WEEK, S),
+        `${status} did not zero an unanswered future week`,
       ).toBe(0);
     }
   });
@@ -134,10 +137,31 @@ describe("projectPlayerWeek", () => {
     expect(questionable?.points).toBe(healthy?.points);
   });
 
-  it("still zeroes a projected row when the player is on season-ending IR", () => {
-    // The stale-projection guard, end to end: a live number plus an IR
-    // designation resolves to zero rather than to the number.
-    const stale = project(projection({ availability: "projected", ppr: 8.9 }), "IR");
-    expect(stale?.points).toBe(0);
+  it("honours a return timeline instead of overruling it", () => {
+    // Jordyn Tyson, end to end. Sleeper marks him out through week 4 and
+    // projects 10.7 from week 5, and both halves of that must survive: the out
+    // weeks score zero, and the projected weeks score the projection.
+    const out = project(
+      projection({ availability: "out", ppr: 0, halfPpr: 0, std: 0 }),
+      "IR",
+    );
+    expect(out?.points).toBe(0);
+
+    const back = project(
+      projection({ availability: "projected", ppr: 10.7, halfPpr: 10.7, std: 10.7 }),
+      "IR",
+    );
+    expect(back?.points).toBeCloseTo(10.7, 5);
+  });
+
+  it("still zeroes a designated player the source says nothing about", () => {
+    // The stale-projection guard, in the shape that still needs it: no per-week
+    // opinion, so the designation is the only signal there is. A source that
+    // publishes a number without saying whether the player suits up lands here.
+    const noOpinion = project(
+      projection({ availability: "unprojected", ppr: 8.9, halfPpr: 8.9, std: 8.9 }),
+      "IR",
+    );
+    expect(noOpinion?.points).toBe(0);
   });
 });

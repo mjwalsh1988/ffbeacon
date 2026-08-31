@@ -32,7 +32,11 @@ import {
   type DraftPulseResult,
 } from "./draft-pulse";
 import { computeMarginal, DEFAULT_MARGINAL_SETTINGS, type MarginalSettings } from "./marginal";
-import { getProjectionBoard, type ProjectionBoard } from "./projection-board";
+import {
+  getProjectionBoard,
+  projectionDataVersion,
+  type ProjectionBoard,
+} from "./projection-board";
 import type { ShapedDraftCache } from "./types";
 import type { PulseMarginalPayload, PulsePayload, PulsePlayerSummary } from "./pulse-types";
 
@@ -167,6 +171,10 @@ async function resolveContext(
     // The projection board is the only expensive step, and it is cached across
     // every league that scores the same way, so it almost never runs.
     const settings = await loadPowerPulseSettings(admin);
+    // Fingerprint the source data ONCE and hand the same value to both caches
+    // below, so the board and the Draft Pulse built on it can never invalidate
+    // at different moments and produce a mixed-vintage answer.
+    const dataVersion = await projectionDataVersion(admin, season);
     const board = await getProjectionBoard(admin, {
       scoringSettings: cache.draft.scoringSettings,
       season,
@@ -174,6 +182,7 @@ async function resolveContext(
       // Already loaded one line above; getProjectionBoard only wants it for the
       // scoring signature, so passing it through drops a round trip per request.
       settings,
+      dataVersion,
     });
 
     const rosters = await buildTeamRosters(admin, cache, {
@@ -189,11 +198,24 @@ async function resolveContext(
     // model, and every other viewer took that as a cache hit. Worse at the end
     // of a draft: once the pick count stops moving, the snapshot finalizer would
     // freeze it permanently, and the grades read their lineup component from it.
+    // The league's last regular season week, the same span Power Pulse averages.
+    // Sleeper's own default is 15 when a league has not set one, matching
+    // resolveFromWeek above.
+    const throughWeek = (cache.draft.playoffWeekStart ?? 15) - 1;
+
+    // dataVersion BELONGS in the version, and its absence is the whole reason a
+    // completed draft room could sit on numbers a day and a half old. The other
+    // half of this key is `through_pick_no`, which stops moving forever the
+    // moment a draft finishes, so before this there was nothing left that could
+    // ever mark the payload stale. throughWeek belongs for the same reason:
+    // changing the span changes every mean and every rank.
     const modelVersion = [
       DRAFT_PULSE_VERSION,
       board.version,
       settings.modelVersion,
       opts.includePreDraftRoster ? "pre" : "nopre",
+      `w${throughWeek}`,
+      dataVersion,
     ].join("|");
     const throughPickNo = cache.picks.reduce((m, p) => Math.max(m, p.pickNo), 0);
 
@@ -219,6 +241,7 @@ async function resolveContext(
         fallbackSlots,
         board,
         display: settings.display,
+        throughWeek,
       });
       const { error } = await admin.from("on_the_clock_pulse_cache").upsert(
         {
@@ -370,4 +393,25 @@ export async function getDraftPulseOnly(
 ): Promise<DraftPulseResult | null> {
   const context = await resolveContext(admin, draftId, opts);
   return context?.pulse ?? null;
+}
+
+/**
+ * Draft Pulse plus the vintage of the projections behind it.
+ *
+ * The snapshot finalizer needs both. It already dates its value and ADP inputs
+ * and reports a confidence from them, and the projections were the one input it
+ * froze without dating, which is how a snapshot taken two minutes after a draft
+ * could carry a sweep computed two hours earlier and still call itself high
+ * confidence.
+ */
+export async function getDraftPulseWithVintage(
+  admin: Client,
+  draftId: string,
+  opts: { includePreDraftRoster: boolean },
+): Promise<{ pulse: DraftPulseResult | null; projectionComputedAt: string | null }> {
+  const context = await resolveContext(admin, draftId, opts);
+  return {
+    pulse: context?.pulse ?? null,
+    projectionComputedAt: context?.board.computedAt ?? null,
+  };
 }

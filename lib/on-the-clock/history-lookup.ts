@@ -83,12 +83,31 @@ export function classifySnapshotSource(
  * at/inside the draft window or shortly before it; low when either had to fall
  * back to current data; medium otherwise.
  */
+/**
+ * How old a projection sweep may be before it stops describing the draft it is
+ * attached to.
+ *
+ * Six hours, and it is not arbitrary. Both syncs that feed a projection run
+ * daily, `sync-sleeper-players` at 06:00 UTC and `sync-weekly-projections` at
+ * 12:01, so a sweep older than one gap between them has, by definition, missed a
+ * write. On 2026-08-31 a snapshot finalized at 03:23 froze a sweep computed at
+ * 01:23 and called itself high confidence; by 06:00 five of its players had been
+ * moved to IR, DNR or PUP, and by 12:01 388 of 603 had new numbers.
+ */
+const PROJECTION_STALE_MS = 6 * 60 * 60 * 1000;
+
 export function deriveSnapshotConfidence(params: {
   valueSource: SnapshotSourceKind;
   valueDateMs: number | null;
   adpSource: SnapshotSourceKind;
   adpDateMs: number | null;
   completedAtMs: number | null;
+  /**
+   * When the projection sweep behind the frozen Draft Pulse, grades and awards
+   * was computed. Undefined on a caller that has no projections at all, which is
+   * not the same as a stale one and is not penalised.
+   */
+  projectionDateMs?: number | null;
 }): SnapshotConfidence {
   const { valueSource, valueDateMs, adpSource, adpDateMs, completedAtMs } = params;
   if (valueSource === "current_fallback" || adpSource === "current_fallback") return "low";
@@ -99,9 +118,24 @@ export function deriveSnapshotConfidence(params: {
     return Math.abs(completedAtMs - dateMs) <= 7 * DAY_MS;
   };
 
+  // The projections were the one input this never looked at, and they drive the
+  // lineup component, every Draft Pulse rank, and five of the thirteen awards.
+  // A sweep that predates the draft by longer than the gap between the two syncs
+  // that feed it cannot be called a high-confidence record of that draft.
+  const projectionStale =
+    params.projectionDateMs != null &&
+    completedAtMs !== null &&
+    completedAtMs - params.projectionDateMs > PROJECTION_STALE_MS;
+
   const valueClose = closeEnough(valueSource, valueDateMs);
   const adpClose = closeEnough(adpSource, adpDateMs);
-  if (valueClose && adpClose && valueSource !== "next_available" && adpSource !== "next_available") {
+  if (
+    valueClose &&
+    adpClose &&
+    !projectionStale &&
+    valueSource !== "next_available" &&
+    adpSource !== "next_available"
+  ) {
     return "high";
   }
   return "medium";
