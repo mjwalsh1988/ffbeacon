@@ -61,10 +61,12 @@ export type PowerPulseSettings = {
   };
 
   /**
-   * Projection reliability: does this player usually beat their projection?
-   * `priorGames` is the empirical Bayes prior strength. With the default of 10,
-   * a player with 10 graded games gets half their own ratio and half the
-   * neutral 1.0, so a three-game hot streak nudges rather than rewrites.
+   * Projection reliability: does this player beat his projection by more than
+   * his positional peers do? `priorGames` is the empirical Bayes prior strength.
+   * A player with `priorGames` graded games gets half his own centered ratio and
+   * half the neutral 1.0.
+   *
+   * READ THE MEASUREMENT BEFORE WIDENING THESE. See the DEFAULT block below.
    */
   reliability: {
     enabled: boolean;
@@ -153,6 +155,22 @@ export type PowerPulseSettings = {
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
+  // pp-5 (2026-09-01): the reliability multiplier is centered on the player's
+  // own position before it is applied, and its range is cut from plus or minus
+  // 15% to plus or minus 5%.
+  //
+  // Uncentered, it was marking the whole quarterback pool down about 5% and the
+  // whole tight end pool up about 3%, because a ratio has a floor at zero and
+  // receivers post a genuine goose egg far more often than quarterbacks do.
+  // That is a property of the position, not of the player, and applying it as
+  // if it were the player is what tilted every cross-position comparison. See
+  // positionBaselineRatio in lib/calculate-projection-accuracy.ts.
+  //
+  // The multiplier's VALUES change for every player in the table, and nothing
+  // in a cached Power Pulse row or Positional WAR curve records which version
+  // of the accuracy table produced it, so this bump is the only thing that can
+  // say the cached rows are stale.
+  //
   // pp-4 (2026-08-31): the volatility fallback is now a measured curve rather
   // than one number per position. It varies with the player's own projected
   // points and with the league's scoring base, because both change the answer
@@ -173,7 +191,7 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   //
   // Both change what a score means, so cached pp-2 rows are stale by definition
   // and every league rescores on next view.
-  modelVersion: "pp-4",
+  modelVersion: "pp-5",
 
   weights: {
     points: 0.55,
@@ -190,11 +208,43 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
     currentSeasonHalfLifeWeeks: 8,
   },
 
+  // A NUDGE, NOT A REORDER. These numbers are set from a measurement rather
+  // than from taste, and the measurement is worth keeping because the instinct
+  // to widen them back out is strong.
+  //
+  // The question this block asks is "does this player beat his projection".
+  // Measured on 2026-09-01 against 2024 and 2025 player_stats, the year over
+  // year correlation of that answer, for every player with at least eight
+  // graded games in BOTH seasons, is:
+  //
+  //     QB 0.02   RB -0.06   WR -0.03   TE 0.02   K -0.01   DEF 0.16
+  //
+  // It does not persist. Last year's beat rate says nothing about this year's,
+  // so almost all of what this multiplier carries is noise, and the correct
+  // Bayesian weight on a signal with no measured persistence is close to zero.
+  //
+  // The old settings (priorGames 10, range 0.85 to 1.15) let that noise run at
+  // plus or minus 15%. Among the top 34 quarterbacks in the 2026 pool the
+  // multiplier's own spread was 67% as large as the spread of the projections
+  // it was multiplying
+  // (log SD 0.073 against 0.109), which is why the quarterback board came out
+  // scrambled while the running back board, whose projections are spread far
+  // wider, looked fine. Concretely: Jalen Hurts was carrying 0.855 and Trevor
+  // Lawrence 1.127, a 27% swing, against real gaps between the top ten
+  // quarterbacks of 2% to 4%.
+  //
+  // priorGames 60 means a fully-sampled veteran (effective weight around 12 in
+  // the blended row) keeps about a sixth of his own figure. The 0.95 to 1.05
+  // clamp is the backstop: whatever the ratio says, this can move a projection
+  // by at most a twentieth, which is smaller than the gaps it must not
+  // reorder. Turning `enabled` off entirely is defensible on the same evidence;
+  // it is left on because the small persistent part is real and because
+  // availability, which is a genuinely persistent signal, is a separate block.
   reliability: {
     enabled: true,
-    priorGames: 10,
-    minMultiplier: 0.85,
-    maxMultiplier: 1.15,
+    priorGames: 60,
+    minMultiplier: 0.95,
+    maxMultiplier: 1.05,
   },
 
   availability: {

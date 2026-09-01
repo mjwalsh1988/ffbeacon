@@ -74,6 +74,7 @@ function baseInput(overrides: Partial<WarFingerprintInput> = {}): WarFingerprint
     warSettings: BASE_WAR_SETTINGS,
     modelVersion: DEFAULT_WAR_SETTINGS.modelVersion,
     projectionsSnapshot: "2026-08-26T14:00:00.000Z",
+    accuracySnapshot: "2026-08-26T09:00:00.000Z",
     ...overrides,
   };
 }
@@ -181,6 +182,25 @@ describe("warFingerprint: false-hit scenarios from plan section 6.4", () => {
     expect(a).not.toBe(b);
   });
 
+  it("a different accuracySnapshot (the nightly reliability rebuild) changes the fingerprint", () => {
+    // The model multiplies every projection by the player's reliability
+    // multiplier, so a rebuild of player_projection_accuracy changes every
+    // curve. Before this field existed it changed no fingerprint, and a league
+    // viewed inside the 12-hour TTL served a curve built on replaced numbers.
+    const a = warFingerprint(baseInput({ accuracySnapshot: "2026-08-26T09:00:00.000Z" }));
+    const b = warFingerprint(baseInput({ accuracySnapshot: "2026-08-27T09:00:00.000Z" }));
+    expect(a).not.toBe(b);
+  });
+
+  it("an empty reliability table is a stable fingerprint, not a crash", () => {
+    // Empty is computable: every player scores a neutral 1.0. Unlike the
+    // projections, whose absence means there is nothing to compute at all.
+    const a = warFingerprint(baseInput({ accuracySnapshot: "" }));
+    const b = warFingerprint(baseInput({ accuracySnapshot: "" }));
+    expect(a).toBe(b);
+    expect(a).not.toBe(warFingerprint(baseInput()));
+  });
+
   it("an admin edit to the reliability weights changes the fingerprint", () => {
     const editedSettings: PowerPulseSettings = {
       ...DEFAULT_POWER_PULSE_SETTINGS,
@@ -257,6 +277,7 @@ describe("warFingerprint: stability", () => {
   it("is stable across two calls with structurally equal but differently key-ordered inputs", () => {
     const a = warFingerprint(baseInput());
     const reordered: WarFingerprintInput = {
+      accuracySnapshot: "2026-08-26T09:00:00.000Z",
       projectionsSnapshot: "2026-08-26T14:00:00.000Z",
       modelVersion: DEFAULT_WAR_SETTINGS.modelVersion,
       warSettings: BASE_WAR_SETTINGS,

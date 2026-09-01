@@ -27,6 +27,7 @@ import { closestScoringBase } from "@/lib/league-scoring";
 import {
   loadWarUniverse,
   loadProjectionsSnapshot,
+  loadAccuracySnapshot,
   buildWarPlayers,
 } from "@/lib/positional-war/load";
 import { computeCurves } from "@/lib/positional-war/engine";
@@ -313,11 +314,13 @@ async function buildWarContext(
     };
   }
 
-  const [totalRosters, storedRosterCount, projectionsSnapshot] = await Promise.all([
-    loadTotalRosters(supabase, leagueRowId),
-    countStoredRosters(supabase, leagueRowId),
-    loadProjectionsSnapshot({ season: league.season, fromWeek }),
-  ]);
+  const [totalRosters, storedRosterCount, projectionsSnapshot, accuracySnapshot] =
+    await Promise.all([
+      loadTotalRosters(supabase, leagueRowId),
+      countStoredRosters(supabase, leagueRowId),
+      loadProjectionsSnapshot({ season: league.season, fromWeek }),
+      loadAccuracySnapshot(),
+    ]);
 
   const teamCount = resolveTeamCount(leagueRowId, totalRosters, storedRosterCount);
   if (teamCount === null) {
@@ -356,6 +359,7 @@ async function buildWarContext(
     },
     modelVersion: settings.war.modelVersion,
     projectionsSnapshot,
+    accuracySnapshot,
   };
 
   return {

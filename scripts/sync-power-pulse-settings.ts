@@ -19,6 +19,13 @@
  * overridden by the old estimates, and the version bump that invalidates every
  * cached score pinned to the old string.
  *
+ * As of 2026-09-01 the stored row STILL reads pp-2, so pp-3 and pp-4 never
+ * reached production: this script was written but appears never to have been run
+ * with --apply. Anyone shipping a model change should treat the preview run as
+ * part of the deploy rather than as an optional check. Reading the stored row is
+ * the only way to know which model a league is actually being scored under; the
+ * code default is what it would be scored under if nobody had ever pressed save.
+ *
  * WHY IT MUST RUN AFTER THE DEPLOY, NEVER BEFORE
  * Running it against the OLD code would apply the new variance figures to the
  * old model AND stamp every cache it then writes as pp-3. The real deploy would
@@ -56,6 +63,20 @@ const SUPERSEDED_DEFAULTS = {
   modelVersion: "pp-2",
   defaultCv: { QB: 0.35, RB: 0.55, WR: 0.65, TE: 0.7, K: 0.5, DEF: 0.75 } as Record<
     PulsePosition,
+    number
+  >,
+  /**
+   * The pp-2 reliability block. Advancing this is what makes the pp-5 narrowing
+   * real: the stored row holds these three numbers verbatim, and a stored value
+   * wins over a code default, so without this the new range never applies to a
+   * single league however many times the code ships.
+   *
+   * `enabled` is deliberately not listed. It is a switch an admin flips for a
+   * reason, and advancing a switch is not the same kind of act as advancing a
+   * number nobody has touched.
+   */
+  reliability: { priorGames: 10, minMultiplier: 0.85, maxMultiplier: 1.15 } as Record<
+    string,
     number
   >,
 };
@@ -122,6 +143,26 @@ async function main(): Promise<void> {
   }
   variance.defaultCv = cv;
   stored.variance = variance;
+
+  const reliability = (stored.reliability ?? {}) as Record<string, unknown>;
+  for (const field of Object.keys(SUPERSEDED_DEFAULTS.reliability)) {
+    const old = SUPERSEDED_DEFAULTS.reliability[field];
+    const next = (DEFAULT_POWER_PULSE_SETTINGS.reliability as unknown as Record<string, number>)[
+      field
+    ];
+    if (reliability[field] === next) continue;
+    if (reliability[field] === old) {
+      changes.push({ path: `reliability.${field}`, from: reliability[field], to: next });
+      reliability[field] = next;
+    } else {
+      kept.push({
+        path: `reliability.${field}`,
+        value: reliability[field],
+        reason: "tuned away from the pp-2 default, so it is left as it is.",
+      });
+    }
+  }
+  stored.reliability = reliability;
 
   for (const c of changes) console.log(`  change  ${c.path}: ${String(c.from)} -> ${String(c.to)}`);
   for (const k of kept) console.log(`  keep    ${k.path} = ${String(k.value)} (${k.reason})`);

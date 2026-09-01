@@ -75,7 +75,21 @@ export function opponentMultiplier(
   );
 }
 
-/** Reliability multiplier from the recency-weighted accuracy row. */
+/**
+ * Reliability multiplier from the recency-weighted accuracy row.
+ *
+ * `shrunkMultiplier` is already CENTERED on the player's own position by
+ * lib/calculate-projection-accuracy.ts, so it reads as "against his positional
+ * peers" and 1.0 is exactly average for his position. Uncentered it carried the
+ * position's own bias against the source, which marked every quarterback down
+ * about 5% and every tight end up about 3% and quietly tilted every
+ * cross-position comparison in Positional WAR.
+ *
+ * Deliberately kept to a small range (0.95 to 1.05 by default). "Does this
+ * player beat his projection" has no measured year over year persistence, so
+ * most of what this carries is noise; see the reliability block in
+ * ./default-settings.ts for the measurement.
+ */
 export function reliabilityMultiplier(
   accuracy: AccuracyRow | null,
   settings: PowerPulseSettings,

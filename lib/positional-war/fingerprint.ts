@@ -5,8 +5,10 @@
  * pure function of a short, enumerable list of inputs (season, the startable
  * slot multiset, team count, normalized scoring, the reliability/availability/
  * injury/opponent/variance/recency blocks of the resolved Power Pulse settings,
- * the WAR display settings, the model version, and an hour-truncated
- * projections snapshot). Two leagues whose fingerprints match are guaranteed to
+ * the WAR display settings, the model version, and hour-truncated snapshots of
+ * the two tables the model reads per player: the weekly projections and the
+ * reliability figures derived from them). Two leagues whose fingerprints match
+ * are guaranteed to
  * produce the same curve, and the inputs digest in warInputsDigest() is the
  * collision guard that catches a hash collision anyway (section 15.4.3).
  *
@@ -91,6 +93,24 @@ export type WarFingerprintInput = {
    * timestamp itself.
    */
   projectionsSnapshot: string;
+  /**
+   * max(computed_at) of player_projection_accuracy, hour-truncated by the
+   * caller, or the empty string when the table is empty.
+   *
+   * WHY THIS EXISTS. The model multiplies every projection by the player's
+   * reliability multiplier, which lives in that table and is rebuilt nightly by
+   * lib/calculate-projection-accuracy.ts. Without this field a rebuild that
+   * changed every multiplier changed no fingerprint, so a league viewed inside
+   * the 12-hour TTL served a curve built on reliability numbers the rest of the
+   * site had already replaced. Same class of gap projectionsSnapshot closes for
+   * the projections themselves, and it is the field the war-3 note in
+   * ./default-settings.ts was complaining about.
+   *
+   * The defense-vs-position splits are deliberately NOT a second field. They are
+   * rebuilt by the same nightly derived job and only ever from completed games,
+   * so they cannot move without the projections moving in the same run.
+   */
+  accuracySnapshot: string;
 };
 
 /**
@@ -120,7 +140,10 @@ function canonicalJson(value: unknown): string {
 
 function buildPayload(input: WarFingerprintInput) {
   return {
-    v: 1,
+    // Bumped when the payload's SHAPE changes, so a stored hash cannot be
+    // mistaken for one computed from a different field list. v2 added
+    // accuracySnapshot.
+    v: 2,
     season: input.season,
     fromWeek: input.fromWeek,
     toWeek: input.toWeek,
@@ -133,6 +156,7 @@ function buildPayload(input: WarFingerprintInput) {
     warSettings: input.warSettings,
     modelVersion: input.modelVersion,
     projectionsSnapshot: input.projectionsSnapshot,
+    accuracySnapshot: input.accuracySnapshot,
   };
 }
 

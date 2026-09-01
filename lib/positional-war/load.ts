@@ -739,6 +739,39 @@ export async function loadProjectionsSnapshot(params: {
 }
 
 /**
+ * max(computed_at) of player_projection_accuracy, truncated to the hour, or the
+ * empty string when the table is empty. Feeds warFingerprint()'s
+ * accuracySnapshot field.
+ *
+ * An empty string rather than null, because unlike the projections an empty
+ * reliability table is a perfectly computable state: every player simply scores
+ * a neutral 1.0 multiplier. A missing projections table means there is nothing
+ * to compute at all, which is why that one returns null and skips the league.
+ *
+ * Not filtered by season or scoring base. The table is rebuilt wholesale
+ * (lib/calculate-projection-accuracy.ts deletes and reinserts every row in one
+ * run), so one timestamp describes all of it and a narrower filter would only
+ * cost an index that does not exist.
+ *
+ * Not memoized, for the same reason loadProjectionsSnapshot is not: this is the
+ * read that detects the rebuild.
+ */
+export async function loadAccuracySnapshot(): Promise<string> {
+  const supabase = createCachedReadClient();
+  const { data, error } = await supabase
+    .from("player_projection_accuracy")
+    .select("computed_at")
+    .order("computed_at", { ascending: false })
+    .limit(1);
+  if (error) {
+    throw new Error(`positional war accuracy snapshot failed: ${error.message}`);
+  }
+  const row = data?.[0];
+  if (!row?.computed_at) return "";
+  return truncateToHour(row.computed_at);
+}
+
+/**
  * Assemble WarPlayerInput rows from the universe: run projectPlayerWeek() once
  * per player per week in the window, unchanged from what Power Pulse uses.
  *

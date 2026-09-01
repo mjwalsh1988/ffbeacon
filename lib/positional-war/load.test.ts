@@ -568,8 +568,12 @@ describe("buildWarPlayers", () => {
         [
           "p4",
           {
+            // Inside the default reliability clamp on purpose. This test is
+            // about the multiplier being applied ONCE, so a value the clamp
+            // would rewrite would test the clamp instead. The clamp has its own
+            // assertion below.
             playerId: "p4",
-            shrunkMultiplier: 1.1,
+            shrunkMultiplier: 1.04,
             beatRate: 0.5,
             availabilityRate: 1,
             ratioStdev: 0.4,
@@ -589,9 +593,69 @@ describe("buildWarPlayers", () => {
       currentWeek: 5,
     });
 
-    // rush_yd 100 * 0.1 + rush_td 1 * 6 = 16, times reliability 1.1 applied
+    // rush_yd 100 * 0.1 + rush_td 1 * 6 = 16, times reliability 1.04 applied
     // exactly once (opponent, availability and injury are all neutral here).
-    expect(result.byWeek.get(5)?.points).toBeCloseTo(16 * 1.1, 5);
+    expect(result.byWeek.get(5)?.points).toBeCloseTo(16 * 1.04, 5);
+  });
+
+  it("clamps a stored reliability multiplier to the configured range", () => {
+    // A multiplier stored under older, wider settings must not survive a
+    // narrowing of the range. The engines read the clamp at projection time
+    // rather than trusting the stored figure, so an admin edit takes effect on
+    // the next view without waiting for the nightly rebuild.
+    const player: WarUniversePlayer = {
+      playerId: "p5",
+      sleeperId: "1005",
+      slug: "player-p5",
+      name: "Test P5",
+      team: "BUF",
+      position: "RB",
+      injuryStatus: null,
+    };
+    const universe: WarUniverse = {
+      players: new Map([["p5", player]]),
+      projections: [
+        {
+          playerId: "p5",
+          week: 5,
+          opponent: null,
+          statLine: { rush_yd: 100, rush_td: 1 },
+          ppr: 16,
+          halfPpr: 16,
+          std: 16,
+          availability: "projected",
+          injuryStatus: null,
+        },
+      ],
+      accuracy: new Map([
+        [
+          "p5",
+          {
+            playerId: "p5",
+            shrunkMultiplier: 1.4,
+            beatRate: 0.5,
+            availabilityRate: 1,
+            ratioStdev: 0.4,
+            weeksPlayed: 12,
+          },
+        ],
+      ]),
+      defense: new Map(),
+      defenseSeasons: [2025, 2024],
+    };
+
+    const [result] = buildWarPlayers({
+      universe,
+      scoringSettings,
+      settings,
+      weeks: [5],
+      currentWeek: 5,
+    });
+
+    expect(result.byWeek.get(5)?.points).toBeCloseTo(
+      16 * settings.reliability.maxMultiplier,
+      5,
+    );
   });
 });
 

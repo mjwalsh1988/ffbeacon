@@ -29,6 +29,7 @@ vi.mock("@/lib/power-pulse/settings", () => ({
 vi.mock("@/lib/positional-war/load", () => ({
   loadWarUniverse: vi.fn(),
   loadProjectionsSnapshot: vi.fn(),
+  loadAccuracySnapshot: vi.fn(),
   buildWarPlayers: vi.fn(),
 }));
 
@@ -97,6 +98,7 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import {
   loadWarUniverse,
   loadProjectionsSnapshot,
+  loadAccuracySnapshot,
   buildWarPlayers,
 } from "@/lib/positional-war/load";
 import { computeCurves } from "@/lib/positional-war/engine";
@@ -308,6 +310,7 @@ function wireOkPipeline() {
   vi.mocked(loadProjectionsSnapshot).mockResolvedValue(
     "2026-10-01T12:00:00.000Z",
   );
+  vi.mocked(loadAccuracySnapshot).mockResolvedValue("2026-10-01T09:00:00.000Z");
   vi.mocked(loadWarUniverse).mockResolvedValue({
     players: new Map(),
     projections: [],

@@ -72,27 +72,49 @@ export type WarSettings = {
 };
 
 export const DEFAULT_WAR_SETTINGS: WarSettings = {
-  // war-3: the PROJECTIONS underneath moved, and this version is the only thing
-  // that can say so. Positional WAR reuses the Power Pulse projection stack, and
-  // pp-3 changed two things inside it: a season-long injury designation no
-  // longer overrules a per-week projection (a player Sleeper projects at 10.7 a
-  // week from week 5 was being scored 0.0 for the whole season), and the
-  // fallback variance figures are now measured from 2025 rather than estimated.
+  // war-4 (2026-09-01): the reliability multiplier underneath was reordering
+  // the curve, and this version is what says so.
   //
-  // The fingerprint deliberately does not hash the projection table, so neither
-  // change would have invalidated a single cached curve. The 12-hour TTL would
-  // have bounded it, but a league viewed inside that window would have served a
-  // curve built on numbers the rest of the site had already corrected.
+  // Two changes in lib/calculate-projection-accuracy.ts and the reliability
+  // block of DEFAULT_POWER_PULSE_SETTINGS: the multiplier is now centered on
+  // the player's own position, and its range is cut from plus or minus 15% to
+  // plus or minus 5%. The
+  // second is inside the fingerprint (pulseSettings.reliability is hashed) and
+  // would have invalidated every curve on its own. The FIRST would not have:
+  // it changes the VALUES in player_projection_accuracy, and the fingerprint
+  // now hashes that table's freshness (accuracySnapshot) but a curve written
+  // before that field existed carries no record of it. So the bump.
   //
-  // war-2, for the record: the tail tiebreak in lib/positional-war/engine.ts
-  // moved from player id to projected points a week, and minDisplayDepth rose
-  // to 36.
-  modelVersion: "war-3",
+  // What it fixes, on the live board: quarterback curves were ordered partly
+  // by a number with no measured year over year persistence. Jaxson Dart was
+  // ranking QB1 or QB2 in several leagues and Jalen Hurts tenth, on a
+  // multiplier gap of 16% between them.
+  modelVersion: "war-4",
   displayDepthMultiple: 2.5,
   minDisplayDepth: 36,
   cliffThreshold: 0.5,
   clampBelowReplacement: true,
 };
+
+// Earlier model versions, kept because each one records why a whole generation
+// of cached curves was thrown away.
+//
+// war-3: the PROJECTIONS underneath moved, and that version was the only thing
+// that could say so. Positional WAR reuses the Power Pulse projection stack,
+// and pp-3 changed two things inside it: a season-long injury designation no
+// longer overrules a per-week projection (a player Sleeper projects at 10.7 a
+// week from week 5 was being scored 0.0 for the whole season), and the fallback
+// variance figures became measurements from 2025 rather than estimates.
+//
+// At the time the fingerprint hashed no snapshot of the projection table, so
+// neither change would have invalidated a single cached curve on its own. The
+// 12-hour TTL bounded it, but a league viewed inside that window served a curve
+// built on numbers the rest of the site had already corrected. That gap is now
+// closed for projections (projectionsSnapshot) and for the reliability table
+// (accuracySnapshot) in lib/positional-war/fingerprint.ts.
+//
+// war-2: the tail tiebreak in lib/positional-war/engine.ts moved from player id
+// to projected points a week, and minDisplayDepth rose to 36.
 
 /**
  * The numeric and length bounds for every war setting, in one place. The zod

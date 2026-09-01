@@ -318,7 +318,7 @@ export function PowerPulseSettingsManager({
 
       <Section
         title="Projection reliability"
-        description="Adjusts a player's projection by how often they beat it. Prior games is the shrinkage strength: higher pulls small samples harder toward neutral."
+        description="Adjusts a player's projection by how far he beats it compared with others at his own position. Prior games is the shrinkage strength: higher pulls small samples harder toward neutral. Keep the multiplier range narrow. Whether a player beats his projection has no measured year to year persistence, so a wide range reorders the board on noise rather than on football."
       >
         <Toggle
           label="Reliability enabled"
