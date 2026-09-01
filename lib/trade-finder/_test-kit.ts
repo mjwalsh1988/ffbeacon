@@ -11,7 +11,7 @@
  * ratios the engine works in behave the way they do in production.
  */
 
-import type { FinderPick, FinderPlayer, FinderTeam } from "./types";
+import type { FinderPick, FinderPlayer, FinderTeam, PulseSnapshot } from "./types";
 import { teamStatusWords, type TeamStatusKey } from "@/lib/league-team-status";
 
 let counter = 0;
@@ -74,6 +74,11 @@ export function team(overrides: Partial<FinderTeam> = {}): FinderTeam {
       (status ? teamStatusWords(status).phrase : null),
     pulseRank: overrides.pulseRank ?? null,
     valueRank: overrides.valueRank ?? null,
+    // Null by default, which is what a league Power Pulse has not scored
+    // looks like. A test that wants schedule-aware wins asks for it with
+    // pulse() below, so every other test keeps the pre-Power-Pulse
+    // behaviour and cannot be moved by a default nobody chose.
+    pulse: overrides.pulse ?? null,
     players: overrides.players ?? [],
     picks: overrides.picks ?? [],
   };
@@ -105,6 +110,21 @@ export function fullRoster(scale = 1): FinderPlayer[] {
     player({ position: "TE", value: 1800 * scale }),
     player({ position: "WR", value: 1600 * scale }),
   ];
+}
+
+/**
+ * A Power Pulse snapshot for a team, with a plausible remaining slate.
+ *
+ * `winsPerPoint` near 0.11 is what a full remaining season of coin-flip
+ * matchups produces (ten games, a combined spread around 35), so a two point
+ * a week lineup gain reads as roughly a fifth of a win, which is the order
+ * of magnitude production data shows.
+ */
+export function pulse(overrides: Partial<PulseSnapshot> = {}): PulseSnapshot {
+  return {
+    winsPerPoint: overrides.winsPerPoint === undefined ? 0.11 : overrides.winsPerPoint,
+    remainingGames: overrides.remainingGames ?? 10,
+  };
 }
 
 /** Reset the id counter so a test can assert on generated names. */

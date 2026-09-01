@@ -534,8 +534,8 @@ async function TradeFinderSection({
     isDynasty: finderLeague.isDynasty,
     allowPicks: finderLeague.allowPicks,
     goal: "balanced",
-    targetPlayerId: null,
-    offerPlayerId: null,
+    targetPlayerIds: [],
+    offerPlayerIds: [],
     excludeKeys: declined,
     quality: { config: qualityConfig, poolMax: finderLeague.poolMax },
   });
@@ -622,6 +622,9 @@ async function TradeFinderSection({
             0,
             initialResult.suggestions.length - initialSuggestions.length,
           ),
+          // The first paint names no player, so it can never hit one of the
+          // reasons a named package fails.
+          notice: null,
         },
       }}
     />

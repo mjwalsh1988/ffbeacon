@@ -5,11 +5,12 @@ import {
   qualityGapOf,
   qualityRatioOf,
   satisfiesGoal,
+  scoreSuggestion,
   valueGapOf,
 } from "./rank";
 import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
 import { buildTeamProfile } from "./profile";
-import { STANDARD_SLOTS, fullRoster, pick, player, team } from "./_test-kit";
+import { STANDARD_SLOTS, fullRoster, pick, player, pulse, team } from "./_test-kit";
 import type { AssetRef } from "./packages";
 import type { SideImpact } from "./types";
 
@@ -21,6 +22,7 @@ const pickRef = (value: number): AssetRef => ({ kind: "pick", pick: pick({ value
 const impact = (over: Partial<SideImpact> = {}): SideImpact => ({
   valueDelta: 0,
   lineupDelta: 0,
+  winsDelta: null,
   ageDelta: 0,
   pickCountDelta: 0,
   ...over,
@@ -223,5 +225,161 @@ describe("acceptanceOf on the consolidation curve", () => {
   it("falls back to raw value when no quality ratio is supplied", () => {
     const theirs = impact({ valueDelta: 400, lineupDelta: 1.2 });
     expect(acceptanceOf(theirs, profileOf("competitor"), 0.02)).toBe("likely");
+  });
+});
+
+describe("scoreSuggestion, weighted by the reader's own footing", () => {
+  /**
+   * The same deal, scored for each of the three kinds of team.
+   *
+   * One trade that adds real points on Sunday and gives up real trade value to
+   * do it, which is the deal that genuinely SHOULD split a league: it is what a
+   * contender is looking for and the last thing a rebuilder wants.
+   */
+  const winNowDeal = impact({ lineupDelta: 3, winsDelta: 0.33, valueDelta: -900 });
+  /** Its mirror: value and youth and draft capital, at a cost on the field. */
+  const rebuildDeal = impact({
+    lineupDelta: -3,
+    winsDelta: -0.33,
+    valueDelta: 900,
+    ageDelta: -1.5,
+    pickCountDelta: 2,
+  });
+
+  const scoreFor = (
+    statusKey: "competitor" | "rebuilder" | "middle" | null,
+    mine: SideImpact,
+  ) =>
+    scoreSuggestion({
+      mine,
+      myProfile: buildTeamProfile(
+        team({ players: fullRoster(), statusKey, pulse: pulse() }),
+        STANDARD_SLOTS,
+        BASELINES,
+      ),
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+
+  it("puts the win-now deal in front of a contender and the rebuild deal behind it", () => {
+    expect(scoreFor("competitor", winNowDeal)).toBeGreaterThan(
+      scoreFor("competitor", rebuildDeal),
+    );
+  });
+
+  it("reverses that for a rebuilder", () => {
+    expect(scoreFor("rebuilder", rebuildDeal)).toBeGreaterThan(
+      scoreFor("rebuilder", winNowDeal),
+    );
+  });
+
+  it("values the win-now deal more to a contender than to a rebuilder", () => {
+    expect(scoreFor("competitor", winNowDeal)).toBeGreaterThan(
+      scoreFor("rebuilder", winNowDeal),
+    );
+  });
+
+  it("leaves a team in the pack, and a league with no Power Pulse, exactly where they were", () => {
+    // The middle band is the neutral multiplier by design, and a team with no
+    // status at all is read as the middle. A league Power Pulse has not scored
+    // must rank the way it did before any of this existed.
+    expect(scoreFor("middle", winNowDeal)).toBeCloseTo(scoreFor(null, winNowDeal), 10);
+  });
+
+  it("scores a league with no Power Pulse exactly as it did before any of this", () => {
+    // Pinned to the arithmetic rather than to a comparison, because a
+    // comparison passes even when both sides have drifted. These are the
+    // pre-refactor balanced weights: lineup 1.3, value 1, youth 0.4, picks 0.3,
+    // with the acceptance discount of 0.75 for "worth asking".
+    const profile = buildTeamProfile(
+      team({ players: fullRoster(), statusKey: null }),
+      STANDARD_SLOTS,
+      BASELINES,
+    );
+    const valueDelta = -900;
+    const expected =
+      (3 * 1.3 + (valueDelta / profile.totalValue) * 100 * 1) * 0.75;
+
+    const noPulse = scoreSuggestion({
+      mine: impact({ lineupDelta: 3, winsDelta: null, valueDelta }),
+      myProfile: profile,
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+    expect(noPulse).toBeCloseTo(expected, 10);
+  });
+
+  it("adds the wins term on top rather than replacing the lineup term", () => {
+    // Same deal twice, the second with a projected-wins figure attached. The
+    // difference has to be exactly the wins term at the balanced weighting, or
+    // the two readings of the same gain are being conflated.
+    const profile = buildTeamProfile(
+      team({ players: fullRoster(), statusKey: null, pulse: pulse() }),
+      STANDARD_SLOTS,
+      BASELINES,
+    );
+    const base = { lineupDelta: 3, valueDelta: 0 };
+    const without = scoreSuggestion({
+      mine: impact({ ...base, winsDelta: null }),
+      myProfile: profile,
+      acceptance: "likely",
+      goal: "balanced",
+    });
+    const with_ = scoreSuggestion({
+      mine: impact({ ...base, winsDelta: 0.33 }),
+      myProfile: profile,
+      acceptance: "likely",
+      goal: "balanced",
+    });
+    expect(with_ - without).toBeCloseTo(0.33 * 10 * 1.3, 10);
+  });
+
+  it("counts a longer remaining season for more than a shorter one", () => {
+    const early = scoreSuggestion({
+      mine: impact({ lineupDelta: 3, winsDelta: 0.33 }),
+      myProfile: buildTeamProfile(
+        team({ players: fullRoster(), statusKey: "competitor" }),
+        STANDARD_SLOTS,
+        BASELINES,
+      ),
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+    const late = scoreSuggestion({
+      mine: impact({ lineupDelta: 3, winsDelta: 0.09 }),
+      myProfile: buildTeamProfile(
+        team({ players: fullRoster(), statusKey: "competitor" }),
+        STANDARD_SLOTS,
+        BASELINES,
+      ),
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+    expect(early).toBeGreaterThan(late);
+  });
+});
+
+describe("measureImpact and projected wins", () => {
+  it("reports the wins a lineup change is worth against the remaining schedule", () => {
+    const profile = buildTeamProfile(
+      team({ players: fullRoster(), pulse: pulse({ winsPerPoint: 0.1 }) }),
+      STANDARD_SLOTS,
+      BASELINES,
+    );
+    const incoming = [ref(player({ position: "TE", value: 3000, projPoints: 18 }))];
+    const outgoing: AssetRef[] = [];
+    const result = measureImpact(profile, STANDARD_SLOTS, incoming, outgoing);
+    expect(result.lineupDelta).not.toBeNull();
+    expect(result.winsDelta).toBeCloseTo((result.lineupDelta as number) * 0.1, 10);
+  });
+
+  it("leaves projected wins null on a league Power Pulse has not scored", () => {
+    const profile = buildTeamProfile(
+      team({ players: fullRoster(), pulse: null }),
+      STANDARD_SLOTS,
+      BASELINES,
+    );
+    const incoming = [ref(player({ position: "TE", value: 3000, projPoints: 18 }))];
+    expect(measureImpact(profile, STANDARD_SLOTS, incoming, []).winsDelta).toBeNull();
   });
 });

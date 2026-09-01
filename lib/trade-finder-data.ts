@@ -35,6 +35,7 @@ import { buildPickPositionResolver, NO_PICK_POSITIONS } from "@/lib/league-pick-
 import { formatPickLabel } from "@/lib/trade-ideas/pick-label";
 import { loadLeagueTeamCards, type TeamCardData } from "@/lib/league-view-data";
 import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
+import { pulseSnapshotFor } from "@/lib/trade-finder/pulse";
 import { startingSlots } from "@/lib/power-pulse/lineup";
 import { formatTeamLabel } from "@/lib/team-label";
 import { scoreWithFallback, type ScoringSettings } from "@/lib/league-scoring";
@@ -370,6 +371,16 @@ export async function loadTradeFinderLeague(
     (pulseView?.teams ?? []).map((t) => [t.sleeperRosterId, t]),
   );
 
+  // Every team's weekly means and spreads, indexed once. The sensitivity of a
+  // matchup needs both sides of it, and rebuilding this per team would be the
+  // same walk twelve times over.
+  const weeklyByRoster = new Map<number, Map<number, { mean: number; sigma: number }>>();
+  for (const t of pulseView?.teams ?? []) {
+    const byWeek = new Map<number, { mean: number; sigma: number }>();
+    for (const week of t.weekly) byWeek.set(week.week, { mean: week.mean, sigma: week.sigma });
+    weeklyByRoster.set(t.sleeperRosterId, byWeek);
+  }
+
   const teams: FinderTeam[] = cards.map((card) => {
     const inactive = inactiveByRoster.get(card.sleeperRosterId) ?? new Set<string>();
     const pulse = pulseByRoster.get(card.sleeperRosterId) ?? null;
@@ -458,6 +469,15 @@ export async function loadTradeFinderLeague(
       statusLabel: pulse?.status?.phrase ?? null,
       pulseRank: pulse?.pulseRank ?? null,
       valueRank: pulse?.valueRank ?? null,
+      // Null rather than a zeroed object on a league Power Pulse has not
+      // scored. The engine leans on this to decide how much a deal is worth
+      // to THIS team, and a fabricated zero would tell it every trade is
+      // worth nothing on the field.
+      // Power Pulse's own headline figures (projected wins, playoff odds) are
+      // deliberately not carried across. Nothing in the engine reads them and
+      // they are already on the Power Pulse page; a field kept in case
+      // somebody wants it later is a field nobody can tell is stale.
+      pulse: pulse ? pulseSnapshotFor(pulse.weekly, weeklyByRoster) : null,
       players,
       picks,
     };

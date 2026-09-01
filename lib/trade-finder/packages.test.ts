@@ -54,7 +54,7 @@ describe("balancePackages", () => {
   it("puts the required asset in every package it returns", () => {
     const required = asRef(1500, "keeper");
     const pool = [asRef(400, "a"), asRef(800, "b"), required];
-    const packages = balancePackages(2200, pool, { required });
+    const packages = balancePackages(2200, pool, { required: [required] });
     expect(packages.length).toBeGreaterThan(0);
     for (const pkg of packages) {
       expect(pkg.map(assetId)).toContain("keeper");
@@ -126,7 +126,7 @@ describe("acquirablePool", () => {
     const theirs = profileOf([...fullRoster(), benched]);
     const pool = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
     });
     expect(pool.map(assetId)).toContain(benched.playerId);
@@ -137,7 +137,7 @@ describe("acquirablePool", () => {
     const theirs = profileOf(starters, { statusKey: "competitor" });
     const pool = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
     });
     // Nothing on this roster is spare, so nothing is on the table.
@@ -154,7 +154,7 @@ describe("acquirablePool", () => {
     );
     const pool = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
     });
     expect(pool.map(assetId)).toContain(veteran.playerId);
@@ -165,7 +165,7 @@ describe("acquirablePool", () => {
     const theirs = profileOf([...fullRoster(), stash], { statusKey: "competitor" });
     const pool = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
     });
     expect(pool.map(assetId)).toContain(stash.playerId);
@@ -176,7 +176,7 @@ describe("acquirablePool", () => {
     const theirs = profileOf([wanted, ...fullRoster().slice(1)]);
     const pool = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: wanted.playerId,
+      targetPlayerIds: [wanted.playerId],
       allowPicks: true,
     });
     // Untouchable or not, they asked what he costs, and that deserves an answer.
@@ -187,12 +187,12 @@ describe("acquirablePool", () => {
     const theirs = profileOf(fullRoster(), { picks: [pick({ value: 3000 })] });
     const balanced = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
     });
     const collecting = acquirablePool(theirs, mine, {
       goal: "add-picks",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
     });
     expect(balanced.some((a) => a.kind === "pick")).toBe(false);
@@ -206,7 +206,7 @@ describe("acquirablePool", () => {
 
     const spareParts = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
     });
     // Untouched by the ordinary pool: nobody trades their starter for filler.
@@ -214,7 +214,7 @@ describe("acquirablePool", () => {
 
     const evenSwap = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
       comparableTo: theirBest.value,
     });
@@ -228,7 +228,7 @@ describe("acquirablePool", () => {
     const theirs = profileOf(starters, { statusKey: "competitor" });
     const pool = acquirablePool(theirs, mine, {
       goal: "balanced",
-      targetPlayerId: null,
+      targetPlayerIds: [],
       allowPicks: true,
       comparableTo: 8000,
     });
@@ -277,7 +277,7 @@ describe("givablePool", () => {
     );
     const pool = givablePool(mine, {
       goal: "balanced",
-      offerPlayerId: null,
+      offerPlayerIds: [],
       allowPicks: true,
     });
     // Suggesting a rebuild trade away its own firsts is the one move this
@@ -297,7 +297,7 @@ describe("givablePool", () => {
     );
     const pool = givablePool(mine, {
       goal: "consolidate",
-      offerPlayerId: null,
+      offerPlayerIds: [],
       allowPicks: true,
     });
     expect(pool.some((a) => a.kind === "pick")).toBe(true);
@@ -309,7 +309,7 @@ describe("givablePool", () => {
     const mine = buildTeamProfile(team({ players: roster }), STANDARD_SLOTS, BASELINES);
     const pool = givablePool(mine, {
       goal: "balanced",
-      offerPlayerId: offered.playerId,
+      offerPlayerIds: [offered.playerId],
       allowPicks: true,
     });
     expect(assetId(pool[0])).toBe(offered.playerId);
@@ -324,7 +324,7 @@ describe("givablePool", () => {
     expect(
       givablePool(mine, {
         goal: "balanced",
-        offerPlayerId: "not-a-real-player",
+        offerPlayerIds: ["not-a-real-player"],
         allowPicks: true,
       }),
     ).toEqual([]);
@@ -395,7 +395,7 @@ describe("givablePool value spread", () => {
     const profile = profileOf(deepBench());
     const pool = givablePool(profile, {
       goal: "balanced",
-      offerPlayerId: null,
+      offerPlayerIds: [],
       allowPicks: false,
     });
 
@@ -409,7 +409,7 @@ describe("givablePool value spread", () => {
     const profile = profileOf(deepBench());
     const pool = givablePool(profile, {
       goal: "balanced",
-      offerPlayerId: null,
+      offerPlayerIds: [],
       allowPicks: false,
     });
     const values = pool.map(assetValue);
@@ -421,7 +421,7 @@ describe("givablePool value spread", () => {
     const profile = profileOf();
     const pool = givablePool(profile, {
       goal: "balanced",
-      offerPlayerId: null,
+      offerPlayerIds: [],
       allowPicks: false,
     });
     expect(pool.length).toBeLessThanOrEqual(PACKAGE_LIMITS.GIVE_LIMIT);
@@ -470,7 +470,7 @@ describe("balancePackages honours maxAssets", () => {
     // constraint was a lie the caller could not see.
     const required = asRef(2000, "req");
     const packages = balancePackages(3000, [required, asRef(900, "a"), asRef(1100, "b")], {
-      required,
+      required: [required],
       maxAssets: 1,
     });
     for (const p of packages) expect(p.length).toBeLessThanOrEqual(1);
@@ -479,7 +479,7 @@ describe("balancePackages honours maxAssets", () => {
   it("still builds the pair when there is room for it", () => {
     const required = asRef(2000, "req");
     const packages = balancePackages(3000, [required, asRef(900, "a"), asRef(1100, "b")], {
-      required,
+      required: [required],
       maxAssets: 2,
     });
     expect(packages.some((p) => p.length === 2)).toBe(true);

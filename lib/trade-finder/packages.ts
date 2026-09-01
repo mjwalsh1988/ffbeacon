@@ -74,6 +74,19 @@ const MAX_PACKAGES = 3;
 /** Assets allowed on the outgoing side. Beyond three it stops being a trade. */
 const MAX_OUTGOING = 3;
 /**
+ * The ceiling once the reader has PINNED a package.
+ *
+ * Three is the right bound for a search nobody asked for: an unprompted
+ * four-piece offer reads as an attempt to bury something. It is the wrong bound
+ * when the reader has typed three names and asked what they bring back, because
+ * the pinned pieces would then fill the whole package and no change could ride
+ * along to close a gap. So a pinned package may carry one filler beyond itself,
+ * up to this, which is also the most lib/trade-finder-saves.ts will store per
+ * side. It is a ceiling rather than a reachable number: MAX_NAMED_PLAYERS caps
+ * a pinned package at four, so the cap derived below tops out at five.
+ */
+const MAX_PINNED_OUTGOING = 6;
+/**
  * Packages one target may collect before the search stops looking.
  *
  * The search used to stop at the first three that fit, which is why the same
@@ -191,8 +204,15 @@ function packageValue(assets: AssetRef[]): number {
  * Only asked about players the profile did NOT already call surplus, so this is
  * the second tier: a piece with a real cost attached, where the team's direction
  * is the argument for selling anyway.
+ *
+ * Both arguments below are about the AGE CURVE, which is a dynasty idea. In a
+ * one-year league nobody sells a 28-year-old because of what he will be worth
+ * in two seasons, and nobody stashes a 23-year-old for a future that does not
+ * exist. What a redraft team can spare is its bench, which the surplus list
+ * already found, so this tier is empty there.
  */
 function wouldMoveStarter(player: FinderPlayer, profile: TeamProfile): boolean {
+  if (!profile.isDynasty) return false;
   if (profile.direction === "rebuild") {
     const threshold = SELL_AGE[player.position] ?? DEFAULT_SELL_AGE;
     return player.age !== null && player.age >= threshold;
@@ -275,15 +295,20 @@ function spendsPicksFor(goal: TradeGoal, myDirection: TeamProfile["direction"]):
 /**
  * The assets the reader could plausibly get from one team, best fit first.
  *
- * `targetPlayerId` overrides everything: when the reader has named a player, the
- * only question is what he costs, so the pool is exactly him.
+ * `targetPlayerIds` overrides everything: when the reader has named players, the
+ * only question is what they cost, so the pool is exactly them. All of them have
+ * to be on THIS team, because a trade has one other side; a team holding some
+ * but not all of the named players returns an empty pool and drops out of the
+ * search rather than being offered a partial version of the package the reader
+ * asked about.
  */
 export function acquirablePool(
   theirs: TeamProfile,
   mine: TeamProfile,
   opts: {
     goal: TradeGoal;
-    targetPlayerId: string | null;
+    /** Players that must ALL come back, or empty for an open search. */
+    targetPlayerIds: readonly string[];
     allowPicks: boolean;
     /**
      * Value of the single asset the reader is offering, when they are offering
@@ -313,11 +338,18 @@ export function acquirablePool(
     positions?: ReadonlySet<string> | null;
   },
 ): AssetRef[] {
-  if (opts.targetPlayerId) {
-    const hit = theirs.team.players.find(
-      (p) => p.playerId === opts.targetPlayerId && p.hasValue,
-    );
-    return hit ? [{ kind: "player", player: hit }] : [];
+  if (opts.targetPlayerIds.length > 0) {
+    const named: AssetRef[] = [];
+    for (const playerId of opts.targetPlayerIds) {
+      const hit = theirs.team.players.find(
+        (p) => p.playerId === playerId && p.hasValue,
+      );
+      // One missing piece means this roster cannot supply the package. Returning
+      // the rest would quietly answer a question the reader did not ask.
+      if (!hit) return [];
+      named.push({ kind: "player", player: hit });
+    }
+    return named;
   }
 
   const seen = new Set<string>();
@@ -477,7 +509,8 @@ export function givablePool(
   mine: TeamProfile,
   opts: {
     goal: TradeGoal;
-    offerPlayerId: string | null;
+    /** Players that must ALL be sent, or empty for an open search. */
+    offerPlayerIds: readonly string[];
     allowPicks: boolean;
     /**
      * Let every valuable player the reader owns be spent, not just the ones
@@ -488,7 +521,7 @@ export function givablePool(
      * image of the "give me your best player" failure the acquirable pool exists
      * to prevent.
      *
-     * On when the reader has NAMED somebody. "What would it take to get him"
+     * On when the reader has NAMED somebody. "What would it take to get them"
      * cannot be answered honestly out of a wallet containing only bench pieces,
      * and answering "nothing works" while the same engine was showing that exact
      * player in a suggestion a minute earlier is the specific failure this
@@ -527,20 +560,29 @@ export function givablePool(
     }
   }
 
+  const named = new Set(opts.offerPlayerIds);
   const sorted = spreadByValue(
     out
-      .filter((a) => assetId(a) !== opts.offerPlayerId)
+      .filter((a) => !named.has(assetId(a)))
       .sort((a, b) => assetValue(a) - assetValue(b) || assetId(a).localeCompare(assetId(b))),
   );
 
-  // A named player the reader wants to move leads the pool, so every package
-  // built from it contains him.
-  if (opts.offerPlayerId) {
-    const offered = mine.team.players.find(
-      (p) => p.playerId === opts.offerPlayerId && p.hasValue,
-    );
-    if (!offered) return [];
-    return [{ kind: "player", player: offered }, ...sorted];
+  // The named players lead the pool, so every package built from it contains
+  // all of them. Kept in the order the reader named them, which is the order
+  // their chips are drawn in, so the same package always reads the same way.
+  if (opts.offerPlayerIds.length > 0) {
+    const offered: AssetRef[] = [];
+    for (const playerId of opts.offerPlayerIds) {
+      const hit = mine.team.players.find(
+        (p) => p.playerId === playerId && p.hasValue,
+      );
+      // A named player we cannot find or cannot value leaves nothing honest to
+      // build the package from, so the whole search stands down rather than
+      // silently answering about a smaller package.
+      if (!hit) return [];
+      offered.push({ kind: "player", player: hit });
+    }
+    return [...offered, ...sorted];
   }
   return sorted;
 }
@@ -653,14 +695,16 @@ function withinQualityBand(assets: AssetRef[], gate: QualityGate): boolean {
  * one a manager would actually send, and a three-for-one that could have been a
  * one-for-one reads as an attempt to bury something.
  *
- * `required` is the named player in "what can I get for him" mode. He appears in
- * every package, and the rest of the pool fills the gap he leaves.
+ * `required` is the named PACKAGE in "what can I get for these" mode. Every
+ * asset in it appears in every package, and the rest of the pool fills whatever
+ * gap they leave. One name and three names take the same path; a package of one
+ * is not a special case.
  */
 export function balancePackages(
   target: number,
   pool: AssetRef[],
   opts: {
-    required?: AssetRef | null;
+    required?: readonly AssetRef[] | null;
     maxAssets?: number;
     quality?: QualityGate | null;
     /**
@@ -689,9 +733,21 @@ export function balancePackages(
     accept?: (assets: AssetRef[]) => boolean;
   } = {},
 ): AssetRef[][] {
-  const required = opts.required ?? null;
-  const maxAssets = Math.min(opts.maxAssets ?? MAX_OUTGOING, MAX_OUTGOING);
+  const required = opts.required ?? [];
+  const requiredIds = new Set(required.map(assetId));
+  // A pinned package raises the ceiling only as far as it needs to: the pieces
+  // the reader named, plus at most one thing to close the gap. Without this a
+  // three-player package could never balance, because the hard cap of three was
+  // already spent on the pieces the reader typed.
+  const hardCap =
+    required.length > 0
+      ? Math.min(Math.max(MAX_OUTGOING, required.length + 1), MAX_PINNED_OUTGOING)
+      : MAX_OUTGOING;
+  const maxAssets = Math.min(opts.maxAssets ?? hardCap, hardCap);
   if (target <= 0 || maxAssets < 1) return [];
+  // The pinned package alone already exceeds what this search may return, so
+  // there is nothing it could legally build.
+  if (required.length > maxAssets) return [];
 
   const bands = opts.tolerances ?? STRICT_TOLERANCES;
   const gate = opts.quality ? { ...opts.quality, tolerances: bands } : null;
@@ -711,9 +767,10 @@ export function balancePackages(
   // answers than the ones it had in hand. Ordering the pool is the function's
   // own business; it is the only place that knows the scans depend on it.
   const rest = pool
-    .filter((a) => !required || assetId(a) !== assetId(required))
+    .filter((a) => !requiredIds.has(assetId(a)))
     .sort((a, b) => assetValue(a) - assetValue(b) || assetId(a).localeCompare(assetId(b)));
-  const requiredValue = required ? assetValue(required) : 0;
+  const requiredValue = required.reduce((sum, a) => sum + assetValue(a), 0);
+  const pinned = required.length > 0;
   const candidates: AssetRef[][] = [];
   const seenKeys = new Set<string>();
   const full = () => candidates.length >= CANDIDATE_SCAN_CAP;
@@ -730,31 +787,29 @@ export function balancePackages(
     candidates.push(assets);
   };
 
-  // The required asset on its own, when it already balances.
-  if (required) consider([required]);
+  // The pinned package on its own, when it already balances.
+  if (pinned) consider([...required]);
 
-  // One more asset alongside whatever is required. Two assets is one more than
-  // one, so a caller that pinned maxAssets to a single piece has to be honoured
-  // here too; without the check this loop returned two-asset packages under
-  // maxAssets: 1 and the constraint was a lie its callers could not see.
+  // One more asset alongside whatever is pinned. A caller that capped maxAssets
+  // at the size of the pinned package has to be honoured here too; without the
+  // check this loop returned oversized packages and the constraint was a lie its
+  // callers could not see.
   const gap = target - requiredValue;
-  const roomForOneMore = maxAssets >= (required ? 2 : 1);
-  if (roomForOneMore && (gap > 0 || !required)) {
+  const roomForOneMore = maxAssets >= required.length + 1;
+  if (roomForOneMore && (gap > 0 || !pinned)) {
     for (const a of rest) {
       if (full()) break;
-      consider(required ? [required, a] : [a]);
+      consider([...required, a]);
     }
   }
 
   // Two more. The pool is ascending, so the inner scan walks up from the outer
   // asset and stops once the total has clearly overshot the band.
-  const roomForTwo = maxAssets >= (required ? 3 : 2);
+  const roomForTwo = maxAssets >= required.length + 2;
   if (roomForTwo) {
     for (let i = 0; i < rest.length && !full(); i += 1) {
       for (let j = i + 1; j < rest.length && !full(); j += 1) {
-        const combo = required
-          ? [required, rest[i], rest[j]]
-          : [rest[i], rest[j]];
+        const combo = [...required, rest[i], rest[j]];
         const total = packageValue(combo);
         if (total > target * (1 + overTolerance)) break;
         consider(combo);
@@ -763,7 +818,7 @@ export function balancePackages(
   }
 
   // Three, only when nothing smaller worked and the shape allows it.
-  if (candidates.length === 0 && !required && maxAssets >= 3) {
+  if (candidates.length === 0 && !pinned && maxAssets >= 3) {
     for (let i = 0; i < rest.length && !full(); i += 1) {
       for (let j = i + 1; j < rest.length && !full(); j += 1) {
         if (packageValue([rest[i], rest[j]]) > target * (1 + overTolerance)) break;
@@ -787,7 +842,7 @@ export function balancePackages(
     return gate ? withinQualityBand(assets, { ...gate, tolerances: STRICT_TOLERANCES }) : true;
   };
 
-  return chooseVaried(candidates, target, required, opts.usage, clearsStrict);
+  return chooseVaried(candidates, target, requiredIds, opts.usage, clearsStrict);
 }
 
 /** The piece a package leads with: the most valuable thing in it. */
@@ -820,9 +875,9 @@ export function anchorOf(assets: AssetRef[]): AssetRef | null {
  * it, so the alternatives behind a suggestion are real alternatives rather than
  * the same player at three slightly different prices.
  *
- * When the caller has pinned an asset (the "what can I get for him" mode), the
- * pinned piece is in every package by definition, so variety is measured on
- * what comes with it instead.
+ * When the caller has pinned a package (the "what can I get for these" mode),
+ * the pinned pieces are in every candidate by definition, so variety is measured
+ * on what comes with them instead.
  *
  * `clearsStrict` sorts ahead of everything. The search runs on the wider band so
  * that a quiet league still has answers, and this is what stops that widening
@@ -832,17 +887,17 @@ export function anchorOf(assets: AssetRef[]): AssetRef | null {
 function chooseVaried(
   candidates: AssetRef[][],
   target: number,
-  required: AssetRef | null,
+  requiredIds: ReadonlySet<string>,
   usage?: ReadonlyMap<string, number>,
   clearsStrict?: (assets: AssetRef[]) => boolean,
 ): AssetRef[][] {
   if (candidates.length === 0) return [];
 
-  const requiredId = required ? assetId(required) : null;
   const leadOf = (assets: AssetRef[]): string => {
-    const varying = requiredId
-      ? assets.filter((a) => assetId(a) !== requiredId)
-      : assets;
+    const varying =
+      requiredIds.size > 0
+        ? assets.filter((a) => !requiredIds.has(assetId(a)))
+        : assets;
     const anchor = anchorOf(varying.length > 0 ? varying : assets);
     return anchor ? assetId(anchor) : "";
   };
@@ -895,6 +950,7 @@ export const PACKAGE_LIMITS = {
   CANDIDATE_SCAN_CAP,
   MAX_PACKAGES,
   MAX_OUTGOING,
+  MAX_PINNED_OUTGOING,
   UNDER_TOLERANCE,
   OVER_TOLERANCE,
   QUALITY_RAW_OVER_TOLERANCE,

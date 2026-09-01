@@ -19,7 +19,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { TradeFinderCard } from "@/components/trade-finder-card";
-import { PlayerPicker, type PlayerOption } from "@/components/player-picker";
+import { type PlayerOption } from "@/components/player-picker";
+import { PlayerPackagePicker } from "@/components/trade-ideas/player-package-picker";
 import { formatEastern } from "@/lib/datetime";
 import {
   declineSuggestion,
@@ -37,6 +38,7 @@ import type { PositionalWarContext } from "@/lib/trade-impact/asset-notes";
 import { PositionFilter } from "@/components/trade-ideas/position-filter";
 import { SuggestionEvaluation } from "@/components/trade-ideas/suggestion-evaluation";
 import {
+  MAX_NAMED_PLAYERS,
   TRADE_GOALS,
   TRADE_POSITION_LABEL,
   type SuggestionAsset,
@@ -72,13 +74,18 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *
  * WHAT THE FILTERS ASK FOR
  *   Four questions, narrowing as they go: the SHAPE of the deal (the goal), the
- *   POSITION GROUPS on each side, and a NAMED PLAYER on each side. They are
+ *   POSITION GROUPS on each side, and NAMED PLAYERS on each side. They are
  *   ordered that way on screen because that is the order of specificity, and the
  *   engine resolves conflicts the same way: a named player settles the side he
  *   is on and stands the position ask on that side down, because "get me this
  *   quarterback" and "get me a running back" cannot both be honoured and the
  *   name is the more specific request. The ask on the OTHER side survives, which
  *   is the combination managers actually type.
+ *
+ *   Each name row takes a LIST, and the list is a package rather than a
+ *   shortlist: every player named on a side has to be in the deal on that side.
+ *   "These two backs, together, for a receiver" is one question, and asking it
+ *   one player at a time gets two answers, neither of which is the trade.
  *
  *   Nothing auto-searches. A chip press is cheap and a search is a few hundred
  *   lineup fills, so pressing four chips must not run four searches; the live
@@ -182,8 +189,8 @@ export function TradeFinder(props: {
   const isLeague = props.mode === "league";
 
   const [goal, setGoal] = useState<TradeGoal>("balanced");
-  const [targetPlayerId, setTargetPlayerId] = useState("");
-  const [offerPlayerId, setOfferPlayerId] = useState("");
+  const [targetPlayerIds, setTargetPlayerIds] = useState<string[]>([]);
+  const [offerPlayerIds, setOfferPlayerIds] = useState<string[]>([]);
   const [wantPositions, setWantPositions] = useState<TradePosition[]>([]);
   const [givePositions, setGivePositions] = useState<TradePosition[]>([]);
 
@@ -251,8 +258,8 @@ export function TradeFinder(props: {
             username: props.searchedUsername ?? null,
             source: props.source ?? null,
             goal,
-            targetPlayerId: targetPlayerId || null,
-            offerPlayerId: offerPlayerId || null,
+            targetPlayerIds,
+            offerPlayerIds,
             wantPositions,
             givePositions,
             sessionExcluded: excluded,
@@ -269,7 +276,16 @@ export function TradeFinder(props: {
           setSavedKeys(res.savedKeys);
           setIndex(0);
           setMeta(res.meta);
-          setStatus(describeFound(res.suggestions.length));
+          // On an empty result the notice is the ONLY sentence that says
+          // anything the reader can act on: which chip to move, or that the
+          // package is too big to price. Announcing the generic line instead
+          // and leaving the diagnosis in a paragraph gives a screen reader
+          // user the half that does not help.
+          setStatus(
+            res.suggestions.length === 0 && res.meta.notice
+              ? res.meta.notice
+              : describeFound(res.suggestions.length),
+          );
         } else {
           const res = await findPortfolioTrade({
             sleeperLeagueIds: props.sleeperLeagueIds ?? [],
@@ -312,13 +328,13 @@ export function TradeFinder(props: {
       givePositions,
       goal,
       isLeague,
-      offerPlayerId,
+      offerPlayerIds,
       props.searchedUsername,
       props.sleeperLeagueId,
       props.sleeperLeagueIds,
       props.sleeperUserId,
       props.source,
-      targetPlayerId,
+      targetPlayerIds,
       wantPositions,
     ],
   );
@@ -741,31 +757,43 @@ export function TradeFinder(props: {
 
             {/* NAMED PLAYERS. More specific than a position, and the engine
                 treats them that way: naming somebody stands the position ask on
-                that side down rather than trying to satisfy both. */}
+                that side down rather than trying to satisfy both.
+
+                Each row takes several. Everyone named on a side has to be in
+                the deal on that side, so two names is one package and not two
+                separate questions. */}
             {isLeague &&
               ((props.theirPlayers?.length ?? 0) > 0 ||
                 (props.myPlayers?.length ?? 0) > 0) && (
                 <div className="grid gap-4 px-4 py-3.5 sm:grid-cols-2">
                   {(props.theirPlayers?.length ?? 0) > 0 && (
-                    <PlayerPicker
+                    <PlayerPackagePicker
                       filterLabel="Find a player to get"
-                      label="Player you want"
-                      hint="What he would cost."
+                      label="Players you want"
+                      hint="What they would cost, together."
+                      addLabel="Add a player you want"
+                      chipsLabel="Players you want in the deal"
+                      emptyNote="No players picked. Add one or more and every deal will bring all of them back."
                       options={props.theirPlayers ?? []}
-                      value={targetPlayerId}
-                      onChange={setTargetPlayerId}
-                      showCount={false}
+                      selected={targetPlayerIds}
+                      onChange={setTargetPlayerIds}
+                      onAnnounce={setStatus}
+                      max={MAX_NAMED_PLAYERS}
                     />
                   )}
                   {(props.myPlayers?.length ?? 0) > 0 && (
-                    <PlayerPicker
+                    <PlayerPackagePicker
                       filterLabel="Find a player to send"
-                      label="Player you would move"
-                      hint="What he brings back."
+                      label="Players you would move"
+                      hint="What they bring back as a package."
+                      addLabel="Add a player you would move"
+                      chipsLabel="Players you would send in the deal"
+                      emptyNote="No players picked. Add one or more and every deal will send all of them."
                       options={props.myPlayers ?? []}
-                      value={offerPlayerId}
-                      onChange={setOfferPlayerId}
-                      showCount={false}
+                      selected={offerPlayerIds}
+                      onChange={setOfferPlayerIds}
+                      onAnnounce={setStatus}
+                      max={MAX_NAMED_PLAYERS}
                     />
                   )}
                 </div>
@@ -1085,6 +1113,11 @@ export function TradeFinder(props: {
           leaguesLeft={leaguesLeft}
           declinedAll={sessionExcluded.length > 0}
           positionAsk={wantPositions.length + givePositions.length > 0}
+          // A package is more than one name on ONE side. One player wanted and
+          // one offered is an ordinary two-sided ask, and telling that reader
+          // to "send them in separate deals" is advice about a question they
+          // did not ask.
+          packageAsk={targetPlayerIds.length > 1 || offerPlayerIds.length > 1}
         />
       )}
     </div>
@@ -1185,6 +1218,7 @@ function EmptyState({
   leaguesLeft,
   declinedAll,
   positionAsk,
+  packageAsk,
 }: {
   mode: "league" | "portfolio";
   meta: TradeFinderMeta | null;
@@ -1199,6 +1233,15 @@ function EmptyState({
    * than told to change the kind of trade.
    */
   positionAsk: boolean;
+  /**
+   * Whether the reader pinned MORE THAN ONE player to the search.
+   *
+   * A package is a much narrower question than a single name, and a league can
+   * quite honestly hold no level deal for two specific players moving
+   * together while holding several for either of them alone. Pointing at the
+   * chips is more use than telling somebody to change the kind of trade.
+   */
+  packageAsk: boolean;
 }) {
   return (
     <div className="rounded-card border border-dashed border-line bg-base/40 p-5">
@@ -1208,13 +1251,22 @@ function EmptyState({
       </p>
       {mode === "league" ? (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-          {declinedAll
-            ? "Search again for a fresh set, or change what you are after."
-            : meta && meta.consideredTeams === 0
-              ? "No other team has a piece it would move yet."
-              : positionAsk
-                ? "Nothing that fits those positions comes back level. Widen them, or clear one side."
-                : "Nothing we could build helps you or would be accepted. Try a different kind of trade, or name a player."}
+          {/* The engine's own reason first, when it has one. It only ever
+              fires for a question that could not have had an answer (players
+              named across two rosters, a player we cannot price), and in
+              those cases every sentence below would be misleading: the league
+              is not short of deals, the question was. */}
+          {meta?.notice
+            ? meta.notice
+            : declinedAll
+              ? "Search again for a fresh set, or change what you are after."
+              : meta && meta.consideredTeams === 0
+                ? "No other team has a piece it would move yet."
+                : packageAsk
+                  ? "Nothing comes back level for those players as one package. Remove one of them, or send them in separate deals."
+                  : positionAsk
+                    ? "Nothing that fits those positions comes back level. Widen them, or clear one side."
+                    : "Nothing we could build helps you or would be accepted. Try a different kind of trade, or name a player."}
         </p>
       ) : (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">

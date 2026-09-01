@@ -112,6 +112,7 @@ import { TRADE_POSITIONS, TRADE_POSITION_PHRASE } from "./types";
 import type {
   SuggestionAsset,
   TradeFinderInput,
+  TradeFinderNotice,
   TradeFinderResult,
   TradeGoal,
   TradeSuggestion,
@@ -152,6 +153,25 @@ const CONSOLIDATE_PAIR_DEPTH = 8;
 
 /** A need this size is worth naming in the explanation. Points per week. */
 const NAMEABLE_NEED = 0.5;
+
+/** Ids in the order given, with repeats dropped. */
+function unique(ids: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (typeof id !== "string" || id.length === 0 || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** Does this side carry every player the reader pinned to it? */
+function containsAll(assets: AssetRef[], playerIds: readonly string[]): boolean {
+  if (playerIds.length === 0) return true;
+  const present = new Set(assets.map(assetId));
+  return playerIds.every((id) => present.has(id));
+}
 
 function toSuggestionAsset(asset: AssetRef): SuggestionAsset {
   if (asset.kind === "pick") {
@@ -313,6 +333,16 @@ type PassResult = {
    * underneath the good ones instead of mixing them in.
    */
   loose: Set<string>;
+  /**
+   * Why the search could not run AS ASKED, when that is the reason for an
+   * empty answer.
+   *
+   * Deliberately narrow. An ordinary empty result leaves this null and the
+   * surface uses its own words; this is only for the cases where the question
+   * itself describes a trade that cannot exist, which a reader has no way to
+   * work out from "no trade to suggest".
+   */
+  notice: TradeFinderNotice | null;
 };
 
 /**
@@ -343,6 +373,7 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     suggestions: [],
     consideredTeams: 0,
     lineupUnavailable: false,
+    notice: null,
   };
 
   const myTeam = input.teams.find((t) => t.rosterId === input.myRosterId);
@@ -350,7 +381,12 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
 
   const slots = input.startingSlots;
   const baselines = leagueStarterBaselines(input.teams, slots);
-  const profiles = input.teams.map((team) => buildTeamProfile(team, slots, baselines));
+  // isDynasty is what decides whether the Contender / Rebuilder call means
+  // anything. In a one-year league every team is win-now, because there is no
+  // future to hold an asset for. See the header of profile.ts.
+  const profiles = input.teams.map((team) =>
+    buildTeamProfile(team, slots, baselines, { isDynasty: input.isDynasty }),
+  );
   const mine = profiles.find((p) => p.team.rosterId === input.myRosterId);
   if (!mine) return empty;
 
@@ -365,7 +401,7 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     poolMax: input.quality?.poolMax ?? null,
   };
 
-  const { suggestions, considered, passedTargets, loose } = collect(
+  const { suggestions, considered, passedTargets, loose, notice } = collect(
     input,
     profiles,
     mine,
@@ -397,6 +433,11 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     ).slice(0, MAX_RESULTS),
     consideredTeams: considered.size,
     lineupUnavailable,
+    // Only ever surfaced when there is nothing to show. A search that found
+    // deals has already answered the reader, and telling them at the same time
+    // that part of their question was impossible would be noise on a card they
+    // are reading for something else.
+    notice: suggestions.length === 0 ? notice : null,
   };
 }
 
@@ -418,15 +459,21 @@ function collect(
   // not membership.
   const tolerances: Tolerances = RELAXED_TOLERANCES;
 
-  const emptyPass: PassResult = {
+  const emptyPass = (notice: TradeFinderNotice | null = null): PassResult => ({
     suggestions: [],
     considered: new Set<number>(),
     passedTargets: new Set<string>(),
     loose: new Set<string>(),
-  };
+    notice,
+  });
 
   const excluded = new Set(input.excludeKeys);
-  const specificAsk = Boolean(input.targetPlayerId || input.offerPlayerId);
+  // Deduplicated and order-preserving. Two chips for the same player is a
+  // slip rather than a request for him twice, and a duplicate in the pinned
+  // package would ask the search to send one player two times.
+  const targetPlayerIds = unique(input.targetPlayerIds ?? []);
+  const offerPlayerIds = unique(input.offerPlayerIds ?? []);
+  const specificAsk = targetPlayerIds.length > 0 || offerPlayerIds.length > 0;
 
   // A named player settles the side he is on. Asking for a running back back AND
   // naming the quarterback you want is a contradiction, and the name is the more
@@ -434,10 +481,10 @@ function collect(
   // survives, which is the combination a reader actually types: "get me this
   // player, and take a running back off my hands".
   const wantPositions: ReadonlySet<string> = new Set(
-    input.targetPlayerId ? [] : (input.wantPositions ?? []),
+    targetPlayerIds.length > 0 ? [] : (input.wantPositions ?? []),
   );
   const givePositions: ReadonlySet<string> = new Set(
-    input.offerPlayerId ? [] : (input.givePositions ?? []),
+    offerPlayerIds.length > 0 ? [] : (input.givePositions ?? []),
   );
 
   // The reader's own currency is the same whoever they are talking to, so it is
@@ -461,18 +508,28 @@ function collect(
 
   const givable = givablePool(mine, {
     goal: input.goal,
-    offerPlayerId: input.offerPlayerId,
+    offerPlayerIds,
     allowPicks: input.allowPicks,
     widen: specificAsk || givePositions.size > 0,
   });
-  const required = input.offerPlayerId
-    ? (givable.find((a) => assetId(a) === input.offerPlayerId) ?? null)
-    : null;
+  // The pinned outgoing package, in the order the reader named it. Read back
+  // out of the pool rather than rebuilt, so a player the pool refused (no
+  // value row) is missing here too and the search stands down instead of
+  // pricing him at zero.
+  const required: AssetRef[] = [];
+  for (const playerId of offerPlayerIds) {
+    const hit = givable.find((a) => assetId(a) === playerId);
+    if (hit) required.push(hit);
+  }
 
-  // A named player the reader wants to move but that we cannot find, or cannot
-  // value, leaves nothing honest to build from.
-  if (input.offerPlayerId && !required) return emptyPass;
-  if (givable.length === 0) return emptyPass;
+  // A player the reader wants to move but that we cannot find, or cannot
+  // value, leaves nothing honest to build from. Reported rather than returned
+  // as a bare empty: "we have no price for one of the players you named" is a
+  // different answer from "your league has no deal for you".
+  if (offerPlayerIds.length > 0 && required.length !== offerPlayerIds.length) {
+    return emptyPass("offers-missing");
+  }
+  if (givable.length === 0) return emptyPass();
 
   const suggestions: TradeSuggestion[] = [];
   const seenKeys = new Set<string>();
@@ -561,6 +618,14 @@ function collect(
     if (wantPositions.size > 0 && !hasPosition(incoming, wantPositions)) return null;
     if (givePositions.size > 0 && !hasPosition(outgoing, givePositions)) return null;
 
+    // THE NAMED PACKAGE IS A HARD GATE TOO, and for a stronger reason than the
+    // position ask: a reader who typed three names and is shown a deal for two
+    // of them has been handed a trade they did not ask about, in a card that
+    // looks exactly like the one they did. The pools already pin both sides,
+    // and this catches the paths that assemble a side rather than fixing it.
+    if (!containsAll(incoming, targetPlayerIds)) return null;
+    if (!containsAll(outgoing, offerPlayerIds)) return null;
+
     const myImpact = measureImpact(mine, slots, incoming, outgoing);
     // The other team's ledger is this one reversed: what the reader sends is
     // what they receive.
@@ -599,7 +664,7 @@ function collect(
     });
 
     // A deal that does nothing for the reader is not a suggestion.
-    if (score <= 0 && !input.targetPlayerId && !opts.allowNeutral) return null;
+    if (score <= 0 && targetPlayerIds.length === 0 && !opts.allowNeutral) return null;
 
     seenKeys.add(key);
     if (!clearsStrictBands(qualityRatio, gap)) loose.add(key);
@@ -632,7 +697,19 @@ function collect(
         teamName: theirs.team.teamName,
         positionHelped: helped?.position ?? null,
         needPoints: helped?.need ?? null,
-        named: input.targetPlayerId ? "target" : input.offerPlayerId ? "offer" : null,
+        named:
+          targetPlayerIds.length > 0
+            ? "target"
+            : offerPlayerIds.length > 0
+              ? "offer"
+              : null,
+        namedCount:
+          targetPlayerIds.length > 0 ? targetPlayerIds.length : offerPlayerIds.length,
+        // The reader's own footing, which is what scoreSuggestion weighted this
+        // deal by. Without it the card explains the counterparty's situation and
+        // says nothing about why the ranking put THIS deal in front of THIS team.
+        myDirection: mine.direction,
+        isDynasty: input.isDynasty,
         asked: askedPhrases,
         mine: myImpact,
       }),
@@ -651,6 +728,13 @@ function collect(
         valueGap: gap,
       }),
       caveats: buildCaveats({
+        // How much runway a lineup change still has. A gain of two points a
+        // week with two games left is a different proposition from the same
+        // gain in week 4, and the projected-wins figure alone does not say so.
+        remainingGames:
+          myImpact.winsDelta === null
+            ? null
+            : (mine.team.pulse?.remainingGames ?? null),
         rosterSpotDelta:
           outgoing.filter((a) => a.kind === "player").length -
           incoming.filter((a) => a.kind === "player").length,
@@ -685,24 +769,62 @@ function collect(
     wantPositions,
   );
 
+  // Which rosters, if any, could supply the whole package the reader asked for.
+  //
+  // Three distinct failures hide behind one empty answer, and they need
+  // different sentences: the players are on different rosters, nobody in the
+  // league has them, or one roster has them all but we hold no value for one
+  // of them. The last is the one worth separating out, because reporting it
+  // as "different teams" states something about the league the reader can see
+  // is false on the next tab.
+  let anyTeamHoldsTargets = targetPlayerIds.length === 0;
+  let anyTeamRostersTargets = false;
+  let targetsFoundSomewhere = false;
+  if (targetPlayerIds.length > 0) {
+    const wanted = new Set(targetPlayerIds);
+    for (const other of profiles) {
+      if (other.team.rosterId === input.myRosterId) continue;
+      let held = 0;
+      for (const p of other.team.players) {
+        if (wanted.has(p.playerId)) held += 1;
+      }
+      if (held > 0) targetsFoundSomewhere = true;
+      // Membership only. Whether we can PRICE them is the acquirable pool's
+      // question, and the gap between the two answers is the unpriced case.
+      if (held === targetPlayerIds.length) {
+        anyTeamRostersTargets = true;
+        break;
+      }
+    }
+  }
+
   for (const theirs of profiles) {
     if (theirs.team.rosterId === input.myRosterId) continue;
 
     const acquirable = acquirablePool(theirs, mine, {
       goal: input.goal,
-      targetPlayerId: input.targetPlayerId,
+      targetPlayerIds,
       allowPicks: input.allowPicks,
       positions: wantPositions.size > 0 ? wantPositions : null,
     });
     if (acquirable.length === 0) continue;
+    if (targetPlayerIds.length > 0) anyTeamHoldsTargets = true;
     considered.add(theirs.team.rosterId);
 
     // What the reader might receive. One piece at a time, plus genuine
     // combinations for the goals whose whole shape is "more than one thing
     // comes back".
-    const incomingSets = incomingCombos(acquirable, input.goal).filter(
-      (set) => !incomingShape.accept || incomingShape.accept(set),
-    );
+    //
+    // A NAMED PACKAGE skips the combination walk entirely. The reader has
+    // already said what the incoming side is, and letting incomingCombos take
+    // it apart would offer subsets of the package as if they were answers: ask
+    // what two receivers cost together and be quoted a price for one of them.
+    const incomingSets =
+      targetPlayerIds.length > 0
+        ? [acquirable]
+        : incomingCombos(acquirable, input.goal).filter(
+            (set) => !incomingShape.accept || incomingShape.accept(set),
+          );
 
     for (const incoming of incomingSets) {
       const target = incoming.reduce((sum, a) => sum + assetValue(a), 0);
@@ -773,8 +895,8 @@ function collect(
    *   that goal is actually about: who has one player worth roughly what these
    *   two are worth together.
    */
-  const anchorSets: AssetRef[][] = required
-    ? [[required]]
+  const anchorSets: AssetRef[][] = required.length > 0
+    ? [required]
     : (() => {
         const mentioned = new Set<string>();
         for (const s of suggestions) {
@@ -814,10 +936,10 @@ function collect(
           .map((a) => [a]);
       })();
 
-  // A named target is answered by the browse loop, which already fixes that
-  // player on the incoming side; anchoring the reader's own assets as well would
-  // build deals that do not contain the player they asked about.
-  if (!input.targetPlayerId) {
+  // A named target is answered by the browse loop, which already fixes those
+  // players on the incoming side; anchoring the reader's own assets as well
+  // would build deals that do not contain the players they asked about.
+  if (targetPlayerIds.length === 0) {
     for (const anchorSet of anchorSets) {
       const anchorValue = anchorSet.reduce((sum, a) => sum + assetValue(a), 0);
       if (anchorValue <= 0) continue;
@@ -830,7 +952,7 @@ function collect(
         // it depends on this anchor and cannot be cached across anchors.
         const pool = acquirablePool(theirs, mine, {
           goal: input.goal,
-          targetPlayerId: null,
+          targetPlayerIds: [],
           allowPicks: input.allowPicks,
           comparableTo: anchorValue,
           positions: wantPositions.size > 0 ? wantPositions : null,
@@ -869,7 +991,7 @@ function collect(
       // Keep the best few, but never two that bring back the same lead player.
       // Without this the two ideas offered for one anchor were routinely the
       // same acquisition at two prices, which is one idea printed twice.
-      const take = required ? NAMED_ANCHOR_TAKE : COVERAGE_PER_ANCHOR;
+      const take = required.length > 0 ? NAMED_ANCHOR_TAKE : COVERAGE_PER_ANCHOR;
       const kept: TradeSuggestion[] = [];
       const keptLeads = new Set<string>();
       for (const s of found) {
@@ -894,7 +1016,57 @@ function collect(
     }
   }
 
-  return { suggestions, considered, passedTargets, loose };
+  return {
+    suggestions,
+    considered,
+    passedTargets,
+    loose,
+    // A package the reader asked to receive that no single roster holds. The
+    // search ran and found nothing because the question describes a trade with
+    // three sides, and saying so is the only useful thing we can tell them.
+    notice: noticeFor({
+      named: targetPlayerIds.length,
+      priced: anyTeamHoldsTargets,
+      rostered: anyTeamRostersTargets,
+      foundSomewhere: targetsFoundSomewhere,
+      built: suggestions.length > 0,
+    }),
+  };
+}
+
+/**
+ * Why a named-target search came back empty, when the reason is the question.
+ *
+ * Four distinct failures, and a reader can act on each of them differently:
+ * move a chip to another roster, pick somebody we actually have a price for,
+ * or ask for fewer players. Collapsing them into one sentence sends a reader
+ * to fix the wrong thing, and collapsing the unpriced case into "different
+ * teams" states something about the league they can see is false on the next
+ * tab.
+ *
+ * Returns null the moment the search produced anything at all. A suggestion
+ * on screen has already answered the reader, and a note beside it explaining
+ * why some other version of the question failed is noise.
+ */
+function noticeFor(state: {
+  named: number;
+  /** Some roster holds them all AND we can price every one of them. */
+  priced: boolean;
+  /** Some roster holds them all, whatever we know about their value. */
+  rostered: boolean;
+  /** At least one of them is on some other roster in this league. */
+  foundSomewhere: boolean;
+  built: boolean;
+}): TradeFinderNotice | null {
+  if (state.named === 0 || state.built) return null;
+  if (state.priced) {
+    // The pieces were all on the table and nothing on the reader's roster
+    // adds up to them. Naming fewer is the move, and no other sentence here
+    // would tell them that.
+    return state.named > 1 ? "targets-unaffordable" : null;
+  }
+  if (state.rostered) return "targets-unpriced";
+  return state.foundSomewhere ? "targets-split" : "targets-missing";
 }
 
 /** Identifies "this player, from this team", whatever the price. */

@@ -7,7 +7,7 @@ import {
   givablePool,
 } from "./packages";
 import { buildTeamProfile, leagueStarterBaselines } from "./profile";
-import { STANDARD_SLOTS, pick, player, team } from "./_test-kit";
+import { STANDARD_SLOTS, pick, player, pulse, team } from "./_test-kit";
 import { DEFAULT_TRADE_QUALITY_CONFIG } from "@/lib/trade-quality";
 import {
   TRADE_GOALS,
@@ -135,8 +135,8 @@ function run(overrides: Partial<TradeFinderInput> = {}) {
     isDynasty: true,
     allowPicks: true,
     goal: "balanced",
-    targetPlayerId: null,
-    offerPlayerId: null,
+    targetPlayerIds: [],
+    offerPlayerIds: [],
     excludeKeys: [],
     ...overrides,
   });
@@ -233,7 +233,7 @@ describe("findTrades", () => {
   });
 
   it("answers what it would take for a named player", () => {
-    const { suggestions } = run({ targetPlayerId: "th-te1" });
+    const { suggestions } = run({ targetPlayerIds: ["th-te1"] });
     expect(suggestions.length).toBeGreaterThan(0);
     for (const s of suggestions) {
       expect(s.incoming).toHaveLength(1);
@@ -243,7 +243,7 @@ describe("findTrades", () => {
   });
 
   it("answers what a named player brings back", () => {
-    const { suggestions } = run({ offerPlayerId: "my-rb3" });
+    const { suggestions } = run({ offerPlayerIds: ["my-rb3"] });
     expect(suggestions.length).toBeGreaterThan(0);
     for (const s of suggestions) {
       expect(
@@ -253,7 +253,7 @@ describe("findTrades", () => {
   });
 
   it("gives up when the named player is not on the roster", () => {
-    expect(run({ offerPlayerId: "not-mine" }).suggestions).toEqual([]);
+    expect(run({ offerPlayerIds: ["not-mine"] }).suggestions).toEqual([]);
   });
 
   it("never trades a pick in a redraft league", () => {
@@ -314,7 +314,7 @@ describe("findTrades", () => {
   it("lets a named player override the goal, because it is the more specific ask", () => {
     // th-te1 costs value and adds no picks, so an add-picks filter would drop
     // him. Naming him is the reader saying they want this answer anyway.
-    const { suggestions } = run({ goal: "add-picks", targetPlayerId: "th-te1" });
+    const { suggestions } = run({ goal: "add-picks", targetPlayerIds: ["th-te1"] });
     expect(suggestions.length).toBeGreaterThan(0);
     expect(suggestions[0].incoming[0]).toMatchObject({ playerId: "th-te1" });
   });
@@ -331,8 +331,8 @@ describe("findTrades", () => {
       isDynasty: true,
       allowPicks: true,
       goal: "balanced",
-      targetPlayerId: null,
-      offerPlayerId: null,
+      targetPlayerIds: [],
+      offerPlayerIds: [],
       excludeKeys: [],
     });
     expect(result.lineupUnavailable).toBe(true);
@@ -482,7 +482,7 @@ describe("findTrades variety on the paying side", () => {
     const currency = new Set(
       givablePool(profile, {
         goal: "balanced",
-        offerPlayerId: null,
+        offerPlayerIds: [],
         allowPicks: true,
       }).map(assetId),
     );
@@ -629,8 +629,8 @@ function runStar(overrides: Partial<TradeFinderInput> = {}) {
     isDynasty: true,
     allowPicks: true,
     goal: "balanced",
-    targetPlayerId: null,
-    offerPlayerId: null,
+    targetPlayerIds: [],
+    offerPlayerIds: [],
     excludeKeys: [],
     quality: { config: DEFAULT_TRADE_QUALITY_CONFIG, poolMax: 9900 },
     ...overrides,
@@ -645,7 +645,7 @@ describe("findTrades naming a player", () => {
     // deal used to be switched OFF the moment a player was named, so the only
     // remaining question was "which of their spare parts costs as much as him",
     // and the answer to that is always none.
-    const { suggestions } = runStar({ offerPlayerId: "my-star-qb" });
+    const { suggestions } = runStar({ offerPlayerIds: ["my-star-qb"] });
     expect(suggestions.length).toBeGreaterThan(0);
     for (const s of suggestions) {
       expect(
@@ -655,7 +655,7 @@ describe("findTrades naming a player", () => {
   });
 
   it("brings back real players for a star, not a pile of bench pieces", () => {
-    const { suggestions } = runStar({ offerPlayerId: "my-star-qb" });
+    const { suggestions } = runStar({ offerPlayerIds: ["my-star-qb"] });
     const best = Math.max(
       ...suggestions.flatMap((s) => s.incoming.map((a) => a.value)),
     );
@@ -665,13 +665,13 @@ describe("findTrades naming a player", () => {
   });
 
   it("reaches more than one manager when several could do the deal", () => {
-    const { suggestions } = runStar({ offerPlayerId: "my-star-qb" });
+    const { suggestions } = runStar({ offerPlayerIds: ["my-star-qb"] });
     const partners = new Set(suggestions.map((s) => s.counterparty.rosterId));
     expect(partners.size).toBeGreaterThan(1);
   });
 
   it("answers what a star would cost when the reader wants one", () => {
-    const { suggestions } = runStar({ targetPlayerId: "th-star-wr" });
+    const { suggestions } = runStar({ targetPlayerIds: ["th-star-wr"] });
     expect(suggestions.length).toBeGreaterThan(0);
     for (const s of suggestions) {
       expect(
@@ -693,7 +693,7 @@ describe("findTrades naming a player", () => {
   });
 
   it("gives up honestly when the named player is not on the roster", () => {
-    expect(runStar({ offerPlayerId: "th-star-wr" }).suggestions).toEqual([]);
+    expect(runStar({ offerPlayerIds: ["th-star-wr"] }).suggestions).toEqual([]);
   });
 
   it("answers a named player whatever the goal dropdown still says", () => {
@@ -703,7 +703,7 @@ describe("findTrades naming a player", () => {
     // Consolidate could never satisfy that goal's shape test and every star on
     // the roster returned nothing at all.
     for (const goal of TRADE_GOALS) {
-      const { suggestions } = runStar({ goal: goal.key, offerPlayerId: "my-star-qb" });
+      const { suggestions } = runStar({ goal: goal.key, offerPlayerIds: ["my-star-qb"] });
       expect(
         suggestions.length,
         `${goal.key} with a named player returned nothing`,
@@ -783,8 +783,8 @@ function runCurved(goal: TradeFinderInput["goal"]) {
     isDynasty: true,
     allowPicks: true,
     goal,
-    targetPlayerId: null,
-    offerPlayerId: null,
+    targetPlayerIds: [],
+    offerPlayerIds: [],
     excludeKeys: [],
     quality: { config: DEFAULT_TRADE_QUALITY_CONFIG, poolMax: 9900 },
   });
@@ -905,7 +905,7 @@ describe("findTrades rationale", () => {
   });
 
   it("says so plainly when the reader named the player", () => {
-    const named = runStar({ offerPlayerId: "my-star-qb" }).suggestions[0];
+    const named = runStar({ offerPlayerIds: ["my-star-qb"] }).suggestions[0];
     expect(named.rationale).toContain("the player you named");
   });
 });
@@ -1003,7 +1003,7 @@ describe("findTrades position asks", () => {
     // "Get me this tight end, and take a running back off my hands." The named
     // player settles the incoming side; the outgoing ask survives him.
     const { suggestions } = run({
-      targetPlayerId: "th-te2",
+      targetPlayerIds: ["th-te2"],
       wantPositions: ["QB"],
       givePositions: ["RB"],
     });
@@ -1031,5 +1031,327 @@ describe("findTrades position asks", () => {
       (s) => s.key,
     );
     expect(after).toEqual(before);
+  });
+});
+
+/**
+ * Naming a set of players, and getting one deal for the set.
+ *
+ * The single-name mode answered "what does this player cost" and "what does he
+ * bring back". A manager with two backs they do not need is asking a different
+ * question, and asking it twice gets two answers, neither of which is the trade
+ * they had in mind.
+ */
+describe("packages of named players", () => {
+  const idsOf = (assets: TradeSuggestion["incoming"]) =>
+    assets.map((a) => (a.kind === "player" ? a.playerId : a.key));
+
+  it("sends every player named on the outgoing side, in every suggestion", () => {
+    const { suggestions } = run({ offerPlayerIds: ["my-rb3", "my-wr3"] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      expect(idsOf(s.outgoing)).toContain("my-rb3");
+      expect(idsOf(s.outgoing)).toContain("my-wr3");
+    }
+  });
+
+  it("brings back every player named on the incoming side, in every suggestion", () => {
+    const { suggestions } = run({ targetPlayerIds: ["th-te1", "th-te2"] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      expect(idsOf(s.incoming)).toContain("th-te1");
+      expect(idsOf(s.incoming)).toContain("th-te2");
+      // And only from the roster that holds them both.
+      expect(s.counterparty.rosterId).toBe(2);
+    }
+  });
+
+  it("never quotes a price for part of the package", () => {
+    // Ask what two tight ends cost together and the answer must not be the price
+    // of one of them, which is what an unconstrained combination walk produces.
+    for (const s of run({ targetPlayerIds: ["th-te1", "th-te2"] }).suggestions) {
+      const players = s.incoming.filter((a) => a.kind === "player");
+      expect(players.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("says the players are on different teams rather than going quiet", () => {
+    const result = run({ targetPlayerIds: ["th-te1", "mid-te1"] });
+    expect(result.suggestions).toEqual([]);
+    expect(result.notice).toBe("targets-split");
+  });
+
+  it("says so when a named player is nowhere in the league", () => {
+    const result = run({ targetPlayerIds: ["nobody-at-all"] });
+    expect(result.suggestions).toEqual([]);
+    expect(result.notice).toBe("targets-missing");
+  });
+
+  it("says so when a player the reader would send has no value", () => {
+    const result = run({ offerPlayerIds: ["not-on-my-roster"] });
+    expect(result.suggestions).toEqual([]);
+    expect(result.notice).toBe("offers-missing");
+  });
+
+  it("does not claim two players are on different teams when one is unpriced", () => {
+    // Both tight ends sit on roster 2, but one has no value row. Reporting
+    // that as "different teams" states something about the league the reader
+    // can see is false on the next tab, and sends them to move a chip that
+    // was never the problem.
+    const teams = league().map((t) =>
+      t.rosterId === 2
+        ? {
+            ...t,
+            players: t.players.map((p) =>
+              p.playerId === "th-te2" ? { ...p, value: 0, hasValue: false } : p,
+            ),
+          }
+        : t,
+    );
+    const result = run({ teams, targetPlayerIds: ["th-te1", "th-te2"] });
+    expect(result.suggestions).toEqual([]);
+    expect(result.notice).toBe("targets-unpriced");
+  });
+
+  it("says the package is unaffordable when the pieces were all on the table", () => {
+    // Four of the other roster's best players at once. They are all there, we
+    // can price every one, and nothing on this roster adds up to them, which
+    // is a different problem from any of the three above.
+    const result = run({
+      targetPlayerIds: ["th-qb", "th-wr1", "th-wr2", "th-te1"],
+    });
+    if (result.suggestions.length === 0) {
+      expect(result.notice).toBe("targets-unaffordable");
+    } else {
+      // If a league this size can somehow pay for it, the notice must be
+      // absent rather than wrong.
+      expect(result.notice).toBeNull();
+    }
+  });
+
+  it("honours a pin on BOTH sides at once", () => {
+    const { suggestions } = run({
+      targetPlayerIds: ["th-te1"],
+      offerPlayerIds: ["my-rb3"],
+    });
+    for (const s of suggestions) {
+      expect(idsOf(s.incoming)).toContain("th-te1");
+      expect(idsOf(s.outgoing)).toContain("my-rb3");
+    }
+  });
+
+  it("keeps a four-player outgoing package whole", () => {
+    const named = ["my-rb3", "my-wr3", "my-rb4", "my-wr4"];
+    for (const s of run({ offerPlayerIds: named }).suggestions) {
+      for (const id of named) expect(idsOf(s.outgoing)).toContain(id);
+      expect(s.outgoing.length).toBeLessThanOrEqual(
+        PACKAGE_LIMITS.MAX_PINNED_OUTGOING,
+      );
+    }
+  });
+
+  it("carries no notice when it actually found something", () => {
+    const result = run({ targetPlayerIds: ["th-te1"] });
+    expect(result.suggestions.length).toBeGreaterThan(0);
+    expect(result.notice).toBeNull();
+  });
+
+  it("treats a repeated name as one player rather than two", () => {
+    for (const s of run({ offerPlayerIds: ["my-rb3", "my-rb3"] }).suggestions) {
+      expect(idsOf(s.outgoing).filter((id) => id === "my-rb3")).toHaveLength(1);
+    }
+  });
+
+  it("keeps a named package inside what a side may carry", () => {
+    for (const s of run({ offerPlayerIds: ["my-rb3", "my-wr3", "my-rb4"] }).suggestions) {
+      expect(s.outgoing.length).toBeLessThanOrEqual(
+        PACKAGE_LIMITS.MAX_PINNED_OUTGOING,
+      );
+      expect(s.outgoing.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("still answers a single name exactly as it always did", () => {
+    const { suggestions } = run({ offerPlayerIds: ["my-rb3"] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) expect(idsOf(s.outgoing)).toContain("my-rb3");
+  });
+});
+
+/**
+ * The ranking is not the same for every team in the league any more.
+ *
+ * Both readers below own the identical roster and face the identical league. The
+ * only difference is where Power Pulse has them, and that has to change what
+ * comes back first, or the feature is still handing every manager the same
+ * advice and calling it personal.
+ */
+describe("suggestions weighted by the reader's Power Pulse standing", () => {
+  /** The same league, with a Power Pulse snapshot on every team. */
+  function scheduled(): FinderTeam[] {
+    return league().map((t) => ({ ...t, pulse: pulse() }));
+  }
+
+  const topFor = (statusKey: "competitor" | "rebuilder") => {
+    const teams = scheduled().map((t) =>
+      t.rosterId === 1 ? { ...t, statusKey } : t,
+    );
+    return findTrades({
+      myRosterId: 1,
+      teams,
+      startingSlots: STANDARD_SLOTS,
+      isDynasty: true,
+      allowPicks: true,
+      goal: "balanced",
+      targetPlayerIds: [],
+      offerPlayerIds: [],
+      excludeKeys: [],
+    });
+  };
+
+  it("puts projected wins on every suggestion once Power Pulse has scored the league", () => {
+    for (const s of topFor("competitor").suggestions) {
+      expect(s.mine.winsDelta).not.toBeNull();
+      // Same sign as the lineup change it was converted from.
+      if (s.mine.lineupDelta !== null && Math.abs(s.mine.lineupDelta) > 0.01) {
+        expect(Math.sign(s.mine.winsDelta as number)).toBe(
+          Math.sign(s.mine.lineupDelta),
+        );
+      }
+    }
+  });
+
+  it("leads a contender with a deal that adds points on Sunday", () => {
+    const top = topFor("competitor").suggestions[0];
+    expect(top.mine.lineupDelta).not.toBeNull();
+    expect(top.mine.lineupDelta as number).toBeGreaterThan(0);
+  });
+
+  it("does not hand a contender and a rebuilder the same shortlist", () => {
+    // The two readers own the same roster in the same league. The deals that
+    // exist are the same deals; what has to change is which of them the reader
+    // is shown first. Measured on the one distinction that separates the two
+    // timelines: how far down the list a deal that adds trade value sits.
+    const rankOfValueDeal = (result: ReturnType<typeof topFor>) =>
+      result.suggestions.findIndex((s) => s.mine.valueDelta > 300);
+
+    const contender = rankOfValueDeal(topFor("competitor"));
+    const rebuilder = rankOfValueDeal(topFor("rebuilder"));
+    expect(rebuilder).toBeGreaterThanOrEqual(0);
+    expect(rebuilder).toBeLessThan(contender);
+  });
+
+  it("offers a rebuilder draft capital and does not offer it to a contender", () => {
+    // A pick coming back is the shape of a rebuild and noise on a roster trying
+    // to win this season, and the acquirable pool has always known that. This
+    // locks the behaviour down now that the reader's standing is what decides
+    // it end to end.
+    expect(
+      topFor("rebuilder").suggestions.some((s) => s.mine.pickCountDelta > 0),
+    ).toBe(true);
+    expect(
+      topFor("competitor").suggestions.some((s) => s.mine.pickCountDelta > 0),
+    ).toBe(false);
+  });
+
+  it("lets a contender spend its own pick and never asks a rebuilder to", () => {
+    expect(
+      topFor("competitor").suggestions.some((s) => s.mine.pickCountDelta < 0),
+    ).toBe(true);
+    expect(
+      topFor("rebuilder").suggestions.some((s) => s.mine.pickCountDelta < 0),
+    ).toBe(false);
+  });
+
+  it("names the reader's own footing on the card", () => {
+    expect(topFor("competitor").suggestions[0].rationale).toContain("competing");
+    expect(topFor("rebuilder").suggestions[0].rationale).toContain("out of the race");
+  });
+
+  it("leaves a league with no Power Pulse ranking exactly as it was", () => {
+    // Every team unscored, so nothing here has a wins figure and the ordering is
+    // the pre-Power-Pulse one. This is the guard against the new weighting
+    // quietly applying to leagues that told us nothing.
+    for (const s of run().suggestions) expect(s.mine.winsDelta).toBeNull();
+  });
+});
+
+/**
+ * A one-year league has one timeline.
+ *
+ * Nothing carries over, so trade value is a proxy for rest-of-season production
+ * rather than a store of anything, and a team at the bottom of the table is
+ * losing rather than rebuilding. Offering that reader picks and 22-year-olds for
+ * their best players describes a trade that helps neither side.
+ */
+describe("redraft leagues, where everybody is competing", () => {
+  const redraft = (statusKey: "competitor" | "rebuilder" | "middle") =>
+    findTrades({
+      myRosterId: 1,
+      teams: league().map((t) =>
+        t.rosterId === 1 ? { ...t, statusKey, pulse: pulse() } : { ...t, pulse: pulse() },
+      ),
+      startingSlots: STANDARD_SLOTS,
+      isDynasty: false,
+      allowPicks: false,
+      goal: "balanced",
+      targetPlayerIds: [],
+      offerPlayerIds: [],
+      excludeKeys: [],
+    });
+
+  it("ranks the same way for a bottom team as for a top one", () => {
+    // The standings say these two readers are opposites. In a redraft league
+    // that difference is about who is WINNING, not about what either of them
+    // should be trading for, so the shortlist must not diverge.
+    const contender = redraft("competitor").suggestions.map((s) => s.key);
+    const longshot = redraft("rebuilder").suggestions.map((s) => s.key);
+    expect(longshot).toEqual(contender);
+  });
+
+  it("leads with a deal that helps this Sunday, whatever the standings say", () => {
+    // The coverage pass deliberately keeps sideways and negative deals in the
+    // list, so that every asset a reader owns has an answer to "what could I get
+    // for him". What must never happen is one of them OPENING the shortlist for
+    // a team whose only currency is this season.
+    for (const statusKey of ["competitor", "rebuilder", "middle"] as const) {
+      const top = redraft(statusKey).suggestions[0];
+      expect(top.mine.lineupDelta ?? 0).toBeGreaterThan(0);
+    }
+  });
+
+  it("ranks a deal that costs lineup points below one that adds them", () => {
+    const ranked = redraft("rebuilder").suggestions;
+    const firstGain = ranked.findIndex((s) => (s.mine.lineupDelta ?? 0) > 0);
+    const firstLoss = ranked.findIndex((s) => (s.mine.lineupDelta ?? 0) < 0);
+    expect(firstGain).toBeGreaterThanOrEqual(0);
+    if (firstLoss >= 0) expect(firstGain).toBeLessThan(firstLoss);
+  });
+
+  it("says it is a one-year league rather than reading the standings back", () => {
+    const top = redraft("rebuilder").suggestions[0];
+    expect(top.rationale).toContain("one-year league");
+    expect(top.rationale).not.toContain("out of the race");
+    expect(top.rationale).not.toContain("Power Pulse has you competing");
+  });
+
+  it("does not put a player on the table just because he is young", () => {
+    // wouldMoveStarter is an argument about the age curve, and a redraft league
+    // has no age curve to trade against. What a team can spare is its bench.
+    const dynastyIds = new Set(
+      run({ isDynasty: true, allowPicks: false }).suggestions.flatMap((s) =>
+        s.incoming.map((a) => (a.kind === "player" ? a.playerId : a.key)),
+      ),
+    );
+    const redraftIds = new Set(
+      redraft("competitor").suggestions.flatMap((s) =>
+        s.incoming.map((a) => (a.kind === "player" ? a.playerId : a.key)),
+      ),
+    );
+    // th-te2 is 23 and startable, so a dynasty contender is offered him as a
+    // stash. A redraft team is not, unless he is genuine bench surplus.
+    expect(dynastyIds.size).toBeGreaterThan(0);
+    expect(redraftIds.size).toBeGreaterThan(0);
+    for (const id of redraftIds) expect(dynastyIds.has(id)).toBe(true);
   });
 });

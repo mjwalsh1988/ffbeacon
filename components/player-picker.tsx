@@ -81,6 +81,8 @@ export const PlayerPicker = memo(function PlayerPicker({
   anyLabel = "Anyone",
   filterLabel,
   showCount = true,
+  clearFilterOnChange = false,
+  excludeIds,
 }: {
   label: string;
   hint: string;
@@ -105,6 +107,32 @@ export const PlayerPicker = memo(function PlayerPicker({
    * cannot see the list shrink.
    */
   showCount?: boolean;
+  /**
+   * Empty the filter box once a pick is made.
+   *
+   * Off for a single-choice picker, where the filter that found the player is
+   * context worth keeping while the reader looks at what they chose.
+   *
+   * On when this control is the ADD button of a package builder. There the
+   * chosen player leaves the list the moment he is added, so a filter that
+   * matched only him leaves the reader typing into a box that now says "no
+   * players match" about a search that just succeeded. Clearing it puts the
+   * whole list back, ready for the next name.
+   */
+  clearFilterOnChange?: boolean;
+  /**
+   * Players to leave out of the list, without changing `options`.
+   *
+   * The package builder needs the list to shrink as players are chosen, and the
+   * obvious way to do that is to hand this component a filtered array. That is
+   * also the expensive way: `options` keys the normalization memo below, which
+   * lowercases, decomposes, and strips punctuation from several hundred names,
+   * and a new array identity on every chip press throws all of it away and
+   * redoes it. Passing the exclusions separately keeps `options` stable for the
+   * life of the component, so a chip press costs one filter pass instead of a
+   * full rebuild.
+   */
+  excludeIds?: ReadonlySet<string>;
 }) {
   const [query, setQuery] = useState("");
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -125,23 +153,38 @@ export const PlayerPicker = memo(function PlayerPicker({
     return map;
   }, [options]);
 
+  /**
+   * The options actually on offer. Everything below counts against this rather
+   * than against `options`, so "348 players in the list" stays true when the
+   * caller has taken some out.
+   */
+  const available = useMemo(
+    () =>
+      excludeIds && excludeIds.size > 0
+        ? options.filter((o) => !excludeIds.has(o.playerId))
+        : options,
+    [excludeIds, options],
+  );
+
   const terms = useMemo(
     () => normalize(query).split(" ").filter(Boolean),
     [query],
   );
 
   const matches = useMemo(() => {
-    if (terms.length === 0) return options;
-    return options.filter((option) => {
+    if (terms.length === 0) return available;
+    return available.filter((option) => {
       const hay = haystacks.get(option.playerId) ?? "";
       return terms.every((term) => hay.includes(term));
     });
-  }, [haystacks, options, terms]);
+  }, [available, haystacks, terms]);
 
   const selected = useMemo(
     () => options.find((o) => o.playerId === value) ?? null,
     [options, value],
   );
+
+  const total = available.length;
 
   // The current pick rides along whether or not it matches, so narrowing the
   // list can never quietly discard the reader's choice.
@@ -165,7 +208,7 @@ export const PlayerPicker = memo(function PlayerPicker({
    */
   const status = (() => {
     if (!filtering) {
-      return `${options.length} ${options.length === 1 ? "player" : "players"} in the list.`;
+      return `${total} ${total === 1 ? "player" : "players"} in the list.`;
     }
     if (matches.length === 0) {
       return selected
@@ -174,8 +217,8 @@ export const PlayerPicker = memo(function PlayerPicker({
     }
     const kept = shown.length > matches.length ? ", plus your current pick" : "";
     return matches.length === 1
-      ? `1 of ${options.length} players matches${kept}.`
-      : `${matches.length} of ${options.length} players match${kept}.`;
+      ? `1 of ${total} players matches${kept}.`
+      : `${matches.length} of ${total} players match${kept}.`;
   })();
 
   /**
@@ -188,8 +231,25 @@ export const PlayerPicker = memo(function PlayerPicker({
    * copy still updates instantly.
    */
   const [spokenStatus, setSpokenStatus] = useState(status);
+  /**
+   * Whether the pending status change came from a keystroke in the filter box.
+   *
+   * The count also moves when the CALLER changes what is on offer, and a
+   * package builder does that on every chip press. Announcing then means the
+   * reader hears "Josh Allen added, 1 of 4 players picked" from the parent and
+   * then, half a second later, a bare decrementing number from here, which
+   * says nothing they did not just hear and buries the sentence that did.
+   *
+   * So this region speaks only for the control it belongs to. Typing and
+   * clearing announce; a list that shrank underneath announces nothing.
+   */
+  const filterTouched = useRef(false);
   useEffect(() => {
-    const timer = setTimeout(() => setSpokenStatus(status), 500);
+    if (!filterTouched.current) return;
+    const timer = setTimeout(() => {
+      filterTouched.current = false;
+      setSpokenStatus(status);
+    }, 500);
     return () => clearTimeout(timer);
   }, [status]);
 
@@ -248,7 +308,10 @@ export const PlayerPicker = memo(function PlayerPicker({
           value={query}
           aria-describedby={filterHintId}
           aria-controls={selectId}
-          onChange={(e) => setQuery(e.target.value.slice(0, MAX_QUERY))}
+          onChange={(e) => {
+            filterTouched.current = true;
+            setQuery(e.target.value.slice(0, MAX_QUERY));
+          }}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
             // Enter inside a form submits it, and submitting here would run the
@@ -258,6 +321,7 @@ export const PlayerPicker = memo(function PlayerPicker({
             e.preventDefault();
             if (matches.length === 1) {
               onChange(matches[0].playerId);
+              if (clearFilterOnChange) setQuery("");
               // Said out loud, because otherwise the picker changes the value
               // and moves the cursor in one keystroke and the reader hears only
               // the select being announced, with no way to tell "it just chose
@@ -275,6 +339,7 @@ export const PlayerPicker = memo(function PlayerPicker({
           <button
             type="button"
             onClick={() => {
+              filterTouched.current = true;
               setQuery("");
               document.getElementById(filterId)?.focus();
             }}
@@ -317,7 +382,10 @@ export const PlayerPicker = memo(function PlayerPicker({
         ref={selectRef}
         aria-describedby={`${hintId} ${statusId}`}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          if (clearFilterOnChange && e.target.value) setQuery("");
+        }}
         className="mt-1.5 min-h-11 w-full rounded-card border border-ink-subtle bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
       >
         <option value="">{anyLabel}</option>

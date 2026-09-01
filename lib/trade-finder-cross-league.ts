@@ -186,8 +186,8 @@ export async function findCrossLeagueTrade(
       isDynasty: league.isDynasty,
       allowPicks: league.allowPicks,
       goal: params.goal,
-      targetPlayerId: null,
-      offerPlayerId: null,
+      targetPlayerIds: [],
+      offerPlayerIds: [],
       excludeKeys: [...stored, ...sessionExcluded],
       quality: {
         config: params.qualityConfig ?? DEFAULT_TRADE_QUALITY_CONFIG,

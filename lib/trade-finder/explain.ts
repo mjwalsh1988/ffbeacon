@@ -16,6 +16,7 @@
  */
 
 import { RANK_THRESHOLDS } from "./rank";
+import { NAMEABLE_WINS } from "./pulse";
 import type {
   SideImpact,
   SuggestionAsset,
@@ -30,6 +31,45 @@ const GOAL_CLAUSE: Record<TradeGoal, string> = {
   "split-assets": "You asked to split an asset up, and this is that shape of deal.",
   "add-picks": "You asked for draft capital, and this is that shape of deal.",
   "get-younger": "You asked to get younger, and this is that shape of deal.",
+};
+
+/**
+ * The opening clause when the reader has not narrowed the search but Power
+ * Pulse has an opinion about their season.
+ *
+ * This is the sentence that says the ranking is not the same for everybody.
+ * A contender and a rebuilder pressing the same button get different deals
+ * now, and a reader who is not told that has no way to know why the tool
+ * stopped offering them draft picks. It replaces the generic goal clause
+ * rather than joining it, because both would be answering the same question.
+ *
+ * Only for the balanced goal. A reader who picked "Obtain draft picks" asked a
+ * narrower question than their standing, and the goal clause is the honest
+ * account of why they are seeing what they are seeing.
+ */
+/**
+ * The opener in a one-year league, whatever the reader's standing says.
+ *
+ * A redraft league has one timeline, so the Contender / Rebuilder split has
+ * nothing to say about it and the dynasty clauses below would say the wrong
+ * thing: a team at the bottom of a redraft table reads as win-now inside the
+ * engine (see lib/trade-finder/profile.ts), and telling that reader "Power
+ * Pulse has you competing" is not what they see on the standings page.
+ */
+const REDRAFT_CLAUSE =
+  "This is a one-year league, so the ranking is about what a deal does to your lineup rather than what an asset holds for later.";
+
+const STANCE_CLAUSE: Record<TeamDirection, string | null> = {
+  // Kept short. Three clauses share a 360 character ceiling, and a team name in
+  // this league can run long, so an opener that runs to 130 characters is what
+  // pushes the sentence that names the reader's actual hole off the end.
+  "win-now":
+    "Power Pulse has you competing, so this ranking leans on lineup points and projected wins.",
+  rebuild:
+    "Power Pulse has you out of the race, so this ranking leans on value and youth rather than this Sunday.",
+  // A team in the pack genuinely wants both, and saying so adds nothing the
+  // deltas below do not already say.
+  balanced: null,
 };
 
 /**
@@ -49,6 +89,12 @@ export function listAssets(assets: SuggestionAsset[]): string {
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
+
+/**
+ * At or under this many games left, the season itself is the limit on what a
+ * trade can do, and the card says so.
+ */
+const LATE_SEASON_GAMES = 3;
 
 /** Points per week, signed, to one decimal. */
 function points(delta: number): string {
@@ -126,8 +172,29 @@ export function buildRationale(params: {
   positionHelped: string | null;
   /** Points per week that position was short by. */
   needPoints: number | null;
-  /** Whether the deal was built around a player the reader named. */
+  /** Whether the deal was built around players the reader named, and which side. */
   named: "target" | "offer" | null;
+  /**
+   * How many players the reader pinned to that side. Drives singular versus
+   * plural, so a package of three does not read as "the player you named".
+   */
+  namedCount?: number;
+  /**
+   * The READER's own footing, which is what the ranking was weighted by.
+   *
+   * Distinct from `direction` above, which is the counterparty's. Both appear
+   * in this sentence and they are routinely opposite, which is exactly why a
+   * deal exists at all.
+   */
+  myDirection?: TeamDirection;
+  /**
+   * Whether assets carry past this season.
+   *
+   * Outranks `myDirection` in the opening clause, because in a one-year league
+   * the direction is win-now for everybody by construction and saying so back
+   * to a reader sitting last would read as a bug.
+   */
+  isDynasty?: boolean;
   /**
    * Position groups the reader asked for, if any, as plain words.
    *
@@ -144,14 +211,34 @@ export function buildRationale(params: {
   const wanted = params.asked?.want ?? [];
   const given = params.asked?.give ?? [];
 
+  const count = params.namedCount ?? 1;
   if (params.named === "target") {
-    parts.push("This is what it would take to get the player you named.");
+    parts.push(
+      count > 1
+        ? "This is what it would take to get the players you named, together."
+        : "This is what it would take to get the player you named.",
+    );
   } else if (params.named === "offer") {
-    parts.push("This is what the player you named brings back.");
+    parts.push(
+      count > 1
+        ? "This is what the players you named bring back as a package."
+        : "This is what the player you named brings back.",
+    );
   } else if (wanted.length > 0 || given.length > 0) {
     parts.push(askClause(wanted, given));
   } else {
-    parts.push(GOAL_CLAUSE[params.goal] ?? GOAL_CLAUSE.balanced);
+    // The reader's own standing outranks the generic "you did not narrow the
+    // search" line, because it says something true and specific about why THIS
+    // deal is on top rather than merely confirming that no filter was set.
+    const stance =
+      params.goal !== "balanced"
+        ? null
+        : params.isDynasty === false
+          ? REDRAFT_CLAUSE
+          : params.myDirection
+            ? STANCE_CLAUSE[params.myDirection]
+            : null;
+    parts.push(stance ?? GOAL_CLAUSE[params.goal] ?? GOAL_CLAUSE.balanced);
   }
 
   // Why THIS team. A manager's willingness is the part a reader cannot see from
@@ -223,6 +310,25 @@ export function buildWhyYou(
       mine.lineupDelta > 0
         ? `Your starting lineup gains ${points(mine.lineupDelta)} points a week${where}.`
         : `Your starting lineup gives up ${points(mine.lineupDelta)} points a week${where}.`,
+    );
+  }
+
+  // What those points are worth in games, against the schedule this team
+  // actually has left. Called an estimate out loud, because it is a
+  // linearization of the Power Pulse season rather than a rerun of it, and the
+  // full simulation is one press away in the builder.
+  if (mine.winsDelta !== null && Math.abs(mine.winsDelta) >= NAMEABLE_WINS) {
+    const size = Math.abs(mine.winsDelta);
+    // "1.35 of a projected win" is not a sentence. Under one it is a fraction
+    // of a win and reads as one; at or over one it is a count.
+    const amount =
+      size < 1
+        ? `${size.toFixed(2)} of a projected win`
+        : `${size.toFixed(2)} projected wins`;
+    parts.push(
+      mine.winsDelta > 0
+        ? `Against your remaining schedule that is worth about ${amount}.`
+        : `Against your remaining schedule that costs about ${amount}.`,
     );
   }
 
@@ -402,6 +508,11 @@ export function buildCaveats(params: {
   missingProjection: string[];
   /** Outgoing assets minus incoming ones. Positive frees roster spots. */
   rosterSpotDelta: number;
+  /**
+   * Regular season games the reader has left, when a projected-wins figure was
+   * reported. Null when there is no such figure to qualify.
+   */
+  remainingGames?: number | null;
 }): string[] {
   const out: string[] = [];
   // A three-for-one is two empty roster spots on Monday morning, and in a league
@@ -431,6 +542,19 @@ export function buildCaveats(params: {
   if (params.assumedPickSlots) {
     out.push(
       "Draft slots for these picks are not set yet, so their values assume a mid-round slot.",
+    );
+  }
+  // Late in a season the projected-wins figure is small because there is
+  // barely any season left for it to land in, not because the deal is weak.
+  // Without this a reader compares a week 15 number against a week 4 one and
+  // concludes the engine has stopped finding good trades.
+  if (
+    typeof params.remainingGames === "number" &&
+    params.remainingGames > 0 &&
+    params.remainingGames <= LATE_SEASON_GAMES
+  ) {
+    out.push(
+      `Only ${params.remainingGames} regular season ${params.remainingGames === 1 ? "game" : "games"} left, so a lineup change has little room to move your record.`,
     );
   }
   return out;

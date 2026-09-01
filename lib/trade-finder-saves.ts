@@ -114,6 +114,12 @@ const sideImpactSchema = z
   .object({
     valueDelta: finiteNumber,
     lineupDelta: finiteNumber.nullable(),
+    // Optional, because bookmarks written before projected wins existed are
+    // still perfectly good bookmarks. `.strict()` rejects unknown keys, so a
+    // required field here would silently drop every older row out of the
+    // Saved tab on the way back in, which is the one thing a bookmark must
+    // never do. Filled with null on read, exactly like `rationale`.
+    winsDelta: finiteNumber.nullable().optional(),
     ageDelta: finiteNumber.nullable(),
     pickCountDelta: finiteNumber,
   })
@@ -212,6 +218,11 @@ export async function loadSavedTrades(supabase: SessionClient): Promise<SavedTra
         suggestion: {
           ...parsed.data,
           rationale: parsed.data.rationale ?? "",
+          mine: { ...parsed.data.mine, winsDelta: parsed.data.mine.winsDelta ?? null },
+          theirs: {
+            ...parsed.data.theirs,
+            winsDelta: parsed.data.theirs.winsDelta ?? null,
+          },
         } as TradeSuggestion,
         grade: grade?.success ? (grade.data as SuggestionGrade) : null,
         savedAtIso: row.saved_at,

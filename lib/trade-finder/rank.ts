@@ -33,7 +33,14 @@ import {
 import { lineupTotal } from "./profile";
 import type { TeamProfile } from "./profile";
 import { assetValue, type AssetRef } from "./packages";
-import type { AcceptanceBand, FinderPlayer, SideImpact, TradeGoal } from "./types";
+import { winsDeltaFor } from "./pulse";
+import type {
+  AcceptanceBand,
+  FinderPlayer,
+  SideImpact,
+  TeamDirection,
+  TradeGoal,
+} from "./types";
 
 /** Below this share of the larger side, the two sides read as even. */
 const EVEN_GAP = 0.08;
@@ -134,14 +141,21 @@ export function measureImpact(
   const beforeAge = profile.meanAge;
   const afterAge = weightedMeanAge(after);
 
+  const lineupDelta =
+    profile.startingTotal === null || afterTotal === null
+      ? null
+      : afterTotal - profile.startingTotal;
+
   return {
     valueDelta:
       incoming.reduce((s, a) => s + assetValue(a), 0) -
       outgoing.reduce((s, a) => s + assetValue(a), 0),
-    lineupDelta:
-      profile.startingTotal === null || afterTotal === null
-        ? null
-        : afterTotal - profile.startingTotal,
+    lineupDelta,
+    // Points per week turned into games, against THIS team's own remaining
+    // schedule. Two points a week is worth a different number of wins to a team
+    // with ten coin-flips left than to one with three games it has already all
+    // but won, and that difference is the whole reason the reader is asking.
+    winsDelta: winsDeltaFor(lineupDelta, profile.team.pulse),
     ageDelta: beforeAge === null || afterAge === null ? null : afterAge - beforeAge,
     pickCountDelta: countPicks(incoming) - countPicks(outgoing),
   };
@@ -369,17 +383,109 @@ const ACCEPTANCE_WEIGHT: Record<AcceptanceBand, number> = {
 };
 
 /**
- * How good this deal is for the reader, weighted by their stated goal and
- * discounted by how unlikely it is to happen.
+ * How much a term counts, before the reader's own footing is applied.
+ *
+ * One row per goal, replacing the switch that used to sit inside
+ * scoreSuggestion. Same numbers, named rather than inlined, because the stance
+ * multipliers below have to compose with them and two sets of magic constants
+ * multiplied together in a switch statement is not something anybody can reason
+ * about later.
+ */
+type ScoreWeights = {
+  lineup: number;
+  wins: number;
+  value: number;
+  youth: number;
+  picks: number;
+};
+
+const GOAL_WEIGHTS: Record<TradeGoal, ScoreWeights> = {
+  // Picks carry real weight here as well as youth: a rookie pick is the
+  // youngest asset in the game and the reader asking for a younger roster wants
+  // to be shown the ones that come with draft capital attached.
+  "get-younger": { lineup: 0.3, wins: 0.3, value: 1, youth: 2, picks: 0.8 },
+  "add-picks": { lineup: 0.2, wins: 0.2, value: 1.2, youth: 0, picks: 2.5 },
+  // The shape is guaranteed by satisfiesGoal, so the ordering here is only
+  // about which consolidation is the best one.
+  consolidate: { lineup: 1.4, wins: 1.4, value: 1.2, youth: 0, picks: 0 },
+  // Same two terms, because the question is the same one pointing the other
+  // way: of the deals that split a good player up, which leaves the reader best
+  // off. Youth counts a little, since upside is most of the reason to do this.
+  "split-assets": { lineup: 1.4, wins: 1.4, value: 1.2, youth: 0.5, picks: 0 },
+  balanced: { lineup: 1.3, wins: 1.3, value: 1, youth: 0.4, picks: 0.3 },
+};
+
+/**
+ * How the reader's OWN footing rescales those weights.
+ *
+ * This is the half that was missing, and it is the difference between a trade
+ * tool and advice. Every team in a league is handed the same ranking today: the
+ * deal that adds the most trade value while nudging the lineup up. That is the
+ * right answer for roughly a third of the league and the wrong one for the
+ * rest. A team two games clear at the top does not want a 2028 first and a
+ * 21-year-old; a team five games out does not want a 30-year-old back who wins
+ * them a meaningless week 14.
+ *
+ * So the reader's Power Pulse standing (Contender / Bubble / Rebuilder, the
+ * same call the rest of League Pulse renders, via lib/league-team-status.ts)
+ * rescales what the score is measuring:
+ *
+ *   Contender. Wins are the point, so the schedule-aware wins term leads and
+ *   the raw lineup term backs it up. Trade value is discounted rather than
+ *   ignored: a contender still should not be talked into a bad deal, but a
+ *   sideways deal that adds a starter is exactly what they are looking for.
+ *   Youth and picks are close to worthless to them this season.
+ *
+ *   Rebuilder. The mirror image. Value, youth and draft capital lead; the
+ *   lineup term is discounted rather than inverted, because points on Sunday
+ *   are still points and a rebuild that also happens to score more is not
+ *   worse. What it must not do is REWARD losing the lineup, which is why the
+ *   multiplier is small and positive rather than negative.
+ *
+ *   Bubble, or a league Power Pulse has not scored. Everything at 1, which is
+ *   exactly the behaviour that shipped before this existed. A team in the pack
+ *   genuinely does want both, and a league with no Power Pulse row has told us
+ *   nothing, so inventing a lean for it would be worse than staying neutral.
+ *
+ * Multipliers rather than a replacement set, so the goal the reader picked is
+ * still the thing being ranked. Stance decides emphasis; the goal decides the
+ * question, and satisfiesGoal decides membership.
+ */
+const STANCE_WEIGHTS: Record<TeamDirection, ScoreWeights> = {
+  "win-now": { lineup: 1.2, wins: 2.2, value: 0.55, youth: 0.25, picks: 0.3 },
+  balanced: { lineup: 1, wins: 1, value: 1, youth: 1, picks: 1 },
+  rebuild: { lineup: 0.35, wins: 0.3, value: 1.6, youth: 1.5, picks: 1.6 },
+};
+
+/**
+ * What one projected win is worth on the same scale as a point per week.
+ *
+ * A realistic full remaining slate converts at roughly a tenth of a win per
+ * point per week (see lib/trade-finder/pulse.ts), so a deal worth two points a
+ * week is worth about a fifth of a win. Scaling by ten puts that back on the
+ * same footing as the raw lineup term, which is what makes the two comparable
+ * in one sum without either running away with it.
+ *
+ * The two terms are NOT redundant even though one is derived from the other.
+ * The lineup term says the roster got better. The wins term says how much that
+ * is worth given how many games are left and how close they are, and it is the
+ * only one of the two that can tell a week 3 upgrade from a week 16 one.
+ */
+const WINS_SCALE = 10;
+
+/**
+ * How good this deal is for the reader, weighted by their stated goal, scaled by
+ * their team's own footing, and discounted by how unlikely it is to happen.
  *
  * The discount is what stops the ranking from opening on a fantasy. A deal worth
  * twice as much to the reader but rated a long shot lands below a modest one the
  * other manager would actually take, which is the correct order for a feature
  * whose output is meant to be sent rather than admired.
  *
- * Points per week and trade value are different units, so both are normalized
- * before they meet: lineup gain against a full point a week, value gain against
- * the reader's own roster total. Neither can run away with the score.
+ * Points per week, projected wins, and trade value are different units, so all
+ * three are normalized before they meet: lineup gain against a full point a
+ * week, wins against WINS_SCALE, value gain against the reader's own roster
+ * total. None of them can run away with the score.
  */
 export function scoreSuggestion(params: {
   mine: SideImpact;
@@ -391,39 +497,29 @@ export function scoreSuggestion(params: {
   const rosterValue = Math.max(myProfile.totalValue, 1);
 
   const lineupScore = (mine.lineupDelta ?? 0) / 1.0;
+  // Zero rather than null-guarded away, and the distinction matters: a league
+  // with no Power Pulse row contributes nothing to this term instead of being
+  // scored against a made-up rate, which leaves the ranking exactly where it
+  // was before any of this existed.
+  const winsScore = (mine.winsDelta ?? 0) * WINS_SCALE;
   const valueScore = (mine.valueDelta / rosterValue) * 100;
   const youthScore = mine.ageDelta === null ? 0 : -mine.ageDelta * 2;
   const pickScore = mine.pickCountDelta * 0.6;
 
-  let total: number;
-  switch (goal) {
-    case "get-younger":
-      // Picks carry real weight here as well as youth: a rookie pick is the
-      // youngest asset in the game and the reader asking for a younger roster
-      // wants to be shown the ones that come with draft capital attached.
-      total = youthScore * 2 + valueScore * 1 + pickScore * 0.8 + lineupScore * 0.3;
-      break;
-    case "add-picks":
-      total = pickScore * 2.5 + valueScore * 1.2 + lineupScore * 0.2;
-      break;
-    case "consolidate":
-      // The shape is guaranteed by satisfiesGoal, so the ordering here is only
-      // about which consolidation is the best one.
-      total = lineupScore * 1.4 + valueScore * 1.2;
-      break;
-    case "split-assets":
-      // Same two terms, because the question is the same one pointing the other
-      // way: of the deals that split a good player up, which leaves the reader
-      // best off. Youth counts a little, since upside is most of the reason to
-      // do this at all.
-      total = lineupScore * 1.4 + valueScore * 1.2 + youthScore * 0.5;
-      break;
-    default:
-      total = lineupScore * 1.3 + valueScore * 1 + youthScore * 0.4 + pickScore * 0.3;
-  }
+  const g = GOAL_WEIGHTS[goal] ?? GOAL_WEIGHTS.balanced;
+  const stance = STANCE_WEIGHTS[myProfile.direction] ?? STANCE_WEIGHTS.balanced;
+
+  const total =
+    lineupScore * g.lineup * stance.lineup +
+    winsScore * g.wins * stance.wins +
+    valueScore * g.value * stance.value +
+    youthScore * g.youth * stance.youth +
+    pickScore * g.picks * stance.picks;
 
   return total * ACCEPTANCE_WEIGHT[params.acceptance];
 }
+
+export const SCORE_WEIGHTS = { GOAL_WEIGHTS, STANCE_WEIGHTS, WINS_SCALE };
 
 export const RANK_THRESHOLDS = {
   EVEN_GAP,

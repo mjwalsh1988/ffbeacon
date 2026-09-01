@@ -26,6 +26,7 @@ const pick = (label: string): SuggestionAsset => ({
 const impact = (over: Partial<SideImpact> = {}): SideImpact => ({
   valueDelta: 0,
   lineupDelta: 0,
+  winsDelta: null,
   ageDelta: 0,
   pickCountDelta: 0,
   ...over,

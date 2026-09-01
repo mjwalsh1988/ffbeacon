@@ -66,9 +66,11 @@ import {
 } from "@/lib/trade-quality";
 import { isValidSuggestionKey } from "@/lib/trade-finder/fingerprint";
 import {
+  MAX_NAMED_PLAYERS,
   TRADE_GOALS,
   TRADE_POSITIONS,
   readTradePosition,
+  type TradeFinderNotice,
   type TradeGoal,
   type TradePosition,
   type TradeSuggestion,
@@ -149,6 +151,12 @@ export type TradeFinderMeta = {
   lineupUnavailable: boolean;
   /** Ranked deals past the window we sent. */
   beyondWindow: number;
+  /**
+   * Why an empty answer is empty, when the reason is the question rather than
+   * the league. Null on an ordinary empty result and on any result that found
+   * something.
+   */
+  notice: string | null;
 };
 
 export type TradeFinderResponse =
@@ -195,9 +203,58 @@ function readKeys(value: unknown): string[] {
     .slice(0, MAX_SESSION_EXCLUDED);
 }
 
-function readPlayerId(value: unknown): string | null {
-  return typeof value === "string" && UUID_PATTERN.test(value) ? value : null;
+/**
+ * The players a caller pinned to one side, as ids we recognise.
+ *
+ * Bounded and deduplicated here rather than trusted, for the same reason the
+ * position list is: a caller cannot widen the search, or the work it costs, by
+ * posting a longer array. Order is preserved, because it is the order the
+ * reader's chips were added in and every sentence the engine writes about the
+ * package reads back in that order.
+ *
+ * Null means the caller named more players than one side may carry. Duplicates
+ * are dropped BEFORE that test, so a reader who somehow submits the same name
+ * twice is not refused for a list that is really within the cap.
+ */
+function readPlayerIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "string" || !UUID_PATTERN.test(raw)) continue;
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
+  }
+  // REFUSED rather than trimmed. Answering the first four of six names
+  // returns a fully reasoned card for a package the caller did not ask
+  // about, and nothing on it says which two were dropped. That is the exact
+  // failure the shared constant exists to prevent, and silently enforcing
+  // the cap here would reintroduce it one layer down.
+  return out.length > MAX_NAMED_PLAYERS ? null : out;
 }
+
+/**
+ * The engine's machine reason, as a sentence for the reader.
+ *
+ * Written here rather than in the engine because the engine is pure and knows
+ * nothing about surfaces, and written at all because "no trade to suggest" is
+ * a bad answer to a question that could never have had one. A reader who named
+ * two players from two different rosters has not made a mistake anybody would
+ * spot on their own.
+ */
+const NOTICE_TEXT: Record<TradeFinderNotice, string> = {
+  "targets-split":
+    "Those players are on different teams. A trade has one other side, so pick players from a single roster.",
+  "targets-missing":
+    "We could not find all of those players on another roster in this league.",
+  "targets-unpriced":
+    "One roster holds all of those players, but we have no trade value for one of them, so we cannot price the package.",
+  "targets-unaffordable":
+    "Nothing on your roster adds up to all of those players at once. Try naming fewer of them.",
+  "offers-missing":
+    "We have no trade value for one of the players you picked, so we cannot price that package.",
+};
 
 /**
  * The position groups a caller named, normalised and deduplicated.
@@ -240,8 +297,10 @@ export async function findLeagueTrade(input: {
   rosterId?: number | null;
   source?: string | null;
   goal?: string;
-  targetPlayerId?: string | null;
-  offerPlayerId?: string | null;
+  /** Players that must ALL come back. A package, not a list of alternatives. */
+  targetPlayerIds?: string[];
+  /** Players that must ALL be sent. */
+  offerPlayerIds?: string[];
   /** Position groups the incoming side must contain at least one of. */
   wantPositions?: string[];
   /** Position groups the outgoing side must contain at least one of. */
@@ -251,6 +310,17 @@ export async function findLeagueTrade(input: {
   const sleeperLeagueId = String(input.sleeperLeagueId ?? "");
   if (!SLEEPER_ID_PATTERN.test(sleeperLeagueId)) {
     return { ok: false, error: "Invalid league id" };
+  }
+
+  // Shape first, then the rate-limit claim, then the expensive half. A
+  // malformed request must not cost a reader one of their twelve searches.
+  const targetPlayerIds = readPlayerIds(input.targetPlayerIds);
+  const offerPlayerIds = readPlayerIds(input.offerPlayerIds);
+  if (!targetPlayerIds || !offerPlayerIds) {
+    return {
+      ok: false,
+      error: `You can name at most ${MAX_NAMED_PLAYERS} players on each side of a trade.`,
+    };
   }
 
   if (!(await claimSlot("trade_finder_league", LEAGUE_RATE_MAX))) {
@@ -307,8 +377,8 @@ export async function findLeagueTrade(input: {
     isDynasty: league.isDynasty,
     allowPicks: league.allowPicks,
     goal: readGoal(input.goal),
-    targetPlayerId: readPlayerId(input.targetPlayerId),
-    offerPlayerId: readPlayerId(input.offerPlayerId),
+    targetPlayerIds,
+    offerPlayerIds,
     wantPositions: readPositions(input.wantPositions),
     givePositions: readPositions(input.givePositions),
     excludeKeys: [...stored, ...sessionExcluded],
@@ -333,6 +403,7 @@ export async function findLeagueTrade(input: {
       consideredTeams: result.consideredTeams,
       lineupUnavailable: result.lineupUnavailable,
       beyondWindow: Math.max(0, result.suggestions.length - suggestions.length),
+      notice: result.notice ? NOTICE_TEXT[result.notice] : null,
     },
   };
 }

@@ -8,6 +8,19 @@
  * row has no direction and is read as balanced, which is the absence of a claim
  * rather than a claim of mediocrity.
  *
+ * IN A REDRAFT LEAGUE EVERY TEAM IS WIN-NOW, whatever its standing says.
+ * Direction is a question about a team's TIMELINE, and a one-year league has
+ * only one timeline. Nothing carries over, so there is no future to hold an
+ * asset for and trade value is a proxy for rest-of-season production rather
+ * than a store of anything. A team at the bottom of a redraft league is not
+ * rebuilding, it is losing, and offering it picks and 22-year-olds for its best
+ * players describes a trade that does nothing for either side.
+ *
+ * That is why the flattening happens HERE rather than in the ranking. Direction
+ * feeds the acceptance bands, the surplus rules, the pick rules, and every
+ * sentence on the card as well as the score, and a redraft league has to read
+ * the same way in all of them.
+ *
  * NEED is measured, not assumed. For each position we ask a concrete question:
  * how many points a week would this team's STARTING LINEUP gain if we handed it
  * one league-average starter at that position? That number is the need. It falls
@@ -46,6 +59,14 @@ const LINEUP_POSITIONS = new Set<string>(PULSE_POSITIONS);
 export type TeamProfile = {
   team: FinderTeam;
   direction: TeamDirection;
+  /**
+   * Whether assets carry past this season.
+   *
+   * Carried on the profile rather than passed alongside it because every rule
+   * that reads `direction` needs it in the same breath: what a team would sell
+   * for age reasons, what it will accept, and what the card says about why.
+   */
+  isDynasty: boolean;
   /** Optimal starting lineup, points per week. Null with no projections. */
   startingTotal: number | null;
   /** player ids that make the optimal lineup. */
@@ -160,8 +181,18 @@ export function leagueStarterBaselines(
   return out;
 }
 
-/** Contender / Bubble / Rebuilder, as the engine reads it. */
-export function directionOf(team: FinderTeam): TeamDirection {
+/**
+ * Contender / Bubble / Rebuilder, as the engine reads it.
+ *
+ * `isDynasty` defaults to true so a caller that has not thought about it gets
+ * the reading with more information in it. The engine always passes the
+ * league's own answer.
+ */
+export function directionOf(team: FinderTeam, isDynasty = true): TeamDirection {
+  // One season, one timeline. See the header: a redraft team at the bottom of
+  // the table is losing, not rebuilding, and there is nothing for it to
+  // rebuild towards.
+  if (!isDynasty) return "win-now";
   if (team.statusKey === "competitor") return "win-now";
   if (team.statusKey === "rebuilder") return "rebuild";
   return "balanced";
@@ -267,13 +298,18 @@ const UNTOUCHABLE_BY_VALUE = 3;
  * `surplusFloor` keeps waiver flotsam out of the surplus list: a player has to
  * be worth at least this share of the roster's best player before the fact that
  * he is expendable says anything interesting about him.
+ *
+ * `isDynasty` decides whether the Contender / Rebuilder call means anything at
+ * all. See the header.
  */
 export function buildTeamProfile(
   team: FinderTeam,
   slots: string[],
   baselines: Record<string, number>,
-  surplusFloor = 0.06,
+  opts: { isDynasty?: boolean; surplusFloor?: number } = {},
 ): TeamProfile {
+  const isDynasty = opts.isDynasty ?? true;
+  const surplusFloor = opts.surplusFloor ?? 0.06;
   const startingTotal = lineupTotal(slots, team.players);
   const starterIds = optimalStarterIds(slots, team.players);
 
@@ -315,7 +351,8 @@ export function buildTeamProfile(
 
   return {
     team,
-    direction: directionOf(team),
+    direction: directionOf(team, isDynasty),
+    isDynasty,
     startingTotal,
     starterIds,
     replacementCost,

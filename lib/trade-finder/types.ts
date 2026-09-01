@@ -18,6 +18,9 @@
 
 import type { TeamStatusKey } from "@/lib/league-team-status";
 import type { TradeQualityConfig } from "@/lib/trade-quality";
+import type { PulseSnapshot } from "./pulse";
+
+export type { PulseSnapshot } from "./pulse";
 
 /**
  * What the reader is trying to do. Weights the ranking; never fabricates data.
@@ -124,6 +127,20 @@ export const TRADE_POSITION_PHRASE: Record<TradePosition, string> = {
   DEF: "a defense",
 };
 
+/**
+ * How many players may be pinned to ONE side of a search.
+ *
+ * Lives here so the control that collects them and the action that validates
+ * them read the same number. Two copies of a limit is how a reader ends up
+ * able to add a fifth chip that the server then silently drops, and the deal
+ * that comes back is for a package they did not ask about.
+ *
+ * Four is past what anybody actually proposes. It is also where the cost
+ * starts to matter: every pinned piece widens the currency pool and forces
+ * the balancing search to carry a larger fixed side.
+ */
+export const MAX_NAMED_PLAYERS = 4;
+
 /** Which side of a suggested deal an asset sits on, from the reader's view. */
 export type Direction = "in" | "out";
 
@@ -201,6 +218,16 @@ export type FinderTeam = {
   statusLabel: string | null;
   pulseRank: number | null;
   valueRank: number | null;
+  /**
+   * What Power Pulse says about this team's season: projected wins, playoff
+   * odds, and how much one point a week of lineup is worth against the games
+   * still to play.
+   *
+   * Null on a league Power Pulse has not scored. Every consumer treats that as
+   * "we cannot say" rather than as zero, which is the difference between a
+   * suggestion that admits what it does not know and one that invents a number.
+   */
+  pulse: PulseSnapshot | null;
   players: FinderPlayer[];
   picks: FinderPick[];
 };
@@ -215,15 +242,28 @@ export type TradeFinderInput = {
   /** False for redraft, where no pick has a published value. */
   allowPicks: boolean;
   goal: TradeGoal;
-  /** Lock this player onto the incoming side ("what would it take?"). */
-  targetPlayerId: string | null;
-  /** Lock this player onto the outgoing side ("what can I get?"). */
-  offerPlayerId: string | null;
+  /**
+   * Players locked onto the INCOMING side ("what would it take to get these?").
+   *
+   * Every one of them has to come back in the deal, which is what makes this a
+   * package rather than a list of alternatives. A trade has exactly one other
+   * side, so naming players from two different rosters describes a deal that
+   * cannot happen; the engine says so through `notice` rather than returning an
+   * empty panel with no reason attached.
+   */
+  targetPlayerIds: string[];
+  /**
+   * Players locked onto the OUTGOING side ("what does this package bring back?").
+   *
+   * Same contract on the other side: all of them leave together, and the engine
+   * builds the return around the package rather than around each piece.
+   */
+  offerPlayerIds: string[];
   /**
    * Position groups the reader wants at least one of on the INCOMING side.
    *
-   * Empty or absent means any. A NAMED target settles the incoming side on its
-   * own and overrides this, for the same reason it overrides the goal: naming a
+   * Empty or absent means any. NAMED targets settle the incoming side on their
+   * own and override this, for the same reason they override the goal: naming a
    * player is the more specific request, and applying both would ask for a deal
    * where the named quarterback is also a running back.
    */
@@ -232,7 +272,7 @@ export type TradeFinderInput = {
    * Position groups the reader is willing to send at least one of.
    *
    * Same contract as `wantPositions`, on the other side, and overridden by
-   * `offerPlayerId` for the same reason.
+   * `offerPlayerIds` for the same reason.
    */
   givePositions?: TradePosition[];
   /** Deal fingerprints the reader has already passed on. */
@@ -294,6 +334,15 @@ export type SideImpact = {
    * league has no projections loaded, which is not the same as zero.
    */
   lineupDelta: number | null;
+  /**
+   * Change in projected wins over the games still to play, estimated from the
+   * lineup change against this team's own remaining schedule.
+   *
+   * Null when there are no projections, or when Power Pulse has not scored this
+   * league, or when the season has no games left. An estimate, and described as
+   * one wherever it is shown: the full simulation lives in the trade builder.
+   */
+  winsDelta: number | null;
   /** Value-weighted change in average age. Negative means younger. */
   ageDelta: number | null;
   /** Draft picks gained (positive) or given up. */
@@ -361,6 +410,22 @@ export type TradeSuggestion = {
   caveats: string[];
 };
 
+/**
+ * Why a search came back with nothing, when the reason is the question rather
+ * than the league.
+ *
+ * Only set when the engine could not run the search AS ASKED. An ordinary empty
+ * result (the league genuinely holds no deal that balances) leaves this null,
+ * because the surface already has good words for that and a machine reason
+ * would be a worse version of them.
+ */
+export type TradeFinderNotice =
+  | "targets-split"
+  | "targets-missing"
+  | "targets-unpriced"
+  | "targets-unaffordable"
+  | "offers-missing";
+
 /** What a league returns to a surface: the best deal, plus what is behind it. */
 export type TradeFinderResult = {
   suggestions: TradeSuggestion[];
@@ -368,4 +433,6 @@ export type TradeFinderResult = {
   consideredTeams: number;
   /** True when no projections were available, so lineup impact is unavailable. */
   lineupUnavailable: boolean;
+  /** Set when the search could not run as asked. Null on an ordinary empty. */
+  notice: TradeFinderNotice | null;
 };

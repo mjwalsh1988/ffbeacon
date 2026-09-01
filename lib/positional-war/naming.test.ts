@@ -124,13 +124,23 @@ function describeViolations(violations: Violation[]): string {
 }
 
 describe("the token WAR is always adjacent to Positional", () => {
-  // The three modules that own the OTHER metric. A bare WAR here is the exact
+  // The modules that own the OTHER metric. A bare WAR here is the exact
   // collision the rule exists to prevent.
-  const GUARDED_DIRECTORIES = ["lib/trade-impact", "lib/faab", "lib/power-pulse"];
+  //
+  // lib/trade-finder joined the list when it started reporting a projected-wins
+  // delta of its own (lib/trade-finder/pulse.ts). It computes a team-specific
+  // number from a team-specific schedule, which is precisely the class of module
+  // that must never borrow the token.
+  const GUARDED_DIRECTORIES = [
+    "lib/trade-impact",
+    "lib/faab",
+    "lib/power-pulse",
+    "lib/trade-finder",
+  ];
 
-  // Comments count here. These three modules own the OTHER metric, so a bare
-  // WAR in a comment is a reader of this code being told the wrong thing, which
-  // is how the collision would come back.
+  // Comments count here. These modules own the OTHER metric, so a bare WAR in a
+  // comment is a reader of this code being told the wrong thing, which is how
+  // the collision would come back.
   for (const dir of GUARDED_DIRECTORIES) {
     it(`holds in ${dir}, comments included`, () => {
       const violations = walk(dir).flatMap((f) => unqualifiedWarTokens(f, { commentsToo: true }));

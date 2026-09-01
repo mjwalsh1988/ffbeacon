@@ -66,6 +66,23 @@ function describeLineup(delta: number | null): string {
   return `${fmtSigned(delta, 1)} points a week`;
 }
 
+/**
+ * The same lineup change, in games.
+ *
+ * Always says "about". This is a derivative of the Power Pulse season taken
+ * against the real remaining schedule, not a rerun of the simulation, and a
+ * figure printed to two decimals reads as exact unless the sentence says
+ * otherwise. The full simulation is behind "Change a piece".
+ */
+function describeWins(delta: number): string {
+  if (Math.abs(delta) < 0.005) return "no meaningful change";
+  const size = Math.abs(delta).toFixed(2);
+  const direction = delta > 0 ? "gains about" : "gives up about";
+  // "1.35 of a projected win" is not a sentence, so the unit switches at one.
+  const unit = Math.abs(delta) < 1 ? "of a win" : "wins";
+  return `${direction} ${size} ${unit} over the games you have left`;
+}
+
 export function TradeFinderCard({
   suggestion,
   grade,
@@ -245,7 +262,21 @@ export function TradeFinderCard({
         <Target aria-hidden="true" className="h-3.5 w-3.5" />
         What it does
       </h4>
-      <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {/* Five tiles when Power Pulse has scored this league, four when it has
+          not. The grid changes rather than the projected-wins tile rendering
+          "Not available" forever: a league with no Power Pulse row is never
+          going to fill it, and a permanently empty readout is clutter a screen
+          reader has to step past on every card.
+
+          Nothing is hidden at any breakpoint. Two columns on a phone, three on
+          a tablet, the full row on a wide screen. */}
+      <dl
+        className={`mt-2 grid grid-cols-2 gap-2 ${
+          suggestion.mine.winsDelta === null
+            ? "sm:grid-cols-4"
+            : "sm:grid-cols-3 lg:grid-cols-5"
+        }`}
+      >
         <Readout
           label="Your lineup"
           value={
@@ -256,6 +287,19 @@ export function TradeFinderCard({
           spoken={`Your starting lineup: ${describeLineup(suggestion.mine.lineupDelta)}`}
           positive={(suggestion.mine.lineupDelta ?? 0) > 0}
         />
+        {/* Sits next to the lineup figure because it IS the lineup figure,
+            converted into the unit the reader is actually playing for. Two
+            points a week is worth a different number of games to a team with
+            ten close matchups left than to one with three it has all but won,
+            and that difference is what this tile carries. */}
+        {suggestion.mine.winsDelta !== null && (
+          <Readout
+            label="Projected wins"
+            value={fmtSigned(suggestion.mine.winsDelta, 2)}
+            spoken={`Your projected wins, estimated: your season ${describeWins(suggestion.mine.winsDelta)}`}
+            positive={suggestion.mine.winsDelta > 0}
+          />
+        )}
         <Readout
           label="Your value"
           value={fmtSigned(suggestion.mine.valueDelta)}

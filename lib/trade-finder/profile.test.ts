@@ -96,6 +96,28 @@ describe("buildTeamProfile", () => {
     expect(directionOf(team({ statusKey: null }))).toBe("balanced");
   });
 
+  it("reads every team in a one-year league as win-now", () => {
+    // Direction is a question about a TIMELINE, and a redraft league has one.
+    // A team at the bottom of the table there is losing, not rebuilding, and
+    // there is nothing for it to rebuild towards.
+    for (const statusKey of ["competitor", "middle", "rebuilder", null] as const) {
+      expect(directionOf(team({ statusKey }), false)).toBe("win-now");
+    }
+  });
+
+  it("carries the league type onto the profile", () => {
+    const dynasty = buildTeamProfile(team({ players: fullRoster() }), STANDARD_SLOTS, {});
+    const redraft = buildTeamProfile(
+      team({ players: fullRoster(), statusKey: "rebuilder" }),
+      STANDARD_SLOTS,
+      {},
+      { isDynasty: false },
+    );
+    expect(dynasty.isDynasty).toBe(true);
+    expect(redraft.isDynasty).toBe(false);
+    expect(redraft.direction).toBe("win-now");
+  });
+
   it("counts a valuable player who cannot crack the lineup as surplus", () => {
     const starters = fullRoster();
     const benched = player({ position: "WR", value: 2500, projPoints: 5 });
