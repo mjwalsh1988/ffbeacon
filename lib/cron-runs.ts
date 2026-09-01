@@ -97,6 +97,7 @@ export type CronJobName =
   | "league-sync-worker"
   | "would-you-rather-discord"
   | "rebuild-draft-value"
+  | "league-relay"
   | "cron-health";
 
 export type CronRunStatus = "running" | "success" | "error" | "skipped";
@@ -231,6 +232,13 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "0 * * * *",
     description:
       "Ticks hourly and almost always does nothing. Whether it posts is decided by the times an admin picked at /admin/would-you-rather, read in America/New_York, so the frequency is a setting rather than a cron expression and it holds its Eastern time across daylight saving. On a scheduled hour it posts one anonymised trade to Discord as a poll; on every tick it also folds any poll past its close time into that trade's tally, exactly once each. Off by default: nothing posts until a webhook is chosen and the toggle is turned on.",
+  },
+  {
+    name: "league-relay",
+    label: "League Relay",
+    schedule: "*/15 * * * *",
+    description:
+      "Resyncs every league an admin marked as a community league, then writes up what changed and posts it to Discord: trades through Signal Check and the trade impact model, waiver claims, a Wednesday matchup preview and a Tuesday recap run. The cadence here is the RESYNC; what actually posts is decided by the message types and Eastern-time windows an admin picked at /admin/league-relay. Off by default, so until somebody turns it on this reads one settings row and returns.",
   },
   {
     name: "cron-health",

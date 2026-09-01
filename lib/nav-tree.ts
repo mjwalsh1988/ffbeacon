@@ -277,6 +277,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "scale",
       },
       {
+        id: "/admin/league-relay",
+        label: "League Relay",
+        href: "/admin/league-relay",
+        hint: "Community leagues, and what they post to Discord",
+        icon: "radio",
+      },
+      {
         id: "/admin/system",
         label: "System Settings",
         href: "/admin/system",

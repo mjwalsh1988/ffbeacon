@@ -1084,6 +1084,59 @@ export type Database = {
         };
         Relationships: [];
       };
+      community_leagues: {
+        Row: {
+          added_by: string | null;
+          created_at: string;
+          id: string;
+          is_active: boolean;
+          label: string | null;
+          last_synced_at: string | null;
+          league_id: string;
+          sleeper_league_id: string;
+          sync_detail: string | null;
+          sync_status: string;
+          updated_at: string;
+          watermark_at: string;
+        };
+        Insert: {
+          added_by?: string | null;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          label?: string | null;
+          last_synced_at?: string | null;
+          league_id: string;
+          sleeper_league_id: string;
+          sync_detail?: string | null;
+          sync_status?: string;
+          updated_at?: string;
+          watermark_at?: string;
+        };
+        Update: {
+          added_by?: string | null;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          label?: string | null;
+          last_synced_at?: string | null;
+          league_id?: string;
+          sleeper_league_id?: string;
+          sync_detail?: string | null;
+          sync_status?: string;
+          updated_at?: string;
+          watermark_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "community_leagues_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: true;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       cron_runs: {
         Row: {
           created_at: string;
@@ -2144,6 +2197,96 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      league_relay_posts: {
+        Row: {
+          created_at: string;
+          dedupe_key: string;
+          discord_channel_id: string | null;
+          discord_message_id: string | null;
+          error: string | null;
+          id: string;
+          league_id: string;
+          message_type: string;
+          payload: Json | null;
+          posted_at: string | null;
+          season: number | null;
+          status: string;
+          webhook_id: string | null;
+          week: number | null;
+        };
+        Insert: {
+          created_at?: string;
+          dedupe_key: string;
+          discord_channel_id?: string | null;
+          discord_message_id?: string | null;
+          error?: string | null;
+          id?: string;
+          league_id: string;
+          message_type: string;
+          payload?: Json | null;
+          posted_at?: string | null;
+          season?: number | null;
+          status?: string;
+          webhook_id?: string | null;
+          week?: number | null;
+        };
+        Update: {
+          created_at?: string;
+          dedupe_key?: string;
+          discord_channel_id?: string | null;
+          discord_message_id?: string | null;
+          error?: string | null;
+          id?: string;
+          league_id?: string;
+          message_type?: string;
+          payload?: Json | null;
+          posted_at?: string | null;
+          season?: number | null;
+          status?: string;
+          webhook_id?: string | null;
+          week?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_relay_posts_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "league_relay_posts_webhook_id_fkey";
+            columns: ["webhook_id"];
+            isOneToOne: false;
+            referencedRelation: "discord_webhooks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      league_relay_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
       };
       league_sync_attempts: {
         Row: {
