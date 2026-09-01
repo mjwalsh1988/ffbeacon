@@ -19,6 +19,13 @@ import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import { refreshPowerPulse } from "@/lib/league-power-pulse";
 import { refreshPositionalWar } from "@/lib/league-positional-war";
 import { captureLeagueDraftSelections } from "@/lib/league-draft-selections";
+import { normalizeDraftPicks } from "@/lib/sleeper-draft-picks";
+import {
+  captureLeagueSnapshot,
+  recordLeagueChanges,
+  snapshotFromSleeper,
+} from "@/lib/league-activity/record";
+import { projectLeagueActivity } from "@/lib/league-activity/project";
 import type { Database } from "@/lib/database.types";
 
 export const LEAGUE_PULSE_TTL_MS = 60 * 60 * 1000; // 60 minutes
@@ -164,9 +171,15 @@ export async function pulseLeagueCore(
   return coalesce(`core:${sleeperLeagueId}:${force}`, async () => {
     const startedAt = Date.now();
 
+    // Widened past what the cache check needs so the activity snapshot below can
+    // be built from this row instead of reading the same one again. The extra
+    // columns are a few kilobytes on a query that was happening anyway, against
+    // a whole round trip saved on the critical path of every full sync.
     const { data: existing } = await supabase
       .from("leagues")
-      .select("id, season, last_pulsed_at, pulse_status")
+      .select(
+        "id, name, season, status, total_rosters, scoring_settings, roster_positions, metadata, last_pulsed_at, pulse_status",
+      )
       .eq("sleeper_league_id", sleeperLeagueId)
       .maybeSingle();
 
@@ -213,7 +226,19 @@ export async function pulseLeagueCore(
       }
     }
 
-    const league = await getSleeperLeague(sleeperLeagueId);
+    // THE SNAPSHOT HAS TO BE TAKEN HERE, before the upserts below write over
+    // the values it is made of. Everything the activity log reports about
+    // lineups, scoring, roster slots and managers is a DIFFERENCE between two
+    // syncs, and until this line existed the sync destroyed its own evidence:
+    // the upsert replaced the old row and nothing had read it.
+    //
+    // It costs nothing on the clock. The read runs against our own database
+    // while the Sleeper round trip beside it is the slow half of this function,
+    // so the pair finishes when `getSleeperLeague` does.
+    const [league, priorSnapshot] = await Promise.all([
+      getSleeperLeague(sleeperLeagueId),
+      captureLeagueSnapshot(supabase, existing),
+    ]);
     if (!league) {
       if (existing) {
         await supabase
@@ -320,6 +345,26 @@ export async function pulseLeagueCore(
       };
     }
 
+    // What changed since the snapshot above. Awaited rather than fired and
+    // forgotten, because an unawaited promise in a serverless request is killed
+    // when the response is sent; but the common case is a sync where nothing
+    // changed, and that path writes nothing and returns immediately.
+    //
+    // `settings.leg` is Sleeper's own current week for this league, already in
+    // the payload we just fetched, so a lineup card gets its week badge without
+    // an extra request for the NFL state.
+    const nextSnapshot = snapshotFromSleeper(
+      league,
+      rosters,
+      users,
+      draftDetails,
+      priorSnapshot?.snapshot ?? null,
+    );
+    const currentLeg = Number((league.settings ?? {}).leg);
+    await recordLeagueChanges(supabase, leagueRowId, priorSnapshot, nextSnapshot, {
+      week: Number.isFinite(currentLeg) && currentLeg > 0 ? currentLeg : null,
+    });
+
     console.log(
       `[pulseLeague] core ${sleeperLeagueId} in ${Date.now() - startedAt}ms (rosters=${rosters.length}, users=${users.length})`,
     );
@@ -355,12 +400,20 @@ export async function pulseLeagueDerived(
 
     const { data: league } = await supabase
       .from("leagues")
-      .select("id, sleeper_league_id, season")
+      .select(
+        // `leg` is Sleeper's own current week for this league. Projected out of
+        // the stored raw object rather than selecting the whole of it, and
+        // needed here because whether a game has been played is what decides
+        // whether it is a result.
+        "id, sleeper_league_id, season, leg:metadata->settings->leg",
+      )
       .eq("id", leagueRowId)
       .maybeSingle();
     if (!league) return { transactions: 0 };
 
     const season = Number(league.season ?? 0);
+    const legValue = Number(league.leg);
+    const currentLeg = Number.isFinite(legValue) && legValue > 0 ? legValue : null;
     // Per-stage timings. Cheap, and the only way to aim the next round of
     // tuning at what is actually slow rather than at what looks slow.
     const timings: string[] = [];
@@ -373,20 +426,51 @@ export async function pulseLeagueDerived(
       }
     };
 
-    // The three stages touch three different tables and none reads another's
-    // output, so they run together rather than in a queue. Each one owns its
-    // own failure: a thrown calculation must not take the other two down, and
+    // The stages touch different tables and, with one exception, none reads
+    // another's output, so they run together rather than in a queue. Each owns
+    // its own failure: a thrown calculation must not take the others down, and
     // none of them may fail the page.
+    //
+    // THE ONE EXCEPTION IS THE PAIR BELOW. The activity projector reads the
+    // transactions the sync above it writes, so those two are sequential inside
+    // a single member of this list rather than two siblings of it. As siblings
+    // they raced, and the race had a visible symptom: a reader opening a cold
+    // league saw a log with no moves in it, because the projector read the
+    // table while the sync was still filling it.
     await Promise.all([
       (async () => {
-        if (!force && !resynced) return;
+        if (force || resynced) {
+          try {
+            await timed("transactions", () =>
+              syncTransactions(supabase, leagueRowId, league.sleeper_league_id, season, force),
+            );
+          } catch (err) {
+            console.warn(
+              `[pulseLeague] transaction sync failed for league ${leagueRowId}:`,
+              (err as Error).message,
+            );
+          }
+        }
+
+        // Turning transactions and played matchups into feed entries.
+        //
+        // Deliberately NOT gated on `force || resynced` like the sync above it,
+        // because this reads OUR tables rather than Sleeper's: a league whose
+        // 60-minute cache is warm still needs its back history projected the
+        // first time anyone opens it after this shipped. The gates inside make
+        // a repeat run a pair of indexed reads that write nothing.
         try {
-          await timed("transactions", () =>
-            syncTransactions(supabase, leagueRowId, league.sleeper_league_id, season, force),
+          const projected = await timed("activity", () =>
+            projectLeagueActivity(supabase, leagueRowId, season, currentLeg),
           );
+          if (projected.transactions > 0 || projected.results > 0) {
+            console.log(
+              `[pulseLeague] activity projected for ${leagueRowId} (transactions=${projected.transactions}, results=${projected.results})`,
+            );
+          }
         } catch (err) {
           console.warn(
-            `[pulseLeague] transaction sync failed for league ${leagueRowId}:`,
+            `[pulseLeague] activity projection threw for league ${leagueRowId}:`,
             (err as Error).message,
           );
         }
@@ -946,27 +1030,13 @@ function scaledPoints(whole: number | undefined, decimal: number | undefined): n
 }
 
 /**
- * Sleeper emits transaction.draft_picks as one of:
- *   - array of pick objects
- *   - object map keyed by index
- *   - JSON-encoded string
- *   - null/undefined
- * Normalize to a plain array. See CLAUDE.md gotchas.
+ * Re-exported so every existing importer keeps working.
+ *
+ * The implementation moved to `lib/sleeper-draft-picks.ts` because this module
+ * now imports the activity projector, which needs the same normaliser while
+ * reading transactions back. Leaving it here made that pair an import cycle.
  */
-export function normalizeDraftPicks(input: unknown): unknown[] {
-  if (input == null) return [];
-  if (Array.isArray(input)) return input;
-  if (typeof input === "object") return Object.values(input as Record<string, unknown>);
-  if (typeof input === "string") {
-    try {
-      const parsed = JSON.parse(input);
-      return Array.isArray(parsed) ? parsed : Object.values(parsed ?? {});
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
+export { normalizeDraftPicks };
 
 function collectRosterIds(
   adds: Record<string, number> | null | undefined,

@@ -5,6 +5,7 @@ import type { LeagueContext } from "@/lib/league-format-resolution";
 import { loadLeagueDraftSlots, type LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
 import type { StartupPickIndex } from "@/lib/league-startup-picks";
 import type { TransactionRowData } from "@/components/transaction-row";
+import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -146,7 +147,7 @@ export async function loadLeagueTransactions(
       }
     }
   }
-  const playerLookup = await resolvePlayers(supabase, Array.from(allSleeperIds));
+  const playerLookup = await resolveSleeperPlayers(supabase, Array.from(allSleeperIds));
 
   const rows: TransactionRowData[] = [];
   for (const r of txRows ?? []) {
@@ -268,42 +269,3 @@ export async function loadTradeAnalyses(
   return out;
 }
 
-async function resolvePlayers(
-  supabase: AnySupabase,
-  sleeperIds: string[],
-): Promise<Record<string, { name: string; position: string | null; team: string | null }>> {
-  const out: Record<string, { name: string; position: string | null; team: string | null }> = {};
-  if (sleeperIds.length === 0) return out;
-  // Sleeper player IDs are numeric strings. Defense-in-depth: strip
-  // anything that isn't, so an untrusted id (a malicious sleeper league
-  // could in theory carry oddly-shaped player ids) can't escape the
-  // PostgREST filter language we interpolate into below.
-  const safeIds = sleeperIds.filter((id) => /^\d+$/.test(id));
-  const CHUNK = 200;
-  for (let i = 0; i < safeIds.length; i += CHUNK) {
-    const chunk = safeIds.slice(i, i + CHUNK);
-    const ors = chunk
-      .flatMap((id) => [`external_ids->>sleeper.eq.${id}`, `slug.like.*-${id}`])
-      .join(",");
-    const { data } = await (supabase as SupabaseClient<Database>)
-      .from("players")
-      .select("slug, full_name, first_name, last_name, position, team, external_ids")
-      .or(ors);
-    for (const row of data ?? []) {
-      const ext = (row.external_ids as Record<string, unknown>) ?? {};
-      const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      const tail = (row.slug as string).match(/-(\d+)$/)?.[1] ?? null;
-      const sid = fromExternal ?? tail;
-      if (!sid || !chunk.includes(sid)) continue;
-      if (!out[sid]) {
-        out[sid] = {
-          name:
-            row.full_name ?? (`${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() || sid),
-          position: row.position ?? null,
-          team: row.team ?? null,
-        };
-      }
-    }
-  }
-  return out;
-}

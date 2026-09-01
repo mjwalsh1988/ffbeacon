@@ -27,6 +27,15 @@ import { WarRailSection } from "@/components/league-war/positional-war-section";
 import { PulseFavoriteCard } from "@/components/league-rail/pulse-favorite-card";
 import { loadPulseFavorite } from "@/lib/league-pulse-favorite";
 import { PowerRankingsRow } from "@/components/power-rankings-row";
+import { LeagueActivityPanel } from "@/components/league-activity/activity-panel";
+import {
+  ACTIVITY_DEFAULT_DAYS,
+  ACTIVITY_PANEL_ROWS,
+  loadLeagueActivity,
+  parseRosterId,
+  parseWindowDays,
+} from "@/lib/league-activity/load";
+import { isActivityCategory, type ActivityCategory } from "@/lib/league-activity/types";
 import { PicksToggle } from "@/components/picks-toggle";
 import { RankModeToggle, type RankMode } from "@/components/power-pulse/rank-mode-toggle";
 import { Panel } from "@/components/dashboard-panel";
@@ -114,6 +123,9 @@ export default async function LeagueDeepViewPage({
     roster?: string;
     picks?: string;
     rank?: string;
+    adays?: string;
+    acat?: string;
+    ateam?: string;
   }>;
 }) {
   const { league_id: sleeperLeagueId } = await params;
@@ -124,6 +136,9 @@ export default async function LeagueDeepViewPage({
     roster: rosterParam,
     picks: picksParam,
     rank: rankParam,
+    adays: activityDaysParam,
+    acat: activityCategoryParam,
+    ateam: activityTeamParam,
   } = await searchParams;
   const searchedUsername =
     typeof usernameParam === "string" && usernameParam.trim() ? usernameParam.trim() : null;
@@ -241,6 +256,15 @@ export default async function LeagueDeepViewPage({
   // restores the pure trade-value order for readers who want the asset view.
   const rankMode: RankMode = rankParam === "value" ? "value" : "pulse";
 
+  // Activity log state. The window defaults to a fortnight and climbs a ladder
+  // from there; the category and team narrow it. All three live in the URL so a
+  // filtered view is a link somebody can send to their league.
+  const activityDays = parseWindowDays(activityDaysParam);
+  const activityCategory: ActivityCategory | null = isActivityCategory(activityCategoryParam)
+    ? activityCategoryParam
+    : null;
+  const activityRosterId = parseRosterId(activityTeamParam);
+
   // In-view links (username forwarded so the Teams chips default correctly).
   const teamsHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}`
@@ -257,6 +281,9 @@ export default async function LeagueDeepViewPage({
   const scheduleHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/schedules?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/schedules`;
+  const activityHref = searchedUsername
+    ? `/leagues/${sleeperLeagueId}/activity?username=${encodeURIComponent(searchedUsername)}`
+    : `/leagues/${sleeperLeagueId}/activity`;
   const positionalWarHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/positional-war`;
@@ -311,6 +338,33 @@ export default async function LeagueDeepViewPage({
         // supplementary and belongs after the table in DOM order.
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0 space-y-6">
+            {/*
+              THE LOG LEADS THE COLUMN. It is the answer to "what did I miss",
+              which is the question a reader has on the way in; the rankings
+              answer "where do I stand", which is the question they have once
+              they are oriented. It also has to sit above the table because it
+              is the only surface on the page that reports a scoring or roster
+              change, and both of those change what the table below it means.
+
+              Its own boundary and its own reads: one indexed query against
+              league_activity, no valuation, no projection. The rankings do not
+              wait on it and it does not wait on the rankings.
+            */}
+            <Suspense fallback={<ActivitySkeleton />}>
+              <ActivitySection
+                leagueRowId={league.id}
+                sleeperLeagueId={sleeperLeagueId}
+                searchedUsername={searchedUsername}
+                days={activityDays}
+                category={activityCategory}
+                rosterId={activityRosterId}
+                fullHref={activityHref}
+                sourceParam={typeof sourceParam === "string" ? sourceParam : null}
+                rankParam={rankParam === "value" ? "value" : null}
+                picksParam={picksParam === "off" ? "off" : null}
+              />
+            </Suspense>
+
             <Suspense fallback={<RankingsSkeleton />}>
               <PowerRankingsSection
                 leagueRowId={league.id}
@@ -598,6 +652,103 @@ async function OverviewInsights({
           />
         </Panel>
       )}
+    </div>
+  );
+}
+
+/**
+ * The activity log on the overview.
+ *
+ * Capped and scrolling here, full length on `/leagues/[id]/activity`. Both
+ * render the same panel from the same loader, so the two can never disagree
+ * about what happened in a league.
+ *
+ * Every filter link points back at this page and carries the params that must
+ * survive the hop (`username`, `source`), plus the fragment that lands focus on
+ * the panel heading rather than merely scrolling to it.
+ */
+async function ActivitySection({
+  leagueRowId,
+  sleeperLeagueId,
+  searchedUsername,
+  days,
+  category,
+  rosterId,
+  fullHref,
+  sourceParam,
+  rankParam,
+  picksParam,
+}: {
+  leagueRowId: string;
+  sleeperLeagueId: string;
+  searchedUsername: string | null;
+  days: number;
+  category: ActivityCategory | null;
+  rosterId: number | null;
+  fullHref: string;
+  sourceParam: string | null;
+  rankParam: string | null;
+  picksParam: string | null;
+}) {
+  const supabase = await createClient();
+  const loaded = await loadLeagueActivity(supabase, {
+    leagueRowId,
+    sleeperLeagueId,
+    days,
+    category,
+    rosterId,
+    limit: ACTIVITY_PANEL_ROWS,
+    searchedUsername,
+  });
+
+  // EVERY PARAM THE PAGE READS HAS TO SURVIVE A FILTER CLICK. `rank` and `picks`
+  // belong to the rankings table below, and dropping them meant pressing an
+  // activity chip silently re-sorted that table under the reader, unannounced,
+  // with focus already moved up to the panel heading.
+  const carry: Record<string, string> = {};
+  if (searchedUsername) carry.username = searchedUsername;
+  if (sourceParam) carry.source = sourceParam;
+  if (rankParam) carry.rank = rankParam;
+  if (picksParam) carry.picks = picksParam;
+  if (days !== ACTIVITY_DEFAULT_DAYS) carry.adays = days === 0 ? "all" : String(days);
+  if (rosterId != null) carry.ateam = String(rosterId);
+
+  return (
+    <LeagueActivityPanel
+      id="league-activity"
+      loaded={loaded}
+      days={days}
+      scrollable
+      fullHref={fullHref}
+      // The rankings panel is what follows the log on this page. Its heading is
+      // focusable, so the skip link moves focus rather than only scrolling.
+      skipHref="#pr-title"
+      filters={{
+        basePath: `/leagues/${sleeperLeagueId}`,
+        carry,
+        anchor: "#league-activity-title",
+        category,
+        available: loaded.availableCategories,
+        rosterId,
+        teams: loaded.teams,
+        // Twelve team chips would double the height of the filter bar in a
+        // panel whose whole job is to show entries. They live on the full page.
+        showTeams: false,
+      }}
+    />
+  );
+}
+
+function ActivitySkeleton() {
+  // `role="status"` with hidden text, not `aria-hidden`. A pulsing box tells a
+  // sighted reader that something is coming and a screen-reader user nothing at
+  // all, so without this they find a gap where the feed should be.
+  return (
+    <div
+      role="status"
+      className="h-64 animate-pulse rounded-modal border border-line bg-surface/40"
+    >
+      <span className="sr-only">Loading league activity</span>
     </div>
   );
 }
@@ -922,6 +1073,8 @@ async function PowerRankingsSection({
   if (ranked.length === 0) {
     return (
       <Panel
+        id="pr"
+        headingFocusable
         eyebrow="Standings"
         title="Power Rankings"
         helper={`${formatDisplay}, ${sourceDisplay}`}
@@ -961,6 +1114,7 @@ async function PowerRankingsSection({
   return (
     <Panel
       id="pr"
+      headingFocusable
       eyebrow="Standings"
       title="Power Rankings"
       helper={helper}
@@ -1135,6 +1289,7 @@ async function PreDraftRoster({
       />
       <Panel
         id="pr"
+        headingFocusable
         eyebrow="Standings"
         title="Power Rankings"
         helper="Listed alphabetically. There is no ranking to show until the draft finishes and the schedule posts."

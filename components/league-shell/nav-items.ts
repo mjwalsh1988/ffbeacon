@@ -14,6 +14,7 @@ import type { NavIconName } from "@/components/app-shell/nav-icons";
 
 export type LeagueTabId =
   | "overview"
+  | "activity"
   | "teams"
   | "schedules"
   | "power-pulse"
@@ -40,6 +41,12 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     label: "Overview",
     hint: "Rankings and league snapshot",
     icon: "dashboard",
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    hint: "Everything that has happened in this league",
+    icon: "history",
   },
   {
     id: "teams",
@@ -89,6 +96,7 @@ export function leagueTabHref(
   if (searchedUsername) qs.set("username", searchedUsername);
 
   if (
+    tabId === "activity" ||
     tabId === "transactions" ||
     tabId === "power-pulse" ||
     tabId === "positional-war" ||

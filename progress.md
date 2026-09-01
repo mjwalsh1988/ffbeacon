@@ -9518,3 +9518,195 @@ compare-and-swap, so an admin saving mid-run loses that save.
 DOCUMENTED, not fixed: the `redraftWeights` back-compat guard in draft-grade.ts
 is dead, because the validator always defaults the field. Comment corrected to
 say what actually happens.
+
+---
+
+# League Activity (the league's own record of what happened)
+
+Session of 2026-09-01. Plan: the layman's writeup in the session transcript.
+Tasks prefixed `LA-T###`. Nothing committed.
+
+```
+LA-T001 | completed | Migration 0235: league_activity table, RLS, four indexes
+     | files: supabase/migrations/0235_league_activity.sql
+     | verified: yes (pg_policies confirms public SELECT + service_role ALL)
+
+LA-T002 | completed | Regenerate database types via MCP
+     | files: lib/database.types.ts
+     | depends on: LA-T001
+
+LA-T003 | completed | Event and card shapes, kind/category maps
+     | files: lib/league-activity/types.ts
+
+LA-T004 | completed | Sleeper setting, scoring and slot names in English
+     | files: lib/league-activity/labels.ts
+
+LA-T005 | completed | The pure diff: lineups, settings, roster slots, people, drafts
+     | files: lib/league-activity/diff.ts, lib/league-activity/diff.test.ts
+     | depends on: LA-T003, LA-T004
+     | verified: yes (30 tests)
+
+LA-T006 | completed | Snapshot read-before-write, and the event writer
+     | files: lib/league-activity/record.ts
+     | depends on: LA-T005
+
+LA-T007 | completed | Project transactions and finished matchups into events
+     | files: lib/league-activity/project.ts, lib/league-activity/project.test.ts
+     | depends on: LA-T003
+     | verified: yes (15 tests)
+
+LA-T008 | completed | Extract normalizeDraftPicks to a leaf to break an import cycle
+     | files: lib/sleeper-draft-picks.ts, lib/league-pulse.ts
+
+LA-T009 | completed | Wire detection into pulseLeagueCore (snapshot before upsert)
+     | files: lib/league-pulse.ts
+     | depends on: LA-T006
+
+LA-T010 | completed | Wire projection into pulseLeagueDerived as a parallel stage
+     | files: lib/league-pulse.ts
+     | depends on: LA-T007
+
+LA-T011 | completed | Event to card, reusing the relay's voice module
+     | files: lib/league-activity/writeup.ts, lib/league-activity/writeup.test.ts
+     | depends on: LA-T003
+     | verified: yes (55 tests, including a banned-punctuation scan of source)
+
+LA-T012 | completed | Shared Sleeper player lookup, replacing a third private copy
+     | files: lib/sleeper-player-lookup.ts, lib/league-transactions-data.ts
+
+LA-T013 | completed | The paginated read, the day-window ladder, the filters
+     | files: lib/league-activity/load.ts
+     | depends on: LA-T011, LA-T012
+
+LA-T014 | completed | Card component: rails, icon tiles, columns, moves, changes, stats
+     | files: components/league-activity/activity-card.tsx,
+     |        components/league-activity/activity-visuals.ts
+
+LA-T015 | completed | Filter chips as links (aria-current, no client JS)
+     | files: components/league-activity/activity-filters.tsx
+
+LA-T016 | completed | The panel: scroll region, empty states, load-more footer
+     | files: components/league-activity/activity-panel.tsx
+     | depends on: LA-T014, LA-T015
+
+LA-T017 | completed | Panel on the league overview, above the power rankings
+     | files: app/leagues/[league_id]/page.tsx
+     | depends on: LA-T016
+
+LA-T018 | completed | Full page at /leagues/[id]/activity, plus the nav entry
+     | files: app/leagues/[league_id]/activity/page.tsx,
+     |        components/league-shell/nav-items.ts
+     | depends on: LA-T016
+
+LA-T019 | completed | Sub-agent review: security
+LA-T020 | completed | Sub-agent review: accessibility
+LA-T021 | completed | Sub-agent review: implementation
+LA-T022 | completed | Sub-agent review: performance
+```
+
+## League Activity review outcomes, 2026-09-01
+
+Four sub-agents reviewed the uncommitted build: security, accessibility,
+implementation, performance. Thirty-eight findings. Everything at high or medium
+severity is fixed; the rest are fixed or documented below.
+
+FIXED (high, correctness): a failed Sleeper `/users` request returns `[]`, which
+the diff read as every manager leaving at once, writing a dozen permanent false
+cards. Same shape for `/rosters`, and for a snapshot whose child read errored
+(which wrote "manager joined" for everyone instead). `diff.ts` now gates each
+half on its own data being present, and `captureLeagueSnapshot` fails closed on a
+read error. CLAUDE.md already carried this rule for Power Pulse.
+
+FIXED (high, correctness): `league_matchups.is_final` is stamped at write time as
+`week < currentWeek`, and the sync only refetches the current week onward, so it
+is false forever for any normally synced league. Results would have stayed empty
+all season. Finality is now derived at projection time from the league's own
+`settings.leg`, which also fixes a manager who starts nobody scoring 0.0 and
+swallowing their opponent's win.
+
+FIXED (high, correctness): the projector was a sibling of the transaction sync
+inside the same `Promise.all`, so it raced the writes it reads. A cold league's
+first view showed a log with no moves in it. The two are now a sequential pair.
+
+FIXED (high, performance): `resolveSleeperPlayers` put an indexed `eq` and a
+leading-wildcard `slug.like` in one `or()`, which made the whole filter
+unindexable and sequentially scanned the 48 MB players table on the league
+overview: 161 ms and 4,106 buffers per 100 ids, measured. Split into the same two
+passes `lib/player-trades.ts` already uses, chunks now parallel.
+
+FIXED (high, performance): `league_transactions` had no `(league_id,
+created_at_sleeper)` index, so the projector's overlap read planned as a bitmap
+whose second leg scanned every transaction on the site inside a 7-day window.
+Migration 0236 adds it: 22.8 ms and 1,948 rows becomes 0.17 ms and 27.
+
+FIXED (high, performance): the steady state issued `ON CONFLICT DO NOTHING` for a
+week of already-stored rows on every sync (641 dedupe-key probes against 119
+rows). The gate now reads the window's existing keys in the same wave and writes
+only what is new. Activity stage: 328 ms to 237 ms, and zero writes.
+
+FIXED (high, a11y): the disabled filter chip's state lived in an `aria-label` on
+a bare span, which maps to role=generic where naming is prohibited, so every
+browser discarded it. Now visually hidden text.
+
+FIXED (high, a11y): every card announced itself twice, once as the article's
+`aria-label` summary and again as its contents. Cards are named by their own
+heading now and `ariaLabel` is gone from the type.
+
+FIXED (high, a11y): card titles were h4 under an h2 panel, skipping h3. The level
+is threaded from the panel.
+
+FIXED (medium, security): `?ateam=` was parsed on `Number.isFinite` alone, so
+`?ateam=99999999999` overflowed int4 and 500'd the whole league overview.
+`parseRosterId` clamps it, and both pages share the one parser.
+
+FIXED (medium, correctness): a commissioner-executed trade was flattened to one
+roster, so the card attributed one team's drops to the other. Any move touching
+two rosters is stored two-sided now.
+
+FIXED (medium, correctness): the matchup gate keyed on the highest recorded week,
+so a week that became readable late was skipped forever. It keys on which weeks
+are missing.
+
+FIXED (medium, a11y): `truncate` clipped player names, team names, handles and
+stat labels that had no other home on the card. All wrap.
+
+FIXED (medium, a11y): filter and team chips were 32px against the project's 44px
+floor; the load-more link dropped `rank` and `picks`, silently re-sorting the
+rankings table; the skeletons were `aria-hidden` with nothing in their place; the
+scroll container was `role="group"` rather than a `region` landmark; "Everything"
+and "All teams" failed WCAG 2.5.3 Label in Name; the avatar alt repeated the team
+name beside it; a 40-card feed had no skip link past its 80 tab stops.
+
+FIXED (medium, perf): `/activity` awaited the whole derived pass to get one stage
+of it; the snapshot re-read a `leagues` row the caller already had; the `Intl`
+formatters in `lib/datetime.ts` were rebuilt per call (65 ms per 600, measured).
+
+FIXED (low): the unused GIN index on `roster_ids` dropped (zero scans, and the
+planner correctly declines it); dedupe uniqueness moved to `(league_id,
+dedupe_key)` so the guarantee is structural rather than string-prefixed; the
+`roster_positions` normalisers differed between the two snapshot sides; an
+unrecognised Sleeper transaction type deep-linked to an empty list; a result
+could read "in 2 days"; a truncated full page was a dead end.
+
+FIXED (tests): 21 added, covering the empty-array guards, roster churn, clock
+skew, the whole matchup grouper, multi-roster moves and unknown types. Three
+tautological assertions replaced.
+
+DOCUMENTED, not fixed: `commissioner_change` cannot fire, because Sleeper gives
+no commissioner signal and `upsertLeagueUsers` writes the flag as false. The
+branch is inert by design and `record.ts` says so.
+
+DOCUMENTED, not fixed: `league_activity` has no retention prune. At 10,000
+leagues that is roughly 5 M rows and 2 to 3 GB, which is a storage bill rather
+than a latency problem, because every read is prefixed by `league_id`. A single
+delete on the existing nightly job when it matters.
+
+DOCUMENTED, not fixed: `team_identity_change`, `manager_left` and
+`roster_owner_change` retain a manager's PREVIOUS handle and team name after they
+change, and the table is publicly readable. Every value was public while it was
+current, and the card is meaningless without it, but it is retention the rest of
+the sync does not perform.
+
+DOCUMENTED, not fixed: bursts are not grouped. Eight free agent moves in an
+afternoon is eight cards. `lib/league-relay/waiver-run.ts` already solves this
+shape for Discord.

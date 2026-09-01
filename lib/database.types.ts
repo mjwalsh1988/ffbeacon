@@ -1714,6 +1714,68 @@ export type Database = {
           },
         ];
       };
+      league_activity: {
+        Row: {
+          category: string;
+          created_at: string;
+          dedupe_key: string;
+          detected_at: string;
+          id: string;
+          kind: string;
+          league_id: string;
+          observed_from: string | null;
+          occurred_at: string;
+          occurred_at_precision: string;
+          payload: Json;
+          player_ids: string[];
+          roster_ids: number[];
+          season: number | null;
+          week: number | null;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          dedupe_key: string;
+          detected_at?: string;
+          id?: string;
+          kind: string;
+          league_id: string;
+          observed_from?: string | null;
+          occurred_at: string;
+          occurred_at_precision?: string;
+          payload?: Json;
+          player_ids?: string[];
+          roster_ids?: number[];
+          season?: number | null;
+          week?: number | null;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          dedupe_key?: string;
+          detected_at?: string;
+          id?: string;
+          kind?: string;
+          league_id?: string;
+          observed_from?: string | null;
+          occurred_at?: string;
+          occurred_at_precision?: string;
+          payload?: Json;
+          player_ids?: string[];
+          roster_ids?: number[];
+          season?: number | null;
+          week?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_activity_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       league_bulk_sync_requests: {
         Row: {
           completed_at: string | null;
