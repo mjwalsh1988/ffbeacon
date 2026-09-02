@@ -383,3 +383,121 @@ describe("measureImpact and projected wins", () => {
     expect(measureImpact(profile, STANDARD_SLOTS, incoming, []).winsDelta).toBeNull();
   });
 });
+
+describe("scoreSuggestion, horizon weight (Part 4: rest-of-season horizon)", () => {
+  /**
+   * Two candidate packages that disagree on purpose: one wins on the field and
+   * gives up a little trade value to do it, the other gives up a little on the
+   * field for a real gain in trade value. Which one leads the ranking is
+   * exactly the question this table answers.
+   */
+  const winsPackage = impact({ lineupDelta: 3, winsDelta: 0.3, valueDelta: -200 });
+  const valuePackage = impact({ lineupDelta: -0.5, winsDelta: -0.02, valueDelta: 1200 });
+
+  const profileFor = (
+    isDynasty: boolean,
+    statusKey: "competitor" | "rebuilder" | "middle" | null,
+  ) =>
+    buildTeamProfile(
+      team({ players: fullRoster(), statusKey }),
+      STANDARD_SLOTS,
+      BASELINES,
+      { isDynasty },
+    );
+
+  it("orders a redraft league by projected wins when trade value disagrees", () => {
+    // A redraft league always resolves to the "contender" strategy (see
+    // resolveStrategy in ./types), so the test states it explicitly rather
+    // than relying on the fallback this function carries for direct callers.
+    const profile = profileFor(false, null);
+    const scoreWins = scoreSuggestion({
+      mine: winsPackage,
+      myProfile: profile,
+      acceptance: "worth-asking",
+      goal: "balanced",
+      strategy: "contender",
+    });
+    const scoreValue = scoreSuggestion({
+      mine: valuePackage,
+      myProfile: profile,
+      acceptance: "worth-asking",
+      goal: "balanced",
+      strategy: "contender",
+    });
+    expect(scoreWins).toBeGreaterThan(scoreValue);
+  });
+
+  it("orders a dynasty contender by projected wins the same way", () => {
+    const profile = profileFor(true, "competitor");
+    const scoreWins = scoreSuggestion({
+      mine: winsPackage,
+      myProfile: profile,
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+    const scoreValue = scoreSuggestion({
+      mine: valuePackage,
+      myProfile: profile,
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+    expect(scoreWins).toBeGreaterThan(scoreValue);
+  });
+
+  it("orders a dynasty rebuilder by trade value, and that order never moves for any projected-wins number", () => {
+    const profile = profileFor(true, "rebuilder");
+    const scoreWinsPkg = scoreSuggestion({
+      mine: winsPackage,
+      myProfile: profile,
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+    const scoreValuePkg = scoreSuggestion({
+      mine: valuePackage,
+      myProfile: profile,
+      acceptance: "worth-asking",
+      goal: "balanced",
+    });
+    // Reversed from the two readings above: a rebuilder ranks the value
+    // package over the wins package.
+    expect(scoreValuePkg).toBeGreaterThan(scoreWinsPkg);
+
+    // THE ONE HARD RULE (docs/projection-engine-plan.md, Part 4). Same two
+    // packages, lineupDelta and winsDelta swapped out for unrelated numbers on
+    // both sides, everything else held fixed. If the rebuilder branch read the
+    // projection at all, at least one of these four totals would move off the
+    // value it started at.
+    const rewound = (mine: SideImpact, lineupDelta: number, winsDelta: number | null) =>
+      scoreSuggestion({
+        mine: { ...mine, lineupDelta, winsDelta },
+        myProfile: profile,
+        acceptance: "worth-asking",
+        goal: "balanced",
+      });
+
+    expect(rewound(winsPackage, 99, 4)).toBeCloseTo(scoreWinsPkg, 10);
+    expect(rewound(winsPackage, -40, -6)).toBeCloseTo(scoreWinsPkg, 10);
+    expect(rewound(valuePackage, 12, 1.1)).toBeCloseTo(scoreValuePkg, 10);
+    expect(rewound(valuePackage, -8, null)).toBeCloseTo(scoreValuePkg, 10);
+  });
+
+  it("weighs a dynasty balanced league between the contender and rebuilder readings", () => {
+    // One deal, wins-positive and value-negative, so the two terms disagree
+    // and the horizon is what decides how loudly each one speaks.
+    const deal = impact({ lineupDelta: 2, winsDelta: 0.2, valueDelta: -400 });
+    const scoreFor = (statusKey: "competitor" | "middle" | "rebuilder") =>
+      scoreSuggestion({
+        mine: deal,
+        myProfile: profileFor(true, statusKey),
+        acceptance: "worth-asking",
+        goal: "balanced",
+      });
+
+    const contenderScore = scoreFor("competitor");
+    const balancedScore = scoreFor("middle");
+    const rebuilderScore = scoreFor("rebuilder");
+
+    expect(contenderScore).toBeGreaterThan(balancedScore);
+    expect(balancedScore).toBeGreaterThan(rebuilderScore);
+  });
+});

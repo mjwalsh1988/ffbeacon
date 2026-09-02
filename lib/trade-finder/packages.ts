@@ -47,7 +47,12 @@
  */
 
 import { qualityBalance, type TradeQualityConfig } from "@/lib/trade-quality";
-import type { FinderPick, FinderPlayer, TradeGoal } from "./types";
+import type {
+  FinderPick,
+  FinderPlayer,
+  TradeGoal,
+  TradeStrategy,
+} from "./types";
 import type { TeamProfile } from "./profile";
 
 export type AssetRef =
@@ -270,10 +275,23 @@ function appetite(player: FinderPlayer, mine: TeamProfile, goal: TradeGoal): num
  * picks too, which is how the other manager closes a gap without sending a
  * third body.
  */
-function wantsPicksFor(goal: TradeGoal, myDirection: TeamProfile["direction"]): boolean {
+function wantsPicksFor(
+  goal: TradeGoal,
+  myDirection: TeamProfile["direction"],
+  strategy?: TradeStrategy | null,
+): boolean {
   if (goal === "add-picks" || goal === "get-younger" || goal === "split-assets") {
     return true;
   }
+  // A reader who asked for VALUE trades in a dynasty league is asking about the
+  // currency the league is actually denominated in, and a future first is a
+  // large part of it. Their standing does not get a vote here: pressing Value
+  // while sitting top of the table is a reader saying they will take the
+  // long-term win, and a pool that quietly refused to offer picks would answer a
+  // question they did not ask. The mirror case is CONTENDER, where a pick cannot
+  // start on Sunday and so is never worth asking for.
+  if (strategy === "value") return true;
+  if (strategy === "contender") return false;
   return goal === "balanced" && myDirection === "rebuild";
 }
 
@@ -285,10 +303,20 @@ function wantsPicksFor(goal: TradeGoal, myDirection: TeamProfile["direction"]): 
  * it spends. Anything collecting picks does not, and neither does a rebuilding
  * roster, which is the one move this feature should never suggest.
  */
-function spendsPicksFor(goal: TradeGoal, myDirection: TeamProfile["direction"]): boolean {
+function spendsPicksFor(
+  goal: TradeGoal,
+  myDirection: TeamProfile["direction"],
+  strategy?: TradeStrategy | null,
+): boolean {
   if (goal === "add-picks" || goal === "get-younger" || goal === "split-assets") {
     return false;
   }
+  // Contender spends picks freely, which is the whole point of being one: a
+  // 2028 second cannot start in week 12. Value does not, because spending the
+  // currency you asked to be measured in is the one move that cannot win the
+  // trade on the terms the reader set.
+  if (strategy === "contender") return true;
+  if (strategy === "value") return false;
   return myDirection !== "rebuild";
 }
 
@@ -307,6 +335,8 @@ export function acquirablePool(
   mine: TeamProfile,
   opts: {
     goal: TradeGoal;
+    /** What the ranking is measuring. Decides whether picks are on the table. */
+    strategy?: TradeStrategy | null;
     /** Players that must ALL come back, or empty for an open search. */
     targetPlayerIds: readonly string[];
     allowPicks: boolean;
@@ -392,7 +422,7 @@ export function acquirablePool(
   // Their picks are worth asking for only when the reader's goal actually wants
   // them. Otherwise a pick on the incoming side is noise on a roster trying to
   // win games.
-  if (opts.allowPicks && wantsPicksFor(opts.goal, mine.direction)) {
+  if (opts.allowPicks && wantsPicksFor(opts.goal, mine.direction, opts.strategy)) {
     const picks = [...theirs.team.picks]
       .filter((p) => p.hasValue && p.value > 0)
       .sort((a, b) => b.value - a.value || a.key.localeCompare(b.key))
@@ -509,6 +539,8 @@ export function givablePool(
   mine: TeamProfile,
   opts: {
     goal: TradeGoal;
+    /** What the ranking is measuring. Decides whether picks are on the table. */
+    strategy?: TradeStrategy | null;
     /** Players that must ALL be sent, or empty for an open search. */
     offerPlayerIds: readonly string[];
     allowPicks: boolean;
@@ -552,7 +584,7 @@ export function givablePool(
   // Picks are currency when the reader is buying, and are kept when the reader
   // is collecting them. A rebuilding team trading away its own firsts is the one
   // move this feature should never suggest.
-  const spendsPicks = opts.allowPicks && spendsPicksFor(opts.goal, mine.direction);
+  const spendsPicks = opts.allowPicks && spendsPicksFor(opts.goal, mine.direction, opts.strategy);
   if (spendsPicks) {
     for (const pick of mine.team.picks) {
       if (!pick.hasValue || pick.value <= 0) continue;
@@ -608,6 +640,8 @@ export function anchorCandidates(
   mine: TeamProfile,
   opts: {
     goal: TradeGoal;
+    /** What the ranking is measuring. Decides whether picks are on the table. */
+    strategy?: TradeStrategy | null;
     allowPicks: boolean;
     /**
      * Position groups the reader said they would move, or null for any.
@@ -626,7 +660,7 @@ export function anchorCandidates(
     .map((player) => ({ kind: "player" as const, player }));
 
   const spendsPicks =
-    !wanted && opts.allowPicks && spendsPicksFor(opts.goal, mine.direction);
+    !wanted && opts.allowPicks && spendsPicksFor(opts.goal, mine.direction, opts.strategy);
   if (spendsPicks) {
     for (const pick of mine.team.picks) {
       if (!pick.hasValue || pick.value <= 0) continue;

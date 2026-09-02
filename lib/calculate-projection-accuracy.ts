@@ -28,8 +28,14 @@
  *   - The final multiplier is shrunk toward 1.0 by sample size, so a three-game
  *     sample nudges a projection instead of rewriting it.
  *
- * Writes one row per (player, season, scoring) plus a blended row with a NULL
- * season, which is what the Power Pulse engine reads.
+ * Writes one row per (player, season, scoring, source) plus a blended row with
+ * a NULL season, which is what every projection engine reads through
+ * lib/power-pulse/load.ts loadAccuracy(). That function takes a `source`
+ * parameter (default 'sleeper', so every caller written before ffbeacon
+ * projections existed keeps reading exactly what it always read), and
+ * lib/projections/read.ts is the one caller that passes the source it
+ * actually resolved, so a reader on the ffbeacon source gets reliability
+ * measured against ffbeacon, never against sleeper's.
  *
  * WHAT `mean_ratio` IS AND IS NOT. It stays the RAW, uncentered figure, because
  * it is the audit trail: it is what we actually measured, and the breakdown page
@@ -37,6 +43,35 @@
  * centered, shrunk number the projection engines apply. Keeping them apart is
  * what lets anyone re-derive one from the other and check this file's arithmetic
  * against the table.
+ *
+ * THE SOURCE DIMENSION. `player_weekly_projections` can hold more than one
+ * source's projections for the same player-week (migration 0240 added `source`
+ * to this table for exactly that reason: grading our own projections against
+ * Sleeper's on the same table with the same code). Every quantity this file
+ * derives is computed WITHIN one source and never pooled across sources: a
+ * source's beat rate, mean ratio, multiplier, stdev, availability and mean diff
+ * describe that source's own projections against reality, and mixing two
+ * sources into one figure would average away the very comparison this table
+ * exists to make.
+ *
+ * That includes the positional baseline. `positionBaselineRatio` centers a
+ * player's ratio on his position because the SOURCE marks positions down or up
+ * for reasons that have nothing to do with the player (Sleeper: QB about 5%
+ * low, TE about 3% high, see the comment on that function). A different source
+ * has its own bias, measured on its own projections, and centering a source's
+ * players on another source's bias would not remove that source's positional
+ * skew, it would replace it with someone else's. So the baseline key moved from
+ * `season|scoring|position` to `source|season|scoring|position`, and every
+ * baseline pool, and every row centered on it, is built one source at a time.
+ *
+ * `runCalculateProjectionAccuracy` groups the loaded projections by source and
+ * runs the full three-pass grade (grade every player, build one baseline per
+ * bucket, write rows) once per source, sharing only the parts that are not
+ * source-specific: the actuals, the player positions, and which season counts
+ * as "current". The returned `perSource` summary is the scoreboard: for each
+ * source, pooled and per-position mean absolute error and mean error (bias)
+ * over graded PLAYED weeks in PPR, the only two questions "is this source
+ * better" and "is this source biased" actually need answered.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -163,6 +198,7 @@ type ProjectionRow = {
   playerId: string;
   season: number;
   week: number;
+  source: string;
   ppr: number | null;
   halfPpr: number | null;
   std: number | null;
@@ -178,11 +214,46 @@ type ActualRow = {
   std: number | null;
 };
 
+/**
+ * Per-position figures within one source, over graded PLAYED weeks in PPR
+ * (see the header comment for why PPR only: this is a glance-at-it scoreboard,
+ * not another slice of the full per-scoring table).
+ */
+export type ProjectionAccuracyPositionSummary = {
+  position: string;
+  playersScored: number;
+  weeksGraded: number;
+  /** mean(|actual - projected|) over graded played weeks. Lower is better. */
+  meanAbsoluteError: number | null;
+  /** mean(actual - projected) over graded played weeks. The bias; 0 is unbiased. */
+  meanError: number | null;
+};
+
+/**
+ * One source's scoreboard line: pooled across every position, plus the same
+ * four figures broken out per position. `rowsWritten` counts every row this
+ * run inserted for this source (every season bucket and scoring basis, plus
+ * the blended row), which is a different, larger number than `weeksGraded`
+ * (graded PLAYED weeks in PPR only) on purpose: one is "how much we stored",
+ * the other is "how much evidence backs the headline numbers".
+ */
+export type ProjectionAccuracySourceSummary = {
+  source: string;
+  playersScored: number;
+  rowsWritten: number;
+  weeksGraded: number;
+  meanAbsoluteError: number | null;
+  meanError: number | null;
+  byPosition: ProjectionAccuracyPositionSummary[];
+};
+
 export type ProjectionAccuracyResult = {
   playersScored: number;
   rowsWritten: number;
   currentSeason: number;
   durationMs: number;
+  /** One entry per source graded this run, e.g. 'sleeper' today, 'ffbeacon' once it ships. */
+  perSource: ProjectionAccuracySourceSummary[];
 };
 
 export async function runCalculateProjectionAccuracy(
@@ -194,12 +265,23 @@ export async function runCalculateProjectionAccuracy(
   const settings = await loadSettings(supabase);
   const projections = await loadProjections(supabase);
   if (projections.length === 0) {
-    return { playersScored: 0, rowsWritten: 0, currentSeason: 0, durationMs: Date.now() - started };
+    return {
+      playersScored: 0,
+      rowsWritten: 0,
+      currentSeason: 0,
+      durationMs: Date.now() - started,
+      perSource: [],
+    };
   }
 
+  // "Current season" is not a per-source concept, it is a calendar fact, so it
+  // is picked once from every source's projections pooled together.
   const seasons = [...new Set(projections.map((p) => p.season))].sort((a, b) => b - a);
   const currentSeason = options.currentSeason ?? seasons[0];
 
+  // Actuals and positions are not source-specific either: a player's real
+  // stat line and his position do not depend on whose projection is being
+  // graded against them, so both are loaded once and shared by every source.
   const actuals = await loadActuals(supabase, seasons);
   const positions = await loadPositions(supabase);
 
@@ -215,108 +297,136 @@ export async function runCalculateProjectionAccuracy(
     return settings.recency.olderSeasons;
   };
 
-  // Within the current season only, older weeks decay.
-  const latestWeekBySeason = new Map<number, number>();
+  // Group every projection row by source. Everything past this point runs
+  // once PER SOURCE: the grading, the positional baseline, the shrunk
+  // multiplier, all of it, because a figure measured against one source's
+  // projections is only meaningful applied to that same source's rows.
+  const bySource = new Map<string, ProjectionRow[]>();
   for (const p of projections) {
-    const seen = latestWeekBySeason.get(p.season) ?? 0;
-    if (p.week > seen) latestWeekBySeason.set(p.season, p.week);
-  }
-  const weekWeightFor = (season: number, week: number): number => {
-    if (season !== currentSeason) return 1;
-    const halfLife = Math.max(1, settings.recency.currentSeasonHalfLifeWeeks);
-    const latest = latestWeekBySeason.get(season) ?? week;
-    const age = Math.max(0, latest - week);
-    return 0.5 ** (age / halfLife);
-  };
-
-  // Group every graded week by player.
-  const byPlayer = new Map<string, ProjectionRow[]>();
-  for (const p of projections) {
-    const list = byPlayer.get(p.playerId) ?? [];
+    const list = bySource.get(p.source) ?? [];
     list.push(p);
-    byPlayer.set(p.playerId, list);
+    bySource.set(p.source, list);
   }
 
-  /**
-   * PASS ONE: grade every player. Nothing is turned into a row yet, because a
-   * row's shrunk_multiplier depends on its position's baseline, and a baseline
-   * cannot be known until every player at that position has been graded.
-   */
-  type Graded = {
-    playerId: string;
-    season: number | null;
-    scoring: ScoringBase;
-    position: string | null;
-    acc: Accumulated;
-  };
-  const graded: Graded[] = [];
+  const allPlayers = new Set(projections.map((p) => p.playerId));
+  const allInserts: Database["public"]["Tables"]["player_projection_accuracy"]["Insert"][] = [];
+  const perSource: ProjectionAccuracySourceSummary[] = [];
 
-  for (const [playerId, rows] of byPlayer) {
-    const position = positions.get(playerId) ?? null;
-
-    for (const scoring of SCORING_BASES) {
-      // Per-season rows.
-      const bySeason = new Map<number, ProjectionRow[]>();
-      for (const row of rows) {
-        const list = bySeason.get(row.season) ?? [];
-        list.push(row);
-        bySeason.set(row.season, list);
-      }
-
-      for (const [season, seasonRows] of bySeason) {
-        const stats = accumulate(seasonRows, actualByKey, scoring, () => 1);
-        if (stats.weeksProjected === 0) continue;
-        graded.push({ playerId, season, scoring, position, acc: stats });
-      }
-
-      // Blended row, recency-weighted. This is what the engine reads.
-      const blended = accumulate(rows, actualByKey, scoring, (row) =>
-        seasonWeightFor(row.season) * weekWeightFor(row.season, row.week),
-      );
-      if (blended.weeksProjected === 0) continue;
-      graded.push({ playerId, season: null, scoring, position, acc: blended });
+  for (const [source, sourceRows] of [...bySource].sort(([a], [b]) => a.localeCompare(b))) {
+    // Within the current season only, older weeks decay. Scoped to this
+    // source's own rows: a source that has not published as many weeks yet
+    // must not have its decay curve set by a different source's coverage.
+    const latestWeekBySeason = new Map<number, number>();
+    for (const p of sourceRows) {
+      const seen = latestWeekBySeason.get(p.season) ?? 0;
+      if (p.week > seen) latestWeekBySeason.set(p.season, p.week);
     }
-  }
+    const weekWeightFor = (season: number, week: number): number => {
+      if (season !== currentSeason) return 1;
+      const halfLife = Math.max(1, settings.recency.currentSeasonHalfLifeWeeks);
+      const latest = latestWeekBySeason.get(season) ?? week;
+      const age = Math.max(0, latest - week);
+      return 0.5 ** (age / halfLife);
+    };
 
-  /**
-   * PASS TWO: one baseline per (season bucket, scoring, position).
-   *
-   * Bucketed by SEASON as well as position because the source's positional bias
-   * is not a constant across years, and a per-season row centered on a blended
-   * baseline would be centered on the wrong thing. The blended rows get their
-   * own blended baseline, computed from the same recency-weighted numbers that
-   * built them.
-   *
-   * A null position gets no baseline. We cannot center a player on a position
-   * we do not know he plays, and inventing one is worse than leaving his raw
-   * ratio alone.
-   */
-  const baselineKey = (g: { season: number | null; scoring: ScoringBase; position: string | null }) =>
-    g.position === null ? null : `${g.season ?? "blended"}|${g.scoring}|${g.position}`;
+    // Group this source's rows by player.
+    const byPlayer = new Map<string, ProjectionRow[]>();
+    for (const p of sourceRows) {
+      const list = byPlayer.get(p.playerId) ?? [];
+      list.push(p);
+      byPlayer.set(p.playerId, list);
+    }
 
-  const pools = new Map<string, Accumulated[]>();
-  for (const g of graded) {
-    const key = baselineKey(g);
-    if (key === null) continue;
-    const pool = pools.get(key);
-    if (pool) pool.push(g.acc);
-    else pools.set(key, [g.acc]);
-  }
+    /**
+     * PASS ONE: grade every player, within this source. Nothing is turned
+     * into a row yet, because a row's shrunk_multiplier depends on its
+     * position's baseline, and a baseline cannot be known until every player
+     * at that position, in this source, has been graded.
+     */
+    type Graded = {
+      playerId: string;
+      season: number | null;
+      scoring: ScoringBase;
+      position: string | null;
+      acc: Accumulated;
+    };
+    const graded: Graded[] = [];
 
-  const baselines = new Map<string, number | null>();
-  for (const [key, pool] of pools) baselines.set(key, positionBaselineRatio(pool));
+    for (const [playerId, rows] of byPlayer) {
+      const position = positions.get(playerId) ?? null;
 
-  /** PASS THREE: rows. */
-  const inserts: Database["public"]["Tables"]["player_projection_accuracy"]["Insert"][] = graded.map(
-    (g) => {
+      for (const scoring of SCORING_BASES) {
+        // Per-season rows.
+        const bySeason = new Map<number, ProjectionRow[]>();
+        for (const row of rows) {
+          const list = bySeason.get(row.season) ?? [];
+          list.push(row);
+          bySeason.set(row.season, list);
+        }
+
+        for (const [season, seasonRows] of bySeason) {
+          const stats = accumulate(seasonRows, actualByKey, scoring, () => 1);
+          if (stats.weeksProjected === 0) continue;
+          graded.push({ playerId, season, scoring, position, acc: stats });
+        }
+
+        // Blended row, recency-weighted. This is what the engine reads.
+        const blended = accumulate(rows, actualByKey, scoring, (row) =>
+          seasonWeightFor(row.season) * weekWeightFor(row.season, row.week),
+        );
+        if (blended.weeksProjected === 0) continue;
+        graded.push({ playerId, season: null, scoring, position, acc: blended });
+      }
+    }
+
+    /**
+     * PASS TWO: one baseline per (source, season bucket, scoring, position).
+     *
+     * Bucketed by SOURCE first, because the positional bias being corrected
+     * for is a property of the source, not of football: bucketed by SEASON,
+     * because that bias is not constant across years even within one source;
+     * and a per-season row centered on a blended baseline would be centered
+     * on the wrong thing. The blended rows get their own blended baseline,
+     * computed from the same recency-weighted numbers that built them.
+     *
+     * A null position gets no baseline. We cannot center a player on a
+     * position we do not know he plays, and inventing one is worse than
+     * leaving his raw ratio alone.
+     */
+    const baselineKey = (g: {
+      season: number | null;
+      scoring: ScoringBase;
+      position: string | null;
+    }) => (g.position === null ? null : `${source}|${g.season ?? "blended"}|${g.scoring}|${g.position}`);
+
+    const pools = new Map<string, Accumulated[]>();
+    for (const g of graded) {
+      const key = baselineKey(g);
+      if (key === null) continue;
+      const pool = pools.get(key);
+      if (pool) pool.push(g.acc);
+      else pools.set(key, [g.acc]);
+    }
+
+    const baselines = new Map<string, number | null>();
+    for (const [key, pool] of pools) baselines.set(key, positionBaselineRatio(pool));
+
+    /** PASS THREE: rows, for this source. */
+    const sourceInserts = graded.map((g) => {
       const key = baselineKey(g);
       const baseline = key === null ? null : (baselines.get(key) ?? null);
-      return toInsert(g.playerId, g.season, g.scoring, g.position, g.acc, baseline, settings);
-    },
-  );
+      return toInsert(g.playerId, g.season, g.scoring, g.position, g.acc, baseline, source, settings);
+    });
+    allInserts.push(...sourceInserts);
+
+    perSource.push(
+      summarizeSource(source, sourceRows, actualByKey, positions, byPlayer.size, sourceInserts.length),
+    );
+  }
 
   // Replace wholesale so players who fall out of the projection feed do not
-  // keep a stale reliability score forever.
+  // keep a stale reliability score forever. Every source is rebuilt on every
+  // run, so this clears the whole table rather than one source's slice.
   await withRetry(
     async () => {
       const { error } = await supabase
@@ -331,8 +441,8 @@ export async function runCalculateProjectionAccuracy(
   // Chunked with retry: this is a long run over tens of thousands of rows and
   // Supabase's edge proxy occasionally drops a socket mid-stream.
   const CHUNK = 500;
-  for (let i = 0; i < inserts.length; i += CHUNK) {
-    const chunk = inserts.slice(i, i + CHUNK);
+  for (let i = 0; i < allInserts.length; i += CHUNK) {
+    const chunk = allInserts.slice(i, i + CHUNK);
     await withRetry(
       async () => {
         const { error } = await supabase.from("player_projection_accuracy").insert(chunk);
@@ -343,10 +453,89 @@ export async function runCalculateProjectionAccuracy(
   }
 
   return {
-    playersScored: byPlayer.size,
-    rowsWritten: inserts.length,
+    playersScored: allPlayers.size,
+    rowsWritten: allInserts.length,
     currentSeason,
     durationMs: Date.now() - started,
+    perSource,
+  };
+}
+
+/**
+ * The scoreboard line for one source: PPR, graded PLAYED weeks only, mean
+ * absolute error and mean error (bias), pooled and per position.
+ *
+ * Deliberately a flat, unweighted pass over the raw comparisons rather than a
+ * reuse of the recency-weighted `Accumulated` figures above. Those exist to
+ * build the shrunk_multiplier the projection engines apply, which is meant to
+ * emphasize recent games on purpose. This summary answers a different
+ * question, "how has this source actually done", and an honest answer to that
+ * counts every graded week once, not decayed by how long ago it happened.
+ */
+function summarizeSource(
+  source: string,
+  rows: ProjectionRow[],
+  actualByKey: Map<string, ActualRow>,
+  positions: Map<string, string>,
+  playersScored: number,
+  rowsWritten: number,
+): ProjectionAccuracySourceSummary {
+  type Bucket = { players: Set<string>; weeksGraded: number; absDiffSum: number; diffSum: number };
+  const newBucket = (): Bucket => ({ players: new Set(), weeksGraded: 0, absDiffSum: 0, diffSum: 0 });
+
+  const pooled = newBucket();
+  const byPosition = new Map<string, Bucket>();
+
+  for (const row of rows) {
+    const projected = row.ppr;
+    if (projected === null || projected <= 0) continue;
+
+    const actualRow = actualByKey.get(`${row.playerId}|${row.season}|${row.week}`);
+    if (!actualRow || actualRow.gp <= 0) continue; // not played, or not yet played: not gradeable
+
+    const actual = actualRow.ppr ?? 0;
+    const diff = actual - projected;
+    const abs = Math.abs(diff);
+
+    pooled.players.add(row.playerId);
+    pooled.weeksGraded += 1;
+    pooled.absDiffSum += abs;
+    pooled.diffSum += diff;
+
+    const position = positions.get(row.playerId);
+    if (position) {
+      const bucket = byPosition.get(position) ?? newBucket();
+      bucket.players.add(row.playerId);
+      bucket.weeksGraded += 1;
+      bucket.absDiffSum += abs;
+      bucket.diffSum += diff;
+      byPosition.set(position, bucket);
+    }
+  }
+
+  const summarize = (b: Bucket): Omit<ProjectionAccuracyPositionSummary, "position"> => ({
+    playersScored: b.players.size,
+    weeksGraded: b.weeksGraded,
+    meanAbsoluteError: b.weeksGraded > 0 ? round(b.absDiffSum / b.weeksGraded, 3) : null,
+    meanError: b.weeksGraded > 0 ? round(b.diffSum / b.weeksGraded, 3) : null,
+  });
+
+  // `playersScored` at the top level is the source's coverage: every player it
+  // published a projection for. The pooled bucket's own player count (how many
+  // actually contributed a graded week) is a narrower, different number, so it
+  // is taken by name rather than spread, to avoid silently overwriting coverage
+  // with evidence.
+  const pooledSummary = summarize(pooled);
+  return {
+    source,
+    playersScored,
+    rowsWritten,
+    weeksGraded: pooledSummary.weeksGraded,
+    meanAbsoluteError: pooledSummary.meanAbsoluteError,
+    meanError: pooledSummary.meanError,
+    byPosition: [...byPosition.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([position, bucket]) => ({ position, ...summarize(bucket) })),
   };
 }
 
@@ -435,6 +624,7 @@ function toInsert(
   acc: Accumulated,
   /** His position's average ratio, or null when the pool was too thin to use. */
   baseline: number | null,
+  source: string,
   settings: ReturnType<typeof mergePowerPulseSettings>,
 ): Database["public"]["Tables"]["player_projection_accuracy"]["Insert"] {
   const meanRatio = acc.ratioWeight > 0 ? acc.ratioSum / acc.ratioWeight : null;
@@ -466,6 +656,7 @@ function toInsert(
     season,
     scoring,
     position,
+    source,
     weeks_projected: acc.weeksProjected,
     weeks_played: acc.weeksPlayed,
     weeks_beat: acc.weeksBeat,
@@ -508,7 +699,7 @@ async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]
       async () =>
         await supabase
           .from("player_weekly_projections")
-      .select("player_id, season, week, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
+      .select("player_id, season, week, source, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std")
       .eq("season_type", "regular")
       .not("player_id", "is", null)
       .range(from, from + PAGE - 1),
@@ -522,6 +713,7 @@ async function loadProjections(supabase: ServiceClient): Promise<ProjectionRow[]
         playerId: row.player_id,
         season: Number(row.season),
         week: Number(row.week),
+        source: row.source,
         ppr: numOrNull(row.projected_pts_ppr),
         halfPpr: numOrNull(row.projected_pts_half_ppr),
         std: numOrNull(row.projected_pts_std),

@@ -2,6 +2,12 @@
 
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
+import {
+  matches,
+  normalizeParts,
+  queryTerms,
+  type Haystack,
+} from "@/lib/player-filter";
 
 /**
  * Pick one player out of several hundred.
@@ -23,17 +29,22 @@ import { Search, X } from "lucide-react";
  *   still opens the wheel on a phone. The filter is an ordinary text input
  *   beside it. There is no custom widget to get wrong.
  *
+ *   What it was missing is that a closed select shows nothing. A reader typed a
+ *   name, the list behind the control narrowed, and not one pixel on the page
+ *   moved. So the matches are now DRAWN, as ordinary buttons, above the select
+ *   that still holds all of them. Typing produces a visible answer and one press
+ *   takes it.
+ *
  * THE SELECTED PLAYER IS NEVER FILTERED OUT
  *   A filter that can hide the current selection is a control that silently
  *   changes its own value, so the chosen option is always present whatever the
  *   query says, and is marked as the current pick when it would not otherwise
  *   match.
  *
- * Matching ignores case, accents, and punctuation, and every word has to appear
- * somewhere, so "dandre swift" finds D'Andre Swift and "buf wr" finds the
- * receivers on Buffalo. The team name is searchable because the options are
- * grouped by team and a manager thinking about one roster should be able to say
- * so.
+ * Matching lives in lib/player-filter.ts, is tested there, and reads a name two
+ * ways so "dandre swift" and "d'andre swift" both find D'Andre Swift. The team
+ * he plays for and the roster holding him are both searchable, so "buf wr"
+ * finds the receivers on Buffalo.
  */
 
 export type PlayerOption = {
@@ -43,21 +54,6 @@ export type PlayerOption = {
   group: string;
 };
 
-/** Lowercase, unaccented, punctuation-free. "D'Andre" and "dandre" both land here. */
-function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    // The combining marks NFD just split off. Escaped rather than written
-    // literally so this file stays plain ASCII, and stripped BEFORE the general
-    // cleanup below, which would otherwise turn each mark into a space and cut
-    // an accented name in half.
-    .replace(/\p{M}/gu, "")
-    .replace(/[^a-z0-9 ]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 /**
  * Longest filter this will act on.
  *
@@ -66,6 +62,18 @@ function normalize(text: string): string {
  * a hundred characters to find a running back.
  */
 const MAX_QUERY = 100;
+
+/**
+ * How many matches get a button of their own.
+ *
+ * A cap on the DRAWING, never on the search: the count beneath says how many
+ * more matched and the select below holds every one of them, so nothing is out
+ * of reach at any width. Ten is about the point where a result list stops being
+ * something a reader scans and starts being something they scroll, and a filter
+ * that returns more than ten is a filter that wants another letter typed into
+ * it.
+ */
+const RESULT_LIMIT = 10;
 
 /**
  * Memoized. The parent sets state constantly (searching, paging, saving,
@@ -83,6 +91,7 @@ export const PlayerPicker = memo(function PlayerPicker({
   showCount = true,
   clearFilterOnChange = false,
   excludeIds,
+  resultVerb = "Choose",
 }: {
   label: string;
   hint: string;
@@ -133,6 +142,20 @@ export const PlayerPicker = memo(function PlayerPicker({
    * full rebuild.
    */
   excludeIds?: ReadonlySet<string>;
+  /**
+   * The verb on each match button, when a filter is running.
+   *
+   * "Choose" for a picker whose answer stays in the control, "Add" for one that
+   * is the add button of a package builder. It leads the button's accessible
+   * name, so a reader arrowing a list of ten hears what pressing will do rather
+   * than ten names in a row.
+   *
+   * A PRESENT-TENSE VERB, and only ever read as one. An earlier version also
+   * built the announcement out of it by concatenating "ed", which is fine for
+   * "Add" and produces "chooseed" for the default. Nothing here derives a tense
+   * from a string any more; the caller says what happened.
+   */
+  resultVerb?: string;
 }) {
   const [query, setQuery] = useState("");
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -144,11 +167,12 @@ export const PlayerPicker = memo(function PlayerPicker({
   const filterHintId = `${baseId}-filter-hint`;
   const statusId = `${baseId}-status`;
   const groupId = `${baseId}-group`;
+  const resultsId = `${baseId}-results`;
 
   const haystacks = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, Haystack>();
     for (const option of options) {
-      map.set(option.playerId, normalize(`${option.label} ${option.group}`));
+      map.set(option.playerId, normalizeParts(`${option.label} ${option.group}`));
     }
     return map;
   }, [options]);
@@ -166,18 +190,16 @@ export const PlayerPicker = memo(function PlayerPicker({
     [excludeIds, options],
   );
 
-  const terms = useMemo(
-    () => normalize(query).split(" ").filter(Boolean),
-    [query],
-  );
+  const terms = useMemo(() => queryTerms(query), [query]);
+  const filtering = terms.loose.length > 0;
 
-  const matches = useMemo(() => {
-    if (terms.length === 0) return available;
+  const matched = useMemo(() => {
+    if (!filtering) return available;
     return available.filter((option) => {
-      const hay = haystacks.get(option.playerId) ?? "";
-      return terms.every((term) => hay.includes(term));
+      const hay = haystacks.get(option.playerId);
+      return hay ? matches(hay, terms) : false;
     });
-  }, [available, haystacks, terms]);
+  }, [available, filtering, haystacks, terms]);
 
   const selected = useMemo(
     () => options.find((o) => o.playerId === value) ?? null,
@@ -189,13 +211,12 @@ export const PlayerPicker = memo(function PlayerPicker({
   // The current pick rides along whether or not it matches, so narrowing the
   // list can never quietly discard the reader's choice.
   const shown = useMemo(() => {
-    if (!selected || matches.some((o) => o.playerId === selected.playerId)) {
-      return matches;
+    if (!selected || matched.some((o) => o.playerId === selected.playerId)) {
+      return matched;
     }
-    return [selected, ...matches];
-  }, [matches, selected]);
+    return [selected, ...matched];
+  }, [matched, selected]);
 
-  const filtering = terms.length > 0;
   /**
    * What the list actually looks like now.
    *
@@ -210,15 +231,15 @@ export const PlayerPicker = memo(function PlayerPicker({
     if (!filtering) {
       return `${total} ${total === 1 ? "player" : "players"} in the list.`;
     }
-    if (matches.length === 0) {
+    if (matched.length === 0) {
       return selected
         ? "No players match. Only your current pick is left in the list."
         : "No players match. Only the Anyone option is left in the list.";
     }
-    const kept = shown.length > matches.length ? ", plus your current pick" : "";
-    return matches.length === 1
+    const kept = shown.length > matched.length ? ", plus your current pick" : "";
+    return matched.length === 1
       ? `1 of ${total} players matches${kept}.`
-      : `${matches.length} of ${total} players match${kept}.`;
+      : `${matched.length} of ${total} players match${kept}.`;
   })();
 
   /**
@@ -262,8 +283,14 @@ export const PlayerPicker = memo(function PlayerPicker({
    * fibers of reconciliation for an identical result.
    */
   const grouped = useMemo(
-    () => groupOptions(shown, selected, matches),
-    [shown, selected, matches],
+    () => groupOptions(shown, selected, matched),
+    [shown, selected, matched],
+  );
+
+  /** The matches drawn as buttons. Capped; the select below holds the rest. */
+  const shownResults = useMemo(
+    () => (filtering ? matched.slice(0, RESULT_LIMIT) : []),
+    [filtering, matched],
   );
 
   return (
@@ -307,7 +334,10 @@ export const PlayerPicker = memo(function PlayerPicker({
           spellCheck={false}
           value={query}
           aria-describedby={filterHintId}
-          aria-controls={selectId}
+          // Both things the box narrows: the drawn matches and the full list
+          // underneath them. Naming only the select understated the
+          // relationship the reader is being asked to infer.
+          aria-controls={`${resultsId} ${selectId}`}
           onChange={(e) => {
             filterTouched.current = true;
             setQuery(e.target.value.slice(0, MAX_QUERY));
@@ -319,8 +349,8 @@ export const PlayerPicker = memo(function PlayerPicker({
             // anybody. It moves them on to the list instead, taking the single
             // match with it when there is exactly one.
             e.preventDefault();
-            if (matches.length === 1) {
-              onChange(matches[0].playerId);
+            if (matched.length === 1) {
+              onChange(matched[0].playerId);
               if (clearFilterOnChange) setQuery("");
               // Said out loud, because otherwise the picker changes the value
               // and moves the cursor in one keystroke and the reader hears only
@@ -328,7 +358,11 @@ export const PlayerPicker = memo(function PlayerPicker({
               // for me" from "this was already selected". Set directly rather
               // than through the debounce, since this one is a response to a
               // deliberate keypress and should not wait.
-              setSpokenStatus(`${matches[0].label} selected. Moving to the list.`);
+              // Cleared, or the pending 500ms debounce fires afterwards and
+              // replaces this sentence with a bare count. The keystroke that
+              // got here also set the flag.
+              filterTouched.current = false;
+              setSpokenStatus(`${matched[0].label} selected. Moving to the list.`);
             }
             selectRef.current?.focus();
           }}
@@ -371,6 +405,111 @@ export const PlayerPicker = memo(function PlayerPicker({
         {status}
       </p>
 
+      {/* THE MATCHES, ON SCREEN.
+
+          Without this the filter had no visible effect at all. It narrows a
+          native select, and a native select is CLOSED: a reader types a name,
+          nothing on the page moves, and the control still reads "Add a player
+          you want". The count under the box was the only feedback and it is
+          turned off on Trade Ideas, where two of these sit side by side. So the
+          control worked exactly as designed and looked broken, which is the
+          same thing as being broken.
+
+          Plain buttons in a plain list. Not a listbox, and not aria-activedescendant
+          over the text field: those are the pieces of a combobox, and building
+          one would give up everything the native select is here for. A list of
+          buttons is tabbable, arrow-scrollable by any screen reader's own
+          reading cursor, and pressable with a thumb.
+
+          NOTHING IS HIDDEN BY THE CAP. Ten is what fits without turning a form
+          into a scroll; the full list is in the select directly below, at every
+          breakpoint, and the line under the buttons says how many more there
+          are and where they are. */}
+      {filtering && (
+        <div className="mt-2" id={resultsId}>
+          {shownResults.length === 0 ? (
+            // The zero case is drawn too, and it has to be. Leaving it out put
+            // the original failure straight back: on Trade Ideas the count is
+            // sr-only, so a sighted reader who typed a name with no match saw
+            // the page not move and the closed select still saying "Add a
+            // player you want. The screen reader user was told and they were
+            // not.
+            <p className="rounded-card border border-dashed border-line bg-base/40 px-3 py-2.5 text-sm text-ink-muted">
+              No players match that. Try a surname, or a team.
+            </p>
+          ) : (
+            <ul
+              // Explicit, because Tailwind's preflight sets list-style: none and
+              // Safari then drops the implicit list role. The item count is most
+              // of what tells a reader this is a result set rather than a run of
+              // buttons that happen to be near each other.
+              role="list"
+              aria-label={`Matches for ${filterLabel}`}
+              className="divide-y divide-line overflow-hidden rounded-card border border-line bg-base/40"
+            >
+              {shownResults.map((option) => {
+                const isCurrent = selected?.playerId === option.playerId;
+                return (
+                  <li key={option.playerId}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange(option.playerId);
+                        // Deliberately silent. The caller announces this: the
+                        // package builder says "Josh Allen added. 1 of 4 players
+                        // picked. Press Search to apply", which is strictly more
+                        // than anything this component knows. Speaking here as
+                        // well queued two polite regions against each other and
+                        // the reader heard the player's name twice.
+                        if (clearFilterOnChange) {
+                          setQuery("");
+                          // The list that held this button is about to vanish
+                          // with the query, so focus has to be put somewhere on
+                          // purpose. The filter box is where the reader is and
+                          // where the next name goes. When this add fills a
+                          // package the parent unmounts the whole picker and
+                          // moves focus to the new chip instead, which runs
+                          // after this and wins.
+                          document.getElementById(filterId)?.focus();
+                        }
+                      }}
+                      className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-elevated/60 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-cyan"
+                    >
+                      {/* The accessible name is built from CONTENT rather than
+                          from an aria-label, so the visible words are inside the
+                          spoken name instead of replaced by it. That is what
+                          keeps voice control working: somebody who says "click
+                          Josh Allen" is naming what they can see.
+
+                          The verb leads, because ten buttons whose names are ten
+                          bare player names give a reader no way to tell a result
+                          list from a set of headings. */}
+                      <span className="sr-only">{resultVerb} </span>
+                      <span className="font-semibold">{option.label}</span>
+                      {isCurrent && (
+                        <span className="sr-only">, your current pick</span>
+                      )}
+                      {/* The roster he is on. Second, and quieter, because two
+                          players with the same surname are told apart by the
+                          team in the label already; this answers "whose is he". */}
+                      <span className="shrink-0 text-xs text-ink-muted">
+                        {option.group}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {matched.length > shownResults.length && (
+            <p className="mt-1.5 text-xs text-ink-muted">
+              {matched.length - shownResults.length} more match. Type a bit more,
+              or open the full list below.
+            </p>
+          )}
+        </div>
+      )}
+
       <label htmlFor={selectId} className="mt-3 block text-sm font-semibold text-ink">
         {label}
       </label>
@@ -405,9 +544,9 @@ export const PlayerPicker = memo(function PlayerPicker({
 function groupOptions(
   shown: PlayerOption[],
   selected: PlayerOption | null,
-  matches: PlayerOption[],
+  matchedOptions: PlayerOption[],
 ) {
-  const matched = new Set(matches.map((o) => o.playerId));
+  const matchedIds = new Set(matchedOptions.map((o) => o.playerId));
   const groups = new Map<string, PlayerOption[]>();
   for (const option of shown) {
     const list = groups.get(option.group) ?? [];
@@ -424,7 +563,7 @@ function groupOptions(
       <optgroup key={group} label={group}>
         {list.map((option) => {
           const kept =
-            selected?.playerId === option.playerId && !matched.has(option.playerId);
+            selected?.playerId === option.playerId && !matchedIds.has(option.playerId);
           return (
             <option key={option.playerId} value={option.playerId}>
               {kept ? `${option.label} (your current pick)` : option.label}

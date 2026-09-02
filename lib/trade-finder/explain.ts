@@ -22,6 +22,7 @@ import type {
   SuggestionAsset,
   TeamDirection,
   TradeGoal,
+  TradeStrategy,
 } from "./types";
 
 /** How the reader described what they were after, in the engine's own words. */
@@ -58,6 +59,32 @@ const GOAL_CLAUSE: Record<TradeGoal, string> = {
  */
 const REDRAFT_CLAUSE =
   "This is a one-year league, so the ranking is about what a deal does to your lineup rather than what an asset holds for later.";
+
+/**
+ * The opener when the reader has told us which question they are asking.
+ *
+ * This outranks the stance clause below, and the reason is the same one that
+ * makes the strategy replace the stance multipliers in the ranking: the stance
+ * clause reports an inference about the reader, and this reports a statement by
+ * them. Telling somebody who has just pressed Value that "Power Pulse has you
+ * competing, so this leans on lineup points" describes a ranking that is not the
+ * one they are looking at.
+ *
+ * Dynasty only. A redraft league has its own opener, because there the strategy
+ * was never a choice and phrasing it as one would invite a reader to go looking
+ * for the toggle that turns it off.
+ */
+const STRATEGY_CLAUSE: Record<TradeStrategy, string> = {
+  // Both kept under ninety characters, matching STANCE_CLAUSE below, and for
+  // the reason stated there: three clauses share a 360 character ceiling and a
+  // long opener is paid for by the sentence at the END, which is the one naming
+  // the reader's actual hole. The first drafts ran to 133 and 118, and against
+  // a long team name the contender one truncated that sentence mid-word.
+  contender:
+    "You asked for contender deals, so this ranking leads on lineup points and projected wins.",
+  value:
+    "You asked for value deals, so this ranking leads on what the pieces are worth.",
+};
 
 const STANCE_CLAUSE: Record<TeamDirection, string | null> = {
   // Kept short. Three clauses share a 360 character ceiling, and a team name in
@@ -156,7 +183,8 @@ export function buildHeadline(
  * here would be the same word twice in two lines.
  */
 export function buildRationale(params: {
-  goal: TradeGoal;
+  /** The shape constraint, when the caller set one. Defaults to "any". */
+  goal?: TradeGoal;
   /**
    * What the counterparty's roster is pointing at.
    *
@@ -196,6 +224,13 @@ export function buildRationale(params: {
    */
   isDynasty?: boolean;
   /**
+   * Which question the ranking was answering. See STRATEGY_CLAUSE.
+   *
+   * Absent for a caller that has not set one, which falls back to the reader's
+   * own footing exactly as it did before the toggle existed.
+   */
+  strategy?: TradeStrategy | null;
+  /**
    * Position groups the reader asked for, if any, as plain words.
    *
    * The opening clause names what was ASKED FOR rather than the goal whenever
@@ -230,15 +265,22 @@ export function buildRationale(params: {
     // The reader's own standing outranks the generic "you did not narrow the
     // search" line, because it says something true and specific about why THIS
     // deal is on top rather than merely confirming that no filter was set.
+    const goal = params.goal ?? "balanced";
     const stance =
-      params.goal !== "balanced"
+      goal !== "balanced"
         ? null
         : params.isDynasty === false
           ? REDRAFT_CLAUSE
-          : params.myDirection
-            ? STANCE_CLAUSE[params.myDirection]
-            : null;
-    parts.push(stance ?? GOAL_CLAUSE[params.goal] ?? GOAL_CLAUSE.balanced);
+          : params.strategy === "contender" || params.strategy === "value"
+            ? // Branched rather than indexed. The value is validated twice
+              // before it gets here, so this is belt and braces, but an object
+              // literal answers "__proto__" with something truthy and that
+              // would put "[object Object]" into a sentence on a card.
+              STRATEGY_CLAUSE[params.strategy]
+            : params.myDirection
+              ? STANCE_CLAUSE[params.myDirection]
+              : null;
+    parts.push(stance ?? GOAL_CLAUSE[goal] ?? GOAL_CLAUSE.balanced);
   }
 
   // Why THIS team. A manager's willingness is the part a reader cannot see from
@@ -299,7 +341,7 @@ export function buildRationale(params: {
  */
 export function buildWhyYou(
   mine: SideImpact,
-  goal: TradeGoal,
+  goal: TradeGoal | undefined,
   positionHelped: string | null,
 ): string {
   const parts: string[] = [];

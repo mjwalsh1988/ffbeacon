@@ -23,6 +23,7 @@ import type { WeeklyDistribution } from "@/lib/power-pulse/what-if";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { resolveCurrentWeek } from "@/lib/league-matchups";
 import { getNflState } from "@/lib/sleeper";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import {
   loadTradeFinderLeague,
   type RosterIdentity,
@@ -228,7 +229,7 @@ export async function loadTradeImpactWorld(
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
 
   const scoringBase = closestScoringBase(league.scoringSettings);
-  const defenseSeasons = [league.season - 1, league.season - 2];
+  const defenseSeasons = defenseSeasonsFor(league.season);
 
   const [projectionRows, accuracy, defense, schedule, cachedWeekly] = await Promise.all([
     loadProjections(admin, playerIds, league.season, currentWeek),

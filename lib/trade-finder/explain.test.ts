@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPitch, listAssets } from "./explain";
+import { buildPitch, buildRationale, listAssets } from "./explain";
 import type { SideImpact, SuggestionAsset } from "./types";
 
 const player = (name: string): SuggestionAsset => ({
@@ -158,5 +158,59 @@ describe("buildPitch", () => {
     ]) {
       expect(pitch).not.toContain(pushy);
     }
+  });
+});
+
+/**
+ * The opener is paid for by the sentence at the END.
+ *
+ * buildRationale truncates at 360 characters, and the last clause is the one
+ * naming the reader's actual positional hole. A long opener does not read as
+ * long, it reads as a sentence that stops mid-word, so the ceiling has to be
+ * held by a test rather than by a comment. The strategy clauses shipped at 133
+ * and 118 characters against a stance clause of 89, and against a long team
+ * name the contender one cut that last sentence in half.
+ */
+describe("buildRationale stays inside its character budget", () => {
+  // Sleeper lets a manager name a team about this long, and formatTeamLabel
+  // pairs the name with the handle, so this is not a pathological input.
+  const longTeamName = "The Absolutely Enormous Team Name Experience (@managerhandle)";
+
+  const rationale = (strategy: "contender" | "value") =>
+    buildRationale({
+      strategy,
+      direction: "rebuild",
+      teamName: longTeamName,
+      positionHelped: "running back",
+      needPoints: 3.4,
+      named: null,
+      myDirection: "win-now",
+      isDynasty: true,
+      mine: impact({ lineupDelta: 2.2, winsDelta: 0.24, valueDelta: 140 }),
+    });
+
+  for (const strategy of ["contender", "value"] as const) {
+    it(`does not truncate the ${strategy} opener's sentence off the end`, () => {
+      const text = rationale(strategy);
+      expect(text.length).toBeLessThanOrEqual(360);
+      // The END of the string is what has to be checked, not the presence of
+      // the position name. Truncation lops the last few characters off, and the
+      // position is named early in that final clause, so "does it mention the
+      // running back" is true either way. Whether the sentence FINISHES is the
+      // question, and it is the one a reader hears.
+      expect(text.endsWith("and this deal lands there.")).toBe(true);
+    });
+  }
+
+  it("names the question the reader actually asked", () => {
+    expect(rationale("contender")).toContain("asked for contender deals");
+    expect(rationale("value")).toContain("asked for value deals");
+  });
+
+  it("lets the reader's stated strategy outrank Power Pulse's read of them", () => {
+    // myDirection is win-now above. The stance clause would say "Power Pulse
+    // has you competing"; the reader pressed Value, and a card that describes
+    // a ranking they are not looking at is worse than one that says nothing.
+    expect(rationale("value")).not.toContain("Power Pulse has you competing");
   });
 });

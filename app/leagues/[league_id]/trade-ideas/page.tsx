@@ -57,10 +57,12 @@ import {
   type LeagueEmphasis,
 } from "@/lib/league-emphasis";
 import { categorizeLeague } from "@/lib/league-category";
+import { noticeText } from "@/lib/trade-finder/notice";
 import {
   TRADE_POSITIONS,
   readTradePosition,
   type TradePosition,
+  type TradeStrategy,
 } from "@/lib/trade-finder/types";
 
 /**
@@ -527,13 +529,37 @@ async function TradeFinderSection({
       ? signalCheckSettings.quality
       : DEFAULT_TRADE_QUALITY_CONFIG;
 
+  /**
+   * Which side of the toggle this tab opens on.
+   *
+   * Read off Power Pulse's call on the reader's OWN team, so a dynasty team
+   * that is out of the race opens on Value and one chasing January opens on
+   * Contender. A league with no Power Pulse row has told us nothing, so it opens
+   * on Contender, which is the reading that talks about the season in front of
+   * them rather than the one that assumes they have given up on it.
+   *
+   * In a redraft league it is still passed and still ignored: the toggle is not
+   * rendered, and resolveStrategy overrides whatever arrives with Contender.
+   * Computed unconditionally rather than behind a branch, because the value is
+   * cheap and a branch here would be a second place that has to know what a
+   * redraft league is.
+   */
+  const myStatusKey =
+    finderLeague.teams.find((t) => t.rosterId === myRosterId)?.statusKey ?? null;
+  const defaultStrategy: TradeStrategy =
+    finderLeague.isDynasty && myStatusKey === "rebuilder" ? "value" : "contender";
+
   const initialResult = findTrades({
     myRosterId,
     teams: finderLeague.teams,
     startingSlots: finderLeague.startingSlots,
     isDynasty: finderLeague.isDynasty,
     allowPicks: finderLeague.allowPicks,
-    goal: "balanced",
+    // The same strategy the toggle will open on, so the deal this tab paints on
+    // arrival is one its own Search button reproduces. A first paint ranked by a
+    // different question from the control beside it is a tab that changes its
+    // mind the first time anybody presses anything.
+    strategy: defaultStrategy,
     targetPlayerIds: [],
     offerPlayerIds: [],
     excludeKeys: declined,
@@ -605,6 +631,8 @@ async function TradeFinderSection({
       }
       myPlayers={myPlayers}
       theirPlayers={theirPlayers}
+      isDynasty={finderLeague.isDynasty}
+      defaultStrategy={defaultStrategy}
       availablePositions={availablePositions}
       positionalWarByPlayer={positionalWarByPlayer}
       initial={{
@@ -623,8 +651,13 @@ async function TradeFinderSection({
             initialResult.suggestions.length - initialSuggestions.length,
           ),
           // The first paint names no player, so it can never hit one of the
-          // reasons a named package fails.
-          notice: null,
+          // reasons a named package fails. It CAN hit the contender floor,
+          // though: a redraft league where nothing on the board improves this
+          // lineup opens with an empty panel, and the reason is the only thing
+          // on it worth reading. Taken from the result rather than hardcoded,
+          // so the tab's first answer explains itself exactly as its own Search
+          // button would.
+          notice: noticeText(initialResult.notice),
         },
       }}
     />

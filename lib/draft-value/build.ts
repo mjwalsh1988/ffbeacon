@@ -6,22 +6,46 @@
  *
  * WHAT IT LOADS, PER FORMAT
  *   rankings + player_value_history   our value opinion, source ffbeacon
- *   player_weekly_projections         summed and rescored under the FORMAT'S OWN
- *                                     canonical scoring, so TE premium is exact
- *                                     rather than an invented multiplier
+ *   player_weekly_projections         rescored under the FORMAT'S OWN canonical
+ *                                     scoring via lib/projections/read.ts, so TE
+ *                                     premium is exact rather than an invented
+ *                                     multiplier
  *   player_projection_accuracy        beat rate, reliability, availability
  *   player_market_snapshots           the public ADP, via the SAME key mapping
  *                                     the live draft room uses
  *   draft_market_adp                  our own rooms, as a confidence input
  *
- * THE PROJECTION IS RESCORED, NOT READ OFF A COLUMN. player_market_snapshots
- * carries projected_pts_ppr / _half_ppr / _std, but no column for TE premium,
- * and a TEP board scored on the PPR column would price tight ends as though the
- * premium did not exist. Sleeper publishes weekly projections as a stat map
- * whose keys match a scoring map's keys (it emits `bonus_rec_te` as the tight
- * end's projected reception count), so summing the weekly stat lines and taking
- * the dot product against the format's canonical scoring gives the right answer
- * for all thirteen formats with no special cases.
+ * THE PROJECTION IS RESCORED, NOT READ OFF A COLUMN. The public ADP snapshot
+ * table stores a market source's own point totals per scoring base, but no
+ * column for TE premium, and a TEP board scored on that alone would price
+ * tight ends as though the premium did not exist. Sleeper publishes weekly
+ * projections as a stat map whose keys match a scoring map's keys (it emits
+ * `bonus_rec_te` as the tight end's projected reception count), so scoring each
+ * week's stat line against the format's canonical scoring gives the right
+ * answer for all thirteen formats with no special cases.
+ *
+ * THE PROJECTION IS THE RAW SEASON TOTAL, NOT THE ADJUSTED ONE.
+ * lib/projections/read.ts loadAdjustedProjections also applies opponent
+ * strength, reliability and availability, but engine.ts ALREADY applies its
+ * own reliability and availability discount to `projectedPoints` (see
+ * `adjustmentMultiplier`, driven by the beatRate/shrunkMultiplier/
+ * availabilityRate this file loads separately from player_projection_accuracy
+ * a few lines below). Feeding it a number that already carries those two
+ * adjustments would discount the same thing twice and silently understate
+ * every player's points above replacement. So this file reads
+ * `rawPoints` off each AdjustedProjection, the value BEFORE any multiplier,
+ * summed across the season: mathematically identical to the old
+ * sum-then-score, because the dot product distributes over a sum either way.
+ * `rawPoints` therefore also drops the OPPONENT-STRENGTH adjustment, not only
+ * reliability and availability: it is the projected stat line scored as-is,
+ * before the defense a player faces that week ever multiplies it. A player
+ * with a soft or brutal remaining slate reads the same as one with an
+ * average slate on this board. That is an accepted tradeoff of reading
+ * rawPoints rather than points, not a separate oversight.
+ * Bringing opponent strength and injury into the Beacon Steals board too would
+ * mean teaching engine.ts to accept a pre-adjusted number and dropping its own
+ * reliability/availability step, which is a change to the pure, unit-tested
+ * judgement layer this file is not the one to make.
  *
  * Formats with no FF Beacon rankings, or no ADP market, are SKIPPED rather than
  * written empty. An empty board is a bug; a missing board is a fact.
@@ -29,9 +53,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { scoreStatMap, type StatMap } from "@/lib/league-scoring";
 import { adpFormatKeyCandidates } from "@/lib/on-the-clock/adp";
 import { FFBEACON_SOURCE_SLUG } from "@/lib/signal-check/format";
+import { loadAdjustedProjections, type AdjustedProjectionSummary } from "@/lib/projections/read";
+import { getNflState } from "@/lib/sleeper";
+import { resolveCurrentWeek } from "@/lib/league-matchups";
 import {
   canonicalScoringForFormat,
   STEAL_POSITIONS,
@@ -41,6 +67,12 @@ import {
 import { loadDraftValueSettings } from "./settings";
 import { scoreFormat, type FormatShape, type PlayerInput } from "./engine";
 import { buildVerdict } from "./verdict";
+
+/**
+ * No league tells this build when its playoffs start, so it uses the same
+ * default trade-finder-data.ts falls back to when a league cannot say either.
+ */
+const DEFAULT_PLAYOFF_WEEK_START = 15;
 
 type Client = SupabaseClient<Database>;
 type TargetInsert = Database["public"]["Tables"]["draft_value_targets"]["Insert"];
@@ -78,46 +110,6 @@ interface FormatRow {
   scoring_type: string;
   te_premium_bonus: number;
   is_superflex: boolean;
-}
-
-/** Sum every projected week for a season into one stat map per player. */
-async function loadSeasonStatLines(
-  supabase: Client,
-  season: number,
-): Promise<Map<string, StatMap>> {
-  const totals = new Map<string, Record<string, number>>();
-
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("player_weekly_projections")
-      .select("player_id, stat_line")
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .not("player_id", "is", null)
-      .order("player_id", { ascending: true })
-      .order("week", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`weekly projections read failed: ${error.message}`);
-    if (!data || data.length === 0) break;
-
-    for (const row of data) {
-      if (!row.player_id) continue;
-      const stats = (row.stat_line ?? {}) as Record<string, unknown>;
-      let bucket = totals.get(row.player_id);
-      if (!bucket) {
-        bucket = {};
-        totals.set(row.player_id, bucket);
-      }
-      for (const [key, value] of Object.entries(stats)) {
-        const n = typeof value === "number" ? value : Number(value);
-        if (!Number.isFinite(n)) continue;
-        bucket[key] = (bucket[key] ?? 0) + n;
-      }
-    }
-    if (data.length < PAGE) break;
-  }
-
-  return totals as Map<string, StatMap>;
 }
 
 /** Reliability, availability, and beat rate, keyed by (player, scoring base). */
@@ -313,12 +305,17 @@ export async function runBuildDraftValue(
     (f) => (include.length === 0 || include.includes(f.slug)) && !exclude.has(f.slug),
   ) as FormatRow[];
 
-  // Both of these depend on the SEASON only, never on the format, so they are
-  // loaded once for the whole run rather than once per format.
-  const [statLines, marketSnapshots] = await Promise.all([
-    loadSeasonStatLines(supabase, season),
-    loadMarketSnapshots(supabase, season),
-  ]);
+  // Depends on the SEASON only, never on the format, so it is loaded once for
+  // the whole run rather than once per format.
+  const marketSnapshots = await loadMarketSnapshots(supabase, season);
+
+  // No league tells this build what week it is either. Resolved once for the
+  // whole run: it only feeds the injury multiplier's week-to-week discount
+  // inside loadAdjustedProjections, and that discount is moot anyway (see the
+  // header note on why this file reads rawPoints rather than the adjusted
+  // figure), so a single best-effort value for the whole run is enough.
+  const nflState = await getNflState();
+  const currentWeek = resolveCurrentWeek(nflState, season, DEFAULT_PLAYOFF_WEEK_START);
 
   const skipped: BuildResult["formatsSkipped"] = [];
   const builtSlugs: string[] = [];
@@ -328,6 +325,35 @@ export async function runBuildDraftValue(
   // Accuracy depends only on the scoring base, so it is loaded once per base
   // rather than once per format.
   const accuracyByBase = new Map<string, Awaited<ReturnType<typeof loadAccuracy>>>();
+
+  interface FormatContext {
+    format: FormatRow;
+    market: { adp: Map<string, number>; key: string; source: string };
+    accuracy: Awaited<ReturnType<typeof loadAccuracy>>;
+    roomAdp: Map<string, { adp: number; picks: number }>;
+    rankings: {
+      player_id: string;
+      overall_rank: number;
+      position_rank: number;
+      position: string;
+    }[];
+    valueByPlayer: Map<string, number>;
+    scoring: ReturnType<typeof canonicalScoringForFormat>;
+    stealRankings: FormatContext["rankings"];
+    /**
+     * Groups formats that will read the identical projection: the projected
+     * point total only varies with the scoring type and the TE premium bonus
+     * (canonicalScoringForFormat's only two inputs), never with league type,
+     * superflex, or roster shape. Two formats sharing this key share one
+     * loadAdjustedProjections call below instead of running it twice.
+     */
+    configKey: string;
+  }
+
+  // Pass 1: everything a format needs EXCEPT its projections, which is the
+  // one query bundle that does not actually vary per format (see configKey
+  // above). Failures here are per-format, same skip reasons as before.
+  const contexts: FormatContext[] = [];
 
   for (const format of formats) {
     try {
@@ -361,12 +387,7 @@ export async function runBuildDraftValue(
         continue;
       }
 
-      const rankings: {
-        player_id: string;
-        overall_rank: number;
-        position_rank: number;
-        position: string;
-      }[] = [];
+      const rankings: FormatContext["rankings"] = [];
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from("rankings")
@@ -440,13 +461,102 @@ export async function runBuildDraftValue(
         tePremiumBonus: Number(format.te_premium_bonus),
       });
 
+      // Steal-eligible rows only (K, DEF, and IDP are out of scope), so the
+      // batch below never fetches a projection nobody is going to use.
+      const stealRankings = rankings.filter((row) => toStealPosition(row.position) !== null);
+
+      contexts.push({
+        format,
+        market,
+        accuracy,
+        roomAdp,
+        rankings,
+        valueByPlayer,
+        scoring,
+        stealRankings,
+        configKey: `${base}|${Number(format.te_premium_bonus) || 0}`,
+      });
+    } catch (err) {
+      // One thin or broken format must not take the whole board down.
+      skipped.push({
+        slug: format.slug,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Pass 2: one loadAdjustedProjections call per distinct configKey, instead
+  // of one per format. The rows and their rescoring depend only on the
+  // scoring type and the TE premium bonus, so this is the same dedupe
+  // accuracyByBase already does for accuracy, applied to the far more
+  // expensive projection bundle (a settings read, two source-availability
+  // probes, a chunked projection count-then-select, an internal accuracy
+  // load, and a defense-splits load). Formats are grouped by their shared
+  // player universe so the union is loaded once and every format in the
+  // group reads out of the same Map.
+  const groups = new Map<string, FormatContext[]>();
+  for (const ctx of contexts) {
+    const list = groups.get(ctx.configKey) ?? [];
+    list.push(ctx);
+    groups.set(ctx.configKey, list);
+  }
+
+  const projectionsByConfig = new Map<string, Map<string, AdjustedProjectionSummary>>();
+
+  for (const [configKey, group] of groups) {
+    const playerIds = new Set<string>();
+    const positionByPlayer = new Map<string, string>();
+    for (const ctx of group) {
+      for (const row of ctx.stealRankings) {
+        playerIds.add(row.player_id);
+        positionByPlayer.set(row.player_id, row.position);
+      }
+    }
+
+    try {
+      // See the header note: rawPoints, not the adjusted `points`, because
+      // engine.ts already applies its own reliability/availability discount
+      // from the beatRate/shrunkMultiplier/availabilityRate loaded above, and
+      // the two must not stack. scoringSettings is identical for every format
+      // in this group by construction of configKey.
+      const { byPlayer } = await loadAdjustedProjections({
+        supabase,
+        playerIds: [...playerIds],
+        season,
+        fromWeek: 1,
+        scoringSettings: group[0].scoring,
+        positionByPlayer,
+        currentWeek,
+      });
+      projectionsByConfig.set(configKey, byPlayer);
+    } catch (err) {
+      // A broken projection load only takes down the formats that share this
+      // configKey, not the whole board.
+      const reason = err instanceof Error ? err.message : String(err);
+      for (const ctx of group) skipped.push({ slug: ctx.format.slug, reason });
+    }
+  }
+
+  // Pass 3: score and write, per format.
+  for (const ctx of contexts) {
+    const projections = projectionsByConfig.get(ctx.configKey);
+    if (!projections) continue; // pass 2 already recorded why
+
+    try {
+      const { format, market, accuracy, roomAdp, rankings, valueByPlayer } = ctx;
+
       const inputs: PlayerInput[] = [];
       for (const row of rankings) {
         const position = toStealPosition(row.position);
         if (!position) continue; // K, DEF, and IDP are out of scope
 
-        const stats = statLines.get(row.player_id);
-        const projected = stats ? scoreStatMap(stats, scoring) : null;
+        const summary = projections.get(row.player_id);
+        let projected: number | null = null;
+        if (summary && summary.weeks > 0) {
+          let total = 0;
+          for (const week of summary.byWeek.values()) total += week.rawPoints;
+          projected = total;
+        }
         const acc = accuracy.get(row.player_id);
         const room = roomAdp.get(row.player_id);
 
@@ -522,7 +632,7 @@ export async function runBuildDraftValue(
     } catch (err) {
       // One thin or broken format must not take the whole board down.
       skipped.push({
-        slug: format.slug,
+        slug: ctx.format.slug,
         reason: err instanceof Error ? err.message : String(err),
       });
     }

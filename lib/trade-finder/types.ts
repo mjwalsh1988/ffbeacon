@@ -23,6 +23,88 @@ import type { PulseSnapshot } from "./pulse";
 export type { PulseSnapshot } from "./pulse";
 
 /**
+ * Which question the ranking is answering: does this deal win me games, or does
+ * it win me the trade?
+ *
+ * These are the two things a manager actually wants from a suggestion engine and
+ * they routinely disagree, which is why picking one has to be the reader's call
+ * rather than a weighting buried in a scoring function.
+ *
+ *   "contender" ranks on the lineup: projected points per week, and what those
+ *   points are worth in games against the schedule still to play. Trade value
+ *   still keeps a deal honest, it just stops deciding the order.
+ *
+ *   "value" ranks on what the pieces are worth in this league's format, from the
+ *   reader's chosen source. Youth and draft capital count here too, because in a
+ *   dynasty league they ARE value that has not been spent yet.
+ *
+ * A REDRAFT LEAGUE ONLY EVER GETS "contender". That follows from the league
+ * rather than from a default we chose. Nothing carries past January, so a pile
+ * of trade
+ * value that does not score points on Sunday is worth exactly nothing, and the
+ * reader is never asked a question whose other answer is wrong.
+ */
+export type TradeStrategy = "contender" | "value";
+
+/**
+ * The toggle's two options.
+ *
+ * The blurb is a phrase rather than a sentence because it rides inside the
+ * control's accessible name, so it is heard on every arrow press. That is also
+ * why the CONTENDER one says "only", and why the word is load-bearing: a deal
+ * that costs lineup points is excluded rather than ranked lower, and that is
+ * the fact which explains an empty panel. A reader who meets it here has met it
+ * before they need it, rather than in a paragraph they may never tab to.
+ */
+export const TRADE_STRATEGIES: {
+  key: TradeStrategy;
+  label: string;
+  blurb: string;
+}[] = [
+  {
+    key: "contender",
+    label: "Contender",
+    blurb: "only deals that add points to your lineup, ranked by projected wins",
+  },
+  {
+    key: "value",
+    label: "Value",
+    blurb: "ranks on what the pieces are worth, youth and picks included",
+  },
+];
+
+const STRATEGY_KEYS = new Set<string>(TRADE_STRATEGIES.map((s) => s.key));
+
+/**
+ * The strategy actually in force, given the league.
+ *
+ * One function so the engine, the server action, the page's first paint and the
+ * toggle itself can never disagree about what a redraft league is doing. A
+ * second copy of "redraft means contender" is how a surface ends up rendering a
+ * toggle the engine ignores.
+ */
+export function resolveStrategy(
+  isDynasty: boolean,
+  strategy?: TradeStrategy | string | null,
+): TradeStrategy | null {
+  // Not a default. A one-year league has no second answer, so the reader is
+  // never offered the toggle and whatever arrived on the wire is discarded.
+  if (!isDynasty) return "contender";
+  // NULL, not "contender", when a dynasty caller has said nothing. Absent means
+  // we have not been told, and the ranking then reads the team's own footing the
+  // way it always did. Guessing "contender" here would quietly hand every
+  // dynasty rebuilder a win-now shortlist on the strength of a missing field.
+  return readTradeStrategy(strategy);
+}
+
+/** Coerce anything off the wire to a strategy, or null when it is not one. */
+export function readTradeStrategy(raw: unknown): TradeStrategy | null {
+  return typeof raw === "string" && STRATEGY_KEYS.has(raw)
+    ? (raw as TradeStrategy)
+    : null;
+}
+
+/**
  * What the reader is trying to do. Weights the ranking; never fabricates data.
  *
  * Each of these names a SHAPE of deal rather than a filter on what may appear in
@@ -39,9 +121,14 @@ export type TradeGoal =
   | "get-younger";
 
 /**
- * The blurb is read aloud on every arrow press, because it rides in the option
- * text rather than in a hint beside the control. That is the reason to keep it
- * to a phrase: it is heard five times while somebody makes one choice.
+ * The five shapes, with the words the dropdown used to show.
+ *
+ * Trade Ideas no longer offers them: the reader picks a strategy, and the shape
+ * of the package falls out of that rather than being chosen in advance. The
+ * keys still drive the engine's shape constraints, so this list stays as the
+ * one place that names them; the labels and blurbs have no production reader
+ * today and are kept so that a surface which wants to offer a shape again does
+ * not have to reinvent the wording.
  */
 export const TRADE_GOALS: { key: TradeGoal; label: string; blurb: string }[] = [
   {
@@ -241,7 +328,25 @@ export type TradeFinderInput = {
   isDynasty: boolean;
   /** False for redraft, where no pick has a published value. */
   allowPicks: boolean;
-  goal: TradeGoal;
+  /**
+   * Which question the ranking answers. See TradeStrategy.
+   *
+   * Optional, and resolved through `resolveStrategy` rather than read directly,
+   * so a redraft league lands on "contender" whatever the caller passed and a
+   * caller that has not thought about it lands on the reading that talks about
+   * this season.
+   */
+  strategy?: TradeStrategy;
+  /**
+   * The SHAPE the deal has to take.
+   *
+   * No longer a control on Trade Ideas: the reader picks a strategy now, and the
+   * five shapes were answering a different question from the one the toggle
+   * asks. The constraint itself is unchanged and still honoured, so a caller
+   * that wants a specific shape can still ask for one; the surface simply does
+   * not, and leaving it out means "any shape".
+   */
+  goal?: TradeGoal;
   /**
    * Players locked onto the INCOMING side ("what would it take to get these?").
    *
@@ -424,7 +529,18 @@ export type TradeFinderNotice =
   | "targets-missing"
   | "targets-unpriced"
   | "targets-unaffordable"
-  | "offers-missing";
+  | "offers-missing"
+  /**
+   * Deals existed and every one of them would have cost the reader points off
+   * their starting lineup, so the contender floor turned them all away.
+   *
+   * This one is not a malformed question; it is the honest answer to a good one,
+   * and it earns a notice because the alternative reads as a broken tool. A
+   * redraft manager who is told "no trade to suggest" with a full league of
+   * rosters in front of them assumes the search failed. Told that the search ran
+   * and nothing on the board makes their Sunday better, they have their answer.
+   */
+  | "no-lineup-gain";
 
 /** What a league returns to a surface: the best deal, plus what is behind it. */
 export type TradeFinderResult = {

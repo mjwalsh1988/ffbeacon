@@ -29,6 +29,11 @@ import {
 import { opponentMultiplier } from "@/lib/power-pulse/project";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import type { PulsePosition } from "@/lib/power-pulse/types";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
+import { loadAdjustedProjections } from "@/lib/projections/read";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
+import { canonicalScoringForFormat } from "@/lib/draft-value/default-settings";
+import type { ScoringSettings } from "@/lib/league-scoring";
 import { buildSignals } from "./signals";
 import { loadGameLogs, loadPositionalFinishes } from "./league-load";
 import type {
@@ -42,14 +47,21 @@ type ServiceClient = SupabaseClient<Database>;
 
 const PAGE = 1000;
 
-/** Scoring bases we can read a projection in, keyed off the reader's format. */
-const SCORING_COLUMN = {
-  ppr: "projected_pts_ppr",
-  half_ppr: "projected_pts_half_ppr",
-  std: "projected_pts_std",
-} as const;
+export type ScoringBase = "ppr" | "half_ppr" | "std";
 
-export type ScoringBase = keyof typeof SCORING_COLUMN;
+/**
+ * A canonical (no TE premium) ScoringSettings map for each bare scoring
+ * base, built once per module load. The manual calculator has a scoring base
+ * but no league, so there is nothing to build a real dot product from; this
+ * is the same fallback lib/projections/engine.ts's own CANONICAL_SCORING uses
+ * for the identical reason, reproduced here because that map is private to
+ * that file.
+ */
+const CANONICAL_SCORING: Record<ScoringBase, ScoringSettings> = {
+  ppr: canonicalScoringForFormat({ scoringType: "ppr", tePremiumBonus: 0 }),
+  half_ppr: canonicalScoringForFormat({ scoringType: "half_ppr", tePremiumBonus: 0 }),
+  std: canonicalScoringForFormat({ scoringType: "standard", tePremiumBonus: 0 }),
+};
 
 /** The accuracy table keys its rows by these same strings. */
 const ACCURACY_SCORING: Record<ScoringBase, string> = {
@@ -79,11 +91,83 @@ export type PlayerOutlook = {
 };
 
 /**
+ * Every player id at a position that carries a projection somewhere inside
+ * the window, read WITHOUT touching a points column: only `player_id` and
+ * the joined position filter. This is the same scoping the raw query used to
+ * apply implicitly, kept explicit now that scoring is somebody else's job.
+ *
+ * Filtered to SLEEPER_SOURCE. player_weekly_projections now also holds
+ * ffbeacon rows (see lib/projections/source-constants.ts), and the ffbeacon
+ * builder mirrors every Sleeper row rather than adding coverage of its own,
+ * so this stays the complete player universe while reading half the rows.
+ * Without the filter every player at the position would be counted twice,
+ * which does not change WHO shows up in the returned id list but does double
+ * the row count loadAdjustedProjections has to load for them next.
+ *
+ * Paged, because a full position across a dozen remaining weeks runs well
+ * past the 1000-row default and a silent truncation here would quietly lower
+ * replacement level for everyone.
+ */
+async function playerIdsAtPosition(
+  supabase: SupabaseClient<Database>,
+  position: string,
+  season: number,
+  fromWeek: number,
+  toWeek: number,
+): Promise<string[]> {
+  const ids = new Set<string>();
+
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("player_weekly_projections")
+      .select("player_id, players!inner(position)")
+      .eq("season", season)
+      .eq("season_type", "regular")
+      .eq("source", SLEEPER_SOURCE)
+      .gte("week", fromWeek)
+      .lte("week", toWeek)
+      .eq("players.position", position)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+
+    for (const row of data as unknown as Array<{ player_id: string | null }>) {
+      if (row.player_id) ids.add(row.player_id);
+    }
+
+    if (data.length < PAGE) break;
+  }
+
+  return [...ids];
+}
+
+/**
  * Rest-of-season projections for every player at one position.
  *
- * Paged, because a full position across a dozen remaining weeks runs well past
- * the 1000-row default and a silent truncation here would quietly lower
- * replacement level for everyone.
+ * Routed through lib/projections/read.ts loadAdjustedProjections rather than
+ * scored straight off the raw Sleeper columns, so the manual calculator's
+ * replacement level and its "what does he project for" answer carry the same
+ * opponent-strength, reliability, availability and injury adjustments league
+ * mode already applies (lib/faab/league-faab.ts, via the same reader).
+ *
+ * A null projection is Sleeper declining to cover a player for a week, and it
+ * must never become a zero: loadAdjustedProjections already keeps that
+ * distinction (a week only counts when projectPlayerWeek actually returned
+ * one), so nothing here has to re-derive it. A player who is genuinely OUT is
+ * stored as a real 0 and does count, for the same reason.
+ *
+ * playerIdsAtPosition and loadAdjustedProjections both scan
+ * player_weekly_projections for the same window: the first to discover WHO
+ * is at this position, the second to score them. That is not collapsible
+ * without either teaching lib/projections/read.ts a position-based query
+ * (it only accepts an explicit player id list, by design, so no caller can
+ * pick a source for itself) or widening the enumeration to lib.players,
+ * which would pull in every roster-eligible player at the position whether
+ * or not Sleeper ever projected them, INCREASING the id list
+ * loadAdjustedProjections has to chunk through rather than shrinking it. The
+ * caller wraps this whole function in unstable_cache for 24 hours (see
+ * loadPositionProjectionsCached below), so the duplicate scan runs once a
+ * day per (position, season, week window, scoring), not once per request.
  */
 async function loadPositionProjections(
   position: string,
@@ -93,43 +177,30 @@ async function loadPositionProjections(
   scoring: ScoringBase,
 ): Promise<Map<string, { total: number; weeks: number }>> {
   const supabase = createCachedReadClient();
-  const column = SCORING_COLUMN[scoring];
+  const playerIds = await playerIdsAtPosition(supabase, position, season, fromWeek, toWeek);
+  if (playerIds.length === 0) return new Map();
+
+  const positionByPlayer = new Map(playerIds.map((id) => [id, position]));
+
+  const { byPlayer } = await loadAdjustedProjections({
+    supabase,
+    playerIds,
+    season,
+    fromWeek,
+    toWeek,
+    scoringSettings: CANONICAL_SCORING[scoring],
+    positionByPlayer,
+    // No live week here beyond fromWeek itself: the manual calculator has no
+    // roster and no per-player injury designation to weigh against it, so the
+    // injury multiplier's week-to-week discount (which only fires for the
+    // CURRENT week) never applies inside this window anyway.
+    currentWeek: fromWeek,
+  });
+
   const totals = new Map<string, { total: number; weeks: number }>();
-
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("player_weekly_projections")
-      .select(`player_id, week, ${column}, players!inner(position)`)
-      .eq("season", season)
-      .eq("season_type", "regular")
-      .gte("week", fromWeek)
-      .lte("week", toWeek)
-      .eq("players.position", position)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-
-    for (const row of data as unknown as Array<Record<string, unknown>>) {
-      const playerId = row.player_id;
-      if (typeof playerId !== "string") continue;
-      // A null projection is Sleeper declining to cover this player, and it must
-      // not become a zero. Number(null) is 0 and Number.isFinite(0) is true, so
-      // checking the parsed value alone lets every unprojected week through as a
-      // scoring week worth nothing, which both drags the player's average down
-      // and inflates his week count. Reject the null before it is parsed.
-      // A player who is genuinely OUT is stored as a real 0 and does count.
-      const raw = row[column];
-      if (raw === null || raw === undefined) continue;
-      const value = Number(raw);
-      if (!Number.isFinite(value)) continue;
-      const entry = totals.get(playerId) ?? { total: 0, weeks: 0 };
-      entry.total += value;
-      entry.weeks += 1;
-      totals.set(playerId, entry);
-    }
-
-    if (data.length < PAGE) break;
+  for (const [playerId, summary] of byPlayer) {
+    if (summary.weeks > 0) totals.set(playerId, { total: summary.total, weeks: summary.weeks });
   }
-
   return totals;
 }
 
@@ -221,6 +292,7 @@ export async function loadPlayerOutlook(
 
   const scoring = scoringBaseForFormat(formatSlug);
   const pulseSettings = await loadPowerPulseSettings(supabase);
+  const defenseSeasons = defenseSeasonsFor(season);
 
   const [positionTotals, accuracyMap, defense, ownProjections] = await Promise.all([
     weeksRemaining > 0
@@ -233,9 +305,23 @@ export async function loadPlayerOutlook(
         )
       : Promise.resolve(new Map<string, { total: number; weeks: number }>()),
     loadAccuracy(supabase, [playerId], ACCURACY_SCORING[scoring]),
-    loadDefenseSplits(supabase, ACCURACY_SCORING[scoring], [season - 1, season - 2]),
+    loadDefenseSplits(supabase, ACCURACY_SCORING[scoring], defenseSeasons),
+    // Deliberately the RAW power-pulse loader, not loadAdjustedProjections,
+    // and deliberately a separate call from loadPositionProjectionsCached
+    // above even though both touch player_weekly_projections for the same
+    // player. This one only needs `.opponent` per week to feed the pure
+    // opponentMultiplier() computation below (defense splits are already
+    // loaded); it never reads points off it. Folding it into the cached
+    // position curve would mean caching a full per-week byWeek detail for
+    // every player at the position, for a full day, to serve the one player a
+    // single request actually asks about. `source` and `toWeek` are pinned so
+    // this reads exactly the Sleeper rows for the weeks actually used below,
+    // the same way playerIdsAtPosition above does: without them, a source
+    // that mirrors every Sleeper row (see lib/projections/source-constants.ts)
+    // would return two rows per week once ffbeacon rows exist, and each week
+    // would render twice in the matchup detail.
     weeksRemaining > 0
-      ? loadProjections(supabase, [playerId], season, currentWeek)
+      ? loadProjections(supabase, [playerId], season, currentWeek, lastRegularWeek, SLEEPER_SOURCE)
       : Promise.resolve([]),
   ]);
 
@@ -270,7 +356,7 @@ export async function loadPlayerOutlook(
       opponent: p.opponent,
       opponentMultiplier: opponentMultiplier(
         defense,
-        [season - 1, season - 2],
+        defenseSeasons,
         p.opponent,
         position as PulsePosition,
         pulseSettings,

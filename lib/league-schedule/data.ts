@@ -13,6 +13,7 @@ import {
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { winProbability } from "@/lib/power-pulse/math";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { MAX_MATCHUP_WEEK, resolveCurrentWeek } from "@/lib/league-matchups";
 import { getNflHomeAwayMap, getNflState } from "@/lib/sleeper";
 import { alignedStartingSlots } from "./slots";
@@ -445,7 +446,7 @@ export async function loadMatchupDetail(
   );
 
   const scoringBase = closestScoringBase(league.scoringSettings);
-  const defenseSeasons = [season - 1, season - 2];
+  const defenseSeasons = defenseSeasonsFor(season);
 
   const [projectionRows, accuracy, defense, homeAwayByTeamWeek] = await Promise.all([
     // One week only, and the ceiling belongs in the query rather than in a loop

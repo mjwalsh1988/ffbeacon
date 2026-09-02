@@ -24,6 +24,7 @@ import {
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { lineFromProjection, type StatLine } from "@/components/player-profile/stat-shaping";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -474,6 +475,33 @@ export function readPoints(metadata: unknown, key: ScoringKey): number {
 
 // ---------- weekly projections ----------
 
+/**
+ * PE-T044: this section reads player_weekly_projections directly and stays
+ * that way on purpose.
+ *
+ * The profile's "Sleeper projected points" card (components/player-profile/
+ * weekly-projections.tsx) and the overview sidebar's "Projected points"
+ * panel (components/player-profile/overview-sidebar.tsx, helper text
+ * "Sleeper projections, {scoring} scoring") both name Sleeper as the source
+ * in the heading a reader sees. That is honest only if the numbers under it
+ * are actually Sleeper's own published weekly figures. Routing them through
+ * lib/projections/read.ts loadAdjustedProjections would quietly swap in the
+ * FF Beacon opponent/reliability/availability/injury adjustment (and, once
+ * enabled, the ffbeacon source) under a heading that still says Sleeper,
+ * which is worse than showing an unadjusted number honestly labelled.
+ *
+ * Both loaders below filter `.eq("source", SLEEPER_SOURCE)`. That filter is
+ * what makes "Sleeper projections" LITERALLY true rather than incidentally
+ * true: since player_weekly_projections now also holds ffbeacon rows (see
+ * lib/projections/source-constants.ts), an unfiltered read here would return
+ * both sources' rows for every (season, week) and the "beat or missed his
+ * projection" comparison would silently grade against whichever row Postgres
+ * happened to return last.
+ *
+ * See docs/projection-engine-plan.md, section "3.9 Which source a reader
+ * gets", and lib/projections/read.test.ts's guard, which allow-lists this
+ * file for exactly this reason.
+ */
 export type WeeklyProjectionRow = {
   season: number;
   week: number;
@@ -557,6 +585,7 @@ export async function loadWeeklyProjections(
     )
     .eq("player_id", playerId)
     .eq("season_type", "regular")
+    .eq("source", SLEEPER_SOURCE)
     .order("season", { ascending: false })
     .order("week", { ascending: true });
 
@@ -659,6 +688,19 @@ export type ProjectedPointsSet = {
  * across ALL seasons (nightly upcoming rows plus the historical backfill). Used
  * to overlay the projection line on played weeks in the statistics tab. Numeric
  * columns arrive as strings from PostgREST, so they are coerced here.
+ *
+ * PE-T044: reads player_weekly_projections directly, same as
+ * loadWeeklyProjections above and for the same reason. This feeds the
+ * per-stat "beat or missed his projection" comparison (stats-tab.tsx), which
+ * is a grade of Sleeper's own published number against what actually
+ * happened. Swapping in our adjusted figure would grade a number Sleeper
+ * never published.
+ *
+ * `.eq("source", SLEEPER_SOURCE)` is mandatory here, not incidental: this map
+ * is keyed by `${season}-${week}` with no tiebreak, so an unfiltered read
+ * would let whichever source's row Postgres returned last silently win once
+ * ffbeacon rows exist alongside Sleeper's, making the beat/miss grade
+ * nondeterministic.
  */
 export async function loadProjectionsMap(
   supabase: AnySupabase,
@@ -671,7 +713,8 @@ export async function loadProjectionsMap(
       "season, week, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std, stat_line",
     )
     .eq("player_id", playerId)
-    .eq("season_type", "regular");
+    .eq("season_type", "regular")
+    .eq("source", SLEEPER_SOURCE);
 
   const map = new Map<string, ProjectedPointsSet>();
   for (const r of data ?? []) {

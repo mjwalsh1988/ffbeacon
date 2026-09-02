@@ -13,6 +13,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { ScoringSettings } from "@/lib/league-scoring";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import type { PulsePosition, ScheduleWeek } from "./types";
 import { PULSE_POSITIONS } from "./types";
 
@@ -146,7 +147,12 @@ export type DefenseRow = {
   team: string;
   season: number;
   position: PulsePosition;
+  /** Raw audit-trail value. Never change what this means; read the adjusted or shrunk figure instead. */
   multiplier: number;
+  /** Opponent-adjusted for the schedule the defense actually faced. Null until the defense-splits calc has re-run since migration 0237. */
+  adjustedMultiplier: number | null;
+  /** The adjusted multiplier, pulled toward 1.0 by the position's measured signal and by sample size. Null under the same condition as adjustedMultiplier. */
+  shrunkMultiplier: number | null;
   gamesSampled: number;
 };
 
@@ -371,6 +377,12 @@ export async function loadPlayers(
  * can run chunks concurrently while the walk inside a single chunk (each
  * page depends on the previous page's cursor) stays exactly as sequential as
  * it always was.
+ *
+ * `source` is optional and, when omitted, changes nothing about the query:
+ * every caller written before lib/projections/read.ts existed keeps reading
+ * every source's rows for the window, exactly as before. Once ffbeacon rows
+ * exist alongside sleeper's, an unfiltered read would return one row per
+ * source per player-week, so lib/projections/read.ts always passes one.
  */
 async function loadProjectionsChunk(
   supabase: ServiceClient,
@@ -378,6 +390,7 @@ async function loadProjectionsChunk(
   season: number,
   fromWeek: number,
   toWeek?: number,
+  source?: string,
 ): Promise<ProjectionRow[]> {
   const out: ProjectionRow[] = [];
 
@@ -392,6 +405,7 @@ async function loadProjectionsChunk(
   // what the completeness guard below compares against, so a count over
   // eighteen weeks and a select over one would fail every run.
   if (toWeek !== undefined) countQ = countQ.lte("week", toWeek);
+  if (source !== undefined) countQ = countQ.eq("source", source);
   const { count: expected, error: countErr } = await countQ;
   if (countErr) {
     throw new Error(`power pulse projection count failed: ${countErr.message}`);
@@ -412,6 +426,7 @@ async function loadProjectionsChunk(
       .order("id", { ascending: true })
       .limit(PAGE);
     if (toWeek !== undefined) q = q.lte("week", toWeek);
+    if (source !== undefined) q = q.eq("source", source);
     if (cursor !== null) q = q.gt("id", cursor);
     const { data, error } = await q;
     if (error)
@@ -444,12 +459,21 @@ async function loadProjectionsChunk(
   return out;
 }
 
+/**
+ * `source` is optional. Omitted, this reads every source's rows for the
+ * window, unchanged from before lib/projections/read.ts existed: Power
+ * Pulse, FAAB, Positional WAR and every other existing caller keep calling
+ * this with four arguments and keep the exact behaviour they always had.
+ * lib/projections/read.ts is the one caller that passes a fifth, because it
+ * has already resolved which single source a reader should see.
+ */
 export async function loadProjections(
   supabase: ServiceClient,
   playerIds: string[],
   season: number,
   fromWeek: number,
   toWeek?: number,
+  source?: string,
 ): Promise<ProjectionRow[]> {
   if (playerIds.length === 0) return [];
 
@@ -467,16 +491,34 @@ export async function loadProjections(
   const perChunk = await mapWithConcurrency(
     chunks,
     DB_CHUNK_CONCURRENCY,
-    (chunk) => loadProjectionsChunk(supabase, chunk, season, fromWeek, toWeek),
+    (chunk) => loadProjectionsChunk(supabase, chunk, season, fromWeek, toWeek, source),
   );
   return perChunk.flat();
 }
 
-/** Blended, recency-weighted reliability rows for one scoring base. */
+/**
+ * Blended, recency-weighted reliability rows for one scoring base, scoped to
+ * one projection source.
+ *
+ * Migration 0240 re-keyed `player_projection_accuracy`'s unique indexes to
+ * include `source` for exactly this reason: a multiplier measured against
+ * Sleeper's projection is only meaningful applied to Sleeper's projection, and
+ * once a `source='ffbeacon'` blended row exists for a player (the first time a
+ * played week gets graded), an unfiltered query can return BOTH rows with no
+ * ORDER BY, and whichever came back last would silently win. `source` filters
+ * that out at the query rather than leaving it to insertion order.
+ *
+ * Defaults to SLEEPER_SOURCE so every caller written before this parameter
+ * existed keeps exactly the behaviour it always had. lib/projections/read.ts
+ * is the one caller that passes the source it actually resolved, because a
+ * reader on the ffbeacon source needs reliability measured against ffbeacon,
+ * not against Sleeper.
+ */
 export async function loadAccuracy(
   supabase: ServiceClient,
   playerIds: string[],
   scoring: string,
+  source: string = SLEEPER_SOURCE,
 ): Promise<Map<string, AccuracyRow>> {
   const out = new Map<string, AccuracyRow>();
   if (playerIds.length === 0) return out;
@@ -501,6 +543,7 @@ export async function loadAccuracy(
           "player_id, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, weeks_played",
         )
         .eq("scoring", scoring)
+        .eq("source", source)
         .is("season", null)
         .in("player_id", chunk);
       if (error)
@@ -525,8 +568,10 @@ export async function loadAccuracy(
 }
 
 /**
- * Opponent-strength splits for the two most recent seasons that have data. The
- * engine blends them, weighting the more recent one more heavily.
+ * Opponent-strength splits for whichever candidate seasons the caller passes
+ * (see lib/projections/defense-seasons.ts). opponentMultiplier in ./project.ts
+ * walks them most recent first and blends the first two that actually have a
+ * usable row, weighting the more recent one more heavily.
  */
 export async function loadDefenseSplits(
   supabase: ServiceClient,
@@ -538,7 +583,9 @@ export async function loadDefenseSplits(
 
   const { data, error } = await supabase
     .from("nfl_defense_vs_position")
-    .select("team, season, position, multiplier, games_sampled")
+    .select(
+      "team, season, position, multiplier, adjusted_multiplier, shrunk_multiplier, games_sampled",
+    )
     .eq("scoring", scoring)
     .in("season", seasons);
   if (error)
@@ -550,6 +597,8 @@ export async function loadDefenseSplits(
       season: Number(row.season),
       position: row.position as PulsePosition,
       multiplier: Number(row.multiplier),
+      adjustedMultiplier: numOrNull(row.adjusted_multiplier),
+      shrunkMultiplier: numOrNull(row.shrunk_multiplier),
       gamesSampled: Number(row.games_sampled ?? 0),
     });
   }

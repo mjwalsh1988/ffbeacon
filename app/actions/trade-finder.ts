@@ -65,14 +65,14 @@ import {
   type TradeQualityConfig,
 } from "@/lib/trade-quality";
 import { isValidSuggestionKey } from "@/lib/trade-finder/fingerprint";
+import { noticeText } from "@/lib/trade-finder/notice";
 import {
   MAX_NAMED_PLAYERS,
-  TRADE_GOALS,
   TRADE_POSITIONS,
   readTradePosition,
-  type TradeFinderNotice,
-  type TradeGoal,
+  readTradeStrategy,
   type TradePosition,
+  type TradeStrategy,
   type TradeSuggestion,
 } from "@/lib/trade-finder/types";
 
@@ -105,8 +105,6 @@ const MAX_SESSION_EXCLUDED = 200;
 const RATE_WINDOW_SECONDS = 60;
 const LEAGUE_RATE_MAX = 12;
 const PORTFOLIO_RATE_MAX = 4;
-
-const GOAL_KEYS = new Set(TRADE_GOALS.map((g) => g.key));
 
 /**
  * The consolidation model, read from the same admin settings Signal Check uses.
@@ -190,12 +188,6 @@ export type SavedTradesResponse =
   | { ok: true; saved: SavedTrade[] }
   | { ok: false; error: string };
 
-function readGoal(value: unknown): TradeGoal {
-  return typeof value === "string" && GOAL_KEYS.has(value as TradeGoal)
-    ? (value as TradeGoal)
-    : "balanced";
-}
-
 function readKeys(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -233,28 +225,6 @@ function readPlayerIds(value: unknown): string[] | null {
   // the cap here would reintroduce it one layer down.
   return out.length > MAX_NAMED_PLAYERS ? null : out;
 }
-
-/**
- * The engine's machine reason, as a sentence for the reader.
- *
- * Written here rather than in the engine because the engine is pure and knows
- * nothing about surfaces, and written at all because "no trade to suggest" is
- * a bad answer to a question that could never have had one. A reader who named
- * two players from two different rosters has not made a mistake anybody would
- * spot on their own.
- */
-const NOTICE_TEXT: Record<TradeFinderNotice, string> = {
-  "targets-split":
-    "Those players are on different teams. A trade has one other side, so pick players from a single roster.",
-  "targets-missing":
-    "We could not find all of those players on another roster in this league.",
-  "targets-unpriced":
-    "One roster holds all of those players, but we have no trade value for one of them, so we cannot price the package.",
-  "targets-unaffordable":
-    "Nothing on your roster adds up to all of those players at once. Try naming fewer of them.",
-  "offers-missing":
-    "We have no trade value for one of the players you picked, so we cannot price that package.",
-};
 
 /**
  * The position groups a caller named, normalised and deduplicated.
@@ -296,7 +266,15 @@ export async function findLeagueTrade(input: {
   username?: string | null;
   rosterId?: number | null;
   source?: string | null;
-  goal?: string;
+  /**
+   * Which question the ranking should answer: "contender" or "value".
+   *
+   * Coerced rather than trusted, and then resolved against the league itself, so
+   * a caller posting "value" at a redraft league still gets the contender
+   * ranking. The engine does that resolution; nothing here has to know the
+   * league's type to be safe.
+   */
+  strategy?: string | null;
   /** Players that must ALL come back. A package, not a list of alternatives. */
   targetPlayerIds?: string[];
   /** Players that must ALL be sent. */
@@ -376,7 +354,7 @@ export async function findLeagueTrade(input: {
     startingSlots: league.startingSlots,
     isDynasty: league.isDynasty,
     allowPicks: league.allowPicks,
-    goal: readGoal(input.goal),
+    strategy: readTradeStrategy(input.strategy) ?? undefined,
     targetPlayerIds,
     offerPlayerIds,
     wantPositions: readPositions(input.wantPositions),
@@ -403,7 +381,7 @@ export async function findLeagueTrade(input: {
       consideredTeams: result.consideredTeams,
       lineupUnavailable: result.lineupUnavailable,
       beyondWindow: Math.max(0, result.suggestions.length - suggestions.length),
-      notice: result.notice ? NOTICE_TEXT[result.notice] : null,
+      notice: noticeText(result.notice),
     },
   };
 }
@@ -418,7 +396,8 @@ export async function findPortfolioTrade(input: {
   sleeperLeagueIds: string[];
   sleeperUserId: string | null;
   source?: string | null;
-  goal?: string;
+  /** "contender" or "value". Resolved per league inside the walk. */
+  strategy?: string | null;
   cursor?: number;
   sessionExcluded?: string[];
 }): Promise<PortfolioResponse> {
@@ -469,7 +448,7 @@ export async function findPortfolioTrade(input: {
     sleeperLeagueIds,
     sleeperUserId,
     sourceSlug: resolvedSource.slug,
-    goal: readGoal(input.goal),
+    strategy: readTradeStrategy(input.strategy) ?? undefined,
     cursor,
     excludeByLeague,
     sessionExcluded: readKeys(input.sessionExcluded),

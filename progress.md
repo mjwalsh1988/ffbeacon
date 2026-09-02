@@ -9710,3 +9710,757 @@ the sync does not perform.
 DOCUMENTED, not fixed: bursts are not grouped. Eight free agent moves in an
 afternoon is eight cards. `lib/league-relay/waiver-run.ts` already solves this
 shape for Discord.
+
+---
+
+# The FF Beacon Projection Engine (PE-T###)
+
+Plan of record: `docs/projection-engine-plan.md`. Started 2026-09-01.
+
+Goal: stop shipping Sleeper's projection with four multipliers on it and start
+shipping our own, measured against Sleeper's on the same graded weeks. Ships
+disabled behind `settings.beaconProjections.enabled` so nothing on the site
+changes until the scoreboard earns it.
+
+Conventions inherited: every migration applies via MCP, saves SQL to
+/supabase/migrations/, carries its RLS policies in the same file, is verified
+against pg_policies plus anon and authenticated role simulations, and regenerates
+/lib/database.types.ts. Every lib task ships its colocated *.test.ts. Progress and
+handoff are updated after every task.
+
+## Phase 0 - Records
+PE-T000 | completed | Plan of record written from the session audit, with every
+       measurement, algorithm, schema change, settings key and source
+     | files: docs/projection-engine-plan.md
+     | verified: yes (research only; no code)
+PE-T001 | completed | progress.md and handoff.md seeded for this build
+     | files: progress.md, handoff.md
+     | verified: yes
+
+## Phase 1 - Opponent strength
+PE-T010 | completed | Migration 0237: nfl_defense_vs_position gains
+       adjusted_points_allowed_per_game, adjusted_multiplier, shrunk_multiplier
+     | files: supabase/migrations/0237_defense_splits_opponent_adjusted.sql, lib/database.types.ts
+     | notes: columns only, nullable with no default, so a null says "the calc has
+       not run since 0237" rather than asserting a neutral 1.0. multiplier keeps its
+       raw audit-trail meaning. Applied via MCP, types regenerated and prettier-formatted.
+     | verified: yes (RLS: relrowsecurity true, exactly 2 pre-existing policies intact
+       (select_public to anon+authenticated, service_role_all); anon SELECT returns
+       1728 rows; anon UPDATE changed 0 rows; three new columns present in
+       information_schema and in database.types.ts; npx tsc --noEmit clean)
+PE-T011 | completed | lib/projections/adjust.ts, iterative opponent adjustment, pure
+     | files: lib/projections/adjust.ts, lib/projections/adjust.test.ts
+     | notes: adjustForOpponents (alternating ratings, 4 passes), clampMultiplier,
+       shrinkMultiplier. The ordering rule (build the whole new D map from the current
+       O map, THEN the new O map from the NEW D map) is pinned by a test that also
+       asserts the in-place variant would give a different answer.
+     | verified: yes (19 tests; tsc clean; punctuation scan clean)
+PE-T012 | completed | lib/calculate-defense-splits.ts writes the new columns
+     | files: lib/calculate-defense-splits.ts
+     | notes: the offense on the other side of each game comes from the preserved
+       Sleeper payload key "team", verified 100% populated on every regular season back
+       to 2021 with 32 distinct teams. Pulled through PostgREST as a single JSON key
+       rather than selecting the whole metadata object, which would drag about a
+       kilobyte per row across 40,000 rows a season to read a three character code.
+       Syntax verified live against the project before use.
+       A bucket with no offense still counts toward the RAW allowance and is excluded
+       from the adjustment only, so a future ingestion gap degrades rather than
+       silently dropping games from one side of the ledger. generosity_rank now ranks
+       on the ADJUSTED figure, because the raw order answers which defense had the
+       easiest schedule, which is not the question the rank is labelled with.
+     | verified: yes (tsc clean; ran against production, 1728 rows across 2025, 2024,
+       2023 in 23s)
+PE-T013 | completed | lib/projections/defense-seasons.ts + opponentMultiplier walks
+       usable seasons most recent first and applies shrunk_multiplier
+     | files: lib/projections/defense-seasons.ts, lib/projections/defense-seasons.test.ts,
+       lib/power-pulse/project.ts, lib/power-pulse/load.ts, lib/power-pulse/project.test.ts
+     | notes: the old code indexed positionally, so seasons[0] took currentSeasonWeight
+       (0.7) whether or not it was the current season. It now walks candidates most
+       recent first and takes the first two that EXIST and clear minGamesSampled, which
+       reproduces the old preseason answer exactly while letting the live season take
+       the 0.7 slot from about week 8. No date check anywhere. DefenseRow gained
+       adjustedMultiplier and shrunkMultiplier; the reader takes the shrunk value and
+       falls back to the raw one, gated on settings.opponent.useAdjusted.
+     | verified: yes (10 new tests in power-pulse/project.test.ts, which had no test
+       file at all before; 4 in defense-seasons.test.ts; tsc clean; full suite green)
+PE-T014 | completed | Replace the five hardcoded [season-1, season-2] call sites
+     | files: lib/league-power-pulse.ts, lib/positional-war/load.ts,
+       lib/faab/league-faab.ts, lib/breakdown/league-impact.ts, lib/league-schedule/data.ts,
+       lib/on-the-clock/projection-board.ts, lib/faab/outlook.ts, lib/trade-impact/load.ts,
+       lib/positional-war/upgrade.ts, lib/breakdown/load-extras.ts
+     | notes: TEN call sites, not five. The audit found five by reading the Power Pulse
+       path; a grep for the pattern found four more (faab/outlook twice, trade-impact/load,
+       positional-war/upgrade, breakdown/load-extras) plus the on-the-clock local helper,
+       every one carrying the same bug. A stale comment in breakdown/load-extras claiming
+       Power Pulse blends the two seasons before the current one was corrected rather
+       than left to mislead the next reader.
+     | verified: yes (tsc clean; full suite green)
+PE-T015 | completed | Settings: opponent.positionReliability, priorGames, useAdjusted
+     | files: lib/power-pulse/default-settings.ts, lib/power-pulse/validate.ts,
+       lib/power-pulse/validate.test.ts, app/admin/power-pulse/power-pulse-settings-manager.tsx
+     | notes: modelVersion bumped pp-5 to pp-6, so every cached Power Pulse and
+       Positional WAR row is stale by definition and rescores on next view.
+       positionReliability merges one level deep like injury.multipliers and
+       variance.defaultCv, so a partial admin save cannot drop a position. Admin form
+       gained a toggle, a prior-games field and one field per position, all through the
+       existing labelled Field and Toggle components.
+     | verified: yes (validate bounds tested: 0 to 1 per position, priorGames 0 to 100,
+       useAdjusted boolean; tsc clean; full suite green)
+PE-T016 | completed | Recalculate live and measure the adjusted year-over-year
+       correlations, then set positionReliability from them
+     | files: lib/power-pulse/default-settings.ts
+     | notes: MEASURED, two season pairs, all 32 teams, PPR, raw and adjusted:
+                  raw 25/24  adj 25/24  raw 24/23  adj 24/23   mean
+         DEF        0.319      0.276      0.297      0.238     0.283
+         RB         0.243      0.269      0.285      0.356     0.288
+         TE         0.152      0.223      0.247      0.032     0.164
+         K          0.147      0.113      0.026      0.079     0.091
+         QB         0.107      0.043     -0.117     -0.075    -0.011
+         WR        -0.097     -0.056     -0.027     -0.081    -0.065
+       Final coefficients are the mean of all four, floored at zero: DEF 0.28, RB 0.29,
+       TE 0.16, K 0.09, QB 0.00, WR 0.00. Pooling all four rather than the adjusted pair
+       alone is deliberate: with 32 teams the standard error on any one of these is about
+       0.19, so no two cells in a row are distinguishable and picking the flattering one
+       would be fitting noise.
+       HONEST FINDING: the opponent adjustment clearly helped running backs (0.264 to
+       0.313) and did nothing measurable anywhere else; team defense reads slightly WORSE
+       adjusted. It is kept regardless, because it removes a bias we can demonstrate
+       exists and a correctness fix does not need a correlation to justify it. Saying it
+       rescued the other positions would be inventing a result.
+       QB went to 0.00 against published work that puts it at 0.26 (4for4). Our figure is
+       the top ONE startable quarterback performance per game, clamped, which is a far
+       noisier quantity than a season points-allowed rank. The disagreement is recorded
+       in the settings comment so raising it is an informed admin choice.
+     | verified: yes (recalculated live; applied multiplier spread is now DEF sd 0.041
+       range 0.959 to 1.052, RB sd 0.028, TE sd 0.019, K sd 0.009, QB and WR exactly
+       1.000, against a raw spread of sd 0.13 to 0.19 pinned at the 0.80 and 1.25 bounds.
+       A 15% swing on noise is now a 5% swing on measured signal.)
+
+## Phase 2 - Market signal
+PE-T020 | completed | Migration 0238: nfl_game_odds + RLS
+     | files: supabase/migrations/0238_nfl_game_odds.sql, lib/database.types.ts
+     | notes: unique on (source, season, season_type, week, home_team) because a team
+       plays at most one home game a week, which is exact and provider-independent.
+       home_spread negative means home favoured. Implied totals stored, not derived on
+       read, so a null input yields a null total rather than a confident half of nothing.
+       metadata jsonb preserves the ESPN competition object per the source-preservation rule.
+     | verified: yes (RLS: relrowsecurity true, exactly 2 policies
+       (nfl_game_odds_select_public SELECT to anon+authenticated,
+       nfl_game_odds_service_role_all ALL to service_role); anon SELECT succeeds;
+       anon INSERT blocked, 0 forged rows; types regenerated, 123 tables)
+PE-T021 | completed | lib/nfl-odds.ts, ESPN scoreboard adapter, WSH to WAS alias
+     | files: lib/nfl-odds.ts, lib/nfl-odds.test.ts
+     | notes: ESPN quotes its spread relative to the FAVOURITE named in the details
+       string, not to the home team, so parseHomeSpread parses that string, falls back
+       to the favorite booleans, and returns null rather than guessing a sign. A sign
+       error here would silently invert every game script in the model and never show up
+       in a total, so all four orientations are pinned by tests. getEspnScoreboard
+       returns null on a failed request and an empty array on a genuine empty answer,
+       per the project rule that a failed request is not evidence.
+     | verified: yes (19 tests including a 32-code alias identity check against
+       lib/nfl-teams.ts; tsc clean)
+PE-T022 | completed | lib/sync-nfl-odds.ts + scripts/sync-nfl-odds.ts + npm script
+     | files: lib/sync-nfl-odds.ts, lib/sync-nfl-odds.test.ts, scripts/sync-nfl-odds.ts,
+       package.json
+     | notes: refreshes the current week plus two ahead, because lines move but a week
+       already played is not worth refetching. Upserts on the unique key, preserves the
+       ESPN competition object in metadata verbatim.
+       FAILURE POSTURE, corrected after first delivery: a run where EVERY targeted week
+       FAILED now throws, so recordCronRun marks the ledger entry an error and cron-health
+       alerts. The first version returned ok true, which made a total ESPN outage
+       indistinguishable from a healthy run for as long as it lasted. A partial failure
+       still returns ok true with failedWeeks populated, and an all-empty run still
+       returns skipped true, because that is the dead-months case and is correct.
+     | verified: yes (3 tests covering all-failed, some-failed and all-empty; tsc clean;
+       full suite 3458 tests green)
+PE-T023 | completed | /api/cron/sync-nfl-odds + vercel.json + cron-runs registry
+     | files: app/api/cron/sync-nfl-odds/route.ts, lib/cron-runs.ts, vercel.json
+     | notes: 0 13 * * *, once daily. The registry entry, the vercel.json entry and the
+       CronJobName union are cross-checked by the existing cron-runs, cron-health and
+       derived-tables-scheduled tests, all of which pass.
+     | verified: yes (full suite green)
+PE-T024 | completed | lib/projections/volume.ts, implied totals into volume and script
+     | files: lib/projections/volume.ts, lib/projections/volume.test.ts
+     | notes: environmentEffect returns volume, scoring and rushShift. Scoring moves on
+       a doubled exponent because a richer environment produces more touchdowns per
+       play, not only more plays. A NEGATIVE spread means favoured and a favourite runs
+       more, so the sign flip is deliberate and pinned by a test; a sign error there
+       would invert every game script and never show up in a total.
+       A missing line returns EXACTLY 1 on both multipliers. A missing line is an
+       adjustment we did not make, never a neutral game we asserted.
+       The agent found and fixed a real edge case: with the default totalWeight of 0.5
+       the scoring exponent is an integer, so a negative ratio produced a finite but
+       nonsensical result that slipped past the non-finite guard. Now guarded on the
+       ratio itself being positive.
+     | verified: yes (17 tests; tsc clean)
+PE-T025 | completed | Backfill 2026 odds and verify against the live board
+     | notes: ran against production. 272 games across all 18 weeks of 2026, 272 with a
+       game total and 271 with a spread. Arithmetic spot-checked against the board:
+       LAC hosting ARI at a 46.5 total and -10.5 spread stores 28.5 home and 18.0 away,
+       which is exactly total/2 minus and plus spread/2. Home implied totals average
+       23.75 against 22.06 away, the size of home field advantage, which is the
+       sanity check that the sign convention is right way round league-wide.
+       Team codes stored as ours: WAS, not ESPN's WSH.
+     | verified: yes
+
+## Phase 3 - Our own projections
+PE-T030 | completed | lib/projections/types.ts + default-settings.ts + validation
+     | files: lib/projections/types.ts, lib/projections/default-settings.ts,
+       lib/power-pulse/default-settings.ts, lib/power-pulse/validate.ts
+     | notes: written by the orchestrator rather than delegated, because every other
+       Phase 3 module depends on this contract and two agents writing against a moving
+       one would drift. Settings live under beaconProjections inside the Power Pulse
+       document for the same reason Positional WAR's do: a model that reuses the
+       projection stack must not be able to run under a half-applied edit across two
+       documents. enabled defaults to FALSE, so the whole build lands without changing
+       a number on the site.
+       Validation bounds chosen so a bad save degrades rather than breaks: blend weights
+       are unit-bounded so we can never claim more than the whole projection, and
+       calibration slopes cap at 1.5 because a slope above 1 would EXPAND a spread every
+       measurement says is already too wide.
+     | verified: yes (tsc clean; power-pulse suite green)
+PE-T031 | completed | lib/projections/usage.ts, recency-weighted role shares
+     | files: lib/projections/usage.ts, lib/projections/usage.test.ts
+     | notes: recencyWeight, computeUsageShares, computeEfficiencyRates. Team
+       denominators use the MAXIMUM off_snp on a team-week (the quarterback in almost
+       every case) and the SUM of targets, carries and attempts. Every rate is a
+       weighted ratio of weighted sums, never a mean of per-game ratios, so a two-target
+       game cannot carry the same weight as a twelve-target one.
+       DECISION on gp <= 0 rows: excluded from a player's own numerator everywhere,
+       INCLUDED in team denominators, because a denominator is a team aggregate and an
+       inactive player's row can only add zeros to a sum or fail to beat the snap max.
+       KNOWN SIMPLIFICATION: a past season's within-season decay is measured from an
+       assumed 18 week finish, which slightly overstates recency for 2020's 17 week
+       season. Documented in the file.
+     | verified: yes (26 tests; tsc clean)
+PE-T032 | completed | lib/projections/convert.ts, opportunity to a stat line
+     | files: lib/projections/convert.ts, lib/projections/convert.test.ts
+     | notes: shrinkRate plus toStatLine. The model is the ASYMMETRY of the two priors:
+       shares shrink with a prior of 4 weighted games because a role persists, efficiency
+       with 24 because touchdown rate, yards per carry and yards per target all revert.
+       A null rate omits its key rather than writing a zero, because an omitted key and a
+       zero key are different claims.
+       bonus_rec_te DECISION: we DO emit it on TE lines, equal to the reception count,
+       whenever rec is present. scoreStatMap is a pure dot product with no
+       position-specific logic, so a TE premium league whose scoring carries
+       bonus_rec_te would read our line as lacking the key, contribute zero, and lose the
+       entire premium, while Sleeper's own line (which carries it) prices correctly. That
+       is a silent, position-specific mispricing of every TE premium league. Pinned by a
+       test asserting the delta between a plain PPR map and a TE premium map equals
+       0.5 * receptions, plus a companion test that non-TE positions never emit the key.
+     | verified: yes (part of 49 tests across convert, calibrate and blend; tsc clean)
+PE-T033 | completed | lib/projections/calibrate.ts, per-position spread calibration
+     | files: lib/projections/calibrate.ts, lib/projections/calibrate.test.ts
+     | notes: applied as a uniform scale across every value in the stat line rather than
+       to a point total, so the line stays internally consistent (receptions times yards
+       per reception still equals yards). gp is explicitly NOT scaled: it is a count of
+       games, not a quantity of production, and 0.83 games is meaningless.
+     | verified: yes (tsc clean)
+PE-T034 | completed | lib/projections/blend.ts, beacon and sleeper per stat key
+     | files: lib/projections/blend.ts, lib/projections/blend.test.ts
+     | notes: ONE-SIDED KEY DECISION: a key present on only one side is carried through
+       at its full asserted value regardless of weight, never blended against an implied
+       zero and never dropped. Blending Sleeper's real pass_sack against our unstated
+       zero would invent a claim we never made; dropping our rec_tgt because Sleeper does
+       not carry it would throw away real information. Pinned at weights 0, 0.5 and 1 so
+       the passthrough is shown to hold independent of weight.
+     | verified: yes (tsc clean)
+PE-T035 | completed | lib/projections/engine.ts, computeBeaconProjections, pure
+     | files: lib/projections/engine.ts, lib/projections/types.ts
+     | notes: written by the orchestrator because it is the seam every delegated module
+       meets at. Mirrors EVERY Sleeper row rather than only the ones we can improve: a
+       reader on the ffbeacon source reads only ffbeacon rows, so a week we declined to
+       write would simply vanish, and a vanished week is indistinguishable from a bye.
+       Availability is CARRIED THROUGH from Sleeper, never asserted by us.
+       TWO REAL BUGS FOUND BY VERIFYING AGAINST PRODUCTION RATHER THAN BY READING:
+       (1) Every kicker and defense came out 0.00, across 1,119 rows. The engine was
+       re-deriving points from the stat line under canonical scoring, and canonical
+       scoring has no keys for fgm or pts_allow. Even for the four modelled positions
+       the re-derivation was wrong: a live 2026 quarterback row dot-products to 20.36
+       while Sleeper publishes 23.26, because Sleeper scores keys the canonical map does
+       not. Fixed by anchoring on Sleeper's PUBLISHED total and applying our model as a
+       delta, so at blend weight 0 our row is byte-identical to Sleeper's in all three
+       bases.
+       (2) Calibration was inflating the deep bench by 54% at tight end. Compressing 130
+       tight ends toward the top-18 mean pulls every bench player UP toward a startable
+       number. The published slopes were fitted among starters, so calibration now
+       applies inside the startable range only and everyone below keeps their number.
+       Also carries red zone leverage: a back who takes more of his team's red zone work
+       than of its carries overall scores more per carry, bounded 0.5 to 1.75 because the
+       ratio is a quotient of two small numbers and runs away without a bound.
+     | verified: yes (tsc clean; verified against production, see PE-T038)
+PE-T036 | completed | lib/build-beacon-projections.ts, the I/O half
+     | files: lib/build-beacon-projections.ts, lib/projections/source-constants.ts
+     | notes: loads three seasons of stats, Sleeper's rows for the window, the odds, and
+       the players; writes source='ffbeacon' rows in exactly Sleeper's shape, so every
+       existing reader and every league's custom scoring works on them unchanged. That
+       is why the schema needed no new table.
+       The stat read is deliberately NOT filtered to rostered players: the usage model
+       needs a team's whole offense to build a denominator, and dropping the team-mates
+       nobody projects would inflate every share left standing.
+       Writes NOTHING when there are no Sleeper rows for the window. An ffbeacon source
+       that exists but covers nothing would be selected by the reader and then answer
+       every question with silence, which is strictly worse than not existing.
+       source-constants.ts is a leaf module with no imports so the builder can name the
+       source it writes without dragging in the reader's selection logic.
+     | verified: yes (tsc clean; ran against production)
+PE-T037 | completed | Migration 0239: source index on player_weekly_projections
+     | files: supabase/migrations/0239_projection_source_index.sql
+     | notes: the unique key ALREADY carried source, so no schema change was needed
+       there. What was missing was an index with source as the LEADING column. Without
+       it every hot projection read doubles the rows it scans and discards the moment a
+       second source exists. idx_player_weekly_projections_season_week deliberately kept
+       for the source-agnostic full-table walk the accuracy grader does.
+     | verified: yes (index present in pg_indexes; index-only change so RLS and types
+       are unaffected)
+PE-T038 | completed | scripts/build-beacon-projections.ts + cron + npm script
+     | files: scripts/build-beacon-projections.ts,
+       app/api/cron/build-beacon-projections/route.ts, lib/cron-runs.ts, vercel.json,
+       package.json
+     | notes: scheduled 30 14 * * *, LAST in the day and deliberately so. It reads what
+       three earlier jobs write: usage history from sync-sleeper-stats at 09:00, the
+       blend partner from sync-weekly-projections at 12:00, and game environment from
+       sync-nfl-odds at 13:00. Building earlier would build on yesterday's inputs.
+     | verified: yes (ran against production: 18,508 rows for 2026 weeks 1 to 18,
+       mirroring Sleeper's 18,508 exactly. 3,202 modelled from our own usage; 15,306
+       mirrored (9,376 because Sleeper says the player is out or uncovered, 4,672 with
+       too little history, 1,258 kickers and defenses we do not model).
+       PARITY CHECK against Sleeper, per position: K and DEF differ on ZERO of 1,119
+       rows, which is the mirror working. QB, RB, WR and TE share the same mean and a
+       slightly compressed standard deviation (RB 5.84 to 5.71), differing on 2,266 rows
+       by at most about 2 points, which is calibration compressing the startable range
+       and nothing else. That is exactly right for the preseason: with no 2026 games
+       played the blend weight is 0 for every player, so the ffbeacon source today IS a
+       calibrated Sleeper, and it earns its own weight as games are played.
+       Full cron registry, vercel.json and CronJobName cross-checks green (45 tests).)
+
+## Phase 4 - One read path
+PE-T040 | completed | lib/projections/source.ts + lib/projections/read.ts
+     | files: lib/projections/source.ts, lib/projections/source.test.ts,
+       lib/projections/read.ts, lib/projections/read.test.ts, lib/power-pulse/load.ts
+     | notes: loadAdjustedProjections is THE single adjusted read path: it resolves the
+       source, loads projections, accuracy and defense splits through the EXISTING
+       power-pulse loaders rather than a second copy, computes reliability once per
+       player, and runs projectPlayerWeek per week.
+       loadProjections in lib/power-pulse/load.ts gained an OPTIONAL sixth `source`
+       parameter, applied to both the count and the page query only when supplied.
+       Omitting it is byte-for-byte the old behaviour, so every existing caller is
+       unaffected and their tests pass untouched.
+       A null week is absent and is not counted; a stored "out" zero IS a real week and
+       is. perWeek averages over the weeks that carried a projection, never over the
+       window length, so a bye does not read as a week worth nothing.
+     | verified: yes (15 tests across source and read; tsc clean; full suite 3,565 green)
+PE-T041 | completed | Migrate lib/trade-finder-data.ts
+     | files: lib/trade-finder-data.ts
+     | notes: the sharpest inconsistency in the product is closed. Trade Ideas priced a
+       suggested package on a raw six-week Sleeper average while the impact verdict on
+       the SAME PAGE ran the adjusted projection through a Monte Carlo. Two numbers, one
+       screen, two models. loadProjectedPoints now calls loadAdjustedProjections and
+       keeps its Map<string, number> return shape, so this is a change of model and not
+       of interface.
+       KNOWN GAP: injury statuses are not passed, because lib/league-view-data.ts never
+       fetches injury_status and adding that read was out of scope. The optional
+       argument is omitted, which the reader treats as everyone healthy, and both files
+       say so inline.
+     | verified: yes (tsc clean; full suite green)
+PE-T042 | completed | Migrate lib/draft-value/build.ts
+     | notes: migrated, but summing rawPoints rather than the fully adjusted points, and
+       the reason is a real trap the agent caught: lib/draft-value/engine.ts ALREADY
+       applies its own reliability and availability discount via adjustmentMultiplier,
+       sourced independently from player_projection_accuracy. Feeding it the adjusted
+       number would have double-discounted every player. Summing rawPoints is
+       mathematically identical to the old sum-then-score (the dot product distributes
+       over a sum) while routing through the shared reader.
+     | verified: yes
+PE-T043 | completed | Migrate lib/beam/projections/load.ts
+     | notes: uses the FULLY adjusted points, because BEAM has no other reliability or
+       availability path and so cannot double-count.
+     | verified: yes
+PE-T044 | completed as a deliberate NON-migration | lib/player-profile.ts stays raw
+     | notes: the page says what it means. The sidebar panel reads "Projected points,
+       Sleeper projections" and the weekly card headline reads "Sleeper projected
+       points". Swapping our adjusted numbers in under a heading that names Sleeper
+       would be dishonest, and loadProjectionsMap also GRADES Sleeper published number
+       against what happened for the stats tab, which needs the real published figure.
+       Both raw readers now carry an explicit PE-T044 comment so this cannot drift back
+       by accident, and both are named on the guard test allow-list with that reason.
+     | verified: yes
+PE-T045 | completed | Migrate lib/faab/outlook.ts
+     | notes: fully adjusted. FAAB's other use of accuracy (buildSignals) only reports
+       beat rate and availability as narrative text and never re-multiplies the points,
+       so there is no double-count. The careful existing guard about Number(null) being
+       0 was preserved.
+     | verified: yes
+PE-T046 | completed | Migrate lib/league-relay/load.ts
+     | notes: fully adjusted, using the league real scoring_settings as before.
+       projectedPoints is display-only in the Discord waiver writeup downstream.
+     | verified: yes
+PE-T047 | completed | Guard against a module reading a projected points column raw
+     | files: lib/projections/raw-column-guard.test.ts
+     | notes: scans lib, app and components for the three column names, modelled on
+       lib/positional-war/naming.test.ts. The allow-list carries a reason per entry and
+       covers the generated types, the canonical raw loader the shared reader itself
+       calls, three surfaces already adjusted through their own bespoke full-pool
+       loaders, the grading scoreboard (which reads raw ON PURPOSE, to grade it), two
+       market-snapshot syncs whose different table has coincidentally identical column
+       names, and the PE-T044 decision above.
+       A SECOND test asserts every allow-list entry still exists and still matches, so
+       a stale exemption is caught rather than quietly widening the hole.
+     | verified: yes (8 tests; full suite 3,606 green)
+
+## Phase 5 - Grading
+PE-T050 | completed | Migration 0240: player_projection_accuracy gains source
+     | files: supabase/migrations/0240_projection_accuracy_source.sql, lib/database.types.ts
+     | notes: both unique indexes re-keyed to include source, or the second source's
+       rows collide with the first's on insert. Default 'sleeper' is a statement of fact:
+       every existing row WAS measured against Sleeper. Also protects the existing model,
+       since a shrunk_multiplier measured against one source is only meaningful applied
+       to that same source.
+     | verified: yes (all 5595 existing rows stamped source='sleeper'; 2 policies intact
+       (select_public to anon+authenticated, service_role_all); three indexes re-keyed;
+       source present in database.types.ts)
+PE-T051 | completed | calculate-projection-accuracy.ts grades per source
+     | files: lib/calculate-projection-accuracy.ts, scripts/calculate-projection-accuracy.ts
+     | notes: every derived quantity is now computed WITHIN a source, and so is the
+       positional baseline. That last part is the one that would have been a silent
+       disaster: the baseline key moved from season|scoring|position to
+       source|season|scoring|position, because a source's positional bias is a property
+       of THAT source. Centering our projections on Sleeper's bias would have been worse
+       than not centering at all. The within-season week-decay curve moved with it, so a
+       source with fewer published weeks does not inherit another's decay.
+     | verified: yes (full suite 3,550 green)
+PE-T052 | completed | /admin/projections scoreboard
+     | files: app/admin/projections/page.tsx, lib/projection-scoreboard.ts, lib/nav-tree.ts
+     | notes: per source, pooled and per position: weeks graded, mean absolute error,
+       mean error (bias), beat rate and an OLS calibration slope. Computed fresh per
+       request from the raw tables rather than from player_projection_accuracy, whose
+       figures are recency-weighted and centered for a different purpose. No new table,
+       per the instruction that migrations are the orchestrator's job.
+       Accessibility: one h1, a real table with caption, thead and scope on every header
+       cell, tabular-nums on right-aligned numerics, overflow-x-auto so NO column is
+       hidden at any breakpoint, 44px scoring-basis links with aria-current and visible
+       focus rings, and a plain-language "how to read this" section. Rows under 200
+       graded weeks carry a "Thin sample" badge rather than being shown with the same
+       confidence as a deep row.
+     | verified: yes (tsc clean; full suite green)
+PE-T053 | completed | Run the grader and record the first scoreboard
+     | notes: ran against production. 5,703 rows for 1,206 players.
+       FIRST SCOREBOARD (PPR): sleeper MAE 4.21, bias -0.13, 17,584 graded weeks.
+       ffbeacon: 0 graded weeks, which is correct and expected. We have only built 2026
+       and 2026 has not been played, so there is nothing to grade yet. The scoreboard
+       fills in from week 1 onward and is what promotes beaconProjections.enabled from
+       false to true.
+       HONEST LIMITATION, recorded rather than papered over: a retrospective backtest
+       against 2025 is NOT available from this build. The usage model reads whole
+       seasons, so building 2025 projections today would use the very games it is
+       predicting. A naive backtest would look excellent and mean nothing. A real
+       walk-forward backtest (rebuild the model week by week using only prior weeks) is
+       future work and is noted in handoff.md.
+       ALSO CONFIRMED: the pp-5 position centering now works. Pool means of the applied
+       reliability multiplier moved from QB 0.954, WR 0.970, TE 0.983, RB 0.984 to
+       0.995, 0.988, 0.989, 0.993, against a target of exactly 1.000 for an average
+       player.
+     | verified: yes
+
+## Phase 6 - Horizon
+PE-T060 | completed | Dynasty against redraft projection weighting in trade ranking
+     | files: lib/trade-finder/rank.ts, lib/trade-finder/rank.test.ts
+     | notes: HORIZON_WEIGHTS layered on top of the existing stance and strategy tables
+       rather than replacing them, and horizonBucket reads isDynasty and direction off
+       TeamProfile, both already threaded, so no new parameter anywhere.
+       THE HARD RULE IS STRUCTURAL, NOT NUMERICAL. For an inferred dynasty rebuilder,
+       scoreSuggestion sets total = tradeValueTerms directly and never adds the lineup
+       or wins terms to the sum at all. There is no rebuilder row in HORIZON_WEIGHTS and
+       no numeric weight for that path by design, because a weight of 0.05 is still a
+       re-rank and a rebuilder has told us they do not care who wins in week 12.
+       The proof is a test, not a coefficient: the rebuilder ordering is asserted
+       unchanged to ten decimal places when lineupDelta and winsDelta are replaced with
+       four different unrelated numbers on both candidate packages.
+       DELIBERATE NON-CHANGE: an EXPLICIT "value" strategy is not caught by the hard
+       rule, because a contender can pick it too and the existing STRATEGY_WEIGHTS.value
+       comment argues for a small positive lineup term. Only an INFERRED rebuild (from
+       Power Pulse status, no toggle pressed) gets the hard zero.
+     | verified: yes (5 new tests, no existing test removed or weakened; the pinned
+       arithmetic test still passes untouched because a null status lands on the even
+       bucket; trade-finder suite 246 tests green)
+
+PE-T061 | completed | Admin controls for the projection model
+     | files: app/admin/power-pulse/power-pulse-settings-manager.tsx
+     | notes: two sections on /admin/power-pulse: the on switch, blend cap, games to
+       reach it, usage half life, efficiency prior, odds toggle and calibration toggle;
+       plus the four per-position calibration slopes. Every control goes through the
+       existing labelled Field and Toggle components, so labels, aria-describedby hints
+       and 44px targets come for free. The copy says out loud that the feature should
+       stay off until the scoreboard earns it.
+     | verified: yes (tsc clean; full suite 3,598 green)
+
+## Phase 7 - Review
+PE-T070 | completed | Implementation review sub-agent
+PE-T071 | completed | Security review sub-agent
+PE-T072 | completed | Accessibility review sub-agent
+PE-T073 | completed | Performance review sub-agent
+PE-T074 | completed | Fix everything at high or medium severity
+
+
+## Discovered mid-build, not on the original task list
+
+PE-T017 | completed | modelVersion can no longer be pinned by a stored settings row
+     | files: lib/power-pulse/default-settings.ts, lib/power-pulse/model-version.test.ts
+     | notes: FOUND IN PRODUCTION while verifying PE-T053. The global
+       league_power_pulse_settings row reads modelVersion "pp-2" while the code had
+       moved through pp-3, pp-4, pp-5 and pp-6. mergePowerPulseSettings took the version
+       from the stored document, so every one of those four bumps announced itself with
+       the oldest name and NOTHING invalidated. The single job of modelVersion is to say
+       "the model changed, rescore", and a stored row is by definition older than the
+       code it is merged into.
+       Fixed with effectiveModelVersion: the base always comes from CODE, and the stored
+       document's own shape is folded in as a short order-independent fingerprint so an
+       admin edit still invalidates. Both guarantees now hold at once and a stale string
+       can pin neither. modelVersion is excluded from its own fingerprint, and keys are
+       sorted before hashing because Postgres does not preserve jsonb key order and a
+       round-trip would otherwise look like an edit.
+     | verified: yes (9 tests, including the exact stale production row as a fixture)
+
+PE-T018 | open, needs a product decision, NOT a code change | the stale production
+       settings row is also holding back two evidence-based improvements
+     | notes: the same pp-2 row carries reliability.priorGames 10 and clamps of 0.85 to
+       1.15. The code defaults are 60 and 0.95 to 1.05, set from the pp-5 measurement
+       that beat rate has NO year over year persistence (QB 0.02, RB -0.06, WR -0.03,
+       TE 0.02, K -0.01, DEF 0.16). Because a stored value wins over a default, the
+       plus or minus 15% noise multiplier is still live in production.
+       Deliberately NOT changed from this session. Code is ours to fix; production
+       configuration is the owner's. The fix is one save on /admin/power-pulse, and it
+       is called out in the final report and in handoff.md.
+
+## Projection engine review outcomes, 2026-09-01
+
+Four independent sub-agents reviewed the finished build: implementation,
+security, accessibility, performance. None of them wrote any of it. Everything
+at HIGH or MEDIUM is fixed. Final state: tsc clean, 231 files, 3,628 tests
+passing, production build clean, punctuation scan clean across every changed
+file.
+
+Both HIGH implementation findings were LATENT rather than live: neither was
+producing a wrong number in production yet, and both would have started doing so
+under conditions this build's own purpose guarantees will occur.
+
+FIXED (high, correctness): loadAccuracy in lib/power-pulse/load.ts had no source
+filter. The moment a graded ffbeacon row exists for a player, PostgREST could
+return both that row and the Sleeper one with no ORDER BY, and the loop kept
+whichever came back last, mixing two populations into one reliability figure.
+Migration 0240's own comment names this exact failure. It reaches Power Pulse,
+Positional WAR, FAAB and Trade Ideas, not just the new engine. It now takes a
+source parameter defaulting to sleeper, so every legacy caller is unchanged, and
+lib/projections/read.ts passes the source it actually resolved.
+
+FIXED (high, correctness): availableProjectionSources asked "does ffbeacon have
+ANY row in this window" and then routed the WHOLE window to it. One missed cron
+day during the season would leave those weeks with no ffbeacon row forever, and a
+later reader spanning them would silently lose them, breaking the guarantee that
+switching sources can change what a number IS but never which weeks EXIST. It is
+now a COVERAGE check against the Sleeper row count for the same window.
+
+FIXED (high, correctness): lib/player-profile.ts read both sources with no
+filter. Verified live: every touched 2026 player returned 34 to 36 rows instead
+of 17 to 18. Worse, loadProjectionsMap keys on season and week with no tiebreak,
+so once the sources diverge the beat-or-missed comparison on the stats tab would
+have become nondeterministic. The file stays on the raw Sleeper read by design
+(PE-T044); the source filter is what makes the heading "Sleeper projections"
+literally true rather than incidentally true.
+
+FIXED (high, performance): the projection build spent 130 of its 160 seconds in
+one phase, and nobody could say which until phase timing was added. Two causes,
+both now fixed and both measured:
+  1. The stat read fetched EVERY position and discarded 70% in JavaScript.
+     Pushed into the query with an inner join on position.
+  2. The keyset walk ordered by id, which defeated the season index and made
+     Postgres walk the PRIMARY KEY filtering season row by row. Measured:
+     5,276 ms for one 1,000 row page, reading 8,355 disk pages to return 1,000
+     rows. Migration 0242 adds (season, season_type, id) and the walk now runs
+     one season at a time, because a btree can only supply an ordering when the
+     leading columns are equalities.
+  RESULT: stats phase 130,269 ms to 16,536 ms, total build 160 s to 34 s, from
+  53% of the 300 second cron ceiling to 11%. Output byte-identical: 18,508 rows,
+  3,202 modelled, 0 dropped, same mirror breakdown.
+
+FIXED (high, performance): lib/draft-value/build.ts called the whole
+loadAdjustedProjections bundle INSIDE the per-format loop. The data does not vary
+by format, only the final scoring does, and the file's own header documents a
+near-identical past incident in the same function. Now grouped by
+(scoringType, tePremiumBonus): 10 formats collapse to 4 groups, roughly 70 to 100
+queries down to 28 to 40.
+
+FIXED (high, performance): /admin/projections paged three whole tables on every
+render, uncached, roughly 140 round trips a view, with one measured page at
+774 ms. Now wrapped in unstable_cache on a 24 hour TTL and tagged with
+playerProjections, playerStats and playerDepth so a nightly sync busts it
+immediately rather than serving a stale board for a day.
+
+FIXED (high, correctness): missing ORDER BY on range-based pagination in four
+places, three of them new. Without a stable sort Postgres can return a different
+order per page and silently skip or duplicate rows; for defense splits that
+understates a sample with nothing thrown. All now order by id, matching the
+convention in lib/draft-tracker/board.ts.
+
+FIXED (high, accessibility): the scoreboard table had no row headers. Every
+column header carried scope="col" but the cell giving a row its identity was a
+plain td, so a screen reader user navigating cell by cell heard "Mean absolute
+error" and nothing saying which position they were in. Now a row-scoped header.
+
+FIXED (medium, correctness): a player-week could be silently dropped from the
+mirror. The write key came only from the players table mapping, while the
+authoritative sleeper_player_id on the row being mirrored was read and then never
+used. Now row-first with the players table as fallback, and any row still without
+an id is counted and logged rather than skipped in silence.
+
+FIXED (medium, correctness): the calibration factor puts the projection in the
+denominator, so it runs away as the projection approaches zero. At the QB slope
+against a mean near 20, a 0.2 point projection scaled by about 33. The startable
+range guard covers the normal case but a THIN pool degrades the cut to the pool
+minimum and lets a near-zero row through. Now an absolute 2 point floor plus a
+2x factor cap.
+
+FIXED (medium, correctness): clampMultiplier in adjust.ts and clamp in volume.ts
+had no NaN guard, and clamping NaN returns NaN. A single degenerate ratio would
+have been written into shrunk_multiplier and then multiplied into every
+projection facing that defense. Both now return the floor.
+
+FIXED (medium, performance): lib/projections/read.ts ran a settings read and two
+count probes BEFORE checking whether the feature is enabled, on every render
+across five callers, with the feature off by default. Settings first now, probes
+only when enabled.
+
+FIXED (medium, performance): migration 0239's index served the count probes but
+not the row fetch, because week is a RANGE condition and sits before player_id,
+and a btree cannot use a later column as an index condition once a preceding one
+is range-restricted. Measured: 113 ms fetching 429 rows to keep 171. Migration
+0241 adds (source, season, season_type, player_id, week). Re-measured: all five
+columns as index conditions, 171 rows fetched to return 171.
+
+FIXED (medium, accessibility): the new numeric fields stated their bounds only in
+section prose, never through aria-describedby. Native min and max are not
+reliably announced and there is no form element, so constraint validation never
+fires either. Every new field now carries a hint.
+
+FIXED (medium, accessibility): the Checkbox control was 20 by 20 against the
+project's absolute 44 by 44 rule. Centring it inside a 44px row did not make
+anything 44px tall. The label now wraps the row and carries the target.
+
+FIXED (medium, observability): the odds cron had maxDuration 60 against three
+sequential 20 second timeouts, landing exactly on the ceiling. A slow but not
+dead ESPN would have Vercel hard-kill the function, and a hard kill skips the
+finalize in cron-runs, leaving a "running" row stuck in the ledger forever
+instead of a clean error. Now 120.
+
+FIXED (low, documentation): three comments that would have sent a debugger to
+the wrong file. convert.ts attributed share shrinkage to volume.ts when it
+happens in usage.ts; default-settings.ts claimed the usage recency ladder was
+shared with Power Pulse's when they are two independent settings that merely
+agree today; calculate-projection-accuracy.ts claimed a source scoping that did
+not exist.
+
+DOCUMENTED, not fixed: nfl_game_odds.metadata is publicly readable and holds the
+verbatim ESPN payload, per the source-preservation rule. Nothing reads it today
+and the content is not attacker-influenced (a fixed server-side URL with
+internally computed params), so there is no live path. The note exists so a
+future consumer does not assume it is safe to render raw.
+
+DOCUMENTED, not fixed: the settings form has no client-side range enforcement, so
+an out-of-range value is only caught by the server round trip. It is announced
+correctly through the live region, and it affects the whole pre-existing form
+rather than this build.
+
+DOCUMENTED, not fixed: lib/faab/outlook.ts scans player_weekly_projections twice,
+once to enumerate ids and once through the shared reader. Removing it would mean
+either teaching the deliberately id-list-only reader a position query, or
+enumerating from players and pulling in every roster-eligible player Sleeper
+never projected. Both scans sit inside the same 24 hour cache.
+
+DOCUMENTED, not fixed: no walk-forward backtest exists. The usage model reads
+whole seasons, so building 2025 projections today would use the games it is
+predicting. A naive backtest would look excellent and mean nothing. This is the
+highest-value next piece of work and is recorded in handoff.md.
+
+SECURITY: no CRITICAL and no HIGH findings. RLS verified live on all four touched
+tables with role simulations rolled back in a transaction: every one has
+relrowsecurity true and exactly the two-policy pattern (public select, service
+role all), anon reads succeed, anon writes are rejected or affect zero rows, and
+migration 0240's re-keying dropped no policy. Cron auth uses the shared
+constant-time bearer check and leaks nothing in its error bodies. requireAdmin
+runs before any query on the new page. No user-controlled value reaches a select,
+filter, order or in clause anywhere in the build.
+
+PE-T075 | completed | Final report artifact
+
+## The backtest, and what it says, 2026-09-01
+
+PE-T019 | completed | Clear the stale production settings row
+     | notes: diffed the stored row against code defaults programmatically before
+       touching it. It differed in EXACTLY 9 values and all 9 were superseded
+       measurements: the six variance.defaultCv figures (pre-pp-4 estimates,
+       replaced by figures measured from our own player_stats) and the three
+       reliability values (pre-pp-5, replaced by the finding that beat rate has no
+       year over year persistence). Every other key in it was byte-identical to
+       the code defaults, so the row carried nothing an admin had chosen.
+       Set to {} rather than deleted, so the row still exists for the admin form
+       to load and save into. Effective modelVersion went from "pp-6+xl59yf" to a
+       clean "pp-6", which itself invalidates the caches so leagues rescore under
+       the corrected settings.
+     | verified: yes (re-ran the diff: 0 differences; accuracy rebuilt)
+
+PE-T080 | completed | Walk-forward backtest of the 2025 season
+     | files: scripts/backtest-projections.ts, package.json,
+       lib/projections/types.ts, lib/projections/engine.ts
+     | notes: the handoff said a backtest was not available. That was wrong, and
+       the owner was right to push. What is not available is a NAIVE backtest.
+       The honest version walks forward: for week W it hands the engine the two
+       prior seasons in full plus the target season's weeks 1 to W-1 and nothing
+       else, sets latestWeek to W-1 so the recency decay is measured from the last
+       week we were allowed to see, and grades against week W. assertNoLookahead
+       re-checks that slice on every week rather than trusting the loop, because a
+       lookahead bug would not throw, it would just return a flattering number.
+       BeaconProjection gained a `modelled` flag so the isolating column grades
+       only rows OUR model produced. A mirrored row is Sleeper's number wearing
+       our name, and scoring it as ours would credit us with his work.
+       THE RESULT, and it is not the flattering one. Pooled, 2025, PPR, 6,097
+       graded player-weeks on played weeks only:
+                     MAE     bias    corr
+         sleeper    4.116   -0.391   0.699
+         blended    4.372   -0.589   0.686    6.2% WORSE
+         ours alone 5.266   -0.961   0.637    clearly worse
+       And it is a dose-response curve rather than noise. In week 1, where the
+       blend weight is 0, blended and sleeper agree to three decimals (3.907
+       against 3.908). From week 7, where the weight reaches its cap, blended runs
+       about 0.35 worse every single week. The more of our model is used, the
+       worse the answer gets.
+       ONE POSITION ALREADY WINS: quarterbacks. Blended MAE 6.320 against
+       Sleeper's 6.540, with bias cut from -2.834 to -1.232. A per-position blend
+       weight is the obvious next move and was deliberately NOT taken, because one
+       position beating the incumbent on one season is a lead to follow rather
+       than a result to ship.
+       LIMITATION, stated rather than buried: no game environment. ESPN drops the
+       betting line once a game is played, so no 2025 odds are retrievable and the
+       volume and game-script adjustments contributed nothing to these numbers.
+       Whatever they are worth is not in this result. The backtest also grades the
+       STORED projection, not the read path, so the opponent, reliability,
+       availability and injury multipliers applied by projectPlayerWeek are not in
+       it either, for Sleeper or for us.
+     | verified: yes (npm run backtest:projections; 3,629 tests green)
+
+PE-T081 | completed | Act on the backtest: blend default to 0
+     | files: lib/projections/default-settings.ts, lib/projections/engine.test.ts
+     | notes: blend.max was 0.5 on the strength of published aggregation research.
+       Our own measurement overrules it: shipping 0.5 would have made the product
+       6.2% worse the moment anyone enabled the feature. It is now 0, with the
+       full measurement in the comment and an instruction to raise it only when a
+       rerun says so.
+       At weight 0 the ffbeacon source is a CALIBRATED Sleeper, which the week 1
+       rows show is a hair BETTER than raw Sleeper rather than worse, so the source
+       is still worth having and still worth grading. What it no longer does is
+       claim a model that has not earned it.
+       Two guards on the default: one test drives the blending mechanism with its
+       own explicit non-zero weight, so it keeps testing blending regardless of the
+       shipped value, and a second asserts that at the shipped default a modelled
+       player's stored total is still Sleeper's own number. The first test had been
+       reading SETTINGS.blend.max and would have silently stopped testing anything
+       the day the default hit zero.

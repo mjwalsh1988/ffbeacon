@@ -3,7 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { SleeperLeague } from "@/lib/sleeper";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
-import { scoreWithFallback, type ScoringSettings } from "@/lib/league-scoring";
+import type { ScoringSettings } from "@/lib/league-scoring";
+import { loadAdjustedProjections, type AdjustedProjectionSummary } from "@/lib/projections/read";
 import { buildRelayHeader } from "./header";
 import type { RelayLeague, RelayTeam } from "./types";
 import type { WaiverPlayer } from "./waiver-writeup";
@@ -151,8 +152,11 @@ export async function loadPulseRanks(
  *
  * `projectedPoints` is scored under the LEAGUE'S OWN scoring settings, not
  * under a canonical PPR column, so a superflex TE-premium league sees the
- * number its managers will actually get. That is the same `scoreWithFallback`
- * Power Pulse uses, so the two never disagree about a player.
+ * number its managers will actually get. Routed through
+ * lib/projections/read.ts loadAdjustedProjections, the same reader Power
+ * Pulse and Trade Ideas use, so a waiver writeup carries the same
+ * opponent-strength, reliability, availability and injury adjustments those
+ * pages already show and never quietly disagrees with them.
  */
 export async function loadWaiverPlayers(
   admin: Admin,
@@ -198,17 +202,34 @@ export async function loadWaiverPlayers(
 
   const playerIds = Array.from(bySleeper.values()).map((p) => p.id);
 
-  const [{ data: projections }, { data: trends }] = await Promise.all([
-    params.weeks.length > 0
-      ? admin
-          .from("player_weekly_projections")
-          .select(
-            "sleeper_player_id, week, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
-          )
-          .eq("season", params.season)
-          .in("sleeper_player_id", ids)
-          .in("week", params.weeks)
-      : Promise.resolve({ data: [] as never[] }),
+  // params.weeks is always a contiguous run (relay.ts builds it as
+  // currentWeek..currentWeek+N-1, clipped to the regular season), so its min
+  // and max describe the same window loadAdjustedProjections wants as
+  // fromWeek/toWeek.
+  const fromWeek = params.weeks.length > 0 ? Math.min(...params.weeks) : null;
+  const toWeek = params.weeks.length > 0 ? Math.max(...params.weeks) : null;
+
+  const positionByPlayer = new Map<string, string>();
+  const injuryByPlayer = new Map<string, string | null>();
+  for (const p of bySleeper.values()) {
+    positionByPlayer.set(p.id, p.position);
+    injuryByPlayer.set(p.id, p.injury);
+  }
+
+  const [{ byPlayer: projByPlayer }, { data: trends }] = await Promise.all([
+    fromWeek !== null && toWeek !== null && playerIds.length > 0
+      ? loadAdjustedProjections({
+          supabase: admin,
+          playerIds,
+          season: params.season,
+          fromWeek,
+          toWeek,
+          scoringSettings: params.scoring,
+          positionByPlayer,
+          injuryByPlayer,
+          currentWeek: fromWeek,
+        })
+      : Promise.resolve({ byPlayer: new Map<string, AdjustedProjectionSummary>() }),
     params.formatConfigId && playerIds.length > 0
       ? admin
           .from("player_value_trends")
@@ -218,28 +239,6 @@ export async function loadWaiverPlayers(
           .in("player_id", playerIds)
       : Promise.resolve({ data: [] as never[] }),
   ]);
-
-  // Average over the weeks Sleeper actually published, not over the window
-  // length, so a bye inside the window does not read as a week he was projected
-  // to score nothing.
-  const projSum = new Map<string, { total: number; weeks: number }>();
-  for (const row of projections ?? []) {
-    const scored = scoreWithFallback(
-      row.stat_line as Record<string, unknown> | null,
-      {
-        ppr: row.projected_pts_ppr,
-        half_ppr: row.projected_pts_half_ppr,
-        std: row.projected_pts_std,
-      },
-      params.scoring,
-      bySleeper.get(row.sleeper_player_id)?.position ?? null,
-    );
-    if (scored.points === null) continue;
-    const acc = projSum.get(row.sleeper_player_id) ?? { total: 0, weeks: 0 };
-    acc.total += scored.points;
-    acc.weeks += 1;
-    projSum.set(row.sleeper_player_id, acc);
-  }
 
   const trendByPlayer = new Map<string, { value: number; change: number | null }>();
   for (const t of trends ?? []) {
@@ -253,14 +252,18 @@ export async function loadWaiverPlayers(
   }
 
   for (const [sleeperId, p] of bySleeper) {
-    const proj = projSum.get(sleeperId);
+    // Average over the weeks Sleeper actually published, not over the window
+    // length, so a bye inside the window does not read as a week he was
+    // projected to score nothing. loadAdjustedProjections already keeps this
+    // distinction (perWeek is null rather than 0 when weeks is 0).
+    const proj = projByPlayer.get(p.id);
     const trend = trendByPlayer.get(p.id);
     out.set(sleeperId, {
       name: p.name,
       position: p.position,
       nflTeam: p.team,
       injuryStatus: p.injury,
-      projectedPoints: proj && proj.weeks > 0 ? proj.total / proj.weeks : null,
+      projectedPoints: proj?.perWeek ?? null,
       value: trend?.value ?? null,
       change30dPct: trend?.change ?? null,
       // Filled in by the caller when it has the positional board; a per-player

@@ -24,6 +24,15 @@ const positionCv = z.object({
   DEF: z.number().min(0.05).max(2),
 });
 
+const positionReliability = z.object({
+  QB: unit,
+  RB: unit,
+  WR: unit,
+  TE: unit,
+  K: unit,
+  DEF: unit,
+});
+
 export const powerPulseSettingsSchema = z
   .object({
     modelVersion: z.string().min(1).max(32),
@@ -68,6 +77,9 @@ export const powerPulseSettingsSchema = z
       currentSeasonWeight: unit,
       priorSeasonWeight: unit,
       minGamesSampled: z.number().min(0).max(34),
+      useAdjusted: z.boolean(),
+      priorGames: z.number().min(0).max(100),
+      positionReliability,
     }),
 
     variance: z.object({
@@ -116,8 +128,74 @@ export const powerPulseSettingsSchema = z
         .max(WAR_SETTING_BOUNDS.cliffThreshold.max),
       clampBelowReplacement: z.boolean(),
     }),
+
+    // The FF Beacon projection model. Bounds chosen so a bad save degrades to
+    // "our projections contribute less" rather than to a broken number:
+    // blend weights are unit-bounded so we can never claim MORE than the whole
+    // projection, calibration slopes are capped at 1.5 because a slope above 1
+    // would EXPAND a spread every measurement says is already too wide, and the
+    // environment caps cannot invert.
+    beaconProjections: z.object({
+      modelVersion: z.string().min(1).max(32),
+      enabled: z.boolean(),
+      usage: z.object({
+        halfLifeWeeks: z.number().min(0.5).max(52),
+        seasonWeights: z.object({
+          currentSeason: unit,
+          oneSeasonBack: unit,
+          twoSeasonsBack: unit,
+          olderSeasons: unit,
+        }),
+        minWeightedGames: z.number().min(0).max(64),
+        minTeamTargets: z.number().min(0).max(100),
+        minTeamCarries: z.number().min(0).max(100),
+        priorGames: z.number().min(0).max(200),
+      }),
+      efficiency: z.object({
+        priorGames: z.number().min(0).max(200),
+      }),
+      environment: z.object({
+        enabled: z.boolean(),
+        leagueAverageImpliedTotal: z.number().min(1).max(100),
+        totalWeight: z.number().min(0).max(3),
+        totalMin: multiplier,
+        totalMax: multiplier,
+        spreadWeight: z.number().min(0).max(0.1),
+        scriptMax: unit,
+      }),
+      calibration: z.object({
+        enabled: z.boolean(),
+        slope: z.object({
+          QB: z.number().min(0).max(1.5),
+          RB: z.number().min(0).max(1.5),
+          WR: z.number().min(0).max(1.5),
+          TE: z.number().min(0).max(1.5),
+        }),
+      }),
+      blend: z.object({
+        min: unit,
+        max: unit,
+        gamesForMax: z.number().min(0).max(64),
+      }),
+    }),
   })
   // Cross-field checks the per-field bounds cannot express.
+  .refine(
+    (s) => s.beaconProjections.blend.min <= s.beaconProjections.blend.max,
+    {
+      message: "Blend minimum must not exceed the maximum.",
+      path: ["beaconProjections", "blend", "min"],
+    },
+  )
+  .refine(
+    (s) =>
+      s.beaconProjections.environment.totalMin <=
+      s.beaconProjections.environment.totalMax,
+    {
+      message: "Environment minimum must not exceed the maximum.",
+      path: ["beaconProjections", "environment", "totalMin"],
+    },
+  )
   .refine((s) => s.weights.points + s.weights.schedule + s.weights.depth + s.weights.form > 0, {
     message: "At least one component weight must be above zero.",
     path: ["weights"],

@@ -35,7 +35,7 @@ import {
 } from "@/lib/trade-quality";
 import { findTrades } from "@/lib/trade-finder/engine";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
-import type { TradeGoal, TradeSuggestion } from "@/lib/trade-finder/types";
+import type { TradeStrategy, TradeSuggestion } from "@/lib/trade-finder/types";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -117,7 +117,15 @@ export async function findCrossLeagueTrade(
     sleeperLeagueIds: string[];
     sleeperUserId: string | null;
     sourceSlug: string | null;
-    goal: TradeGoal;
+    /**
+     * Which question the ranking answers, for every league in the walk.
+     *
+     * One setting across the portfolio, and each league resolves it for itself:
+     * a redraft room in the list ranks as a contender search whatever this says,
+     * because in a one-year league there is no other honest reading. See
+     * resolveStrategy.
+     */
+    strategy?: TradeStrategy;
     cursor: number;
     excludeByLeague: Map<string, string[]>;
     sessionExcluded: string[];
@@ -185,7 +193,7 @@ export async function findCrossLeagueTrade(
       startingSlots: league.startingSlots,
       isDynasty: league.isDynasty,
       allowPicks: league.allowPicks,
-      goal: params.goal,
+      strategy: params.strategy,
       targetPlayerIds: [],
       offerPlayerIds: [],
       excludeKeys: [...stored, ...sessionExcluded],

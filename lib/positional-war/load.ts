@@ -140,6 +140,7 @@ import {
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import type { PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import type { WarPlayerInput } from "./types";
 
 type ServiceClient = SupabaseClient<Database>;
@@ -569,7 +570,7 @@ async function assembleUniverse(
   readers: UniverseReaders,
 ): Promise<SerializedWarUniverse> {
   const { season, fromWeek, toWeek, scoringBase } = params;
-  const defenseSeasons = [season - 1, season - 2];
+  const defenseSeasons = defenseSeasonsFor(season);
 
   const weeks: number[] = [];
   for (let w = fromWeek; w <= toWeek; w++) weeks.push(w);

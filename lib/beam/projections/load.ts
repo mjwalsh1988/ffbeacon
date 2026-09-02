@@ -5,14 +5,21 @@
  * split is deliberate:
  *
  *   OUTLOOK    what a player is projected to score from here on
- *              (player_weekly_projections, summed)
+ *              (player_weekly_projections, via the FF Beacon adjustment layer)
  *   RELIABILITY how often the projection has been too low
  *              (player_projection_accuracy, pooled)
  *
- * Both read the same tables the Beacon Breakdown reliability tab reads, through
- * the same scoring key, so BEAM's "beats his projection 76% of the time" and the
- * number on the player profile are the same measurement rather than two
- * plausible ones.
+ * OUTLOOK is routed through lib/projections/read.ts loadAdjustedProjections
+ * rather than summed off the raw Sleeper columns, so a BEAM answer like "Bijan
+ * Robinson is projected for 240 points" carries the same opponent-strength,
+ * reliability, availability and injury adjustments the rest of the site
+ * applies (and, once enabled, the ffbeacon source), instead of a plainer
+ * number that quietly disagreed with everything else BEAM can already cite.
+ *
+ * RELIABILITY reads the same table the Beacon Breakdown reliability tab reads,
+ * through the same scoring key, so BEAM's "beats his projection 76% of the
+ * time" and the number on the player profile are the same measurement rather
+ * than two plausible ones.
  *
  * POOLING, NOT AVERAGING. A beat rate over several seasons is
  * sum(weeks beaten) / sum(weeks played), never the mean of the per-season rates.
@@ -24,14 +31,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { ScoringKey } from "@/lib/player-profile";
+import { loadAdjustedProjections } from "@/lib/projections/read";
+import { canonicalScoringForFormat } from "@/lib/draft-value/default-settings";
+import type { ScoringSettings } from "@/lib/league-scoring";
 
 type Client = SupabaseClient<Database>;
 
-/** The projected-points column for a scoring base. A closed mapping. */
-const PROJECTION_COLUMN: Record<ScoringKey, "projected_pts_ppr" | "projected_pts_half_ppr" | "projected_pts_std"> = {
-  pts_ppr: "projected_pts_ppr",
-  pts_half_ppr: "projected_pts_half_ppr",
-  pts_std: "projected_pts_std",
+/**
+ * A canonical (no TE premium) ScoringSettings map for each of the three bases
+ * we store denormalized columns for, built once per module load. BEAM has a
+ * scoring key but no league, so there is nothing to build a real dot product
+ * from; this mirrors lib/projections/engine.ts's own CANONICAL_SCORING, which
+ * is private to that file and so cannot be imported directly.
+ */
+const CANONICAL_SCORING: Record<ScoringKey, ScoringSettings> = {
+  pts_ppr: canonicalScoringForFormat({ scoringType: "ppr", tePremiumBonus: 0 }),
+  pts_half_ppr: canonicalScoringForFormat({ scoringType: "half_ppr", tePremiumBonus: 0 }),
+  pts_std: canonicalScoringForFormat({ scoringType: "standard", tePremiumBonus: 0 }),
 };
 
 export type ProjectionOutlook = {
@@ -51,11 +67,12 @@ export type ProjectionOutlook = {
 };
 
 /**
- * Weekly projections summed for one or two players.
+ * Weekly projections, adjusted, summed for one or two players.
  *
- * One read, paged the way lib/breakdown/load-extras.ts pages it, because a
- * season is 18 rows per player and PostgREST's default cap is a trap rather
- * than a limit.
+ * One call into lib/projections/read.ts loadAdjustedProjections for the whole
+ * season (fromWeek 1, no toWeek), then split locally into the season total and
+ * the remaining-weeks total: the same single read the raw version made, just
+ * scored through the shared adjustment layer instead of read off a column.
  */
 export async function loadProjectionOutlook(
   db: Client,
@@ -66,21 +83,6 @@ export async function loadProjectionOutlook(
 ): Promise<Map<string, ProjectionOutlook>> {
   const out = new Map<string, ProjectionOutlook>();
   if (playerIds.length === 0) return out;
-
-  const column = PROJECTION_COLUMN[scoringKey];
-  const { data, error } = await db
-    .from("player_weekly_projections")
-    .select(`player_id, week, opponent, ${column}`)
-    .eq("season", season)
-    .eq("season_type", "regular")
-    .in("player_id", playerIds)
-    .order("week", { ascending: true })
-    .limit(playerIds.length * 25);
-
-  if (error) {
-    console.error("[beam] projection read failed", error);
-    return out;
-  }
 
   for (const playerId of playerIds) {
     out.set(playerId, {
@@ -95,30 +97,51 @@ export async function loadProjectionOutlook(
     });
   }
 
-  type Row = { player_id: string | null; week: number; opponent: string | null } & Record<
-    string,
-    unknown
-  >;
+  const { data: playerRows, error: playerErr } = await db
+    .from("players")
+    .select("id, position")
+    .in("id", playerIds);
+  if (playerErr) {
+    console.error("[beam] player position read failed", playerErr);
+    return out;
+  }
+  const positionByPlayer = new Map<string, string>();
+  for (const row of playerRows ?? []) {
+    positionByPlayer.set(row.id, (row.position ?? "").toUpperCase());
+  }
 
-  for (const raw of (data ?? []) as unknown as Row[]) {
-    if (!raw.player_id) continue;
-    const outlook = out.get(raw.player_id);
+  const { byPlayer } = await loadAdjustedProjections({
+    supabase: db,
+    playerIds,
+    season,
+    fromWeek: 1,
+    scoringSettings: CANONICAL_SCORING[scoringKey],
+    positionByPlayer,
+    // BEAM asks about a player with no roster and no per-player injury
+    // designation of its own, so fromWeek doubles as "the live week" for the
+    // injury multiplier's week-to-week discount, matching how both callers
+    // (player-projection.ts, player-compare-projection.ts) already treat it.
+    currentWeek: fromWeek,
+  });
+
+  for (const [playerId, summary] of byPlayer) {
+    const outlook = out.get(playerId);
     if (!outlook) continue;
 
-    const points = raw[column];
-    if (typeof points !== "number" || !Number.isFinite(points)) continue;
-    const week = Number(raw.week);
+    let next: ProjectionOutlook["next"] = null;
+    for (const [week, projected] of summary.byWeek) {
+      outlook.seasonPoints += projected.points;
+      outlook.seasonWeeks += 1;
 
-    outlook.seasonPoints += points;
-    outlook.seasonWeeks += 1;
-
-    if (week >= fromWeek) {
-      outlook.remainingPoints += points;
-      outlook.remainingWeeks += 1;
-      if (!outlook.next || week < outlook.next.week) {
-        outlook.next = { week, opponent: raw.opponent, points };
+      if (week >= fromWeek) {
+        outlook.remainingPoints += projected.points;
+        outlook.remainingWeeks += 1;
+        if (!next || week < next.week) {
+          next = { week, opponent: projected.opponent, points: projected.points };
+        }
       }
     }
+    outlook.next = next;
   }
 
   return out;

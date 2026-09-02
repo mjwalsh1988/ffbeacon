@@ -38,6 +38,7 @@ import {
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { simulateWithReplacements } from "@/lib/power-pulse/what-if";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import {
   buildOptimalLineup,
   lineupSigma,
@@ -226,7 +227,7 @@ export async function calculateLeagueFaab(
   const teamNames = await loadTeamNames(supabase, input.leagueRowId);
 
   const scoringBase = closestScoringBase(league.scoringSettings);
-  const defenseSeasons = [league.season - 1, league.season - 2];
+  const defenseSeasons = defenseSeasonsFor(league.season);
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
 
   const pulseSettings = await loadPowerPulseSettings(supabase);

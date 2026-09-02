@@ -1,178 +1,197 @@
 # Handoff
 
-Session of 2026-09-01. Build: **League Activity**, the scrollable log of
-everything that happens in a league, on the League Pulse overview and on a full
-page of its own. Tasks: `progress.md`, prefix `LA-T###`.
-
-This build sits on top of `b052261` (League Relay), which was committed outside
-this session while it was running. Nothing in this build is part of that commit.
+Session of 2026-09-01. Build: **The FF Beacon Projection Engine**. Plan of
+record: `docs/projection-engine-plan.md`. Tasks: `progress.md`, prefix `PE-T###`.
 
 ## State
 
-**Nothing from this build is committed.** The working tree holds all of it.
+**Nothing is committed.** Everything lives in the working tree.
 
 Green as of the last run:
 
 - `npx tsc --noEmit` clean
-- `npx vitest run`: 212 files, 3,302 tests, all passing (121 of them new)
-- `npm run build` clean, `/leagues/[league_id]/activity` registered at 818 B of
-  client JS (the whole feature is server rendered; that figure is the Link
-  runtime)
-- Verified against a real league (`1312210128811872256`, GDK): 119 events
-  projected from 137 stored transactions, and a repeat sync writes zero
+- `npx vitest run`: 231 files, 3,628 tests, all passing
+- `npm run build` clean, all three new routes registered
+- Punctuation scan clean across every changed file
 
-Migrations **0235** and **0236** are applied to the live project
-(`cilvpyivysjxpxbudkfa`) and `lib/database.types.ts` is regenerated from 0235.
-0236 changes only indexes and a constraint, so the types are unaffected.
+ALL SEVEN PHASES COMPLETE, including the four independent reviews and the fixes
+that came out of them. See "Projection engine review outcomes" at the end of
+`progress.md` for the full list.
 
-Four sub-agent reviews (security, accessibility, implementation, performance)
-ran against the finished build. Thirty-eight findings; everything at high or
-medium severity is fixed. The full list and the four deliberate non-fixes are in
-`progress.md` under "League Activity review outcomes".
+## What this build is
 
-## What it is
+Before it, there was no FF Beacon projection engine. There was a Sleeper
+projection with four FF Beacon multipliers on top, applied by seven surfaces and
+skipped by six others. Now there is a projection of our own, stored as
+`player_weekly_projections` rows with `source = 'ffbeacon'` in Sleeper's own
+component stat-line vocabulary.
 
-One table, `league_activity`, one row per detected event, and a feed that reads
-it with one indexed query. Nineteen kinds in five filter buckets: Moves,
-Results, Lineups, Settings, Managers.
+**It ships disabled.** `beaconProjections.enabled` defaults to false. Nothing on
+the site changes until an admin turns it on, and what earns that edit is the
+scoreboard at `/admin/projections`.
 
-Rows arrive two different ways, and the difference is the whole design:
+## What is live in production right now
 
-- **Projected** from tables we already keep. Transactions carry Sleeper's own
-  `created_at_sleeper`, so those are marked `exact` and the card prints the
-  time. Finished matchups carry settled scores but no clock, so the timestamp is
-  derived from the NFL week and the card leads with "Week 6" instead.
-- **Detected** by diffing. Lineups, scoring, roster slots, team count, managers,
-  owners: every sync used to upsert straight over the previous values, so
-  `pulseLeagueCore` now takes a snapshot BEFORE the upsert and `diff.ts` decides
-  what the difference means. Those are marked `observed` and the card says the
-  window it was spotted in.
+Six migrations applied to `cilvpyivysjxpxbudkfa`, each verified with the
+project's RLS sequence (policy inventory, anon SELECT simulation, anon write
+simulation asserting zero rows changed):
+
+- **0237** `nfl_defense_vs_position`: `adjusted_points_allowed_per_game`,
+  `adjusted_multiplier`, `shrunk_multiplier`
+- **0238** `nfl_game_odds`: new table, public select, service-role write
+- **0239** `player_weekly_projections`: source-leading index
+- **0240** `player_projection_accuracy`: `source`, both unique indexes re-keyed
+- **0241** `player_weekly_projections`: a SECOND index,
+  `(source, season, season_type, player_id, week)`. 0239's column order serves
+  the count probes but not the row fetch, because a btree cannot use a later
+  column as an index condition once a preceding one is range-restricted, and
+  `week` is a range. Both are kept; they serve different halves of one read path.
+- **0242** `player_stats`: `(season, season_type, id)`. Ordering a keyset walk by
+  `id` defeated the season index and made Postgres walk the primary key,
+  filtering season row by row: 5,276 ms and 8,355 disk pages to return 1,000
+  rows. This index plus a per-season walk took the projection build from 160
+  seconds to 34.
+
+Data written:
+
+- `nfl_defense_vs_position`: 1,728 rows recomputed with the opponent adjustment
+  and the shrinkage. Applied multiplier spread is now DEF sd 0.041, RB 0.028,
+  TE 0.019, K 0.009, QB and WR exactly 1.000, against a raw spread of sd 0.13
+  to 0.19 pinned at the clamps.
+- `nfl_game_odds`: 272 games, all 18 weeks of 2026.
+- `player_weekly_projections`: 18,508 `ffbeacon` rows for 2026, mirroring
+  Sleeper's 18,508 exactly.
+- `player_projection_accuracy`: 5,703 rows rebuilt, now source-scoped and
+  position-centered.
+
+## Two things the owner has to decide, not the next session
+
+**1. The stale production settings row. DONE, on the owner's instruction.**
+It was diffed programmatically before being touched: it differed from code
+defaults in exactly 9 values, all of them superseded measurements (the six
+variance figures and the three reliability ones), and every other key was
+byte-identical. It is now `{}`, so the row still exists for the admin form while
+overriding nothing. Effective model version went from `pp-6+xl59yf` to a clean
+`pp-6`, which invalidates the caches so leagues rescore correctly.
+
+The related MECHANISM bug was fixed in code (PE-T017): the stored row could also
+pin `modelVersion`, so four consecutive model bumps invalidated nothing.
+`effectiveModelVersion` now always takes the base from code and folds the stored
+document in as a fingerprint.
+
+**2. Turning our projections on.** `beaconProjections.enabled` is false. Leave it
+false until the scoreboard shows a real graded sample.
+
+## Key decisions, do not relitigate
+
+- **Blend, do not replace.** Twelve seasons of data say an equal-weighted
+  average beat individual sources in 69% of comparisons. Blend caps at 0.5 and
+  starts at 0.
+- **Mirror EVERY Sleeper row**, including kickers, defenses, and weeks Sleeper
+  marks out. A reader on the ffbeacon source reads only ffbeacon rows, so a week
+  we declined to write would vanish, and a vanished week is indistinguishable
+  from a bye.
+- **Anchor points on Sleeper's published total, apply our model as a delta.**
+  Sleeper's own total is NOT the canonical dot product of its own stat line (a
+  live 2026 quarterback row: 20.36 derived against 23.26 published), and a
+  kicker's line does not dot-product to anything under skill scoring.
+- **Calibrate inside the startable range only.** Compressing the whole pool
+  toward the top-N mean inflates the deep bench, measured at plus 54% for tight
+  ends.
+- **Availability is carried through from Sleeper, never asserted by us.**
+- **WR opponent reliability is 0.00 and QB is 0.00**, from our own measurement.
+  See PE-T016 in progress.md for the full table and for the honest note that
+  the opponent adjustment helped running backs and nothing else.
+- **No kicker or defense projections of our own.** Not individual usage.
+- **No play-by-play ingestion.** Out of scope.
+- **ESPN is the odds source**, free and unauthenticated. Only team-code
+  difference from ours is `WSH` against our `WAS`.
+
+## Known gaps, recorded rather than hidden
+
+- **The backtest exists now, and it says our model is worse than Sleeper.**
+  `npm run backtest:projections`. Walk-forward over all of 2025: for each week it
+  rebuilds from the two prior seasons plus that season's earlier weeks only, then
+  grades against what happened. Pooled over 6,097 graded player-weeks, PPR:
+  Sleeper MAE 4.116, our blended output 4.372 (6.2% worse), our model alone
+  5.266. It is a dose-response curve, not noise: at week 1 where the blend weight
+  is 0 the two agree to three decimals, and from week 7 where it caps, blended
+  runs 0.35 worse every week.
+  `blend.max` is therefore 0. At that weight our source is a calibrated Sleeper,
+  which the week 1 rows show is a hair better than raw Sleeper. RAISE IT ONLY
+  WHEN A RERUN SAYS SO.
+  Quarterbacks are the exception and the lead worth following: blended MAE 6.320
+  against Sleeper's 6.540, bias cut from -2.834 to -1.232. A per-position blend
+  weight is the obvious next move.
+  Two things are NOT in that measurement: game environment (ESPN drops the
+  betting line once a game is played, so no 2025 odds exist) and the read-path
+  multipliers, since it grades the stored projection rather than what
+  `projectPlayerWeek` returns.
+- **Trade Ideas does not pass injury statuses** into the adjusted read, because
+  `lib/league-view-data.ts` never fetches `injury_status`. Both files say so
+  inline.
+- **A past season's within-season decay assumes an 18 week finish**, which
+  slightly overstates recency for 2020's 17 week season.
+- **The scoreboard and the accuracy calc are two independent computations** of
+  overlapping figures. They should roughly agree and are not wired together.
+
+## Inherited working tree, not part of this build
+
+`git status` at session start already showed these:
+
+- **pp-5**, the reliability multiplier centered on position with its range cut
+  to plus or minus 5%. Correct work; this build carried it forward and bumped to
+  pp-6 on top of it.
+- **A Trade Ideas ranking change** across `app/actions/trade-finder.ts`,
+  `components/trade-finder.tsx`, `components/player-picker.tsx` and
+  `lib/trade-finder/*`. Phase 6 merges into it rather than over it.
 
 ## Module map
 
 ```
-lib/league-activity/
-  types.ts     the event and the card, and the line between them
-  labels.ts    Sleeper's field names in English, with value formatters
-  diff.ts      PURE. the whole detection rulebook. 38 tests
-  record.ts    snapshot read-before-write, and the idempotent event insert
-  project.ts   transactions and played matchups into events. 28 tests
-  writeup.ts   PURE. event plus identities into a card. 55 tests
-  load.ts      the paginated read, the day ladder, the filters
+lib/projections/
+  types.ts             the shapes, and why a stat line is not a point total
+  default-settings.ts  every weight and cap, admin-overridable
+  source-constants.ts  the two source slugs. leaf module, no imports
+  adjust.ts            PURE. opponent adjustment and multiplier shrinkage
+  defense-seasons.ts   PURE. which seasons an opponent lookup considers
+  usage.ts             PURE. recency-weighted role shares and efficiency rates
+  volume.ts            PURE. team volume and the game-environment effect
+  convert.ts           PURE. opportunity into a component stat line
+  calibrate.ts         PURE. per-position spread calibration
+  blend.ts             PURE. beacon and sleeper, key by key
+  engine.ts            PURE. computeBeaconProjections
+  source.ts            which source a reader gets
+  read.ts              THE single adjusted read path
 
-components/league-activity/
-  activity-visuals.ts   accent and icon name to Tailwind and Lucide
-  activity-card.tsx     one entry
-  activity-filters.tsx  chips, as links
-  activity-panel.tsx    the panel both surfaces render
-
-lib/sleeper-draft-picks.ts     extracted from league-pulse to break a cycle
-lib/sleeper-player-lookup.ts   the shared player resolver
+lib/build-beacon-projections.ts   the I/O half of the builder
+lib/nfl-odds.ts                   ESPN adapter. null on failure, never throws
+lib/sync-nfl-odds.ts              the odds sync
+lib/projection-scoreboard.ts      the /admin/projections aggregator
 ```
 
-## Rules this build established
+## Commands
 
-These belong in CLAUDE.md if the feature stays (not added yet, deliberately, so
-the wording can be reviewed):
+```
+npm run sync:odds
+npm run build:projections
+npm run calculate:defense-splits
+npm run calculate:projection-accuracy
+```
 
-1. **THE FIRST SIGHT RULE.** The first time a league is synced there is no prior
-   state, so NO state-change events are written. We did not watch anybody edit a
-   lineup, we just met the league.
+## Next step
 
-2. **A STALE COMPARISON IS NOT AN OBSERVATION.** Lineup and reserve events are
-   dropped when the window between two syncs is wider than seven days
-   (`OBSERVATION_LIMIT_MS`). Settings and people changes survive a wide window,
-   because "the trade deadline moved at some point since September" is still
-   worth knowing and nothing else records it.
+Nothing is blocking. In rough order of value:
 
-3. **AN EMPTY ARRAY IS NOT EVIDENCE OF AN EMPTY LEAGUE.** `getSleeperLeagueUsers`
-   returns `[]` both for a league with no members and for a FAILED request, so
-   each half of the diff is gated on its own side of the data being present, and
-   a failed snapshot read returns null rather than an empty prior. Without this,
-   one throttled request wrote a permanent "manager left" card for every manager
-   in the league. Same rule CLAUDE.md already carries for Power Pulse.
-
-4. **A PLAYER WHO LEFT THE ROSTER IS THE TRANSACTION'S STORY.** Lineup events
-   only name players held on BOTH sides of the window, so a waiver Wednesday
-   produces one card and not two.
-
-5. **THE DEDUPE KEY IS BUILT FROM THE PRIOR SYNC TIME, NEVER FROM `now`.** Two
-   server instances rendering the same cold league read the same stored row, so
-   they compute the same key and the unique index collapses them. Keying on the
-   detection time would post the same swap twice.
-
-6. **ONE CARD PER GAME.** The result key is `game:<season>:<week>:<lowest roster
-   id>`, matching how `lib/league-relay/select-matchup.ts` keys a recap, so the
-   two features can never disagree about what counts as one game.
-
-7. **NO COMPUTE ON THE READ PATH.** No valuation, no projection, no lineup
-   optimisation. Every number a card shows was settled when the event was
-   written. That is what lets the panel sit above the power rankings.
-
-8. **NEVER WIRE THIS INTO A NIGHTLY CRON**, same scaling reason as Power Pulse
-   and Positional WAR. Detection rides the sync a reader already triggered.
-
-## Deliberate limitations, all of them honest in the UI
-
-- **No commissioner signal exists.** `upsertLeagueUsers` writes
-  `is_commissioner: false` for everyone, because Sleeper's `is_owner` means
-  "active member" and overloading it would grant force-refresh to every
-  co-owner. So `snapshotFromSleeper` CARRIES THE STORED FLAG FORWARD rather than
-  recomputing it, and `commissioner_change` can never fire spuriously. The kind
-  exists and works the day a real signal does.
-- **Whether a game was played is derived, not read.** `league_matchups.is_final`
-  is stamped at write time and is false forever for a normally synced league, so
-  the projector re-derives finality from the league's own `settings.leg`. See
-  `buildMatchupResultEvents`.
-- **Result timestamps are derived from the week**, not measured.
-  `nflWeekEndUtc` puts week 1 on the first Tuesday on or after September 9,
-  which is the real Tuesday after Monday Night Football for every season 2020
-  through 2026. It exists to ORDER the feed; the card never prints it as a clock
-  time.
-- **A league nobody has opened for a month gets no lineup history**, by rule 2.
-
-## Measured, after the fixes
-
-- Activity stage inside `pulseLeagueDerived`: **237 ms** on a cached sync,
-  **146 ms** on a forced one, and it writes nothing when nothing changed. It is
-  no longer the longest stage in that fan-out.
-- The projector's overlap read: **0.17 ms and 27 rows**, against 22.8 ms and
-  1,948 rows before migration 0236's index.
-- The feed read with a team filter: **0.2 ms, 10 buffers**, served by
-  `idx_league_activity_feed` with the roster containment applied as a filter.
-- `/leagues/[id]/activity` ships **818 B** of client JavaScript, which is the
-  Next Link runtime. The feed itself is entirely server rendered.
-
-## Known follow-ups, none blocking
-
-- **Bursts are not grouped.** A manager who makes eight free agent moves in an
-  afternoon gets eight cards. `lib/league-relay/waiver-run.ts` already solves
-  exactly this for Discord (group by time gap, digest above a threshold) and the
-  same grouping would apply cleanly here.
-- **Retention is unbounded.** A single `delete from league_activity where
-  occurred_at < now() - interval '18 months'` belongs in the existing nightly
-  `recalculate-derived` job, which already prunes `positional_war_curves` and
-  iterates no leagues. Roughly 5 M rows and 2 to 3 GB at 10,000 leagues. It is a
-  storage bill rather than a latency problem, because every read is prefixed by
-  `league_id`. Revisit around 2,000 leagues.
-- **No guide entry** for `/leagues/[id]/activity` in `lib/guide/registry.ts`,
-  matching `schedules` and `power-pulse`, which also have none.
-- **`league-power-rankings.ts` and `league-share-card.ts` still share their own
-  private player resolver.** `lib/sleeper-player-lookup.ts` is the shared one
-  now and `league-transactions-data.ts` was moved onto it; the other two return
-  a different shape and were left alone.
-
-- **Superseded identities are retained publicly.** `team_identity_change`,
-  `manager_left` and `roster_owner_change` keep a manager's previous handle and
-  team name, on a table anyone can read. Every value was public while it was
-  current and the card says nothing without it, but the rest of the sync
-  overwrites these rather than keeping them. Worth a decision if anyone ever asks
-  to be forgotten.
-
-## Where to pick up
-
-Everything on the task list is done and reviewed, and the four reviews are
-answered. The next real decisions are whether burst grouping and retention
-pruning are worth doing before this ships, and whether the feature's rules
-(the first-sight rule, the observation ceiling, the empty-array rule) should be
-promoted into CLAUDE.md alongside the Power Pulse and Positional WAR sections.
+1. **Make the model actually beat Sleeper.** The backtest is the instrument and
+   it currently says no. Concrete leads, in order:
+   a. A per-position blend weight. Quarterbacks already win; nothing else does.
+   b. Re-run with game environment. The 2025 backtest had none, so the volume
+      and game-script adjustments are entirely unmeasured. 2026 will have odds
+      from week 1, so a mid-season rerun tests them for the first time.
+   c. Look at the bias. Our model over-projects by about 1 point pooled and
+      UNDER-projects quarterbacks by 2. Those are different problems.
+2. **Watch the first graded week of 2026.** `/admin/projections` has the
+   mechanism and no sample until games are played.
+3. Turn on `beaconProjections.enabled` only once the scoreboard earns it, and
+   raise `blend.max` above 0 only once the backtest does.

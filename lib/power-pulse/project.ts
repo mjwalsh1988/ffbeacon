@@ -43,6 +43,18 @@ export const LONG_TERM_INJURY_STATUSES = new Set([
  * Blend the opponent-strength multiplier across the seasons we have splits for,
  * weighting the more recent season more heavily. Falls back to neutral when the
  * sample is too thin to trust.
+ *
+ * `seasons` is a list of CANDIDATES, most recent first (see
+ * lib/projections/defense-seasons.ts), not a fixed [current, prior] pair. This
+ * function, not the caller, decides which two of them are usable: it walks the
+ * list in order and keeps the first two rows that exist and clear
+ * settings.opponent.minGamesSampled. `currentSeasonWeight` applies to whichever
+ * row is found FIRST and `priorSeasonWeight` to whichever is found SECOND, so
+ * in the preseason (no row yet for the season in progress) the two prior
+ * seasons fill both slots and the answer is unchanged from before this
+ * function knew how to look at the current season at all. From roughly week 8
+ * on, the current season has enough sampled games to be usable and takes the
+ * first slot on its own, with no date check anywhere in this function.
  */
 export function opponentMultiplier(
   defense: Map<string, DefenseRow>,
@@ -57,13 +69,22 @@ export function opponentMultiplier(
     settings.opponent.currentSeasonWeight,
     settings.opponent.priorSeasonWeight,
   ];
+  const usable: DefenseRow[] = [];
+  for (const season of seasons) {
+    const row = defense.get(`${opponentTeam}|${season}|${position}`);
+    if (!row || row.gamesSampled < settings.opponent.minGamesSampled) continue;
+    usable.push(row);
+    if (usable.length === 2) break;
+  }
+
   let weighted = 0;
   let totalWeight = 0;
-  seasons.slice(0, 2).forEach((season, i) => {
-    const row = defense.get(`${opponentTeam}|${season}|${position}`);
-    if (!row || row.gamesSampled < settings.opponent.minGamesSampled) return;
+  usable.forEach((row, i) => {
     const w = weights[i] ?? 0;
-    weighted += row.multiplier * w;
+    const rowMultiplier = settings.opponent.useAdjusted
+      ? row.shrunkMultiplier ?? row.multiplier
+      : row.multiplier;
+    weighted += rowMultiplier * w;
     totalWeight += w;
   });
 
@@ -278,6 +299,7 @@ export function projectPlayerWeek({
   reliability: number;
   scoringSettings: ScoringSettings | null;
   defense: Map<string, DefenseRow>;
+  /** Candidate seasons, most recent first. See lib/projections/defense-seasons.ts. */
   defenseSeasons: number[];
   week: number;
   currentWeek: number;

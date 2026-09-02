@@ -92,6 +92,8 @@ export type CronJobName =
   | "sync-sleeper-stats"
   | "sync-sleeper-market"
   | "sync-weekly-projections"
+  | "sync-nfl-odds"
+  | "build-beacon-projections"
   | "beacon-brief-curate"
   | "beacon-brief-worker"
   | "league-sync-worker"
@@ -204,6 +206,20 @@ export const CRON_JOBS: ReadonlyArray<{
     schedule: "0 12 * * *",
     description:
       "Refreshes Sleeper per-week projected points for the current season's upcoming weeks into player_weekly_projections (overwrite in place). Skips cleanly when nothing is published yet.",
+  },
+  {
+    name: "sync-nfl-odds",
+    label: "Game odds sync",
+    schedule: "0 13 * * *",
+    description:
+      "Refreshes ESPN's published game total and spread for the current week plus the next two into nfl_game_odds (overwrite in place), the game-environment signal the projection engine's volume and script adjustments read. Lines move through the week, so a once-daily pull is the right cadence for a table whose only consumer is a weekly projection. Skips cleanly when ESPN has nothing published yet for every targeted week; a week whose fetch failed outright is never mistaken for a week with no games.",
+  },
+  {
+    name: "build-beacon-projections",
+    label: "FF Beacon projections build",
+    schedule: "30 14 * * *",
+    description:
+      "Builds our own weekly projections into player_weekly_projections with source 'ffbeacon', for the rest of the live season. Runs last in the day because it reads what three earlier jobs write: the usage history from sync-sleeper-stats at 09:00, the blend partner and the list of weeks that exist at all from sync-weekly-projections at 12:00, and the game environment from sync-nfl-odds at 13:00. Building before any of those would build on yesterday's inputs. Skips cleanly when there are no Sleeper rows for the window, because an ffbeacon source that exists but covers nothing would be selected by the reader and then answer every question with silence.",
   },
   {
     name: "beacon-brief-curate",

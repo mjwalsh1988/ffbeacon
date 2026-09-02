@@ -228,6 +228,12 @@ export function PlayerPackagePicker({
           anyLabel={addLabel}
           showCount={false}
           clearFilterOnChange
+          // The match buttons ADD to the package rather than replacing a value,
+          // and the verb is the whole difference between the two: "Choose Josh
+          // Allen" reads as a swap, "Add Josh Allen" reads as a list growing.
+          // `add` above is what announces the result, so this is the button's
+          // name and nothing else.
+          resultVerb="Add"
         />
       )}
 

@@ -15,6 +15,11 @@ async function main() {
   console.log(
     `Done. ${result.rowsWritten} rows for ${result.playersScored} players (current season ${result.currentSeason}) in ${result.durationMs}ms.`,
   );
+  for (const s of result.perSource) {
+    const mae = s.meanAbsoluteError === null ? "n/a" : s.meanAbsoluteError.toFixed(2);
+    const bias = s.meanError === null ? "n/a" : s.meanError.toFixed(2);
+    console.log(`  ${s.source}: MAE ${mae}, bias ${bias}, ${s.weeksGraded} graded weeks (PPR)`);
+  }
 }
 
 main().catch((err) => {

@@ -2874,6 +2874,8 @@ export type Database = {
       };
       nfl_defense_vs_position: {
         Row: {
+          adjusted_multiplier: number | null;
+          adjusted_points_allowed_per_game: number | null;
           computed_at: string;
           games_sampled: number;
           generosity_rank: number | null;
@@ -2883,9 +2885,12 @@ export type Database = {
           position: string;
           scoring: string;
           season: number;
+          shrunk_multiplier: number | null;
           team: string;
         };
         Insert: {
+          adjusted_multiplier?: number | null;
+          adjusted_points_allowed_per_game?: number | null;
           computed_at?: string;
           games_sampled: number;
           generosity_rank?: number | null;
@@ -2895,9 +2900,12 @@ export type Database = {
           position: string;
           scoring: string;
           season: number;
+          shrunk_multiplier?: number | null;
           team: string;
         };
         Update: {
+          adjusted_multiplier?: number | null;
+          adjusted_points_allowed_per_game?: number | null;
           computed_at?: string;
           games_sampled?: number;
           generosity_rank?: number | null;
@@ -2907,7 +2915,65 @@ export type Database = {
           position?: string;
           scoring?: string;
           season?: number;
+          shrunk_multiplier?: number | null;
           team?: string;
+        };
+        Relationships: [];
+      };
+      nfl_game_odds: {
+        Row: {
+          away_implied_total: number | null;
+          away_team: string;
+          fetched_at: string;
+          game_total: number | null;
+          home_implied_total: number | null;
+          home_spread: number | null;
+          home_team: string;
+          id: string;
+          kickoff_at: string | null;
+          metadata: Json | null;
+          provider: string | null;
+          season: number;
+          season_type: string;
+          source: string;
+          updated_at: string;
+          week: number;
+        };
+        Insert: {
+          away_implied_total?: number | null;
+          away_team: string;
+          fetched_at?: string;
+          game_total?: number | null;
+          home_implied_total?: number | null;
+          home_spread?: number | null;
+          home_team: string;
+          id?: string;
+          kickoff_at?: string | null;
+          metadata?: Json | null;
+          provider?: string | null;
+          season: number;
+          season_type?: string;
+          source?: string;
+          updated_at?: string;
+          week: number;
+        };
+        Update: {
+          away_implied_total?: number | null;
+          away_team?: string;
+          fetched_at?: string;
+          game_total?: number | null;
+          home_implied_total?: number | null;
+          home_spread?: number | null;
+          home_team?: string;
+          id?: string;
+          kickoff_at?: string | null;
+          metadata?: Json | null;
+          provider?: string | null;
+          season?: number;
+          season_type?: string;
+          source?: string;
+          updated_at?: string;
+          week?: number;
         };
         Relationships: [];
       };
@@ -3479,6 +3545,7 @@ export type Database = {
           scoring: string;
           season: number | null;
           shrunk_multiplier: number | null;
+          source: string;
           weeks_beat: number;
           weeks_played: number;
           weeks_projected: number;
@@ -3497,6 +3564,7 @@ export type Database = {
           scoring: string;
           season?: number | null;
           shrunk_multiplier?: number | null;
+          source?: string;
           weeks_beat?: number;
           weeks_played?: number;
           weeks_projected?: number;
@@ -3515,6 +3583,7 @@ export type Database = {
           scoring?: string;
           season?: number | null;
           shrunk_multiplier?: number | null;
+          source?: string;
           weeks_beat?: number;
           weeks_played?: number;
           weeks_projected?: number;

@@ -164,8 +164,18 @@ function Checkbox({
   describedBy: string;
 }) {
   const id = useId();
+  // The box itself stays 20px because a 44px checkbox looks wrong next to
+  // 20px ones elsewhere, so the LABEL carries the target instead: it wraps the
+  // whole row, is min-h-11, and a native label click toggles the input. That
+  // gives a full-width 44px tall hit area, which is what the project's absolute
+  // 44 by 44 rule is actually asking for. `items-center` on the old wrapper
+  // centred the children inside a 44px row without making either of them 44px
+  // tall, so the real target was 20 by 20.
   return (
-    <div className="flex min-h-11 items-center gap-2.5">
+    <label
+      htmlFor={id}
+      className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm font-medium text-ink"
+    >
       <input
         id={id}
         type="checkbox"
@@ -174,10 +184,8 @@ function Checkbox({
         aria-describedby={describedBy}
         className="h-5 w-5 shrink-0 rounded border-line bg-base text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
       />
-      <label htmlFor={id} className="text-sm font-medium text-ink">
-        {label}
-      </label>
-    </div>
+      {label}
+    </label>
   );
 }
 
@@ -214,6 +222,20 @@ export function PowerPulseSettingsManager({
   ) => {
     setSettings((s) => ({ ...s, [key]: { ...(s[key] as object), ...value } }));
   };
+
+  /**
+   * The projection document is one level deeper than everything else on this
+   * form, so it gets its own patcher rather than a `patch("beaconProjections",
+   * ...)` call at every site. Same shallow-merge semantics, one nesting level
+   * down.
+   */
+  const patchProjections = (
+    value: Partial<PowerPulseSettings["beaconProjections"]>,
+  ) =>
+    setSettings((s) => ({
+      ...s,
+      beaconProjections: { ...s.beaconProjections, ...value },
+    }));
 
   const weightTotal =
     settings.weights.points +
@@ -408,6 +430,151 @@ export function PowerPulseSettingsManager({
           step="1"
           min={0}
         />
+        <Toggle
+          label="Read the adjusted, shrunk multiplier"
+          checked={settings.opponent.useAdjusted}
+          onChange={(v) => patch("opponent", { useAdjusted: v })}
+          hint="On reads the opponent-adjusted, sample-size-shrunk multiplier. Off reads the raw multiplier, ignoring the fields below."
+        />
+        <Field
+          label="Shrink prior games"
+          value={settings.opponent.priorGames}
+          onChange={(v) => patch("opponent", { priorGames: v })}
+          hint="Empirical Bayes prior on the sample-size shrink. Higher pulls a thin sample harder toward neutral before this season's games can outweigh it."
+          step="1"
+          min={0}
+          max={100}
+        />
+      </Section>
+
+      <Section
+        title="Opponent matchup reliability by position"
+        description="How much of a position's matchup swing survives the shrink, 0 to 1, measured as the year over year correlation of our stored multipliers. A receiver matchup number this season told us effectively nothing about the same matchup next season, which is why wide receiver defaults to 0: no adjustment at all until a corrected measurement earns one back."
+      >
+        {(["QB", "RB", "WR", "TE", "K", "DEF"] as const).map((position) => (
+          <Field
+            key={position}
+            label={`${position} reliability`}
+            value={settings.opponent.positionReliability[position]}
+            onChange={(v) =>
+              patch("opponent", {
+                positionReliability: {
+                  ...settings.opponent.positionReliability,
+                  [position]: v,
+                },
+              })
+            }
+            min={0}
+            max={1}
+            hint="0 to 1."
+          />
+        ))}
+      </Section>
+
+      <Section
+        title="FF Beacon projections"
+        description="Our own weekly projections, built from usage in our player_stats and blended with Sleeper rather than replacing it. Off by default. Turn this on only once the projection scoreboard shows our mean absolute error beating Sleeper's on the same graded weeks, because a projection model that is switched on because it exists is how a product ships a worse number under its own name."
+      >
+        <Toggle
+          label="Use FF Beacon projections"
+          checked={settings.beaconProjections.enabled}
+          onChange={(v) => patchProjections({ enabled: v })}
+          hint="When off, every reader gets Sleeper's projection exactly as it does today. Our rows are still built nightly and still graded, so the scoreboard fills in either way."
+        />
+        <Field
+          label="Maximum blend weight"
+          value={settings.beaconProjections.blend.max}
+          onChange={(v) =>
+            patchProjections({ blend: { ...settings.beaconProjections.blend, max: v } })
+          }
+          min={0}
+          max={1}
+          step="0.05"
+          hint="How much of a stored projection is ours once a player has a full sample. Half by default: an equal-weighted average of sources beat any single source in 69 percent of comparisons across twelve seasons, and half of a source with no track record is already an aggressive claim."
+        />
+        <Field
+          label="Games to reach maximum blend"
+          value={settings.beaconProjections.blend.gamesForMax}
+          onChange={(v) =>
+            patchProjections({
+              blend: { ...settings.beaconProjections.blend, gamesForMax: v },
+            })
+          }
+          min={0}
+          max={64}
+          step="1"
+          hint="Current-season games a player needs before our weight reaches its maximum. Six, because usage stabilises in four to six games. In week 1 our weight is 0 and the stored row is Sleeper's."
+        />
+        <Field
+          label="Usage half life, weeks"
+          value={settings.beaconProjections.usage.halfLifeWeeks}
+          onChange={(v) =>
+            patchProjections({
+              usage: { ...settings.beaconProjections.usage, halfLifeWeeks: v },
+            })
+          }
+          min={0.5}
+          max={52}
+          step="0.5"
+          hint="How fast a player's older games stop counting toward his role. Four weeks means the last month carries about as much weight as everything before it."
+        />
+        <Field
+          label="Efficiency prior, games"
+          value={settings.beaconProjections.efficiency.priorGames}
+          onChange={(v) => patchProjections({ efficiency: { priorGames: v } })}
+          min={0}
+          max={200}
+          step="1"
+          hint="How hard a player's own efficiency is pulled toward his position's average. Deliberately six times the usage prior: a role persists, but touchdown rate and yards per carry revert hard."
+        />
+        <Toggle
+          label="Use game odds"
+          checked={settings.beaconProjections.environment.enabled}
+          onChange={(v) =>
+            patchProjections({
+              environment: { ...settings.beaconProjections.environment, enabled: v },
+            })
+          }
+          hint="Move volume and scoring rate with the published game total, and the run and pass split with the spread. A game with no published line gets no adjustment at all rather than a neutral one."
+        />
+        <Toggle
+          label="Calibrate the spread"
+          checked={settings.beaconProjections.calibration.enabled}
+          onChange={(v) =>
+            patchProjections({
+              calibration: { ...settings.beaconProjections.calibration, enabled: v },
+            })
+          }
+          hint="Every projection source exaggerates the gaps between players. This compresses them back toward the positional average, inside the startable range only."
+        />
+      </Section>
+
+      <Section
+        title="Projection calibration slopes"
+        description="How much of a projection's distance from its positional average survives, per position, inside the startable range. Below 1 at every position in twelve seasons of published measurement: the top players are projected too high and the late-round starters too low. Applied to the blended projection, so it corrects Sleeper's spread as well as ours."
+      >
+        {(["QB", "RB", "WR", "TE"] as const).map((position) => (
+          <Field
+            key={position}
+            label={`${position} slope`}
+            value={settings.beaconProjections.calibration.slope[position]}
+            onChange={(v) =>
+              patchProjections({
+                calibration: {
+                  ...settings.beaconProjections.calibration,
+                  slope: {
+                    ...settings.beaconProjections.calibration.slope,
+                    [position]: v,
+                  },
+                },
+              })
+            }
+            min={0}
+            max={1.5}
+            step="0.01"
+            hint="0 to 1.5."
+          />
+        ))}
       </Section>
 
       <Section

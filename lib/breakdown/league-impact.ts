@@ -53,6 +53,7 @@ import {
 } from "@/lib/power-pulse/lineup";
 import { computeLineupSwap, type CandidateWeek } from "@/lib/faab/marginal";
 import type { PulsePosition } from "@/lib/power-pulse/types";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import type { LeagueImpact } from "./metrics";
 
 type ServiceClient = SupabaseClient<Database>;
@@ -246,7 +247,7 @@ export async function calculateLeagueImpact(
   const players = await loadPlayers(supabase, allSleeperIds);
 
   const scoringBase = closestScoringBase(league.scoringSettings);
-  const defenseSeasons = [league.season - 1, league.season - 2];
+  const defenseSeasons = defenseSeasonsFor(league.season);
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
 
   const pulseSettings = await loadPowerPulseSettings(supabase);

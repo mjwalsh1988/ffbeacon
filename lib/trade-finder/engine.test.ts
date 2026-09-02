@@ -15,6 +15,7 @@ import {
   type TradeFinderInput,
   type TradeSuggestion,
 } from "./types";
+import type { TeamStatusKey } from "@/lib/league-team-status";
 
 /**
  * One league, built so the right trade is obvious to a human.
@@ -1320,12 +1321,52 @@ describe("redraft leagues, where everybody is competing", () => {
     }
   });
 
-  it("ranks a deal that costs lineup points below one that adds them", () => {
-    const ranked = redraft("rebuilder").suggestions;
-    const firstGain = ranked.findIndex((s) => (s.mine.lineupDelta ?? 0) > 0);
-    const firstLoss = ranked.findIndex((s) => (s.mine.lineupDelta ?? 0) < 0);
-    expect(firstGain).toBeGreaterThanOrEqual(0);
-    if (firstLoss >= 0) expect(firstGain).toBeLessThan(firstLoss);
+  it("never suggests a deal that costs lineup points, at any depth", () => {
+    // Ranking these last was not enough, and this is the test that says why.
+    // The shortlist is walked with an arrow key, so a deal sitting at position
+    // nine is a deal the reader is shown; in a one-year league one that gives up
+    // points every remaining week is not a worse idea than the deal above it, it
+    // is the wrong answer to the only question the league can ask.
+    for (const statusKey of ["competitor", "rebuilder", "middle"] as const) {
+      const ranked = redraft(statusKey).suggestions;
+      expect(ranked.length).toBeGreaterThan(0);
+      for (const s of ranked) {
+        expect(
+          s.mine.lineupDelta,
+          `${s.key} costs ${s.mine.lineupDelta} points a week`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("never suggests a deal that costs projected wins", () => {
+    for (const s of redraft("middle").suggestions) {
+      if (s.mine.winsDelta === null) continue;
+      expect(s.mine.winsDelta).toBeGreaterThan(0);
+    }
+  });
+
+  it("still answers a named player with whatever he actually brings back", () => {
+    // The floor is about UNPROMPTED suggestions. "What does this player bring
+    // back" is a question the reader typed, and refusing to answer it because
+    // the honest answer is a step sideways would leave the two name pickers
+    // silently returning nothing in every redraft league.
+    const { suggestions } = findTrades({
+      myRosterId: 1,
+      teams: league().map((t) => ({ ...t, pulse: pulse() })),
+      startingSlots: STANDARD_SLOTS,
+      isDynasty: false,
+      allowPicks: false,
+      targetPlayerIds: [],
+      offerPlayerIds: ["my-rb3"],
+      excludeKeys: [],
+    });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const s of suggestions) {
+      expect(
+        s.outgoing.some((a) => a.kind === "player" && a.playerId === "my-rb3"),
+      ).toBe(true);
+    }
   });
 
   it("says it is a one-year league rather than reading the standings back", () => {
@@ -1353,5 +1394,135 @@ describe("redraft leagues, where everybody is competing", () => {
     expect(dynastyIds.size).toBeGreaterThan(0);
     expect(redraftIds.size).toBeGreaterThan(0);
     for (const id of redraftIds) expect(dynastyIds.has(id)).toBe(true);
+  });
+});
+
+/**
+ * The two questions a dynasty manager is actually choosing between.
+ *
+ * "Contender" and "Value" are not two weightings of the same ranking; they are
+ * two different questions, and a league that answered them the same way would
+ * be a toggle that does nothing. These tests are the guarantee that it does
+ * something, and that what it does is the thing on the label.
+ */
+describe("the dynasty strategy toggle", () => {
+  const dynasty = (strategy: "contender" | "value", statusKey?: TeamStatusKey) =>
+    findTrades({
+      myRosterId: 1,
+      teams: league().map((t) =>
+        t.rosterId === 1
+          ? { ...t, statusKey: statusKey ?? t.statusKey, pulse: pulse() }
+          : { ...t, pulse: pulse() },
+      ),
+      startingSlots: STANDARD_SLOTS,
+      isDynasty: true,
+      allowPicks: true,
+      strategy,
+      targetPlayerIds: [],
+      offerPlayerIds: [],
+      excludeKeys: [],
+    });
+
+  it("gives both sides of the toggle something to show", () => {
+    expect(dynasty("contender").suggestions.length).toBeGreaterThan(0);
+    expect(dynasty("value").suggestions.length).toBeGreaterThan(0);
+  });
+
+  it("holds a contender search to the same lineup floor a redraft league gets", () => {
+    // The floor is about the QUESTION, not about the league. A dynasty manager
+    // who has pressed Contender has asked for deals that win them games, and a
+    // deal that costs points every remaining week is not one.
+    for (const s of dynasty("contender").suggestions) {
+      expect(s.mine.lineupDelta).toBeGreaterThan(0);
+    }
+  });
+
+  it("lets a value search take a deal that costs lineup points", () => {
+    // The mirror. A value search is allowed to hand back the standard dynasty
+    // trade: a starter out, more than he is worth coming back, and a worse
+    // Sunday for it.
+    const contender = new Set(dynasty("contender").suggestions.map((s) => s.key));
+    const value = dynasty("value").suggestions;
+    expect(value.some((s) => !contender.has(s.key))).toBe(true);
+  });
+
+  it("orders the two searches differently", () => {
+    const contender = dynasty("contender").suggestions.map((s) => s.key);
+    const value = dynasty("value").suggestions.map((s) => s.key);
+    expect(value).not.toEqual(contender);
+  });
+
+  it("obeys the reader over Power Pulse's read of them", () => {
+    // A rebuilder who presses Contender has decided to make a run, and the
+    // stance table does not get to overrule them. Before the toggle existed
+    // this reader's ranking was value-and-youth first whatever they asked for.
+    const asked = dynasty("contender", "rebuilder").suggestions;
+    expect(asked.length).toBeGreaterThan(0);
+    for (const s of asked) expect(s.mine.lineupDelta).toBeGreaterThan(0);
+  });
+
+  it("says which question it answered, in the reader's own terms", () => {
+    expect(dynasty("contender").suggestions[0].rationale).toContain(
+      "asked for contender deals",
+    );
+    expect(dynasty("value").suggestions[0].rationale).toContain(
+      "asked for value deals",
+    );
+  });
+
+  it("leaves a dynasty caller that names no strategy exactly where it was", () => {
+    // Absent means "we have not been told", never "contender". A caller that
+    // has not thought about it still gets the stance-weighted ranking that
+    // shipped before the toggle, which is what stops this from being a silent
+    // behaviour change for every other consumer of the engine.
+    const unset = run({ teams: league().map((t) => ({ ...t, pulse: pulse() })) });
+    expect(unset.suggestions.length).toBeGreaterThan(0);
+    expect(unset.suggestions.some((s) => (s.mine.lineupDelta ?? 0) <= 0)).toBe(true);
+  });
+
+  it("tells a contender with nothing to gain why the panel is empty", () => {
+    // Everybody else in the league projects nothing, so no incoming player can
+    // lift the reader's lineup and every deal the search builds fails the floor.
+    // The honest answer is not "no trade to suggest", which reads as a search
+    // that broke; it is that the search ran and found only deals that would cost
+    // this team points.
+    const barren = league().map((t) =>
+      t.rosterId === 1
+        ? { ...t, pulse: pulse() }
+        : {
+            ...t,
+            pulse: pulse(),
+            players: t.players.map((p) => ({ ...p, projPoints: 0 })),
+          },
+    );
+    const { suggestions, notice } = findTrades({
+      myRosterId: 1,
+      teams: barren,
+      startingSlots: STANDARD_SLOTS,
+      isDynasty: false,
+      allowPicks: false,
+      targetPlayerIds: [],
+      offerPlayerIds: [],
+      excludeKeys: [],
+    });
+    expect(suggestions).toEqual([]);
+    expect(notice).toBe("no-lineup-gain");
+  });
+
+  it("keeps the reason to itself when there is a shortlist to read instead", () => {
+    // A reason printed beside a working shortlist is noise about a question the
+    // reader is no longer asking.
+    const { suggestions, notice } = findTrades({
+      myRosterId: 1,
+      teams: league().map((t) => ({ ...t, pulse: pulse() })),
+      startingSlots: STANDARD_SLOTS,
+      isDynasty: false,
+      allowPicks: false,
+      targetPlayerIds: [],
+      offerPlayerIds: [],
+      excludeKeys: [],
+    });
+    expect(suggestions.length).toBeGreaterThan(0);
+    expect(notice).toBeNull();
   });
 });

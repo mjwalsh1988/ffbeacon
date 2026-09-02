@@ -30,6 +30,7 @@ import { loadDefenseSplits, type DefenseRow, type ProjectionRow } from "@/lib/po
 import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/project";
 import { DEFAULT_POWER_PULSE_SETTINGS, type PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import type {
   BreakdownExtras,
   BreakdownMarket,
@@ -467,11 +468,11 @@ export async function loadBreakdownExtras(
 
   const clock = await resolveSeasonClock(db);
 
-  // Power Pulse blends the two seasons before the current one, because the
-  // in-progress season rarely has enough games sampled to trust. Mirrored here
-  // so a Breakdown projection and a Power Pulse projection agree.
+  // Power Pulse walks the current season and the two before it, most recent
+  // first, and blends the first two that actually have a usable row. Mirrored
+  // here so a Breakdown projection and a Power Pulse projection agree.
   const defenseSeasons =
-    clock.season != null ? [clock.season - 1, clock.season - 2] : [];
+    clock.season != null ? defenseSeasonsFor(clock.season) : [];
 
   const [projections, accuracy, defense, adp, series, reliabilityWeeks] = await Promise.all([
     clock.season != null

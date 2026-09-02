@@ -38,6 +38,14 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/cron/sync-nfl-odds",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/build-beacon-projections",
+      "schedule": "30 14 * * *"
+    },
+    {
       "path": "/api/cron/beacon-reference-rebuild",
       "schedule": "0 13 * * *"
     },

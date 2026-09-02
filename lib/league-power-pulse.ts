@@ -30,6 +30,7 @@ import {
   loadRosters,
   loadSchedule,
 } from "@/lib/power-pulse/load";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 
 type ServiceClient = SupabaseClient<Database>;
@@ -455,8 +456,9 @@ export async function calculateLeaguePowerPulse(
 
   const scoringBase = closestScoringBase(league.scoringSettings);
 
-  // Opponent splits come from the two most recent completed seasons.
-  const defenseSeasons = [league.season - 1, league.season - 2];
+  // Opponent splits come from whichever of the current season and the two
+  // before it actually have a usable row; opponentMultiplier picks.
+  const defenseSeasons = defenseSeasonsFor(league.season);
 
   const [projections, accuracy, defense, schedule, results] = await Promise.all([
     loadProjections(supabase, playerIds, league.season, currentWeek),

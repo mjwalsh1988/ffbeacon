@@ -249,6 +249,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "target",
       },
       {
+        id: "/admin/projections",
+        label: "Projection Scoreboard",
+        href: "/admin/projections",
+        hint: "Grade every projection source against what actually happened",
+        icon: "barChart",
+      },
+      {
         id: "/admin/beam",
         label: "Ask BEAM",
         href: "/admin/beam",

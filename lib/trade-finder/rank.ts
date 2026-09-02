@@ -15,6 +15,14 @@
  *   so a flex-heavy roster and a superflex league are both handled by the code
  *   that already knows how.
  *
+ * WHICH OF THE TWO LEADS IS THE READER'S CALL, not ours. The strategy toggle
+ * says whether they are trying to win games or win the trade, and it does two
+ * things here: it replaces the stance multipliers, so the ranking measures what
+ * they asked for rather than what their standing implies, and under "contender"
+ * it turns the lineup term into a FLOOR as well as a weight. See
+ * clearsContenderFloor. A redraft league is always on "contender", because a
+ * pile of trade value that scores no points expires in January.
+ *
  * A suggestion has to be good on the reader's side and survivable on the other
  * one. The acceptance band is that second test, and it is intentionally the
  * harsher of the two: the failure this feature has to avoid is not missing a
@@ -40,6 +48,7 @@ import type {
   SideImpact,
   TeamDirection,
   TradeGoal,
+  TradeStrategy,
 } from "./types";
 
 /** Below this share of the larger side, the two sides read as even. */
@@ -324,11 +333,11 @@ export type TradeShape = {
  * "Open to all trades" constrains nothing, which is what it says on the label.
  */
 export function satisfiesGoal(
-  goal: TradeGoal,
+  goal: TradeGoal | undefined,
   mine: SideImpact,
   shape: TradeShape,
 ): boolean {
-  switch (goal) {
+  switch (goal ?? "balanced") {
     case "get-younger":
       return mine.ageDelta === null || mine.ageDelta < 0;
     case "add-picks":
@@ -450,12 +459,179 @@ const GOAL_WEIGHTS: Record<TradeGoal, ScoreWeights> = {
  * Multipliers rather than a replacement set, so the goal the reader picked is
  * still the thing being ranked. Stance decides emphasis; the goal decides the
  * question, and satisfiesGoal decides membership.
+ *
+ * This table is only reached when the reader has NOT stated a strategy, because
+ * a statement outranks an inference. See STRATEGY_WEIGHTS below, which replaces
+ * this row rather than multiplying with it.
  */
 const STANCE_WEIGHTS: Record<TeamDirection, ScoreWeights> = {
   "win-now": { lineup: 1.2, wins: 2.2, value: 0.55, youth: 0.25, picks: 0.3 },
   balanced: { lineup: 1, wins: 1, value: 1, youth: 1, picks: 1 },
   rebuild: { lineup: 0.35, wins: 0.3, value: 1.6, youth: 1.5, picks: 1.6 },
 };
+
+/**
+ * What the reader ASKED the ranking to measure, which outranks what Power Pulse
+ * thinks of them.
+ *
+ * The stance table above is an inference: it reads a team's standing and guesses
+ * what that team probably wants. The strategy toggle is the reader saying it
+ * outright, and an inference must not argue with a statement. So when a strategy
+ * is in force these REPLACE the stance multipliers rather than compounding with
+ * them; a dynasty rebuilder who presses Contender because they have decided to
+ * make a run gets contender deals, not a rebuild ranking wearing a contender
+ * label.
+ *
+ *   Contender. Projected wins lead and lineup points back them up, because those
+ *   are the two things that decide a season. Value is discounted rather than
+ *   dropped: it is still what stops a reader being talked into a bad deal, it
+ *   just stops choosing which deal goes first. Youth and picks are worth close to
+ *   nothing to somebody trying to win in December.
+ *
+ *   Value. The mirror image, and the closest thing this engine has to "just win
+ *   the trade". Youth and draft capital count alongside raw value because in a
+ *   dynasty league they are the same currency held for longer. The lineup term
+ *   stays small and POSITIVE rather than going to zero: points on Sunday are
+ *   still points, and a value win that also scores more is not worse than one
+ *   that does not.
+ *
+ * A REDRAFT LEAGUE ALWAYS LANDS ON CONTENDER, resolved upstream in
+ * resolveStrategy. Nothing carries over, so the value table would be ranking on
+ * a currency that expires before it can be spent.
+ */
+const STRATEGY_WEIGHTS: Record<TradeStrategy, ScoreWeights> = {
+  contender: { lineup: 1.4, wins: 2.4, value: 0.4, youth: 0.15, picks: 0.2 },
+  // Youth and picks look high next to the stance table and are not, because
+  // these compose with GOAL_WEIGHTS and that row is NOT the identity: it
+  // carries youth 0.4 and picks 0.3. The first draft used 1.2 and 1.4 here,
+  // which composed to 0.48 and 0.42, LOWER than the 0.60 and 0.48 a rebuilder
+  // used to get by default. Since a dynasty rebuilder now opens on this row,
+  // that made the toggle move them away from the thing it is named after.
+  // These compose to 0.72 and 0.60, which is the intent the paragraph above
+  // describes.
+  value: { lineup: 0.35, wins: 0.3, value: 1.9, youth: 1.8, picks: 2 },
+};
+
+/**
+ * How much a rest-of-season projection should drive a suggestion, against how
+ * much this league's own trade value should, keyed on horizon: how long the
+ * assets in a trade actually have to pay off before they are spent.
+ *
+ * Weekly projections are a redraft instrument. They answer "who do I start"
+ * and "who wins my league this year". Dynasty value is a discounted stream and
+ * comes from age curves, positional aging and pick capital, none of which a
+ * weekly projection contains. Published research backs the split: running
+ * backs peak around 24 to 27 and shed 35 to 50 percent of market value within
+ * a year of peaking, receivers peak around 26 to 27 and hold value 3.5 to 4
+ * years longer with no significant per-game decline until 30, and future
+ * rookie picks are the only dynasty assets that reliably appreciate. None of
+ * that lives in a projection, so the shorter the horizon, the more a
+ * projection is actually answering the question being asked.
+ *
+ * See docs/projection-engine-plan.md, Part 4, for the table this constant
+ * implements:
+ *
+ *   Redraft, any mode      | projected wins dominant | trade value secondary
+ *   Dynasty, contender     | projected wins dominant | trade value secondary
+ *   Dynasty, balanced      | even                     | even
+ *   Dynasty, rebuilder     | (see horizonBucket: no weight, no term)
+ *
+ * There is no "rebuilder" row in this table on purpose. A rebuilder is not a
+ * small number here, see horizonBucket and scoreSuggestion below: the
+ * projection terms are left out of the sum entirely rather than multiplied
+ * down, because a weight of 0.05 is still a re-rank and the guarantee this
+ * build adds has to be readable in the code, not emergent from a constant.
+ *
+ * These multiply ON TOP of STANCE_WEIGHTS / STRATEGY_WEIGHTS above rather than
+ * replacing them. Redraft and a dynasty contender already lean toward
+ * projected wins through STRATEGY_WEIGHTS.contender (forced for every redraft
+ * league by resolveStrategy) or STANCE_WEIGHTS["win-now"], for a different,
+ * roster-need reason; this table adds the horizon's own reason on top of that
+ * lean rather than doubling back on it, which is why "dominant" sharpens
+ * rather than overrides.
+ */
+const HORIZON_WEIGHTS: Record<
+  "dominant" | "even",
+  { projection: number; tradeValue: number }
+> = {
+  dominant: { projection: 1.2, tradeValue: 0.85 },
+  even: { projection: 1, tradeValue: 1 },
+};
+
+/**
+ * Which row of the horizon table applies.
+ *
+ * A statement outranks an inference, same precedence as the stance table
+ * above: an explicit strategy is read first, and only a reader who has not
+ * stated one falls back to their team's own Power Pulse footing. This is what
+ * keeps a dynasty rebuilder who presses Contender ("I have decided to make a
+ * run") on the dominant-projection row rather than being handed a rebuild
+ * ranking wearing a contender label; the strategy toggle already carries that
+ * intent and the horizon has to agree with it rather than argue.
+ *
+ * "value" reads as "even" rather than as the rebuilder row. Pressing Value is
+ * a contender or a bubble team asking to rank on trade value too, not a
+ * declaration that this season does not matter; STRATEGY_WEIGHTS.value already
+ * keeps a small, deliberate, positive lineup and wins term for exactly that
+ * reason (see its own comment above), and the hard rule below only ever
+ * applies to a team we have inferred, not asked, is rebuilding.
+ *
+ * `!isDynasty` is a defensive fallback rather than the normal path: every real
+ * caller resolves strategy to "contender" for a redraft league before this
+ * function runs (see resolveStrategy in ./types), so a direct call that skips
+ * that step still lands on the same row instead of silently reading a
+ * TeamDirection that a redraft league has already flattened to "win-now".
+ */
+function horizonBucket(
+  myProfile: TeamProfile,
+  strategy?: TradeStrategy | null,
+): "dominant" | "even" | "rebuilder" {
+  if (strategy === "contender") return "dominant";
+  if (strategy === "value") return "even";
+  if (!myProfile.isDynasty) return "dominant";
+  if (myProfile.direction === "win-now") return "dominant";
+  if (myProfile.direction === "rebuild") return "rebuilder";
+  return "even";
+}
+
+/**
+ * The smallest lineup gain that counts as an improvement rather than as noise.
+ *
+ * A twentieth of a point a week is inside the rounding on a single projection,
+ * so a deal that clears only this has not made anybody better at football. The
+ * floor exists to separate "up" from "flat and down", not to rank; the score
+ * does the ranking.
+ */
+const MIN_LINEUP_GAIN = 0.05;
+
+/**
+ * Is this deal allowed in front of a reader who asked for contender trades?
+ *
+ * A HARD GATE, not a weighting, and that is the whole point of it. Weighting a
+ * lineup loss merely pushes it down the shortlist, and a shortlist is something
+ * a reader walks through with an arrow key: press Next enough times in a redraft
+ * league and the old build would eventually offer a deal that cost points every
+ * single week of the run-in, sitting in the same card as the one that gained
+ * them. In a one-year league such a deal answers the wrong question, since the
+ * only question being asked there is about this season.
+ *
+ * A NULL lineup delta passes. Null means the league has no projections loaded,
+ * which is not the same as a flat trade, and rejecting everything on a league we
+ * could not measure would leave the reader with an empty panel and no reason for
+ * it. The surface already says lineup impact is unavailable in that case.
+ *
+ * The wins test is deliberately kept even though it is nearly redundant:
+ * winsDelta is the lineup delta multiplied by a positive rate, so the two agree
+ * by construction today. If the conversion ever gains a term that can flip the
+ * sign, the reader should not learn about it from a suggestion that costs them
+ * games.
+ */
+export function clearsContenderFloor(mine: SideImpact): boolean {
+  if (mine.lineupDelta === null) return true;
+  if (!(mine.lineupDelta > MIN_LINEUP_GAIN)) return false;
+  if (mine.winsDelta !== null && mine.winsDelta <= 0) return false;
+  return true;
+}
 
 /**
  * What one projected win is worth on the same scale as a point per week.
@@ -491,9 +667,17 @@ export function scoreSuggestion(params: {
   mine: SideImpact;
   myProfile: TeamProfile;
   acceptance: AcceptanceBand;
-  goal: TradeGoal;
+  goal?: TradeGoal;
+  /**
+   * The reader's stated strategy. When present it REPLACES the stance
+   * multipliers, because a statement outranks an inference. When absent the
+   * ranking falls back to reading the team's own footing, which is what every
+   * caller did before the toggle existed.
+   */
+  strategy?: TradeStrategy | null;
 }): number {
-  const { mine, myProfile, goal } = params;
+  const { mine, myProfile } = params;
+  const goal = params.goal ?? "balanced";
   const rosterValue = Math.max(myProfile.totalValue, 1);
 
   const lineupScore = (mine.lineupDelta ?? 0) / 1.0;
@@ -507,19 +691,55 @@ export function scoreSuggestion(params: {
   const pickScore = mine.pickCountDelta * 0.6;
 
   const g = GOAL_WEIGHTS[goal] ?? GOAL_WEIGHTS.balanced;
-  const stance = STANCE_WEIGHTS[myProfile.direction] ?? STANCE_WEIGHTS.balanced;
+  // Branched rather than indexed with the incoming value. It is validated
+  // twice before it reaches this function, so this is belt and braces, but an
+  // object literal answers "__proto__" with something truthy, the `??` would
+  // not catch it, and every weight would come back undefined and turn the whole
+  // score into NaN.
+  const stance =
+    params.strategy === "contender"
+      ? STRATEGY_WEIGHTS.contender
+      : params.strategy === "value"
+        ? STRATEGY_WEIGHTS.value
+        : (STANCE_WEIGHTS[myProfile.direction] ?? STANCE_WEIGHTS.balanced);
 
-  const total =
-    lineupScore * g.lineup * stance.lineup +
-    winsScore * g.wins * stance.wins +
+  // Trade value, youth and picks are the same three terms on every horizon
+  // row, so they are summed once and the horizon multiplier is applied to the
+  // whole group rather than repeated three times.
+  const tradeValueTerms =
     valueScore * g.value * stance.value +
     youthScore * g.youth * stance.youth +
     pickScore * g.picks * stance.picks;
 
+  const horizon = horizonBucket(myProfile, params.strategy);
+
+  let total: number;
+  if (horizon === "rebuilder") {
+    // THE ONE HARD RULE (docs/projection-engine-plan.md, Part 4): a rebuilder
+    // has told us they do not care who wins in week 12, so lineupScore and
+    // winsScore are never added to the sum, not multiplied by something small.
+    // A candidate's ordering under this branch cannot move no matter what a
+    // rest-of-season projection says about it, because the projection is
+    // never read here at all.
+    total = tradeValueTerms;
+  } else {
+    const h = HORIZON_WEIGHTS[horizon];
+    total =
+      lineupScore * g.lineup * stance.lineup * h.projection +
+      winsScore * g.wins * stance.wins * h.projection +
+      tradeValueTerms * h.tradeValue;
+  }
+
   return total * ACCEPTANCE_WEIGHT[params.acceptance];
 }
 
-export const SCORE_WEIGHTS = { GOAL_WEIGHTS, STANCE_WEIGHTS, WINS_SCALE };
+export const SCORE_WEIGHTS = {
+  GOAL_WEIGHTS,
+  STANCE_WEIGHTS,
+  STRATEGY_WEIGHTS,
+  HORIZON_WEIGHTS,
+  WINS_SCALE,
+};
 
 export const RANK_THRESHOLDS = {
   EVEN_GAP,
@@ -529,4 +749,5 @@ export const RANK_THRESHOLDS = {
   SEVERE_LINEUP_LOSS,
   MEANINGFULLY_YOUNGER,
   TIER_JUMP,
+  MIN_LINEUP_GAIN,
 };

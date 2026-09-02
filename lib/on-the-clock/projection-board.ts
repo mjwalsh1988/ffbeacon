@@ -44,6 +44,7 @@ import {
   reliabilityMultiplier,
 } from "@/lib/power-pulse/project";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 
 type Client = SupabaseClient<Database>;
 
@@ -368,15 +369,6 @@ export async function buildProjectionBoard(
     computedAt: new Date().toISOString(),
     players,
   };
-}
-
-/**
- * The two most recent completed seasons for opponent splits, matching the Power
- * Pulse convention of weighting the more recent one more heavily. For a season
- * that has not started, both are prior seasons, which is the only honest option.
- */
-function defenseSeasonsFor(season: number): number[] {
-  return [season - 1, season - 2];
 }
 
 function round2(n: number): number {

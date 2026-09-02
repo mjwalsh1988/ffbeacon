@@ -14,6 +14,16 @@ import {
   DEFAULT_WAR_SETTINGS,
   type WarSettings,
 } from "@/lib/positional-war/default-settings";
+import {
+  DEFAULT_PROJECTION_SETTINGS,
+  mergeProjectionSettings,
+  type ProjectionSettings,
+} from "@/lib/projections/default-settings";
+
+// Re-exported for the same reason DEFAULT_WAR_SETTINGS is: a caller holding a
+// PowerPulseSettings should never need a second import to name its parts.
+export { DEFAULT_PROJECTION_SETTINGS };
+export type { ProjectionSettings };
 
 // Re-exported so one document has one type: callers reading PowerPulseSettings
 // never need to also import from lib/positional-war/default-settings.
@@ -104,12 +114,23 @@ export type PowerPulseSettings = {
     enabled: boolean;
     minMultiplier: number;
     maxMultiplier: number;
-    /** Weight on the most recent completed season's splits. */
+    /** Weight on the more recent of the two seasons actually found usable. */
     currentSeasonWeight: number;
-    /** Weight on the season before that. */
+    /** Weight on the older of the two. */
     priorSeasonWeight: number;
     /** Defenses with fewer sampled games than this fall back to neutral. */
     minGamesSampled: number;
+    /** Read shrunk_multiplier rather than the raw multiplier. */
+    useAdjusted: boolean;
+    /** Empirical Bayes prior on the sample-size shrink, in games. */
+    priorGames: number;
+    /**
+     * How much of a position's matchup swing survives, 0 to 1. Consumed by the
+     * defense-splits calc that writes shrunk_multiplier, not by the reader
+     * here: opponentMultiplier in ./project.ts reads the already-shrunk value
+     * off the row and does not repeat the shrink.
+     */
+    positionReliability: Record<PulsePosition, number>;
   };
 
   /**
@@ -152,9 +173,44 @@ export type PowerPulseSettings = {
    * under mixed settings.
    */
   war: WarSettings;
+
+  /**
+   * The FF Beacon projection model. See lib/projections/default-settings.ts for
+   * the field-by-field reasoning.
+   *
+   * Lives inside this document for the same reason `war` does: it feeds the
+   * very projection stack Power Pulse and Positional WAR read, so a
+   * half-applied edit across two documents could produce a cached league score
+   * computed under mixed settings. One document, one edit, one version.
+   *
+   * `enabled` defaults to FALSE. Nothing on the site changes until an admin
+   * turns it on, and the thing that earns that edit is the scoreboard at
+   * /admin/projections showing our error beating Sleeper's on the same graded
+   * weeks.
+   */
+  beaconProjections: ProjectionSettings;
 };
 
 export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
+  // pp-6 (2026-09-01): opponent strength now sees the current season. The
+  // lookup used to be a hardcoded [season - 1, season - 2], which meant a
+  // defense's rating during the 2026 season was frozen on 2025 and 2024
+  // forever and could never learn anything about 2026 itself. It now walks
+  // candidate seasons most recent first (lib/projections/defense-seasons.ts)
+  // and takes the first two that actually have a usable row, so the current
+  // season fills the currentSeasonWeight slot for itself as soon as it has
+  // enough sampled games, with no date check anywhere in the code.
+  //
+  // The multiplier being read also changed, from the raw multiplier to the
+  // opponent-adjusted, sample-size-shrunk one (shrunkMultiplier, gated by
+  // opponent.useAdjusted below), which strips the schedule bias the raw
+  // figure carried and pulls it back toward neutral by how much a matchup
+  // effect actually persists.
+  //
+  // Both changes alter what a score means for every league that has ever
+  // faced an opponent, so every cached Power Pulse row and Positional WAR
+  // curve is stale by definition on this bump.
+  //
   // pp-5 (2026-09-01): the reliability multiplier is centered on the player's
   // own position before it is applied, and its range is cut from plus or minus
   // 15% to plus or minus 5%.
@@ -191,7 +247,7 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   //
   // Both change what a score means, so cached pp-2 rows are stale by definition
   // and every league rescores on next view.
-  modelVersion: "pp-5",
+  modelVersion: "pp-6",
 
   weights: {
     points: 0.55,
@@ -276,6 +332,73 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
     currentSeasonWeight: 0.7,
     priorSeasonWeight: 0.3,
     minGamesSampled: 8,
+    useAdjusted: true,
+
+    // priorGames and positionReliability feed the empirical Bayes shrink that
+    // produces shrunk_multiplier (lib/projections/adjust.ts shrinkMultiplier,
+    // run by the defense-splits calc, not by this reader). priorGames 6 means
+    // a defense with 6 sampled games in the current season is already
+    // contributing at half strength rather than waiting to clear a hard
+    // threshold, which is the whole point: a defense with 3 games this season
+    // should count at 3/9 strength, not be ignored until game 8.
+    priorGames: 6,
+
+    // The question this asks is "does a matchup number this season say
+    // anything about the same matchup number next season".
+    //
+    // MEASURED, PE-T016, 2026-09-01, on our own table after the opponent
+    // adjustment landed. Two season pairs, all 32 teams, PPR, both the raw
+    // multiplier and the opponent-adjusted one:
+    //
+    //          raw 25/24   adj 25/24   raw 24/23   adj 24/23    mean
+    //   DEF      0.319       0.276       0.297       0.238      0.283
+    //   RB       0.243       0.269       0.285       0.356      0.288
+    //   TE       0.152       0.223       0.247       0.032      0.164
+    //   K        0.147       0.113       0.026       0.079      0.091
+    //   QB       0.107       0.043      -0.117      -0.075     -0.011
+    //   WR      -0.097      -0.056      -0.027      -0.081     -0.065
+    //
+    // The values below are that mean of four, floored at zero and rounded to
+    // two places. Pooling all four rather than taking the adjusted pair alone
+    // is deliberate: with 32 teams the standard error on any single one of
+    // these correlations is about 0.19, so no two cells in a row here are
+    // distinguishable from each other, and picking the flattering one would be
+    // fitting noise.
+    //
+    // WHAT THE ADJUSTMENT DID, HONESTLY. It clearly helped running backs
+    // (0.264 to 0.313 across the two pairs) and did nothing measurable
+    // anywhere else; team defense actually reads slightly worse adjusted. The
+    // adjustment is kept regardless, because it removes a bias we can
+    // demonstrate exists (a defense that drew the six best offenses is not
+    // generous) and a correctness fix does not need a correlation to justify
+    // it. But it did not rescue the positions the plan hoped it would, and
+    // saying otherwise would be inventing a result.
+    //
+    // TWO POSITIONS ARE NOW ZERO, AND BOTH ARE DELIBERATE.
+    //
+    // WR is negative in ALL FOUR measurements. No receiver matchup adjustment
+    // applies at all. That is the honest reading, not an oversight, and it is
+    // the position where a spurious 15% swing would do the most damage because
+    // rosters carry more receivers than anything else.
+    //
+    // QB is the interesting one, and it is where our own data DISAGREES with
+    // published work. 4for4 measures fantasy points allowed to quarterbacks at
+    // 0.26 to 0.27, the strongest of any position. We measure -0.011. The
+    // likely reason is that we are not measuring the same thing: our figure is
+    // the top ONE startable quarterback performance per game, clamped, which
+    // is a far noisier quantity than a full-season points-allowed rank. We use
+    // our own number because it is our own metric, computed our way, and it is
+    // the one being applied. An admin who trusts the published figure more can
+    // raise this in one edit, and the disagreement is recorded here so that
+    // edit is an informed choice rather than a guess.
+    positionReliability: {
+      DEF: 0.28,
+      RB: 0.29,
+      TE: 0.16,
+      K: 0.09,
+      QB: 0.0,
+      WR: 0.0,
+    },
   },
 
   variance: {
@@ -321,12 +444,93 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
   },
 
   war: DEFAULT_WAR_SETTINGS,
+
+  beaconProjections: DEFAULT_PROJECTION_SETTINGS,
 };
+
+/**
+ * The version string every cache is keyed on.
+ *
+ * A STORED DOCUMENT CAN NEVER PIN THIS, AND THAT IS THE WHOLE POINT.
+ *
+ * modelVersion has exactly one job: to say "the model changed, so every cached
+ * Power Pulse row and every Positional WAR curve computed under the old one is
+ * stale". A stored settings row is by definition older than the code it is
+ * being merged into, so letting it supply the version means the newest code
+ * announces itself with the oldest name and nothing invalidates.
+ *
+ * That was not hypothetical. Found in production on 2026-09-01: the global row
+ * read `modelVersion: "pp-2"` while the code had moved to pp-6 through four
+ * model changes, so the bump that was supposed to force every league to
+ * rescore would have done nothing at all. The row also still carried the
+ * pre-pp-5 reliability clamps, which is a separate problem and an admin edit to
+ * fix, but the version pin is a mechanism bug and it is fixed here.
+ *
+ * An admin edit still has to invalidate caches, so the stored document's own
+ * shape is folded in as a short fingerprint. Both guarantees now hold at once:
+ * a code change gives a new base version, an admin save gives a new
+ * fingerprint, and a stale stored string can pin neither.
+ */
+export function effectiveModelVersion(
+  codeVersion: string,
+  stored: Record<string, unknown> | null | undefined,
+): string {
+  if (!stored) return codeVersion;
+  const fingerprint = stableFingerprint(stored);
+  return fingerprint === null ? codeVersion : `${codeVersion}+${fingerprint}`;
+}
+
+/**
+ * A short, order-independent fingerprint of a settings document.
+ *
+ * Keys are sorted before hashing so two documents that differ only in key order
+ * fingerprint identically, which matters because Postgres does not preserve
+ * jsonb key order and an admin round-trip would otherwise look like an edit.
+ *
+ * `modelVersion` is excluded from the hash. It is an output of this function,
+ * not an input, and including it would make the fingerprint change every time
+ * the code version did, which is already accounted for separately.
+ */
+function stableFingerprint(stored: Record<string, unknown>): string | null {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => key !== "modelVersion")
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+      return entries.map(([key, v]) => [key, canonical(v)]);
+    }
+    return value;
+  };
+
+  let json: string;
+  try {
+    json = JSON.stringify(canonical(stored));
+  } catch {
+    // A settings document that cannot be serialized cannot be fingerprinted.
+    // Falling back to the bare code version is safe: it under-invalidates
+    // rather than producing a version string that changes every render.
+    return null;
+  }
+  if (!json || json === "[]") return null;
+
+  // FNV-1a, 32 bit. Not cryptographic and does not need to be: this
+  // distinguishes one admin's saved document from another's, and a collision
+  // costs one league one stale cache row until the next real change.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < json.length; i++) {
+    hash ^= json.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
 
 /**
  * Merge a stored settings document over the code defaults. Only recognized keys
  * survive, and nested objects merge one level deep, so a partial admin save
  * cannot drop a whole section.
+ *
+ * THE STORED DOCUMENT CANNOT PIN modelVersion. See effectiveModelVersion above.
  */
 export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
   const base = DEFAULT_POWER_PULSE_SETTINGS;
@@ -341,8 +545,7 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
   };
 
   return {
-    modelVersion:
-      typeof s.modelVersion === "string" ? s.modelVersion : base.modelVersion,
+    modelVersion: effectiveModelVersion(base.modelVersion, s),
     weights: obj("weights", base.weights),
     recency: obj("recency", base.recency),
     reliability: obj("reliability", base.reliability),
@@ -358,7 +561,17 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
         >) ?? {}),
       },
     },
-    opponent: obj("opponent", base.opponent),
+    opponent: {
+      ...base.opponent,
+      ...obj("opponent", base.opponent),
+      positionReliability: {
+        ...base.opponent.positionReliability,
+        ...(((s.opponent as Record<string, unknown>)?.positionReliability as Record<
+          PulsePosition,
+          number
+        >) ?? {}),
+      },
+    },
     variance: {
       ...base.variance,
       ...obj("variance", base.variance),
@@ -373,5 +586,10 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
     simulation: obj("simulation", base.simulation),
     display: obj("display", base.display),
     war: obj("war", base.war),
+    // Delegated rather than merged with `obj`, because the projection document
+    // has its own two-level records (calibration.slope, usage.seasonWeights)
+    // that a one-level merge would replace wholesale and thereby drop a
+    // position from.
+    beaconProjections: mergeProjectionSettings(s.beaconProjections),
   };
 }

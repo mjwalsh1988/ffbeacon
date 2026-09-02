@@ -19,6 +19,7 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { startingSlots, type LineupCandidate } from "@/lib/power-pulse/lineup";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import { simulateWithReplacements, type WeeklyDistribution } from "@/lib/power-pulse/what-if";
+import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { computeLineupSwap, type CandidateWeek, type RosterMetaEntry } from "@/lib/faab/marginal";
 import { loadCachedWeekly } from "@/lib/trade-impact/load";
 import { matchViewerRoster, type ViewerCandidate } from "@/lib/league-viewer";
@@ -266,7 +267,7 @@ export async function runUpgradeWhatIf(
   if (!targetPlayer) return { ok: false, reason: "no-candidates" };
 
   const scoringBase = closestScoringBase(league.scoringSettings);
-  const defenseSeasons = [league.season - 1, league.season - 2];
+  const defenseSeasons = defenseSeasonsFor(league.season);
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
   const pulseSettings = await loadPowerPulseSettings(supabase);
 

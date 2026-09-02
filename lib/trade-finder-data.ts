@@ -29,7 +29,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
-import type { SleeperLeague } from "@/lib/sleeper";
+import { getNflState, type SleeperLeague } from "@/lib/sleeper";
+import { resolveCurrentWeek } from "@/lib/league-matchups";
 import { resolveLeagueContext } from "@/lib/league-format-resolution";
 import { buildPickPositionResolver, NO_PICK_POSITIONS } from "@/lib/league-pick-position";
 import { formatPickLabel } from "@/lib/trade-ideas/pick-label";
@@ -38,7 +39,8 @@ import { loadPowerPulseView } from "@/lib/league-power-pulse-data";
 import { pulseSnapshotFor } from "@/lib/trade-finder/pulse";
 import { startingSlots } from "@/lib/power-pulse/lineup";
 import { formatTeamLabel } from "@/lib/team-label";
-import { scoreWithFallback, type ScoringSettings } from "@/lib/league-scoring";
+import { type ScoringSettings } from "@/lib/league-scoring";
+import { loadAdjustedProjections } from "@/lib/projections/read";
 import { computeAgeDecimal } from "@/lib/player-age";
 import type { FinderPick, FinderPlayer, FinderTeam } from "@/lib/trade-finder/types";
 
@@ -88,12 +90,25 @@ function asStringArray(value: Json | null | undefined): string[] {
 }
 
 /**
- * Average projected points per week for each player, in this league's scoring.
+ * Average ADJUSTED projected points per week for each player, in this
+ * league's scoring.
  *
- * Averaged over the weeks Sleeper actually published rather than over the window
- * length, so a bye inside the window does not read as a week the player was
- * projected to score nothing. A player with no rows at all comes back absent,
- * and the engine treats that as unknown rather than as zero.
+ * Routed through lib/projections/read.ts loadAdjustedProjections rather than
+ * scored straight off the raw Sleeper column, so a suggested package is
+ * priced with the same opponent-strength, reliability, availability and
+ * injury adjustments lib/trade-impact/evaluate.ts already runs through its
+ * Monte Carlo for the impact verdict on this same page. Before this, the two
+ * numbers on one screen came from two different models.
+ *
+ * Averaged over the weeks that actually carried a projection rather than over
+ * the window length, so a bye inside the window does not read as a week the
+ * player was projected to score nothing. A player with no rows at all comes
+ * back absent, and the engine treats that as unknown rather than as zero.
+ *
+ * Trade Finder does not currently load each player's Sleeper injury_status
+ * (lib/league-view-data.ts's player select omits it), so no injury map is
+ * passed here; loadAdjustedProjections treats an absent one as "everyone
+ * healthy", the same default the injury multiplier itself falls back to.
  */
 async function loadProjectedPoints(
   supabase: AnySupabase,
@@ -102,56 +117,24 @@ async function loadProjectedPoints(
   fromWeek: number,
   scoring: ScoringSettings,
   positionByPlayer: Map<string, string>,
+  currentWeek: number,
 ): Promise<Map<string, number>> {
-  const totals = new Map<string, { sum: number; weeks: number }>();
   if (playerIds.length === 0) return new Map();
 
-  const toWeek = fromWeek + WEEK_HORIZON - 1;
-  const CHUNK = 150;
-  for (let i = 0; i < playerIds.length; i += CHUNK) {
-    const chunk = playerIds.slice(i, i + CHUNK);
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
-        .from("player_weekly_projections")
-        .select(
-          "player_id, week, stat_line, projected_pts_ppr, projected_pts_half_ppr, projected_pts_std",
-        )
-        .eq("season", season)
-        .eq("season_type", "regular")
-        .gte("week", fromWeek)
-        .lte("week", toWeek)
-        .in("player_id", chunk)
-        .range(from, from + PAGE - 1);
-      if (error || !data || data.length === 0) break;
-
-      for (const row of data) {
-        if (!row.player_id) continue;
-        const { points } = scoreWithFallback(
-          (row.stat_line as Record<string, unknown> | null) ?? null,
-          {
-            ppr: row.projected_pts_ppr === null ? null : Number(row.projected_pts_ppr),
-            half_ppr:
-              row.projected_pts_half_ppr === null
-                ? null
-                : Number(row.projected_pts_half_ppr),
-            std: row.projected_pts_std === null ? null : Number(row.projected_pts_std),
-          },
-          scoring,
-          positionByPlayer.get(row.player_id) ?? null,
-        );
-        if (points === null || !Number.isFinite(points)) continue;
-        const entry = totals.get(row.player_id) ?? { sum: 0, weeks: 0 };
-        entry.sum += points;
-        entry.weeks += 1;
-        totals.set(row.player_id, entry);
-      }
-      if (data.length < PAGE) break;
-    }
-  }
+  const { byPlayer } = await loadAdjustedProjections({
+    supabase,
+    playerIds,
+    season,
+    fromWeek,
+    toWeek: fromWeek + WEEK_HORIZON - 1,
+    scoringSettings: scoring,
+    positionByPlayer,
+    currentWeek,
+  });
 
   const out = new Map<string, number>();
-  for (const [playerId, entry] of totals) {
-    if (entry.weeks > 0) out.set(playerId, entry.sum / entry.weeks);
+  for (const [playerId, summary] of byPlayer) {
+    if (summary.perWeek !== null) out.set(playerId, summary.perWeek);
   }
   return out;
 }
@@ -355,6 +338,18 @@ export async function loadTradeFinderLeague(
   // which is the first week a trade made today could affect.
   const fromWeek = pulseView ? Math.max(1, pulseView.throughWeek + 1) : 1;
 
+  // For the injury multiplier's week-to-week discount, matching how
+  // lib/league-power-pulse.ts resolves the same value: Sleeper's own NFL
+  // state clamped into the league's regular season, so the preseason and
+  // offseason both resolve to week 1 rather than an empty remaining slate.
+  const nflState = await getNflState();
+  const rawPlayoffWeekStart = Number(sleeperLeague.settings?.playoff_week_start);
+  const playoffWeekStart =
+    Number.isFinite(rawPlayoffWeekStart) && rawPlayoffWeekStart > 0
+      ? rawPlayoffWeekStart
+      : 15;
+  const currentWeek = resolveCurrentWeek(nflState, season, playoffWeekStart);
+
   const [projected, ages] = await Promise.all([
     loadProjectedPoints(
       supabase,
@@ -363,6 +358,7 @@ export async function loadTradeFinderLeague(
       fromWeek,
       (league.scoring_settings ?? {}) as ScoringSettings,
       positionByPlayer,
+      currentWeek,
     ),
     loadAges(supabase, playerIds),
   ]);

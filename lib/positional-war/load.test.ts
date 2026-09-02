@@ -293,6 +293,10 @@ describe("loadWarUniverse: the serialization round trip", () => {
           player_id: "p1",
           scoring: "pts_ppr",
           season: null,
+          // loadAccuracy (lib/power-pulse/load.ts) now filters on `source`,
+          // defaulting to "sleeper"; every fixture row needs it or the
+          // default filter drops the row entirely.
+          source: "sleeper",
           shrunk_multiplier: 1.05,
           beat_rate: 0.6,
           availability_rate: 0.9,
@@ -794,6 +798,10 @@ describe("the sliced universe cache", () => {
           player_id: "p1",
           scoring: "pts_ppr",
           season: null,
+          // loadAccuracy (lib/power-pulse/load.ts) now filters on `source`,
+          // defaulting to "sleeper"; every fixture row needs it or the
+          // default filter drops the row entirely.
+          source: "sleeper",
           shrunk_multiplier: 1.05,
           beat_rate: 0.6,
           availability_rate: 0.9,

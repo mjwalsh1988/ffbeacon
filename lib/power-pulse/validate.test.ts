@@ -128,3 +128,90 @@ describe("mergePowerPulseSettings: war fallback", () => {
     expect(merged.war).toEqual({ ...DEFAULT_WAR_SETTINGS, cliffThreshold: 0.42 });
   });
 });
+
+/**
+ * Opponent strength (3.1 and 3.3 of docs/projection-engine-plan.md): the
+ * current-season lookup and the shrunk-multiplier read are both settings
+ * values now, so a partial admin save must not silently drop a position's
+ * reliability the way a partial war save must not drop a field.
+ */
+describe("mergePowerPulseSettings: opponent.positionReliability merges one level deep", () => {
+  it("loads the position reliability defaults when the stored document has no opponent key", () => {
+    const stored = { modelVersion: "pp-5" };
+    const merged = mergePowerPulseSettings(stored);
+    expect(merged.opponent.positionReliability).toEqual(
+      DEFAULT_POWER_PULSE_SETTINGS.opponent.positionReliability,
+    );
+  });
+
+  it("merges a partial positionReliability object over the defaults rather than dropping the missing positions", () => {
+    const stored = { opponent: { positionReliability: { WR: 0.2 } } };
+    const merged = mergePowerPulseSettings(stored);
+    expect(merged.opponent.positionReliability).toEqual({
+      ...DEFAULT_POWER_PULSE_SETTINGS.opponent.positionReliability,
+      WR: 0.2,
+    });
+  });
+
+  it("keeps the other opponent fields at their defaults when only positionReliability is stored", () => {
+    const stored = { opponent: { positionReliability: { QB: 0.5 } } };
+    const merged = mergePowerPulseSettings(stored);
+    expect(merged.opponent.useAdjusted).toBe(true);
+    expect(merged.opponent.priorGames).toBe(6);
+    expect(merged.opponent.currentSeasonWeight).toBe(
+      DEFAULT_POWER_PULSE_SETTINGS.opponent.currentSeasonWeight,
+    );
+  });
+});
+
+describe("powerPulseSettingsSchema: opponent bounds", () => {
+  const validWith = (opponent: Partial<typeof DEFAULT_POWER_PULSE_SETTINGS.opponent>) => ({
+    ...DEFAULT_POWER_PULSE_SETTINGS,
+    opponent: { ...DEFAULT_POWER_PULSE_SETTINGS.opponent, ...opponent },
+  });
+
+  it("priorGames: rejects below 0 and above 100", () => {
+    expect(validatePowerPulseSettings(validWith({ priorGames: -1 })).ok).toBe(false);
+    expect(validatePowerPulseSettings(validWith({ priorGames: 101 })).ok).toBe(false);
+    expect(validatePowerPulseSettings(validWith({ priorGames: 0 })).ok).toBe(true);
+    expect(validatePowerPulseSettings(validWith({ priorGames: 100 })).ok).toBe(true);
+  });
+
+  it("useAdjusted: rejects a non-boolean value", () => {
+    const settings = {
+      ...DEFAULT_POWER_PULSE_SETTINGS,
+      opponent: {
+        ...DEFAULT_POWER_PULSE_SETTINGS.opponent,
+        useAdjusted: "true" as unknown as boolean,
+      },
+    };
+    expect(validatePowerPulseSettings(settings).ok).toBe(false);
+  });
+
+  it("positionReliability: rejects a position value outside 0 to 1", () => {
+    expect(
+      validatePowerPulseSettings(
+        validWith({
+          positionReliability: {
+            ...DEFAULT_POWER_PULSE_SETTINGS.opponent.positionReliability,
+            WR: 1.1,
+          },
+        }),
+      ).ok,
+    ).toBe(false);
+    expect(
+      validatePowerPulseSettings(
+        validWith({
+          positionReliability: {
+            ...DEFAULT_POWER_PULSE_SETTINGS.opponent.positionReliability,
+            DEF: -0.01,
+          },
+        }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("positionReliability: accepts the documented defaults", () => {
+    expect(validatePowerPulseSettings(DEFAULT_POWER_PULSE_SETTINGS).ok).toBe(true);
+  });
+});

@@ -39,11 +39,11 @@ import { PositionFilter } from "@/components/trade-ideas/position-filter";
 import { SuggestionEvaluation } from "@/components/trade-ideas/suggestion-evaluation";
 import {
   MAX_NAMED_PLAYERS,
-  TRADE_GOALS,
   TRADE_POSITION_LABEL,
+  TRADE_STRATEGIES,
   type SuggestionAsset,
-  type TradeGoal,
   type TradePosition,
+  type TradeStrategy,
   type TradeSuggestion,
 } from "@/lib/trade-finder/types";
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
@@ -73,7 +73,7 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *   trip at all. Pass still means refused, and Save means keep.
  *
  * WHAT THE FILTERS ASK FOR
- *   Four questions, narrowing as they go: the SHAPE of the deal (the goal), the
+ *   Three questions, narrowing as they go: WHAT THE RANKING SHOULD CHASE, the
  *   POSITION GROUPS on each side, and NAMED PLAYERS on each side. They are
  *   ordered that way on screen because that is the order of specificity, and the
  *   engine resolves conflicts the same way: a named player settles the side he
@@ -81,6 +81,17 @@ import type { CrossLeagueSuggestion } from "@/lib/trade-finder-cross-league";
  *   quarterback" and "get me a running back" cannot both be honoured and the
  *   name is the more specific request. The ask on the OTHER side survives, which
  *   is the combination managers actually type.
+ *
+ *   The first question used to name five SHAPES of deal in a select
+ *   (consolidate, split, collect picks, get younger, or nothing). It was the
+ *   wrong question. A manager opening this tab has already decided whether they
+ *   are trying to win in December or trying to win the trade, and those two
+ *   answers order the same league completely differently; the shape of the
+ *   package is downstream of that and mostly not something anyone has an opinion
+ *   about in advance. So it is two options now, Contender and Value, and in a
+ *   REDRAFT league nobody is asked: nothing carries over, so a deal
+ *   that costs points a week is simply wrong there and the engine refuses to
+ *   build one rather than ranking it lower.
  *
  *   Each name row takes a LIST, and the list is a package rather than a
  *   shortlist: every player named on a side has to be in the deal on that side.
@@ -153,6 +164,25 @@ export function TradeFinder(props: {
   /** Players on every other roster, for the "get this player" picker. */
   theirPlayers?: PlayerOption[];
   /**
+   * Whether assets carry past this season.
+   *
+   * Decides whether the strategy toggle is a question at all. A one-year league
+   * is never asked it, because the other answer is wrong there rather than
+   * merely different: a pile of trade value that scores no points expires in
+   * January. Absent (portfolio mode) is read as dynasty, which is where the
+   * toggle is a real choice.
+   */
+  isDynasty?: boolean;
+  /**
+   * Which side of the toggle to open on, in a dynasty league.
+   *
+   * The page reads it off Power Pulse's call on the reader's own team, so a
+   * rebuilder opens on Value and a contender on Contender. It is a starting
+   * position and nothing more: the toggle is right there and moving it is one
+   * press.
+   */
+  defaultStrategy?: TradeStrategy;
+  /**
    * The position groups this league actually rosters, in display order.
    *
    * Passed in rather than assumed, so a league with no kicker slot is never
@@ -188,7 +218,18 @@ export function TradeFinder(props: {
 }) {
   const isLeague = props.mode === "league";
 
-  const [goal, setGoal] = useState<TradeGoal>("balanced");
+  /**
+   * Which question the ranking answers.
+   *
+   * Seeded by the page rather than hardcoded, because the right opening answer
+   * depends on the reader: a dynasty team Power Pulse has out of the race opens
+   * on Value, one chasing January opens on Contender. In a REDRAFT league there
+   * is no choice to seed, the toggle is not rendered, and this stays on
+   * "contender" for the whole visit.
+   */
+  const [strategy, setStrategy] = useState<TradeStrategy>(
+    props.isDynasty === false ? "contender" : (props.defaultStrategy ?? "contender"),
+  );
   const [targetPlayerIds, setTargetPlayerIds] = useState<string[]>([]);
   const [offerPlayerIds, setOfferPlayerIds] = useState<string[]>([]);
   const [wantPositions, setWantPositions] = useState<TradePosition[]>([]);
@@ -222,7 +263,7 @@ export function TradeFinder(props: {
 
   const headingId = useId();
   const filtersId = useId();
-  const goalId = useId();
+  const strategyLabelId = useId();
   const passNoteId = useId();
   const evaluationId = useId();
   const cardRef = useRef<HTMLElement>(null);
@@ -237,6 +278,16 @@ export function TradeFinder(props: {
   }, [suggestions, index, saved, savedIndex, tab, pending]);
 
   const savedSet = useMemo(() => new Set(savedKeys), [savedKeys]);
+
+  /**
+   * Whether the reader gets a choice about what the ranking measures.
+   *
+   * Only in a dynasty league. Portfolio mode spans rooms of both kinds and has
+   * no single league to read, so the toggle stands and each league resolves it
+   * for itself: a redraft room in the walk ranks as a contender search whatever
+   * the toggle says. See resolveStrategy.
+   */
+  const showStrategy = props.isDynasty !== false;
 
   const search = useCallback(
     async (excluded: string[], nextCursor: number) => {
@@ -257,7 +308,7 @@ export function TradeFinder(props: {
             sleeperLeagueId: props.sleeperLeagueId ?? "",
             username: props.searchedUsername ?? null,
             source: props.source ?? null,
-            goal,
+            strategy,
             targetPlayerIds,
             offerPlayerIds,
             wantPositions,
@@ -291,7 +342,7 @@ export function TradeFinder(props: {
             sleeperLeagueIds: props.sleeperLeagueIds ?? [],
             sleeperUserId: props.sleeperUserId ?? null,
             source: props.source ?? null,
-            goal,
+            strategy,
             cursor: nextCursor,
             sessionExcluded: excluded,
           });
@@ -326,7 +377,6 @@ export function TradeFinder(props: {
     },
     [
       givePositions,
-      goal,
       isLeague,
       offerPlayerIds,
       props.searchedUsername,
@@ -334,6 +384,7 @@ export function TradeFinder(props: {
       props.sleeperLeagueIds,
       props.sleeperUserId,
       props.source,
+      strategy,
       targetPlayerIds,
       wantPositions,
     ],
@@ -681,41 +732,118 @@ export function TradeFinder(props: {
 
           <div className="divide-y divide-line">
             <div className="px-4 py-3.5">
-              {/* The description rides in the OPTION text, not only in a hint.
-                  These five differ in ways a two-word label cannot hold ("Split
-                  assets" is not self-explanatory), and a describedby hint is the
-                  wrong place for the difference: arrowing through a closed
-                  select changes the value immediately, so the hint updates
-                  silently behind the reader and they only ever hear the
-                  explanation for a choice they have already made. Option text is
-                  read on every arrow press, which is the moment it is needed.
+              {/* WHAT THE RANKING MEASURES.
 
-                  There is no hint under the label any more, for the same reason.
-                  "What the trade has to do for you" said nothing the label and
-                  the options did not, and it was read out ahead of every one of
-                  them. */}
-              <label htmlFor={goalId} className="block text-sm font-semibold text-ink">
-                Kind of trade
-              </label>
-              <select
-                id={goalId}
-                value={goal}
-                onChange={(e) => {
-                  setGoal(e.target.value as TradeGoal);
-                  // A new goal is a new question, so the portfolio walk starts
-                  // over. Continuing from where it stopped would leave every
-                  // league already visited unexamined under the new goal.
-                  setCursor(0);
-                  setLeaguesLeft(null);
-                }}
-                className={`mt-1.5 ${SELECT_CLASS}`}
-              >
-                {TRADE_GOALS.map((g) => (
-                  <option key={g.key} value={g.key}>
-                    {g.label}: {g.blurb}
-                  </option>
-                ))}
-              </select>
+                  This was a five-option select naming SHAPES of deal
+                  (consolidate, split, collect picks, get younger). It asked the
+                  wrong question. A manager opening this tab is not thinking
+                  about the shape of a package, they are thinking about whether
+                  they are trying to win in December or trying to win the trade,
+                  and those two answers order the same league completely
+                  differently.
+
+                  Two buttons rather than a select, because there are two
+                  answers and both fit on screen. A select hides one of them
+                  behind an interaction and reads the chosen one back as a value
+                  rather than as a choice; a radio group says out loud that
+                  there are two and which one is on.
+
+                  Not rendered at all in a redraft league. There the answer
+                  follows from the league rather than from a preference, and
+                  offering a toggle whose other position the engine would ignore
+                  is worse than offering none. The sentence in its place says
+                  why. */}
+              {showStrategy ? (
+                // A real fieldset of real radios, drawn as a segmented strip.
+                //
+                // Not role="radiogroup" over two buttons, which is the shape
+                // this wants to be and the one that ships broken: ARIA says a
+                // radio group is arrow-navigable, and two buttons with
+                // aria-checked are not, so a keyboard reader meets a control
+                // that announces itself as a radio group and then refuses to
+                // behave like one. Native inputs get arrow keys, the
+                // one-tab-stop-per-group rule, and the platform's own
+                // announcement, for free and in every screen reader.
+                //
+                // The input is not display:none. A hidden input is not
+                // focusable, which would take the whole group out of the tab
+                // order; it is drawn under its label with peer- styling.
+                <fieldset className="min-w-0 border-0 p-0">
+                  <legend className="block p-0 text-sm font-semibold text-ink">
+                    What the ranking should chase
+                  </legend>
+                  <div className="mt-2 flex flex-wrap gap-1.5 rounded-card border border-line bg-base/40 p-1.5">
+                    {TRADE_STRATEGIES.map((option) => (
+                      <div key={option.key} className="relative min-w-[8rem] flex-1">
+                        <input
+                          type="radio"
+                          id={`${strategyLabelId}-${option.key}`}
+                          name={`${strategyLabelId}-strategy`}
+                          value={option.key}
+                          checked={strategy === option.key}
+                          onChange={() => {
+                            setStrategy(option.key);
+                            // A different question, so the portfolio walk starts
+                            // over rather than resuming with leagues already
+                            // visited under the old one.
+                            setCursor(0);
+                            setLeaguesLeft(null);
+                            // Just the instruction. The radio's own accessible
+                            // name already carried the label and the blurb, and
+                            // repeating the blurb here read the longest part of
+                            // it twice in a row on every arrow press.
+                            setStatus(`${option.label} selected. Press Search to apply.`);
+                          }}
+                          className="peer absolute h-px w-px overflow-hidden opacity-0"
+                        />
+                        <label
+                          htmlFor={`${strategyLabelId}-${option.key}`}
+                          // The transparent border is a placeholder that stops
+                          // the checked state from shifting the layout. It is
+                          // also the only thing that survives forced-colors
+                          // mode: `bg-beacon` is a background IMAGE and the
+                          // real radio is a 1px transparent square, so with
+                          // background images stripped both options would look
+                          // identical and nothing on screen would say which is
+                          // on.
+                          className="flex min-h-11 cursor-pointer items-center justify-center rounded-card border border-transparent px-3 py-2 text-center text-sm font-bold text-ink-muted transition-colors hover:bg-surface-elevated/60 hover:text-ink peer-checked:bg-beacon peer-checked:text-black peer-checked:shadow-[0_0_20px_-10px_rgba(168,85,247,0.9)] peer-checked:forced-colors:border-[Highlight] peer-checked:forced-colors:text-[Highlight] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-cyan"
+                        >
+                          {/* The label a sighted reader sees, then the
+                              difference between the two options, which is the
+                              part they cannot infer from one word. Read out on
+                              every arrow press, which is the moment it is
+                              needed; a hint under the group is read once, on
+                              arrival, and by then the reader has not yet met
+                              either option. */}
+                          {option.label}
+                          <span className="sr-only">: {option.blurb}</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {/* What the choice currently in force actually does. Outside
+                      the group and not wired to it with aria-describedby: it
+                      changes as the selection changes, so attaching it to each
+                      radio would read the OLD sentence on the press that
+                      replaced it. */}
+                  <p className="mt-1.5 text-xs text-ink-muted">
+                    {strategy === "contender"
+                      ? "Only deals that add points to your starting lineup, ranked by what those points are worth in wins."
+                      : "Ranked by what the pieces are worth in this league's format, including youth and draft capital."}
+                  </p>
+                </fieldset>
+              ) : (
+                <>
+                  <span className="block text-sm font-semibold text-ink">
+                    What the ranking chases
+                  </span>
+                  <p className="mt-1.5 text-xs text-ink-muted">
+                    This is a one-year league, so every suggestion has to add
+                    points to your starting lineup. Deals that cost you points a
+                    week are left out rather than ranked lower.
+                  </p>
+                </>
+              )}
             </div>
 
             {/* POSITIONS. Two rows rather than one control, because they are two
@@ -1110,6 +1238,7 @@ export function TradeFinder(props: {
         <EmptyState
           mode={props.mode}
           meta={meta}
+          strategy={strategy}
           leaguesLeft={leaguesLeft}
           declinedAll={sessionExcluded.length > 0}
           positionAsk={wantPositions.length + givePositions.length > 0}
@@ -1130,13 +1259,6 @@ function describeFound(count: number): string {
     ? "Found one trade."
     : `Found ${count} trades. Showing trade 1 of ${count}. Use Previous and Next to move between them.`;
 }
-
-// border-ink-subtle rather than border-line. Against the surface behind it,
-// border-line measures 1.18:1 and bg-base 1.06:1, so neither the edge nor the
-// fill tells a low-vision reader there is a control there at all; 1.4.11 asks
-// for 3:1 on a control boundary and ink-subtle gives 3.65:1.
-const SELECT_CLASS =
-  "min-h-11 w-full rounded-card border border-ink-subtle bg-base px-3 py-2 text-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan";
 
 // min-w-11 as well as min-h-11. Below sm the word beside the chevron is hidden
 // and the button is a 16px icon in 24px of padding, which is a 40px target: the
@@ -1215,6 +1337,7 @@ function TabButton({
 function EmptyState({
   mode,
   meta,
+  strategy,
   leaguesLeft,
   declinedAll,
   positionAsk,
@@ -1222,6 +1345,15 @@ function EmptyState({
 }: {
   mode: "league" | "portfolio";
   meta: TradeFinderMeta | null;
+  /**
+   * What the ranking was chasing.
+   *
+   * Only read on the portfolio branch, and only to explain an empty answer. The
+   * cross-league walk merges several leagues into one shortlist, so there is no
+   * single engine notice it could carry; the reason still has to be said, or a
+   * reader looking at forty other rosters concludes the search broke.
+   */
+  strategy: TradeStrategy;
   leaguesLeft: number | null;
   declinedAll: boolean;
   /**
@@ -1230,7 +1362,7 @@ function EmptyState({
    * A fifth reason, and the newest one. Asking for a kicker back and a
    * quarterback out is a question a real league can answer with nothing, and a
    * reader who has just pressed four chips deserves to be pointed at them rather
-   * than told to change the kind of trade.
+   * than at a generic suggestion to ask for something else.
    */
   positionAsk: boolean;
   /**
@@ -1239,7 +1371,7 @@ function EmptyState({
    * A package is a much narrower question than a single name, and a league can
    * quite honestly hold no level deal for two specific players moving
    * together while holding several for either of them alone. Pointing at the
-   * chips is more use than telling somebody to change the kind of trade.
+   * chips is more use than a generic suggestion to ask for something else.
    */
   packageAsk: boolean;
 }) {
@@ -1251,13 +1383,21 @@ function EmptyState({
       </p>
       {mode === "league" ? (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-          {/* The engine's own reason first, when it has one. It only ever
-              fires for a question that could not have had an answer (players
-              named across two rosters, a player we cannot price), and in
-              those cases every sentence below would be misleading: the league
-              is not short of deals, the question was. */}
+          {/* The engine's own reason first, when it has one. It fires for a
+              question that could not have had an answer (players named across
+              two rosters, a player we cannot price), and for the one case where
+              the search DID run and refused everything it built: a contender
+              search in a league where nothing on the board would add points to
+              this lineup. In all of them every sentence below would be
+              misleading, because the league is not short of deals. */}
           {meta?.notice
-            ? meta.notice
+            ? // Both sentences when both apply. The engine's reason is the
+              // accurate one and the position chips are the actionable one, and
+              // suppressing the second sent a reader who had just pressed four
+              // chips looking for a cause somewhere else. They can co-occur:
+              // the position gate runs BEFORE the lineup floor, so a floored
+              // deal did satisfy the chips.
+              `${meta.notice}${positionAsk ? " The positions you picked narrow it further, so clearing one may open something up." : ""}`
             : declinedAll
               ? "Search again for a fresh set, or change what you are after."
               : meta && meta.consideredTeams === 0
@@ -1266,13 +1406,20 @@ function EmptyState({
                   ? "Nothing comes back level for those players as one package. Remove one of them, or send them in separate deals."
                   : positionAsk
                     ? "Nothing that fits those positions comes back level. Widen them, or clear one side."
-                    : "Nothing we could build helps you or would be accepted. Try a different kind of trade, or name a player."}
+                    : "Nothing we could build helps you or would be accepted. Name a player above to see what he would cost, or what he would bring back."}
         </p>
       ) : (
         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
           {leaguesLeft && leaguesLeft > 0
             ? "Nothing in those leagues. Search again for the rest."
-            : "Every league we can read has been searched."}
+            : strategy === "contender"
+              ? // The floor applies here too, and the walk cannot carry a
+                // per-league reason back, so the reason is stated from what we
+                // do know: which question was asked. Without it this is the
+                // exact "no trade to suggest" that the league page's own notice
+                // exists to avoid.
+                "Every league we can read has been searched, and nothing in them adds points to your starting lineup. Switch to Value to see the deals that win on what the pieces are worth."
+              : "Every league we can read has been searched."}
         </p>
       )}
       {meta?.lineupUnavailable && (
