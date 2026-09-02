@@ -96,6 +96,20 @@ export const powerPulseSettingsSchema = z
       seed: z.number().int(),
     }),
 
+    lineupRealism: z.object({
+      enabled: z.boolean(),
+      // 0 is the current behaviour (assume a perfect lineup); 1 applies the
+      // measured share in full.
+      blend: unit,
+      // At least two graded weeks before a manager's own measurement is used
+      // to move their projection. One week is not evidence about anyone.
+      minWeeks: z.number().int().min(2).max(17),
+      // The factor can never fall below this. A floor under 0.5 would let a
+      // bad month halve a team's projection for the rest of the season, which
+      // is a worse prediction than the bias this setting exists to correct.
+      floor: z.number().min(0.5).max(1),
+    }),
+
     display: z.object({
       min: z.number().min(0).max(50),
       max: z.number().min(51).max(100),

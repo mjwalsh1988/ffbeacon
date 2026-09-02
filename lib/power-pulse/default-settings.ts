@@ -154,6 +154,49 @@ export type PowerPulseSettings = {
   };
 
   /**
+   * Should a team's projection assume its manager will set a perfect lineup?
+   *
+   * IT DOES TODAY, AND THAT IS A KNOWN BIAS. Every remaining week is projected
+   * from `buildOptimalLineup`, so the model assumes all twelve managers extract
+   * every point their roster can produce for the rest of the season. Measured
+   * against settled results, real managers in a normal league start between
+   * about 76% and 90% of what was available to them, which is a gap of several
+   * points a week between the best and worst operator in the same room.
+   *
+   * The Manager Ledger measures exactly that share, so the correction is
+   * available. Turning it on multiplies each team's projected weekly mean by a
+   * factor built from their own measured efficiency.
+   *
+   * OFF BY DEFAULT, DELIBERATELY. It is a judgement call, not a bug fix, and it
+   * has two costs worth stating. It is partly self-fulfilling: telling a
+   * manager they are projected lower because they set bad lineups is a claim
+   * about their future behaviour, not their roster. And it is noisy early, when
+   * three weeks of evidence is being asked to predict fourteen. `blend` and
+   * `minWeeks` exist to bound both. Bump `modelVersion` when changing any of
+   * this, so every league rescores rather than serving a mix.
+   */
+  lineupRealism: {
+    /** Nothing changes until this is true. */
+    enabled: boolean;
+    /**
+     * How far to move from "perfect lineup" toward the measured efficiency.
+     * 0 is the current behaviour, 1 applies the measured share in full. The
+     * default of 0.5 is a hedge: a manager's past is evidence about their
+     * future, but not proof of it.
+     */
+    blend: number;
+    /** Graded weeks required before a team's own measurement is used at all. */
+    minWeeks: number;
+    /**
+     * The lowest factor any team can be given. A manager who has started 70% of
+     * their points is not going to keep doing that for fourteen more weeks, and
+     * a projection that assumes they will is a worse prediction than one that
+     * assumes they improve. This is where that floor is set.
+     */
+    floor: number;
+  };
+
+  /**
    * Mapping a within-league z-score onto the display scale, via the normal
    * percentile. An average team lands at 50. `sharpness` above 1 pushes the
    * extremes further apart; below 1 pulls the league together.
@@ -437,6 +480,13 @@ export const DEFAULT_POWER_PULSE_SETTINGS: PowerPulseSettings = {
     seed: 20260801,
   },
 
+  lineupRealism: {
+    enabled: false,
+    blend: 0.5,
+    minWeeks: 4,
+    floor: 0.85,
+  },
+
   display: {
     min: 1,
     max: 99,
@@ -584,6 +634,7 @@ export function mergePowerPulseSettings(stored: unknown): PowerPulseSettings {
       },
     },
     simulation: obj("simulation", base.simulation),
+    lineupRealism: obj("lineupRealism", base.lineupRealism),
     display: obj("display", base.display),
     war: obj("war", base.war),
     // Delegated rather than merged with `obj`, because the projection document

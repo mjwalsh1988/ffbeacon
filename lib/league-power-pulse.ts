@@ -369,6 +369,39 @@ export async function refreshPowerPulse(
   }
 }
 
+/**
+ * Measured lineup efficiency per roster, from the Manager Ledger cache.
+ *
+ * Read only when `settings.lineupRealism.enabled` is true. Never triggers a
+ * ledger computation: the ledger is on-demand-only through the Decisions page,
+ * for the same scaling reasons as this model, so a league that has never had
+ * one simply gets an empty map and every roster keeps the perfect-lineup
+ * assumption. A failed read is treated the same way, because degrading to the
+ * previous behaviour is always safe and throwing here would fail a league page.
+ */
+async function loadMeasuredEfficiency(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  season: number,
+): Promise<Map<number, { efficiency: number; weeksGraded: number }>> {
+  const out = new Map<number, { efficiency: number; weeksGraded: number }>();
+  const { data, error } = await supabase
+    .from("league_manager_ledger_cache")
+    .select("sleeper_roster_id, lineup_efficiency, weeks_graded")
+    .eq("league_id", leagueRowId)
+    .eq("season", season);
+  if (error || !data) return out;
+  for (const row of data) {
+    const efficiency = Number(row.lineup_efficiency);
+    if (!Number.isFinite(efficiency)) continue;
+    out.set(Number(row.sleeper_roster_id), {
+      efficiency,
+      weeksGraded: Number(row.weeks_graded ?? 0),
+    });
+  }
+  return out;
+}
+
 export async function calculateLeaguePowerPulse(
   supabase: ServiceClient,
   leagueRowId: string,
@@ -501,6 +534,15 @@ export async function calculateLeaguePowerPulse(
     };
   }
 
+  // Measured lineup efficiency, read ONLY when an admin has turned the
+  // correction on. Off by default, and the read does not happen at all in that
+  // case, so a league with no Manager Ledger rows costs nothing here and
+  // behaves exactly as it did before the setting existed. A missing row simply
+  // leaves that roster on the perfect-lineup assumption.
+  const lineupEfficiency = settings.lineupRealism?.enabled
+    ? await loadMeasuredEfficiency(supabase, leagueRowId, league.season)
+    : undefined;
+
   const teams = computePowerPulse({
     league,
     rosters,
@@ -512,6 +554,7 @@ export async function calculateLeaguePowerPulse(
     schedule: schedule.weeks,
     setLineups: schedule.setLineups,
     results,
+    lineupEfficiency,
     currentWeek,
     settings,
   });

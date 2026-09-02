@@ -378,7 +378,7 @@ League Pulse is ONE continuous user journey, not multiple features. The journey:
 
 Naming rules:
 - Feature name in copy/docs: "League Pulse".
-- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/positional-war` (the Positional WAR curve plus the upgrade what-if), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
+- Routes: `/tools/league-pulse` (entry), `/dashboard` (saved leagues), `/leagues/[sleeper_league_id]` (deep view), `/leagues/[sleeper_league_id]/schedules` (week and team schedule views), `/leagues/[sleeper_league_id]/schedules/[week]/[roster_id]` (one matchup, both starting lineups), `/leagues/[sleeper_league_id]/power-pulse` (expected performance), `/leagues/[sleeper_league_id]/positional-war` (the Positional WAR curve plus the upgrade what-if), `/leagues/[sleeper_league_id]/decisions` (the Manager Ledger), `/leagues/[sleeper_league_id]/trade-ideas` (suggestions plus the trade builder), `/leagues/[sleeper_league_id]/transactions` (feed), `/leagues/[sleeper_league_id]/teams/[roster_id]` (team deep view, future phase).
 - `/leagues/[sleeper_league_id]/trade-finder` was renamed to `trade-ideas`. `next.config.ts` holds a permanent 308 for the old path; keep it forever, shared links use it.
 - Page titles: plain descriptive ("League Overview", "Power Rankings", "Team Roster", "Transactions"). No "Dynasty Decoder", "DPC", or any DPC-derived branding anywhere in code, UI, copy, or share artifacts.
 - Tabs within `/leagues/[sleeper_league_id]` use plain functional labels.
@@ -474,6 +474,160 @@ Module map:
 Storage: `league_positional_war_cache`, one row per (league, season, position), six rows for a normal league. `positional_war_curves` is keyed by fingerprint and shares the COMPUTE across leagues on the WRITE path only; the read path is unchanged, so every consumer still issues exactly one query against the per-league table. It is service-role only and nothing in the UI reads it.
 
 Observability: `leagues.positional_war_status` / `_detail` / `_attempted_at` / `_succeeded_at` (migration 0212), `POSITIONAL_WAR_RETRY_MS` 15 minutes, and the `settled` verdict clears stored rows the same way Power Pulse does, because a degenerate answer outlives the run that produced it. `positional_war_detail` is server-written, never user-controlled, and rendered as text, never as HTML.
+
+## Manager Ledger (League Pulse decision grading)
+
+`/leagues/[id]/decisions`, nav label "Decisions". Every other model in League
+Pulse measures a ROSTER: the trade-value rankings say who owns the most, Power
+Pulse says what each roster should win from here, Positional WAR says which
+positions are scarce. This one measures the person operating the roster, by
+grading the decisions they actually made against what was actually available at
+the moment they made it.
+
+Four ledgers, one page: lineups set, waiver claims, trades, draft picks.
+
+ABSOLUTE RULE: every figure is RETROSPECTIVE and SETTLED. Read only from
+`league_matchups` rows marked `is_final`, which carry the actual points every
+rostered player scored that week, bench included. Nothing here is a projection,
+an estimate or a simulation. A week that has not settled contributes nothing
+rather than contributing a partial score: a lineup decision graded against a
+Sunday-afternoon scoreboard is a decision that has not finished happening.
+
+ABSOLUTE RULE: this model does NOT vary by value source or `format_config_id`,
+for the same reason Power Pulse and Positional WAR do not. Every quantity is
+points scored under the league's own literal scoring, so there is exactly one
+row per (league, season, roster) in `league_manager_ledger_cache`. `source` is
+deliberately absent from the fingerprint and the toggle must never invalidate
+it. A trade containing draft picks is therefore graded on its players only and
+flagged (`trade_any_picks`); pricing a pick would require a value source and
+would break the guarantee.
+
+ABSOLUTE RULE: the token "WAR" names exactly one metric in this product and it
+is nothing in this feature. Everything here is team-specific by construction, so
+it uses the vocabulary reserved for team-specific work: "wins left on the bench",
+"best-lineup record", "points". Never "WAR", in code, copy, a column name or a
+chart axis.
+
+ABSOLUTE RULE: recomputed ONLY on demand, through `pulseLeague` (gated by
+`MANAGER_LEDGER_TTL_MS`, 12 hours, plus a fingerprint or model version change),
+or manually via `npm run calculate:manager-ledger`. NEVER wired into a nightly
+cron, for the same scaling reason as league power rankings.
+
+ABSOLUTE RULE: never cache a ledger computed without settled weeks. A league
+with nothing final produces zero for every figure and 100% efficiency for every
+manager, which reads as a real answer and is not one.
+`calculateLeagueManagerLedger` writes nothing in that case AND clears any rows
+already stored for that league season.
+
+ABSOLUTE RULE: the optimiser is `buildOptimalLineup` from
+`lib/power-pulse/lineup.ts`, unchanged. Power Pulse feeds it PROJECTED points to
+predict a week; this feeds it ACTUAL points to grade one. Same algorithm, one
+copy, so the prediction and the retrospective can never disagree about a league.
+
+ABSOLUTE RULE: the best legal lineup may only contain players the manager could
+actually have started. `league_matchups.player_points` scores every player ON a
+roster, injured reserve and taxi squad included, so without the filter the
+optimum seats a taxi rookie and the page tells a manager they left a win on the
+bench by not starting someone Sleeper would not have let them start. Two guards
+bound the imperfection: the IR and taxi lists are the roster's CURRENT ones
+(Sleeper publishes no per-week history), so anyone who ACTUALLY STARTED a week
+is treated as eligible that week regardless, and the limitation is stated on the
+page rather than left to be discovered.
+
+ABSOLUTE RULE: both sides of the lineup comparison come from the SAME candidate
+pool. Scoring the set lineup straight off `player_points` while the optimum came
+from the resolved pool let a starter our `players` table had not caught up with
+land in the numerator and not the denominator, which reported a perfect manager
+on a week that could not be measured.
+
+ABSOLUTE RULE: `includeManagerLedger` on `pulseLeagueDerived` defaults to FALSE,
+the opposite polarity to its siblings. Exactly one surface renders a ledger and
+it awaits the compute in its own Suspense boundary; defaulting it on put a full
+season of reads on the critical path of eight other pages, the hover warm-up
+endpoint and two crons, none of which display it. `pulseLeague` opts in, because
+it is the do-everything entry point with no boundary to protect.
+
+ABSOLUTE RULE: the staleness gate never builds the compute context. Every field
+in the fingerprint except the slot list is a count or a maximum, so the warm
+path is four `head: true` counts and a league row. Building the whole season of
+matchups, transactions, picks and players to answer "nothing changed" is what
+`buildFingerprintInput` exists to prevent, and it is the same split
+`lib/league-positional-war.ts` makes for the same reason.
+
+Both sides of the lineup comparison are measured over the SAME gradable slot
+subset. `startingSlots` drops the tokens it has no position eligibility for
+(IDP), so measuring the set lineup over every slot and the optimum over some of
+them would invent a deficit that is really the linebackers. The head-to-head
+result adds the deficit onto the league's own official score rather than
+rebuilding the total from parts, and the ungraded slots are counted and stated
+in the UI.
+
+The best-lineup comparison is ONE-SIDED on purpose: the opponent's score is used
+exactly as it happened and their bench is left alone. A reader cannot set their
+opponent's lineup, and the figure exists to say what was in their own hands.
+
+Each ledger counts what it counts and never the same thing twice. A waiver claim
+is credited with what the player scored FOR THE CLAIMING ROSTER from the week of
+the claim. A trade is credited with what the incoming players scored for their
+new owner minus what the outgoing ones scored for theirs. The draft is credited
+with the player's production IN THE LEAGUE, for anyone, because the draft
+decision was which player to take and what happened to him afterward is the
+trade ledger's business. Keepers are excluded from the draft ledger and from its
+round baselines, because a keeper is carried at a slot the league's rules set
+rather than chosen off the board.
+
+There is deliberately NO composite score. The output is four ledgers and four
+ranks plus a fifth for total points scored. Scoring rank is the ROSTER,
+efficiency rank is the MANAGER, and the all-play luck figure on the Schedule
+page is the SCHEDULE. Those three side by side are what answer the question the
+page exists for.
+
+Module map:
+- `lib/manager-ledger/types.ts` — shared shapes, and the rules above in its header.
+- `lib/manager-ledger/default-settings.ts` — cache policy and display caps only. No model settings row, because this model makes no arguable modelling choice: it reads settled results and does arithmetic.
+- `lib/manager-ledger/lineup.ts` — slot planning, per-week grading, the biggest available swap, the season roll-up. Pure.
+- `lib/manager-ledger/moves.ts` — `LedgerIndex` (the ownership-and-scoring primitive) plus the waiver, trade and draft ledgers. Pure.
+- `lib/manager-ledger/engine.ts` — `computeLedger()`. Pure; takes plain data.
+- `lib/manager-ledger/fingerprint.ts` — the exact invalidation key. Pure, clock-free.
+- `lib/manager-ledger/load.ts` — every read, and no Sleeper request ever. Transactions and draft selections are PAGED; the 1000-row PostgREST cap truncates silently.
+- `lib/league-manager-ledger.ts` — orchestrator + `refreshManagerLedger()` (never throws).
+- `lib/league-manager-ledger-data.ts` — the read path for the page. Identities resolved at render time, never stored. Named columns, not `select("*")`, and wrapped in React `cache()` so the page's two consumers share one result.
+- `lib/request-coalesce.ts` — the in-flight deduplicator, extracted from `lib/league-pulse.ts` when the ledger needed it too. league-pulse imports the ledger, so importing the helper back the other way would close a cycle.
+
+ABSOLUTE RULE: the empty state's worked example is offered ONLY when the ledger
+is genuinely going to fill in. `ledgerEmptyState()` decides, and `settled` (the
+league's starting slots cannot be graded, so no figure will ever appear) and
+`error` (the last run failed) both get the explanation and no example. A preview
+is a promise about what a reader will see, and neither of those readers is going
+to see it. `lib/manager-ledger/empty-state.test.ts` holds that line.
+
+ABSOLUTE RULE: the example is the only place in the product that puts invented
+numbers on a page about a real league, so it is fenced by five independent
+signals, and the three that matter most are WORDS rather than styling, because a
+badge and a dashed border are exactly what a screen reader cannot use. The team
+names are themselves the label ("Example team A" cannot be read as a Sleeper
+handle, so a screenshot of the table alone still says so), plus a Sample badge,
+a heading that says these are not this league's numbers, and the table's own
+`<caption>`, which is the first thing announced on entering it. It is
+deliberately NOT the real `LedgerTable`: a reader who can expand invented rows
+into a full invented ledger has been handed something that behaves exactly like
+the real thing.
+
+Observability: `leagues.manager_ledger_status` / `_detail` / `_attempted_at` /
+`_succeeded_at` (migration 0245), `MANAGER_LEDGER_RETRY_MS` 15 minutes, listed
+at `/admin/system/league-health` beside Power Pulse and Positional WAR.
+`manager_ledger_detail` is server-written, never user-controlled, and rendered
+as text, never as HTML.
+
+Power Pulse correction: `settings.lineupRealism` (admin-editable at
+`/admin/power-pulse`, validated server-side) discounts each team's projected
+weekly mean toward their measured efficiency. Power Pulse otherwise projects
+every remaining week from the OPTIMAL lineup, which assumes every manager
+extracts every point their roster can produce for the rest of the season.
+OFF BY DEFAULT and it must stay that way unless someone decides otherwise: it is
+a judgement call rather than a bug fix, it is partly a claim about future
+behaviour rather than about a roster, and it is noisy early in a season. When it
+is off, no ledger read happens at all. Bump `modelVersion` when changing it.
 
 ## Schedules (League Pulse)
 

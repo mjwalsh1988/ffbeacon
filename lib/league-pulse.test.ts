@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { orphanRowIds } from "./league-pulse";
+import { orphanRowIds, transactionWeek } from "./league-pulse";
 
 /**
  * The rule that keeps our copy of a league the same shape as Sleeper's.
@@ -51,5 +51,30 @@ describe("orphanRowIds", () => {
    */
   it("would delete everything on an empty payload, which is why callers guard first", () => {
     expect(orphanRowIds(stored, [])).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("transactionWeek", () => {
+  it("reads Sleeper's `leg`, which is the field that actually arrives", () => {
+    // THE BUG THIS CLOSES. The row was built with `t.week ?? null` and Sleeper
+    // sends `leg`, so every one of the 23,847 stored transactions had a null
+    // week. That emptied the Transactions page's week filter, left every row
+    // without its week, and made the incremental sync resume from week 0 on
+    // every single resync instead of from the newest week it already held.
+    expect(transactionWeek({ leg: 7 })).toBe(7);
+  });
+
+  it("prefers `week` if Sleeper ever populates it", () => {
+    expect(transactionWeek({ week: 3, leg: 7 })).toBe(3);
+  });
+
+  it("falls through to leg when week is null", () => {
+    expect(transactionWeek({ week: null, leg: 7 })).toBe(7);
+  });
+
+  it("returns null rather than a zero that would sort ahead of week 1", () => {
+    expect(transactionWeek({})).toBeNull();
+    expect(transactionWeek({ week: 0, leg: 0 })).toBeNull();
+    expect(transactionWeek({ leg: -1 })).toBeNull();
   });
 });

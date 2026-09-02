@@ -53,6 +53,7 @@
     "calculate:power-rankings": "tsx --env-file=.env.local scripts/calculate-league-power-rankings.ts",
     "calculate:power-pulse": "tsx --env-file=.env.local scripts/calculate-league-power-pulse.ts",
     "calculate:positional-war": "tsx --env-file=.env.local scripts/calculate-positional-war.ts",
+    "calculate:manager-ledger": "tsx --env-file=.env.local scripts/calculate-manager-ledger.ts",
     "calculate:defense-splits": "tsx --env-file=.env.local scripts/calculate-defense-splits.ts",
     "calculate:projection-accuracy": "tsx --env-file=.env.local scripts/calculate-projection-accuracy.ts",
     "calculate:draft-value": "tsx --env-file=.env.local scripts/calculate-draft-value.ts",

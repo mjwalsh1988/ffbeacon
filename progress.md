@@ -10464,3 +10464,282 @@ PE-T081 | completed | Act on the backtest: blend default to 0
        player's stored total is still Sleeper's own number. The first test had been
        reading SETTINGS.blend.max and would have silently stopped testing anything
        the day the default hit zero.
+
+ML-T001 | completed | Fix the forward-only matchup fetch window so a past week can settle
+     | files: lib/league-matchups.ts, lib/league-matchups.test.ts
+     | notes: weeksToFetch ran from currentWeek to currentWeek+2 plus gaps, forward
+       only. A week was therefore last written while it WAS the current week, so a
+       league last opened on Sunday afternoon kept half-played scores with
+       is_final false and no further chance to correct itself: once Sleeper
+       advanced, that week fell out of the window forever. Everything built on
+       settled results was reading a Sunday-afternoon snapshot and calling it a
+       final score. The window now also asks for any past week whose stored rows
+       are not all final. Bounded on both sides: a week WITH points is chased
+       until is_final flips, a week with none is chased only inside
+       SETTLE_LOOKBACK_WEEKS (3) so an abandoned league does not pay for eighteen
+       requests on every load.
+     | verified: yes (7 new tests; 3,690 green)
+
+ML-T002 | completed | Fix is_final so a legitimately-zero roster settles
+     | files: lib/league-matchups.ts
+     | notes: is_final was `week < currentWeek && points > 0`, tested per ROW.
+       Whether a week was played is a fact about the WEEK, not about one roster,
+       so a roster on a playoff bye (or one whose every starter was on bye) never
+       settled and was re-fetched for the rest of the season while every other
+       roster in the same week was final. Now computed once per week from whether
+       any roster in it scored.
+     | verified: yes (production had exactly one such row, 2025 week 15)
+
+ML-T003 | completed | Fix league_transactions.week, which was null on every row ever synced
+     | files: lib/league-pulse.ts, lib/league-pulse.test.ts,
+       supabase/migrations/0243_league_transactions_week_backfill.sql
+     | notes: the row was built with `week: t.week ?? null` and Sleeper sends
+       `leg`, not `week`. All 23,847 stored transactions had a null week, which
+       broke three things at once: the Transactions page's week filter had an
+       empty facet list and every row rendered without its week; the incremental
+       sync resumes from the newest stored week and so resolved to 0, re-walking
+       the entire history from week 0 on EVERY resync; and nothing could grade a
+       move by when it happened. Now reads leg, prefers week if Sleeper ever
+       populates it, and rejects anything that is not a positive integer rather
+       than storing a zero that would sort ahead of week 1. Migration 0243
+       backfills from the stored raw object, which is exactly what the metadata
+       preservation rule exists to make possible. 23,847 of 23,847 rows repaired.
+     | verified: yes (4 new tests; backfill confirmed against prod)
+
+ML-T004 | completed | Manager Ledger model (pure)
+     | files: lib/manager-ledger/{types,default-settings,lineup,moves,engine,fingerprint}.ts
+       plus lineup.test.ts, moves.test.ts, engine.test.ts
+     | depends on: ML-T001, ML-T002, ML-T003
+     | notes: four ledgers (lineup, waivers, trades, draft) from rows already
+       stored. No Sleeper request, no projection, no value source, no composite
+       score. Reuses buildOptimalLineup from lib/power-pulse/lineup.ts rather
+       than a second copy, fed actual points instead of projected ones. 42 tests.
+     | verified: yes
+
+ML-T005 | completed | league_manager_ledger_cache + status columns
+     | files: supabase/migrations/0244_league_manager_ledger_cache.sql,
+       supabase/migrations/0245_leagues_manager_ledger_status.sql,
+       lib/database.types.ts
+     | depends on: ML-T004
+     | notes: one row per (league, season, roster). Public SELECT, service-role
+       writes, verified as anon on prod (read works, insert blocked). Status
+       columns mirror 0212 and 0215 exactly so the health view lists all three.
+     | verified: yes (RLS policies confirmed in pg_policies; anon read + blocked
+       write tested inside a rolled-back transaction)
+
+ML-T006 | completed | Manager Ledger orchestrator, loader and read path
+     | files: lib/league-manager-ledger.ts, lib/manager-ledger/load.ts,
+       lib/league-manager-ledger-data.ts
+     | depends on: ML-T005
+     | notes: same verdict/backoff/TTL shape as Positional WAR. Clears stored
+       rows on a degenerate run. Transactions and draft selections are PAGED;
+       a plain select() truncates at 1000 rows silently and a dynasty league
+       would have been graded on whatever half of its season fit.
+     | verified: yes (run against two 2025 leagues; efficiency spread 76.2% to
+       88.1%, draft deviations sum to zero across the league as they must)
+
+ML-T007 | completed | /leagues/[id]/decisions page and components
+     | files: app/leagues/[league_id]/decisions/page.tsx,
+       components/manager-ledger/{format.ts,ledger-table,ledger-detail,how-it-works}.tsx,
+       components/league-shell/nav-items.ts
+     | depends on: ML-T006
+     | notes: compute runs inside the ledger's own Suspense boundary so the
+       masthead paints first. No data hidden at any breakpoint: the mobile sheet
+       and the desktop expansion render the same LedgerDetail.
+     | verified: yes (rendered against a real 2025 league and a preseason league;
+       build green, route at 6.07 kB)
+
+ML-T008 | completed | Wire the ledger into pulseLeagueDerived and the admin health view
+     | files: lib/league-pulse.ts, app/admin/system/league-health/page.tsx,
+       scripts/calculate-manager-ledger.ts, package.json
+     | depends on: ML-T007
+     | notes: sixth parallel stage, owning its own failure. Pages pass
+       includeManagerLedger:false for the same reason they pass
+       includePositionalWar:false.
+     | verified: yes
+
+ML-T009 | completed | Power Pulse lineup realism setting (OFF by default)
+     | files: lib/power-pulse/{default-settings,validate,engine}.ts,
+       lib/league-power-pulse.ts, lib/power-pulse/lineup-realism.test.ts,
+       app/admin/power-pulse/power-pulse-settings-manager.tsx
+     | depends on: ML-T006
+     | notes: Power Pulse projects every remaining week from buildOptimalLineup,
+       so it assumes all twelve managers set a perfect lineup for the rest of the
+       season. Measured, real managers start 76% to 90% of what was available.
+       The correction is now available and DISABLED by default: it is a judgement
+       call, not a bug fix, it is partly a claim about future behaviour, and it is
+       noisy early. When off, no ledger read happens at all and the model is
+       byte-identical to what shipped. The mean is discounted; sigma is not,
+       because a manager who benches points scores fewer, not more predictable.
+     | verified: yes (8 new tests; default-off asserted)
+
+ML-T010 | completed | Fix is_final on the rows the old per-roster test stranded
+     | files: supabase/migrations/0246_league_matchups_settle_zero_scoring_rosters.sql
+     | depends on: ML-T002
+     | notes: the code fix in ML-T002 corrects future writes. This applies the
+       same rule to rows already stored: a row settles when another roster in
+       the same league, season and week is already final, which IS the evidence
+       that the week was played. Deliberately narrow, and it does not settle a
+       week with nothing final, since that is a week we have no evidence about.
+       One row on production, a 2025 week 15 roster on a playoff bye.
+     | verified: yes (all 720 2025 rows now final)
+
+ML-T011 | completed | Review round: implementation, accessibility, security, performance
+     | files: many, see below
+     | depends on: ML-T009
+     | notes: four sub-agent reviews. What they found and what changed.
+       CORRECTNESS
+       - IR and taxi players could be seated in the "best legal lineup".
+         player_points scores every player ON a roster, and 13,608 stored
+         roster-weeks carry one for a reserve player, so the page could tell a
+         manager they left a win on the bench by not starting someone Sleeper
+         would not let them start. Now excluded, with two guards: anyone who
+         ACTUALLY started a week is eligible that week whatever the current list
+         says, and the limitation (the lists are current, not per week) is
+         stated on the page. Remeasuring one league deleted a phantom win
+         outright and reordered the leaderboard.
+       - The set lineup was scored straight off player_points while the optimum
+         was scored from the resolved candidate pool, so an unresolved starter
+         landed in the numerator and not the denominator and reported a perfect
+         manager on a week that could not be measured. Both sides now come from
+         one pool.
+       - A 'settled' verdict wrote weeks=0 into its own backoff key, so the
+         comparison could never match and the league recomputed on every view.
+       - Draft round baselines merged a startup and a rookie draft in the same
+         season. Keyed on (draft, round) now.
+       - Points snapped to two decimals where they are produced: a perfect week
+         was coming out with a 1.4e-14 deficit, which is greater than zero.
+       ACCESSIBILITY
+       - The Points rank column is dropped below md and appeared nowhere in the
+         mobile sheet, which breaks the absolute mobile rule. It is now a Figure
+         in LedgerDetail alongside the decisions rank, which is the comparison
+         the page exists for.
+       - The per-row summary was sr-only AND referenced by aria-describedby, so
+         a browse-mode reader heard the whole paragraph twice per row. Now
+         aria-hidden as well, which is what aria-describedby is specified for.
+       - Team and week cells are now th scope="row"; reading a numeric column
+         gave no indication of whose number it was.
+       - Heading level skipped h2 to h4 on the desktop expansion path;
+         LedgerDetail takes a level and the expansion supplies an sr-only h3.
+       - Two h2s both read "Manager decisions". The hero is now "What this page
+         measures".
+       - Every visible "--" is paired with spoken words. Two hyphens are
+         swallowed at the default punctuation level, so the cell announced as
+         empty, which collapses the exact distinction this feature keeps.
+       - The caption told desktop readers to activate a team, which only works
+         below md. The score cell attributes both numbers rather than relying on
+         an unspoken hyphen. The swap sentence stopped restating the week,
+         result and score the reader had just heard from their own cells.
+       - Figure and YourLedger had a <p> inside dl > div, which is invalid and
+         detached the hint that carries the unit. Moved inside the dd.
+       - The methodology disclosure now carries a heading, so it is reachable by
+         heading navigation.
+       PERFORMANCE
+       - includeManagerLedger defaulted TRUE, so eight pages, the hover warm-up
+         endpoint and two crons ran a full season of reads for a model none of
+         them render. Default is now false and callers opt in.
+       - The staleness gate built the entire compute context to produce five
+         counts and a slot list. Split into a cheap fingerprint half; a warm
+         view now pays four head-count queries instead of ~2.5s of reads.
+       - loadPlayers paired an indexed equality with a leading-wildcard LIKE in
+         one .or(), which forces a sequential scan for the whole predicate.
+         Indexed pass first, one batched slug fallback for whatever it missed.
+         441 ids went 1789ms to 586ms with byte-identical results. Shared with
+         Power Pulse and Positional WAR.
+       - draft_selections had no index for (sleeper_league_id, season): 17.9ms
+         sequential scan, now 1.4ms index scan, and that table grows without
+         bound. Migration 0244's own (league_id, season) index was a strict
+         prefix of the unique constraint and is dropped.
+       - refreshManagerLedger is coalesced per league. coalesce moved to
+         lib/request-coalesce.ts because league-pulse imports the ledger and the
+         other direction would close a cycle.
+       - Per-week setPoints, optimalPoints and ungradedSlots and the miss's
+         player ids are computed and then dropped rather than stored: nothing
+         renders them and every row crosses into the browser. GradedWeek is the
+         internal shape, LedgerWeek the stored one.
+       - select("*") replaced with a named column list; loadManagerLedgerView
+         wrapped in cache(); three await waterfalls closed.
+       Cold compute 6.2s to about 1.1s, warm page 4.0s to 1.5s, payload 407KB
+       to 377KB.
+       SECURITY
+       - RLS, client selection, XSS, admin authorization, IDOR and jsonb parsing
+         all came back clean. Two hardening changes: the roster ids interpolated
+         into the prune filter are now Number.isInteger-filtered at the point of
+         use rather than trusted from three files away, and the recalc script
+         pages its league list instead of silently stopping at 1000.
+       - Not changed, and worth knowing: the URL league id reaches
+         getSleeperLeague with no shape check. Pre-existing on every League
+         Pulse route, host is fixed, out of scope for this feature.
+     | verified: yes (3,698 tests green, clean production build, page rendered
+       against a real 2025 league and a preseason league, all four leagues
+       recomputed under ledger-3)
+
+ML-T012 | completed | Designed empty state with a labelled sample of the filled-in page
+     | files: components/manager-ledger/ledger-empty.tsx,
+       lib/league-manager-ledger-data.ts, lib/manager-ledger/empty-state.test.ts,
+       app/leagues/[league_id]/decisions/page.tsx
+     | depends on: ML-T011
+     | notes: the empty state was one sentence in a bare panel. It is now a
+       titled message, four cards naming what each ledger will grade, and a
+       worked example of the leaderboard.
+       ledgerEmptyMessage became ledgerEmptyState, which returns a title, body,
+       a follow-on line and showPreview. The preview is offered ONLY when the
+       ledger is genuinely going to fill in. A 'settled' league can never be
+       graded (its starting slots have no position eligibility) and an 'error'
+       is a fault to report, so both get the explanation and no example: a
+       preview is a promise about what a reader will see, and neither of those
+       readers is going to see it. A test locks that down, because it is the one
+       regression here that would actively mislead.
+       The example is fenced by five independent signals, and the three that
+       matter most are words rather than styling, because a badge and a dashed
+       border are exactly what a screen reader cannot use: the team names ARE
+       the label ("Example team A" cannot be read as a Sleeper handle, so a
+       screenshot of the table alone still says so), a Sample badge, a heading
+       saying these are not this league's numbers, and the table's own caption,
+       which is the first thing announced on entering it.
+       Deliberately NOT the real LedgerTable. Reusing it would mean inventing a
+       season of weekly detail, waivers, trades and picks for four teams that do
+       not exist and then letting a reader drill into all of it, which is
+       handing them something that behaves exactly like the real thing. The
+       example is flat and inert, and that difference is itself another signal.
+       The four example rows are chosen to demonstrate the point rather than to
+       look plausible: team A is the best manager in the room with the third
+       best roster, team D has the best roster and is the worst manager of it.
+       HowLedgerWorks now renders in the empty state too. A reader who arrives
+       before their season starts is the one with time to read it.
+     | verified: yes (3,703 tests green, clean build, rendered against a real
+       2026 preseason league in the browser at desktop width; cards stack below
+       sm and the example table scrolls in its own container, same as the real
+       one, so nothing is hidden at any breakpoint)
+
+ML-T013 | completed | Dress the Decisions page to match the rest of the site, and cut the copy
+     | files: lib/manager-ledger/leaders.ts, lib/manager-ledger/leaders.test.ts,
+       components/manager-ledger/{ledger-leaders,ledger-headline}.tsx,
+       components/manager-ledger/{ledger-detail,ledger-table,ledger-empty,how-it-works,format}.ts(x),
+       lib/league-manager-ledger-data.ts, app/leagues/[league_id]/decisions/page.tsx
+     | depends on: ML-T012
+     | notes: the page was a table and two paragraphs. It now opens with three
+       big league-wide numbers (wins left behind, points left behind, league
+       average started), then the reader's own team, then bright accent cards
+       for the league leaders, then the leaderboard in its own titled panel with
+       an eyebrow and a team count, then the disclosure. Same visual language as
+       components/power-pulse/pulse-leaders.tsx on purpose, so a reader moving
+       between Power Pulse and Decisions meets one design rather than two.
+       lib/manager-ledger/leaders.ts is pure and holds the rule that matters: an
+       award is only ever given on evidence. No trades in the league means no
+       best trader, an uncaptured draft means no draft award, and nobody is
+       handed a trophy for topping a column of zeroes. The two rank-gap awards
+       ("Carried by the roster", "Most out of the least") need at least two
+       places of divergence, because one place apart is noise rather than a
+       story. Ties break on roster id so an award cannot move between page
+       loads. Eight tests cover it.
+       Copy pass across every string on the page: shorter, plainer, and in the
+       words a manager would use. "The share of the points a manager could have
+       had that they actually put in the lineup" became "How much of what you
+       could have scored you actually put in your lineup". The intro went from
+       two long paragraphs to two short ones. how-it-works lost about a third of
+       its length without dropping a single caveat. Column and label names are
+       now consistent: "Left behind" and "Wins left behind" everywhere, rather
+       than three phrasings of each.
+     | verified: yes (3,711 tests green, clean build, checked in the browser
+       against a real 2025 league and a preseason league)

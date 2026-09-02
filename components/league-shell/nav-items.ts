@@ -4,7 +4,8 @@
  * here, so a section can never appear in one and go missing from the other.
  *
  * Overview and Teams are inline views on `/leagues/[id]`; Schedules, Power Pulse,
- * Positional WAR, Trade Ideas, and Transactions are full routes of their own.
+ * Positional WAR, Decisions, Trade Ideas, and Transactions are full routes of
+ * their own.
  * `leagueTabHref` knows which is which and forwards the searched Sleeper handle
  * either way, so the in-view switcher and the Teams-tab owner default survive
  * every hop.
@@ -19,6 +20,7 @@ export type LeagueTabId =
   | "schedules"
   | "power-pulse"
   | "positional-war"
+  | "decisions"
   | "trade-ideas"
   | "transactions";
 
@@ -73,6 +75,12 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     icon: "trendingDown",
   },
   {
+    id: "decisions",
+    label: "Decisions",
+    hint: "How well each manager has played the roster they have",
+    icon: "listChecks",
+  },
+  {
     id: "trade-ideas",
     label: "Trade Ideas",
     hint: "Deals worth offering, and any deal you want checked",
@@ -100,6 +108,7 @@ export function leagueTabHref(
     tabId === "transactions" ||
     tabId === "power-pulse" ||
     tabId === "positional-war" ||
+    tabId === "decisions" ||
     tabId === "trade-ideas" ||
     tabId === "schedules"
   ) {

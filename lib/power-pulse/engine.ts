@@ -67,10 +67,45 @@ export type PowerPulseInput = {
   setLineups: Map<string, string[]>;
   /** Completed weekly point totals, keyed by Sleeper roster id. */
   results: Map<number, { week: number; points: number }[]>;
+  /**
+   * Measured lineup efficiency per Sleeper roster id, from the Manager Ledger.
+   *
+   * Read ONLY when `settings.lineupRealism.enabled` is true, and absent
+   * entirely when it is false, so a league with no ledger behaves exactly as it
+   * did before this existed. See `lineupRealismFactor` for what it does and for
+   * why it is off by default.
+   */
+  lineupEfficiency?: Map<number, { efficiency: number; weeksGraded: number }>;
   /** First unplayed week. 1 during the preseason. */
   currentWeek: number;
   settings: PowerPulseSettings;
 };
+
+/**
+ * How much of a team's optimal lineup to actually project them to score.
+ *
+ * Returns 1 when the correction is off, when the team has no measurement, or
+ * when it has too few graded weeks to be evidence, so the default path through
+ * this function changes nothing at all.
+ *
+ * Pure and exported for the tests. The floor matters more than it looks: a
+ * manager who has started 76% of their points is not going to keep doing that
+ * for fourteen more weeks, and a projection that assumes they will is a worse
+ * prediction than the perfect-lineup assumption this replaces.
+ */
+export function lineupRealismFactor(
+  settings: PowerPulseSettings,
+  measured: { efficiency: number; weeksGraded: number } | undefined,
+): number {
+  const config = settings.lineupRealism;
+  if (!config?.enabled) return 1;
+  if (!measured) return 1;
+  if (measured.weeksGraded < config.minWeeks) return 1;
+  if (!Number.isFinite(measured.efficiency) || measured.efficiency <= 0) return 1;
+
+  const blended = 1 - config.blend * (1 - Math.min(1, measured.efficiency));
+  return Math.min(1, Math.max(config.floor, blended));
+}
 
 export type PowerPulseDriver = {
   label: string;
@@ -285,13 +320,25 @@ export function computePowerPulse(
       enriched.map((e) => [e.player.playerId, e.player]),
     );
 
+    // 1 unless an admin has turned the correction on AND this roster has enough
+    // graded weeks behind it, so the default path is byte-identical to what
+    // this model did before the setting existed.
+    const realism = lineupRealismFactor(
+      settings,
+      input.lineupEfficiency?.get(roster.sleeperRosterId),
+    );
+
     for (const week of remainingWeeks) {
       const candidates = candidatesFor(week);
       const lineup = buildOptimalLineup(slots, candidates);
       const unfilled = lineup.slots.filter((s) => s.playerId === null).length;
       weekLineups.push({
         week,
-        total: lineup.total,
+        // The MEAN is discounted; the spread is not. A manager who leaves
+        // points on the bench scores fewer points, not more predictable ones,
+        // and scaling sigma with it would quietly narrow their win
+        // probabilities as well as lowering them.
+        total: lineup.total * realism,
         sigma: lineupSigma(lineup.slots),
         unfilled,
       });
@@ -304,7 +351,11 @@ export function computePowerPulse(
 
     const weekCount = Math.max(1, weekLineups.length);
     for (const position of PULSE_POSITIONS) {
-      positionTotals[position] = positionTotals[position] / weekCount;
+      // Scaled by the same factor as the weekly totals above, so the position
+      // breakdown still sums to the expected points per week. Leaving it
+      // unscaled would put a set of numbers on the page that add up to a
+      // different total than the one printed beside them.
+      positionTotals[position] = (positionTotals[position] * realism) / weekCount;
     }
 
     const meanPoints = mean(weekLineups.map((w) => w.total));

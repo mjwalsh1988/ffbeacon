@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { normalizeIdList } from "./league-matchups";
+import {
+  normalizeIdList,
+  weeksToFetch,
+  type StoredWeekState,
+} from "./league-matchups";
 
 describe("normalizeIdList", () => {
   it("keeps Sleeper's empty-slot placeholder", () => {
@@ -46,5 +50,61 @@ describe("normalizeIdList", () => {
   it("must not shorten the array: the length IS the slot alignment", () => {
     expect(normalizeIdList(["1", "0", "2"])).toHaveLength(3);
     expect(normalizeIdList(["1", "0", "2"])[2]).toBe("2");
+  });
+});
+
+describe("weeksToFetch", () => {
+  const state = (
+    week: number,
+    settled: boolean,
+    scored: boolean,
+  ): StoredWeekState => ({ week, settled, scored });
+
+  it("asks for the whole season when nothing is stored", () => {
+    expect(weeksToFetch([], 5, false)).toHaveLength(18);
+  });
+
+  it("asks for the whole season on force, however much is stored", () => {
+    const stored = Array.from({ length: 18 }, (_, i) => state(i + 1, true, true));
+    expect(weeksToFetch(stored, 5, true)).toHaveLength(18);
+  });
+
+  it("refreshes the current week and the two ahead of it", () => {
+    const stored = Array.from({ length: 18 }, (_, i) => state(i + 1, true, true));
+    expect(weeksToFetch(stored, 5, false)).toEqual([5, 6, 7]);
+  });
+
+  it("fills a gap in the stored slate", () => {
+    const stored = Array.from({ length: 18 }, (_, i) => state(i + 1, true, true)).filter(
+      (s) => s.week !== 2,
+    );
+    expect(weeksToFetch(stored, 10, false)).toEqual([2, 10, 11, 12]);
+  });
+
+  it("keeps chasing a past week that has points but has not settled", () => {
+    // THE BUG THIS CLOSES. The window used to run forward only, so a week last
+    // written mid-Sunday kept its half-played scores forever once Sleeper moved
+    // on. Week 3 scored and is not final, so it is asked for again even though
+    // it is seven weeks behind.
+    const stored = Array.from({ length: 18 }, (_, i) =>
+      state(i + 1, i + 1 !== 3, true),
+    );
+    expect(weeksToFetch(stored, 10, false)).toContain(3);
+  });
+
+  it("stops chasing a stale week that never scored, so an abandoned league costs nothing", () => {
+    const stored = Array.from({ length: 18 }, (_, i) =>
+      state(i + 1, false, false),
+    );
+    const targets = weeksToFetch(stored, 10, false);
+    // The lookback is three weeks, so 7, 8 and 9 are still chased and 6 is not.
+    expect(targets).toContain(7);
+    expect(targets).not.toContain(6);
+    expect(targets).not.toContain(1);
+  });
+
+  it("leaves a settled past week alone", () => {
+    const stored = Array.from({ length: 18 }, (_, i) => state(i + 1, true, true));
+    expect(weeksToFetch(stored, 10, false)).not.toContain(9);
   });
 });

@@ -255,6 +255,14 @@ export function PowerPulseSettingsManager({
     });
   };
 
+  // Appended to the hint of each control that only does something while the
+  // lineup realism checkbox is on. Stated in words rather than signalled by a
+  // greyed-out control, which a screen reader announces as "dimmed" at best and
+  // not at all at worst.
+  const realismSuffix = settings.lineupRealism.enabled
+    ? ""
+    : " Has no effect until the checkbox above is on.";
+
   return (
     <div className="mt-6 space-y-5">
       <Section
@@ -609,6 +617,57 @@ export function PowerPulseSettingsManager({
           label="Maximum variance"
           value={settings.variance.maxCv}
           onChange={(v) => patch("variance", { maxCv: v })}
+        />
+      </Section>
+
+      <Section
+        title="Lineup realism"
+        description="Power Pulse projects every remaining week from the best lineup a roster could possibly set, which assumes every manager in the league will extract every point their roster can produce for the rest of the season. Measured against settled results, real managers start roughly 76 to 90 percent of what was available to them. Turning this on discounts each team's projection toward their own measured share, from the Decisions page. It is off by default because it is a judgement call, not a bug fix: it is partly a claim about future behaviour rather than about a roster, and it is noisy early in a season."
+      >
+        <div className="sm:col-span-2">
+          <Checkbox
+            label="Discount projections toward measured lineup efficiency"
+            checked={settings.lineupRealism.enabled}
+            onChange={(v) => patch("lineupRealism", { enabled: v })}
+            describedBy="pp-realism-hint"
+          />
+          <p id="pp-realism-hint" className="mt-1 text-[11px] leading-tight text-ink-subtle">
+            Off keeps the current behaviour exactly: every team is projected as if their
+            manager sets a perfect lineup every week. Bump the model version below after
+            changing this, so every league rescores instead of serving a mix of both.
+          </p>
+        </div>
+        {/* The three below depend on the checkbox above. When it is off they
+            still take input and still save, and nothing they hold changes any
+            number, so the dependency is stated in each hint rather than left to
+            be inferred from a greyed-out control that a screen reader would not
+            mention at all. */}
+        <Field
+          label="Blend"
+          value={settings.lineupRealism.blend}
+          onChange={(v) => patch("lineupRealism", { blend: v })}
+          step="0.05"
+          min={0}
+          max={1}
+          hint={`0 keeps the perfect-lineup assumption. 1 applies the measured share in full. 0.5 splits the difference.${realismSuffix}`}
+        />
+        <Field
+          label="Minimum graded weeks"
+          value={settings.lineupRealism.minWeeks}
+          onChange={(v) => patch("lineupRealism", { minWeeks: Math.trunc(v) })}
+          step="1"
+          min={2}
+          max={17}
+          hint={`A team with fewer finished weeks than this keeps the perfect-lineup assumption.${realismSuffix}`}
+        />
+        <Field
+          label="Floor"
+          value={settings.lineupRealism.floor}
+          onChange={(v) => patch("lineupRealism", { floor: v })}
+          step="0.01"
+          min={0.5}
+          max={1}
+          hint={`The lowest a team's projection can be discounted to. Nobody keeps setting the worst lineup in the league for fourteen more weeks.${realismSuffix}`}
         />
       </Section>
 

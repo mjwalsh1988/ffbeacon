@@ -131,11 +131,18 @@ describe("the token WAR is always adjacent to Positional", () => {
   // delta of its own (lib/trade-finder/pulse.ts). It computes a team-specific
   // number from a team-specific schedule, which is precisely the class of module
   // that must never borrow the token.
+  // lib/manager-ledger joined it for the same reason as the rest: every figure
+  // in there is team-specific by construction (this manager, this roster, this
+  // week), so it is exactly the class of module that must never borrow the
+  // token. Its own header stated the discipline in prose and nothing enforced
+  // it, which is how a rule survives until the first person who has not read
+  // the header.
   const GUARDED_DIRECTORIES = [
     "lib/trade-impact",
     "lib/faab",
     "lib/power-pulse",
     "lib/trade-finder",
+    "lib/manager-ledger",
   ];
 
   // Comments count here. These modules own the OTHER metric, so a bare WAR in a

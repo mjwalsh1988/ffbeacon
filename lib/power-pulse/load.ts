@@ -301,27 +301,84 @@ export async function loadPlayers(
   const safeIds = sleeperIds.filter((id) => /^[A-Za-z0-9]{1,32}$/.test(id));
   if (safeIds.length === 0) return out;
 
+  const SELECT =
+    "id, slug, first_name, last_name, full_name, position, team, external_ids, metadata";
+
+  /** One row as the two queries below return it. */
+  type PlayerQueryRow = {
+    id: string;
+    slug: string;
+    first_name: string | null;
+    last_name: string | null;
+    full_name: string | null;
+    position: string | null;
+    team: string | null;
+    external_ids: unknown;
+    metadata: unknown;
+  };
+
+  // THE INDEXED LOOKUP FIRST, IN CHUNKS, THEN ONE SLUG FALLBACK FOR WHATEVER IS
+  // STILL MISSING.
+  //
+  // This used to be a single `.or()` per chunk pairing the equality with
+  // `slug.like.*-{id}`. A leading-wildcard LIKE cannot use an index, and ONE
+  // unindexable branch in an OR forces a sequential scan for the whole
+  // predicate: measured on production, a 200-id chunk scanned all of `players`,
+  // discarded 2,095,800 join-filter rows and took 398ms. The same 200 ids
+  // through idx_players_external_sleeper take 11.8ms. Power Pulse, Positional
+  // WAR and the Manager Ledger all make this read.
+  //
+  // The slug fallback is kept rather than deleted: the slug tail is a real
+  // recovery path for a row whose external id was stripped, and removing it
+  // would change behaviour rather than just its cost. It now runs ONCE for the
+  // union of everything the indexed passes missed, instead of once per chunk,
+  // so a league needing it pays one scan and a league that does not pays none.
+  // On the current corpus it never fires: all 10,480 player rows carry
+  // external_ids->>'sleeper'.
   const CHUNK = 200;
+  const rows: PlayerQueryRow[] = [];
+  const resolved = new Set<string>();
+
   for (let i = 0; i < safeIds.length; i += CHUNK) {
     const chunk = safeIds.slice(i, i + CHUNK);
-    const ors = chunk
-      .flatMap((id) => [`external_ids->>sleeper.eq.${id}`, `slug.like.*-${id}`])
-      .join(",");
     const { data, error } = await supabase
       .from("players")
-      .select(
-        "id, slug, first_name, last_name, full_name, position, team, external_ids, metadata",
-      )
-      .or(ors);
+      .select(SELECT)
+      .in("external_ids->>sleeper", chunk);
     if (error)
       throw new Error(`power pulse player resolve failed: ${error.message}`);
-
     for (const p of data ?? []) {
+      rows.push(p as PlayerQueryRow);
+      const ext = (p.external_ids as Record<string, unknown>) ?? {};
+      if (typeof ext.sleeper === "string") resolved.add(ext.sleeper);
+    }
+  }
+
+  const missing = safeIds.filter((id) => !resolved.has(id));
+  if (missing.length > 0) {
+    for (let i = 0; i < missing.length; i += CHUNK) {
+      const ors = missing
+        .slice(i, i + CHUNK)
+        .map((id) => `slug.like.*-${id}`)
+        .join(",");
+      const { data, error } = await supabase
+        .from("players")
+        .select(SELECT)
+        .or(ors);
+      if (error)
+        throw new Error(`power pulse player resolve failed: ${error.message}`);
+      for (const p of data ?? []) rows.push(p as PlayerQueryRow);
+    }
+  }
+
+  const wanted = new Set(safeIds);
+  {
+    for (const p of rows) {
       const ext = (p.external_ids as Record<string, unknown>) ?? {};
       const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
       const tail = (p.slug as string).match(/-(\d+)$/)?.[1] ?? null;
       const sid = fromExternal ?? tail;
-      if (!sid || !chunk.includes(sid) || out.has(sid)) continue;
+      if (!sid || !wanted.has(sid) || out.has(sid)) continue;
 
       const position = (p.position ?? "").toUpperCase();
       if (!valid.has(position)) continue;

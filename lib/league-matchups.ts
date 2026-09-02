@@ -15,11 +15,29 @@
  *     that answers "no games" means the league has no slate yet and the other
  *     17 requests would all come back empty.
  *   - After that we refresh only the weeks that can still move: the current
- *     week and the next two (lineups change), plus any week that is missing.
+ *     week and the next two (lineups change), plus any week that is missing,
+ *     plus any PAST week that has not settled yet. See `weeksToFetch`.
  *   - `force` refetches everything.
  *
  * A week whose games are done is marked `is_final` so the engine can treat it as
  * a settled result rather than something to project.
+ *
+ * WHY PAST WEEKS ARE REFETCHED AT ALL
+ *   The window used to run forward only, from the current week to two ahead. A
+ *   week was therefore last written while it WAS the current week, which for a
+ *   league last opened on Sunday afternoon means a row full of half-played
+ *   scores, is_final false, and no further chance to correct itself: once
+ *   Sleeper advanced the week it fell out of the window forever. Everything
+ *   built on settled results (the retrospective on the Schedule page, the
+ *   Manager Ledger) would then be reading a Sunday-afternoon snapshot and
+ *   calling it a final score.
+ *
+ *   So an unsettled past week is refetched until it settles. The cost is
+ *   bounded on both sides: a week that HAS points refetches until is_final
+ *   flips, which happens on the first sync after Sleeper advances; a week with
+ *   no points at all (a league that never played it) is chased only inside
+ *   SETTLE_LOOKBACK_WEEKS and then left alone, so an abandoned league does not
+ *   pay for eighteen requests on every load forever.
  *
  * Failures are reported, never swallowed. `failedWeeks` lists weeks whose
  * request did not come back, which means the stored slate is incomplete and a
@@ -37,6 +55,13 @@ export const MAX_MATCHUP_WEEK = 18;
 
 /** How many upcoming weeks past the current one get their lineups refreshed. */
 const LOOKAHEAD_WEEKS = 2;
+
+/**
+ * How far back an unsettled, never-scored week is chased before we accept that
+ * it is never going to settle. A week that DID score is chased regardless of
+ * age, because that one is a real result waiting to be finalised.
+ */
+const SETTLE_LOOKBACK_WEEKS = 3;
 
 export type MatchupSyncResult = {
   ok: boolean;
@@ -81,25 +106,56 @@ export function normalizeIdList(ids: unknown): string[] {
   return ids.map((id) => (typeof id === "string" ? id : ""));
 }
 
+/** What we already hold for one week, as the fetch window reads it. */
+export type StoredWeekState = {
+  week: number;
+  /** True when every stored row for the week is marked final. */
+  settled: boolean;
+  /** True when at least one roster has a non-zero score stored for the week. */
+  scored: boolean;
+};
+
 /**
  * Which weeks need a Sleeper call. Returns every week when the league has no
- * stored schedule, otherwise just the volatile window plus any gaps.
+ * stored schedule, otherwise the volatile window, any gap, and any past week
+ * that has not settled yet.
+ *
+ * Exported so the policy can be tested without a database or a network. The
+ * three rules, in order:
+ *
+ *   1. The volatile window. currentWeek through currentWeek + LOOKAHEAD_WEEKS,
+ *      because lineups still move there.
+ *   2. Gaps. Any week of the season we hold no row for at all.
+ *   3. The settle pass. Any week before currentWeek whose stored rows are not
+ *      all final. Chased indefinitely when the week has points on the board
+ *      (a real result caught mid-play), and only within SETTLE_LOOKBACK_WEEKS
+ *      when it has none (a week that was never played).
  */
-function weeksToFetch(
-  storedWeeks: Set<number>,
+export function weeksToFetch(
+  stored: StoredWeekState[],
   currentWeek: number,
   force: boolean,
 ): number[] {
   const all = Array.from({ length: MAX_MATCHUP_WEEK }, (_, i) => i + 1);
-  if (force || storedWeeks.size === 0) return all;
+  if (force || stored.length === 0) return all;
 
+  const byWeek = new Map(stored.map((s) => [s.week, s]));
   const wanted = new Set<number>();
+
   for (let w = currentWeek; w <= Math.min(MAX_MATCHUP_WEEK, currentWeek + LOOKAHEAD_WEEKS); w += 1) {
     wanted.add(w);
   }
   for (const w of all) {
-    if (!storedWeeks.has(w)) wanted.add(w);
+    if (!byWeek.has(w)) wanted.add(w);
   }
+  for (const state of stored) {
+    if (state.week >= currentWeek) continue;
+    if (state.settled) continue;
+    if (state.scored || state.week >= currentWeek - SETTLE_LOOKBACK_WEEKS) {
+      wanted.add(state.week);
+    }
+  }
+
   return [...wanted].sort((a, b) => a - b);
 }
 
@@ -115,7 +171,7 @@ export async function syncLeagueMatchups(
 
   const { data: existing, error: existingErr } = await supabase
     .from("league_matchups")
-    .select("week")
+    .select("week, is_final, points")
     .eq("league_id", leagueRowId)
     .eq("season", season);
   if (existingErr) {
@@ -129,8 +185,24 @@ export async function syncLeagueMatchups(
     };
   }
 
-  const storedWeeks = new Set((existing ?? []).map((r) => Number(r.week)));
-  let targets = weeksToFetch(storedWeeks, currentWeek, force);
+  // Collapse the per-roster rows into one state per week: settled when every
+  // row for it is final, scored when any roster has points on the board.
+  const stateByWeek = new Map<number, { settled: boolean; scored: boolean }>();
+  for (const row of existing ?? []) {
+    const week = Number(row.week);
+    if (!Number.isFinite(week)) continue;
+    const points = Number(row.points ?? 0);
+    const prior = stateByWeek.get(week);
+    stateByWeek.set(week, {
+      settled: (prior?.settled ?? true) && Boolean(row.is_final),
+      scored: (prior?.scored ?? false) || (Number.isFinite(points) && points > 0),
+    });
+  }
+  const storedState: StoredWeekState[] = [...stateByWeek.entries()]
+    .map(([week, state]) => ({ week, ...state }))
+    .sort((a, b) => a.week - b.week);
+
+  let targets = weeksToFetch(storedState, currentWeek, force);
   if (targets.length === 0) {
     return { ok: true, weeksFetched: [], rowsWritten: 0, failedWeeks: [], noScheduleYet: false };
   }
@@ -176,6 +248,17 @@ export async function syncLeagueMatchups(
   });
 
   for (const [week, matchups] of [...collected.entries()].sort((a, b) => a[0] - b[0])) {
+    // Whether the week was PLAYED is a fact about the week, not about one
+    // roster. It used to be tested per row as `points > 0`, which read a
+    // legitimate zero as "not played yet": a roster on a playoff bye, or one
+    // whose every starter was on bye, never settled and was re-fetched for the
+    // rest of the season while every other roster in the same week was final.
+    const weekHasScoring = matchups.some((m) => {
+      const p = Number(m.points ?? 0);
+      return Number.isFinite(p) && p > 0;
+    });
+    const weekIsFinal = week < currentWeek && weekHasScoring;
+
     for (const m of matchups) {
       const rosterId = Number(m.roster_id);
       if (!Number.isFinite(rosterId)) continue;
@@ -193,9 +276,10 @@ export async function syncLeagueMatchups(
         starter_points: (m.starters_points ?? []) as unknown as Json,
         player_ids: normalizeIdList(m.players) as unknown as Json,
         player_points: (m.players_points ?? {}) as unknown as Json,
-        // A past week with points on the board is settled. A past week with no
-        // points is a league that has not started yet, which stays projectable.
-        is_final: week < currentWeek && points > 0,
+        // A past week with points on the board is settled, for every roster in
+        // it. A past week with no points anywhere is a league that has not
+        // started yet, which stays projectable. See weekHasScoring above.
+        is_final: weekIsFinal,
         metadata: m as unknown as Json,
         synced_at: nowIso,
       });

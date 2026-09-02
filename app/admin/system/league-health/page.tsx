@@ -25,6 +25,10 @@ type LeagueHealthRow = {
   positional_war_detail: string | null;
   positional_war_attempted_at: string | null;
   positional_war_succeeded_at: string | null;
+  manager_ledger_status: string | null;
+  manager_ledger_detail: string | null;
+  manager_ledger_attempted_at: string | null;
+  manager_ledger_succeeded_at: string | null;
 };
 
 export default async function LeagueHealthPage() {
@@ -33,10 +37,16 @@ export default async function LeagueHealthPage() {
 
   const since48h = new Date(Date.now() - FORTY_EIGHT_HOURS_MS).toISOString();
 
-  const [powerPulseCounts, positionalWarCounts, fingerprintCollisions, candidates] =
-    await Promise.all([
+  const [
+    powerPulseCounts,
+    positionalWarCounts,
+    managerLedgerCounts,
+    fingerprintCollisions,
+    candidates,
+  ] = await Promise.all([
       countByStatus(admin, "power_pulse_status"),
       countByStatus(admin, "positional_war_status"),
+      countByStatus(admin, "manager_ledger_status"),
       admin
         .from("leagues")
         .select("id", { count: "exact", head: true })
@@ -50,10 +60,10 @@ export default async function LeagueHealthPage() {
       admin
         .from("leagues")
         .select(
-          "id, sleeper_league_id, name, season, last_pulsed_at, power_pulse_status, power_pulse_detail, power_pulse_attempted_at, power_pulse_succeeded_at, positional_war_status, positional_war_detail, positional_war_attempted_at, positional_war_succeeded_at",
+          "id, sleeper_league_id, name, season, last_pulsed_at, power_pulse_status, power_pulse_detail, power_pulse_attempted_at, power_pulse_succeeded_at, positional_war_status, positional_war_detail, positional_war_attempted_at, positional_war_succeeded_at, manager_ledger_status, manager_ledger_detail, manager_ledger_attempted_at, manager_ledger_succeeded_at",
         )
         .or(
-          `power_pulse_status.eq.error,positional_war_status.eq.error,last_pulsed_at.gte.${since48h}`,
+          `power_pulse_status.eq.error,positional_war_status.eq.error,manager_ledger_status.eq.error,last_pulsed_at.gte.${since48h}`,
         )
         .order("last_pulsed_at", { ascending: false, nullsFirst: false })
         .limit(CANDIDATE_LIMIT),
@@ -61,8 +71,8 @@ export default async function LeagueHealthPage() {
 
   const rows = ((candidates.data ?? []) as LeagueHealthRow[]).filter(isFault);
   rows.sort((a, b) => {
-    const aErr = a.power_pulse_status === "error" || a.positional_war_status === "error";
-    const bErr = b.power_pulse_status === "error" || b.positional_war_status === "error";
+    const aErr = hasError(a);
+    const bErr = hasError(b);
     if (aErr !== bErr) return aErr ? -1 : 1;
     return timeMs(b.last_pulsed_at) - timeMs(a.last_pulsed_at);
   });
@@ -77,10 +87,10 @@ export default async function LeagueHealthPage() {
           League health
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-ink-muted">
-          Power Pulse and Positional WAR both refresh per league, on view, with
-          their own backoff. This page shows whether that is working: counts by
-          status, and every league whose refresh is either erroring or has gone
-          quiet while the league itself is active.
+          Power Pulse, Positional WAR and the Manager Ledger all refresh per
+          league, on view, with their own backoff. This page shows whether that
+          is working: counts by status, and every league whose refresh is either
+          erroring or has gone quiet while the league itself is active.
         </p>
       </div>
 
@@ -91,9 +101,10 @@ export default async function LeagueHealthPage() {
         >
           Counts by status
         </h2>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatusCountCard title="Power Pulse" counts={powerPulseCounts} />
           <StatusCountCard title="Positional WAR" counts={positionalWarCounts} />
+          <StatusCountCard title="Manager Ledger" counts={managerLedgerCounts} />
         </div>
         <div className="mt-3 rounded-card border border-line bg-surface/60 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
@@ -136,8 +147,8 @@ export default async function LeagueHealthPage() {
           <div className="mt-4 overflow-x-auto rounded-card border border-line">
             <table className="w-full text-sm">
               <caption className="sr-only">
-                Leagues with a Power Pulse or Positional WAR fault, newest
-                pulsed first, errors first
+                Leagues with a Power Pulse, Positional WAR or Manager Ledger
+                fault, newest pulsed first, errors first
               </caption>
               <thead>
                 <tr className="border-b border-line bg-surface/60 text-left text-xs uppercase tracking-wide text-ink-subtle">
@@ -152,6 +163,9 @@ export default async function LeagueHealthPage() {
                   </th>
                   <th scope="col" className="px-3 py-2">
                     Positional WAR
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Manager Ledger
                   </th>
                 </tr>
               </thead>
@@ -188,6 +202,14 @@ export default async function LeagueHealthPage() {
                         succeededAt={lg.positional_war_succeeded_at}
                       />
                     </td>
+                    <td className="px-3 py-2">
+                      <FeatureCell
+                        status={lg.manager_ledger_status}
+                        detail={lg.manager_ledger_detail}
+                        attemptedAt={lg.manager_ledger_attempted_at}
+                        succeededAt={lg.manager_ledger_succeeded_at}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -203,7 +225,7 @@ export default async function LeagueHealthPage() {
 
 async function countByStatus(
   admin: ReturnType<typeof createAdminClient>,
-  column: "power_pulse_status" | "positional_war_status",
+  column: "power_pulse_status" | "positional_war_status" | "manager_ledger_status",
 ): Promise<Record<Status, number>> {
   const counts = {} as Record<Status, number>;
   await Promise.all(
@@ -260,8 +282,17 @@ function staleSignature(
   return Date.now() - timeMs(succeededAt) >= FORTY_EIGHT_HOURS_MS;
 }
 
+/** True when any of the three per-league models reports an error. */
+function hasError(lg: LeagueHealthRow): boolean {
+  return (
+    lg.power_pulse_status === "error" ||
+    lg.positional_war_status === "error" ||
+    lg.manager_ledger_status === "error"
+  );
+}
+
 function isFault(lg: LeagueHealthRow): boolean {
-  if (lg.power_pulse_status === "error" || lg.positional_war_status === "error") return true;
+  if (hasError(lg)) return true;
   if (
     staleSignature(lg.last_pulsed_at, lg.power_pulse_attempted_at, lg.power_pulse_succeeded_at)
   ) {
@@ -272,6 +303,15 @@ function isFault(lg: LeagueHealthRow): boolean {
       lg.last_pulsed_at,
       lg.positional_war_attempted_at,
       lg.positional_war_succeeded_at,
+    )
+  ) {
+    return true;
+  }
+  if (
+    staleSignature(
+      lg.last_pulsed_at,
+      lg.manager_ledger_attempted_at,
+      lg.manager_ledger_succeeded_at,
     )
   ) {
     return true;

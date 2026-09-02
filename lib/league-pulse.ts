@@ -18,6 +18,8 @@ import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import { refreshPowerPulse } from "@/lib/league-power-pulse";
 import { refreshPositionalWar } from "@/lib/league-positional-war";
+import { refreshManagerLedger } from "@/lib/league-manager-ledger";
+import { coalesce } from "@/lib/request-coalesce";
 import { captureLeagueDraftSelections } from "@/lib/league-draft-selections";
 import { normalizeDraftPicks } from "@/lib/sleeper-draft-picks";
 import {
@@ -66,28 +68,9 @@ export type LeaguePulseCoreResult =
 
 type ServiceClient = SupabaseClient<Database>;
 
-/**
- * In-flight sync deduplication.
- *
- * A single page render fans out into several server components, and a user
- * hitting reload on a slow cold load starts a second render before the first
- * finishes. Without this, each of those repeats the whole Sleeper sync against
- * the same league. Keyed work shares one promise; the entry is dropped as soon
- * as it settles, so this is a request coalescer and not a cache.
- */
-const inFlight = new Map<string, Promise<unknown>>();
-
-function coalesce<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const existing = inFlight.get(key) as Promise<T> | undefined;
-  if (existing) return existing;
-  const started = run();
-  inFlight.set(key, started);
-  void started.then(
-    () => inFlight.delete(key),
-    () => inFlight.delete(key),
-  );
-  return started;
-}
+// The in-flight coalescer moved to lib/request-coalesce.ts when the Manager
+// Ledger needed the same guarantee: it is imported BY this file, so importing
+// the helper back out of here would close a cycle. Behaviour is unchanged.
 
 /**
  * Decide whether this league's power rankings need recomputing. Returns true
@@ -141,6 +124,11 @@ export async function pulseLeague(
   const derived = await pulseLeagueDerived(supabase, core.leagueRowId, {
     force: options.force,
     resynced: !core.cached,
+    // `pulseLeague` is the "do everything" entry point: it is what
+    // `npm run pulse:league` and the admin refresh endpoint call, and neither
+    // has a Suspense boundary to protect. Pages call the two halves separately
+    // and leave this off. See the default in pulseLeagueDerived.
+    includeManagerLedger: true,
   });
 
   return {
@@ -392,10 +380,28 @@ export async function pulseLeagueCore(
 export async function pulseLeagueDerived(
   supabase: ServiceClient,
   leagueRowId: string,
-  options: { force?: boolean; resynced?: boolean; includePositionalWar?: boolean } = {},
+  options: {
+    force?: boolean;
+    resynced?: boolean;
+    includePositionalWar?: boolean;
+    includeManagerLedger?: boolean;
+  } = {},
 ): Promise<{ transactions: number }> {
-  const { force = false, resynced = false, includePositionalWar = true } = options;
-  return coalesce(`derived:${leagueRowId}:${force}:${includePositionalWar}`, async () => {
+  const {
+    force = false,
+    resynced = false,
+    includePositionalWar = true,
+    // DEFAULTS OFF, WHICH IS THE OPPOSITE POLARITY TO ITS SIBLINGS AND IS
+    // DELIBERATE. Exactly one surface renders a ledger, and it awaits the
+    // compute in its own Suspense boundary. Defaulting this on put a full
+    // season of reads on the critical path of eight other pages plus the
+    // hover warm-up endpoint and the relay cron, none of which display it.
+    // Opting in is one flag on one page; opting out was eleven call sites and
+    // every new one would have had to remember.
+    includeManagerLedger = false,
+  } = options;
+  const key = `derived:${leagueRowId}:${force}:${includePositionalWar}:${includeManagerLedger}`;
+  return coalesce(key, async () => {
     const startedAt = Date.now();
 
     const { data: league } = await supabase
@@ -522,6 +528,18 @@ export async function pulseLeagueDerived(
       // and want one call that does everything.
       includePositionalWar
         ? timed("positional-war", () => refreshPositionalWar(supabase, leagueRowId, { force }))
+        : Promise.resolve(),
+
+      // Manager Ledger: how well each manager has played the roster they have.
+      // Reads only rows already stored (settled matchups, transactions, draft
+      // selections), makes no Sleeper request, and owns its own failure like
+      // every other stage here.
+      //
+      // Only ever true when a caller asks for it: the Decisions page's own
+      // boundary, `npm run pulse:league`, and the admin refresh endpoint. See
+      // the default above for why the polarity is inverted.
+      includeManagerLedger
+        ? timed("manager-ledger", () => refreshManagerLedger(supabase, leagueRowId, { force }))
         : Promise.resolve(),
 
       // Completed drafts into the pick ledger. A finished draft never changes,
@@ -851,6 +869,22 @@ async function upsertLeagueUsers(
   );
 }
 
+/**
+ * The week a transaction happened, from whichever field Sleeper populated.
+ *
+ * `leg` is the one that is actually present: it is set on 100% of the rows we
+ * hold, while `week` has never once arrived. Both are read so a payload
+ * carrying either is handled, and anything that is not a positive integer
+ * resolves to null rather than to a zero that would sort ahead of week 1.
+ */
+export function transactionWeek(t: { week?: number | null; leg?: number | null }): number | null {
+  for (const candidate of [t.week, t.leg]) {
+    const n = Number(candidate);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  return null;
+}
+
 async function upsertTransactions(
   supabase: ServiceClient,
   leagueRowId: string,
@@ -866,7 +900,14 @@ async function upsertTransactions(
       sleeper_transaction_id: t.transaction_id,
       type: t.type,
       status: t.status ?? null,
-      week: t.week ?? null,
+      // Sleeper calls it `leg`, not `week`. Reading `t.week` stored null on
+      // every transaction ever synced, which broke three things at once: the
+      // week filter and its facet list on the Transactions page had nothing to
+      // offer, every row rendered without its week, and the incremental sync
+      // below (which finds the newest stored week to resume from) found null
+      // and walked the whole history from week 0 on every single resync.
+      // `week` is kept as the first choice in case Sleeper ever populates it.
+      week: transactionWeek(t),
       season,
       adds: (t.adds ?? {}) as unknown as Database["public"]["Tables"]["league_transactions"]["Insert"]["adds"],
       drops: (t.drops ?? {}) as unknown as Database["public"]["Tables"]["league_transactions"]["Insert"]["drops"],
