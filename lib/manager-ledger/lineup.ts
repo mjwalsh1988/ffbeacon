@@ -371,15 +371,9 @@ export function summariseLineup(weeks: GradedWeek[]): LineupLedger {
     bestLineupRecord,
     winsLeftOnBench,
     weeksWithUngradedSlots,
-    // The stored subset. See GradedWeek in ./types.ts for the line this draws.
-    weeks: weeks.map((w) => ({
-      week: w.week,
-      officialPoints: w.officialPoints,
-      pointsLeft: w.pointsLeft,
-      opponentPoints: w.opponentPoints,
-      outcome: w.outcome,
-      bestLineupOutcome: w.bestLineupOutcome,
-      biggestMiss: w.biggestMiss,
-    })),
+    // Stored whole since ledger-4. The three fields this used to drop are what
+    // the Lineups page's per-week efficiency chart is built from; see the note
+    // on `setPoints` in ./types.ts for why they cannot be derived instead.
+    weeks,
   };
 }

@@ -29,6 +29,47 @@ import type { ScheduleSlot, SlotGroup } from "./types";
  */
 export const NON_STARTING_TOKENS: ReadonlySet<string> = NON_STARTING_SLOTS;
 
+/**
+ * The visible name for each position block, and the short form of a slot label
+ * for a narrow column.
+ *
+ * BOTH LIVE HERE BECAUSE TWO SECTIONS RENDER THEM. The matchup table and the
+ * Lineups board each had their own copy, and the copies had already drifted:
+ * one said "Quarterbacks" where the other said "Quarterback", down the whole
+ * list. Two pages inside League Pulse printing different headings for the same
+ * slot group is the kind of difference nobody files a bug about and everybody
+ * notices.
+ *
+ * The `Record<SlotGroup, string>` type is what keeps them honest: adding a
+ * group to the union fails every consumer to compile until a label exists.
+ */
+export const SLOT_GROUP_LABEL: Record<SlotGroup, string> = {
+  QB: "Quarterbacks",
+  RB: "Running backs",
+  WR: "Wide receivers",
+  TE: "Tight ends",
+  FLEX: "Flex",
+  SUPERFLEX: "Superflex",
+  IDP: "Defensive players",
+  K: "Kickers",
+  DEF: "Team defense",
+};
+
+/**
+ * The phone-width form of a slot label.
+ *
+ * Only SUPERFLEX needs one: every other token is four characters or fewer and
+ * fits the column as it is. Anything not listed falls through unchanged rather
+ * than being truncated, so a new slot token cannot quietly turn into nonsense.
+ */
+const SHORT_SLOT_LABEL: Record<string, string> = {
+  SUPERFLEX: "SF",
+};
+
+export function shortSlotLabel(label: string): string {
+  return SHORT_SLOT_LABEL[label] ?? label;
+}
+
 /** Display grouping, top to bottom, in the order the matchup table renders. */
 export const SLOT_GROUP_ORDER: readonly SlotGroup[] = [
   "QB",

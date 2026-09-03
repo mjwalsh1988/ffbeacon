@@ -5,6 +5,9 @@
  * the Signal Streak, and nothing server-side asks twice, so the confirmation
  * has to happen here or a misclick silently costs the player their streak.
  *
+ * `desktopPlacement="center"`, same reasoning as burn-confirm-dialog.tsx: a
+ * decision, not a detail view.
+ *
  * Built on SlideUpDialog, which already gives the house modal behavior this
  * needs with no per-caller work: slides up from the bottom on mobile, centers
  * on desktop.
@@ -35,6 +38,7 @@ export function SkipConfirmDialog({ open, pending, onConfirm, onClose }: SkipCon
       onClose={onClose}
       label="Confirm skipping this round"
       closeLabel="Close without skipping the round"
+      desktopPlacement="center"
     >
       <div className="p-5 sm:p-6">
         <h3 className="text-lg font-semibold tracking-tight text-ink">Skip this round?</h3>

@@ -3,20 +3,27 @@
  * (league-side-nav.tsx) and the mobile sheet (league-mobile-nav.tsx) read from
  * here, so a section can never appear in one and go missing from the other.
  *
- * Overview and Teams are inline views on `/leagues/[id]`; Schedules, Power Pulse,
- * Positional WAR, Decisions, Trade Ideas, and Transactions are full routes of
- * their own.
+ * Overview and Teams are inline views on `/leagues/[id]`; Lineups, Schedules,
+ * Power Pulse, Positional WAR, Decisions, Trade Ideas, and Transactions are
+ * full routes of their own.
+ *
  * `leagueTabHref` knows which is which and forwards the searched Sleeper handle
  * either way, so the in-view switcher and the Teams-tab owner default survive
  * every hop.
+ *
+ * There is deliberately no Activity entry. The activity log was a full route
+ * for a while and it rendered the same panel, from the same loader, that the
+ * overview already carries; the only thing the page added was a team filter,
+ * which now lives on the panel itself. A whole section for one filter is a
+ * section a reader has to learn about before they can use it.
  */
 
 import type { NavIconName } from "@/components/app-shell/nav-icons";
 
 export type LeagueTabId =
   | "overview"
-  | "activity"
   | "teams"
+  | "lineups"
   | "schedules"
   | "power-pulse"
   | "positional-war"
@@ -45,16 +52,16 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
     icon: "dashboard",
   },
   {
-    id: "activity",
-    label: "Activity",
-    hint: "Everything that has happened in this league",
-    icon: "history",
-  },
-  {
     id: "teams",
     label: "Teams",
     hint: "Every roster side by side",
     icon: "users",
+  },
+  {
+    id: "lineups",
+    label: "Lineups",
+    hint: "Who you are starting this week, and what to change",
+    icon: "layers",
   },
   {
     id: "schedules",
@@ -104,7 +111,7 @@ export function leagueTabHref(
   if (searchedUsername) qs.set("username", searchedUsername);
 
   if (
-    tabId === "activity" ||
+    tabId === "lineups" ||
     tabId === "transactions" ||
     tabId === "power-pulse" ||
     tabId === "positional-war" ||

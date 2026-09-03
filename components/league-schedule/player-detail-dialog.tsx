@@ -23,12 +23,24 @@
  *   would be a 404 on every player, so there is no link. Add `slug` to
  *   SchedulePlayer and the link becomes three lines here.
  *
- * ACCESSIBLE NAME: SlideUpDialog takes a `label` and owns its own
- * aria-labelledby, with no prop to point it at a heading of ours. The visible
- * h2 below is therefore worded identically to the label passed in, so the name
- * a screen reader announces and the name on the screen cannot drift apart.
+ * ACCESSIBLE NAME: the visible h2 IS the dialog's name, via SlideUpDialog's
+ * `labelledBy`. Naming it with the `label` string instead made a reader hear
+ * the name and then immediately hear the heading saying the identical words,
+ * which is two announcements for one fact. `label` is still passed, because it
+ * is the contract that stops a dialog ending up unnamed if the id ever fails to
+ * resolve.
+ *
+ * THE `extras` SLOT IS WHY THERE IS STILL ONLY ONE OF THESE. The Lineups
+ * section knows two more things about a player than the Schedule section does
+ * (his Positional WAR and the betting market's expectation for his game), and
+ * shipping a near-identical second dialog to say them is how two dialogs end up
+ * disagreeing about the first eleven rows. `LineupPlayer` extends
+ * `SchedulePlayer`, so that section hands one straight in and appends its own
+ * `<Row>` elements. The slot renders INSIDE the same `<dl>`, so the extra rows
+ * are part of the same description list rather than a stray group after it.
  */
 
+import type { ReactNode } from "react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
 import type { SchedulePlayer } from "@/lib/league-schedule/types";
@@ -89,12 +101,19 @@ export function PlayerDetailDialog({
   week,
   isFinal,
   onClose,
+  extras,
 }: {
   /** Null closes the dialog. The parent keeps the selection. */
   player: SchedulePlayer | null;
   week: number;
   isFinal: boolean;
   onClose: () => void;
+  /**
+   * Extra `<Row>` elements, appended inside the same description list. Built by
+   * the caller because only the caller knows what it holds beyond
+   * `SchedulePlayer`. See the header.
+   */
+  extras?: ReactNode;
 }) {
   // Nothing selected, nothing rendered. SlideUpDialog already returns null when
   // it is closed, so mounting it empty would only add a component that draws
@@ -102,19 +121,26 @@ export function PlayerDetailDialog({
   if (!player) return null;
 
   const title = `${player.name}, week ${week}`;
+  const headingId = `player-detail-${player.sleeperId}`;
   const opponent = opponentLabel(player.nflOpponent, player.nflIsHome);
   // Read as a phrase in the identity line, where it sits in running text, and
   // as a bare code in the term list below, where the label supplies the noun.
   const opponentPhrase = opponentWords(player.nflOpponent, player.nflIsHome);
 
   return (
-    <SlideUpDialog open onClose={onClose} label={title} closeLabel={`Close ${player.name}`}>
+    <SlideUpDialog
+      open
+      onClose={onClose}
+      label={title}
+      labelledBy={headingId}
+      closeLabel={`Close ${player.name}`}
+    >
       <div className="px-5 pb-6 pt-1">
         <header className="flex items-start gap-3 border-b border-line pb-4">
           <PlayerHeadshot sleeperId={player.sleeperId} name="" size={48} className="shrink-0" />
           <div className="min-w-0 flex-1">
             <p className={EYEBROW}>Week {week}</p>
-            <h2 className="mt-0.5 truncate text-lg font-bold tracking-tight text-ink">
+            <h2 id={headingId} className="mt-0.5 truncate text-lg font-bold tracking-tight text-ink">
               {title}
             </h2>
             <p className="mt-0.5 text-xs text-ink-muted">
@@ -186,13 +212,18 @@ export function PlayerDetailDialog({
                 : "Active, and startable as things stand."
             }
           />
+          {extras}
         </dl>
       </div>
     </SlideUpDialog>
   );
 }
 
-function Row({ term, value }: { term: string; value: string }) {
+/**
+ * One labelled fact. Exported so the Lineups section builds its extra rows out
+ * of the same component rather than a lookalike that drifts a padding value.
+ */
+export function Row({ term, value }: { term: string; value: string }) {
   return (
     <div className="rounded-card border border-line bg-base/50 px-3 py-2.5">
       <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">

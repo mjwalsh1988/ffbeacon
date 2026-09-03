@@ -6,6 +6,10 @@
  * burn_confirmation_required unless the request carries confirmBurn: true.
  * This sheet is the explicit confirmation step that produces that flag.
  *
+ * `desktopPlacement="center"` because this is a decision rather than a detail
+ * view: covering the page is the point, and a full-height right rail holding two
+ * sentences and two buttons would be mostly empty.
+ *
  * Built on SlideUpDialog, whose auto-focus targets the FIRST focusable
  * element inside its sheet, which is its own close button (the full-screen
  * backdrop button lives outside that scope, see
@@ -47,6 +51,7 @@ export function BurnConfirmDialog({
       onClose={onClose}
       label="Confirm signal burnout"
       closeLabel="Close without burning your signal"
+      desktopPlacement="center"
     >
       <div className="p-5 sm:p-6">
         <h3 className="text-lg font-semibold tracking-tight text-ink">Burn out your signal?</h3>

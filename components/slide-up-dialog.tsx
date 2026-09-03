@@ -5,10 +5,24 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 /**
- * Responsive slide-up dialog. Mobile slides up from the viewport bottom
- * (full-width, rounded top corners). Desktop centers in the viewport
- * (constrained width, fully rounded) but reuses the same slide-up
- * animation so the visual language stays consistent across breakpoints.
+ * The house dialog. Mobile slides UP from the bottom edge (full width, rounded
+ * top corners). Desktop slides IN FROM THE RIGHT as a full-height side panel,
+ * which is what `desktopPlacement` selects between.
+ *
+ * WHY THE TWO BREAKPOINTS MOVE IN DIFFERENT DIRECTIONS
+ *   A phone has one thumb and a bottom edge, so a sheet that rises from it is
+ *   reachable. A desktop reader has a wide viewport and a page they were
+ *   already reading, and a centred box drops on top of that page and hides the
+ *   thing they opened it from. A right-edge panel leaves the page in place, so
+ *   a lineup row and the panel explaining it are on screen together.
+ *
+ *   `desktopPlacement="center"` is still there for a dialog that is a DECISION
+ *   rather than a detail view (a confirm), where covering the page is the
+ *   point and a full-height rail would be mostly empty.
+ *
+ *   Only the geometry changes. The focus trap, the Escape handler, the
+ *   backdrop, the scroll lock and the accessible name are identical either
+ *   way, so nothing about how the dialog is operated depends on the viewport.
  *
  * Differs from {@link BottomSheet} only in viewport behavior, kept as a
  * separate component so existing mobile-only callers aren't accidentally
@@ -39,6 +53,20 @@ import { X } from "lucide-react";
  *   parent does. Memoizing the caller's handler fixes one caller; this fixes
  *   all of them. Do not put `onClose` back in the dep array.
  */
+/**
+ * What the focus trap counts as focusable.
+ *
+ * FORM FIELDS ARE IN IT, and their absence was a live hole rather than a
+ * theoretical one: the note above about a select inside a dialog stealing focus
+ * describes a caller that exists, and a trap that cannot see that select would
+ * let Tab walk straight out of the dialog and into the page behind it. Written
+ * once rather than twice, because the mount-focus query and the Tab handler
+ * disagreeing about what is focusable is how the last element in a dialog
+ * becomes unreachable.
+ */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function SlideUpDialog({
   open,
   onClose,
@@ -46,6 +74,7 @@ export function SlideUpDialog({
   labelledBy,
   showClose = true,
   closeLabel = "Close",
+  desktopPlacement = "right",
   children,
 }: {
   open: boolean;
@@ -72,6 +101,16 @@ export function SlideUpDialog({
   showClose?: boolean;
   /** Accessible name for the built-in close button. */
   closeLabel?: string;
+  /**
+   * Where the dialog sits from the `sm` breakpoint up.
+   *
+   * "right" (the default) is a full-height panel anchored to the right edge,
+   * sliding in horizontally. "center" is the older centred box, and is for
+   * dialogs that are a decision rather than a detail view.
+   *
+   * Below `sm` this has no effect at all: every dialog is a bottom sheet.
+   */
+  desktopPlacement?: "right" | "center";
   children: ReactNode;
 }) {
   const labelId = useId();
@@ -105,7 +144,7 @@ export function SlideUpDialog({
     // an off-screen panel confuses screen readers.
     const focusTimer = window.setTimeout(() => {
       const focusables = sheetRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        FOCUSABLE,
       );
       focusables?.[0]?.focus();
     }, 80);
@@ -116,7 +155,7 @@ export function SlideUpDialog({
         onCloseRef.current();
       } else if (event.key === "Tab" && sheetRef.current) {
         const focusables = sheetRef.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          FOCUSABLE,
         );
         if (focusables.length === 0) return;
         const first = focusables[0];
@@ -143,12 +182,42 @@ export function SlideUpDialog({
 
   if (!mounted || !open) return null;
 
+  const onRight = desktopPlacement === "right";
+
+  // Geometry, and nothing else, differs between the two placements. Written out
+  // as whole class strings rather than assembled from fragments, because a
+  // Tailwind class built by concatenation is a class Tailwind never sees.
+  const shellClass = onRight
+    ? "fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end"
+    : "fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6";
+
+  const panelClass = onRight
+    ? "relative flex w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:h-full sm:max-w-xl sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-l sm:border-r-0"
+    : "relative flex w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:rounded-modal sm:border";
+
+  // The bottom sheet always rises; the desktop panel slides in from the right
+  // and must NOT also be offset vertically, or it arrives on a diagonal.
+  const enterClass = onRight
+    ? entered
+      ? "translate-y-0 sm:translate-x-0"
+      : "translate-y-full sm:translate-y-0 sm:translate-x-full"
+    : entered
+      ? "translate-y-0"
+      : "translate-y-full";
+
+  // A phone caps the sheet so the page behind stays visible above it. The
+  // desktop rail is full height, so the cap has to be lifted there rather than
+  // pinned in an inline style that no breakpoint can reach.
+  const heightClass = onRight
+    ? "max-h-[min(90vh,720px)] sm:max-h-none"
+    : "max-h-[min(90vh,720px)]";
+
   const portal = (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy ?? labelId}
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
+      className={shellClass}
     >
       {!labelledBy && (
         <span id={labelId} className="sr-only">
@@ -165,14 +234,9 @@ export function SlideUpDialog({
       />
       <div
         ref={sheetRef}
-        className={`relative flex w-full max-w-2xl flex-col rounded-t-modal border-x border-t border-line bg-surface-elevated shadow-2xl shadow-black/60 transition-transform duration-300 ease-out motion-reduce:transition-none sm:rounded-modal sm:border ${
-          entered ? "translate-y-0" : "translate-y-full"
-        }`}
+        className={`${panelClass} ${heightClass} ${enterClass}`}
         style={{
           paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
-          // Pull desktop view slightly above center so it doesn't fight the
-          // viewport's vertical centroid, feels more "modal" than "panel".
-          maxHeight: "min(90vh, 720px)",
         }}
       >
         {/* Top bar: drag handle centred on mobile, close button on the right

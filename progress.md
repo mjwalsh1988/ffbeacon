@@ -10743,3 +10743,343 @@ ML-T013 | completed | Dress the Decisions page to match the rest of the site, an
        than three phrasings of each.
      | verified: yes (3,711 tests green, clean build, checked in the browser
        against a real 2025 league and a preseason league)
+
+T712 | completed | Every projection read names the source it reads
+     | files: lib/projections/source.ts, lib/projections/read.ts,
+     |   lib/projections/source-guard.test.ts, lib/power-pulse/load.ts,
+     |   lib/league-schedule/data.ts, lib/league-power-pulse.ts,
+     |   lib/league-positional-war.ts, lib/positional-war/load.ts,
+     |   lib/positional-war/fingerprint.ts, lib/breakdown/league-impact.ts,
+     |   lib/faab/league-faab.ts, lib/faab/outlook.ts, lib/trade-impact/load.ts,
+     |   lib/positional-war/upgrade.ts,
+     |   supabase/migrations/0248_player_weekly_projections_source_updated_index.sql
+     | depends on: T-projection-engine
+     | Only lib/projections/read.ts resolved which projection source a reader
+     | got. Eight other surfaces called loadProjections/loadAccuracy with no
+     | source, so flipping beaconProjections.enabled would have moved some
+     | pages onto our own numbers and left the ones beside them on Sleeper's.
+     | resolveProjectionSourceForWindow is the one resolver; it makes no query
+     | at all while the feature is disabled, so this costs nothing today.
+     | Two latent bugs found on the way. loadProjections with no source applied
+     | NO filter rather than defaulting to Sleeper, so once ffbeacon rows exist
+     | it returns two rows per player-week and its own completeness guard
+     | cannot notice because the count is unfiltered too; it now defaults.
+     | lib/positional-war/load.ts had the same hole on its own queries: prod
+     | already holds 18,563 ffbeacon rows beside 18,563 sleeper ones, so every
+     | cached curve was computed on a doubled universe. Source is now filtered,
+     | in the data-cache keys, and in the fingerprint (payload v3), so the flip
+     | invalidates rather than serving the old source for 12 hours. Power Pulse
+     | gets the same guarantee by folding the source into its stored
+     | model_version, because modelVersion alone cannot see coverage changing.
+     | Migration 0248 is the index that read needed: without it the new source
+     | filter cost 15 ms warm and 2367 ms cold on the warm path of EVERY league
+     | route (5091 buffers, 18,565 rows discarded). With it, 0.082 ms and 3
+     | buffers. Measured before and after on prod.
+     | source-guard.test.ts is the repo-wide guard that keeps this true, modelled
+     | on raw-column-guard.test.ts, with an allow-list that names a reason per
+     | entry. It rejects a literal `undefined` in the source position and sees
+     | through a namespaced call, which were the two one-line ways around it.
+     | verified: yes (3,818 tests green, clean build, EXPLAIN ANALYZE on prod)
+
+T713 | completed | The activity log stops being a route of its own
+     | files: app/leagues/[league_id]/activity/page.tsx (deleted),
+     |   app/leagues/[league_id]/page.tsx, next.config.ts,
+     |   components/league-shell/nav-items.ts,
+     |   components/league-activity/activity-panel.tsx,
+     |   components/league-activity/activity-filters.tsx,
+     |   lib/league-activity/load.ts
+     | depends on: T712
+     | The route rendered the same panel from the same loader the overview
+     | already carries. The only thing it added was the per-team filter, so it
+     | was a second URL for one control. The filter now sits on the panel behind
+     | a details disclosure that names the active team in its summary, and the
+     | timestamp explainer came across as a second disclosure with a heading, so
+     | a reader jumping by heading can still find it. Permanent 308 to the
+     | overview, kept forever: the Copy link button published that path.
+     | The row cap is what the removal costs (200 down to 40) and the escape it
+     | left behind was broken: with 14 as both the default window and the bottom
+     | rung, "Narrow to the last 14 days" linked to the window the reader was
+     | already on. Added a 7-day rung and stopped rendering the link when it
+     | would go nowhere.
+     | The disclosure passes `open` only when it should be true. Passing the
+     | boolean let React force it shut on any soft navigation that did not set a
+     | team filter, collapsing the control under a reader mid-scan.
+     | verified: yes (3,818 tests green, clean build)
+
+T714 | completed | Lineups: one team, one week, and what to change about it
+     | files: app/leagues/[league_id]/lineups/page.tsx,
+     |   lib/league-lineups/{types,build,advice,weeks,data,rate-limit}.ts,
+     |   lib/nfl-game-environment.ts,
+     |   components/league-lineups/{format,lineup-summary,lineup-board,
+     |   optimizer-panel,roster-moves,lineup-controls}.tsx,
+     |   components/league-schedule/{player-detail-dialog,matchup-table}.tsx,
+     |   lib/league-schedule/slots.ts
+     | depends on: T712
+     | Starters grouped by position block, then bench, IR and taxi, with the
+     | projection, the matchup multiplier, the game's implied team total, the
+     | beat rate and the Positional WAR behind each player. Then the optimiser,
+     | a cut list and free agent suggestions framed by what the team is playing
+     | for (a redraft league is always contending; there is no next season).
+     | No new model. Slots, set lineup, projections, optimal fill, rest-of-season
+     | totals, free agency, market values and the WAR read are all the existing
+     | functions. The player dialog was extended with an `extras` slot rather
+     | than forked. GROUP_LABEL and shortSlotLabel moved into
+     | lib/league-schedule/slots.ts after the second copy drifted
+     | ("Quarterbacks" against "Quarterback").
+     | nfl_game_odds had one consumer, the projection builder, and showed
+     | nowhere. lib/nfl-game-environment.ts is the read path that puts the
+     | implied team total on a screen: the size of the pie, beside the slice.
+     | The optimiser is run ONCE and diffed on membership, not slot assignment,
+     | so reshuffles are silently ignored. Review caught two real bugs in that
+     | diff: pairing by value alone printed "start the running back over the
+     | quarterback" with a gain belonging to neither swap (now paired by slot
+     | eligibility), and counting an ungradable starter in the set total but not
+     | the candidate pool made the page report a perfect lineup on a week it
+     | could not measure (both sides now come from one pool). Both are pinned by
+     | tests written from the reviewer's own counterexample.
+     | The free agent panel is the only unbounded work on an unauthenticated
+     | GET, so it is metered. Only that panel: the limiter fails closed, and an
+     | outage must not take the lineup down with it.
+     | verified: yes (3,818 tests green, clean build; four independent reviews,
+     | findings fixed except the follow-ups listed in the session report)
+
+T715 | completed | Lineups: hear every metric, and try the change before you make it
+     | files: components/league-lineups/{lineup-board,slot-swap-dialog,
+     |   lineup-summary,optimizer-panel,roster-moves,lineup-controls}.tsx,
+     |   lib/league-lineups/{simulate,simulate.test,types,data}.ts,
+     |   app/leagues/[league_id]/lineups/page.tsx,
+     |   components/slide-up-dialog.tsx,
+     |   app/games/signal-scout/{burn,skip}-confirm-dialog.tsx
+     | depends on: T714
+     | Every figure on the board was being drawn twice: an aria-hidden span with
+     | the digits and an sr-only twin with the sentence. It reads correctly line
+     | by line and it goes silent the moment somebody points at a number, which
+     | is what "the metrics are not announced when I hover" turned out to mean.
+     | Each figure is now one real text node with only the MISSING words
+     | appended inside the same element, and the metric chips moved OUT of the
+     | player button, because a button flattens its contents into one name and a
+     | beat rate inside one could only ever be read as clause nine of a sentence
+     | about the whole player. aria-hidden survives on icons, the hairline and
+     | the slot abbreviations, whose spelled-out form sits on the same element.
+     | The one overlay on the page without pointer-events-none was the control
+     | bar's hairline. It has it now, like every other copy on the site.
+     | Position blocks are separated by a heavy rule and a banded heading that
+     | carries the slot count, rather than by the same one pixel divider that
+     | runs between rows.
+     | The slot label is now a button that opens a what-if: swap the starter for
+     | anyone on the bench and see the projected points, the chance of beating
+     | this week's opponent and the gap to the best lineup move, before and
+     | after. lib/league-lineups/simulate.ts is pure and client-safe and
+     | introduces NO model: a swap moves the total by (in minus out), variances
+     | add, and winProbability is the same function the Schedules board uses.
+     | The optimum does not depend on which nine are seated, so the remaining
+     | bench gap is optimalTotal minus the new set total with no second fill.
+     | Bench only: IR and taxi cannot start, and a starter-to-starter shuffle is
+     | worth exactly zero, which the optimiser panel already says out loud.
+     | A settled week offers no button at all. The lineup cannot be changed and
+     | the Decisions page already grades that week on what players actually did.
+     | The button's accessible name IS the row header, so it is the spelled-out
+     | slot description plus four words. aria-describedby was the first attempt
+     | and it cannot work: the element it points at lands back inside the th.
+     | The win probability needs an opponent, so LineupView carries one, read
+     | from the week's matchup pairing plus league_power_pulse_cache.weekly for
+     | that one roster. Same figure the Schedules board uses, so the two pages
+     | cannot disagree about the opponent. It is their BEST lineup against the
+     | reader's SET one, which is a different question from the Schedules
+     | number, and the panel says so rather than leaving two win probabilities
+     | on the site with no explanation for the gap.
+     | SlideUpDialog gained desktopPlacement. Desktop dialogs slide in from the
+     | right as a full-height panel now, leaving the page a reader was reading
+     | in place; mobile still rises from the bottom edge. The two Signal Scout
+     | confirms keep the centred placement, because a decision is meant to cover
+     | the page and a full-height rail holding two sentences is mostly empty.
+     | Review caught six real things. The slot button failed WCAG 2.5.3 Label in
+     | Name on every abbreviated slot in every league: the visible label is "QB"
+     | or "SF" and the accessible name was "quarterback, try a different
+     | player", so speech input had nothing to match. The button's name now
+     | starts with the visible token, and the th carries its own aria-label so
+     | the row header stays one word instead of echoing the button onto all six
+     | cells. Three cells announced their own figure twice ("0.42, 0.42
+     | Positional WAR", "62% beat rate, 62%, beats it more often than not",
+     | "high scoring, high scoring"): the appended words are completions now,
+     | not repeats. The what-if's live region was populated at mount, so it fired
+     | on top of the dialog name and the focus move; it starts empty and the
+     | invitation is ordinary text. The impact block got a heading, because it
+     | is seventy atomic words with no way back to them. `canSimulate` gained
+     | `week >= currentWeek`: a past week Sleeper never marked final is not
+     | final and is still unplayable, which is the same test the waiver panel
+     | already makes. And the three figures in a row were rounded independently,
+     | so 52.6% to 53.2% printed "53% to 53%, +1"; the delta comes off the
+     | displayed values now.
+     | The focus trap did not count inputs, selects or textareas, so Tab could
+     | walk out of a dialog containing a form. The player detail dialog named
+     | itself twice (dialog name plus an identical heading) and now points at
+     | the heading.
+     | verified: yes (3,843 tests green, clean build; four independent reviews,
+     | every finding fixed except the two noted in the session report)
+
+T716 | completed | Every projection surface follows the engine, not a hardcoded word
+     | files: lib/projections/{current-source,source-constants}.ts,
+     |   lib/on-the-clock/{projection-board,pulse-service}.ts,
+     |   lib/breakdown/load-extras.ts, lib/player-profile.ts,
+     |   lib/player-profile-cache.ts, lib/faab/outlook.ts,
+     |   lib/draft-value/build.ts, lib/beam/projections/load.ts,
+     |   components/player-profile/{overview-tab,stats-tab,overview-sidebar,
+     |   weekly-projections}.tsx,
+     |   components/league-war/{summary,positional-war-panel,
+     |   positional-war-section}.tsx,
+     |   lib/projections/{source-guard,raw-column-guard}.test.ts
+     | depends on: T712
+     | T712 made every read NAME its source and left five surfaces on the debt
+     | ledger. This clears it, so the day beaconProjections.enabled is flipped
+     | the whole site moves together instead of in pieces.
+     | Three of the five were not merely stale, they were AMBIGUOUS. On The
+     | Clock's full-pool sweep, Beacon Breakdown's three reads and the player
+     | profile's two all key their results by (player, week) or (season, week)
+     | with no tiebreak, and none of them filtered a source: the moment an
+     | ffbeacon row exists beside a sleeper one, the pool sweep pushes both into
+     | one array and doubles every seasonPoints, and the others let whichever
+     | row Postgres returned last decide the page.
+     | The worst of them was BEAM's loadReliability, which POOLS the rows it
+     | gets back. Unfiltered, every player's sample size doubles and the beat
+     | rate becomes a blend of two engines being graded, reported as one
+     | engine's record.
+     | player_projection_accuracy is scoped per source too, and two readers
+     | (lib/draft-value/build.ts, lib/breakdown/load-extras.ts) had private
+     | loaders that ignored it. A reliability multiplier measures how one
+     | engine's numbers have landed; applying it to the other engine's numbers
+     | is the same error as reading the wrong column, with a plausible answer.
+     | The source is now in every cache key that outlives a flip: On The Clock's
+     | data fingerprint, its in-process memo key and its payload etag; the
+     | profile's two unstable_cache entries; the FAAB position curve's 24-hour
+     | one. Without that the switch would take a day to show up, or never.
+     | The player profile stops pinning Sleeper. It still reads the engine's OWN
+     | published number rather than our adjusted opinion of it, because the
+     | per-stat beat/miss comparison grades exactly that, but WHICH engine is
+     | resolved and both headings render its display name. The Positional WAR
+     | footnote does the same. A heading that says "Sleeper" over our numbers is
+     | worse than an unadjusted number honestly labelled.
+     | lib/projections/current-source.ts is the one resolver for surfaces that
+     | need to NAME the engine rather than query with it: global, hourly, and
+     | zero queries while the feature is off.
+     | Two enumeration reads stay pinned to Sleeper on purpose and say so:
+     | "which season do we hold projections for" and "who exists at this
+     | position". Sleeper is the coverage baseline every other source is
+     | measured against, and our builder mirrors its rows rather than adding
+     | any, so both are the same answer through half the rows.
+     | Review caught three real things and one performance trap.
+     | The statistics tab's beat/miss map is NOT season-scoped: it is read for
+     | every week of every season in the game log. Resolving its source would
+     | have emptied the projection overlay and the accuracy charts for 2024 and
+     | 2025 the day the engine is enabled, because our builder writes from the
+     | live week forward and has no history behind it. It is pinned to Sleeper
+     | permanently now, and that is the right answer rather than a compromise: a
+     | retrospective can only grade the engine that actually published a number
+     | at the time.
+     | `currentProjectionSourceCached` resolved over the whole season while every
+     | real read resolves from the live week forward, so one missed player-week
+     | in an already-played week would have made the Positional WAR footnote say
+     | "Sleeper" over an ffbeacon curve. It takes the window now, and the WAR
+     | panel asks about the curve's OWN from-week and through-week, which is the
+     | same window the fingerprint used.
+     | `availableProjectionSources` fires two exact counts, about 6.6ms each on
+     | the live database and growing per season, and a single page render reached
+     | it twice across fifteen call sites. Memoized in process for a minute, with
+     | a documented reset seam because a module-level cache otherwise makes the
+     | test suite depend on file order. Deliberately not unstable_cache: scripts
+     | import this module outside Next.
+     | Folding the source into On The Clock's fingerprint and etag unconditionally
+     | would have retired every stored board and every open draft room on the
+     | deploy that added it. Sleeper keeps the old shape; only the other engine
+     | changes the string, which is the only case the guarantee is about.
+     | KNOWN, AND A GO-LIVE PREREQUISITE RATHER THAN A BUG:
+     | `player_projection_accuracy` currently holds sleeper rows only, so every
+     | beat rate, availability rate and reliability multiplier falls to its
+     | neutral 1.0 default the moment the engine is enabled. That is the
+     | behaviour the already-shipped Power Pulse path has had since it started
+     | scoping accuracy by source; this change makes four more surfaces agree
+     | with it. Run `npm run calculate:projection-accuracy` after the ffbeacon
+     | builder and before flipping the switch.
+     | verified: yes (3,843 tests green, clean build; the source guard's
+     | allowlist is one entry shorter and the rest carry updated reasons)
+
+T717 | completed | Lineups after the whistle: a report, not a stale forecast
+     | files: lib/league-lineups/{status,recap,season,season-data}.ts (+ tests),
+     |   lib/league-lineups/{types,build,data}.ts,
+     |   components/league-lineups/{week-status,week-recap,season-context,
+     |   season-charts}.tsx, components/league-lineups/{lineup-board,
+     |   lineup-summary}.tsx, app/leagues/[league_id]/lineups/page.tsx,
+     |   lib/manager-ledger/{types,lineup,default-settings}.ts
+     | depends on: T715
+     | The page had one mode and a played week got the wrong one: a projection
+     | as the headline for a game already on the scoreboard, an optimiser
+     | offering changes, and a waiver panel for a week nobody can be claimed
+     | for. It has two now, and lib/league-lineups/status.ts decides which.
+     | "In progress" means points are on the board, not that the calendar says
+     | so. Sleeper publishes the current week's row from Tuesday with every
+     | score at zero, so a phase read off the week number labels four quiet days
+     | live and shows a roster of 0.0s as results.
+     | `actualsVisible` and `isFinal` are deliberately different switches. A
+     | live week DISPLAYS real points; the optimum stays graded on projections
+     | until the week settles, or a Sunday afternoon tells a manager they left
+     | forty points on the bench because three starters play at four o'clock.
+     | The optimiser panel does not render at all mid-week for that reason.
+     | On a settled week the score is the big number and the projection sits
+     | under it with the difference signed. Both, always: a 22 point week and a
+     | 22 point week that was supposed to be 9 are different Sundays.
+     | "Best you had" is the optimiser's deficit added to Sleeper's own total,
+     | never optimalTotal printed raw. The optimiser grades over gradable slots
+     | only, so the raw figure sits BELOW the official score in an IDP league.
+     | The season half is the Manager Ledger's, read and not rebuilt. That
+     | needed LedgerWeek to keep setPoints, optimalPoints and ungradedSlots,
+     | which it had been computing and dropping: efficiency derived from
+     | official over (official plus pointsLeft) adds the IDP slots to both
+     | halves and flatters every manager in an IDP league. Model version
+     | ledger-4, so every league rebuilds on its next view.
+     | Two charts, apart on purpose. Scored against best available is a DECISION
+     | gap; scored against projected is VARIANCE. Layered, a reader takes one
+     | for the other, which is how an efficiency number gets misused. Each is
+     | role="img" with a summary and a real table under a disclosure, visible
+     | rather than sr-only because a season of scores is something a sighted
+     | reader wants to copy too.
+     | The whole season section sits in its own Suspense boundary: a season of
+     | matchup rows, a season of projections and the ledger read, none of which
+     | is what a reader came for.
+     | Review caught six real things.
+     | A live week put the PROJECTION under the word "Scored so far": the
+     | headline fell through to optimization.setTotal, which grade() builds from
+     | projections while isFinal is false. LineupView carries a display-only
+     | liveTotal now, and says "not available" rather than substituting.
+     | The recap was built on showsResults, which is true mid-week, and
+     | Sleeper's players_points map holds a 0 for every player who has not
+     | played. A Monday-night starter therefore sat at the top of "Let you down"
+     | all Sunday. It is built on isFinal now, which is what every other
+     | retrospective in the product uses.
+     | The season chart's headline efficiency was scored over bestPossible,
+     | which is the exact ratio ledger-4 was introduced to avoid, sitting above
+     | a table and a panel that both used the gradable one. Three efficiencies
+     | on one screen, two of them disagreeing. rollUpEfficiency sums the
+     | gradable pair.
+     | The optimiser rendered in the "unsettled" phase, directly under a banner
+     | saying there is nothing to grade.
+     | Two scrolling regions had no tabIndex, so a keyboard user could not
+     | scroll either chart at all, and the dashed "best lineup" outline was
+     | 1.4:1 against the panel: the empty part of that outline IS the points
+     | left on the bench, so the chart's premise was invisible to a low-vision
+     | reader. Both fixed, along with the "--" that announces as silence, the
+     | records that read as bare number pairs, and a purple chip at 3.8:1.
+     | Performance review caught the worst of it: includeManagerLedger was
+     | opted in ABOVE the boundary that renders it, so a cold ledger compute ran
+     | in front of the board, and includePositionalWar was left at its default
+     | true, adding a ten second universe read this page only ever reads from
+     | cache. Both are false now and refreshManagerLedger runs inside SeasonBody
+     | behind its own skeleton, matching the Decisions page. Setting both also
+     | stops the derived run forking away from the warm-up endpoint's coalesce
+     | key. The retrospective projection sweep is restricted to SETTLED weeks,
+     | which is all either chart draws, rather than the whole 18 week slate
+     | Sleeper publishes at league creation.
+     | The React cache() on loadLineupSeason took two freshly constructed
+     | Supabase clients and an object literal, so it could never hit. Keyed on
+     | primitives now, with the clients created inside.
+     | verified: yes (3,874 tests green, clean build; four independent reviews,
+     | every finding fixed except the follow-ups in the session report)

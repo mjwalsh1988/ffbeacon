@@ -56,55 +56,26 @@ import type {
   SchedulePlayer,
   SlotGroup,
 } from "@/lib/league-schedule/types";
+import {
+  SLOT_GROUP_LABEL,
+  SLOT_GROUP_ORDER,
+  shortSlotLabel,
+} from "@/lib/league-schedule/slots";
 import { CHIP, fmtPoints, listWords, opponentLabel, opponentWords } from "./format";
 import { PlayerDetailDialog } from "./player-detail-dialog";
 
 /**
- * Display order for the position blocks.
+ * The block labels, the block order and the short slot label all come from
+ * lib/league-schedule/slots.ts.
  *
- * A mirror of SLOT_GROUP_ORDER in lib/league-schedule/slots.ts. It is repeated
- * here rather than imported so this component depends on the type contract
- * alone. The Record below is what keeps the two honest: adding a group to the
- * SlotGroup union fails this file to compile until the label exists.
+ * They used to be declared here, with a comment saying the duplication was
+ * deliberate so this component depended on the type contract alone. That
+ * argument did not survive a second consumer: the Lineups board grew its own
+ * copy, the two drifted ("Quarterbacks" against "Quarterback" and so on down
+ * the list), and two pages in the same section printed different headings for
+ * the same slot group. The `Record<SlotGroup, string>` type still provides the
+ * compile-time guarantee, from one place.
  */
-const GROUP_LABEL: Record<SlotGroup, string> = {
-  QB: "Quarterbacks",
-  RB: "Running backs",
-  WR: "Wide receivers",
-  TE: "Tight ends",
-  FLEX: "Flex",
-  SUPERFLEX: "Superflex",
-  IDP: "Defensive players",
-  K: "Kickers",
-  DEF: "Team defense",
-};
-
-const GROUP_ORDER: readonly SlotGroup[] = [
-  "QB",
-  "RB",
-  "WR",
-  "TE",
-  "FLEX",
-  "SUPERFLEX",
-  "IDP",
-  "K",
-  "DEF",
-];
-
-/**
- * The phone-width form of a slot label.
- *
- * Only SUPERFLEX needs it: every other token is four characters or fewer and
- * fits the column as it is. Anything not listed falls through unchanged rather
- * than being truncated, so a new slot token cannot quietly turn into nonsense.
- */
-const SHORT_SLOT_LABEL: Record<string, string> = {
-  SUPERFLEX: "SF",
-};
-
-function shortSlotLabel(label: string): string {
-  return SHORT_SLOT_LABEL[label] ?? label;
-}
 
 type PairedRow = {
   key: string;
@@ -170,7 +141,7 @@ function groupRows(rows: PairedRow[]): { group: SlotGroup; rows: PairedRow[] }[]
     list.push(row);
     buckets.set(row.home.slot.group, list);
   }
-  return GROUP_ORDER.filter((group) => buckets.has(group)).map((group) => ({
+  return SLOT_GROUP_ORDER.filter((group) => buckets.has(group)).map((group) => ({
     group,
     // Inside a block the league's own slot order decides, so RB1 stays above
     // RB2 in a league that lists them that way.
@@ -284,7 +255,7 @@ export function MatchupTable({
                   colSpan={colCount}
                   className="px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.16em] text-brand-cyan"
                 >
-                  {GROUP_LABEL[group]}
+                  {SLOT_GROUP_LABEL[group]}
                 </th>
               </tr>
               {groupRowsList.map((row) => {

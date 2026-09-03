@@ -41,7 +41,11 @@ export const MANAGER_LEDGER_RETRY_MS = 15 * 60 * 1000;
  * out with a deficit of 1.4e-14 rather than zero, so it reported points left on
  * the bench and a perfect season graded at 0.9999999999.
  */
-export const MANAGER_LEDGER_MODEL_VERSION = "ledger-3";
+// ledger-4 (2026-09-02): LedgerWeek now stores setPoints, optimalPoints and
+// ungradedSlots. Rows written under ledger-3 have weeks without them, and a
+// chart built from those would silently plot nothing, so the version moves and
+// every league rebuilds on its next view.
+export const MANAGER_LEDGER_MODEL_VERSION = "ledger-4";
 
 /** How many waiver moves are kept per roster in the stored detail. */
 export const MAX_STORED_WAIVER_MOVES = 12;

@@ -76,6 +76,22 @@ export type LedgerWeek = {
    * is the number the result is read from.
    */
   officialPoints: number;
+  /**
+   * Actual points from the set lineup, over GRADABLE slots only.
+   *
+   * STORED SINCE ledger-4, because the Lineups page draws a per-week efficiency
+   * chart and there is no honest way to derive one without it. The obvious
+   * substitute, official over (official plus pointsLeft), is exactly right in a
+   * league with no IDP and wrong in one that has them: the ungradable slots add
+   * the same constant to both halves of the ratio, which pulls it toward 1 and
+   * flatters every manager in an IDP league. Splitting hairs over three numbers
+   * a week is cheaper than a chart that quietly lies to a subset of leagues.
+   */
+  setPoints: number;
+  /** Actual points from the best legal lineup, over the same gradable slots. */
+  optimalPoints: number;
+  /** Startable slots this model could not grade (IDP and anything unknown). */
+  ungradedSlots: number;
   /** optimalPoints - setPoints for the week, floored at zero. */
   pointsLeft: number;
   /**
@@ -104,24 +120,16 @@ export type LedgerWeek = {
 };
 
 /**
- * What the grader works out about a week, before anything is thrown away.
+ * What the grader works out about a week.
  *
- * THE LINE THIS DRAWS is the one lib/league-activity/types.ts draws between an
- * event and a card. `GradedWeek` is everything the arithmetic produced;
- * `LedgerWeek` is the subset that is stored and rendered. The three extra
- * fields are load-bearing for the season roll-up and are what the tests assert
- * on, and nothing displays them per week, so they are computed and then dropped
- * rather than carried into a jsonb column that is serialized into the page's
- * Flight payload once per team per week.
+ * IDENTICAL TO `LedgerWeek` SINCE ledger-4, and kept as a distinct name because
+ * the two mean different things: this is what the arithmetic produced, that is
+ * what is stored and rendered. They diverged until the Lineups page needed the
+ * per-week efficiency inputs on a screen, at which point the three fields that
+ * had been computed and dropped had to be carried. Add a field here and leave
+ * it out of `LedgerWeek` the day something is genuinely internal again.
  */
-export type GradedWeek = LedgerWeek & {
-  /** Actual points from the set lineup, over gradable slots only. */
-  setPoints: number;
-  /** Actual points from the best legal lineup, over the same slots. */
-  optimalPoints: number;
-  /** Startable slots this model could not grade (IDP and anything unknown). */
-  ungradedSlots: number;
-};
+export type GradedWeek = LedgerWeek;
 
 /**
  * One player who should have started ahead of one who did.
