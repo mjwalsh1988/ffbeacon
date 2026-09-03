@@ -184,6 +184,9 @@ function projectionRow(id: string, playerId: string, week: number, ppr: number, 
     player_id: playerId,
     season: 2026,
     season_type: "regular",
+    // The reader filters on source now, so a fixture without one would be
+    // filtered away by the fake client and every count assertion would read 0.
+    source: "sleeper",
     week,
     opponent: "BUF",
     stat_line: { rec: 5, rec_yd: 60 },
@@ -235,7 +238,7 @@ describe("truncateToHour", () => {
 describe("loadProjectionsSnapshot", () => {
   it("returns null when there are no rows", async () => {
     activeClient = fakeClient({ player_weekly_projections: table([]) });
-    const result = await loadProjectionsSnapshot({ season: 2026, fromWeek: 5 });
+    const result = await loadProjectionsSnapshot({ season: 2026, fromWeek: 5, source: "sleeper" });
     expect(result).toBeNull();
   });
 
@@ -246,7 +249,7 @@ describe("loadProjectionsSnapshot", () => {
         projectionRow("2", "p1", 6, 13, "2026-08-26T16:05:00.000Z"),
       ]),
     });
-    const result = await loadProjectionsSnapshot({ season: 2026, fromWeek: 5 });
+    const result = await loadProjectionsSnapshot({ season: 2026, fromWeek: 5, source: "sleeper" });
     expect(result).toBe("2026-08-26T16:00:00.000Z");
   });
 });
@@ -275,7 +278,7 @@ describe("loadWarUniverseUncached: the count guard", () => {
     });
 
     await expect(
-      loadWarUniverseUncached({ season: 2026, fromWeek: 5, toWeek: 5, scoringBase: "pts_ppr" }),
+      loadWarUniverseUncached({ season: 2026, fromWeek: 5, toWeek: 5, scoringBase: "pts_ppr", source: "sleeper" }),
     ).rejects.toThrow(/incomplete/);
   });
 });
@@ -322,6 +325,7 @@ describe("loadWarUniverse: the serialization round trip", () => {
       fromWeek: 5,
       toWeek: 6,
       scoringBase: "pts_ppr",
+      source: "sleeper",
     });
 
     const roundTripped = JSON.parse(JSON.stringify(serialized));
@@ -346,6 +350,7 @@ describe("loadWarUniverse: the serialization round trip", () => {
       fromWeek: 5,
       toWeek: 6,
       scoringBase: "pts_ppr",
+      source: "sleeper",
     });
     expect(universe.players.get("p1")?.slug).toBe("player-p1");
     expect(universe.players instanceof Map).toBe(true);
@@ -406,7 +411,7 @@ describe("concurrency: independent chunk reads overlap in flight", () => {
       nfl_defense_vs_position: table([]),
     });
 
-    await loadWarUniverseUncached({ season: 2026, fromWeek: 5, toWeek: 5, scoringBase: "pts_ppr" });
+    await loadWarUniverseUncached({ season: 2026, fromWeek: 5, toWeek: 5, scoringBase: "pts_ppr", source: "sleeper" });
 
     // Six chunks exist (1200 ids at width 200), so a genuinely concurrent
     // run overlaps more than one at a time, and the cap holds it at or below
@@ -698,6 +703,7 @@ describe("loadWarUniverseUncached: one pass over the window", () => {
       fromWeek: 5,
       toWeek: 6,
       scoringBase: "pts_ppr",
+      source: "sleeper",
     });
 
     // One read per week in the window, and no second pass for the full rows.
@@ -725,6 +731,7 @@ describe("loadWarUniverseUncached: one pass over the window", () => {
       fromWeek: 5,
       toWeek: 5,
       scoringBase: "pts_ppr",
+      source: "sleeper",
     });
 
     expect(universe.players.map(([id]) => id)).toEqual(["p1"]);
@@ -746,6 +753,7 @@ describe("loadWarUniverseUncached: one pass over the window", () => {
       fromWeek: 5,
       toWeek: 5,
       scoringBase: "pts_ppr",
+      source: "sleeper",
     });
 
     expect(universe.players[0][1].injuryStatus).toBe("IR");
@@ -767,6 +775,7 @@ describe("loadWarUniverseUncached: one pass over the window", () => {
       fromWeek: 5,
       toWeek: 5,
       scoringBase: "pts_ppr",
+      source: "sleeper",
     });
 
     expect(universe.players[0][1].injuryStatus).toBeNull();
@@ -813,7 +822,7 @@ describe("the sliced universe cache", () => {
     });
   }
 
-  const WINDOW = { season: 2026, fromWeek: 5, toWeek: 7, scoringBase: "pts_ppr" } as const;
+  const WINDOW = { season: 2026, fromWeek: 5, toWeek: 7, scoringBase: "pts_ppr", source: "sleeper" } as const;
 
   it("stores one entry per week, plus one each for players, accuracy and defense", async () => {
     activeClient = threeWeekClient();
@@ -915,7 +924,7 @@ describe("the completeness guards", () => {
         }),
     });
     await expect(
-      loadWarUniverse({ season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr" }),
+      loadWarUniverse({ season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr", source: "sleeper" }),
     ).rejects.toThrow(/week \d+ load incomplete/);
   });
 
@@ -944,7 +953,7 @@ describe("the completeness guards", () => {
         }),
     });
     await expect(
-      loadWarUniverse({ season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr" }),
+      loadWarUniverse({ season: 2026, fromWeek: 5, toWeek: 6, scoringBase: "pts_ppr", source: "sleeper" }),
     ).rejects.toThrow(/universe load incomplete: read 2 of 10/);
   });
 
@@ -968,6 +977,7 @@ describe("the completeness guards", () => {
       fromWeek: 5,
       toWeek: 5,
       scoringBase: "pts_ppr",
+      source: "sleeper",
     });
     expect(universe.projections.length).toBe(1);
   });

@@ -28,8 +28,7 @@ import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { defenseSeasonsFor } from "./defense-seasons";
 import {
-  availableProjectionSources,
-  resolveProjectionSource,
+  resolveProjectionSourceForWindow,
   SLEEPER_SOURCE,
   type AnySupabase,
 } from "./source";
@@ -123,21 +122,21 @@ export async function loadAdjustedProjections(params: {
   // error all degrade to the code defaults inside that function: a league
   // page must never break because an admin has not saved settings yet.
   //
-  // Settings load FIRST, before either availability probe fires. The feature
-  // ships disabled and stays disabled by default, and resolveProjectionSource
-  // returns SLEEPER_SOURCE unconditionally when settings.enabled is false, so
-  // availableProjectionSources's two count probes would be pure waste on the
-  // default, current-production path. Every caller of this file (five of
-  // them) pays that waste on every render until an admin turns the feature
-  // on, so it is skipped entirely rather than run and ignored.
+  // Settings load FIRST, before either availability probe fires.
+  // resolveProjectionSourceForWindow makes no query at all while the feature
+  // is disabled, which is the default and the current production state, so
+  // every caller of this file pays nothing for the probes until an admin turns
+  // it on.
   const pulseSettings = await loadPowerPulseSettings(dbClient);
   const projectionSettings = pulseSettings.beaconProjections;
 
-  const available = projectionSettings.enabled
-    ? await availableProjectionSources(supabase, season, fromWeek, toWeek)
-    : [];
-
-  const source = resolveProjectionSource({ available, settings: projectionSettings });
+  const source = await resolveProjectionSourceForWindow({
+    supabase,
+    season,
+    fromWeek,
+    toWeek,
+    settings: projectionSettings,
+  });
 
   const scoringBase = closestScoringBase(scoringSettings);
   const defenseSeasons = defenseSeasonsFor(season);

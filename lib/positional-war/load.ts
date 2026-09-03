@@ -167,7 +167,11 @@ const PLAYER_RESOLVE_CHUNK = 200;
  * that adds a field to WarUniversePlayer would keep reading yesterday's
  * entries, which parse fine and are missing the field.
  */
-const CACHE_SHAPE_VERSION = "v1";
+// v2 scopes every entry to one projection SOURCE. Before it, the week slices
+// were keyed on (season, week) alone and the query filtered on nothing, so the
+// day player_weekly_projections holds an ffbeacon row beside its sleeper one,
+// the same player-week comes back twice and the universe doubles.
+const CACHE_SHAPE_VERSION = "v2";
 
 /** One projectable player, before any week is attached. */
 export type WarUniversePlayer = {
@@ -303,6 +307,7 @@ async function readProjectionWeek(
   supabase: ServiceClient,
   season: number,
   week: number,
+  source: string,
 ): Promise<ProjectionWeekSlice> {
   const walk = async (): Promise<ProjectionWeekSlice> => {
     const out: ProjectionRow[] = [];
@@ -315,6 +320,7 @@ async function readProjectionWeek(
         .eq("season", season)
         .eq("season_type", "regular")
         .eq("week", week)
+        .eq("source", source)
         .order("id", { ascending: true })
         .limit(PAGE);
       if (cursor !== null) q = q.gt("id", cursor);
@@ -352,7 +358,8 @@ async function readProjectionWeek(
       .select("id", { count: "exact", head: true })
       .eq("season", season)
       .eq("season_type", "regular")
-      .eq("week", week),
+      .eq("week", week)
+      .eq("source", source),
   ]);
 
   if (countResult.error) {
@@ -382,12 +389,14 @@ async function countWindowProjections(
   season: number,
   fromWeek: number,
   toWeek: number,
+  source: string,
 ): Promise<number | null> {
   const { count, error } = await supabase
     .from("player_weekly_projections")
     .select("id", { count: "exact", head: true })
     .eq("season", season)
     .eq("season_type", "regular")
+    .eq("source", source)
     .gte("week", fromWeek)
     .lte("week", toWeek);
   if (error) {
@@ -503,12 +512,15 @@ type UniverseReaders = {
 };
 
 /** Straight to Postgres. No data cache involved at any level. */
-function directReaders(supabase: ServiceClient): UniverseReaders {
+function directReaders(supabase: ServiceClient, source: string): UniverseReaders {
   return {
-    projectionWeek: (season, week) => readProjectionWeek(supabase, season, week),
+    projectionWeek: (season, week) => readProjectionWeek(supabase, season, week, source),
     players: (playerIds) => readUniversePlayers(supabase, playerIds),
+    // Scoped to the SAME source the projections were read from, per migration
+    // 0240: a reliability multiplier measured against Sleeper's projection is
+    // only meaningful applied to Sleeper's projection.
     accuracy: async (playerIds, scoringBase) => [
-      ...(await loadAccuracy(supabase, playerIds, scoringBase)).entries(),
+      ...(await loadAccuracy(supabase, playerIds, scoringBase, source)).entries(),
     ],
     defense: async (scoringBase, seasons) => [
       ...(await loadDefenseSplits(supabase, scoringBase, seasons)).entries(),
@@ -523,12 +535,18 @@ function directReaders(supabase: ServiceClient): UniverseReaders {
  * the window that produced it, so an entry can only ever be reused for exactly
  * the ids it was built from. See the module header.
  */
-function cachedReaders(supabase: ServiceClient): UniverseReaders {
-  const direct = directReaders(supabase);
+function cachedReaders(supabase: ServiceClient, source: string): UniverseReaders {
+  const direct = directReaders(supabase, source);
   return {
     projectionWeek: (season, week) =>
       withDataCache(
-        ["positional-war-projection-week", CACHE_SHAPE_VERSION, String(season), String(week)],
+        [
+          "positional-war-projection-week",
+          CACHE_SHAPE_VERSION,
+          source,
+          String(season),
+          String(week),
+        ],
         () => direct.projectionWeek(season, week),
       ),
     players: (playerIds) =>
@@ -538,7 +556,13 @@ function cachedReaders(supabase: ServiceClient): UniverseReaders {
       ),
     accuracy: (playerIds, scoringBase) =>
       withDataCache(
-        ["positional-war-accuracy", CACHE_SHAPE_VERSION, scoringBase, playerIdSetDigest(playerIds)],
+        [
+          "positional-war-accuracy",
+          CACHE_SHAPE_VERSION,
+          source,
+          scoringBase,
+          playerIdSetDigest(playerIds),
+        ],
         () => direct.accuracy(playerIds, scoringBase),
       ),
     defense: (scoringBase, seasons) =>
@@ -554,6 +578,17 @@ export type WarUniverseParams = {
   fromWeek: number;
   toWeek: number;
   scoringBase: ScoringBase;
+  /**
+   * Which projection source to build the universe from, resolved by the
+   * caller through lib/projections/source.ts.
+   *
+   * Required rather than defaulted, for two reasons at once. A default is
+   * how this module would keep quoting Sleeper on the day the FF Beacon
+   * engine is switched on, and the absence of any source filter at all is
+   * how it would read BOTH sources' rows as one pool and count every player
+   * twice.
+   */
+  source: string;
 };
 
 /**
@@ -579,7 +614,7 @@ async function assembleUniverse(
   // them. Nothing here depends on anything else here.
   const [perWeek, expected] = await Promise.all([
     mapWithConcurrency(weeks, DB_CHUNK_CONCURRENCY, (week) => readers.projectionWeek(season, week)),
-    countWindowProjections(supabase, season, fromWeek, toWeek),
+    countWindowProjections(supabase, season, fromWeek, toWeek, params.source),
   ]);
 
   const windowProjections: ProjectionRow[] = [];
@@ -656,7 +691,7 @@ export async function loadWarUniverseUncached(
   params: WarUniverseParams,
 ): Promise<SerializedWarUniverse> {
   const supabase = createCachedReadClient();
-  return assembleUniverse(supabase, params, directReaders(supabase));
+  return assembleUniverse(supabase, params, directReaders(supabase, params.source));
 }
 
 /**
@@ -669,7 +704,11 @@ export async function loadWarUniverseUncached(
  */
 export async function loadWarUniverse(params: WarUniverseParams): Promise<WarUniverse> {
   const supabase = createCachedReadClient();
-  const serialized = await assembleUniverse(supabase, params, cachedReaders(supabase));
+  const serialized = await assembleUniverse(
+    supabase,
+    params,
+    cachedReaders(supabase, params.source),
+  );
 
   // Rebuild the Maps every call. See the module header: nothing stored is ever
   // a Map, only ever the tuple arrays it round-trips through JSON as.
@@ -721,6 +760,8 @@ export function truncateToHour(iso: string): string {
 export async function loadProjectionsSnapshot(params: {
   season: number;
   fromWeek: number;
+  /** Scoped to the source the curve will actually be built from. */
+  source: string;
 }): Promise<string | null> {
   const supabase = createCachedReadClient();
   const { data, error } = await supabase
@@ -728,6 +769,7 @@ export async function loadProjectionsSnapshot(params: {
     .select("updated_at")
     .eq("season", params.season)
     .eq("season_type", "regular")
+    .eq("source", params.source)
     .gte("week", params.fromWeek)
     .order("updated_at", { ascending: false })
     .limit(1);

@@ -24,6 +24,7 @@ import { loadLeague } from "@/lib/power-pulse/load";
 import { loadPowerPulseSettings, type PowerPulseSettings } from "@/lib/power-pulse/settings";
 import { startingSlots } from "@/lib/power-pulse/lineup";
 import { closestScoringBase } from "@/lib/league-scoring";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import {
   loadWarUniverse,
   loadProjectionsSnapshot,
@@ -211,6 +212,8 @@ type WarContext = {
   rosterPositions: string[];
   scoringSettings: WarFingerprintInput["scoringSettings"];
   pulseSettings: PowerPulseSettings;
+  /** "sleeper" or "ffbeacon", resolved once for the whole compute. */
+  projectionSource: string;
   fingerprintInput: WarFingerprintInput;
   fingerprint: string;
   digest: WarInputsDigest;
@@ -314,11 +317,29 @@ async function buildWarContext(
     };
   }
 
+  // WHICH PROJECTION SOURCE THIS CURVE IS BUILT FROM.
+  //
+  // Resolved here rather than inside the loader so ONE answer feeds the
+  // universe read, the freshness snapshot and the fingerprint. It makes no
+  // query at all while the FF Beacon projection engine is disabled, which is
+  // the default, so the warm path pays nothing for it.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase,
+    season: league.season,
+    fromWeek,
+    toWeek,
+    settings: settings.beaconProjections,
+  });
+
   const [totalRosters, storedRosterCount, projectionsSnapshot, accuracySnapshot] =
     await Promise.all([
       loadTotalRosters(supabase, leagueRowId),
       countStoredRosters(supabase, leagueRowId),
-      loadProjectionsSnapshot({ season: league.season, fromWeek }),
+      loadProjectionsSnapshot({
+        season: league.season,
+        fromWeek,
+        source: projectionSource,
+      }),
       loadAccuracySnapshot(),
     ]);
 
@@ -360,6 +381,7 @@ async function buildWarContext(
     modelVersion: settings.war.modelVersion,
     projectionsSnapshot,
     accuracySnapshot,
+    projectionSource,
   };
 
   return {
@@ -370,6 +392,7 @@ async function buildWarContext(
     rosterPositions: league.rosterPositions,
     scoringSettings: league.scoringSettings,
     pulseSettings: settings,
+    projectionSource,
     fingerprintInput,
     fingerprint: warFingerprint(fingerprintInput),
     digest: warInputsDigest(fingerprintInput),
@@ -709,6 +732,7 @@ export async function calculateLeaguePositionalWar(
         fromWeek: context.fromWeek,
         toWeek: context.toWeek,
         scoringBase,
+        source: context.projectionSource,
       });
       const players = buildWarPlayers({
         universe,

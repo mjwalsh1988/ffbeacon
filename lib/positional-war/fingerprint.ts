@@ -18,10 +18,15 @@
  * hour-truncated projectionsSnapshot; computing "now" here would make the
  * fingerprint change on every call.
  *
- * Deliberately absent: source slug, format_config_id, rosters.player_ids,
- * league_matchups, playoff_teams, league name, and every non-scoring league
- * setting. None of those are read by the model (section 6.1's exclusion
- * table), so none of them belong in the cache key.
+ * Deliberately absent: the VALUE source slug (KTC, FantasyCalc, FF Beacon
+ * values), format_config_id, rosters.player_ids, league_matchups,
+ * playoff_teams, league name, and every non-scoring league setting. None of
+ * those are read by the model (section 6.1's exclusion table), so none of them
+ * belong in the cache key.
+ *
+ * The PROJECTION source is a different thing and it IS present. It names the
+ * rows the model reads, so two curves built from Sleeper's numbers and from
+ * ours are two different answers and must never share a cache entry.
  */
 
 import { createHash } from "node:crypto";
@@ -111,6 +116,20 @@ export type WarFingerprintInput = {
    * so they cannot move without the projections moving in the same run.
    */
   accuracySnapshot: string;
+  /**
+   * Which projection source the curve is built from, "sleeper" or
+   * "ffbeacon" (lib/projections/source-constants.ts).
+   *
+   * WHY THIS IS IN THE KEY. Every other field describes the league or the
+   * model; this one describes which rows the model reads. Enabling the FF
+   * Beacon projection engine changes every projected point in the universe
+   * and changes none of the other fields, because the engine's settings live
+   * under `beaconProjections` and this fingerprint does not carry that block.
+   * Without this field the switch would be flipped and every league inside
+   * the 12-hour TTL would keep serving a curve built on the old source, with
+   * no way for the cache to know.
+   */
+  projectionSource: string;
 };
 
 /**
@@ -142,8 +161,8 @@ function buildPayload(input: WarFingerprintInput) {
   return {
     // Bumped when the payload's SHAPE changes, so a stored hash cannot be
     // mistaken for one computed from a different field list. v2 added
-    // accuracySnapshot.
-    v: 2,
+    // accuracySnapshot; v3 added projectionSource.
+    v: 3,
     season: input.season,
     fromWeek: input.fromWeek,
     toWeek: input.toWeek,
@@ -157,6 +176,7 @@ function buildPayload(input: WarFingerprintInput) {
     modelVersion: input.modelVersion,
     projectionsSnapshot: input.projectionsSnapshot,
     accuracySnapshot: input.accuracySnapshot,
+    projectionSource: input.projectionSource,
   };
 }
 
@@ -169,7 +189,7 @@ export function warFingerprint(input: WarFingerprintInput): string {
   return createHash("sha256").update(canonicalJson(buildPayload(input))).digest("hex");
 }
 
-/** The nine-field collision guard, section 15.4.3. Human-readable, not hashed. */
+/** The ten-field collision guard, section 15.4.3. Human-readable, not hashed. */
 export type WarInputsDigest = {
   season: number;
   fromWeek: number;
@@ -180,12 +200,14 @@ export type WarInputsDigest = {
   scoringUsable: boolean;
   scoringKeyCount: number;
   modelVersion: string;
+  /** "sleeper" or "ffbeacon". Two sources are two different curves. */
+  projectionSource: string;
 };
 
 /**
- * Recompute the nine human-readable values a fingerprint hash stands for, so a
+ * Recompute the ten human-readable values a fingerprint hash stands for, so a
  * cache hit can be checked field by field before its rows are reused. Cheap on
- * purpose: nine comparisons on a row already read, not a second fingerprint.
+ * purpose: ten comparisons on a row already read, not a second fingerprint.
  */
 export function warInputsDigest(input: WarFingerprintInput): WarInputsDigest {
   return {
@@ -198,6 +220,7 @@ export function warInputsDigest(input: WarFingerprintInput): WarInputsDigest {
     scoringUsable: isUsableScoring(input.scoringSettings),
     scoringKeyCount: normalizedScoring(input.scoringSettings).length,
     modelVersion: input.modelVersion,
+    projectionSource: input.projectionSource,
   };
 }
 
@@ -211,6 +234,7 @@ const DIGEST_FIELDS: Array<keyof WarInputsDigest> = [
   "scoringUsable",
   "scoringKeyCount",
   "modelVersion",
+  "projectionSource",
 ];
 
 function digestFieldsEqual(a: unknown, b: unknown): boolean {

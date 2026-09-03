@@ -31,6 +31,7 @@ export function OverviewSidebar({
   scoringLabel,
   finishes,
   projectionSummary,
+  projectionSourceLabel = "Sleeper",
   tePremiumBonus = 0,
   trades,
   focusSleeperId,
@@ -46,6 +47,15 @@ export function OverviewSidebar({
   scoringLabel: string;
   finishes: PositionalFinish[];
   projectionSummary: ProjectionSummary;
+  /**
+   * Whose projections the outlook panel is showing, resolved server side.
+   *
+   * `sourceDisplay` above is a different thing entirely: it is the VALUE
+   * source (KTC, FantasyCalc), which the reader picks. This one is the
+   * PROJECTION engine, which an admin switches. Naming them apart matters,
+   * because they appear two panels from each other.
+   */
+  projectionSourceLabel?: string;
   tePremiumBonus?: number;
   trades: PlayerTrade[];
   focusSleeperId: string;
@@ -105,7 +115,7 @@ export function OverviewSidebar({
         <Panel
           eyebrow="Outlook"
           title="Projected points"
-          helper={`Sleeper projections, ${scoringLabel} scoring`}
+          helper={`${projectionSourceLabel} projections, ${scoringLabel} scoring`}
           headingLevel={3}
         >
           <ProjectionOutlook

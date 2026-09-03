@@ -93,10 +93,10 @@ const ALLOWLIST: Record<string, string> = {
     "The canonical raw loader lib/projections/read.ts itself calls (loadProjections). It lives outside lib/projections/ because Power Pulse built it first: every adjusted read in the codebase, read.ts included, goes through this file's select before projectPlayerWeek adjusts the result.",
 
   "lib/breakdown/load-extras.ts":
-    "Beacon Breakdown's own projection reader. Already routes every number through lib/power-pulse/project.ts projectPlayerWeek (its own header: 'ONE MODEL, NOT TWO'), the same adjustment engine lib/projections/read.ts calls; it predates that shared reader and selects its own raw rows rather than calling it. Not one of the PE-T042 to PE-T046 modules this task migrated.",
+    "Beacon Breakdown's own projection reader. Already routes every number through lib/power-pulse/project.ts projectPlayerWeek (its own header: 'ONE MODEL, NOT TWO'), the same adjustment engine lib/projections/read.ts calls; it predates that shared reader and selects its own raw rows rather than calling it. Every one of those selects now names a resolved projection source, so the remaining difference from the shared path is the query, not the engine.",
 
   "lib/on-the-clock/projection-board.ts":
-    "On The Clock's full-draftable-pool sweep. Same situation as load-extras.ts above: every number is already adjusted via projectPlayerWeek, with its own bespoke paginated reader for the whole pool rather than a caller-supplied id list. Not one of the PE-T042 to PE-T046 modules.",
+    "On The Clock's full-draftable-pool sweep. Same situation as load-extras.ts above: every number is already adjusted via projectPlayerWeek, with its own bespoke paginated reader for the whole pool rather than a caller-supplied id list. Its read names a resolved projection source, and that source is folded into the board's data fingerprint and its etag so a switch rebuilds every cached board.",
 
   "lib/positional-war/load.ts":
     "Positional WAR's full-universe projection loader, feeding lib/positional-war/engine.ts computeCurves(), which also runs every row through projectPlayerWeek per lib/positional-war's own module map. Same shape as the two entries above.",
@@ -115,7 +115,7 @@ const ALLOWLIST: Record<string, string> = {
     "Writes to player_market_snapshots (market ADP sync), the same different table as lib/sync-rookie-adp.ts above.",
 
   "lib/player-profile.ts":
-    "PE-T044: deliberately left raw. The profile's weekly-projections card and overview panel both name Sleeper as the source in the heading a reader sees ('Sleeper projected points' / 'Sleeper projections, {scoring} scoring'), and the per-stat beat/miss comparison grades Sleeper's own published number against what happened. See the comments above loadWeeklyProjections and loadProjectionsMap in that file.",
+    "Deliberately left raw. The profile's weekly-projections card and overview panel are the one place on the site that shows a projection engine's own published number, and the per-stat beat/miss comparison grades exactly that number against what happened; routing it through loadAdjustedProjections would grade a figure nobody published. WHICH engine is no longer pinned: both loaders take a required source resolved by lib/projections/current-source.ts, and both headings render its display name. See the comments above loadWeeklyProjections and loadProjectionsMap in that file.",
 
   "lib/build-beacon-projections.test.ts":
     "Tests the raw player_weekly_projections row shape lib/build-beacon-projections.ts itself reads and writes (that file is already EXEMPT_FILES above); allow-listed alongside it, matching lib/positional-war/load.test.ts above.",

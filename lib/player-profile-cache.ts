@@ -16,6 +16,7 @@
 import { unstable_cache } from "next/cache";
 import { createCachedReadClient } from "@/lib/supabase/server";
 import { CACHE_TAGS, CACHE_TTL } from "@/lib/cache-tags";
+import { currentProjectionSourceCached } from "@/lib/projections/current-source";
 import {
   loadPositionalFinishes,
   loadWeeklyStats,
@@ -46,14 +47,39 @@ export function loadWeeklyStatsCached(playerId: string) {
   )();
 }
 
-export function loadWeeklyProjectionsCached(playerId: string) {
+/**
+ * Which projection engine the profile shows.
+ *
+ * A thin re-export of lib/projections/current-source.ts, kept under this name
+ * because the profile's two loaders need it as part of THEIR cache key and a
+ * reader of this file should not have to go looking for where it comes from.
+ * The resolution, the hourly cache and the reasons for both live in that
+ * module; there is deliberately only one copy of them.
+ *
+ * It has to be awaited BEFORE the two projection reads below, because it is
+ * part of their key. Resolving it inside them would key each cached entry on a
+ * value the key could not see, which is the exact shape of a cache that serves
+ * the old engine's numbers for a day after the switch.
+ */
+export function resolveProfileProjectionSourceCached(): Promise<string> {
+  return currentProjectionSourceCached();
+}
+
+export function loadWeeklyProjectionsCached(playerId: string, source: string) {
   return unstable_cache(
-    () => loadWeeklyProjections(createCachedReadClient(), playerId),
-    ["player-weekly-projections", playerId],
+    () => loadWeeklyProjections(createCachedReadClient(), playerId, source),
+    // The source is IN THE KEY. Without it, flipping the engine would serve
+    // the previous one's rows out of this cache for a full day.
+    ["player-weekly-projections", playerId, source],
     { revalidate: CACHE_TTL.daily, tags: [CACHE_TAGS.playerProjections] },
   )();
 }
 
+/**
+ * NO SOURCE IN THE KEY, because there is no source in the read. This map grades
+ * published history across every season, and only Sleeper has one; see the
+ * block comment above loadProjectionsMap.
+ */
 export async function loadProjectionsMapCached(playerId: string) {
   // unstable_cache JSON-serializes its result, and a Map does not survive that
   // round trip (it comes back as {} with no .get). Cache the entries array

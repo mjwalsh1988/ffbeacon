@@ -17,9 +17,9 @@
  * number that quietly disagreed with everything else BEAM can already cite.
  *
  * RELIABILITY reads the same table the Beacon Breakdown reliability tab reads,
- * through the same scoring key, so BEAM's "beats his projection 76% of the
- * time" and the number on the player profile are the same measurement rather
- * than two plausible ones.
+ * through the same scoring key AND the same projection engine, so BEAM's
+ * "beats his projection 76% of the time" and the number on the player profile
+ * are the same measurement rather than two plausible ones.
  *
  * POOLING, NOT AVERAGING. A beat rate over several seasons is
  * sum(weeks beaten) / sum(weeks played), never the mean of the per-season rates.
@@ -32,6 +32,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { ScoringKey } from "@/lib/player-profile";
 import { loadAdjustedProjections } from "@/lib/projections/read";
+import { currentProjectionSourceCached } from "@/lib/projections/current-source";
 import { canonicalScoringForFormat } from "@/lib/draft-value/default-settings";
 import type { ScoringSettings } from "@/lib/league-scoring";
 
@@ -177,9 +178,28 @@ export async function loadReliability(
   playerIds: string[],
   scoringKey: ScoringKey,
   seasons: number[] | null,
+  /**
+   * The projection engine to grade. Resolved here when omitted, so no caller
+   * can produce a pooled figure by forgetting it.
+   */
+  source?: string,
 ): Promise<Map<string, Reliability>> {
   const out = new Map<string, Reliability>();
   if (playerIds.length === 0) return out;
+
+  /**
+   * THE SOURCE FILTER IS LOAD BEARING, AND MORE SO HERE THAN ANYWHERE ELSE.
+   *
+   * `player_projection_accuracy` holds a row per (player, season, scoring,
+   * SOURCE). Every other reader of it keys a Map and would merely take an
+   * arbitrary engine's row; this one POOLS the rows it gets back, summing
+   * weeks_projected and weeks_played across them. Unfiltered, once ffbeacon
+   * rows exist beside Sleeper's, every player's sample size would double and
+   * the beat rate would be a blend of two engines being graded, reported as
+   * one engine's record. "Beats his projection 76% of the time" would be an
+   * answer to no question anybody asked.
+   */
+  const resolved = source ?? (await currentProjectionSourceCached());
 
   let query = db
     .from("player_projection_accuracy")
@@ -187,6 +207,7 @@ export async function loadReliability(
       "player_id, season, weeks_projected, weeks_played, weeks_beat, beat_rate, availability_rate, mean_diff, ratio_stdev",
     )
     .eq("scoring", scoringKey)
+    .eq("source", resolved)
     .in("player_id", playerIds);
 
   query = seasons === null ? query.is("season", null) : query.in("season", seasons);

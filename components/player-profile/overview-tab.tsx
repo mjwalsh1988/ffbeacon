@@ -33,9 +33,11 @@ import {
   loadLatestValueCached,
   loadDepthChartCached,
   loadWeeklyProjectionsCached,
+  resolveProfileProjectionSourceCached,
   loadLatestArticleCached,
   findPlayerTradesCached,
 } from "@/lib/player-profile-cache";
+import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 
 export async function OverviewTab({
   player,
@@ -54,6 +56,10 @@ export async function OverviewTab({
 
   // Every read here is cached (lib/player-profile-cache.ts), so a reader clicking
   // through profiles is not re-running the whole waterfall per click.
+  // Resolved before the wave, because it is part of the projection read's cache
+  // key. See lib/player-profile-cache.ts.
+  const projectionSource = await resolveProfileProjectionSourceCached();
+
   const [valueSeries, trends, latestValue, trades, article, depthChart, projections] =
     await Promise.all([
       loadValueSeriesCached(player.id, context.formatConfigId, context.valueSourceSlug, 30),
@@ -62,7 +68,7 @@ export async function OverviewTab({
       sleeperId ? findPlayerTradesCached(sleeperId, 3) : Promise.resolve([]),
       loadLatestArticleCached(player.id),
       loadDepthChartCached(player),
-      loadWeeklyProjectionsCached(player.id),
+      loadWeeklyProjectionsCached(player.id, projectionSource),
     ]);
 
   const scoringLabel =
@@ -111,6 +117,7 @@ export async function OverviewTab({
             scoringLabel={scoringLabel}
             finishes={finishesLast3}
             projectionSummary={projectionSummary}
+            projectionSourceLabel={projectionSourceDisplay(projectionSource)}
             tePremiumBonus={tePremiumBonus}
             trades={trades}
             focusSleeperId={sleeperId ?? ""}

@@ -71,6 +71,12 @@ export async function PositionalWarSection({
 }) {
   // Service role, because this writes. The panel below reads through the
   // caller's client, which is anon-scoped and correct for a public table.
+  //
+  // The engine behind the curve is NOT resolved here. It has to be asked about
+  // the window the curve was actually built over, and only the panel knows
+  // that: it comes back on the cache row. Resolving it here, over the whole
+  // season, would name the wrong engine on any week our builder has not covered
+  // end to end.
   await refreshPositionalWar(createAdminClient(), leagueRowId);
 
   return (

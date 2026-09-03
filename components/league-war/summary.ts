@@ -166,6 +166,17 @@ export type FootnoteInput = {
   modelVersion: string | null;
   generatedAt: string | null;
   isStale: boolean;
+  /**
+   * Whose weekly projections the curve was built from, spelled out ("Sleeper"
+   * or "FF Beacon").
+   *
+   * A FIELD, NOT A CONSTANT. This line used to say "Sleeper projections"
+   * outright, which was true and frozen: the day an admin enables our own
+   * engine the curve is rebuilt from it (the engine is part of the Positional
+   * WAR fingerprint, see lib/positional-war/fingerprint.ts) and the sentence
+   * would be attributing our numbers to somebody else.
+   */
+  projectionSourceLabel?: string;
 };
 
 /** The one footnote line under the chart, per section 11.6 and 8.4. */
@@ -180,6 +191,7 @@ export function buildFootnote(input: FootnoteInput): string {
     modelVersion,
     generatedAt,
     isStale,
+    projectionSourceLabel = "Sleeper",
   } = input;
 
   const weekClause =
@@ -209,7 +221,7 @@ export function buildFootnote(input: FootnoteInput): string {
     );
   }
   parts.push(
-    `Sleeper projections, model ${modelVersion ?? "unknown"}, ${formatEastern(generatedAt)}.`,
+    `${projectionSourceLabel} projections, model ${modelVersion ?? "unknown"}, ${formatEastern(generatedAt)}.`,
   );
   if (isStale) {
     parts.push(`Last calculated ${formatRelative(generatedAt)}; the latest refresh did not complete.`);

@@ -56,6 +56,9 @@ import type { Database } from "@/lib/database.types";
 import { adpFormatKeyCandidates } from "@/lib/on-the-clock/adp";
 import { FFBEACON_SOURCE_SLUG } from "@/lib/signal-check/format";
 import { loadAdjustedProjections, type AdjustedProjectionSummary } from "@/lib/projections/read";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
+import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { getNflState } from "@/lib/sleeper";
 import { resolveCurrentWeek } from "@/lib/league-matchups";
 import {
@@ -112,10 +115,22 @@ interface FormatRow {
   is_superflex: boolean;
 }
 
-/** Reliability, availability, and beat rate, keyed by (player, scoring base). */
+/**
+ * Reliability, availability, and beat rate, keyed by (player, scoring base).
+ *
+ * SCOPED TO THE PROJECTION ENGINE the board is being built from.
+ * `player_projection_accuracy` holds a row per (player, scoring, SOURCE), and
+ * this Map has no tiebreak, so an unfiltered read would let whichever engine's
+ * row arrived last silently decide every player's reliability. Worse than
+ * arbitrary: engine.ts applies these figures to points that came out of
+ * loadAdjustedProjections, which resolves its own source from the same
+ * settings, so a mismatch would discount one engine's projection by the other
+ * engine's measured error.
+ */
 async function loadAccuracy(
   supabase: Client,
   scoringBase: string,
+  source: string,
 ): Promise<Map<string, { beatRate: number | null; shrunk: number | null; availability: number | null }>> {
   const out = new Map<
     string,
@@ -130,6 +145,7 @@ async function loadAccuracy(
       // Pulse engine reads. Per-season rows would ignore the recency weighting.
       .is("season", null)
       .eq("scoring", scoringBase)
+      .eq("source", source)
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`projection accuracy read failed: ${error.message}`);
     if (!data || data.length === 0) break;
@@ -282,10 +298,17 @@ export async function runBuildDraftValue(
   // latest season they cover is the season the board describes.
   let season = options.season;
   if (!season) {
+    // SLEEPER_SOURCE, deliberately, and for the same reason
+    // lib/breakdown/load-extras.ts resolveSeasonClock pins it: this asks which
+    // season we hold projections FOR, and Sleeper is the coverage baseline our
+    // own builder mirrors rather than extends. It is the only projection read
+    // in this file that is not the resolved engine, and leaving it unfiltered
+    // would be the one place a second source's row could answer.
     const { data } = await supabase
       .from("player_weekly_projections")
       .select("season")
       .eq("season_type", "regular")
+      .eq("source", SLEEPER_SOURCE)
       .order("season", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -316,6 +339,19 @@ export async function runBuildDraftValue(
   // figure), so a single best-effort value for the whole run is enough.
   const nflState = await getNflState();
   const currentWeek = resolveCurrentWeek(nflState, season, DEFAULT_PLAYOFF_WEEK_START);
+
+  // Which projection engine this board is built from, resolved once for the
+  // whole run over the same window pass 2 reads (season, from week 1).
+  // loadAdjustedProjections resolves the identical value from the identical
+  // settings inside pass 2, so naming it here is only about the ACCURACY rows,
+  // which are scoped per source and would otherwise be read from whichever
+  // engine Postgres happened to return last. Free while the feature is off.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase,
+    season,
+    fromWeek: 1,
+    settings: (await loadPowerPulseSettings(supabase)).beaconProjections,
+  });
 
   const skipped: BuildResult["formatsSkipped"] = [];
   const builtSlugs: string[] = [];
@@ -366,7 +402,7 @@ export async function runBuildDraftValue(
       const base = accuracyScoringBase(format.scoring_type);
       let accuracy = accuracyByBase.get(base);
       if (!accuracy) {
-        accuracy = await loadAccuracy(supabase, base);
+        accuracy = await loadAccuracy(supabase, base, projectionSource);
         accuracyByBase.set(base, accuracy);
       }
 

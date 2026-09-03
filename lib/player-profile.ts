@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import {
   resolveSourceForFormat,
   getAvailableSources,
@@ -24,7 +25,6 @@ import {
 } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { lineFromProjection, type StatLine } from "@/components/player-profile/stat-shaping";
-import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -476,31 +476,37 @@ export function readPoints(metadata: unknown, key: ScoringKey): number {
 // ---------- weekly projections ----------
 
 /**
- * PE-T044: this section reads player_weekly_projections directly and stays
- * that way on purpose.
+ * This section reads player_weekly_projections directly, and it reads the
+ * SOURCE'S OWN PUBLISHED NUMBER rather than our adjusted opinion of it.
  *
- * The profile's "Sleeper projected points" card (components/player-profile/
- * weekly-projections.tsx) and the overview sidebar's "Projected points"
- * panel (components/player-profile/overview-sidebar.tsx, helper text
- * "Sleeper projections, {scoring} scoring") both name Sleeper as the source
- * in the heading a reader sees. That is honest only if the numbers under it
- * are actually Sleeper's own published weekly figures. Routing them through
- * lib/projections/read.ts loadAdjustedProjections would quietly swap in the
- * FF Beacon opponent/reliability/availability/injury adjustment (and, once
- * enabled, the ffbeacon source) under a heading that still says Sleeper,
- * which is worse than showing an unadjusted number honestly labelled.
+ * That half has not changed and should not. The profile's weekly card and the
+ * overview sidebar's outlook panel are the one place on the site that shows a
+ * projection engine's raw output, and the per-stat "beat or missed his
+ * projection" comparison on the statistics tab is a grade of exactly that
+ * number against what happened. Routing them through lib/projections/read.ts
+ * loadAdjustedProjections would apply the opponent, reliability, availability
+ * and injury multipliers on top, and then grade a number nobody published.
  *
- * Both loaders below filter `.eq("source", SLEEPER_SOURCE)`. That filter is
- * what makes "Sleeper projections" LITERALLY true rather than incidentally
- * true: since player_weekly_projections now also holds ffbeacon rows (see
- * lib/projections/source-constants.ts), an unfiltered read here would return
- * both sources' rows for every (season, week) and the "beat or missed his
- * projection" comparison would silently grade against whichever row Postgres
- * happened to return last.
+ * WHAT DID CHANGE: WHICH ENGINE. Both loaders used to pin SLEEPER_SOURCE and
+ * both headings said "Sleeper" in as many words, which was honest but frozen:
+ * the day an admin enables our own engine, the whole site moves onto it and
+ * this page alone would keep quoting Sleeper, with nothing on the screen
+ * saying so. The source is now RESOLVED (lib/projections/source.ts
+ * resolveProjectionSourceForWindow, wrapped for this page in
+ * lib/player-profile-cache.ts) and passed in, and the headings render its
+ * display name rather than a hardcoded word. The label and the number can
+ * therefore never describe different engines.
+ *
+ * `source` is a REQUIRED argument on both loaders on purpose. It is the filter
+ * that makes the read unambiguous: player_weekly_projections holds an ffbeacon
+ * row beside every sleeper one, and both of these key their results by
+ * (season, week) with no tiebreak, so an unfiltered read would let whichever
+ * row Postgres returned last silently decide what the page said. A default
+ * would make forgetting it invisible.
  *
  * See docs/projection-engine-plan.md, section "3.9 Which source a reader
- * gets", and lib/projections/read.test.ts's guard, which allow-lists this
- * file for exactly this reason.
+ * gets", and lib/projections/raw-column-guard.test.ts, which allow-lists this
+ * file for the raw read rather than for the pinned source.
  */
 export type WeeklyProjectionRow = {
   season: number;
@@ -576,6 +582,8 @@ export function effectiveProjectedPoints(
 export async function loadWeeklyProjections(
   supabase: AnySupabase,
   playerId: string,
+  /** The resolved projection engine. See the block comment above. */
+  source: string,
 ): Promise<PlayerProjections> {
   const db = supabase as SupabaseClient<Database>;
   const { data } = await db
@@ -585,7 +593,7 @@ export async function loadWeeklyProjections(
     )
     .eq("player_id", playerId)
     .eq("season_type", "regular")
-    .eq("source", SLEEPER_SOURCE)
+    .eq("source", source)
     .order("season", { ascending: false })
     .order("week", { ascending: true });
 
@@ -689,18 +697,31 @@ export type ProjectedPointsSet = {
  * to overlay the projection line on played weeks in the statistics tab. Numeric
  * columns arrive as strings from PostgREST, so they are coerced here.
  *
- * PE-T044: reads player_weekly_projections directly, same as
- * loadWeeklyProjections above and for the same reason. This feeds the
- * per-stat "beat or missed his projection" comparison (stats-tab.tsx), which
- * is a grade of Sleeper's own published number against what actually
- * happened. Swapping in our adjusted figure would grade a number Sleeper
- * never published.
+ * Reads player_weekly_projections directly, same as loadWeeklyProjections
+ * above and for the same reason. This feeds the per-stat "beat or missed his
+ * projection" comparison (stats-tab.tsx), which grades the engine's own
+ * published number against what actually happened. Swapping in our adjusted
+ * figure would grade a number nobody published.
  *
- * `.eq("source", SLEEPER_SOURCE)` is mandatory here, not incidental: this map
- * is keyed by `${season}-${week}` with no tiebreak, so an unfiltered read
- * would let whichever source's row Postgres returned last silently win once
- * ffbeacon rows exist alongside Sleeper's, making the beat/miss grade
- * nondeterministic.
+ * PINNED TO SLEEPER, AND UNLIKE loadWeeklyProjections THAT IS PERMANENT.
+ *
+ * This map is not season-scoped: the statistics tab reads it for every week of
+ * every season in the game log, back to 2024. Our own engine mirrors Sleeper
+ * from the live week forward and has no history behind it, so resolving the
+ * source here would empty the projection overlay, the beat rate and the
+ * per-stat accuracy for every prior season the day the engine is enabled, with
+ * nothing on the screen saying why. A retrospective can only grade the engine
+ * that actually published a number at the time, and for anything before this
+ * season that is Sleeper.
+ *
+ * The forward-looking card above is a different question and does follow the
+ * resolved engine, so a reader can be shown our projection for this week and
+ * Sleeper's record against past weeks on the same page. Those are two honest
+ * answers to two questions, not one answer told twice.
+ *
+ * The filter itself is mandatory either way: the map is keyed by
+ * `${season}-${week}` with no tiebreak, so an unfiltered read would let
+ * whichever source's row Postgres returned last silently win.
  */
 export async function loadProjectionsMap(
   supabase: AnySupabase,

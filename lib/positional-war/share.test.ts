@@ -28,6 +28,7 @@ function fakeDigest(overrides: Partial<WarInputsDigest> = {}): WarInputsDigest {
     scoringBase: "pts_ppr",
     scoringUsable: true,
     scoringKeyCount: 41,
+    projectionSource: "sleeper",
     modelVersion: "war-1",
     ...overrides,
   };

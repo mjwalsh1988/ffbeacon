@@ -75,6 +75,7 @@ function baseInput(overrides: Partial<WarFingerprintInput> = {}): WarFingerprint
     modelVersion: DEFAULT_WAR_SETTINGS.modelVersion,
     projectionsSnapshot: "2026-08-26T14:00:00.000Z",
     accuracySnapshot: "2026-08-26T09:00:00.000Z",
+    projectionSource: "sleeper",
     ...overrides,
   };
 }
@@ -130,6 +131,24 @@ describe("warFingerprint: false-hit scenarios from plan section 6.4", () => {
     const a = warFingerprint(baseInput());
     const b = warFingerprint(baseInput({ scoringSettings: { ...BASE_SCORING, pass_td: 6 } }));
     expect(a).not.toBe(b);
+  });
+
+  it("switching the projection source changes the fingerprint", () => {
+    // The whole point of carrying projectionSource in the key. Enabling the FF
+    // Beacon projection engine changes every projected point the model reads
+    // and changes none of the other fields, because the engine's own settings
+    // live under `beaconProjections` and this payload does not carry that
+    // block. Without this the switch could be flipped and every league inside
+    // the 12-hour TTL would keep serving a curve built on Sleeper's numbers.
+    const a = warFingerprint(baseInput({ projectionSource: "sleeper" }));
+    const b = warFingerprint(baseInput({ projectionSource: "ffbeacon" }));
+    expect(a).not.toBe(b);
+  });
+
+  it("the inputs digest reports the projection source as the field that moved", () => {
+    const a = warInputsDigest(baseInput({ projectionSource: "sleeper" }));
+    const b = warInputsDigest(baseInput({ projectionSource: "ffbeacon" }));
+    expect(digestsMatch(a, b)).toEqual({ ok: false, field: "projectionSource" });
   });
 
   it("a different season changes the fingerprint", () => {
@@ -278,6 +297,7 @@ describe("warFingerprint: stability", () => {
     const a = warFingerprint(baseInput());
     const reordered: WarFingerprintInput = {
       accuracySnapshot: "2026-08-26T09:00:00.000Z",
+      projectionSource: "sleeper",
       projectionsSnapshot: "2026-08-26T14:00:00.000Z",
       modelVersion: DEFAULT_WAR_SETTINGS.modelVersion,
       warSettings: BASE_WAR_SETTINGS,

@@ -32,6 +32,7 @@ import {
 } from "@/lib/power-pulse/load";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -183,13 +184,48 @@ function withinRetryBackoff(row: BackoffRow): boolean {
  * are no rows, when the freshest row is past the TTL, when the model version
  * moved, or when the stored week is behind the live NFL week.
  */
+/**
+ * The version string `league_power_pulse_cache.model_version` is keyed on, WITH
+ * the projection source folded in.
+ *
+ * `modelVersion` alone is not enough, and the gap is not hypothetical. It
+ * hashes the stored settings document, so it moves when an admin edits
+ * anything, the `beaconProjections.enabled` toggle included. It does NOT move
+ * on the two flips that need no settings change at all: ffbeacon becoming
+ * available once the nightly builder reaches count parity for the window, and
+ * losing it again when a single builder run is missed. Either changes every
+ * projected number in the league while leaving the stored row looking valid for
+ * the full 12 hour TTL.
+ *
+ * Appending the source rather than adding a column keeps this inside the
+ * comparison the staleness gate already makes. Positional WAR solves the same
+ * problem by putting projectionSource in its fingerprint payload; this is that
+ * fix in the shape this cache already has.
+ */
+export function powerPulseCacheModelVersion(
+  modelVersion: string,
+  projectionSource: string,
+): string {
+  return `${modelVersion}:${projectionSource}`;
+}
+
 export async function powerPulseIsStale(
   supabase: ServiceClient,
   leagueRowId: string,
   season: number,
   playoffWeekStart: number,
   getCurrentWeek: () => Promise<number>,
-  modelVersion: string,
+  /**
+   * The version the cache should be keyed on, resolved LAZILY.
+   *
+   * A function rather than a string because working it out can cost two count
+   * probes: it folds in which projection source this league would actually
+   * read (see `cacheModelVersion` in calculateLeaguePowerPulse for why the
+   * source has to be in the key at all). Every cheaper reason to answer the
+   * question first, so a league in backoff, one with no cached row, or one
+   * whose week window has moved on never pays for it.
+   */
+  getModelVersion: () => Promise<string>,
 ): Promise<boolean> {
   const { data: backoffRow } = await supabase
     .from("leagues")
@@ -227,9 +263,10 @@ export async function powerPulseIsStale(
     .limit(1)
     .maybeSingle();
   if (error || !data?.generated_at) return true;
-  if (data.model_version !== modelVersion) return true;
   const currentWeek = await getCurrentWeek();
   if (Number(data.through_week) < currentWeek - 1) return true;
+  // Last, because it is the only check that can cost a round trip.
+  if (data.model_version !== (await getModelVersion())) return true;
   return Date.now() - new Date(data.generated_at).getTime() >= POWER_PULSE_TTL_MS;
 }
 
@@ -340,7 +377,16 @@ export async function refreshPowerPulse(
         league.season,
         league.playoffWeekStart,
         getCurrentWeek,
-        settings.modelVersion,
+        async () =>
+          powerPulseCacheModelVersion(
+            settings.modelVersion,
+            await resolveProjectionSourceForWindow({
+              supabase,
+              season: league.season,
+              fromWeek: await getCurrentWeek(),
+              settings: settings.beaconProjections,
+            }),
+          ),
       );
       if (!stale) return;
     }
@@ -493,9 +539,32 @@ export async function calculateLeaguePowerPulse(
   // before it actually have a usable row; opponentMultiplier picks.
   const defenseSeasons = defenseSeasonsFor(league.season);
 
+  // WHICH PROJECTION SOURCE THIS SCORE IS BUILT ON IS NOT DECIDED HERE.
+  //
+  // Both loads below used to default to Sleeper, which meant the FF Beacon
+  // projection engine could be switched on and Power Pulse, the model every
+  // other League Pulse surface reads its per-week numbers back out of, would
+  // never notice. The resolver makes no query while the feature is disabled, so
+  // this is free today. Enabling it changes the stored settings document, which
+  // changes `modelVersion` (see effectiveModelVersion in
+  // lib/power-pulse/default-settings.ts), which is what forces every cached row
+  // to rescore rather than serving numbers from the old source for 12 hours.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase,
+    season: league.season,
+    fromWeek: currentWeek,
+    settings: settings.beaconProjections,
+  });
+
+  const cacheModelVersion = powerPulseCacheModelVersion(
+    settings.modelVersion,
+    projectionSource,
+  );
+
   const [projections, accuracy, defense, schedule, results] = await Promise.all([
-    loadProjections(supabase, playerIds, league.season, currentWeek),
-    loadAccuracy(supabase, playerIds, scoringBase),
+    loadProjections(supabase, playerIds, league.season, currentWeek, undefined, projectionSource),
+    // Scoped to the SAME source, per migration 0240.
+    loadAccuracy(supabase, playerIds, scoringBase, projectionSource),
     loadDefenseSplits(supabase, scoringBase, defenseSeasons),
     loadSchedule(supabase, leagueRowId, league.season),
     loadCompletedResults(supabase, leagueRowId, league.season),
@@ -564,7 +633,9 @@ export async function calculateLeaguePowerPulse(
   }
 
   const generatedAt = new Date().toISOString();
-  const rows = teams.map((t) => toCacheRow(t, leagueRowId, league.season, currentWeek, settings.modelVersion, generatedAt));
+  const rows = teams.map((t) =>
+    toCacheRow(t, leagueRowId, league.season, currentWeek, cacheModelVersion, generatedAt),
+  );
 
   const { error } = await supabase
     .from("league_power_pulse_cache")

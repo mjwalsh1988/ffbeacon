@@ -19,6 +19,7 @@ import { Panel } from "@/components/dashboard-panel";
 import { SeasonFinishesRail } from "@/components/player-profile/positional-finishes";
 import { WeeklyStats } from "@/components/player-profile/weekly-stats";
 import { WeeklyProjections } from "@/components/player-profile/weekly-projections";
+import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 import {
   aggregateSeasons,
   statColumns,
@@ -48,6 +49,7 @@ import {
   loadWeeklyStatsCached,
   loadWeeklyProjectionsCached,
   loadProjectionsMapCached,
+  resolveProfileProjectionSourceCached,
 } from "@/lib/player-profile-cache";
 
 export async function StatsTab({
@@ -61,10 +63,19 @@ export async function StatsTab({
   scoringLabel: string;
   tePremiumBonus?: number;
 }) {
+  // WHICH ENGINE FIRST, because it is part of the cache key for both
+  // projection reads below (lib/player-profile-cache.ts). Resolving it inside
+  // them would key each entry on a value the key could not see, and the switch
+  // would take a day to show up.
+  const projectionSource = await resolveProfileProjectionSourceCached();
+  const projectionSourceLabel = projectionSourceDisplay(projectionSource);
+
   const [finishes, weeklyRaw, projections, projMap, nflState] = await Promise.all([
     loadPositionalFinishesCached(player.id),
     loadWeeklyStatsCached(player.id),
-    loadWeeklyProjectionsCached(player.id),
+    loadWeeklyProjectionsCached(player.id, projectionSource),
+    // Deliberately NOT given the resolved source: it grades published history
+    // across every season and only Sleeper has one. See lib/player-profile.ts.
     loadProjectionsMapCached(player.id),
     getNflState(),
   ]);
@@ -212,6 +223,7 @@ export async function StatsTab({
               cards={projectionCards}
               position={player.position}
               scoringLabel={scoringLabel}
+              sourceLabel={projectionSourceLabel}
               season={projections.season}
               totalPoints={projectionSummary.totalPoints}
               perGame={projectionSummary.perGame}

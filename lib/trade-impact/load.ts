@@ -24,6 +24,7 @@ import { closestScoringBase } from "@/lib/league-scoring";
 import { resolveCurrentWeek } from "@/lib/league-matchups";
 import { getNflState } from "@/lib/sleeper";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import {
   loadTradeFinderLeague,
   type RosterIdentity,
@@ -231,9 +232,21 @@ export async function loadTradeImpactWorld(
   const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = defenseSeasonsFor(league.season);
 
+  // The projection source is resolved, never assumed. See
+  // resolveProjectionSourceForWindow in lib/projections/source.ts: it makes no
+  // query while the FF Beacon projection engine is disabled, and the day it is
+  // enabled this surface moves onto our own numbers with every other one
+  // instead of being the odd screen still quoting Sleeper's.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase: admin,
+    season: league.season,
+    fromWeek: currentWeek,
+    settings: settings.beaconProjections,
+  });
+
   const [projectionRows, accuracy, defense, schedule, cachedWeekly] = await Promise.all([
-    loadProjections(admin, playerIds, league.season, currentWeek),
-    loadAccuracy(admin, playerIds, scoringBase),
+    loadProjections(admin, playerIds, league.season, currentWeek, undefined, projectionSource),
+    loadAccuracy(admin, playerIds, scoringBase, projectionSource),
     loadDefenseSplits(admin, scoringBase, defenseSeasons),
     loadSchedule(admin, finder.leagueRowId, league.season),
     loadCachedWeekly(admin, finder.leagueRowId, league.season),

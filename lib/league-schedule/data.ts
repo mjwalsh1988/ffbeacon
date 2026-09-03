@@ -14,6 +14,7 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { closestScoringBase } from "@/lib/league-scoring";
 import { winProbability } from "@/lib/power-pulse/math";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { MAX_MATCHUP_WEEK, resolveCurrentWeek } from "@/lib/league-matchups";
 import { getNflHomeAwayMap, getNflState } from "@/lib/sleeper";
 import { alignedStartingSlots } from "./slots";
@@ -448,6 +449,24 @@ export async function loadMatchupDetail(
   const scoringBase = closestScoringBase(league.scoringSettings);
   const defenseSeasons = defenseSeasonsFor(season);
 
+  // WHICH PROJECTION SOURCE THIS PAGE READS IS NOT THIS PAGE'S DECISION.
+  //
+  // It used to be, by omission: both loads below defaulted to Sleeper, so the
+  // day an admin enables the FF Beacon projection engine, Power Pulse and the
+  // Schedule board would move onto our own numbers and this lineup table would
+  // quietly stay on Sleeper's. Two totals for the same team in the same week,
+  // one tab apart, with nothing on either screen saying why. The resolver is
+  // the same one lib/projections/read.ts uses and it makes no query while the
+  // feature is off, so this costs nothing today and carries over on its own the
+  // moment the switch is flipped.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase: admin,
+    season,
+    fromWeek: week,
+    toWeek: week,
+    settings: settings.beaconProjections,
+  });
+
   const [projectionRows, accuracy, defense, homeAwayByTeamWeek] = await Promise.all([
     // One week only, and the ceiling belongs in the query rather than in a loop
     // underneath it. Both bounds are `week`, so Postgres returns the sixty rows
@@ -456,8 +475,10 @@ export async function loadMatchupDetail(
     // sixty players it was 306 rows and 261ms against the live database, versus
     // 16 rows and 1.0ms bounded, and eighteen weeks of them clears the 1000-row
     // page size so the read also bought itself a second keyset round trip.
-    loadProjections(admin, playerIds, season, week, week),
-    loadAccuracy(admin, playerIds, scoringBase),
+    loadProjections(admin, playerIds, season, week, week, projectionSource),
+    // Scoped to the SAME source, per migration 0240: a reliability multiplier
+    // measured against Sleeper's projection means nothing applied to ours.
+    loadAccuracy(admin, playerIds, scoringBase, projectionSource),
     loadDefenseSplits(admin, scoringBase, defenseSeasons),
     // Home and away, which no stats or projection row carries. Memoised for an
     // hour inside lib/sleeper.ts, so this is one request per process per season

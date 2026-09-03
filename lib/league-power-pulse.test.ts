@@ -396,7 +396,7 @@ describe("powerPulseIsStale backoff early return", () => {
       2026,
       15,
       getCurrentWeek,
-      "v1",
+      async () => "v1",
     );
 
     expect(stale).toBe(false);
@@ -421,7 +421,7 @@ describe("powerPulseIsStale backoff early return", () => {
       2026,
       15,
       getCurrentWeek,
-      "v1",
+      async () => "v1",
     );
     expect(stale).toBe(true);
   });

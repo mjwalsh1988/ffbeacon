@@ -37,9 +37,11 @@ import {
   type MarginalSettings,
 } from "./marginal";
 import { rosteredPlayerIds } from "./waiver-replacement";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import {
   getProjectionBoard,
   projectionDataVersion,
+  resolveBoardProjectionSource,
   type ProjectionBoard,
 } from "./projection-board";
 import type { ShapedDraftCache } from "./types";
@@ -224,7 +226,21 @@ async function resolveContext(
     // Fingerprint the source data ONCE and hand the same value to both caches
     // below, so the board and the Draft Pulse built on it can never invalidate
     // at different moments and produce a mixed-vintage answer.
-    const dataVersion = await projectionDataVersion(admin, season);
+    // Which projection engine is live, resolved ONCE for the same reason the
+    // fingerprint is: two resolutions could straddle an admin flipping the
+    // switch and leave a board fingerprinted against one engine and built from
+    // the other. Free while the feature is off, when it makes no query at all.
+    const projectionSource = await resolveBoardProjectionSource(
+      admin,
+      season,
+      fromWeek,
+      settings,
+    );
+    const dataVersion = await projectionDataVersion(
+      admin,
+      season,
+      projectionSource,
+    );
     const board = await getProjectionBoard(admin, {
       scoringSettings: cache.draft.scoringSettings,
       season,
@@ -233,6 +249,7 @@ async function resolveContext(
       // scoring signature, so passing it through drops a round trip per request.
       settings,
       dataVersion,
+      source: projectionSource,
     });
 
     const rosters = await buildTeamRosters(admin, cache, {
@@ -384,7 +401,20 @@ export async function getPulsePayload(
 
   // The map is a pure function of the projection board, so this identifies it
   // exactly. A caller holding this etag already has the same bytes.
-  const boardEtag = `${context.board.scoringSignature}|${context.board.season}|${context.board.fromWeek}`;
+  //
+  // The projection engine is part of it. The scoring signature covers the
+  // league's scoring and the model version and nothing else, so the day an
+  // admin switches engines every open draft room would hold an etag that still
+  // matched and would never be sent the rebuilt numbers.
+  //
+  // Sleeper keeps the old shape, for the same reason projectionDataVersion does:
+  // appending it unconditionally would invalidate every open room on the deploy
+  // that added the suffix, which is a rebuild storm buying nothing.
+  const engine = context.board.projectionSource ?? SLEEPER_SOURCE;
+  const boardEtag =
+    engine === SLEEPER_SOURCE
+      ? `${context.board.scoringSignature}|${context.board.season}|${context.board.fromWeek}`
+      : `${context.board.scoringSignature}|${context.board.season}|${context.board.fromWeek}|${engine}`;
 
   let players: Record<string, PulsePlayerSummary> | null = null;
   if (request.knownBoardEtag !== boardEtag) {

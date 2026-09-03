@@ -447,7 +447,7 @@ async function loadProjectionsChunk(
   season: number,
   fromWeek: number,
   toWeek?: number,
-  source?: string,
+  source: string = SLEEPER_SOURCE,
 ): Promise<ProjectionRow[]> {
   const out: ProjectionRow[] = [];
 
@@ -462,7 +462,7 @@ async function loadProjectionsChunk(
   // what the completeness guard below compares against, so a count over
   // eighteen weeks and a select over one would fail every run.
   if (toWeek !== undefined) countQ = countQ.lte("week", toWeek);
-  if (source !== undefined) countQ = countQ.eq("source", source);
+  countQ = countQ.eq("source", source);
   const { count: expected, error: countErr } = await countQ;
   if (countErr) {
     throw new Error(`power pulse projection count failed: ${countErr.message}`);
@@ -483,7 +483,7 @@ async function loadProjectionsChunk(
       .order("id", { ascending: true })
       .limit(PAGE);
     if (toWeek !== undefined) q = q.lte("week", toWeek);
-    if (source !== undefined) q = q.eq("source", source);
+    q = q.eq("source", source);
     if (cursor !== null) q = q.gt("id", cursor);
     const { data, error } = await q;
     if (error)
@@ -517,12 +517,25 @@ async function loadProjectionsChunk(
 }
 
 /**
- * `source` is optional. Omitted, this reads every source's rows for the
- * window, unchanged from before lib/projections/read.ts existed: Power
- * Pulse, FAAB, Positional WAR and every other existing caller keep calling
- * this with four arguments and keep the exact behaviour they always had.
- * lib/projections/read.ts is the one caller that passes a fifth, because it
- * has already resolved which single source a reader should see.
+ * `source` DEFAULTS TO SLEEPER, and that default is a safety net rather than a
+ * convenience.
+ *
+ * It used to be genuinely optional, and an omitted argument applied no filter
+ * at all. That was harmless for exactly as long as one source existed. The day
+ * `player_weekly_projections` holds an ffbeacon row beside its sleeper one, an
+ * unfiltered read returns TWO rows for the same player-week, and the
+ * completeness guard inside loadProjectionsChunk cannot notice because its
+ * count query was unfiltered too: both numbers double together and the read
+ * looks complete. Downstream, a caller keying a Map by player id silently
+ * takes whichever row came back last, and one that pushes to an array
+ * double-counts the whole universe.
+ *
+ * Every caller in the codebase now passes a resolved source (see
+ * resolveProjectionSourceForWindow in lib/projections/source.ts, and the guard
+ * in lib/projections/source-guard.test.ts that keeps it that way). The default
+ * exists so that a caller written tomorrow that forgets gets the old, correct,
+ * single-source behaviour instead of a silently doubled one. Matches
+ * loadAccuracy below, which has always defaulted this way.
  */
 export async function loadProjections(
   supabase: ServiceClient,
@@ -530,7 +543,7 @@ export async function loadProjections(
   season: number,
   fromWeek: number,
   toWeek?: number,
-  source?: string,
+  source: string = SLEEPER_SOURCE,
 ): Promise<ProjectionRow[]> {
   if (playerIds.length === 0) return [];
 

@@ -23,6 +23,17 @@
  * Absent is not zero. A player with no projection row is omitted from `players`
  * entirely, and every consumer treats a miss as "no opinion" rather than a zero,
  * because a zero would quietly rank a rookie below a backup kicker.
+ *
+ * THE SOURCE IS RESOLVED, NEVER LEFT TO A DEFAULT. `player_weekly_projections`
+ * now holds an ffbeacon row beside every sleeper one (lib/projections/
+ * source-constants.ts), so a read with no `source` filter is not merely stale:
+ * it returns BOTH rows for every player-week, and this sweep pushes them into
+ * one array, so every player would be projected twice and `seasonPoints` would
+ * roughly double. The source therefore comes from
+ * resolveProjectionSourceForWindow (lib/projections/source.ts), which makes no
+ * query at all while the feature is off, and is folded into the cache
+ * fingerprint so the day an admin turns it on every stored board is rebuilt
+ * rather than served from the old engine.
  */
 
 import "server-only";
@@ -45,6 +56,8 @@ import {
 } from "@/lib/power-pulse/project";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 
 type Client = SupabaseClient<Database>;
 
@@ -114,6 +127,15 @@ export interface ProjectionBoard {
   weeks: number[];
   /** The stored-points fallback base the accuracy rows were read for. */
   scoringBase: string;
+  /**
+   * Which projection engine produced these numbers, "sleeper" or "ffbeacon".
+   *
+   * Recorded rather than inferred, so a board read back out of the cache can
+   * say what it was built from. Absent on a payload cached before the source
+   * was resolved at all, which is exactly the payload that must not be trusted
+   * once the feature is enabled; the data fingerprint retires those anyway.
+   */
+  projectionSource?: string;
   /**
    * When this sweep was computed, ISO. Provenance rather than decoration: a
    * completed draft's snapshot dates its value and ADP inputs and calls itself
@@ -223,6 +245,7 @@ async function loadAllProjections(
   supabase: Client,
   season: number,
   fromWeek: number,
+  source: string,
 ): Promise<ProjectionRow[]> {
   const out: ProjectionRow[] = [];
   for (let from = 0; ; from += PAGE) {
@@ -233,6 +256,9 @@ async function loadAllProjections(
       )
       .eq("season", season)
       .eq("season_type", "regular")
+      // NOT OPTIONAL. Without it this pushes one row per source per
+      // player-week into `out`, and the loop below sums every one of them.
+      .eq("source", source)
       .gte("week", fromWeek)
       .order("player_id", { ascending: true })
       .order("week", { ascending: true })
@@ -280,21 +306,40 @@ export async function buildProjectionBoard(
     fromWeek: number;
     /** Only supplied by tests; production loads the shared settings row. */
     settings?: PowerPulseSettings;
+    /**
+     * The already-resolved projection source. getProjectionBoard resolves it
+     * once and passes it here so the fingerprint and the build can never end up
+     * reading different engines; a direct caller (a test) that omits it gets
+     * the same resolution done locally.
+     */
+    source?: string;
   },
 ): Promise<ProjectionBoard> {
   const settings = params.settings ?? (await loadPowerPulseSettings(supabase));
   const scoringBase = closestScoringBase(params.scoringSettings);
+  const source =
+    params.source ??
+    (await resolveProjectionSourceForWindow({
+      supabase,
+      season: params.season,
+      fromWeek: params.fromWeek,
+      settings: settings.beaconProjections,
+    }));
 
   const projections = await loadAllProjections(
     supabase,
     params.season,
     params.fromWeek,
+    source,
   );
   const playerIds = [...new Set(projections.map((p) => p.playerId))];
   const facts = await loadPlayerFacts(supabase, playerIds);
 
   const [accuracy, defense] = await Promise.all([
-    loadAccuracy(supabase, playerIds, scoringBase),
+    // Scoped to the SAME source the projections came from: a reliability
+    // multiplier measured against one engine's numbers is only meaningful
+    // applied to that engine's numbers.
+    loadAccuracy(supabase, playerIds, scoringBase, source),
     loadDefenseSplits(supabase, scoringBase, defenseSeasonsFor(params.season)),
   ]);
 
@@ -366,6 +411,7 @@ export async function buildProjectionBoard(
     fromWeek: params.fromWeek,
     weeks: [...weekSet].sort((a, b) => a - b),
     scoringBase,
+    projectionSource: source,
     computedAt: new Date().toISOString(),
     players,
   };
@@ -452,6 +498,21 @@ function rememberBoard(
 export async function projectionDataVersion(
   admin: Client,
   season: number,
+  /**
+   * The resolved projection source. It is part of the fingerprint AND part of
+   * the probe, and both matter.
+   *
+   * Part of the probe, because the two engines are written by different jobs on
+   * different schedules: fingerprinting the newest row of EITHER would rebuild
+   * a Sleeper board every time the ffbeacon builder ran, and would miss a
+   * Sleeper sync that landed while ffbeacon was quiet.
+   *
+   * Part of the fingerprint, because the stored cache row is keyed on the
+   * scoring signature alone. The moment an admin flips the engine on, every
+   * stored board was built from the other one, and a fingerprint that did not
+   * name the source would report them as current.
+   */
+  source: string,
 ): Promise<string> {
   const [projections, players] = await Promise.all([
     admin
@@ -459,6 +520,7 @@ export async function projectionDataVersion(
       .select("updated_at")
       .eq("season", season)
       .eq("season_type", "regular")
+      .eq("source", source)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -480,7 +542,35 @@ export async function projectionDataVersion(
 
   const p = projections.data?.updated_at ?? "none";
   const d = players.data?.updated_at ?? "none";
-  return `${p}|${d}`;
+  // SLEEPER KEEPS THE OLD SHAPE. Prefixing it unconditionally would change
+  // every fingerprint on the deploy that introduced this, retiring every stored
+  // board and every open draft room's etag at once for no new information. The
+  // guarantee this exists for is unaffected: switching engines still changes
+  // the string, because the other engine is not the default one.
+  return source === SLEEPER_SOURCE ? `${p}|${d}` : `${source}|${p}|${d}`;
+}
+
+/**
+ * Which projection engine a draft room reads, for one season and window.
+ *
+ * A thin named wrapper so pulse-service.ts resolves the source ONCE and hands
+ * the same value to the fingerprint and to the board, exactly as it already
+ * does with the settings document and the data version. Two resolutions could
+ * in principle straddle an admin flipping the switch, and the result would be a
+ * board fingerprinted against one engine and built from the other.
+ */
+export async function resolveBoardProjectionSource(
+  admin: Client,
+  season: number,
+  fromWeek: number,
+  settings: PowerPulseSettings,
+): Promise<string> {
+  return resolveProjectionSourceForWindow({
+    supabase: admin,
+    season,
+    fromWeek,
+    settings: settings.beaconProjections,
+  });
 }
 
 export async function getProjectionBoard(
@@ -503,11 +593,26 @@ export async function getProjectionBoard(
      * saves a round trip per request.
      */
     dataVersion?: string;
+    /**
+     * The resolved projection source. Usually passed in by the caller for the
+     * same reason `dataVersion` is: one resolution, one answer, no chance of the
+     * fingerprint and the build disagreeing about which engine is live.
+     */
+    source?: string;
   },
 ): Promise<ProjectionBoard> {
   const settings = params.settings ?? (await loadPowerPulseSettings(admin));
+  const source =
+    params.source ??
+    (await resolveBoardProjectionSource(
+      admin,
+      params.season,
+      params.fromWeek,
+      settings,
+    ));
   const dataVersion =
-    params.dataVersion ?? (await projectionDataVersion(admin, params.season));
+    params.dataVersion ??
+    (await projectionDataVersion(admin, params.season, source));
   const signature = scoringSignature(
     params.scoringSettings,
     settings.modelVersion,
@@ -557,6 +662,7 @@ export async function getProjectionBoard(
       season: params.season,
       fromWeek: params.fromWeek,
       settings,
+      source,
     });
     rememberBoard(key, board, Date.now());
     const { error } = await admin.from("on_the_clock_projection_cache").upsert(

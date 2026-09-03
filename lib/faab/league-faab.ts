@@ -39,6 +39,7 @@ import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/proj
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import { simulateWithReplacements } from "@/lib/power-pulse/what-if";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import {
   buildOptimalLineup,
   lineupSigma,
@@ -232,10 +233,22 @@ export async function calculateLeagueFaab(
 
   const pulseSettings = await loadPowerPulseSettings(supabase);
 
+  // The projection source is resolved, never assumed. See
+  // resolveProjectionSourceForWindow in lib/projections/source.ts: it makes no
+  // query while the FF Beacon projection engine is disabled, and the day it is
+  // enabled this surface moves onto our own numbers with every other one
+  // instead of being the odd screen still quoting Sleeper's.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase,
+    season: league.season,
+    fromWeek: currentWeek,
+    settings: pulseSettings.beaconProjections,
+  });
+
   const [projectionRows, accuracy, defense, schedule, money, valueContext] =
     await Promise.all([
-      loadProjections(supabase, playerIds, league.season, currentWeek),
-      loadAccuracy(supabase, playerIds, scoringBase),
+      loadProjections(supabase, playerIds, league.season, currentWeek, undefined, projectionSource),
+      loadAccuracy(supabase, playerIds, scoringBase, projectionSource),
       loadDefenseSplits(supabase, scoringBase, defenseSeasons),
       loadSchedule(supabase, input.leagueRowId, league.season),
       loadLeagueMoney(supabase, input.leagueRowId),

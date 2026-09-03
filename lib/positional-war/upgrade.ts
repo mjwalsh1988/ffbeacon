@@ -20,6 +20,7 @@ import { startingSlots, type LineupCandidate } from "@/lib/power-pulse/lineup";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import { simulateWithReplacements, type WeeklyDistribution } from "@/lib/power-pulse/what-if";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { computeLineupSwap, type CandidateWeek, type RosterMetaEntry } from "@/lib/faab/marginal";
 import { loadCachedWeekly } from "@/lib/trade-impact/load";
 import { matchViewerRoster, type ViewerCandidate } from "@/lib/league-viewer";
@@ -271,9 +272,21 @@ export async function runUpgradeWhatIf(
   const playerIds = Array.from(new Set([...players.values()].map((p) => p.playerId)));
   const pulseSettings = await loadPowerPulseSettings(supabase);
 
+  // The projection source is resolved, never assumed. See
+  // resolveProjectionSourceForWindow in lib/projections/source.ts: it makes no
+  // query while the FF Beacon projection engine is disabled, and the day it is
+  // enabled this surface moves onto our own numbers with every other one
+  // instead of being the odd screen still quoting Sleeper's.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase,
+    season,
+    fromWeek: currentWeek,
+    settings: pulseSettings.beaconProjections,
+  });
+
   const [projectionRows, accuracy, defense, schedule] = await Promise.all([
-    loadProjections(supabase, playerIds, season, currentWeek),
-    loadAccuracy(supabase, playerIds, scoringBase),
+    loadProjections(supabase, playerIds, season, currentWeek, undefined, projectionSource),
+    loadAccuracy(supabase, playerIds, scoringBase, projectionSource),
     loadDefenseSplits(supabase, scoringBase, defenseSeasons),
     loadSchedule(supabase, leagueRowId, season),
   ]);

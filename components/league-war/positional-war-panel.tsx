@@ -31,6 +31,8 @@
  */
 
 import Link from "next/link";
+import { currentProjectionSourceCached } from "@/lib/projections/current-source";
+import { projectionSourceDisplay } from "@/lib/projections/source-constants";
 import { ArrowRight } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -201,6 +203,27 @@ export async function PositionalWarPanel({
 
   // Same reasoning: the summary introduces the chart, so it describes the
   // players the chart plots.
+  // WHOSE PROJECTIONS THE CURVE IS BUILT FROM, asked about the curve's OWN
+  // window rather than the season.
+  //
+  // NOT THE SAME THING as `sourceDisplay` above, which is the VALUE source the
+  // reader picked (KTC, FantasyCalc). Positional WAR deliberately does not vary
+  // by that one at all; it varies by this one, which an admin switches.
+  //
+  // The window matters. Our builder only writes weeks from the live one
+  // forward, so a season that is covered from week 6 on and has a gap in week 2
+  // reads as covered to this curve and uncovered to a whole-season question. It
+  // is the same engine the fingerprint recorded (lib/positional-war/
+  // fingerprint.ts resolves it over these same bounds), so the label and the
+  // numbers describe one thing. Free while the feature is off.
+  const projectionSourceLabel = projectionSourceDisplay(
+    await currentProjectionSourceCached(
+      view.fromWeek !== null && view.throughWeek !== null
+        ? { season, fromWeek: view.fromWeek, toWeek: view.throughWeek }
+        : undefined,
+    ),
+  );
+
   const summary = buildChartSummary(dashboardPositions, teamCount);
   const excludedSlots = unprojectableSlots(rosterPositions, NON_STARTING_SLOTS, PULSE_SLOT_ELIGIBILITY);
   const scoringDescription = describeLeagueScoring(scoringSettings);
@@ -214,6 +237,7 @@ export async function PositionalWarPanel({
     modelVersion: view.modelVersion,
     generatedAt: view.generatedAt,
     isStale: view.isStale,
+    projectionSourceLabel,
   });
 
   const noteGeometry = buildChartGeometry({

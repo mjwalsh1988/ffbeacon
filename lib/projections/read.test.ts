@@ -11,11 +11,19 @@
  * afterward.
  */
 
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
+import { __resetProjectionCoverageMemo } from "./source";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { loadAdjustedProjections } from "./read";
 import { SLEEPER_SOURCE, BEACON_SOURCE } from "./source";
+
+// The coverage probe is memoized in process (see availableProjectionSources).
+// Without this, one test's cached answer is another test's fixture and the
+// probe counts below depend on which file ran first.
+beforeEach(() => {
+  __resetProjectionCoverageMemo();
+});
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;

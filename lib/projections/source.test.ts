@@ -8,16 +8,25 @@
  * the window must never be handed to a caller who would then query nothing.
  */
 
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
+import { __resetProjectionCoverageMemo } from "./source";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import {
   availableProjectionSources,
   resolveProjectionSource,
+  resolveProjectionSourceForWindow,
   SLEEPER_SOURCE,
   BEACON_SOURCE,
 } from "./source";
 import { DEFAULT_PROJECTION_SETTINGS } from "./default-settings";
+
+// The coverage probe is memoized in process (see availableProjectionSources).
+// Without this, one test's cached answer is another test's fixture and the
+// probe counts below depend on which file ran first.
+beforeEach(() => {
+  __resetProjectionCoverageMemo();
+});
 
 const enabledSettings = { ...DEFAULT_PROJECTION_SETTINGS, enabled: true };
 const disabledSettings = { ...DEFAULT_PROJECTION_SETTINGS, enabled: false };
@@ -194,5 +203,80 @@ describe("availableProjectionSources: coverage against a cron miss", () => {
     ]);
     const available = await availableProjectionSources(client, 2026, 5, 6);
     expect(available).toEqual([SLEEPER_SOURCE]);
+  });
+});
+
+/**
+ * resolveProjectionSourceForWindow is the function every consumer outside
+ * lib/projections/read.ts actually calls, so the two properties that make it
+ * safe to wire into a hot page get their own coverage: the disabled path must
+ * cost NOTHING, and the answer must match what the pure resolver would give.
+ */
+describe("resolveProjectionSourceForWindow", () => {
+  /** A client that fails the test if anything queries it. */
+  function forbiddenClient(): SupabaseClient<Database> {
+    return {
+      from: () => {
+        throw new Error("no query should be issued while the feature is disabled");
+      },
+    } as unknown as SupabaseClient<Database>;
+  }
+
+  it("issues no query at all and answers Sleeper when the feature is disabled", async () => {
+    await expect(
+      resolveProjectionSourceForWindow({
+        supabase: forbiddenClient(),
+        season: 2026,
+        fromWeek: 5,
+        toWeek: 7,
+        settings: disabledSettings,
+      }),
+    ).resolves.toBe(SLEEPER_SOURCE);
+  });
+
+  it("treats a missing settings document as disabled rather than throwing", async () => {
+    await expect(
+      resolveProjectionSourceForWindow({
+        supabase: forbiddenClient(),
+        season: 2026,
+        fromWeek: 5,
+        settings: null,
+      }),
+    ).resolves.toBe(SLEEPER_SOURCE);
+  });
+
+  it("answers BEACON_SOURCE when enabled and the window is fully covered", async () => {
+    const client = fakeClient([
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 5 },
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 6 },
+      { source: BEACON_SOURCE, season: 2026, season_type: "regular", week: 5 },
+      { source: BEACON_SOURCE, season: 2026, season_type: "regular", week: 6 },
+    ]);
+    await expect(
+      resolveProjectionSourceForWindow({
+        supabase: client,
+        season: 2026,
+        fromWeek: 5,
+        toWeek: 6,
+        settings: enabledSettings,
+      }),
+    ).resolves.toBe(BEACON_SOURCE);
+  });
+
+  it("falls back to Sleeper when enabled but a week inside the window is missing", async () => {
+    const client = fakeClient([
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 5 },
+      { source: SLEEPER_SOURCE, season: 2026, season_type: "regular", week: 6 },
+      { source: BEACON_SOURCE, season: 2026, season_type: "regular", week: 5 },
+    ]);
+    await expect(
+      resolveProjectionSourceForWindow({
+        supabase: client,
+        season: 2026,
+        fromWeek: 5,
+        toWeek: 6,
+        settings: enabledSettings,
+      }),
+    ).resolves.toBe(SLEEPER_SOURCE);
   });
 });

@@ -21,6 +21,16 @@
  * would put an uncached external fetch on a public page's critical path. We
  * already store everything needed to answer it: the newest projected season, and
  * the newest week anybody actually played. Both are indexed lookups.
+ *
+ * EVERY PROJECTION READ NAMES ITS SOURCE. `player_weekly_projections` and
+ * `player_projection_accuracy` both hold an ffbeacon row beside every sleeper
+ * one (lib/projections/source-constants.ts), so an unfiltered read is not
+ * merely stale, it is ambiguous: `loadProjectionRows` keys a Map by
+ * (player, week) with no tiebreak, so whichever row Postgres happened to
+ * return last would silently decide what the page said. The source comes from
+ * resolveProjectionSourceForWindow (lib/projections/source.ts), which makes no
+ * query at all while the feature is off, so the whole page follows the site
+ * onto our own engine the day an admin turns it on.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -31,6 +41,8 @@ import { projectPlayerWeek, reliabilityMultiplier } from "@/lib/power-pulse/proj
 import { DEFAULT_POWER_PULSE_SETTINGS, type PowerPulseSettings } from "@/lib/power-pulse/default-settings";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
+import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import type {
   BreakdownExtras,
   BreakdownMarket,
@@ -102,10 +114,19 @@ function scoringBaseFor(key: ScoringKey): ScoringBase {
 export async function resolveSeasonClock(supabase: AnySupabase): Promise<SeasonClock> {
   const db = supabase as SupabaseClient<Database>;
 
+  // SLEEPER_SOURCE, deliberately and permanently. This asks which season we
+  // hold projections FOR, and Sleeper is the coverage baseline every other
+  // source is measured against (see availableProjectionSources in
+  // lib/projections/source.ts): our own builder mirrors Sleeper's rows rather
+  // than adding seasons of its own. Reading unfiltered would return the same
+  // answer through twice the rows, and reading the resolved source would make
+  // "what season is it" depend on a switch that is about how a number is
+  // computed rather than about which weeks exist.
   const { data: projSeason } = await db
     .from("player_weekly_projections")
     .select("season")
     .eq("season_type", "regular")
+    .eq("source", SLEEPER_SOURCE)
     .order("season", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -151,6 +172,7 @@ async function loadProjectionRows(
   playerIds: string[],
   season: number,
   fromWeek: number,
+  source: string,
 ): Promise<Map<string, Map<number, ProjectionRow>>> {
   const out = new Map<string, Map<number, ProjectionRow>>();
   if (playerIds.length === 0) return out;
@@ -163,6 +185,9 @@ async function loadProjectionRows(
       )
       .eq("season", season)
       .eq("season_type", "regular")
+      // NOT OPTIONAL: the Map below is keyed (player, week) with no tiebreak,
+      // so two sources' rows would silently race to decide the page.
+      .eq("source", source)
       .gte("week", fromWeek)
       .in("player_id", playerIds)
       .range(from, from + PAGE - 1);
@@ -201,6 +226,7 @@ async function loadAccuracyRows(
   db: SupabaseClient<Database>,
   playerIds: string[],
   scoring: ScoringBase,
+  source: string,
 ): Promise<Map<string, AccuracyRecord>> {
   const out = new Map<string, AccuracyRecord>();
   if (playerIds.length === 0) return out;
@@ -211,6 +237,11 @@ async function loadAccuracyRows(
       "player_id, shrunk_multiplier, beat_rate, availability_rate, ratio_stdev, mean_diff, weeks_played, weeks_projected",
     )
     .eq("scoring", scoring)
+    // Scoped to the SAME source the projections are read from. A reliability
+    // multiplier measures how one engine's numbers have landed, and applying
+    // it to the other engine's numbers is not a smaller error than reading the
+    // wrong column: it is the same error with a plausible answer.
+    .eq("source", source)
     .is("season", null)
     .in("player_id", playerIds);
 
@@ -240,6 +271,7 @@ async function loadReliabilityWeeks(
   season: number,
   scoringKey: ScoringKey,
   tePremium: number,
+  source: string,
 ): Promise<Map<string, ReliabilityWeek[]>> {
   const out = new Map<string, ReliabilityWeek[]>();
   if (playerIds.length === 0) return out;
@@ -257,6 +289,10 @@ async function loadReliabilityWeeks(
       .select(`player_id, week, stat_line, ${projCol}`)
       .eq("season", season)
       .eq("season_type", "regular")
+      // The strip plot grades ONE engine's number against what happened, and
+      // two rows per week would put two dots on the same week with no way to
+      // tell them apart.
+      .eq("source", source)
       .in("player_id", playerIds),
     db
       .from("player_stats")
@@ -468,6 +504,21 @@ export async function loadBreakdownExtras(
 
   const clock = await resolveSeasonClock(db);
 
+  // WHICH ENGINE THIS PAGE IS READING, resolved once and handed to all three
+  // projection reads below so they cannot end up on different ones. It has to
+  // come after the clock, because coverage is checked for a specific window and
+  // the clock is what says which window that is. Free while the feature is off:
+  // resolveProjectionSourceForWindow makes no query at all in that case.
+  const projectionSource =
+    clock.season != null
+      ? await resolveProjectionSourceForWindow({
+          supabase: db,
+          season: clock.season,
+          fromWeek: clock.currentWeek,
+          settings: pulseSettings.beaconProjections,
+        })
+      : SLEEPER_SOURCE;
+
   // Power Pulse walks the current season and the two before it, most recent
   // first, and blends the first two that actually have a usable row. Mirrored
   // here so a Breakdown projection and a Power Pulse projection agree.
@@ -476,9 +527,9 @@ export async function loadBreakdownExtras(
 
   const [projections, accuracy, defense, adp, series, reliabilityWeeks] = await Promise.all([
     clock.season != null
-      ? loadProjectionRows(db, playerIds, clock.season, clock.currentWeek)
+      ? loadProjectionRows(db, playerIds, clock.season, clock.currentWeek, projectionSource)
       : Promise.resolve(new Map<string, Map<number, ProjectionRow>>()),
-    loadAccuracyRows(db, playerIds, scoringBase),
+    loadAccuracyRows(db, playerIds, scoringBase, projectionSource),
     defenseSeasons.length > 0
       ? loadDefenseSplits(db as never, scoringBase, defenseSeasons)
       : Promise.resolve(new Map<string, DefenseRow>()),
@@ -491,6 +542,7 @@ export async function loadBreakdownExtras(
           clock.gradedSeason,
           context.scoringKey,
           context.tePremiumPerReception,
+          projectionSource,
         )
       : Promise.resolve(new Map<string, ReliabilityWeek[]>()),
   ]);

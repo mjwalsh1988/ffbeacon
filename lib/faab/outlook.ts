@@ -31,6 +31,7 @@ import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
 import type { PulsePosition } from "@/lib/power-pulse/types";
 import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import { loadAdjustedProjections } from "@/lib/projections/read";
+import { resolveProjectionSourceForWindow } from "@/lib/projections/source";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
 import { canonicalScoringForFormat } from "@/lib/draft-value/default-settings";
 import type { ScoringSettings } from "@/lib/league-scoring";
@@ -96,13 +97,15 @@ export type PlayerOutlook = {
  * the joined position filter. This is the same scoping the raw query used to
  * apply implicitly, kept explicit now that scoring is somebody else's job.
  *
- * Filtered to SLEEPER_SOURCE. player_weekly_projections now also holds
- * ffbeacon rows (see lib/projections/source-constants.ts), and the ffbeacon
- * builder mirrors every Sleeper row rather than adding coverage of its own,
- * so this stays the complete player universe while reading half the rows.
- * Without the filter every player at the position would be counted twice,
- * which does not change WHO shows up in the returned id list but does double
- * the row count loadAdjustedProjections has to load for them next.
+ * Filtered to SLEEPER_SOURCE, deliberately and permanently, and NOT to the
+ * resolved engine. This asks WHO exists at a position, not what anybody is
+ * projected for, and Sleeper is the coverage baseline every other source is
+ * measured against (see availableProjectionSources in lib/projections/
+ * source.ts): our own builder mirrors Sleeper's rows rather than adding
+ * players of its own, so this is the complete universe either way while
+ * reading half the rows. Without a filter every player would be counted
+ * twice, which does not change WHO comes back but does double the row count
+ * loadAdjustedProjections has to chunk through next.
  *
  * Paged, because a full position across a dozen remaining weeks runs well
  * past the 1000-row default and a silent truncation here would quietly lower
@@ -222,6 +225,18 @@ function loadPositionProjectionsCached(
   fromWeek: number,
   toWeek: number,
   scoring: ScoringBase,
+  /**
+   * The resolved projection engine, IN THE CACHE KEY ONLY.
+   *
+   * `loadPositionProjections` does not take a source: it calls
+   * lib/projections/read.ts loadAdjustedProjections, which resolves one itself
+   * from the same settings document and the same window, so the two agree by
+   * construction and passing it through would be a second way to say the same
+   * thing. What the key needs it for is the switch: without it, the day an
+   * admin enables our own engine every position curve on this page would keep
+   * serving the previous engine's numbers out of a 24 hour cache.
+   */
+  source: string,
 ): Promise<Map<string, { total: number; weeks: number }>> {
   return unstable_cache(
     async () => [
@@ -234,6 +249,7 @@ function loadPositionProjectionsCached(
       String(fromWeek),
       String(toWeek),
       scoring,
+      source,
     ],
     { revalidate: CACHE_TTL.daily, tags: [CACHE_TAGS.playerProjections] },
   )().then((entries) => new Map(entries));
@@ -294,6 +310,20 @@ export async function loadPlayerOutlook(
   const pulseSettings = await loadPowerPulseSettings(supabase);
   const defenseSeasons = defenseSeasonsFor(season);
 
+  // WHICH PROJECTION ENGINE THIS PAGE IS ON, resolved once for the whole
+  // remaining-season window. lib/projections/read.ts resolves the identical
+  // value from the identical settings and window inside the position curve
+  // below, so every figure on this page comes from one engine; naming it here
+  // is what lets the two direct reads under it stay on that same engine
+  // instead of being pinned to Sleeper. Free while the feature is off.
+  const projectionSource = await resolveProjectionSourceForWindow({
+    supabase,
+    season,
+    fromWeek: currentWeek,
+    toWeek: lastRegularWeek,
+    settings: pulseSettings.beaconProjections,
+  });
+
   const [positionTotals, accuracyMap, defense, ownProjections] = await Promise.all([
     weeksRemaining > 0
       ? loadPositionProjectionsCached(
@@ -302,9 +332,14 @@ export async function loadPlayerOutlook(
           currentWeek,
           lastRegularWeek,
           scoring,
+          projectionSource,
         )
       : Promise.resolve(new Map<string, { total: number; weeks: number }>()),
-    loadAccuracy(supabase, [playerId], ACCURACY_SCORING[scoring]),
+    // The RESOLVED source rather than a pinned one, to pair with the
+    // projections read below and with the position curve above: a reliability
+    // multiplier measures how one engine's numbers have landed, and applying it
+    // to the other engine's numbers is a plausible-looking wrong answer.
+    loadAccuracy(supabase, [playerId], ACCURACY_SCORING[scoring], projectionSource),
     loadDefenseSplits(supabase, ACCURACY_SCORING[scoring], defenseSeasons),
     // Deliberately the RAW power-pulse loader, not loadAdjustedProjections,
     // and deliberately a separate call from loadPositionProjectionsCached
@@ -314,14 +349,22 @@ export async function loadPlayerOutlook(
     // loaded); it never reads points off it. Folding it into the cached
     // position curve would mean caching a full per-week byWeek detail for
     // every player at the position, for a full day, to serve the one player a
-    // single request actually asks about. `source` and `toWeek` are pinned so
-    // this reads exactly the Sleeper rows for the weeks actually used below,
-    // the same way playerIdsAtPosition above does: without them, a source
-    // that mirrors every Sleeper row (see lib/projections/source-constants.ts)
-    // would return two rows per week once ffbeacon rows exist, and each week
-    // would render twice in the matchup detail.
+    // single request actually asks about. `source` and `toWeek` are both named
+    // so this reads exactly one engine's rows for exactly the weeks used below:
+    // without them, a source that mirrors every Sleeper row (see
+    // lib/projections/source-constants.ts) would return two rows per week once
+    // ffbeacon rows exist, and each week would render twice in the matchup
+    // detail. The source is the RESOLVED one, so the weeks listed here are the
+    // weeks the points above were built from.
     weeksRemaining > 0
-      ? loadProjections(supabase, [playerId], season, currentWeek, lastRegularWeek, SLEEPER_SOURCE)
+      ? loadProjections(
+          supabase,
+          [playerId],
+          season,
+          currentWeek,
+          lastRegularWeek,
+          projectionSource,
+        )
       : Promise.resolve([]),
   ]);
 

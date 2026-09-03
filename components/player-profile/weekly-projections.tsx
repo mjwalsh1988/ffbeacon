@@ -46,6 +46,7 @@ export function WeeklyProjections({
   cards,
   position,
   scoringLabel,
+  sourceLabel = "Sleeper",
   season,
   totalPoints,
   perGame,
@@ -58,6 +59,16 @@ export function WeeklyProjections({
 }: {
   cards: ProjectionWeekCard[];
   position: string;
+  /**
+   * Whose projections these are, already resolved and spelled out by the
+   * server ("Sleeper" or "FF Beacon").
+   *
+   * A PROP, NOT A CONSTANT. This heading used to say "Sleeper" outright, which
+   * was true and frozen: the day an admin enables our own engine, every number
+   * under it comes from that engine and the sentence would be a lie nobody on
+   * the page could catch.
+   */
+  sourceLabel?: string;
   scoringLabel: string;
   season: number | null;
   totalPoints: number;
@@ -105,8 +116,8 @@ export function WeeklyProjections({
             Weekly projections
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-            Sleeper projected points, {scoringLabel} scoring. Select a week for its full
-            projected stat line.
+            {sourceLabel} projected points, {scoringLabel} scoring. Select a week for its
+            full projected stat line.
           </p>
 
           {/* Season summary hero (near-black tiles). */}
