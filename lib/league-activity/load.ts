@@ -51,7 +51,17 @@ type AnySupabase =
  * roughly doubles, so three presses reach a full season without a control that
  * needs a number typed into it.
  */
-export const ACTIVITY_WINDOW_LADDER = [14, 30, 60, 120] as const;
+// 7 exists so NARROWING has somewhere to go from the default.
+//
+// The panel offers a narrower window when the row cap has truncated the view,
+// because widening would return the same rows. With 14 as both the default and
+// the bottom rung, narrowerRung(14) had nothing below it and returned 14: the
+// footer rendered a link reading "Narrow to the last 14 days" pointing at the
+// window the reader was already on. Following it reloaded identical content and
+// moved focus to the panel heading, which is indistinguishable from a broken
+// control because it was one. That branch became the common case when the log
+// stopped having a full-length page to escape to.
+export const ACTIVITY_WINDOW_LADDER = [7, 14, 30, 60, 120] as const;
 
 /** Zero means the whole log, which is the last rung. */
 export const ACTIVITY_WINDOW_ALL = 0;

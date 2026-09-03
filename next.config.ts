@@ -56,6 +56,23 @@ const nextConfig: NextConfig = {
         destination: "/leagues/:league_id/trade-ideas",
         permanent: true,
       },
+      // The activity log stopped being a route of its own. It rendered the
+      // same panel, from the same loader, that the league overview already
+      // carries; the team filter the page added now lives on the panel, so the
+      // page was a second URL for one filter. Kept as a permanent 308 forever
+      // for the same reason as the trade-finder entry above: the Copy link
+      // button published this path, and links to it are already sitting in
+      // league chats.
+      //
+      // The destination is the overview itself rather than an anchor on it. A
+      // fragment is a client-side concept: it is never sent to the server, so
+      // Next cannot append one here, and pretending otherwise in a redirect
+      // rule would just be a lie in a comment.
+      {
+        source: "/leagues/:league_id/activity",
+        destination: "/leagues/:league_id",
+        permanent: true,
+      },
       // Signal profiles moved to the canonical root /{handle} (Phase 7). The
       // legacy /u/{handle} paths are kept forever as permanent redirects so old
       // shared links and OG cards keep working. These run in the routing layer

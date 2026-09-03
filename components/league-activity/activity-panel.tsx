@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, History, Radio } from "lucide-react";
+import { ArrowRight, Radio } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
 import { ActivityCard } from "./activity-card";
 import { ActivityFilters, type ActivityFilterState } from "./activity-filters";
@@ -13,11 +13,18 @@ import { ACTIVITY_CATEGORY_LABEL } from "@/lib/league-activity/types";
 /**
  * The activity log, as a panel.
  *
- * Used twice: on the league overview above the power rankings, where it is a
- * capped scrolling column, and on `/leagues/[id]/activity`, where it runs the
- * full length of the page. The only difference between the two is
- * `scrollable`; everything else, including every filter and the load-more
- * ladder, is identical, so the two surfaces cannot drift apart.
+ * ONE SURFACE: the league overview, above the power rankings, capped and
+ * scrolling. It used to have a second home at `/leagues/[id]/activity`, which
+ * rendered this same component from this same loader at full length and added
+ * nothing but the per-team filter. That filter now renders here behind a
+ * disclosure, so the route was a second URL for one control and it is gone.
+ *
+ * The `fullHref` prop went with the route. Carrying a prop that is always null
+ * would leave a dead branch in the footer and a dead "Full log" button in the
+ * header, both pointing at nothing. What the footer does instead is what that
+ * null already meant: a truncated view offers to NARROW the window, which
+ * reveals different entries, rather than to widen one that would return the
+ * same forty rows.
  *
  * NO CLIENT JAVASCRIPT OF ITS OWN. Filters are links, "load more" is a link,
  * and every component in this file renders on the server, so the log works with
@@ -45,8 +52,6 @@ export interface ActivityPanelProps {
   days: number;
   /** Cap the height and scroll inside. False on the full page. */
   scrollable: boolean;
-  /** The "see everything" link. Null on the full page, which IS everything. */
-  fullHref: string | null;
   /** Rendered under the title. */
   helper?: string;
   headingLevel?: 2 | 3;
@@ -63,12 +68,16 @@ export function LeagueActivityPanel({
   filters,
   days,
   scrollable,
-  fullHref,
   helper,
   headingLevel = 2,
   skipHref = null,
 }: ActivityPanelProps) {
   const { cards, hasOlder, truncated, nextDays } = loaded;
+  // The narrower window, or null when there is none. A link to the window the
+  // reader is already on is a dead control, so the footer says what it is
+  // showing instead of offering one.
+  const narrower = narrowerRung(days);
+  const canNarrow = truncated && narrower !== days && narrower > 0;
   // TWO PHRASINGS, because one does not fit both sentences. "everything on
   // record" reads correctly on the button that fetches it and absurdly in
   // "No results in everything on record", so the whole-log case gets a noun
@@ -103,17 +112,6 @@ export function LeagueActivityPanel({
       headingFocusable
       glow
       bodyClassName="p-0"
-      action={
-        fullHref ? (
-          <Link
-            href={fullHref}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-line-accent bg-base/60 px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-brand-cyan/50 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-[36px]"
-          >
-            <History aria-hidden="true" className="h-3.5 w-3.5" />
-            Full log
-          </Link>
-        ) : null
-      }
     >
       <div className="border-b border-line bg-surface-elevated/30 px-4 py-3 sm:px-5">
         <ActivityFilters state={filters} />
@@ -190,27 +188,25 @@ export function LeagueActivityPanel({
           is what is limiting the view, the offer becomes the full log, which
           shows five times as many and has no cap in practice.
         */}
-        {truncated && !fullHref ? (
-          // THE FULL PAGE HAS NOWHERE TO ESCAPE TO. When the row cap truncates
-          // it, widening the window returns the same rows and "load more" would
-          // be a lie, so the offer is to NARROW instead, which genuinely reveals
-          // different entries. Without this a busy league with more than 200
-          // events inside the window was a dead end.
+        {canNarrow ? (
+          // NOWHERE TO ESCAPE TO. When the row cap truncates the view,
+          // widening the window returns the same rows and "load more" would be
+          // a lie, so the offer is to NARROW instead, which genuinely reveals
+          // different entries.
           <Link
-            href={loadMoreHref(filters, narrowerRung(days))}
+            href={loadMoreHref(filters, narrower)}
             className="inline-flex min-h-[44px] items-center gap-1.5 text-[12px] font-semibold text-brand-cyan transition-colors hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-[32px]"
           >
-            {`Narrow to the last ${narrowerRung(days)} days`}
+            {`Narrow to the last ${narrower} days`}
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
-        ) : truncated && fullHref ? (
-          <Link
-            href={fullHref}
-            className="inline-flex min-h-[44px] items-center gap-1.5 text-[12px] font-semibold text-brand-cyan transition-colors hover:text-brand-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-[32px]"
-          >
-            Open the full log
-            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-          </Link>
+        ) : truncated ? (
+          // Truncated with nowhere narrower to go. The count in the footer
+          // already says how many are shown; this says why there are no more
+          // and what will actually reveal different entries.
+          <p className="text-[11px] text-ink-subtle">
+            Use the filters above to see different entries.
+          </p>
         ) : hasOlder && nextDays !== null ? (
           <Link
             href={loadMoreHref(filters, nextDays)}
@@ -229,7 +225,68 @@ export function LeagueActivityPanel({
           )
         )}
       </footer>
+
+      <TimestampNote />
     </Panel>
+  );
+}
+
+/**
+ * Why two entries an hour apart can carry very different kinds of time.
+ *
+ * This used to be a rail panel on the full activity route. It is not
+ * decoration: the log mixes three sorts of entry, and only one of them has a
+ * timestamp Sleeper actually published. Without this, "seen this week" beside
+ * "7:42 PM" reads as sloppiness rather than as the honest answer it is.
+ *
+ * A `<details>` because it is reference material, not something a reader needs
+ * on the way past, and because the element carries its own expanded state and
+ * announces it with no JavaScript.
+ */
+function TimestampNote() {
+  return (
+    <details className="group border-t border-line px-4 py-2.5 sm:px-5">
+      {/* A HEADING INSIDE THE SUMMARY. These three explanations used to sit in
+          a Panel with an h2 on the removed activity route. Without a heading
+          they are the one block on the page documenting what the timestamps
+          mean and the only one a reader jumping by heading cannot find. Same
+          pattern and same reason as components/manager-ledger/how-it-works.tsx. */}
+      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 text-[11px] font-semibold text-ink-subtle transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-[32px]">
+        <span role="heading" aria-level={3}>
+          What lands in the log, and when
+        </span>
+        <span
+          aria-hidden="true"
+          className="transition-transform group-open:rotate-180"
+        >
+          {"\u25BE"}
+        </span>
+      </summary>
+      <dl className="mt-2 space-y-2.5 pb-1 text-[12px] leading-relaxed">
+        <div>
+          <dt className="font-semibold text-ink">Timed to the second</dt>
+          <dd className="mt-0.5 text-ink-muted">
+            Trades, waiver claims and free agent moves. Sleeper records when each one
+            happened, so the log prints that time.
+          </dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-ink">Timed to the week</dt>
+          <dd className="mt-0.5 text-ink-muted">
+            Final scores. One entry per game, carrying both the win and the loss, so a
+            result is never posted twice.
+          </dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-ink">Spotted between syncs</dt>
+          <dd className="mt-0.5 text-ink-muted">
+            Lineup edits, scoring and roster rule changes, managers arriving and leaving.
+            Sleeper timestamps none of these, so each entry says the window it was seen
+            in rather than a time nobody measured.
+          </dd>
+        </div>
+      </dl>
+    </details>
   );
 }
 

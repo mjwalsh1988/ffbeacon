@@ -281,9 +281,6 @@ export default async function LeagueDeepViewPage({
   const scheduleHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/schedules?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/schedules`;
-  const activityHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}/activity?username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}/activity`;
   const positionalWarHref = searchedUsername
     ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
     : `/leagues/${sleeperLeagueId}/positional-war`;
@@ -358,7 +355,6 @@ export default async function LeagueDeepViewPage({
                 days={activityDays}
                 category={activityCategory}
                 rosterId={activityRosterId}
-                fullHref={activityHref}
                 sourceParam={typeof sourceParam === "string" ? sourceParam : null}
                 rankParam={rankParam === "value" ? "value" : null}
                 picksParam={picksParam === "off" ? "off" : null}
@@ -657,11 +653,18 @@ async function OverviewInsights({
 }
 
 /**
- * The activity log on the overview.
+ * The activity log. THE ONLY ONE: capped and scrolling, right here.
  *
- * Capped and scrolling here, full length on `/leagues/[id]/activity`. Both
- * render the same panel from the same loader, so the two can never disagree
- * about what happened in a league.
+ * It used to have a full-length route of its own at `/leagues/[id]/activity`,
+ * rendering this same panel from this same loader. The only thing the page
+ * added was the per-team filter, and that now renders here, so the route was a
+ * second URL for one filter and it is gone (next.config.ts keeps a permanent
+ * 308 for links already published to it).
+ *
+ * The row cap is what is left of the difference, and the panel already handles
+ * it honestly: with no full page to escape to, a truncated view offers to
+ * NARROW the window instead, which genuinely reveals different entries rather
+ * than returning the same forty.
  *
  * Every filter link points back at this page and carries the params that must
  * survive the hop (`username`, `source`), plus the fragment that lands focus on
@@ -674,7 +677,6 @@ async function ActivitySection({
   days,
   category,
   rosterId,
-  fullHref,
   sourceParam,
   rankParam,
   picksParam,
@@ -685,7 +687,6 @@ async function ActivitySection({
   days: number;
   category: ActivityCategory | null;
   rosterId: number | null;
-  fullHref: string;
   sourceParam: string | null;
   rankParam: string | null;
   picksParam: string | null;
@@ -719,7 +720,6 @@ async function ActivitySection({
       loaded={loaded}
       days={days}
       scrollable
-      fullHref={fullHref}
       // The rankings panel is what follows the log on this page. Its heading is
       // focusable, so the skip link moves focus rather than only scrolling.
       skipHref="#pr-title"
@@ -731,9 +731,14 @@ async function ActivitySection({
         available: loaded.availableCategories,
         rosterId,
         teams: loaded.teams,
-        // Twelve team chips would double the height of the filter bar in a
-        // panel whose whole job is to show entries. They live on the full page.
-        showTeams: false,
+        // The team chips live here now, because there is no longer a full
+        // page for them to live on. Collapsed behind a disclosure rather
+        // than rendered flat: twelve of them would double the height of a
+        // filter bar sitting on top of the panel whose job is to show
+        // entries, and a reader who wants one team goes looking for the
+        // control rather than scanning past it.
+        showTeams: true,
+        collapseTeams: true,
       }}
     />
   );

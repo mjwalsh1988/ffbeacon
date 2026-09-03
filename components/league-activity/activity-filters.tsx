@@ -46,8 +46,21 @@ export interface ActivityFilterState {
   available: ActivityCategory[];
   rosterId: number | null;
   teams: Array<{ rosterId: number; label: string }>;
-  /** Team chips are only worth the space on the full page. */
   showTeams: boolean;
+  /**
+   * Put the team chips behind a disclosure instead of rendering them flat.
+   *
+   * The log lives on the league overview now, above the rankings table, and
+   * twelve chips on top of a panel whose job is to show entries pushes the
+   * entries themselves off the first screen. A `<details>` is the right
+   * control for it and needs no JavaScript: the browser owns the expanded
+   * state and announces it, so this stays a server component.
+   *
+   * It opens by itself whenever a team filter is active, so a shared link
+   * that already names a team never hides the control that is doing the
+   * filtering.
+   */
+  collapseTeams?: boolean;
 }
 
 export function ActivityFilters({ state }: { state: ActivityFilterState }) {
@@ -92,33 +105,76 @@ export function ActivityFilters({ state }: { state: ActivityFilterState }) {
         </ul>
       </nav>
 
-      {state.showTeams && state.teams.length > 0 && (
-        <nav aria-label="Filter activity by team">
-          <ul className="flex flex-wrap gap-1.5">
-            <li>
-              <Chip
-                href={href({ ateam: null })}
-                active={state.rosterId === null}
-                label="All teams"
-                ariaLabel="All teams, show activity for every team"
-                subtle
-              />
-            </li>
-            {state.teams.map((team) => (
-              <li key={team.rosterId}>
-                <Chip
-                  href={href({ ateam: String(team.rosterId) })}
-                  active={state.rosterId === team.rosterId}
-                  label={team.label}
-                  ariaLabel={`${team.label}, show only activity involving this team`}
-                  subtle
-                />
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )}
+      {state.showTeams && state.teams.length > 0 && <TeamChips state={state} href={href} />}
     </div>
+  );
+}
+
+/**
+ * The per-team chips, flat or behind a disclosure.
+ *
+ * The chip list itself is identical either way, so it is built once and the
+ * wrapper is the only thing that branches. The summary names the team that is
+ * currently filtering rather than saying a bare "Filter by team": collapsed,
+ * the summary is the ONLY thing on screen saying the log is showing one team,
+ * and a reader who arrives on a shared link needs to be told that before they
+ * conclude their league has gone quiet.
+ */
+function TeamChips({
+  state,
+  href,
+}: {
+  state: ActivityFilterState;
+  href: (params: Record<string, string | null>) => string;
+}) {
+  const active = state.teams.find((t) => t.rosterId === state.rosterId) ?? null;
+
+  const chips = (
+    <nav aria-label="Filter activity by team">
+      <ul className="flex flex-wrap gap-1.5">
+        <li>
+          <Chip
+            href={href({ ateam: null })}
+            active={state.rosterId === null}
+            label="All teams"
+            ariaLabel="All teams, show activity for every team"
+            subtle
+          />
+        </li>
+        {state.teams.map((team) => (
+          <li key={team.rosterId}>
+            <Chip
+              href={href({ ateam: String(team.rosterId) })}
+              active={state.rosterId === team.rosterId}
+              label={team.label}
+              ariaLabel={`${team.label}, show only activity involving this team`}
+              subtle
+            />
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+
+  if (!state.collapseTeams) return chips;
+
+  return (
+    // `open` IS PASSED ONLY WHEN IT SHOULD BE TRUE, never as `open={false}`.
+    // React controls the property on every reconcile, so passing the boolean
+    // meant any soft navigation that did not set a team filter re-rendered this
+    // closed: a reader who opened it, scanned the chips and pressed a category
+    // chip had the control collapse under them while focus jumped to the panel
+    // heading. Omitting the prop leaves the browser owning the state, which is
+    // what a disclosure is for.
+    <details {...(state.rosterId !== null ? { open: true } : {})} className="group">
+      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 rounded-full border border-line bg-base/50 px-3 text-[12px] font-semibold text-ink-muted transition-colors hover:border-line-accent hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:min-h-[32px]">
+        {active ? `Team: ${active.label}` : "Filter by team"}
+        <span aria-hidden="true" className="text-ink-subtle transition-transform group-open:rotate-180">
+          {"\u25BE"}
+        </span>
+      </summary>
+      <div className="mt-2">{chips}</div>
+    </details>
   );
 }
 
