@@ -310,6 +310,14 @@ export function ManagerPulseSettingsManager({
             hint="Off leaves best ball leagues out of the report entirely."
           />
         </div>
+        <div className="sm:col-span-2 lg:col-span-3">
+          <Checkbox
+            label="Admins skip the cooldown and the lookup limit"
+            checked={settings.capture.adminBypassThrottle}
+            onChange={(v) => patch("capture", { adminBypassThrottle: v })}
+            hint="On lets an admin look up as many managers as they like, as often as they like, which is what makes the tool testable. It skips throttling only: no extra data, no larger league cap, and no change to what a report says. Turn it off to feel exactly what a reader feels."
+          />
+        </div>
       </Group>
 
       <Group

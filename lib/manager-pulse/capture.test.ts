@@ -451,3 +451,111 @@ describe("readCaptureProgress", () => {
     expect(progress).toBeNull();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Admin throttle bypass                                                      */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * The bypass exists so the person who owns the tool can actually exercise it:
+ * a one-hour cooldown makes testing a report impossible. It is deliberately
+ * narrow, and these tests are what keep it narrow. It skips the lookup slot and
+ * sets the run cooldown to zero, and it changes NOTHING else. In particular it
+ * must not widen maxLeaguesPerRun, because that is a cost control rather than a
+ * convenience, and an admin who could queue an unbounded run would be able to
+ * point the whole site's sync drain at one lookup.
+ */
+describe("startManagerCapture admin throttle bypass", () => {
+  const subject = {
+    sleeperUserId: "u-subject",
+    handle: "somebody",
+    avatarUrl: null,
+  };
+
+  /** Enough of a fake for capture to reach the two RPCs these tests inspect. */
+  function bypassHandlers() {
+    return {
+      leagues: () => ({ data: [], error: null }),
+      managerPulseRun: () => freshRun(),
+      managerPulseRunLeagues: () => runLeagueRows(["fresh"]),
+      rpc: (name: string) => {
+        if (name === "try_claim_manager_pulse") {
+          return { data: { claimed: true, run_id: "run-1" }, error: null };
+        }
+        return { data: { leagues: 1, queued: 0, fresh: 1, linked: 0 }, error: null };
+      },
+    };
+  }
+
+  const oneLeague = [
+    {
+      league_id: "L1",
+      name: "League One",
+      season: "2026",
+      sport: "nfl",
+      status: "in_season",
+      total_rosters: 12,
+      settings: { type: 0 },
+      previous_league_id: null,
+    },
+  ];
+
+
+  it("claims no lookup slot and passes a zero cooldown", async () => {
+    mockGetSleeperLeagues.mockResolvedValue(oneLeague);
+    const admin = makeFakeAdmin(bypassHandlers());
+
+    await startManagerCapture({
+      admin,
+      userId: "admin-1",
+      handle: "somebody",
+      settings: DEFAULT_MANAGER_PULSE_SETTINGS,
+      bypassThrottle: true,
+      resolved: subject,
+    });
+
+    expect(mockClaimLookup).not.toHaveBeenCalled();
+    const claim = admin.rpcCalls.find((c) => c.name === "try_claim_manager_pulse");
+    expect(claim).toBeDefined();
+    expect((claim!.args as { p_cooldown_seconds: number }).p_cooldown_seconds).toBe(0);
+  });
+
+  it("passes the real cooldown when the bypass is off", async () => {
+    mockGetSleeperLeagues.mockResolvedValue(oneLeague);
+    const admin = makeFakeAdmin(bypassHandlers());
+
+    await startManagerCapture({
+      admin,
+      userId: "reader-1",
+      handle: "somebody",
+      settings: DEFAULT_MANAGER_PULSE_SETTINGS,
+      resolved: subject,
+    });
+
+    const claim = admin.rpcCalls.find((c) => c.name === "try_claim_manager_pulse");
+    expect((claim!.args as { p_cooldown_seconds: number }).p_cooldown_seconds).toBe(
+      DEFAULT_MANAGER_PULSE_SETTINGS.capture.runCooldownSeconds,
+    );
+  });
+
+  it("does not widen the league cap for an admin", async () => {
+    mockGetSleeperLeagues.mockResolvedValue(oneLeague);
+    const admin = makeFakeAdmin(bypassHandlers());
+
+    await startManagerCapture({
+      admin,
+      userId: "admin-1",
+      handle: "somebody",
+      settings: DEFAULT_MANAGER_PULSE_SETTINGS,
+      bypassThrottle: true,
+      resolved: subject,
+    });
+
+    const enqueue = admin.rpcCalls.find((c) => c.name === "enqueue_manager_pulse_capture");
+    if (enqueue) {
+      expect((enqueue.args as { p_max_leagues: number }).p_max_leagues).toBe(
+        DEFAULT_MANAGER_PULSE_SETTINGS.capture.maxLeaguesPerRun,
+      );
+    }
+  });
+});

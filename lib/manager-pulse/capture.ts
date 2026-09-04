@@ -76,6 +76,16 @@ export async function startManagerCapture(params: {
    * outbound request per lookup rather than two identical ones.
    */
   resolved?: { sleeperUserId: string; handle: string; avatarUrl: string | null };
+  /**
+   * Skip the lookup rate limit and the per-user cooldown.
+   *
+   * Set only for a verified admin, and only when
+   * `settings.capture.adminBypassThrottle` is on. THROTTLING ONLY: it does not
+   * widen `maxLeaguesPerRun`, does not change what a report contains, and does
+   * not touch any authorization. Somebody has to be able to run this tool
+   * twenty times in an afternoon to know whether it works.
+   */
+  bypassThrottle?: boolean;
 }): Promise<CaptureOutcome> {
   const { admin, userId, handle, seasons, settings } = params;
 
@@ -99,7 +109,7 @@ export async function startManagerCapture(params: {
   //
   // A caller that has already claimed and already resolved passes `resolved`
   // and is not charged twice.
-  if (!params.resolved) {
+  if (!params.resolved && !params.bypassThrottle) {
     const lookupClaim = await claimManagerLookupSlot({ admin, userId, settings });
     if (!lookupClaim.ok) {
       return { status: "throttled", retryAfterSeconds: lookupClaim.retryAfterSeconds };
@@ -161,7 +171,10 @@ export async function startManagerCapture(params: {
     p_sleeper_handle: resolved.handle,
     p_season_from: seasonFrom,
     p_season_to: seasonTo,
-    p_cooldown_seconds: settings.capture.runCooldownSeconds,
+    // Zero is "no cooldown" to the RPC, which already takes the window as a
+    // parameter, so an admin bypass needs no separate code path in SQL and the
+    // run row is still written exactly as it is for anybody else.
+    p_cooldown_seconds: params.bypassThrottle ? 0 : settings.capture.runCooldownSeconds,
   });
 
   if (claimRunResult.error) {

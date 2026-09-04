@@ -33,6 +33,7 @@ export const managerPulseSettingsSchema = z
       captureTtlMinutes: bounded(B.capture.captureTtlMinutes),
       jobMaxAttempts: bounded(B.capture.jobMaxAttempts),
       includeBestBall: z.boolean(),
+      adminBypassThrottle: z.boolean(),
     }),
 
     lookup: z.object({

@@ -239,6 +239,39 @@ async function closeRun(
   }
 }
 
+/**
+ * Whether this user may skip the throttling, read fresh on every lookup.
+ *
+ * `user_preferences.is_admin` is the flag, a trigger blocks self-promotion, and
+ * only the service role can set it (migration 0018), so reading it here with
+ * the admin client is the same answer `requireAdmin` gives a page.
+ *
+ * Read rather than passed in on purpose: a caller-supplied "I am an admin" is a
+ * claim, and a claim is exactly what a bypass must not accept. This costs one
+ * indexed read and is skipped entirely when the setting is off.
+ *
+ * Never throws, and fails CLOSED: any error means no bypass, so a broken read
+ * makes an admin wait like everyone else rather than opening the gate.
+ */
+async function canBypassThrottle(
+  admin: Admin,
+  userId: string,
+  settings: ManagerPulseSettings,
+): Promise<boolean> {
+  if (!settings.capture.adminBypassThrottle) return false;
+  try {
+    const { data, error } = await admin
+      .from("user_preferences")
+      .select("is_admin")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) return false;
+    return Boolean(data?.is_admin);
+  } catch {
+    return false;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* The report                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -261,6 +294,9 @@ export async function getManagerFootprint(
 ): Promise<ManagerFootprintResult> {
   try {
     const settings = await loadManagerPulseSettings(admin);
+    // Resolved once, from the database rather than from the caller, and used
+    // for both throttles below. See canBypassThrottle.
+    const bypassThrottle = await canBypassThrottle(admin, userId, settings);
 
     // Resolve the subject first, because the cache is keyed on the Sleeper user
     // id and we cannot check for a warm report without it.
@@ -315,9 +351,11 @@ export async function getManagerFootprint(
         };
       }
 
-      const lookupClaim = await claimManagerLookupSlot({ admin, userId, settings });
-      if (!lookupClaim.ok) {
-        return { status: "throttled", retryAfterSeconds: lookupClaim.retryAfterSeconds };
+      if (!bypassThrottle) {
+        const lookupClaim = await claimManagerLookupSlot({ admin, userId, settings });
+        if (!lookupClaim.ok) {
+          return { status: "throttled", retryAfterSeconds: lookupClaim.retryAfterSeconds };
+        }
       }
 
       const resolved = await resolveManagerHandle(trimmed);
@@ -355,6 +393,7 @@ export async function getManagerFootprint(
       handle,
       seasons: request.seasons,
       settings,
+      bypassThrottle,
       ...(resolvedSubject ? { resolved: resolvedSubject } : {}),
     });
 

@@ -37,6 +37,18 @@ export type ManagerPulseCaptureSettings = {
   jobMaxAttempts: number;
   /** Whether to count best ball leagues at all. */
   includeBestBall: boolean;
+  /**
+   * Let an admin skip the cooldown and the lookup rate limit.
+   *
+   * A switch rather than a hardcoded exemption, because "admins are exempt" is
+   * a policy decision and this feature keeps every policy decision in this row.
+   * It is ON by default so the person who has to test the tool can actually
+   * test it; turn it off to feel exactly what a reader feels.
+   *
+   * It bypasses THROTTLING ONLY. It grants no extra data, widens no cap on how
+   * many leagues a run may queue, and changes nothing about what a report says.
+   */
+  adminBypassThrottle: boolean;
 };
 
 export type ManagerPulseLookupSettings = {
@@ -171,6 +183,7 @@ export const DEFAULT_MANAGER_PULSE_SETTINGS: ManagerPulseSettings = {
     captureTtlMinutes: 60,
     jobMaxAttempts: 3,
     includeBestBall: true,
+    adminBypassThrottle: true,
   },
   lookup: {
     handleLookupPerMinute: 10,
