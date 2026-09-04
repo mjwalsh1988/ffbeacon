@@ -60,6 +60,11 @@ export const TOOLS_NAV: NavChild[] = [
     description: "Live Sleeper draft helper",
   },
   {
+    label: "Manager Pulse",
+    href: "/tools/manager-pulse",
+    description: "Scout any manager before you offer",
+  },
+  {
     label: "Signal Check",
     href: "/tools/signal-check",
     description: "Grade any trade with the Beacon Verdict",
@@ -152,6 +157,21 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["league", "sleeper", "sync", "power rankings", "transactions"],
   },
   {
+    label: "Manager Pulse",
+    href: "/tools/manager-pulse",
+    description: "Scout any manager before you offer",
+    keywords: [
+      "manager",
+      "owner",
+      "scout",
+      "history",
+      "tendencies",
+      "who",
+      "opponent",
+      "trade partner",
+    ],
+  },
+  {
     label: "FAAB Calculator",
     href: "/tools/faab",
     description: "Recommended waiver bid ranges",
@@ -229,15 +249,16 @@ export type FooterLink = {
 export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
   {
     heading: "Tools",
-    // Same order as TOOLS_NAV, with Rankings Board appended (it is not a /tools
-    // page, so it does not appear in the header Tools dropdown).
+    // Same order as TOOLS_NAV. Rankings Board used to be appended here; it is a
+    // reference board rather than something you operate on your own league, so
+    // it now sits under Learn beside the guides.
     links: [
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
       { label: "On The Clock", href: "/tools/on-the-clock" },
+      { label: "Manager Pulse", href: "/tools/manager-pulse" },
       { label: "Signal Check", href: "/tools/signal-check" },
       { label: "Beacon Breakdown", href: "/tools/beacon-breakdown" },
       { label: "FAAB Calculator", href: "/tools/faab" },
-      { label: "Rankings Board", href: "/rankings" },
     ],
   },
   {
@@ -254,12 +275,13 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
       { label: "The Beacon Brief", href: "/brief" },
       { label: "Guides", href: "/guides" },
       { label: "Fantasy Football Terms", href: "/guides/fantasy-football-terms" },
-      {
-        label: "2026 Draft Guide",
-        href: "/guides/2026-fantasy-football-draft-guide",
-        disabled: true,
-      },
-      { label: "Accessible Fantasy Football", href: "/guides/accessible-fantasy-football", disabled: true },
+      // Was pointed at /guides/2026-fantasy-football-draft-guide, which does not
+      // exist, and was disabled to hide that. The guide is real and lives at the
+      // year-free path, so the link now goes to it.
+      { label: "Draft Guide", href: "/guides/fantasy-football-draft-guide" },
+      // Rankings Board moved here from Tools: it is something you read rather
+      // than something you run against your own league.
+      { label: "Rankings Board", href: "/rankings" },
     ],
   },
   {

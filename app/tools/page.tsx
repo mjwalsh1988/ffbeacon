@@ -7,6 +7,7 @@ import {
   Scale,
   Swords,
   Timer,
+  UserSearch,
   ArrowRight,
   Gamepad2,
   Accessibility,
@@ -92,6 +93,7 @@ type Tool = {
   href:
     | "/tools/league-pulse"
     | "/tools/on-the-clock"
+    | "/tools/manager-pulse"
     | "/tools/beacon-breakdown"
     | "/tools/signal-check"
     | "/tools/faab";
@@ -150,6 +152,21 @@ const TOOLS: Tool[] = [
       "A Beacon Verdict that reads like a real take, not a stat dump",
     ],
     cta: "Compare players",
+  },
+  {
+    icon: UserSearch,
+    href: "/tools/manager-pulse",
+    eyebrow: "Know your league mates",
+    title: "Manager Pulse",
+    pitch:
+      "Type any Sleeper username and see how that person actually plays. Four seasons of their real history, so you know who you are dealing with before you send the offer.",
+    bullets: [
+      "The players they keep buying, and the ones they never touch",
+      "What they overpay for, priced against real market value",
+      "How they draft, how often they win, how fast they move",
+      "Dynasty and redraft kept apart, because they are different games",
+    ],
+    cta: "Scout a manager",
   },
   {
     icon: Scale,

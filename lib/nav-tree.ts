@@ -41,6 +41,7 @@ export { findActiveTrail } from "@/lib/nav-types";
 const TOOL_ICONS: Record<string, NavIconName> = {
   "/tools/league-pulse": "workflow",
   "/tools/on-the-clock": "timer",
+  "/tools/manager-pulse": "users",
   "/tools/signal-check": "scale",
   "/tools/beacon-breakdown": "swords",
   "/tools/faab": "calculator",

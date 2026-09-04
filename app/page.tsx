@@ -12,6 +12,7 @@ import {
   Calculator,
   Scale,
   Swords,
+  UserSearch,
   Timer,
   ArrowRight,
   Radar,
@@ -25,6 +26,8 @@ import {
   Users2,
   CheckCircle2,
   Flame,
+  Sparkles,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
@@ -64,8 +67,16 @@ type FeaturedTool = {
   icon: LucideIcon;
   /** Optional highlight pill (e.g. "Draft season") shown in the card corner. */
   badge?: string;
-  /** When true, the card gets the accented "featured" treatment. */
-  featured?: boolean;
+  /**
+   * Which accented treatment the card gets, if any.
+   *
+   * Two colours because two cards are highlighted for different reasons and a
+   * reader should be able to tell them apart at a glance: "purple" is the
+   * seasonal push (On The Clock during draft season), "cyan" is a tool that is
+   * new, "green" is an existing tool that has grown. One colour across all
+   * three would read as the same promotion running three times.
+   */
+  featured?: "purple" | "cyan" | "green";
 };
 
 const FEATURED_TOOLS: FeaturedTool[] = [
@@ -76,6 +87,8 @@ const FEATURED_TOOLS: FeaturedTool[] = [
       "Type in your Sleeper username and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
     cta: "Check your league's pulse",
     icon: Workflow,
+    badge: "New features",
+    featured: "green",
   },
   {
     href: "/tools/on-the-clock",
@@ -85,7 +98,17 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     cta: "Open the draft room",
     icon: Timer,
     badge: "Draft season",
-    featured: true,
+    featured: "purple",
+  },
+  {
+    href: "/tools/manager-pulse",
+    title: "Manager Pulse",
+    description:
+      "About to offer a trade and want to know who you are dealing with? Type their Sleeper username and see four seasons of how they actually play: the players they keep buying, what they overpay for, and how often they win.",
+    cta: "Scout a manager",
+    icon: UserSearch,
+    badge: "New tool",
+    featured: "cyan",
   },
   {
     href: "/tools/beacon-breakdown",
@@ -472,16 +495,12 @@ function ToolsSection() {
           </Link>
         </div>
 
-        {/* Top row: 2 across (League Pulse, On The Clock). Bottom row: 3 across
-            (Beacon Breakdown, Signal Check, FAAB). Everything stacks on mobile. */}
-        <div className="mt-12 grid gap-5 md:grid-cols-2">
-          {FEATURED_TOOLS.slice(0, 2).map((tool, i) => (
+        {/* Six tools, two rows of three. One grid rather than two stacked ones,
+            so the columns line up and every card is the same width. Stacks to a
+            single column on mobile. */}
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 md:grid-cols-3">
+          {FEATURED_TOOLS.map((tool, i) => (
             <ToolCard key={tool.href} tool={tool} index={i} />
-          ))}
-        </div>
-        <div className="mt-5 grid gap-5 md:grid-cols-3">
-          {FEATURED_TOOLS.slice(2).map((tool, i) => (
-            <ToolCard key={tool.href} tool={tool} index={i + 2} />
           ))}
         </div>
       </div>
@@ -495,19 +514,28 @@ function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
     <Link
       href={href}
       className={`group relative flex flex-col overflow-hidden rounded-card border p-6 shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
-        featured
+        featured === "purple"
           ? "border-brand-purple/60 bg-surface-elevated shadow-brand-purple/20 ring-1 ring-brand-purple/20 hover:border-brand-purple hover:shadow-brand-purple/30"
-          : "border-line bg-surface-elevated shadow-black/20 hover:border-brand-purple/60 hover:shadow-brand-purple/10"
+          : featured === "cyan"
+            ? "border-brand-cyan/60 bg-surface-elevated shadow-brand-cyan/20 ring-1 ring-brand-cyan/20 hover:border-brand-cyan hover:shadow-brand-cyan/30"
+            : featured === "green"
+              ? "border-signal-success/60 bg-surface-elevated shadow-signal-success/20 ring-1 ring-signal-success/20 hover:border-signal-success hover:shadow-signal-success/30"
+              : "border-line bg-surface-elevated shadow-black/20 hover:border-brand-purple/60 hover:shadow-brand-purple/10"
       }`}
     >
-      {/* Featured cards get a beacon glow wash in the corner. Decorative. */}
+      {/* Featured cards get a glow wash in the corner, in their own accent so the
+          two highlighted cards do not read as the same promotion. Decorative. */}
       {featured && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full"
           style={{
             background:
-              "radial-gradient(circle, rgba(168, 85, 247, 0.20) 0%, rgba(34, 211, 238, 0.09) 50%, transparent 72%)",
+              featured === "cyan"
+                ? "radial-gradient(circle, rgba(34, 211, 238, 0.20) 0%, rgba(168, 85, 247, 0.09) 50%, transparent 72%)"
+                : featured === "green"
+                  ? "radial-gradient(circle, rgba(16, 185, 129, 0.20) 0%, rgba(34, 211, 238, 0.09) 50%, transparent 72%)"
+                  : "radial-gradient(circle, rgba(168, 85, 247, 0.20) 0%, rgba(34, 211, 238, 0.09) 50%, transparent 72%)",
           }}
         />
       )}
@@ -519,8 +547,22 @@ function ToolCard({ tool, index }: { tool: FeaturedTool; index: number }) {
           <Icon className="h-6 w-6" />
         </span>
         {badge ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-beacon px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-black">
-            <Flame aria-hidden="true" className="h-3.5 w-3.5" />
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-black ${
+              featured === "cyan"
+                ? "bg-brand-cyan"
+                : featured === "green"
+                  ? "bg-signal-success"
+                  : "bg-beacon"
+            }`}
+          >
+            {featured === "cyan" ? (
+              <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
+            ) : featured === "green" ? (
+              <Zap aria-hidden="true" className="h-3.5 w-3.5" />
+            ) : (
+              <Flame aria-hidden="true" className="h-3.5 w-3.5" />
+            )}
             {badge}
           </span>
         ) : (
