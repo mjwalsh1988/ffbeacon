@@ -19,6 +19,10 @@
 import type { TeamStatusKey } from "@/lib/league-team-status";
 import type { TradeQualityConfig } from "@/lib/trade-quality";
 import type { PulseSnapshot } from "./pulse";
+// Type-only. Nothing runtime from lib/manager-pulse may reach the finder
+// engine; see lib/trade-finder/tendency.ts for the rule this import serves.
+import type { ManagerTendency } from "@/lib/manager-pulse/types";
+import type { TendencyThresholds } from "./tendency";
 
 export type { PulseSnapshot } from "./pulse";
 
@@ -396,6 +400,23 @@ export type TradeFinderInput = {
     /** Top value in this league's format and source. Null falls back sanely. */
     poolMax: number | null;
   };
+  /**
+   * What we know about how each manager in this league actually trades, from
+   * Manager Pulse. Keyed by rosterId. Absent for a manager we hold no cached
+   * tendency for, which is read as "no opinion" and never as a neutral one.
+   */
+  managerTendencies?: Map<number, ManagerTendency>;
+  /**
+   * The three tendency thresholds an admin owns, read from
+   * `manager_pulse_settings` by the CALLER and passed down.
+   *
+   * The engine is pure, so it cannot read the settings row itself. Threading
+   * them through is what stops the same numbers living in two places and
+   * eventually disagreeing: an admin who raises the sample floor expects Trade
+   * Ideas to go quieter, not to keep talking on a copy of the old value.
+   * Omitted, the published defaults apply.
+   */
+  tendencyThresholds?: Partial<TendencyThresholds>;
 };
 
 /** One asset as it appears on a rendered suggestion. */
@@ -503,6 +524,20 @@ export type TradeSuggestion = {
   whyYou: string;
   /** Why the other manager might say yes. */
   whyThem: string;
+  /**
+   * Manager Pulse: what this counterparty's own trading history says, as its
+   * own short lines separate from `whyThem`.
+   *
+   * Empty when there is no cached tendency for this manager, when the manager
+   * reads null for this league's game type, or when every figure a tendency
+   * could offer sits below `minSample` (see lib/trade-finder/tendency.ts):
+   * "no data" and "data too thin to trust" both render nothing here rather
+   * than a hedge. Per docs/manager-pulse-plan.md section 8.4, the reader sees
+   * this as its own quiet line under the acceptance band, with a link to that
+   * manager's full Manager Pulse report when a handle is available
+   * (`counterparty.ownerHandle`).
+   */
+  tendencyNotes: string[];
   /**
    * The message to send the other manager, written to them.
    *

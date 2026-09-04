@@ -208,6 +208,27 @@ export function qualityGapOf(ratio: number): number {
 }
 
 /**
+ * The bands in the order a tendency adjustment moves through them.
+ *
+ * Used only by the shift below: an adjustment of +1 means "one band more
+ * willing", -1 means "one band less", never a jump past a neighbour.
+ */
+const ACCEPTANCE_ORDER: AcceptanceBand[] = ["long-shot", "worth-asking", "likely"];
+
+/**
+ * Move a band by a signed number of steps along ACCEPTANCE_ORDER, clamped to
+ * stay inside it. `0` or `undefined` is a no-op, so a caller that has no
+ * tendency data for this counterparty gets back exactly the band the
+ * arithmetic above computed.
+ */
+function shiftBand(band: AcceptanceBand, steps: number | undefined): AcceptanceBand {
+  if (!steps) return band;
+  const index = ACCEPTANCE_ORDER.indexOf(band);
+  const next = Math.max(0, Math.min(ACCEPTANCE_ORDER.length - 1, index + steps));
+  return ACCEPTANCE_ORDER[next];
+}
+
+/**
  * Would the other manager engage with this?
  *
  * Three things decide it, in order of how loudly a real person would react:
@@ -226,8 +247,31 @@ export function qualityGapOf(ratio: number): number {
  * about a person we have never met, and a manager who reads "72% likely" and
  * gets turned down has been lied to. "Worth asking" is honest about what this
  * is: an offer with the arithmetic already done.
+ *
+ * `tendencyBandSteps` is the ONE thing Manager Pulse is allowed to move here
+ * (docs/manager-pulse-plan.md section 8.3): the band this function would
+ * already have computed, shifted by at most one step in either direction.
+ * See lib/trade-finder/tendency.ts bandAdjustment, which computes and clamps
+ * it before it ever reaches here. Clamped again to +-1 below as a second,
+ * defensive bound, since a one-step move is the largest a tendency may ever
+ * cause whatever a caller passes in. Absent or 0 leaves the band exactly as
+ * it read before Manager Pulse existed, which is what every existing caller
+ * and every existing test still gets.
  */
 export function acceptanceOf(
+  theirs: SideImpact,
+  profile: TeamProfile,
+  gap: number,
+  qualityRatio?: number,
+  tendencyBandSteps?: number,
+): AcceptanceBand {
+  const base = baseAcceptanceOf(theirs, profile, gap, qualityRatio);
+  const clamped = Math.max(-1, Math.min(1, Math.trunc(tendencyBandSteps ?? 0)));
+  return shiftBand(base, clamped);
+}
+
+/** The value-and-lineup judgement, unchanged from before Manager Pulse existed. */
+function baseAcceptanceOf(
   theirs: SideImpact,
   profile: TeamProfile,
   gap: number,

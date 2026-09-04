@@ -35,6 +35,7 @@ import {
 } from "@/lib/trade-quality";
 import { findTrades } from "@/lib/trade-finder/engine";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
+import { loadTendencyContext } from "@/lib/trade-finder-tendency-context";
 import type { TradeStrategy, TradeSuggestion } from "@/lib/trade-finder/types";
 
 type AnySupabase =
@@ -131,6 +132,18 @@ export async function findCrossLeagueTrade(
     sessionExcluded: string[];
     /** Consolidation model, so every league is judged on the same curve. */
     qualityConfig?: TradeQualityConfig;
+    /**
+     * Service-role client, for reading Manager Pulse tendencies per league in
+     * the window. Optional and absent by default: findPortfolioTrade
+     * (app/actions/trade-finder.ts) is members-only, so every real caller has
+     * one and passes it, but a caller that omits it (including every test in
+     * lib/trade-finder-cross-league.test.ts) gets exactly today's behaviour,
+     * no tendency data, rather than an error. See
+     * lib/trade-finder-tendency-context.ts for the sign-in reasoning; this
+     * function never guesses a sign-in state, it only reads tendencies when
+     * handed the client that can only exist after that check has passed.
+     */
+    admin?: SupabaseClient<Database>;
   },
 ): Promise<CrossLeagueResult> {
   const ids = params.sleeperLeagueIds.slice(0, MAX_CROSS_LEAGUES);
@@ -187,6 +200,17 @@ export async function findCrossLeagueTrade(
     }
 
     const stored = params.excludeByLeague.get(sleeperLeagueId) ?? [];
+    // Same tendency read the league page and the single-league Search action
+    // make, so a deal surfaced in the portfolio walk carries the same band
+    // adjustment and reason sentences it would on that league's own page.
+    // `params.admin` is only ever set by a signed-in caller (see the field
+    // comment above), so `signedIn: true` here is not a guess.
+    const { managerTendencies, tendencyThresholds } = params.admin
+      ? await loadTendencyContext(params.admin, {
+          leagueRowId: league.leagueRowId,
+          signedIn: true,
+        })
+      : { managerTendencies: undefined, tendencyThresholds: undefined };
     const result = findTrades({
       myRosterId: league.myRosterId,
       teams: league.teams,
@@ -201,6 +225,8 @@ export async function findCrossLeagueTrade(
         config: params.qualityConfig ?? DEFAULT_TRADE_QUALITY_CONFIG,
         poolMax: league.poolMax,
       },
+      managerTendencies,
+      tendencyThresholds,
     });
 
     const live = result.suggestions

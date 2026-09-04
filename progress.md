@@ -11083,3 +11083,786 @@ T717 | completed | Lineups after the whistle: a report, not a stale forecast
      | primitives now, with the clients created inside.
      | verified: yes (3,874 tests green, clean build; four independent reviews,
      | every finding fixed except the follow-ups in the session report)
+
+---
+
+# Manager Pulse (prefix MP-T###)
+
+Plan of record: `docs/manager-pulse-plan.md`. Started 2026-09-04.
+
+Conventions carried over: every migration task applies via MCP, saves SQL to
+/supabase/migrations/, ships RLS in the same file, runs the RLS verification
+sequence, and regenerates types. Every lib task ships its colocated *.test.ts.
+
+## Wave 0 - Schema
+
+MP-T001 | completed | Migration: manager_pulse_settings (single-row jsonb config)
+     | files: supabase/migrations/0249_manager_pulse_settings.sql, lib/database.types.ts
+     | verified: yes (pg_policies shows only manager_pulse_settings_service_role_all
+       for service_role; relrowsecurity true; anon SELECT raises permission denied)
+
+MP-T002 | completed | Migration: manager_pulse_runs (cooldown ledger + progress + observability)
+     | files: supabase/migrations/0250_manager_pulse_runs.sql
+     | depends on: MP-T001
+     | notes: counts_against_cooldown added so a run that queued nothing does not
+       spend the reader's window. Partial cooldown index on that flag.
+     | verified: yes (two policies: service_role ALL, authenticated SELECT own)
+
+MP-T003 | completed | Migration: manager_pulse_run_leagues (what one run waits on)
+     | files: supabase/migrations/0251_manager_pulse_run_leagues.sql
+     | depends on: MP-T002
+     | notes: exists because league_sync_jobs_active_unique drops a duplicate
+       insert, so counting inserted jobs undercounts a run's progress. Progress
+       counts these rows instead.
+     | verified: yes (service_role ALL + authenticated SELECT own)
+
+MP-T004 | completed | Migration: manager_pulse_cache (the computed report)
+     | files: supabase/migrations/0252_manager_pulse_cache.sql
+     | depends on: MP-T002
+     | notes: keyed (sleeper_user_id, season_from, season_to, model_version).
+       Closed to authenticated as well as anon: a report names a real person's
+       habits and an open SELECT would let any signed-in reader enumerate them.
+     | verified: yes (service_role only)
+
+MP-T005 | completed | Migration: manager_pulse_tendencies (cross-tool DTO row)
+     | files: supabase/migrations/0253_manager_pulse_tendencies.sql
+     | depends on: MP-T002
+     | notes: dynasty_sample / redraft_sample are real columns so Trade Ideas can
+       filter on the sample floor without deserializing jsonb.
+     | verified: yes (service_role only)
+
+MP-T006 | completed | Migration: draft_pick_observations (measured per-pick timing)
+     | files: supabase/migrations/0254_draft_pick_observations.sql
+     | notes: Sleeper publishes no pick timestamp in REST or GraphQL (both probed).
+       first_seen_at is our own observation; observation_gap_ms is its error bar.
+     | verified: yes (service_role only)
+
+MP-T007 | completed | Migration: league_sync_jobs.job_kind (pulse | footprint)
+     | files: supabase/migrations/0255_league_sync_jobs_job_kind.sql
+     | notes: defaulted to 'pulse' so every existing row and enqueue path is
+       untouched. Partial index on (job_kind, run_after) for the admin backlog view.
+     | verified: yes (check constraint present; existing policies unchanged)
+
+MP-T008 | completed | Migration: league_sync_jobs second owner (manager_run_id)
+     | files: supabase/migrations/0256_league_sync_jobs_owner.sql
+     | depends on: MP-T002, MP-T007
+     | notes: request_id becomes nullable, manager_run_id added, and
+       league_sync_jobs_one_owner enforces EXACTLY one via num_nonnulls. This is
+       what produced the two expected tsc errors in lib/league-bulk-sync.ts,
+       owned by MP-T012.
+     | verified: yes (constraint present; policies unchanged)
+
+MP-T009 | completed | Migration: try_claim_manager_pulse + enqueue_manager_pulse_capture
+     | files: supabase/migrations/0257_manager_pulse_rpcs.sql
+     | depends on: MP-T003, MP-T008
+     | notes: claim uses a per-user advisory lock so two lookups cannot both pass
+       the cooldown. enqueue links to an in-flight job rather than duplicating it.
+     | verified: yes (has_function_privilege shows service_role only for both;
+       public, anon and authenticated all revoked by name)
+
+MP-T010 | completed | Regenerate lib/database.types.ts and prettier-format
+     | files: lib/database.types.ts
+     | depends on: MP-T009
+     | verified: yes (all 6 new tables + 2 new RPCs + job_kind present; pre-existing
+       tables intact, spot-checked would_you_rather_trades)
+
+## Wave 1 - Foundations
+
+MP-T011 | completed | lib/sleeper.ts: winners/losers brackets, bracketChampion, draft autopickers
+     | files: lib/sleeper.ts, lib/sleeper-brackets.test.ts
+     | notes: brackets return null on a failed request and [] on "no bracket", never
+       collapsed. bracketChampion reads the p:1 match only and never falls back to the
+       highest round. getSleeperDraftAutopickers is the one GraphQL call in the codebase,
+       isolated behind a named function with a numeric-only draft id guard before the
+       request (it is interpolated into a GraphQL string literal).
+     | verified: yes (18 tests passing; tsc gains no new error)
+
+MP-T013 | completed | lib/manager-pulse/types.ts: the whole DTO surface
+     | files: lib/manager-pulse/types.ts
+     | notes: PoolableStat<T> has all/dynasty/redraft; PerTypeStat<T> deliberately has
+       NO all field, which is how the "never pool a value-priced figure" rule is
+       enforced by the type system rather than by discipline. lensForCategory folds
+       best ball into its parent.
+     | verified: yes (tsc clean)
+
+MP-T014 | completed | lib/manager-pulse/default-settings.ts + MANAGER_PULSE_SETTING_BOUNDS
+     | files: lib/manager-pulse/default-settings.ts
+     | notes: 33 settings across 6 groups plus modelVersion. Bounds are grouped the
+       same way as the settings, so the admin form reads them by the same path.
+     | verified: yes
+
+MP-T015 | completed | lib/manager-pulse/settings.ts + validate.ts
+     | files: lib/manager-pulse/settings.ts, lib/manager-pulse/validate.ts,
+       lib/manager-pulse/settings.test.ts
+     | depends on: MP-T014
+     | verified: yes (tests cover both season-window cross-checks, the confidence
+       band check, the modelVersion regex, and a bound rejection naming the field)
+
+MP-T016 | completed | lib/manager-pulse/fingerprint.ts, pure and clock-free
+     | files: lib/manager-pulse/fingerprint.ts, lib/manager-pulse/fingerprint.test.ts
+     | notes: display settings deliberately excluded (changing how many favourites
+       render does not change the report), capture settings excluded (they change
+       what we fetch, which shows up as a different league-season set anyway).
+     | verified: yes (32 tests across the two files; Date.now mocked and asserted
+       to have zero calls)
+
+MP-T017 | completed | /admin/manager-pulse settings page + nav registration
+     | files: lib/manager-pulse-admin-nav.ts, components/admin/manager-pulse-subnav.tsx,
+       app/admin/manager-pulse/page.tsx, app/admin/manager-pulse/actions.ts,
+       app/admin/manager-pulse/manager-pulse-settings-manager.tsx,
+       app/admin/manager-pulse/settings-coverage.test.ts, lib/nav-tree.ts
+     | depends on: MP-T015
+     | notes: 34 fields across seven fieldsets. The coverage test walks every leaf key
+       of the defaults and asserts it appears in the form source, so a knob cannot be
+       added without being exposed. Action re-checks requireAdmin independently of the
+       page gate and validates before any write.
+     | verified: yes (2 tests passing; no responsive `hidden` utility anywhere in the
+       form, so nothing is hidden at 360px)
+
+MP-T018 | completed | draft_pick_observations capture in the On The Clock live poller
+     | files: lib/on-the-clock/pick-observations.ts,
+       lib/on-the-clock/pick-observations.test.ts, lib/on-the-clock/sleeper-sync.ts
+     | depends on: MP-T006, MP-T011
+     | notes: insert-only with ignoreDuplicates so first_seen_at is written once and
+       never overwritten. observation_gap_ms is forced to null whenever more than one
+       pick is newly seen in a poll, not just when the gap is unknown: attributing one
+       interval to several picks that happened at unknown offsets inside it would be
+       false precision rather than an honest unknown. Autopick is three-state; the
+       autopicker list is only requested while status is 'drafting'.
+     | verified: yes (13 tests; 389 on-the-clock tests still green)
+
+MP-T012 | completed | pulseLeagueFootprint + job_kind dispatch + the second job owner
+     | files: lib/league-pulse.ts, lib/league-bulk-sync.ts, lib/league-footprint-sync.test.ts
+     | depends on: MP-T007, MP-T008, MP-T011
+     | notes: the footprint path runs core + transactions + brackets and deliberately
+       does NOT run power rankings, Power Pulse, Positional WAR or the Manager Ledger.
+       A null bracket (failed request) leaves stored metadata alone rather than writing
+       an empty one. The worker dispatches on job_kind, then closes the matching
+       manager_pulse_run_leagues rows and RECOUNTS the run (never increments, because
+       this worker retries and an increment run twice double-counts).
+     | notes: fixed the two standing tsc errors by branching on which owner a job has,
+       not by asserting non-null. The null is correct and means Manager Pulse owns it.
+     | verified: yes (npx tsc --noEmit exits 0 across the whole project)
+
+## Wave 2 - Pure engine modules (in flight)
+
+MP-T019 | completed | lib/manager-pulse/results.ts: record, finishes, championships
+     | files: lib/manager-pulse/results.ts, lib/manager-pulse/results.test.ts
+     | notes: finish is a percentile of league size, never a raw rank, so 3rd of 10
+       and 3rd of 14 do not average as if they were the same achievement. A champion
+       is read off championRosterId and never inferred from the best record. A null
+       bracket contributes to neither side of the playoff rate.
+     | verified: yes (13 tests)
+
+MP-T019a | completed | Orchestrator fix: points-against rank, and its inversion
+     | files: lib/manager-pulse/input-types.ts, lib/manager-pulse/results.ts,
+       lib/manager-pulse/results.test.ts, lib/manager-pulse/affinity.test.ts
+     | notes: the results agent correctly reported that pointsAgainstRankByRoster did
+       not exist on the input, so the field returned null everywhere. Added it, and in
+       doing so shipped a wrong first patch: both rank maps store 1 = the most of their
+       own quantity, so feeding points against through the same normalization scored
+       the roster that CONCEDED THE MOST as the best in the league. The test I wrote
+       alongside it caught that immediately. computeRankPercentile now flips the
+       points-against half, and every figure the module returns runs 0 (worst for this
+       manager) to 1 (best).
+     | verified: yes (two added tests assert both ends of the scale)
+
+MP-T020 | completed | lib/manager-pulse/drafting.ts: reach, shape, keepers, the clock
+     | files: lib/manager-pulse/drafting.ts, lib/manager-pulse/drafting.test.ts
+     | notes: whole-draft pace is computed and labelled a fact about the ROOM, with the
+       rule stated in the module header. Per-pick timing requires BOTH endpoints of a
+       gap to carry a non-null observation_gap_ms, uses the median rather than the mean,
+       reports the MAX gap as the error bar, and drops anything over six hours (an
+       overnight pause is not a nine-hour pick). Keepers are excluded from every draft
+       figure.
+     | verified: yes (17 tests)
+
+MP-T021 | completed | lib/manager-pulse/affinity.ts: favourites, avoids, repeat drafts
+     | files: lib/manager-pulse/affinity.ts, lib/manager-pulse/affinity.test.ts
+     | notes: a player acquired twice in one league-season counts once, at the higher
+       weight; summing would make a manager who cut and re-added someone look twice as
+       keen. Favourites rank by exposure against how commonly the player is rostered
+       generally, and a player with an unknown rate is excluded rather than assumed
+       unusual.
+     | known gap: the avoid opportunity check uses one CURRENT league-wide roster rate
+       rather than a per-season one, so it can overstate opportunity for a player who
+       entered the league mid-window. Closing it needs a per-season rate on the input.
+       Recorded here rather than papered over in the module.
+     | verified: yes (11 tests)
+
+MP-T022 | completed | lib/manager-pulse/trading.ts: the trading profile
+     | files: lib/manager-pulse/trading.ts, lib/manager-pulse/trading.test.ts
+     | notes: every value-priced figure is a PerTypeStat with no `all` field, so the
+       "never pool dynasty and redraft" rule is enforced by the type system rather
+       than by discipline. An ungraded trade counts toward tradeCount and is excluded
+       from the margin mean; flattening it to zero would drag every average toward
+       the middle and make every manager look fair. Also exports buildTendencySlice,
+       so Trade Ideas and the report cannot disagree.
+     | verified: yes (15 tests)
+
+MP-T023 | completed | lib/manager-pulse/roster-ops.ts: how they run a roster
+     | files: lib/manager-pulse/roster-ops.ts, lib/manager-pulse/roster-ops.test.ts
+     | notes: lineup efficiency is a weeks-graded-weighted mean READ from
+       league_manager_ledger_cache and never recomputed. Its sample size counts only
+       league-seasons that actually had a row, because most will not have one.
+       Abandonment needs BOTH a quiet run and an incomplete lineup, and is reported
+       as a count with no adjective attached.
+     | verified: yes (18 tests)
+
+MP-T023a | completed | Orchestrator fix: roster-ops thresholds moved into settings
+     | files: lib/manager-pulse/default-settings.ts, lib/manager-pulse/validate.ts,
+       lib/manager-pulse/roster-ops.ts, lib/manager-pulse/roster-ops.test.ts,
+       app/admin/manager-pulse/manager-pulse-settings-manager.tsx
+     | notes: the module shipped four local constants (move-shape floor, the two shape
+       thresholds, the abandonment quiet-week floor). Those are exactly what the
+       settings row exists for: the number that decides whether we call somebody
+       "faded" is a judgement about what we are willing to say about a person. Moved
+       into a new `behaviour` settings group with bounds, zod validation, a cross-field
+       check that the faded threshold stays below the front-loaded one (otherwise the
+       bands overlap and whichever branch runs first silently wins), and four fields in
+       the admin form.
+     | notes: the settings-coverage test failed the moment the keys were added and
+       passed again once the fields existed. That is the guard working as designed.
+     | verified: yes (coverage test green; 106 manager-pulse tests passing)
+
+MP-T023b | completed | Orchestrator fix: waiver points read from the ledger
+     | files: lib/manager-pulse/input-types.ts, lib/manager-pulse/roster-ops.ts
+     | notes: the module correctly reported that nothing on the input carried a
+       per-claim scoring figure, and refused to invent a proxy. The ledger cache does
+       publish them, so ManagerLedgerFacts gained five waiver columns. The report
+       leads on waiverPointsStarted (points scored IN THE LINEUP); on-roster points
+       count bench weeks, which would credit a manager for a player they never played.
+     | verified: yes (tsc clean, tests green)
+
+## Wave 3 - Assembly and I/O
+
+MP-T024 | completed | lib/manager-pulse/load.ts: the only module that reads the database
+     | files: lib/manager-pulse/load.ts, lib/manager-pulse/load.test.ts
+     | notes: about a dozen batched reads for a 40 league-season manager, every one
+       paged past the 1000-row cap and chunked at 200 ids, plus one analyzeLeagueTrades
+       call per league-season that has trades. Trade margins are re-signed from THIS
+       manager's seat; a sign error there would invert the whole trading section, so
+       it is tested in both directions.
+     | notes: faabSpent reads metadata.settings.waiver_bid, matching lib/faab/
+       league-load.ts. The waiver_budget column holds Sleeper's FAAB-trade objects,
+       which are a different concept.
+     | known gap: draft grades stay null. draft_selections stores no grade and the
+       On The Clock grader is a compute over a live board, not a stored value, so
+       avgDraftGrade is null everywhere rather than reimplemented here.
+     | verified: yes (11 tests, including pagination, chunking, the margin sign flip
+       in both directions, and a full-failure path proving it never throws)
+
+MP-T024a | completed | Orchestrator fix: player_roster_exposure, the missing denominator
+     | files: supabase/migrations/0258_player_roster_exposure.sql,
+       app/api/cron/recalculate-derived/route.ts, lib/manager-pulse/load.ts,
+       lib/database.types.ts
+     | notes: the loader correctly refused to compute leagueWideRosterRate, since the
+       only honest options were one query per player or a full scan of every roster on
+       the site. But that field is the DENOMINATOR of the favourites list: without it
+       every manager's favourites are just a list of good players, and the affinity
+       module excludes null-rate players, so the list would have been permanently
+       empty. Built it as a pre-calculated table instead, the same shape as
+       player_value_trends.
+     | notes: measured at 310ms over 3,704 rosters, returning 2,242 players. That is
+       fine once a night and not fine per report, which is exactly why it is derived.
+       The rebuild is one aggregate and ITERATES NO LEAGUES, so it belongs on the
+       nightly global job without breaking the no-per-league-cron rule.
+     | notes: a missing row is NULL (we have never seen this player rostered), not 0.
+       The two mean different things and affinity relies on the difference.
+     | verified: yes (RLS: service_role only, anon and authenticated revoked; function
+       EXECUTE service_role only; rebuild run live, 2,242 rows written; types
+       regenerated; tsc clean)
+
+MP-T025 | completed | discover.ts, capture.ts, rate-limit.ts, and the progress route
+     | files: lib/manager-pulse/discover.ts, lib/manager-pulse/capture.ts,
+       lib/manager-pulse/rate-limit.ts, app/api/manager-pulse/runs/[run_id]/route.ts,
+       plus discover.test.ts and capture.test.ts
+     | depends on: MP-T009, MP-T014
+     | notes: order is validate, resolve, rate limit, discover, decide freshness, claim
+       the cooldown, enqueue. An invalid handle costs no network call and no rate-limit
+       slot, verified by asserting the mocks were never invoked.
+     | notes: the run id is an IDOR surface. The run is read with the service-role
+       client and ownership checked explicitly; a mismatch and a missing row BOTH
+       return 404, so the endpoint never confirms that someone else's run exists.
+     | notes: the lookup limiter fails CLOSED, so a limiter outage cannot become an
+       unmetered handle-enumeration endpoint.
+     | verified: yes (32 tests)
+
+MP-T026 | completed | engine.ts, narrative.ts, tendencies.ts, purity.test.ts
+     | files: lib/manager-pulse/engine.ts, narrative.ts, tendencies.ts, purity.test.ts
+       and their tests
+     | notes: computeFootprint takes generatedAt as an argument rather than reading a
+       clock, so the engine stays pure. 15 narrative templates, each firing only when
+       its figures are present and each carrying its sample size inline in the text.
+     | notes: purity.test.ts scans every pure module for a Supabase, fetch, React or
+       Date.now reference, and separately asserts the token WAR appears nowhere in the
+       directory. The debt allow-list is EMPTY. It excludes only itself from the WAR
+       scan, because a guard that tests for a token has to name it; that is a scanning
+       exclusion with a comment, not an allow-list entry.
+     | verified: yes (213 tests across 14 files at the time it landed)
+
+MP-T026a | completed | Orchestrator fix: narrative word-choice thresholds into settings
+     | files: lib/manager-pulse/default-settings.ts, lib/manager-pulse/validate.ts,
+       lib/manager-pulse/narrative.ts,
+       app/admin/manager-pulse/manager-pulse-settings-manager.tsx
+     | notes: the narrative agent flagged, correctly, that it had no way to reach the
+       settings row from a file it did not own, so ten thresholds were local constants.
+       They decide VOCABULARY rather than arithmetic: whether three trades a season
+       reads as "trades a lot", whether a two percent margin is worth calling "pays up".
+       That makes them the most editable numbers in the feature, not the least, because
+       they are where a measurement becomes a sentence about a person.
+     | notes: new `wording` group with bounds, validation, ten admin fields, and three
+       cross-field checks (poor below good, band min below max, rarely below often).
+       Each pair could otherwise be crossed so a manager is described both ways at once
+       and whichever template fires first silently wins.
+     | verified: yes (223 tests passing, settings-coverage green)
+
+MP-T033 | completed | lib/manager-pulse/service.ts: the public door
+     | files: lib/manager-pulse/service.ts
+     | depends on: MP-T024, MP-T025, MP-T026
+     | notes: getManagerFootprint and getManagerTendencies. Neither throws; every
+       failure is a member of the returned union.
+     | notes: the cache read happens BEFORE the capture claim, so a reader whose report
+       is warm pays nothing: no Sleeper request, no cooldown, no queue. It also means a
+       second lookup of the same manager is instant rather than throttled.
+     | notes: a throttled reader with a cached report gets the cached report marked
+       stale rather than a throttle message. The cooldown protects the Sleeper refetch,
+       not the answer, and we already have the answer.
+     | notes: a fingerprint that matches the cached one skips the write entirely and
+       keeps the original generatedAt, because nothing that can change the report has
+       changed and re-stamping it would claim freshness we did not earn.
+     | notes: getManagerTendencies drops rows on a superseded model version and rows
+       past the tendency TTL, so a modelVersion bump takes effect without deleting
+       anything. An absent manager stays absent from the map: "we have never looked" is
+       a different claim from "we looked and there is nothing to say".
+     | verified: yes (tsc clean apart from forward references to in-flight page files)
+
+## Wave 4 - The page
+
+MP-T028 | completed | Report sections 6.1 to 6.4 plus the shared frame, tile and formatters
+     | files: components/manager-pulse/section-frame.tsx, stat-tile.tsx,
+       identity-section.tsx, results-section.tsx, drafting-section.tsx,
+       affinity-section.tsx, format.ts, format.test.ts
+     | notes: a null stat renders ONE text node carrying its reason in an inline
+       sr-only span, never a visible number plus a hidden twin. Drawing a figure twice
+       reads correctly line by line and goes silent for a pointer reader, which is the
+       rule CLAUDE.md states for the Lineups board.
+     | notes: the draft pace line says "A fact about the room, not this manager" in
+       those words. The agent also declined to write "on a 120 second clock" because
+       DraftPaceFact carries only the clock SHARE, not the raw timer, and stating a
+       clock length we do not have would have been reverse-engineered rather than read.
+     | notes: points against is labelled "Their opponents' scoring. Not something the
+       manager controlled."
+     | notes: affinity player rows render the same array twice, a table at sm and up
+       and stacked cards below, so all four values survive every breakpoint.
+     | verified: yes (28 format tests; 51 across the component directories)
+
+MP-T027 | completed | Page shell, section nav, the league-type lens, entry and report routes
+     | files: components/manager-shell/* (6 files + lens.test.ts),
+       app/tools/manager-pulse/page.tsx, manager-search-form.tsx,
+       app/tools/manager-pulse/[handle]/page.tsx, loading.tsx, report-skeleton.tsx
+     | notes: the lens is a group of aria-pressed buttons, not aria-current, because it
+       filters rather than navigates. perTypeUnderLens returning BOTH types under the
+       All lens is the whole dynasty/redraft rule expressed in one function.
+     | notes: the report route is signed-in only, gated server-side in the page and
+       independently of the entry page, and carries robots noindex because it describes
+       a named real person assembled from public data.
+     | notes: caught a real bug while wiring the nav. roster-ops-section renders on
+       id="roster-ops" while every other section uses the literal camelCase
+       ManagerSection string, so managerSectionElementId now LOOKS UP the element id
+       rather than assuming the two are the same string. Without it that one nav anchor
+       would have scrolled nowhere, silently, on both the rail and the mobile dock.
+     | notes: the rail and the mobile dock share one IntersectionObserver hook, so the
+       two can never disagree about which section is current.
+     | notes: also rendered limits-note.tsx at the foot of the ready report. Nobody
+       else was wiring it in, and it is the block that tells a reader what the report
+       could NOT measure.
+     | verified: yes (12 lens tests)
+
+MP-T029 | completed | Report sections 6.5 to 6.8, PerTypePair and the limits note
+     | files: components/manager-pulse/trading-section.tsx, roster-ops-section.tsx,
+       narrative-section.tsx, leagues-section.tsx, per-type-pair.tsx, limits-note.tsx,
+       per-type-pair.test.tsx
+     | notes: PerTypePair is the single component every value-priced figure renders
+       through, so "never pool dynasty and redraft" lives in one place rather than in
+       seven sections' worth of discipline. Under the All lens it shows both sides; it
+       has no code path that combines them.
+     | verified: yes
+
+MP-T030 | completed | The guest sample fixture and view, and the capture progress panel
+     | files: lib/manager-pulse/sample.ts, sample-isolation.test.ts,
+       components/manager-pulse/sample-report.tsx, capture-progress.tsx,
+       use-capture-progress.ts, progress-bar.tsx, progress-bar.test.ts
+     | notes: the fixture deliberately carries nulls and an empty list, so a guest sees
+       how absences render. A sample that shows only the happy path lies about the
+       product.
+     | notes: progressState treats a null OR zero total as indeterminate, so there is
+       no divide by zero and no bar that reads 100% because it knows nothing. Polling
+       backs off 1500ms to 8000ms, stops on any terminal status, aborts on unmount, and
+       gives up quietly after six consecutive failures.
+     | notes: the live region diffs section status against the previous poll and
+       announces only real events, so a screen reader hears "Trading is ready" rather
+       than a count read aloud every 1.5 seconds.
+     | verified: yes (19 tests; the isolation guard confirms sample.ts reaches no real
+       read path)
+
+MP-T034 | completed | Integration: reconciling three naming schemes onto one
+     | files: app/tools/manager-pulse/[handle]/page.tsx,
+       components/manager-pulse/sample-report.tsx
+     | notes: three agents converged on three contracts for the same eight components:
+       *-card taking the whole report, manager-* taking the whole report, and *-section
+       taking typed slices. Each built to its own brief rather than guessing, and each
+       said so in its report, which is what made this a ten-minute fix instead of a
+       debugging session.
+     | notes: settled on *-section with typed slices, because a component that receives
+       exactly what it renders cannot read a field it has no business reading. The two
+       consumers were rewritten; no adapter layer was added, since an adapter that
+       exists only to bridge a naming mistake is a permanent monument to it.
+     | notes: also settled that the PAGE owns the single h1 and every section stays at
+       h2. Making a section own the h1 would have made the heading outline depend on
+       which section happened to render first.
+     | verified: yes (npx tsc --noEmit exits 0; npx vitest run is 268 files, 4184 tests,
+       all passing)
+
+MP-T035 | completed | Orchestrator fix: vitest was silently skipping .test.tsx files
+     | files: vitest.config.ts
+     | notes: the include glob was *.test.ts only. A pure helper living beside a
+       component has to be tested from a .tsx file to import it, so per-type-pair's
+       seven tests were written, passing locally, and never running in the suite. A
+       glob that skips a test file is worse than having no test at all: the suite
+       reports green while the assertions never execute.
+     | notes: found by the agent that wrote them, which checked whether its own tests
+       actually ran rather than assuming a green suite covered them.
+     | notes: this was the only .test.tsx in the repo, so nothing else was silently
+       skipped. Suite went from 268 files / 4184 tests to 269 / 4191.
+     | verified: yes
+
+## Wave 5 - Cross-tool and admin
+
+MP-T032 | completed | Admin sub-pages: runs, cache, draft-clock observations
+     | files: app/admin/manager-pulse/runs/page.tsx,
+       app/admin/manager-pulse/cache/page.tsx, cache/actions.ts,
+       cache/cache-actions-panel.tsx, app/admin/manager-pulse/observations/page.tsx
+     | depends on: MP-T017
+     | notes: the runs page is 2 queries regardless of page size: the run list, plus
+       ONE batched read of the per-league breakdown keyed by the run ids on screen. The
+       breakdown is a details disclosure rather than a dialog, because an admin hunting
+       a stall wants several open at once.
+     | notes: a run that queued no work shows a "Free run" chip with a page-level line
+       explaining it did not spend the reader's cooldown. Without it an admin seeing two
+       runs a minute apart would conclude the limit was broken.
+     | notes: both destructive actions compute their delete predicate from a verified
+       SELECT rather than trusting the client's string, and the bulk path REFUSES to
+       delete the live model version, checked server-side against the settings row on
+       every call. Clearing the live version is not an invalidation, it is an outage.
+       The version dropdown lists only versions rows actually exist for, never free
+       text, so a typo cannot reach the delete.
+     | notes: the observations page renders NO stat cards and no chart when the table
+       is empty. It says per-pick timing accumulates from the first live draft watched
+       and that nothing is wrong, which is the honest answer for a feature that starts
+       empty by construction.
+     | notes: it also reports how many observations carry a NULL gap, because that
+       number is large early on and an admin needs to know it is expected. Where a
+       figure needs row-level data (distinct drafts, the median gap) the read is
+       bounded and the page says so when it hits the cap.
+     | verified: yes (tsc clean; every table captioned and scoped; all timestamps
+       through lib/datetime.ts)
+
+MP-T031 | completed | Trade Ideas reads Manager Pulse tendencies
+     | files: lib/trade-finder/types.ts, tendency.ts, tendency.test.ts, rank.ts,
+       engine.ts, explain.ts, app/leagues/[league_id]/trade-ideas/page.tsx
+     | depends on: MP-T033
+     | notes: tendencies touch exactly three things and nothing else: the acceptance
+       band by at most one step, package ordering, and reason sentences. The value math
+       and the wins math are untouched, and acceptanceOf with no tendency returns
+       today's answer unchanged, which is asserted.
+     | notes: the appetite term went into the SORT TIEBREAKER, not the score. The
+       agent's reasoning: every weight in scoreSuggestion is grounded against real
+       leagues with the reasoning written beside the number, and appetiteScore has no
+       such grounding, so it orders candidates the value and lineup math already rate
+       equal rather than moving any of them past each other. That is the more honest
+       of the two options offered and it took the more conservative one.
+     | notes: the page adds exactly ONE query (rosters, for sleeper_roster_id and
+       owner_user_id). The tendency read is the service's own single batched call.
+     | notes: a zero trade count is judged BEFORE the graded-sample floor, because
+       sampleSize counts graded trades and is always 0 when tradeCount is 0, so the
+       "never trades" branch would otherwise be unreachable. Caught by the agent, not
+       by a test.
+     | verified: yes (24 tendency tests; 651 across trade-finder, trade-impact and
+       manager-pulse; the full suite green)
+
+MP-T031a | completed | Orchestrator fix: tendency thresholds threaded, not copied
+     | files: lib/trade-finder/tendency.ts, types.ts, engine.ts,
+       app/leagues/[league_id]/trade-ideas/page.tsx
+     | notes: the engine had copied three admin settings into local constants, because
+       a pure module cannot read the settings row. The reasoning was sound and the
+       conclusion was not: the CALLER can read it. TradeFinderInput now carries
+       tendencyThresholds, the page fills it from manager_pulse_settings, and
+       resolveTendencyThresholds falls back to the published defaults for a caller that
+       has none.
+     | notes: this matters beyond tidiness. An admin who raises the sample floor at
+       /admin/manager-pulse expects Trade Ideas to go quieter; with a copied constant it
+       would have kept talking on the old number, and nothing on either screen would
+       have shown why.
+     | notes: third time this pattern appeared in the build (roster-ops, narrative,
+       here). Every one was self-reported by the agent that hit it.
+     | verified: yes (tsc clean; 270 files, 4220 tests passing; npm run build clean with
+       all 7 new routes registered)
+
+## Wave 6 - Review and remediation
+
+MP-R001 | completed | Security review (Opus) and its fixes
+     | notes: HIGH, the handle lookup was unmetered. The rate-limit claim sat AFTER the
+       Sleeper resolve, and two paths reached Sleeper without ever claiming (an unknown
+       handle returned before the claim; a warm cache returned before capture ran at
+       all). A signed-in reader could walk a wordlist through the report route, learn
+       which handles exist, and point the site's whole egress at Sleeper doing it.
+       FIXED: the claim now sits in getManagerFootprint, after shape validation and
+       before the resolve, so garbage is still free and a plausible guess is not.
+     | notes: the handle was also resolved against Sleeper TWICE per cold lookup. FIXED:
+       the resolved subject is passed into startManagerCapture.
+     | notes: MEDIUM, Manager Pulse tendencies rendered on the PUBLIC Trade Ideas page.
+       manager_pulse_tendencies is closed to `authenticated` at the database level
+       precisely because a tendency is a set of conclusions about a named real person,
+       and /tools/manager-pulse is gated for the same reason. The second consumer
+       inherited neither. FIXED: the tendency read is gated on a signed-in session.
+     | notes: LOW, the admin cache invalidator matched handles with `ilike`, whose
+       wildcards are `%` and `_`. An underscore is legal in a Sleeper handle, so an
+       ordinary handle already over-matched, and a single `%` would have deleted every
+       stored report. FIXED: validated with isValidSleeperHandle and switched to `eq`.
+     | notes: LOW, raw sync error text was written to manager_pulse_run_leagues.detail,
+       which is owner-readable straight out of PostgREST. FIXED: mapped to a fixed set
+       of reasons, the same shape power_pulse_detail uses.
+     | notes: live RLS evidence collected on all seven tables (policy inventory, anon
+       and authenticated role simulation, owner-scoping probe inside a rolled-back
+       transaction) plus has_function_privilege on all three functions. All correct.
+     | verified: yes
+
+MP-R002 | completed | A capture.test.ts assertion updated to the new security contract
+     | files: lib/manager-pulse/capture.test.ts
+     | notes: one test asserted that an unrecognised handle spends no rate-limit slot,
+       which is exactly the behaviour the review said to remove. Rewritten to assert
+       the new contract, with the reasoning in the test so nobody reverts it as a
+       regression, plus a second test that an already-resolved caller is not charged
+       twice.
+     | verified: yes (222 manager-pulse tests passing)
+
+MP-R003 | completed | Performance: the trade grading loop runs a few leagues at a time
+     | files: lib/manager-pulse/load.ts
+     | notes: analyzeLeagueTrades is about a dozen queries per league-season and was
+       called strictly in series. Over 40 league-seasons that is a few hundred
+       sequential round trips on the critical path. Now bounded-concurrency via the
+       existing mapLimit at 4. Each task returns its own arrays and they are
+       concatenated in league order afterwards: pushing into shared arrays would be
+       safe single-threaded but would make output order depend on which query finished
+       first, and a report that reorders between identical runs cannot be diffed.
+     | verified: yes (tsc clean, 222 tests passing)
+
+MP-R004 | completed | Accessibility review (Opus): all 19 findings fixed
+     | notes: the two that mattered most. StatTile's empty state was DEAD CODE in two
+       sections: the formatters return the string "--" for null, and the tile tested
+       for null, so six tiles could never reach their carefully written reasons and a
+       screen reader got "Win rate, dash dash" while the tile kept its positive tone.
+       And during a capture every nav anchor pointed at a DOM id that did not exist,
+       because PendingSection rendered a bare div with no id and no heading.
+     | notes: also fixed: the page never refreshed when a run finished (the reader was
+       told "complete" and left looking at eight placeholders), the league row's mobile
+       summary was trapped inside the link's accessible name, LensSwitch disabled the
+       button under the reader's own focus and threw focus to the body, the progress bar
+       had no accessible name, two places drew a visible figure and an sr-only twin
+       (the exact pattern CLAUDE.md forbids), the sample report had no table captions,
+       and two admin controls were 20px tall.
+     | verified: yes (270 files, 4222 tests passing)
+
+MP-R005 | completed | CRITICAL: server components were calling a client module
+     | files: components/manager-shell/lens.ts (new), lens-switch.tsx, index.ts,
+       lens.test.ts, client-boundary.test.ts (new), five section components, the page
+     | notes: lens-switch.tsx carries "use client", and six SERVER components imported
+       its five pure helpers. Next turns every export of a client module into a client
+       reference, so those calls throw at render: the report page and the signed-out
+       sample page both 500'd. tsc passed (the types are correct) and every unit test
+       passed (a test imports the module directly and never crosses the boundary that
+       breaks it). The performance reviewer found it by grepping the BUILT server chunk
+       for the throwing proxy, which is the only place the bug is visible.
+     | notes: fixed by moving the helpers into components/manager-shell/lens.ts, which
+       has no directive, and importing them back into lens-switch for its own use.
+       Verified against a fresh build: the "Attempted to call underLens()" proxy is gone.
+     | notes: added components/manager-shell/client-boundary.test.ts, which walks the
+       feature's source and fails when a file without "use client" imports a
+       non-component value from one. It distinguishes rendering a client component
+       (correct, and the whole point of the boundary) from calling a client module's
+       function (broken) using React's own PascalCase convention.
+     | notes: the lesson in one line, and it is now the test's header: being free of
+       React and of fetch is not what makes a function server-safe, not living in a
+       client module is.
+     | verified: yes (tsc clean, build clean, guard passing)
+
+MP-R006 | completed | Migration 0259: count distinct rosters, not roster entries
+     | files: supabase/migrations/0259_player_roster_exposure_distinct.sql
+     | notes: rebuild_player_roster_exposure counted count(*) over an unnest of
+       rosters.player_ids, which counts ENTRIES. player_ids is raw Sleeper jsonb, so one
+       roster listing a player twice would push rostered_count past total_rosters and
+       trip the table's own CHECK. The failure would have been silent: the rebuild is
+       one transaction so the old table survives, and the nightly job logs and
+       continues, so the exposure table would simply freeze while Manager Pulse kept
+       ranking favourites against stale rates. Latent, not fired: production has no
+       duplicates today.
+     | verified: yes (applied, rebuild run, 2242 rows)
+
+MP-R007 | completed | Migration 0260: enqueue counts stored rows, and a zero cap
+     | files: supabase/migrations/0260_manager_pulse_enqueue_count.sql
+     | notes: leagues_total came from an iteration counter while the insert below it is
+       on-conflict-do-nothing, so a duplicate (league, season) in the payload counted
+       two and stored one and the progress bar could never reach 100%. That is exactly
+       the failure manager_pulse_run_leagues exists to prevent, reintroduced one level
+       up. Now counted off the rows actually written.
+     | notes: the cap had no floor above zero, so maxLeaguesPerRun of 0 produced a run
+       that stored nothing and read as COMPLETE over zero leagues, which is a confident
+       empty report rather than a refusal. A zero cap now falls back to the default.
+     | verified: yes (applied; grants and search_path re-checked on all three functions)
+
+MP-R008 | completed | Smaller security and correctness fixes
+     | files: lib/manager-pulse/rate-limit.ts, capture.ts,
+       supabase/migrations/0257_manager_pulse_rpcs.sql
+     | notes: the limiter claimed the minute bucket before the day bucket, so a reader
+       already at their daily ceiling burned minute capacity on every refused attempt.
+       The claims are not reversible, so the wider bucket is now claimed first.
+     | notes: an enqueue failure left a run holding the reader's full hour, because the
+       cooldown flag is set at claim time and only a successful enqueue clears it. A
+       transient error on our side locked them out. Now cleared, with the run kept as
+       the observability record rather than deleted.
+     | notes: dropped the `as never` casts on both RPC calls. The generated types carry
+       both signatures, and the cast was discarding exactly the checking that
+       regenerating them bought. tsc confirms they were never needed.
+     | notes: added the missing access-matrix header to migration 0257, the only file
+       in the set without one.
+     | verified: yes (tsc clean)
+
+MP-R009 | completed | Purity guard now covers the whole directory
+     | files: lib/manager-pulse/purity.test.ts
+     | notes: the scan walked a hardcoded list of twelve modules, complete on the day it
+       was written and unable to notice a thirteenth. Added a test that walks the
+       directory and fails unless every source file is classified as pure or as
+       deliberately impure with a stated reason. A guard that does not scan a file it
+       should is worse than no guard, because the green tick says otherwise.
+     | verified: yes (16 tests)
+
+MP-R010 | completed | Queue throughput for footprint jobs
+     | files: lib/league-bulk-sync.ts
+     | notes: one Manager Pulse lookup at the 60-league cap needed twelve minutes of
+       exclusive, site-wide drain, and every Sync all press queued behind it. Batch
+       raised to 8 and footprint jobs paced at 1200ms rather than 2500ms, since
+       pulseLeagueFootprint really is the smaller job. Roughly halves the wait.
+     | known limitation: this improves throughput, not FAIRNESS. The queue is still
+       FIFO, so a large lookup still delays everything behind it; per-owner round-robin
+       in the claim RPC is the real fix and is not built. Recorded rather than pretended
+       away.
+     | verified: yes (tsc clean)
+
+MP-R011 | completed | Implementation review (Opus): the settings and engine findings
+     | files: lib/manager-pulse/default-settings.ts, validate.ts, fingerprint.ts,
+       fingerprint.test.ts, drafting.ts, trading.ts, affinity.ts, narrative.ts,
+       lib/league-bulk-sync.ts, app/admin/manager-pulse/manager-pulse-settings-manager.tsx
+     | notes: THREE settings existed, were validated, were in the admin form, and were
+       read by nothing. jobMaxAttempts is now read by the worker; reachRoundsThreshold
+       is now applied (a reach index below it is noise, and reporting it would give
+       every manager a "drafts early" or "drafts late" label); pickObservationGapMs was
+       REMOVED, because the observation gap is measured per row and stored on it, so a
+       configured value was a second answer that could disagree with the real one.
+     | notes: two of those three were in the FINGERPRINT, so editing a setting that
+       changed nothing invalidated every cached report and forced a recompute producing
+       byte-identical output.
+     | notes: display.tradesShown was declared, bounded and form-wired, and trading.ts
+       capped both its lists with local constants instead. An admin changed the field
+       and neither list moved. Now read from the setting.
+     | notes: AVOID_ROSTER_RATE_FLOOR was an undeclared constant deciding which NAMED
+       REAL PEOPLE appear on a manager's Avoids list, three lines from a sibling that
+       was a proper setting. Now samples.minAvoidRosterRate.
+     | notes: display settings were excluded from the fingerprint on the reasoning that
+       render-time slicing needs no recompute. Wrong: affinity, results and narrative
+       all slice INSIDE computeFootprint and the result is baked into the cache, so
+       raising favouritesShown changed nothing for any existing report, indefinitely.
+       Now included, and the test that asserted the opposite is inverted with the reason
+       written into it.
+     | notes: affinity.ts commented that a null roster rate carries through as null
+       directly above a `?? 0`. A zero rate would rank an unknown player at the TOP of
+       Favourites, since the score is exposure times (1 minus rate). Now `?? 1`, which
+       sends an unknown to the bottom: the honest failure direction.
+     | verified: yes (231 tests across manager-pulse, admin and bulk-sync types)
+
+MP-R012 | completed | Implementation review: the Trade Ideas findings
+     | files: lib/trade-finder-tendency-context.ts (new), lib/trade-finder/tendency.ts,
+       tendency.test.ts, engine.ts, explain.ts, types.ts, app/actions/trade-finder.ts,
+       lib/trade-finder-cross-league.ts, components/trade-finder-card.tsx
+     | notes: tendency sentences VANISHED the moment a reader pressed Search. Only the
+       server-rendered page passed tendencies into findTrades; the server action and the
+       cross-league path passed neither, so first paint showed tendency-adjusted bands
+       and the very next interaction silently dropped them. No wrong number was produced
+       (a null slice is a no-op) but the tool changed its answer for no visible reason.
+       One shared loadTendencyContext now serves all three call sites, and it returns an
+       empty map when the reader is not signed in, which is where the privacy gate lives.
+     | notes: the band-moving CONDITION was implemented twice, once in bandAdjustment
+       and again independently in explain.ts, so the card could say "Trades often" on a
+       deal where the band never actually moved. The engine now passes the adjustment's
+       own reason through and explain.ts states that rather than re-deriving it.
+     | notes: plan section 8.4 was never built. Tendency sentences rode inside the
+       existing whyThem string, indistinguishable from the rest of the reasoning, with
+       no link. Now their own field, their own quiet line on the card, and a link to the
+       manager's full report with a specific accessible name and a 44px target.
+     | notes: the three admin defaults copied into the pure engine now have a test
+       asserting each equals its original, since a copied default is only safe while it
+       is still a copy.
+     | verified: yes (408 tests across trade-finder and trade-impact, including the
+       assertion that acceptanceOf with no tendency returns exactly today's answer)
+
+MP-R013 | completed | Performance review (Opus): all findings fixed
+     | files: app/tools/manager-pulse/[handle]/page.tsx, report-skeleton.tsx,
+       lib/manager-pulse/service.ts, components/manager-pulse/capture-progress.tsx,
+       use-capture-progress.ts, the three admin sub-pages, the trade-ideas page
+     | notes: first paint awaited the ENTIRE report, including several Sleeper round
+       trips on a cold lookup, and the eight Suspense boundaries wrapped synchronous
+       components reading an already-resolved object, so no fallback could ever paint.
+       The page now awaits only the auth gate and the handle shape, and the whole
+       report sits behind ONE real boundary. The seven that could never suspend were
+       removed rather than left as decoration.
+     | notes: a finished run left the reader stranded. The worker sets 'computing' and
+       only a page render sets 'complete', so the poller ran forever at its ceiling
+       while the panel said "building" and nothing was building it. An abandoned tab
+       polled indefinitely at three round trips each. 'computing' is now terminal for
+       polling and triggers the refresh that actually builds the report.
+     | notes: a warm cache still paid a Sleeper round trip, because the handle was
+       resolved before the cache was read. A cached report also could not be served at
+       all while Sleeper was slow. There is now a by-handle cache read first.
+     | notes: three admin reads asked for more rows than PostgREST returns (5000, 20000
+       and unbounded against a 1000 cap). The observations median was computed over an
+       arbitrary 1000 rows and called the median, and its own "this was capped" notice
+       could never fire because it compared against a number the database never let
+       through. All three now page with a real cap, deterministic order and an honest
+       notice.
+     | verified: yes (tsc 0, 271 files / 4226 tests, build clean)
+
+MP-R014 | completed | Orchestrator fix: LIKE wildcards in the by-handle cache read
+     | files: lib/manager-pulse/service.ts
+     | notes: the new warm-path lookup used `ilike` on the reader's handle, with a
+       comment asserting the handle grammar forbids `%` and `_`. It does not:
+       HANDLE_PATTERN is /^[a-z0-9_]{1,32}$/ and underscore is a LIKE single-character
+       wildcard. A reader looking up `a_b` could have been served the cached report for
+       `axb`, which is ONE REAL PERSON'S HISTORY UNDER ANOTHER PERSON'S HANDLE.
+     | notes: this is the same mistake review found in the admin cache invalidator,
+       where `%` would have deleted every stored report. Validation does not help here:
+       it is the validated character set that is dangerous. Now escaped through a
+       likeLiteral helper, with the reasoning written above it.
+     | verified: yes (escape behaviour checked directly: a_b -> a\_b, 100%x -> 100\%x)
+
+MP-FINAL | completed | Final verification
+     | notes: npx tsc --noEmit exits 0. npx vitest run is 271 files, 4226 tests, all
+       passing. npm run build is clean with all seven new routes registered. The
+       banned-character scan is clean across all 120 changed files; the only matches
+       are inside narrative.test.ts, which lists those characters because it is the
+       test asserting narrative output contains none of them.
+     | notes: docs/manager-pulse-plan.md gained section 15 reconciling the plan with
+       what shipped (ten migrations rather than seven, two settings groups that were
+       not planned, one that was removed, and a plan instruction in section 5.7 that
+       would have been a security bug had it been followed).
+     | notes: handoff.md rewritten for a cold start.
+     | notes: NOT COMMITTED and NOT PUSHED, by instruction.

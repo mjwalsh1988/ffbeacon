@@ -28,7 +28,17 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.ts"],
+    // .tsx as well as .ts. A pure helper that lives beside a component (the
+    // side-picking logic in components/manager-pulse/per-type-pair.tsx, say)
+    // has to be tested from a .tsx file to import it, and a glob that quietly
+    // skips those files is worse than having no test: the suite reports green
+    // while the assertions never run. The oxc override above is what makes a
+    // .tsx test transformable here.
+    include: [
+      "lib/**/*.test.{ts,tsx}",
+      "app/**/*.test.{ts,tsx}",
+      "components/**/*.test.{ts,tsx}",
+    ],
     globals: false,
   },
 });

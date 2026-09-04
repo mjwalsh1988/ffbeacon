@@ -17,11 +17,14 @@
 
 import { RANK_THRESHOLDS } from "./rank";
 import { NAMEABLE_WINS } from "./pulse";
+import { TENDENCY_DEFAULTS } from "./tendency";
+import type { TendencySlice } from "@/lib/manager-pulse/types";
 import type {
   SideImpact,
   SuggestionAsset,
   TeamDirection,
   TradeGoal,
+  TradePosition,
   TradeStrategy,
 } from "./types";
 
@@ -599,5 +602,104 @@ export function buildCaveats(params: {
       `Only ${params.remainingGames} regular season ${params.remainingGames === 1 ? "game" : "games"} left, so a lineup change has little room to move your record.`,
     );
   }
+  return out;
+}
+
+/**
+ * Plural, lowercase-safe position words for the tendency sentences below.
+ * Kept local rather than added to TRADE_POSITION_LABEL, which is a heading
+ * word ("Running back"), not a sentence word ("running backs").
+ */
+const TENDENCY_POSITION_PLURAL: Record<TradePosition, string> = {
+  QB: "quarterbacks",
+  RB: "running backs",
+  WR: "wide receivers",
+  TE: "tight ends",
+  K: "kickers",
+  DEF: "defenses",
+};
+
+/** "trades often..." becomes "Trades often...". Straight ASCII only, so no locale surprises. */
+function capitalize(s: string): string {
+  if (s.length === 0) return s;
+  return s[0].toUpperCase() + s.slice(1);
+}
+
+/**
+ * Manager Pulse: what this counterparty's own trading history says, its own
+ * short lines (`TradeSuggestion.tendencyNotes`), separate from `whyThem`.
+ * Per docs/manager-pulse-plan.md section 8.4, the reader sees these as a
+ * quiet line under the acceptance band, with a link to the manager's full
+ * report.
+ *
+ * Deterministic and figure-cited throughout, per the same rule every other
+ * sentence in this file already holds: nothing here is generated, and every
+ * clause names the count or the rate behind it, so a below-floor tendency
+ * produces no clause at all rather than a hedge. `slice` absent (no cached
+ * Manager Pulse tendency, or the manager reads null for this league's game
+ * type) returns an empty list, which is the ordinary "no opinion" case, not
+ * an error.
+ *
+ * ONE SOURCE OF TRUTH FOR THE BAND-MOVING SENTENCE. `tendency.ts
+ * bandAdjustment` already computes exactly when the acceptance band moves
+ * (a manager with zero trades in the window, or a frequent trader who pays
+ * up) and returns a `reason` fragment naming every figure behind it. This
+ * used to be recomputed here as a second, independent pair of conditions
+ * ("trades often" checked alone, "pays up" checked alone), which could fire
+ * in combinations `bandAdjustment` never produced: a manager who trades
+ * often but does NOT pay up got a "Trades often" sentence that implied the
+ * band moved when it had not. Reading `bandAdjustment`'s own fragment here
+ * instead makes the two impossible to disagree, by construction.
+ *
+ * A manager with zero trades in the window returns ONLY that one sentence:
+ * every other figure a slice can offer (margin, position lean, picks moved)
+ * is trivially zero or null when tradeCount is zero, so there is nothing
+ * else true left to say.
+ */
+export function buildTendencyReasons(params: {
+  slice: TendencySlice | null;
+  /** The same computation that moved (or did not move) the acceptance band. */
+  bandAdjustment: { steps: number; reason: string | null };
+  /** Positions of the players THEY would receive in this deal (our outgoing side). */
+  positionsTheyReceive: TradePosition[];
+  /** Whether this deal moves a draft pick, on either side. */
+  involvesPick: boolean;
+  settings?: { minSample: number; frequentTradesPerSeason: number };
+}): string[] {
+  const slice = params.slice;
+  if (!slice) return [];
+  const settings = params.settings ?? {
+    minSample: TENDENCY_DEFAULTS.MIN_SAMPLE,
+    frequentTradesPerSeason: TENDENCY_DEFAULTS.FREQUENT_TRADES_PER_SEASON,
+  };
+
+  if (slice.tradeCount === 0) {
+    return params.bandAdjustment.reason
+      ? [`${capitalize(params.bandAdjustment.reason)}.`]
+      : ["Has not completed a trade. 0 trades in the window."];
+  }
+
+  const out: string[] = [];
+
+  if (params.bandAdjustment.steps > 0 && params.bandAdjustment.reason) {
+    out.push(`${capitalize(params.bandAdjustment.reason)}.`);
+  }
+
+  if (slice.tradeCount >= settings.minSample) {
+    const boughtPosition = params.positionsTheyReceive.find((position) => {
+      const flow = slice.positionAppetite[position];
+      return typeof flow === "number" && flow > 0;
+    });
+    if (boughtPosition) {
+      out.push(
+        `Buys ${TENDENCY_POSITION_PLURAL[boughtPosition]}. Net value in at the position, over ${slice.tradeCount} trades.`,
+      );
+    }
+  }
+
+  if (params.involvesPick && slice.picksTraded === 0 && slice.tradeCount >= settings.minSample) {
+    out.push(`Never trades picks. 0 moved in ${slice.tradeCount} trades.`);
+  }
+
   return out;
 }

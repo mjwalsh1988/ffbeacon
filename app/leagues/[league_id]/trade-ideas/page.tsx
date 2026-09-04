@@ -31,6 +31,9 @@ import {
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
 import { loadDeclinedKeys } from "@/lib/trade-finder-declines";
 import { findTrades } from "@/lib/trade-finder/engine";
+import { getManagerTendencies } from "@/lib/manager-pulse/service";
+import { loadManagerPulseSettings, type ManagerPulseSettings } from "@/lib/manager-pulse/settings";
+import type { ManagerTendency } from "@/lib/manager-pulse/types";
 import { gradeSuggestions } from "@/lib/trade-finder-grade";
 import { loadSavedKeys } from "@/lib/trade-finder-saves";
 import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
@@ -416,6 +419,70 @@ export default async function LeagueTradeFinderPage({
 }
 
 /**
+ * Manager Pulse tendencies, keyed by Sleeper roster id so the engine never
+ * has to know a Sleeper user id exists.
+ *
+ * ONE query against `rosters` for (sleeper_roster_id, owner_user_id), which
+ * is the only new read this feature adds to the page: `owner_user_id` is
+ * already the raw Sleeper user id (lib/league-pulse.ts writes it straight
+ * from Sleeper's own `owner_id`, and lib/trade-finder-data.ts already
+ * compares it against a searched `sleeperUserId` for the same reason), so no
+ * separate join against `league_users` is needed to get from a roster to the
+ * id Manager Pulse keys tendencies on.
+ *
+ * `getManagerTendencies` is its own single batched, cache-only read (see
+ * lib/manager-pulse/service.ts): it never queries Sleeper and never queues a
+ * capture, so a league nobody has ever looked up in Manager Pulse costs this
+ * page nothing beyond the one query above and comes back an empty map, which
+ * the engine reads as "no opinion" rather than as a neutral one.
+ *
+ * Split into two steps (finding 6) so the roster-owner read below can run
+ * IN PARALLEL with `loadManagerPulseSettings`, rather than after it. The
+ * settings row is loaded exactly once by the caller and threaded through to
+ * `getManagerTendencies`, so it never issues its own second read of
+ * manager_pulse_settings on top of the one this page already needs for
+ * `tendencyThresholds`.
+ */
+
+/** Every roster's Sleeper owner id, for the tendency lookup below. */
+async function loadRosterOwners(
+  admin: ReturnType<typeof createAdminClient>,
+  leagueRowId: string,
+): Promise<Array<{ rosterId: number; ownerUserId: string }>> {
+  const { data, error } = await admin
+    .from("rosters")
+    .select("sleeper_roster_id, owner_user_id")
+    .eq("league_id", leagueRowId);
+  if (error || !data) return [];
+
+  return data
+    .filter(
+      (r): r is typeof r & { owner_user_id: string } =>
+        typeof r.owner_user_id === "string" && r.owner_user_id.length > 0,
+    )
+    .map((r) => ({ rosterId: Number(r.sleeper_roster_id), ownerUserId: r.owner_user_id }));
+}
+
+/** Manager Pulse tendencies for the given roster owners, keyed by Sleeper
+ *  roster id. `settings` is the caller's already-loaded settings row. */
+async function tendenciesFromRosterOwners(
+  admin: ReturnType<typeof createAdminClient>,
+  rosterOwners: Array<{ rosterId: number; ownerUserId: string }>,
+  settings: ManagerPulseSettings,
+): Promise<Map<number, ManagerTendency>> {
+  const out = new Map<number, ManagerTendency>();
+  const sleeperUserIds = Array.from(new Set(rosterOwners.map((r) => r.ownerUserId)));
+  if (sleeperUserIds.length === 0) return out;
+
+  const tendenciesByUser = await getManagerTendencies(admin, { sleeperUserIds }, settings);
+  for (const { rosterId, ownerUserId } of rosterOwners) {
+    const tendency = tendenciesByUser.get(ownerUserId);
+    if (tendency) out.set(rosterId, tendency);
+  }
+  return out;
+}
+
+/**
  * The part that actually costs something.
  *
  * Split out so it can stream. It opens the league (rosters, values,
@@ -549,6 +616,46 @@ async function TradeFinderSection({
   const defaultStrategy: TradeStrategy =
     finderLeague.isDynasty && myStatusKey === "rebuilder" ? "value" : "contender";
 
+  // SIGNED-IN READERS ONLY.
+  //
+  // A tendency is a set of conclusions about a NAMED REAL PERSON drawn from
+  // several seasons of their history, which is exactly why
+  // /tools/manager-pulse is behind a sign-in gate and why
+  // manager_pulse_tendencies is closed to `authenticated` at the database
+  // level. This page is public. Without this check the second consumer of the
+  // data would hand a stranger, with no account at all, sentences about eleven
+  // named managers' trading habits that the first consumer requires an account
+  // to see. The gate belongs on the read, not on the rendering, so nothing
+  // downstream has to remember it.
+  //
+  // The settings read and the roster-owner read are independent (neither's
+  // input depends on the other's output), so they run together rather than
+  // one after the other. `managerPulseSettings` is loaded exactly once here
+  // and threaded into `tendenciesFromRosterOwners` below, which is what stops
+  // `getManagerTendencies` from loading manager_pulse_settings a second time
+  // on its own (finding 6).
+  const [managerPulseSettings, rosterOwners] = await Promise.all([
+    loadManagerPulseSettings(adminClient),
+    isSignedIn
+      ? loadRosterOwners(adminClient, leagueRowId)
+      : Promise.resolve([] as Array<{ rosterId: number; ownerUserId: string }>),
+  ]);
+
+  const managerTendencies = isSignedIn
+    ? await tendenciesFromRosterOwners(adminClient, rosterOwners, managerPulseSettings)
+    : new Map<number, ManagerTendency>();
+
+  // The three tendency thresholds an admin owns, read above and passed into
+  // the pure engine. The engine cannot read the settings row itself, and a
+  // copy of an admin number is a number that eventually disagrees with its
+  // original: raising the sample floor at /admin/manager-pulse has to make
+  // Trade Ideas go quieter, not leave it talking on a stale constant.
+  const tendencyThresholds = {
+    minSample: managerPulseSettings.samples.minTradesForMargin,
+    bandStepMax: managerPulseSettings.tendency.bandStepMax,
+    frequentTradesPerSeason: managerPulseSettings.wording.tradesOftenPerSeason,
+  };
+
   const initialResult = findTrades({
     myRosterId,
     teams: finderLeague.teams,
@@ -564,6 +671,12 @@ async function TradeFinderSection({
     offerPlayerIds: [],
     excludeKeys: declined,
     quality: { config: qualityConfig, poolMax: finderLeague.poolMax },
+    // Manager Pulse tendencies. Read-only and cache-only (see
+    // lib/manager-pulse/service.ts getManagerTendencies): a league nobody has
+    // looked up in Manager Pulse hands back an empty map, and the engine reads
+    // that exactly as it reads "no tendency data at all" today.
+    managerTendencies,
+    tendencyThresholds,
   });
   const initialSuggestions = initialResult.suggestions.slice(0, INITIAL_WINDOW);
   const initialGrades = await gradeSuggestions(

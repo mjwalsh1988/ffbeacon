@@ -30,6 +30,18 @@ import {
 import type { SuggestionGrade } from "@/lib/trade-finder-grade";
 
 /**
+ * Sleeper's own handle grammar (lowercase alphanumeric plus underscore, 1-32
+ * chars), copied rather than imported from lib/manager-pulse/discover.ts.
+ * This card is bundled into a client component
+ * (components/trade-finder.tsx), and that module pulls in lib/sleeper.ts,
+ * server-side fetch plumbing with no reason to ship to a browser for one
+ * regex test. `ownerHandle` is our own synced Sleeper username, not raw
+ * input from a stranger, so this is a display guard, not a security
+ * boundary; the URL is still built with `encodeURIComponent`.
+ */
+const HANDLE_PATTERN = /^[a-z0-9_]{1,32}$/;
+
+/**
  * One suggested trade, rendered.
  *
  * The card is built to be HEARD as much as read. A screen reader user should get
@@ -170,6 +182,31 @@ export function TradeFinderCard({
           </span>
         )}
       </div>
+
+      {/* Manager Pulse, section 8.4: a short line under the acceptance band
+          naming what this manager's own trading history says, distinct from
+          whyThem so a screen reader hears it as its own fact rather than
+          folded into the counterparty paragraph. Empty for a league nobody
+          has looked up in Manager Pulse, so this block renders nothing then. */}
+      {suggestion.tendencyNotes.length > 0 && (
+        <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+          <span className="sr-only">Manager Pulse: </span>
+          {suggestion.tendencyNotes.join(" ")}
+          {suggestion.counterparty.ownerHandle &&
+            HANDLE_PATTERN.test(suggestion.counterparty.ownerHandle) && (
+              <>
+                {" "}
+                <Link
+                  href={`/tools/manager-pulse/${encodeURIComponent(suggestion.counterparty.ownerHandle)}`}
+                  aria-label={`Full Manager Pulse report for ${suggestion.counterparty.teamName}`}
+                  className="inline-flex min-h-11 items-center font-semibold text-brand-cyan underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                >
+                  Full Manager Pulse report
+                </Link>
+              </>
+            )}
+        </p>
+      )}
 
       <h3
         id={headingId}

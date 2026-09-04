@@ -41,6 +41,7 @@ import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { findTrades } from "@/lib/trade-finder/engine";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
+import { loadTendencyContext } from "@/lib/trade-finder-tendency-context";
 import {
   findCrossLeagueTrade,
   MAX_CROSS_LEAGUES,
@@ -347,6 +348,13 @@ export async function findLeagueTrade(input: {
   const sessionExcluded = readKeys(input.sessionExcluded);
   const admin = createAdminClient();
   const qualityConfig = await loadTradeQualityConfig(admin);
+  // Same read the server-rendered page makes, so a Search press cannot drop
+  // the tendency-adjusted band or sentences the page opened on. See
+  // lib/trade-finder-tendency-context.ts for the sign-in gate.
+  const { managerTendencies, tendencyThresholds } = await loadTendencyContext(admin, {
+    leagueRowId: league.leagueRowId,
+    signedIn: Boolean(user),
+  });
 
   const result = findTrades({
     myRosterId: league.myRosterId,
@@ -361,6 +369,8 @@ export async function findLeagueTrade(input: {
     givePositions: readPositions(input.givePositions),
     excludeKeys: [...stored, ...sessionExcluded],
     quality: { config: qualityConfig, poolMax: league.poolMax },
+    managerTendencies,
+    tendencyThresholds,
   });
 
   const suggestions = result.suggestions.slice(0, SUGGESTION_WINDOW);
@@ -447,6 +457,11 @@ export async function findPortfolioTrade(input: {
   const result = await findCrossLeagueTrade(supabase, {
     sleeperLeagueIds,
     sleeperUserId,
+    // findPortfolioTrade already refused above when `user` is absent, so
+    // every call here is signed-in and Manager Pulse tendencies may be read.
+    // Passing this client is also what tells findCrossLeagueTrade it is
+    // allowed to try: see lib/trade-finder-tendency-context.ts.
+    admin,
     sourceSlug: resolvedSource.slug,
     strategy: readTradeStrategy(input.strategy) ?? undefined,
     cursor,

@@ -228,6 +228,51 @@ describe("acceptanceOf on the consolidation curve", () => {
   });
 });
 
+describe("acceptanceOf, the tendency band shift (Manager Pulse, section 8.3)", () => {
+  it("returns exactly today's answer when no tendency adjustment is passed", () => {
+    const theirs = impact({ valueDelta: 0, lineupDelta: 0 });
+    const withoutArg = acceptanceOf(theirs, profileOf("competitor"), 0.01);
+    const withUndefined = acceptanceOf(theirs, profileOf("competitor"), 0.01, undefined, undefined);
+    const withZero = acceptanceOf(theirs, profileOf("competitor"), 0.01, undefined, 0);
+    expect(withoutArg).toBe("worth-asking");
+    expect(withUndefined).toBe(withoutArg);
+    expect(withZero).toBe(withoutArg);
+  });
+
+  it("moves a worth-asking deal to likely on a +1 step", () => {
+    const theirs = impact({ valueDelta: 0, lineupDelta: 0 });
+    const base = acceptanceOf(theirs, profileOf("competitor"), 0.01);
+    expect(base).toBe("worth-asking");
+    expect(acceptanceOf(theirs, profileOf("competitor"), 0.01, undefined, 1)).toBe("likely");
+  });
+
+  it("moves a worth-asking deal to long-shot on a -1 step", () => {
+    const theirs = impact({ valueDelta: 0, lineupDelta: 0 });
+    const base = acceptanceOf(theirs, profileOf("competitor"), 0.01);
+    expect(base).toBe("worth-asking");
+    expect(acceptanceOf(theirs, profileOf("competitor"), 0.01, undefined, -1)).toBe("long-shot");
+  });
+
+  it("never moves a band past its neighbour, whatever step size is passed", () => {
+    const theirs = impact({ valueDelta: 50, lineupDelta: 3 });
+    const base = acceptanceOf(theirs, profileOf("competitor"), 0.02);
+    expect(base).toBe("likely");
+    // "likely" is already the top of the order; a further +1 (and anything
+    // beyond the defensive +-1 clamp) has nowhere left to move it.
+    expect(acceptanceOf(theirs, profileOf("competitor"), 0.02, undefined, 1)).toBe("likely");
+    expect(acceptanceOf(theirs, profileOf("competitor"), 0.02, undefined, 5)).toBe("likely");
+  });
+
+  it("clamps a step size beyond +-1, the largest Manager Pulse may ever pass", () => {
+    const theirs = impact({ valueDelta: 0, lineupDelta: 0 });
+    // From "worth-asking", a clamped -5 must land on "long-shot" (one step
+    // down), never skip past it into some band that does not exist.
+    expect(acceptanceOf(theirs, profileOf("competitor"), 0.01, undefined, -5)).toBe(
+      "long-shot",
+    );
+  });
+});
+
 describe("scoreSuggestion, weighted by the reader's own footing", () => {
   /**
    * The same deal, scored for each of the three kinds of team.

@@ -20,10 +20,19 @@ export const maxDuration = 300;
  * the two value syncs. Runs:
  *   1. seed-rankings (rebuild rankings table from latest player_value_history)
  *   2. calculate-trends (rebuild player_value_trends pre-calc)
+ *   3. player_roster_exposure (how commonly each player is rostered anywhere)
  *
  * It also carries the global, deletion-only retention prunes that have nowhere
  * better to live: the rate-limit ledgers, the BEAM question log, and the On The
  * Clock caches. Each is non-fatal and none of them recompute anything.
+ *
+ * The roster-exposure rebuild is one aggregate over every roster row and
+ * ITERATES NO LEAGUES, which is why it belongs here rather than on demand. It
+ * is the denominator behind Manager Pulse favourites: without it, a player
+ * everybody rosters reads as a preference, and every manager's favourites list
+ * would be the same list of good players. Measured at 3,704 rosters it is about
+ * 310ms, but it grows with the number of leagues anyone has ever opened, which
+ * is exactly why it is not computed per report.
  *
  * These are global, player-level tables, not per-league. League Pulse power
  * rankings are NOT recomputed here: that is done on demand when a league deep
@@ -52,6 +61,22 @@ export async function GET(req: Request) {
       const started = Date.now();
       const rankings = await runSeedRankings(supabase);
       const trends = await runCalculateTrends(supabase);
+
+      // Non-fatal, like every other prune on this job. A failed rebuild leaves
+      // the previous one in place, and Manager Pulse degrades to ranking
+      // favourites without the popularity denominator rather than breaking.
+      let rosterExposure: unknown = null;
+      try {
+        const { data, error } = await supabase.rpc("rebuild_player_roster_exposure");
+        if (error) throw new Error(error.message);
+        rosterExposure = data;
+      } catch (err) {
+        console.error(
+          "[recalculate-derived] player_roster_exposure rebuild failed:",
+          err instanceof Error ? err.message : err,
+        );
+        rosterExposure = { rebuilt: false, reason: "error" };
+      }
 
       // Fresh values/trends -> bust the profile value caches.
       revalidateTag(CACHE_TAGS.playerValues);
@@ -158,6 +183,7 @@ export async function GET(req: Request) {
         ok: true as const,
         rankings,
         trends,
+        rosterExposure,
         rateLimitLedgerRowsDeleted,
         onTheClockCacheRowsDeleted,
         beamQueryRowsDeleted,

@@ -365,6 +365,138 @@ export async function getSleeperDraftPicks(draftId: string): Promise<SleeperDraf
   return (await getSleeperDraftPicksOrNull(draftId)) ?? [];
 }
 
+/**
+ * One match in a Sleeper playoff bracket tree, from `GET /league/{id}/winners_bracket`
+ * or `.../losers_bracket`.
+ *
+ * `t1` and `t2` are roster ids and are null when the match is fed by the winner
+ * or loser of an earlier match rather than seeded directly (see `t1_from`
+ * `t2_from`). `w` and `l` are the winning and losing roster ids, both null
+ * until the match has been played. `p` is the placement this match decides:
+ * `p: 1` is the title game, and higher numbers decide lower finishes. A match
+ * with no `p` decides nothing on its own, it only feeds a later match.
+ */
+export type SleeperBracketMatch = {
+  m: number;
+  r: number;
+  t1: number | null;
+  t2: number | null;
+  w: number | null;
+  l: number | null;
+  p?: number;
+  t1_from?: { w?: number; l?: number } | null;
+  t2_from?: { w?: number; l?: number } | null;
+};
+
+/**
+ * The winners bracket for one league's completed (or in-progress) playoffs.
+ *
+ * Returns null when the request itself failed (timeout, 429, 5xx) and [] when
+ * Sleeper answered and the league genuinely has no bracket (season not over
+ * yet, or the league runs no playoffs). Collapsing those two is the same bug
+ * already fixed once for getSleeperMatchups and getSleeperDraftPicksOrNull: a
+ * throttled response read as "no bracket" becomes a false claim that a league
+ * never crowned a champion, when the truth is only that we could not ask.
+ */
+export async function getSleeperWinnersBracket(
+  leagueId: string,
+): Promise<SleeperBracketMatch[] | null> {
+  const id = encodeURIComponent(leagueId);
+  return safeFetch<SleeperBracketMatch[]>(`${BASE}/league/${id}/winners_bracket`);
+}
+
+/** The losers (consolation) bracket. Same null-vs-empty contract as getSleeperWinnersBracket. */
+export async function getSleeperLosersBracket(
+  leagueId: string,
+): Promise<SleeperBracketMatch[] | null> {
+  const id = encodeURIComponent(leagueId);
+  return safeFetch<SleeperBracketMatch[]>(`${BASE}/league/${id}/losers_bracket`);
+}
+
+/**
+ * Champion and runner-up roster ids from a winners bracket, or nulls.
+ *
+ * Finds the one match carrying `p: 1`, the title game, and reads its winner
+ * and loser. Returns nulls when the bracket is null, when no match carries
+ * `p: 1`, or when that match has not been played yet (`w` is still null).
+ * Never infers the champion from the highest round: a bracket can carry a
+ * bye or a bye-adjacent structure where the last round played is not the
+ * title game, so "last round" and "p: 1" are not the same match.
+ */
+export function bracketChampion(bracket: SleeperBracketMatch[] | null): {
+  championRosterId: number | null;
+  runnerUpRosterId: number | null;
+} {
+  const none = { championRosterId: null, runnerUpRosterId: null };
+  if (!Array.isArray(bracket)) return none;
+  const title = bracket.find((match) => match && match.p === 1);
+  if (!title || title.w === null || title.w === undefined) return none;
+  return {
+    championRosterId: title.w,
+    runnerUpRosterId: title.l ?? null,
+  };
+}
+
+/**
+ * Sleeper's undocumented GraphQL host. Isolated behind
+ * getSleeperDraftAutopickers so nothing else in the codebase touches it
+ * directly, matching how getSleeperDraftPicksOrNull is the one place that
+ * knows the REST draft-picks path. It only answers usefully while a draft is
+ * RUNNING: a completed draft returns an empty list, so a call here is a live
+ * capture or it is nothing.
+ */
+const SLEEPER_GRAPHQL_HOST = "https://sleeper.com/graphql";
+
+/** A Sleeper draft id is always numeric. Guards the GraphQL string interpolation below. */
+const DRAFT_ID_PATTERN = /^[0-9]{1,32}$/;
+
+/**
+ * User ids currently set to autopick in a live draft, from Sleeper's
+ * `draft_autopickers(sport, draft_id)` GraphQL query.
+ *
+ * Returns null on any failure: a non-200, a body carrying a GraphQL `errors`
+ * array, a shape that is not an array of strings, a timeout, or the draft id
+ * failing DRAFT_ID_PATTERN. The id check runs before any request is made,
+ * since the id is interpolated into a GraphQL string literal rather than a
+ * URL path segment, so this is the injection guard for that interpolation,
+ * not just input hygiene.
+ */
+export async function getSleeperDraftAutopickers(draftId: string): Promise<string[] | null> {
+  if (!DRAFT_ID_PATTERN.test(draftId)) return null;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const response = await fetch(SLEEPER_GRAPHQL_HOST, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+      body: JSON.stringify({
+        query: `{ draft_autopickers(sport: "nfl", draft_id: "${draftId}") }`,
+      }),
+    });
+    if (!response.ok) return null;
+
+    const text = await readCapped(response, MAX_RESPONSE_BYTES);
+    if (text === null) return null;
+
+    const parsed = JSON.parse(text) as {
+      data?: { draft_autopickers?: unknown } | null;
+      errors?: unknown[];
+    };
+    if (Array.isArray(parsed.errors) && parsed.errors.length > 0) return null;
+
+    const ids = parsed.data?.draft_autopickers;
+    if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return null;
+    return ids;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type SleeperNflState = {
   week: number;
   leg: number;

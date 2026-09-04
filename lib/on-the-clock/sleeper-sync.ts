@@ -24,6 +24,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import {
   getSleeperDraft,
+  getSleeperDraftAutopickers,
   getSleeperDraftPicksOrNull,
   getSleeperLeague,
   getSleeperLeagueUsers,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/sleeper";
 import { mapSleeperToPlayerIds } from "@/lib/players/sleeper-map";
 import { recordDraftSelections } from "@/lib/draft-selections";
+import { recordPickObservations } from "./pick-observations";
 import { sanitizeSleeperPlayerId } from "./validation";
 import { claimSync, completeSync, releaseSync, readDraftCache, claimIpBudget, IP_BUDGET_WINDOW_SECONDS } from "./cache";
 import { ffbeaconFormatCandidates, detectLeagueFormat } from "./format-detect";
@@ -369,6 +371,21 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
       console.error("[on-the-clock/sync] reverted-pick cleanup failed", staleErr.message);
     }
 
+    // Only the picks that are NEW since the last sync. A live room polls every
+    // few seconds, and re-upserting the whole array each time meant a two-hour
+    // draft wrote on the order of 130,000 rows to persist 180 real picks, each
+    // carrying a raw Sleeper object in metadata, with the index churn and dead
+    // tuples that implies. `pickCount` is what the previous completeSync
+    // stored, so anything above it is genuinely new. A commissioner revert
+    // lowers the count, which makes the next sync re-send the tail and heal it.
+    //
+    // Hoisted above both non-fatal side-write blocks below (the draft-selections
+    // ledger and the pick-observations timing ledger) so a failure in one can
+    // never hide the picks the other one needed. Pure array math; cannot throw.
+    const alreadyRecorded = Number(existingPickCount ?? 0);
+    const newPicks =
+      alreadyRecorded > 0 ? picks.filter((p) => Number(p.pick_no) > alreadyRecorded) : picks;
+
     // The durable ledger (draft_selections). Every pick this room sees is also a
     // data point for the Beacon Steals market model, and the live cache above is
     // the wrong place to keep it: its rows are DELETED on a commissioner revert,
@@ -378,17 +395,6 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
     // must never fail because an analytics write did. The id map is handed over
     // rather than re-resolved, so this costs no extra player lookup.
     try {
-      // Only the picks that are NEW since the last sync. A live room polls every
-      // few seconds, and re-upserting the whole array each time meant a two-hour
-      // draft wrote on the order of 130,000 rows to persist 180 real picks, each
-      // carrying a raw Sleeper object in metadata, with the index churn and dead
-      // tuples that implies. `pickCount` is what the previous completeSync
-      // stored, so anything above it is genuinely new. A commissioner revert
-      // lowers the count, which makes the next sync re-send the tail and heal it.
-      const alreadyRecorded = Number(existingPickCount ?? 0);
-      const newPicks =
-        alreadyRecorded > 0 ? picks.filter((p) => Number(p.pick_no) > alreadyRecorded) : picks;
-
       // Both of these are effectively static (13 format rows and one source row)
       // and the result is discarded when the league object failed to load, so
       // they are skipped entirely rather than run on every poll.
@@ -423,6 +429,44 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
       }
     } catch (ledgerErr) {
       console.error("[on-the-clock/sync] draft-selections ledger write failed", ledgerErr);
+    }
+
+    // Real per-pick draft timing (MP-T018, docs/manager-pulse-plan.md 2.3B/C).
+    // Sleeper never timestamps a pick; the first moment THIS poll sees it is
+    // the only honest measurement we get, so it is written to
+    // draft_pick_observations rather than being lost with the cache row it
+    // rides on. Fully non-fatal, same reasoning as the ledger write above: a
+    // live draft must never fail because this telemetry write did.
+    try {
+      if (newPicks.length > 0) {
+        // The gap since the PREVIOUS poll's completion, read before this sync's
+        // own fetch work. Null on the very first sync of a draft (claimSync
+        // returns no prior last_synced_at), which is exactly when there is no
+        // honest gap to report.
+        const previous = claim.lastSyncedAt ? Date.parse(claim.lastSyncedAt) : NaN;
+        const pollGapMs = Number.isFinite(previous) ? Math.max(0, Date.now() - previous) : null;
+
+        // Autopick is a LIVE-ONLY signal: Sleeper's draft_autopickers query
+        // returns [] once a draft completes, so asking on a finished draft
+        // would write was_autopick: false for every pick, which is a false
+        // fact about a room nobody is running anymore.
+        const autopickerIds =
+          draftObj.status === "drafting" ? await getSleeperDraftAutopickers(draftId) : null;
+
+        const observationSeasonNum = Number(authoritativeSeason);
+        await recordPickObservations(admin, {
+          sleeperDraftId: draftId,
+          season:
+            Number.isFinite(observationSeasonNum) && observationSeasonNum > 0
+              ? observationSeasonNum
+              : null,
+          picks: newPicks,
+          pollGapMs,
+          autopickerIds,
+        });
+      }
+    } catch (observationErr) {
+      console.error("[on-the-clock/sync] pick-observations write failed", observationErr);
     }
 
     await completeSync(admin, {

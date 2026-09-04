@@ -119,11 +119,20 @@ import {
   buildHeadline,
   buildPitch,
   buildRationale,
+  buildTendencyReasons,
   buildWhyThem,
   buildWhyYou,
 } from "./explain";
+import {
+  appetiteScore,
+  avoidsPicks,
+  bandAdjustment,
+  resolveTendencyThresholds,
+  sliceFor,
+} from "./tendency";
 import { suggestionKey } from "./fingerprint";
 import {
+  readTradePosition,
   resolveStrategy,
   TRADE_POSITIONS,
   TRADE_POSITION_PHRASE,
@@ -134,9 +143,13 @@ import type {
   TradeFinderNotice,
   TradeFinderResult,
   TradeGoal,
+  TradePosition,
   TradeStrategy,
   TradeSuggestion,
 } from "./types";
+// Type-only, same rule tendency.ts and types.ts hold: nothing runtime from
+// lib/manager-pulse may reach the finder engine.
+import type { ManagerTendency } from "@/lib/manager-pulse/types";
 
 /** How many ranked suggestions a single run keeps. */
 const MAX_RESULTS = 40;
@@ -173,6 +186,37 @@ const CONSOLIDATE_PAIR_DEPTH = 8;
 
 /** A need this size is worth naming in the explanation. Points per week. */
 const NAMEABLE_NEED = 0.5;
+
+/**
+ * How much Manager Pulse tendency data favors this suggestion for the
+ * counterparty receiving it, used ONLY as a final sort tiebreaker among
+ * candidates the value and lineup math already rate as equal.
+ *
+ * Deliberately never folded into scoreSuggestion (lib/trade-finder/rank.ts).
+ * That function's weights are each grounded against real production leagues,
+ * with the reasoning written beside the number; appetiteScore has no such
+ * grounding; it is a plausibility read on one manager's history, not a
+ * measurement. Ordering equally-good candidates by it is a reasonable use of
+ * that evidence; letting it outweigh, or even nudge, a value or wins term
+ * that WAS measured against real trades would not be. Absent tendency data
+ * this is 0 for every suggestion and changes nothing.
+ */
+function counterpartyAppetite(
+  s: TradeSuggestion,
+  tendencies: Map<number, ManagerTendency> | undefined,
+  isDynasty: boolean,
+): number {
+  const slice = sliceFor(tendencies?.get(s.counterparty.rosterId), isDynasty);
+  if (!slice) return 0;
+  let total = 0;
+  // Read against what THEY would receive: our outgoing side is their incoming
+  // one.
+  for (const asset of s.outgoing) {
+    if (asset.kind !== "player") continue;
+    total += appetiteScore(slice, readTradePosition(asset.position), asset.playerId);
+  }
+  return total;
+}
 
 /** Ids in the order given, with repeats dropped. */
 function unique(ids: readonly string[]): string[] {
@@ -442,7 +486,17 @@ export function findTrades(input: TradeFinderInput): TradeFinderResult {
     const aLoose = loose.has(a.key) ? 1 : 0;
     const bLoose = loose.has(b.key) ? 1 : 0;
     if (aLoose !== bLoose) return aLoose - bLoose;
-    return b.score - a.score || a.key.localeCompare(b.key);
+    if (a.score !== b.score) return b.score - a.score;
+    // MANAGER PULSE'S PACKAGE-ORDERING EFFECT: reached only when the value
+    // and lineup math already call two candidates equal. Absent tendency
+    // data (the ordinary case today) both sides read 0 and this changes
+    // nothing, so the sort falls straight through to the fingerprint exactly
+    // as it did before this existed.
+    const appetiteDelta =
+      counterpartyAppetite(b, input.managerTendencies, input.isDynasty) -
+      counterpartyAppetite(a, input.managerTendencies, input.isDynasty);
+    if (appetiteDelta !== 0) return appetiteDelta;
+    return a.key.localeCompare(b.key);
   });
 
   return {
@@ -679,6 +733,38 @@ function collect(
     if (!containsAll(incoming, targetPlayerIds)) return null;
     if (!containsAll(outgoing, offerPlayerIds)) return null;
 
+    // MANAGER PULSE: what this counterparty's own Sleeper history says about
+    // them, read once per candidate. Absent tendency data (no cached row, or
+    // the manager reads null for this league's game type) makes every one of
+    // these a no-op, so a league nobody has looked up behaves exactly as
+    // Trade Ideas does today. See lib/trade-finder/tendency.ts for what each
+    // of these is and is not allowed to do: never the value or wins math,
+    // only the acceptance band by at most one step, package ordering, and
+    // reason sentences (docs/manager-pulse-plan.md section 8.3).
+    const theirTendencySlice = sliceFor(
+      input.managerTendencies?.get(theirs.team.rosterId),
+      input.isDynasty,
+    );
+    // Resolved from the caller's settings, falling back to the published
+    // defaults. Never a constant read out of this file: see the header of
+    // lib/trade-finder/tendency.ts for why a copy of an admin number is a
+    // number that eventually disagrees with its original.
+    const tendencyThresholds = resolveTendencyThresholds(input.tendencyThresholds);
+
+    // PACKAGE ORDERING, THE SKIP HALF: a manager who has never moved a pick
+    // across enough trades to call it a pattern is not going to be won over
+    // by one now, so a pick-based shape is dropped for them entirely rather
+    // than ranked low. A NAMED ask is exempt, same reasoning as every other
+    // shape gate above: a reader who typed a pick into the search is asking
+    // about that pick, not asking to be steered away from it.
+    if (
+      !specificAsk &&
+      avoidsPicks(theirTendencySlice, tendencyThresholds.minSample) &&
+      [...incoming, ...outgoing].some((a) => a.kind === "pick")
+    ) {
+      return null;
+    }
+
     const myImpact = measureImpact(mine, slots, incoming, outgoing);
 
     // BOTH GATES THAT READ ONLY THE READER'S SIDE RUN HERE, before the other
@@ -741,7 +827,17 @@ function collect(
 
     const gap = valueGapOf(incoming, outgoing);
     const qualityRatio = qualityRatioOf(incoming, outgoing, quality);
-    const acceptance = acceptanceOf(theirImpact, theirs, gap, qualityRatio);
+    // THE ACCEPTANCE BAND, THE ONE PLACE A TENDENCY MAY MOVE IT: at most one
+    // step, computed and clamped in tendency.ts, never touching the value or
+    // lineup arithmetic above this line.
+    const tendencyAdjustment = bandAdjustment(theirTendencySlice, tendencyThresholds);
+    const acceptance = acceptanceOf(
+      theirImpact,
+      theirs,
+      gap,
+      qualityRatio,
+      tendencyAdjustment.steps,
+    );
     const score = scoreSuggestion({
       mine: myImpact,
       myProfile: mine,
@@ -802,12 +898,29 @@ function collect(
         mine: myImpact,
       }),
       whyYou: buildWhyYou(myImpact, goal, helped?.position ?? null),
+      // whyThem is unchanged from before Manager Pulse existed: tendency
+      // sentences no longer ride along inside it (docs/manager-pulse-plan.md
+      // section 8.4 wants them as their own quiet line on the card, not
+      // folded into the counterparty paragraph).
       whyThem: buildWhyThem(
         theirImpact,
         theirs.direction,
         theirs.team.teamName,
         theirs.team.statusLabel,
       ),
+      // Manager Pulse's own field. `bandAdjustment` is passed straight
+      // through so the sentence explaining a band move and the computation
+      // that actually moved it can never disagree (see explain.ts
+      // buildTendencyReasons). Absent tendency data this is an empty array.
+      tendencyNotes: buildTendencyReasons({
+        slice: theirTendencySlice,
+        bandAdjustment: tendencyAdjustment,
+        positionsTheyReceive: outgoingAssets
+          .map((a) => (a.kind === "player" ? readTradePosition(a.position) : null))
+          .filter((p): p is TradePosition => p !== null),
+        involvesPick: [...incoming, ...outgoing].some((a) => a.kind === "pick"),
+        settings: tendencyThresholds,
+      }),
       pitch: buildPitch({
         outgoing: outgoingAssets,
         incoming: incomingAssets,

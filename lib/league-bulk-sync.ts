@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { pulseLeagueCore, pulseLeagueDerived, pulseLeagueFootprint } from "@/lib/league-pulse";
 import {
   BULK_SYNC_COOLDOWN_SECONDS,
   IDLE_BULK_SYNC_STATE,
   type BulkSyncState,
   type LeagueSyncJobStatus,
 } from "@/lib/league-bulk-sync-types";
+import { loadManagerPulseSettings } from "@/lib/manager-pulse/settings";
 
 /**
  * Sync all: one press, every league, drained by a worker.
@@ -64,10 +65,27 @@ export {
  * around 200 Sleeper calls a minute at the very worst, against guidance of a
  * thousand.
  */
-const MAX_JOBS_PER_RUN = 5;
+const MAX_JOBS_PER_RUN = 8;
 
-/** Breather between leagues inside one run, so a run is a trickle, not a burst. */
+/**
+ * Breather between leagues inside one run, so a run is a trickle, not a burst.
+ *
+ * A FOOTPRINT JOB PAYS A SHORTER ONE, because it is a genuinely smaller piece
+ * of work: `pulseLeagueFootprint` fetches the league, its rosters, members,
+ * drafts, transactions and brackets, and skips the matchup sync and all four
+ * per-league computes a full pulse runs. Pacing it like a full pulse spends
+ * budget on waiting rather than on syncing.
+ *
+ * Why this matters beyond throughput: the queue is FIFO and site-wide, so one
+ * Manager Pulse lookup at the 60-league cap used to need twelve minutes of
+ * exclusive drain, and every "Sync all" press and every other lookup queued
+ * behind it. Raising the batch and shortening the footprint pace roughly
+ * halves that. It does not make the queue FAIR, which would need per-owner
+ * round-robin in the claim RPC; that is a known limitation, recorded rather
+ * than pretended away.
+ */
 const PACE_MS = 2_500;
+const FOOTPRINT_PACE_MS = 1_200;
 
 /**
  * Soft wall clock for a run. Well under the route's maxDuration, and under the
@@ -75,7 +93,18 @@ const PACE_MS = 2_500;
  */
 const RUN_BUDGET_MS = 50_000;
 
-/** Tries per league before it is left failed for the reader to retry by hand. */
+/**
+ * Tries per league before it is left failed for the reader to retry by hand.
+ *
+ * This is the CODE FALLBACK only, used when a worker run's settings read
+ * genuinely throws (loadManagerPulseSettings itself never throws; it already
+ * falls back to DEFAULT_MANAGER_PULSE_SETTINGS on a missing row or a query
+ * error, so this branch exists only for a defensive belt-and-braces case). The
+ * live value is `manager_pulse_settings.capture.jobMaxAttempts`, admin-edited
+ * at /admin/manager-pulse, and it governs Manager Pulse footprint jobs and
+ * Sync all bulk-sync jobs alike, because both job kinds are drained from this
+ * same league_sync_jobs queue by this same worker.
+ */
 const MAX_ATTEMPTS = 3;
 
 /** A job still 'processing' after this had no worker finish it. */
@@ -265,11 +294,12 @@ async function failOrRetry(
   admin: Admin,
   job: LeagueSyncJob,
   message: string,
+  maxAttempts: number,
   staleBefore?: string,
 ): Promise<"retry" | "failed" | "lost"> {
   const attempts = job.attempts + 1;
   const now = new Date().toISOString();
-  const terminal = attempts >= MAX_ATTEMPTS;
+  const terminal = attempts >= maxAttempts;
 
   let q = admin
     .from("league_sync_jobs")
@@ -314,6 +344,7 @@ async function reapStaleJobs(
   admin: Admin,
   summary: WorkerSummary,
   touched: Set<string>,
+  maxAttempts: number,
 ): Promise<void> {
   const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
   const { data: stale } = await admin
@@ -329,18 +360,137 @@ async function reapStaleJobs(
       admin,
       job,
       "reclaimed after a stalled sync (worker crash or timeout)",
+      maxAttempts,
       cutoff,
     );
     if (outcome === "lost") continue;
-    touched.add(job.request_id);
+    // A job now has one of two owners (migration 0256): a Sync all request
+    // (request_id) or a Manager Pulse run (manager_run_id). Only the former
+    // needs the bulk-request bookkeeping this set feeds; a Manager Pulse
+    // job's owning run is closed out separately below.
+    if (job.request_id) touched.add(job.request_id);
     summary.reaped += 1;
-    if (outcome === "failed") summary.failed += 1;
-    else summary.retried += 1;
+    if (outcome === "failed") {
+      summary.failed += 1;
+      // The real cause is logged by the reaper; the reader is told the shape of
+      // the problem, not our internals.
+      await closeManagerPulseRunLeagues(admin, job, "failed", "stalled");
+    } else {
+      summary.retried += 1;
+    }
   }
 }
 
 /**
- * Run one league, exactly the way opening that league would run it.
+ * Close out a Manager Pulse run's bookkeeping for one finished job.
+ *
+ * `job.manager_run_id` is null for a Sync all job, so this returns
+ * immediately with no query for the common case. When it IS set, every
+ * `manager_pulse_run_leagues` row pointing at this job is updated: there can
+ * be more than one, because `enqueue_manager_pulse_capture` LINKS a run to an
+ * already in-flight job for the same user and league rather than duplicating
+ * it (migration 0257), so more than one run can be waiting on the same job.
+ */
+/**
+ * The fixed set of reasons a league-season can fail, and nothing else.
+ *
+ * `manager_pulse_run_leagues` is owner-readable, so whatever lands in `detail`
+ * is readable by the person who asked for the report, straight out of
+ * PostgREST. Passing a raw sync error through would make that column a channel
+ * for whatever text a future failure path happens to produce, which is exactly
+ * how an internal message ends up in front of a reader. Same reasoning as
+ * `power_pulse_detail` and `positional_war_detail` elsewhere.
+ */
+type RunLeagueFailureReason = "sync_failed" | "stalled";
+
+const RUN_LEAGUE_FAILURE_TEXT: Record<RunLeagueFailureReason, string> = {
+  sync_failed: "This league could not be read from Sleeper.",
+  stalled: "This league's sync stopped partway and was not retried.",
+};
+
+async function closeManagerPulseRunLeagues(
+  admin: Admin,
+  job: LeagueSyncJob,
+  status: "done" | "failed",
+  reason?: RunLeagueFailureReason,
+): Promise<void> {
+  if (!job.manager_run_id) return;
+
+  const now = new Date().toISOString();
+  const { data: rows, error: updErr } = await admin
+    .from("manager_pulse_run_leagues")
+    .update({
+      status,
+      detail:
+        status === "failed"
+          ? RUN_LEAGUE_FAILURE_TEXT[reason ?? "sync_failed"]
+          : null,
+      updated_at: now,
+    })
+    .eq("job_id", job.id)
+    .select("run_id");
+  if (updErr) {
+    console.warn(
+      `[league-sync-worker] could not close manager_pulse_run_leagues for job ${job.id}: ${updErr.message}`,
+    );
+    return;
+  }
+
+  const runIds = new Set((rows ?? []).map((r) => r.run_id));
+  for (const runId of runIds) {
+    await recountManagerPulseRun(admin, runId);
+  }
+}
+
+/**
+ * Recount one Manager Pulse run's progress from its own league rows, and move
+ * it from 'capturing' to 'computing' once nothing is left in ('pending',
+ * 'queued').
+ *
+ * A RECOUNT, never an increment: this worker retries jobs through
+ * failOrRetry's backoff, and an increment applied twice would double-count a
+ * league the run had already been told about.
+ */
+async function recountManagerPulseRun(admin: Admin, runId: string): Promise<void> {
+  const { data: rows, error } = await admin
+    .from("manager_pulse_run_leagues")
+    .select("status")
+    .eq("run_id", runId);
+  if (error || !rows) {
+    console.warn(
+      `[league-sync-worker] could not recount manager_pulse_run ${runId}: ${error?.message ?? "no rows"}`,
+    );
+    return;
+  }
+
+  const leaguesDone = rows.filter((r) => r.status === "fresh" || r.status === "done").length;
+  const leaguesFailed = rows.filter((r) => r.status === "failed").length;
+  const stillWorking = rows.some((r) => r.status === "pending" || r.status === "queued");
+
+  const now = new Date().toISOString();
+  await admin
+    .from("manager_pulse_runs")
+    .update({ leagues_done: leaguesDone, leagues_failed: leaguesFailed, updated_at: now })
+    .eq("id", runId);
+
+  if (!stillWorking) {
+    // Guarded on the run still being 'capturing' so a job that closes out
+    // late can never send a run backwards from 'computing', 'complete',
+    // 'error' or 'throttled'.
+    await admin
+      .from("manager_pulse_runs")
+      .update({ status: "computing", updated_at: now })
+      .eq("id", runId)
+      .eq("status", "capturing");
+  }
+}
+
+/**
+ * Run one league, exactly the way opening that league would run it: a full
+ * pulse for a 'pulse' job (Sync all), or the lighter footprint capture for a
+ * 'footprint' job (Manager Pulse). See lib/league-pulse.ts
+ * pulseLeagueFootprint and docs/manager-pulse-plan.md section 4.4 for why the
+ * two differ.
  *
  * Core first so a league Sleeper does not know about fails before any derived
  * work starts. Derived is awaited rather than backgrounded, because the standing
@@ -351,6 +501,10 @@ async function syncOneLeague(
   admin: Admin,
   job: LeagueSyncJob,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (job.job_kind === "footprint") {
+    const result = await pulseLeagueFootprint(admin, job.sleeper_league_id);
+    return result.ok ? { ok: true } : { ok: false, error: result.error };
+  }
   const core = await pulseLeagueCore(admin, job.sleeper_league_id);
   if (!core.ok) {
     return { ok: false, error: core.error || "Sleeper did not return that league" };
@@ -404,7 +558,20 @@ export async function runLeagueSyncWorker(admin: Admin): Promise<WorkerSummary> 
   const deadline = Date.now() + RUN_BUDGET_MS;
   const touched = new Set<string>();
 
-  await reapStaleJobs(admin, summary, touched);
+  // Loaded once per worker run, not once per job: the setting can only move
+  // by an admin save, and re-reading it on every job would be a query per
+  // league for a number that never changes mid-run.
+  let maxAttempts = MAX_ATTEMPTS;
+  try {
+    const settings = await loadManagerPulseSettings(admin);
+    maxAttempts = settings.capture.jobMaxAttempts;
+  } catch {
+    // loadManagerPulseSettings already falls back to the code defaults
+    // internally; this catch only guards against a genuine throw reaching
+    // here, so a settings outage can never stall the queue.
+  }
+
+  await reapStaleJobs(admin, summary, touched, maxAttempts);
 
   const { data: claimed, error: claimErr } = await admin.rpc(
     "claim_league_sync_jobs",
@@ -423,11 +590,16 @@ export async function runLeagueSyncWorker(admin: Admin): Promise<WorkerSummary> 
   for (; i < jobs.length; i++) {
     if (Date.now() >= deadline) break;
     const job = jobs[i];
-    touched.add(job.request_id);
+    // See the comment in reapStaleJobs: a job carries request_id OR
+    // manager_run_id, never both. closeFinishedRequests only knows about
+    // request_id owners.
+    if (job.request_id) touched.add(job.request_id);
 
     // Pace between leagues, never before the first, and never past the deadline.
+    // The gap is set by the job we are about to run, not the one just finished.
     if (i > 0) {
-      const wait = Math.min(PACE_MS, deadline - Date.now());
+      const pace = job.job_kind === "footprint" ? FOOTPRINT_PACE_MS : PACE_MS;
+      const wait = Math.min(pace, deadline - Date.now());
       if (wait > 0) await sleep(wait);
       if (Date.now() >= deadline) break;
     }
@@ -455,13 +627,20 @@ export async function runLeagueSyncWorker(admin: Admin): Promise<WorkerSummary> 
         .eq("id", job.id)
         .eq("status", "processing");
       summary.done += 1;
+      await closeManagerPulseRunLeagues(admin, job, "done");
     } else {
       console.warn(
         `[league-sync-worker] ${job.sleeper_league_id} failed: ${outcome.error}`,
       );
-      const result = await failOrRetry(admin, job, outcome.error);
-      if (result === "failed") summary.failed += 1;
-      else if (result === "retry") summary.retried += 1;
+      const result = await failOrRetry(admin, job, outcome.error, maxAttempts);
+      if (result === "failed") {
+        summary.failed += 1;
+        // outcome.error is logged above and deliberately NOT written to a
+        // reader-visible column. See RUN_LEAGUE_FAILURE_TEXT.
+        await closeManagerPulseRunLeagues(admin, job, "failed", "sync_failed");
+      } else if (result === "retry") {
+        summary.retried += 1;
+      }
     }
   }
 

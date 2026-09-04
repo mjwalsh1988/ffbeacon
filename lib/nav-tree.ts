@@ -242,6 +242,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "activity",
       },
       {
+        id: "/admin/manager-pulse",
+        label: "Manager Pulse",
+        href: "/admin/manager-pulse",
+        hint: "Lookup limits, sample floors, and the report cache",
+        icon: "gauge",
+      },
+      {
         id: "/admin/draft-value",
         label: "Beacon Steals Model",
         href: "/admin/draft-value",

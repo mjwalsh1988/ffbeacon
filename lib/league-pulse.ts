@@ -5,8 +5,10 @@ import {
   getSleeperLeague,
   getSleeperLeagueDrafts,
   getSleeperLeagueUsers,
+  getSleeperLosersBracket,
   getSleeperRosters,
   getSleeperTradedPicks,
+  getSleeperWinnersBracket,
   type SleeperDraft,
   type SleeperLeague,
   type SleeperRoster,
@@ -579,6 +581,152 @@ export async function pulseLeagueDerived(
 
     return { transactions: count ?? 0 };
   });
+}
+
+/**
+ * The lighter capture a Manager Pulse run queues instead of a full pulse: the
+ * league, its rosters, its members, its drafts and its traded picks (all via
+ * pulseLeagueCore), plus transaction history and the two playoff brackets.
+ * Deliberately stops there.
+ *
+ * A full pulseLeague also computes trade-value power rankings, Power Pulse,
+ * Positional WAR and (opt-in) the Manager Ledger. Manager Pulse reads none of
+ * that for the sections built on top of this capture, and it can queue dozens
+ * of league-seasons for one report, so running the full pulse on each of them
+ * would spend most of an hour of compute nobody asked for. See
+ * docs/manager-pulse-plan.md section 4.4.
+ *
+ * Shares pulseLeagueCore's in-process coalescing (a footprint job and a page
+ * render of the same league collapse into one execution) and its 60-minute
+ * TTL: on a cache hit, core makes no Sleeper request, and this function skips
+ * its own Sleeper requests (the transaction pull and the bracket fetch) for
+ * the same reason. `last_pulsed_at` and `pulse_status` are stamped by
+ * pulseLeagueCore alone, only after core's own child rows land; the
+ * transaction and bracket writes below run AFTER that stamp, the same
+ * ordering pulseLeague already uses for its derived half.
+ */
+export async function pulseLeagueFootprint(
+  supabase: ServiceClient,
+  sleeperLeagueId: string,
+  options: { force?: boolean } = {},
+): Promise<LeaguePulseResult> {
+  const { force = false } = options;
+  const core = await pulseLeagueCore(supabase, sleeperLeagueId, options);
+  if (!core.ok) return core;
+
+  // A cache hit means core made no Sleeper request. Treat that as this
+  // function's own signal to skip Sleeper too, the same `force || resynced`
+  // gate pulseLeagueDerived applies to its own transaction sync.
+  const resynced = !core.cached;
+
+  const transactions = await coalesce(
+    `footprint-derived:${core.leagueRowId}:${force}`,
+    async () => {
+      if (force || resynced) {
+        try {
+          await syncTransactions(
+            supabase,
+            core.leagueRowId,
+            sleeperLeagueId,
+            core.season,
+            force,
+          );
+        } catch (err) {
+          console.warn(
+            `[pulseLeagueFootprint] transaction sync failed for league ${core.leagueRowId}:`,
+            (err as Error).message,
+          );
+        }
+
+        try {
+          await captureLeagueBrackets(supabase, core.leagueRowId, sleeperLeagueId);
+        } catch (err) {
+          console.warn(
+            `[pulseLeagueFootprint] bracket capture failed for league ${core.leagueRowId}:`,
+            (err as Error).message,
+          );
+        }
+      }
+
+      const { count } = await supabase
+        .from("league_transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("league_id", core.leagueRowId);
+      return count ?? 0;
+    },
+  );
+
+  return {
+    ok: true,
+    leagueRowId: core.leagueRowId,
+    sleeperLeagueId,
+    cached: core.cached,
+    counts: { ...core.counts, transactions },
+  };
+}
+
+/**
+ * The two playoff brackets, merged into `leagues.metadata` under a
+ * `brackets` key.
+ *
+ * getSleeperWinnersBracket/getSleeperLosersBracket return null when the
+ * REQUEST failed (timeout, 429, 5xx) and [] when Sleeper answered and the
+ * league genuinely has no bracket yet (season not over, or no playoffs). Only
+ * the second is written: writing null over a bracket already captured would
+ * erase a real answer because of one timeout, so a failed fetch is skipped
+ * and the prior value is left alone rather than cleared.
+ *
+ * Read-modify-write rather than a blind overwrite, per the project's metadata
+ * rule: `leagues.metadata` already carries the raw Sleeper league object
+ * pulseLeagueCore wrote moments earlier, and this merges the brackets key
+ * into it instead of clobbering those sibling keys.
+ */
+async function captureLeagueBrackets(
+  supabase: ServiceClient,
+  leagueRowId: string,
+  sleeperLeagueId: string,
+): Promise<void> {
+  const [winners, losers] = await Promise.all([
+    getSleeperWinnersBracket(sleeperLeagueId),
+    getSleeperLosersBracket(sleeperLeagueId),
+  ]);
+
+  const patch: Record<string, unknown> = {};
+  if (winners !== null) patch.winners = winners;
+  if (losers !== null) patch.losers = losers;
+  if (Object.keys(patch).length === 0) return;
+
+  const { data: existing, error: readErr } = await supabase
+    .from("leagues")
+    .select("metadata")
+    .eq("id", leagueRowId)
+    .maybeSingle();
+  if (readErr) {
+    console.warn(
+      `[pulseLeagueFootprint] could not read metadata for league ${leagueRowId}: ${readErr.message}`,
+    );
+    return;
+  }
+
+  const currentMetadata = (existing?.metadata ?? {}) as Record<string, unknown>;
+  const currentBrackets = (currentMetadata.brackets ?? {}) as Record<string, unknown>;
+  const nextMetadata = {
+    ...currentMetadata,
+    brackets: { ...currentBrackets, ...patch },
+  };
+
+  const { error: writeErr } = await supabase
+    .from("leagues")
+    .update({
+      metadata: nextMetadata as unknown as Database["public"]["Tables"]["leagues"]["Update"]["metadata"],
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", leagueRowId);
+  if (writeErr) {
+    console.warn(
+      `[pulseLeagueFootprint] could not write brackets for league ${leagueRowId}: ${writeErr.message}`,
+    );
+  }
 }
 
 /**

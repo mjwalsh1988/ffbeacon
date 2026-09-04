@@ -1259,6 +1259,57 @@ export type Database = {
           },
         ];
       };
+      draft_pick_observations: {
+        Row: {
+          created_at: string;
+          draft_slot: number | null;
+          first_seen_at: string;
+          id: string;
+          metadata: Json;
+          observation_gap_ms: number | null;
+          pick_no: number;
+          picked_by: string | null;
+          roster_id: number | null;
+          round: number | null;
+          season: number | null;
+          sleeper_draft_id: string;
+          sleeper_player_id: string | null;
+          was_autopick: boolean | null;
+        };
+        Insert: {
+          created_at?: string;
+          draft_slot?: number | null;
+          first_seen_at?: string;
+          id?: string;
+          metadata?: Json;
+          observation_gap_ms?: number | null;
+          pick_no: number;
+          picked_by?: string | null;
+          roster_id?: number | null;
+          round?: number | null;
+          season?: number | null;
+          sleeper_draft_id: string;
+          sleeper_player_id?: string | null;
+          was_autopick?: boolean | null;
+        };
+        Update: {
+          created_at?: string;
+          draft_slot?: number | null;
+          first_seen_at?: string;
+          id?: string;
+          metadata?: Json;
+          observation_gap_ms?: number | null;
+          pick_no?: number;
+          picked_by?: string | null;
+          roster_id?: number | null;
+          round?: number | null;
+          season?: number | null;
+          sleeper_draft_id?: string;
+          sleeper_player_id?: string | null;
+          was_autopick?: boolean | null;
+        };
+        Relationships: [];
+      };
       draft_pick_values: {
         Row: {
           captured_at: string;
@@ -2526,9 +2577,11 @@ export type Database = {
           created_at: string;
           finished_at: string | null;
           id: string;
+          job_kind: string;
           last_error: string | null;
           league_name: string | null;
-          request_id: string;
+          manager_run_id: string | null;
+          request_id: string | null;
           run_after: string;
           sleeper_league_id: string;
           status: string;
@@ -2540,9 +2593,11 @@ export type Database = {
           created_at?: string;
           finished_at?: string | null;
           id?: string;
+          job_kind?: string;
           last_error?: string | null;
           league_name?: string | null;
-          request_id: string;
+          manager_run_id?: string | null;
+          request_id?: string | null;
           run_after?: string;
           sleeper_league_id: string;
           status?: string;
@@ -2554,9 +2609,11 @@ export type Database = {
           created_at?: string;
           finished_at?: string | null;
           id?: string;
+          job_kind?: string;
           last_error?: string | null;
           league_name?: string | null;
-          request_id?: string;
+          manager_run_id?: string | null;
+          request_id?: string | null;
           run_after?: string;
           sleeper_league_id?: string;
           status?: string;
@@ -2564,6 +2621,13 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "league_sync_jobs_manager_run_id_fkey";
+            columns: ["manager_run_id"];
+            isOneToOne: false;
+            referencedRelation: "manager_pulse_runs";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "league_sync_jobs_request_id_fkey";
             columns: ["request_id"];
@@ -2785,6 +2849,234 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      manager_pulse_cache: {
+        Row: {
+          dynasty_seasons_counted: number;
+          fingerprint: string;
+          generated_at: string;
+          id: string;
+          league_seasons_counted: number;
+          metadata: Json;
+          model_version: string;
+          redraft_seasons_counted: number;
+          report: Json;
+          season_from: number;
+          season_to: number;
+          sleeper_handle: string | null;
+          sleeper_user_id: string;
+        };
+        Insert: {
+          dynasty_seasons_counted?: number;
+          fingerprint: string;
+          generated_at?: string;
+          id?: string;
+          league_seasons_counted?: number;
+          metadata?: Json;
+          model_version: string;
+          redraft_seasons_counted?: number;
+          report: Json;
+          season_from: number;
+          season_to: number;
+          sleeper_handle?: string | null;
+          sleeper_user_id: string;
+        };
+        Update: {
+          dynasty_seasons_counted?: number;
+          fingerprint?: string;
+          generated_at?: string;
+          id?: string;
+          league_seasons_counted?: number;
+          metadata?: Json;
+          model_version?: string;
+          redraft_seasons_counted?: number;
+          report?: Json;
+          season_from?: number;
+          season_to?: number;
+          sleeper_handle?: string | null;
+          sleeper_user_id?: string;
+        };
+        Relationships: [];
+      };
+      manager_pulse_run_leagues: {
+        Row: {
+          created_at: string;
+          detail: string | null;
+          id: string;
+          job_id: string | null;
+          league_category: string | null;
+          league_name: string | null;
+          run_id: string;
+          season: number;
+          sleeper_league_id: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          detail?: string | null;
+          id?: string;
+          job_id?: string | null;
+          league_category?: string | null;
+          league_name?: string | null;
+          run_id: string;
+          season: number;
+          sleeper_league_id: string;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          detail?: string | null;
+          id?: string;
+          job_id?: string | null;
+          league_category?: string | null;
+          league_name?: string | null;
+          run_id?: string;
+          season?: number;
+          sleeper_league_id?: string;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "manager_pulse_run_leagues_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "league_sync_jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "manager_pulse_run_leagues_run_id_fkey";
+            columns: ["run_id"];
+            isOneToOne: false;
+            referencedRelation: "manager_pulse_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      manager_pulse_runs: {
+        Row: {
+          completed_at: string | null;
+          counts_against_cooldown: boolean;
+          detail: string | null;
+          id: string;
+          leagues_done: number;
+          leagues_failed: number;
+          leagues_total: number;
+          requested_at: string;
+          season_from: number;
+          season_to: number;
+          section_status: Json;
+          sleeper_handle: string | null;
+          sleeper_user_id: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          completed_at?: string | null;
+          counts_against_cooldown?: boolean;
+          detail?: string | null;
+          id?: string;
+          leagues_done?: number;
+          leagues_failed?: number;
+          leagues_total?: number;
+          requested_at?: string;
+          season_from: number;
+          season_to: number;
+          section_status?: Json;
+          sleeper_handle?: string | null;
+          sleeper_user_id: string;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          completed_at?: string | null;
+          counts_against_cooldown?: boolean;
+          detail?: string | null;
+          id?: string;
+          leagues_done?: number;
+          leagues_failed?: number;
+          leagues_total?: number;
+          requested_at?: string;
+          season_from?: number;
+          season_to?: number;
+          section_status?: Json;
+          sleeper_handle?: string | null;
+          sleeper_user_id?: string;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      manager_pulse_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          settings: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          settings: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          settings?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      manager_pulse_tendencies: {
+        Row: {
+          dynasty_sample: number;
+          generated_at: string;
+          model_version: string;
+          redraft_sample: number;
+          season_from: number | null;
+          season_to: number | null;
+          seasons_covered: number;
+          sleeper_handle: string | null;
+          sleeper_user_id: string;
+          tendency: Json;
+        };
+        Insert: {
+          dynasty_sample?: number;
+          generated_at?: string;
+          model_version: string;
+          redraft_sample?: number;
+          season_from?: number | null;
+          season_to?: number | null;
+          seasons_covered?: number;
+          sleeper_handle?: string | null;
+          sleeper_user_id: string;
+          tendency: Json;
+        };
+        Update: {
+          dynasty_sample?: number;
+          generated_at?: string;
+          model_version?: string;
+          redraft_sample?: number;
+          season_from?: number | null;
+          season_to?: number | null;
+          seasons_covered?: number;
+          sleeper_handle?: string | null;
+          sleeper_user_id?: string;
+          tendency?: Json;
+        };
+        Relationships: [];
       };
       news_categories: {
         Row: {
@@ -3758,6 +4050,30 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      player_roster_exposure: {
+        Row: {
+          computed_at: string;
+          roster_rate: number;
+          rostered_count: number;
+          sleeper_player_id: string;
+          total_rosters: number;
+        };
+        Insert: {
+          computed_at?: string;
+          roster_rate: number;
+          rostered_count: number;
+          sleeper_player_id: string;
+          total_rosters: number;
+        };
+        Update: {
+          computed_at?: string;
+          roster_rate?: number;
+          rostered_count?: number;
+          sleeper_player_id?: string;
+          total_rosters?: number;
+        };
+        Relationships: [];
       };
       player_stats: {
         Row: {
@@ -6502,9 +6818,11 @@ export type Database = {
           created_at: string;
           finished_at: string | null;
           id: string;
+          job_kind: string;
           last_error: string | null;
           league_name: string | null;
-          request_id: string;
+          manager_run_id: string | null;
+          request_id: string | null;
           run_after: string;
           sleeper_league_id: string;
           status: string;
@@ -6561,6 +6879,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      enqueue_manager_pulse_capture: {
+        Args: { p_leagues: Json; p_max_leagues?: number; p_run_id: string };
+        Returns: Json;
+      };
       find_player_trade_transactions: {
         Args: { p_limit?: number; p_sleeper_id: string };
         Returns: {
@@ -6609,6 +6931,7 @@ export type Database = {
           total_points: number;
         }[];
       };
+      rebuild_player_roster_exposure: { Args: never; Returns: Json };
       rebuild_positional_finishes: { Args: never; Returns: number };
       release_league_sync: {
         Args: { p_actor_key: string };
@@ -6642,6 +6965,17 @@ export type Database = {
           p_cooldown_seconds?: number;
           p_lease_seconds?: number;
           p_sleeper_league_id: string;
+        };
+        Returns: Json;
+      };
+      try_claim_manager_pulse: {
+        Args: {
+          p_cooldown_seconds?: number;
+          p_season_from: number;
+          p_season_to: number;
+          p_sleeper_handle: string;
+          p_sleeper_user_id: string;
+          p_user_id: string;
         };
         Returns: Json;
       };
