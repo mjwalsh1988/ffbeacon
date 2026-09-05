@@ -294,6 +294,15 @@ export function ManagerPulseSettingsManager({
           max={MANAGER_PULSE_SETTING_BOUNDS.capture.captureTtlMinutes.max}
         />
         <Field
+          label="Resume an open run for, minutes"
+          value={settings.capture.resumeMaxAgeMinutes}
+          onChange={(v) => patch("capture", { resumeMaxAgeMinutes: Math.trunc(v) })}
+          hint="A capture still in flight is rejoined by later page loads rather than charged a second cooldown. Past this age it is abandoned and a fresh run is claimed."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.capture.resumeMaxAgeMinutes.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.capture.resumeMaxAgeMinutes.max}
+        />
+        <Field
           label="Job max attempts"
           value={settings.capture.jobMaxAttempts}
           onChange={(v) => patch("capture", { jobMaxAttempts: Math.trunc(v) })}
@@ -498,6 +507,24 @@ export function ManagerPulseSettingsManager({
           min={MANAGER_PULSE_SETTING_BOUNDS.display.narrativeSentencesMax.min}
           max={MANAGER_PULSE_SETTING_BOUNDS.display.narrativeSentencesMax.max}
         />
+        <Field
+          label="Repeat drafts shown"
+          value={settings.display.repeatDraftsShown}
+          onChange={(v) => patch("display", { repeatDraftsShown: Math.trunc(v) })}
+          hint="Players taken in more than one draft, kept in the report. A manager in thirty leagues has hundreds."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.display.repeatDraftsShown.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.display.repeatDraftsShown.max}
+        />
+        <Field
+          label="Pick rounds charted"
+          value={settings.display.pickRoundsShown}
+          onChange={(v) => patch("display", { pickRoundsShown: Math.trunc(v) })}
+          hint="Rounds shown individually on the pick-flow chart. Everything deeper is combined into one row rather than dropped."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.display.pickRoundsShown.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.display.pickRoundsShown.max}
+        />
       </Group>
 
       <Group
@@ -613,6 +640,15 @@ export function ManagerPulseSettingsManager({
           step="0.01"
           min={MANAGER_PULSE_SETTING_BOUNDS.wording.marginDeadzone.min}
           max={MANAGER_PULSE_SETTING_BOUNDS.wording.marginDeadzone.max}
+        />
+        <Field
+          label="Clear-win margin"
+          value={settings.wording.verdictClearMargin}
+          onChange={(v) => patch("wording", { verdictClearMargin: v })}
+          hint="At or above this margin a trade reads as a clear win or loss rather than a slight one. Must be larger than the margin dead zone."
+          step="0.01"
+          min={MANAGER_PULSE_SETTING_BOUNDS.wording.verdictClearMargin.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.wording.verdictClearMargin.max}
         />
         <Field
           label="Age lean dead zone"

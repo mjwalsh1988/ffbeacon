@@ -19,7 +19,7 @@ vi.mock("./rate-limit", () => ({
 import { getSleeperLeagues, getSleeperUser } from "@/lib/sleeper";
 import { claimManagerLookupSlot } from "./rate-limit";
 import { DEFAULT_MANAGER_PULSE_SETTINGS } from "./default-settings";
-import { readCaptureProgress, startManagerCapture } from "./capture";
+import { findOpenRun, readCaptureProgress, startManagerCapture } from "./capture";
 import type { ManagerPulseSettings } from "./types";
 
 const mockGetSleeperUser = vi.mocked(getSleeperUser);
@@ -52,6 +52,18 @@ function makeFakeAdmin(handlers: FakeAdminHandlers) {
       return this;
     }
     in() {
+      return this;
+    }
+    gte() {
+      return this;
+    }
+    not() {
+      return this;
+    }
+    order() {
+      return this;
+    }
+    limit() {
       return this;
     }
     maybeSingle() {
@@ -557,5 +569,73 @@ describe("startManagerCapture admin throttle bypass", () => {
         DEFAULT_MANAGER_PULSE_SETTINGS.capture.maxLeaguesPerRun,
       );
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* findOpenRun                                                                */
+/* -------------------------------------------------------------------------- */
+
+describe("findOpenRun", () => {
+  const SUBJECT = {
+    userId: "user-1",
+    sleeperUserId: "sleeper-1",
+    seasonFrom: 2023,
+    seasonTo: 2026,
+    settings: DEFAULT_MANAGER_PULSE_SETTINGS,
+  };
+
+  it("returns the run and its live progress when one is still open", async () => {
+    const admin = makeFakeAdmin({
+      managerPulseRun: () => freshRun({ status: "capturing", leagues_total: 4 }),
+      managerPulseRunLeagues: () => runLeagueRows(["done", "done", "queued", "failed"]),
+    });
+
+    const found = await findOpenRun(admin, SUBJECT);
+
+    expect(found).not.toBeNull();
+    expect(found!.runId).toBe("run-1");
+    // Counted from the league rows, not from the run row's own lagging
+    // counters, exactly as readCaptureProgress does everywhere else.
+    expect(found!.progress.status).toBe("capturing");
+    expect(found!.progress.leaguesDone).toBe(2);
+    expect(found!.progress.leaguesFailed).toBe(1);
+  });
+
+  it("returns a run parked at computing, which is the case that used to lock a reader out", async () => {
+    // THE BUG THIS EXISTS FOR. A capture finishes reading leagues and parks at
+    // 'computing', waiting for a render to build the report. Every such render
+    // used to call startManagerCapture, which claims a NEW run, which the
+    // per-user cooldown refuses. The reader who waited out the whole capture
+    // was answered "one lookup at a time" and got no report for an hour.
+    const admin = makeFakeAdmin({
+      managerPulseRun: () => freshRun({ status: "computing" }),
+      managerPulseRunLeagues: () => runLeagueRows(["done"]),
+    });
+
+    const found = await findOpenRun(admin, SUBJECT);
+
+    expect(found).not.toBeNull();
+    expect(found!.progress.status).toBe("computing");
+  });
+
+  it("returns null when there is no open run, so the caller claims a fresh one", async () => {
+    const admin = makeFakeAdmin({
+      managerPulseRun: () => ({ data: null, error: null }),
+      managerPulseRunLeagues: () => runLeagueRows([]),
+    });
+
+    expect(await findOpenRun(admin, SUBJECT)).toBeNull();
+  });
+
+  it("never throws on an unreadable run: no run is the honest answer", async () => {
+    const admin = makeFakeAdmin({
+      managerPulseRun: () => {
+        throw new Error("connection reset");
+      },
+      managerPulseRunLeagues: () => runLeagueRows([]),
+    });
+
+    expect(await findOpenRun(admin, SUBJECT)).toBeNull();
   });
 });

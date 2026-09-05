@@ -10,6 +10,7 @@
  *
  *   getManagerFootprint   the whole report. What /tools/manager-pulse renders.
  *   getManagerTendencies  the compact per-manager summary. What Trade Ideas reads.
+ *   listRecentLookups     the handles one reader has looked up. The entry page.
  *
  * NEITHER THROWS. Every failure mode is a member of the returned union, because
  * a page that renders a manager's history must be able to say what went wrong
@@ -39,7 +40,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { loadManagerPulseSettings } from "./settings";
-import { startManagerCapture, readCaptureProgress } from "./capture";
+import {
+  startManagerCapture,
+  readCaptureProgress,
+  findOpenRun,
+  type CaptureOutcome,
+} from "./capture";
 import { isValidSleeperHandle, resolveManagerHandle } from "./discover";
 import { claimManagerLookupSlot } from "./rate-limit";
 import { loadManagerPulseInput } from "./load";
@@ -383,19 +389,45 @@ export async function getManagerFootprint(
       };
     }
 
-    // 2. Capture. Validates, meters, claims the cooldown, queues what is stale.
+    // 2. RESUME BEFORE CLAIM. A capture this reader already has open for this
+    // exact question is the answer to this render, not a reason to open a
+    // second one. See `findOpenRun`: without this, every re-render during a
+    // capture walked into `try_claim_manager_pulse`, was refused by the
+    // cooldown it had itself just spent, and the reader who waited out the
+    // whole sync was told "one lookup at a time" and left with no report for
+    // an hour. Costs one indexed read on the warm-miss path and nothing at all
+    // on the warm path, which returned above.
+    const openRun = await findOpenRun(admin, {
+      userId,
+      sleeperUserId,
+      seasonFrom,
+      seasonTo,
+      settings,
+    });
+
+    // 3. Capture. Validates, meters, claims the cooldown, queues what is stale.
     // The subject is passed down so the handle is resolved ONCE per lookup.
     // Without it this call repeats the same outbound request we just made and
     // just paid for.
-    const capture = await startManagerCapture({
-      admin,
-      userId,
-      handle,
-      seasons: request.seasons,
-      settings,
-      bypassThrottle,
-      ...(resolvedSubject ? { resolved: resolvedSubject } : {}),
-    });
+    const capture: CaptureOutcome = openRun
+      ? {
+          // A run still reading leagues is "started"; one that has finished
+          // reading and is waiting for a render to compute it is "warm". Same
+          // two outcomes `startManagerCapture` returns, decided from the run's
+          // own status rather than from a fresh claim.
+          status: openRun.progress.status === "capturing" ? "started" : "warm",
+          runId: openRun.runId,
+          progress: openRun.progress,
+        }
+      : await startManagerCapture({
+          admin,
+          userId,
+          handle,
+          seasons: request.seasons,
+          settings,
+          bypassThrottle,
+          ...(resolvedSubject ? { resolved: resolvedSubject } : {}),
+        });
 
     if (capture.status === "not_found") return { status: "not_found", handle };
     if (capture.status === "empty") return { status: "empty", reason: "no_leagues" };
@@ -653,4 +685,68 @@ async function readRunLeagues(admin: Admin, runId: string): Promise<RunLeague[]>
     if (data.length < PAGE) break;
   }
   return out;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Recent lookups: the entry page's own read                                  */
+/* -------------------------------------------------------------------------- */
+
+export type RecentManagerLookup = {
+  handle: string;
+  lookedUpAt: string;
+};
+
+/**
+ * The handles this reader has looked up, newest first, deduplicated.
+ *
+ * The entry page was one input field alone on an empty screen, with no way
+ * back to a report you built five minutes ago short of retyping the handle.
+ * This is that list.
+ *
+ * ONE INDEXED READ, against `manager_pulse_runs_user_idx`. It reads a small
+ * window of the reader's newest runs and folds repeats out in memory rather
+ * than asking Postgres for a distinct-on, because the window is bounded and a
+ * reader who looked the same person up four times wants one row, not four.
+ *
+ * `admin` may be the SERVICE-ROLE client or the reader's own session client:
+ * `manager_pulse_runs` is owner-readable, so a session client sees exactly this
+ * reader's rows and nobody else's either way. `userId` is still passed and
+ * filtered on, so a service-role caller cannot accidentally read everybody's.
+ *
+ * Never throws. An empty list is a fine entry page.
+ */
+export async function listRecentLookups(
+  client: Admin,
+  userId: string,
+  limit = 6,
+): Promise<RecentManagerLookup[]> {
+  try {
+    const { data, error } = await client
+      .from("manager_pulse_runs")
+      .select("sleeper_handle, requested_at")
+      .eq("user_id", userId)
+      .not("sleeper_handle", "is", null)
+      .order("requested_at", { ascending: false })
+      .limit(Math.max(limit * 4, limit));
+    if (error || !data) return [];
+
+    const seen = new Set<string>();
+    const out: RecentManagerLookup[] = [];
+    for (const row of data) {
+      const handle = (row.sleeper_handle ?? "").trim();
+      if (!handle) continue;
+      const key = handle.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ handle, lookedUpAt: row.requested_at });
+      if (out.length >= limit) break;
+    }
+    return out;
+  } catch (err) {
+    console.error(
+      "[manager-pulse/service] listRecentLookups failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
 }

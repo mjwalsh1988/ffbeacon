@@ -1339,6 +1339,22 @@ export async function loadManagerPulseInput(
             if (rid === rosterId) incomingPlayerIds.push(pid);
             else if (rid === otherRosterId) outgoingPlayerIds.push(pid);
           }
+          // The round on each side, for the pick-flow chart. A pick whose
+          // round Sleeper did not publish is still counted below; it just
+          // contributes no round, rather than being guessed at as a first.
+          const pickRound = (p: TradedPickEntry): number | null => {
+            const round = Number(p.round);
+            return Number.isFinite(round) && round > 0 ? Math.trunc(round) : null;
+          };
+          const incomingPickRounds = normalizedPicks
+            .filter((p) => Number(p.owner_id) === rosterId)
+            .map(pickRound)
+            .filter((r): r is number => r !== null);
+          const outgoingPickRounds = normalizedPicks
+            .filter((p) => Number(p.previous_owner_id) === rosterId)
+            .map(pickRound)
+            .filter((r): r is number => r !== null);
+
           const incomingPickCount = normalizedPicks.filter((p) => Number(p.owner_id) === rosterId).length;
           const outgoingPickCount = normalizedPicks.filter(
             (p) => Number(p.previous_owner_id) === rosterId,
@@ -1400,6 +1416,8 @@ export async function loadManagerPulseInput(
             outgoingPlayerIds,
             incomingPickCount,
             outgoingPickCount,
+            incomingPickRounds,
+            outgoingPickRounds,
             marginPct,
             verdictLabel,
             valueIn,

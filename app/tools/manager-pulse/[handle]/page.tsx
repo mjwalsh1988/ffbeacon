@@ -39,7 +39,9 @@ import { CaptureProgressPanel } from "@/components/manager-pulse/capture-progres
 // the literal ManagerSection string with one exception (rosterOps ->
 // "roster-ops"), which is why nav-items.ts's managerSectionElementId is a
 // lookup against the real ids rather than a blind pass-through.
-import { IdentitySection } from "@/components/manager-pulse/identity-section";
+import { ManagerMasthead } from "@/components/manager-pulse/manager-masthead";
+import { ReportColumns } from "@/components/manager-pulse/report-columns";
+import { ReportRail } from "@/components/manager-pulse/report-rail";
 import { ResultsSection } from "@/components/manager-pulse/results-section";
 import { DraftingSection } from "@/components/manager-pulse/drafting-section";
 import { AffinitySection } from "@/components/manager-pulse/affinity-section";
@@ -47,7 +49,6 @@ import { TradingSection } from "@/components/manager-pulse/trading-section";
 import { RosterOpsSection } from "@/components/manager-pulse/roster-ops-section";
 import { NarrativeSection } from "@/components/manager-pulse/narrative-section";
 import { LeaguesSection } from "@/components/manager-pulse/leagues-section";
-import { LimitsNote } from "@/components/manager-pulse/limits-note";
 import { SectionFrame } from "@/components/manager-pulse/section-frame";
 
 export const dynamic = "force-dynamic";
@@ -150,7 +151,11 @@ async function ManagerReportBoundary({
     return (
       <ManagerShell handle={handle}>
         <div className="space-y-6">
-          <ReportHeading handle={handle} />
+          {result.partial.identity ? (
+            <ManagerMasthead identity={result.partial.identity} />
+          ) : (
+            <ReportHeading handle={handle} />
+          )}
           <CaptureProgressPanel progress={result.progress} />
           <PartialSections partial={result.partial} lens={requestedLens} />
         </div>
@@ -164,31 +169,49 @@ async function ManagerReportBoundary({
 
   return (
     <ManagerShell handle={handle}>
-      <div className="space-y-8">
-        <ReportHeading handle={handle} />
+      <div className="space-y-6">
+        {/* The masthead spans both columns: it is the report's own header, and
+            the lens control inside it filters the rail as well as the
+            sections, so neither belongs beside the other. */}
+        <ManagerMasthead
+          identity={report.identity}
+          window={report.window}
+          controls={
+            <Suspense
+              fallback={<div className="h-11 w-64 rounded-card bg-surface/60" aria-hidden="true" />}
+            >
+              <LensSwitch
+                lens={requestedLens}
+                counts={{
+                  leagueSeasons: report.counts.leagueSeasons,
+                  dynasty: report.counts.dynasty,
+                  redraft: report.counts.redraft,
+                }}
+              />
+            </Suspense>
+          }
+          note={
+            result.stale ? (
+              <p role="status" className="text-xs text-ink-subtle">
+                Showing a saved report from {formatEastern(result.generatedAt)} while
+                we check for anything newer.
+              </p>
+            ) : null
+          }
+        />
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Suspense fallback={<div className="h-11 w-64 rounded-card bg-surface/60" aria-hidden="true" />}>
-            <LensSwitch
+        <ReportColumns
+          railLabel="Report summary and coverage"
+          rail={
+            <ReportRail
+              report={report}
               lens={requestedLens}
-              counts={{
-                leagueSeasons: report.counts.leagueSeasons,
-                dynasty: report.counts.dynasty,
-                redraft: report.counts.redraft,
-              }}
+              generatedAt={result.generatedAt}
             />
-          </Suspense>
-          {result.stale && (
-            <p role="status" className="text-xs text-ink-subtle">
-              Showing a saved report from {formatEastern(result.generatedAt)} while
-              we check for anything newer.
-            </p>
-          )}
-        </div>
-
-        <ReportSections report={report} lens={requestedLens} />
-
-        <LimitsNote limits={report.limits} />
+          }
+        >
+          <ReportSections report={report} lens={requestedLens} />
+        </ReportColumns>
       </div>
     </ManagerShell>
   );
@@ -233,15 +256,20 @@ function isLens(value: string | undefined): value is LeagueLens {
 function ReportSections({ report, lens }: { report: ManagerReport; lens: LeagueLens }) {
   const counts = { leagueSeasons: report.counts.leagueSeasons, dynasty: report.counts.dynasty, redraft: report.counts.redraft };
   return (
-    <div className="space-y-8">
-      <IdentitySection identity={report.identity} window={report.window} />
+    <div className="space-y-6">
+      {/* HOW TO DEAL LEADS. See the note on MANAGER_NAV_ITEMS: it is the
+          conclusion the rest of the report is the evidence for, and it sat
+          seventh. */}
+      <NarrativeSection narrative={report.narrative} />
       <ResultsSection results={report.results} lens={lens} />
       <DraftingSection drafting={report.drafting} lens={lens} />
       <AffinitySection affinity={report.affinity} />
       <TradingSection trading={report.trading} counts={counts} lens={lens} />
       <RosterOpsSection rosterOps={report.rosterOps} totalLeagueSeasons={counts} lens={lens} />
-      <NarrativeSection narrative={report.narrative} />
-      <LeaguesSection leagues={report.leagues} />
+      <LeaguesSection
+        leagues={report.leagues}
+        totalLeagueSeasons={report.counts.leagueSeasons}
+      />
     </div>
   );
 }
@@ -264,7 +292,7 @@ function PartialSections({
     : { leagueSeasons: 0, dynasty: 0, redraft: 0 };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-3">
       {MANAGER_NAV_ITEMS.map((item) => (
         <PartialSection
           key={item.id}
@@ -296,11 +324,10 @@ function PartialSection({
   // sample size, so a section that has not landed yet renders as a plain
   // waiting notice rather than a zero the report never claimed.
   if (id === "identity") {
-    return partial.identity ? (
-      <IdentitySection identity={partial.identity} />
-    ) : (
-      <PendingSection id={id} label={label} />
-    );
+    // The masthead above already renders this section when it is ready, so
+    // there is nothing left to draw here but the waiting notice the nav rail's
+    // Overview row needs an anchor for.
+    return partial.identity ? null : <PendingSection id={id} label={label} />;
   }
   if (id === "results") {
     return partial.results ? (
@@ -349,29 +376,40 @@ function PartialSection({
     );
   }
   return partial.leagues ? (
-    <LeaguesSection leagues={partial.leagues} />
+    <LeaguesSection leagues={partial.leagues} totalLeagueSeasons={counts.leagueSeasons} />
   ) : (
     <PendingSection id={id} label={label} />
   );
 }
 
 /**
- * Renders inside `SectionFrame` so it carries the same `id` and `<h2>` a
- * finished section would. The nav rail and the mobile dock link to
- * `#identity`, `#results` and so on unconditionally, so during a build those
- * anchors have to exist or activating a nav link does nothing. No
- * `role="status"` here: the capture progress panel above is the one live
- * region on this page, and eight static "still reading" strings are not
- * status updates.
+ * The anchor a nav row needs for a section that has not landed yet.
+ *
+ * The nav rail and the mobile dock link to `#identity`, `#results` and so on
+ * unconditionally, so during a build those anchors have to exist or activating
+ * a nav link does nothing.
+ *
+ * ONE LINE, NOT A CARD. Eight full-height cards each saying "still reading
+ * leagues" filled three screens with the same sentence written eight times,
+ * under a progress panel that had already listed all eight sections and their
+ * state. This is the anchor and the heading, and nothing else.
+ *
+ * No `role="status"`: the capture progress panel above is the one live region
+ * on this page, and eight static strings are not status updates.
  */
 function PendingSection({ id, label }: { id: ManagerSection; label: string }) {
+  const headingId = `${managerSectionElementId(id)}-heading`;
   return (
-    <SectionFrame id={managerSectionElementId(id)} title={label}>
-      <p className="rounded-modal border border-dashed border-line bg-surface/30 p-5 text-sm text-ink-muted sm:p-6">
-        {label} is still reading leagues. It will appear here on its own once it
-        is ready.
-      </p>
-    </SectionFrame>
+    <section
+      id={managerSectionElementId(id)}
+      aria-labelledby={headingId}
+      className="flex scroll-mt-24 items-center justify-between gap-3 rounded-card border border-dashed border-line bg-surface/30 px-4 py-3"
+    >
+      <h2 id={headingId} className="text-sm font-semibold text-ink-muted">
+        {label}
+      </h2>
+      <span className="text-xs text-ink-subtle">Still reading leagues</span>
+    </section>
   );
 }
 

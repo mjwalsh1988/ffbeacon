@@ -44,16 +44,18 @@ export function ResultsSection({
     <SectionFrame
       id="results"
       title="Results"
-      eyebrow="Section 2"
+     
       accent="cyan"
       sampleNote={sampleNote || undefined}
     >
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {/* The section's one hero figure. A section where every tile is the
+            same weight is a section with no answer in it. */}
         <StatTile
           label="Win rate"
           value={winRate === null ? null : formatPercent(winRate)}
+          size="hero"
           sub={lensLabel(lens)}
-          tone="good"
           emptyReason="Not enough settled games"
         />
         <StatTile
@@ -69,7 +71,7 @@ export function ResultsSection({
         />
       </div>
 
-      <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
         <ResultRow
           label="Record"
           value={record === null ? null : formatRecord(record)}
@@ -108,7 +110,7 @@ export function ResultsSection({
 
 /**
  * The dt/dd pair is a direct child of the wrapping `<div>`, matching
- * identity-section.tsx's `IdentityBucket`: a `<div>` inside a `<dl>` may only
+ * manager-masthead.tsx's `MastheadFigure`: a `<div>` inside a `<dl>` may only
  * contain `dt`/`dd` elements, so `sub` lives inside `dt` (flow content is
  * fine there) rather than in a second wrapping `<div>` around it. `dd` points
  * at `sub` with `aria-describedby` so the qualifier is tied to the value it

@@ -96,7 +96,7 @@ describe("bandAdjustment", () => {
   });
 
   it("gives no opinion below the sample floor", () => {
-    const s = slice({ sampleSize: 1, tradeCount: 5, tradesPerSeason: 4, avgValueMargin: -0.1 });
+    const s = slice({ sampleSize: 1, tradeCount: 5, tradesPerSeason: 4, avgValueMargin: -10 });
     expect(bandAdjustment(s, SETTINGS)).toEqual({ steps: 0, reason: null });
   });
 
@@ -111,7 +111,7 @@ describe("bandAdjustment", () => {
     const s = slice({
       tradeCount: 12,
       tradesPerSeason: 4,
-      avgValueMargin: -0.08,
+      avgValueMargin: -8,
       sampleSize: 9,
     });
     const result = bandAdjustment(s, SETTINGS);
@@ -122,17 +122,17 @@ describe("bandAdjustment", () => {
   });
 
   it("does nothing for a frequent trader who does not pay up", () => {
-    const s = slice({ tradeCount: 12, tradesPerSeason: 4, avgValueMargin: 0.05, sampleSize: 9 });
+    const s = slice({ tradeCount: 12, tradesPerSeason: 4, avgValueMargin: 5, sampleSize: 9 });
     expect(bandAdjustment(s, SETTINGS)).toEqual({ steps: 0, reason: null });
   });
 
   it("does nothing for an occasional trader who pays up", () => {
-    const s = slice({ tradeCount: 5, tradesPerSeason: 1, avgValueMargin: -0.2, sampleSize: 5 });
+    const s = slice({ tradeCount: 5, tradesPerSeason: 1, avgValueMargin: -20, sampleSize: 5 });
     expect(bandAdjustment(s, SETTINGS)).toEqual({ steps: 0, reason: null });
   });
 
   it("clamps the upgrade to bandStepMax", () => {
-    const s = slice({ tradeCount: 12, tradesPerSeason: 4, avgValueMargin: -0.08, sampleSize: 9 });
+    const s = slice({ tradeCount: 12, tradesPerSeason: 4, avgValueMargin: -8, sampleSize: 9 });
     expect(bandAdjustment(s, { minSample: 4, bandStepMax: 0 }).steps).toBe(0);
   });
 

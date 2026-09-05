@@ -73,11 +73,17 @@ export function RosterOpsSection({
         : totalLeagueSeasons.leagueSeasons;
 
   return (
-    <SectionFrame id="roster-ops" title="Roster management" eyebrow="Section 6" accent="cyan">
-      <div className="grid grid-cols-2 gap-3">
+    <SectionFrame id="roster-ops" title="Roster management" accent="cyan">
+      {/* One grid, not three stacked pairs. Nine figures in rows of two put
+          this section's own footer below the fold on a laptop; three across
+          from sm fits the same nine in three rows with nothing dropped. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {/* The section's one hero figure: how busy this manager is, which is
+            what every other tile here qualifies. */}
         <StatTile
           label="Moves per week"
           value={movesPerWeek === null ? null : formatRate(movesPerWeek)}
+          size="hero"
           emptyReason="Not enough measured weeks"
         />
         <StatTile
@@ -86,9 +92,6 @@ export function RosterOpsSection({
           sub={moveShape === null ? undefined : MOVE_SHAPE_SUB[moveShape]}
           emptyReason="Not enough seasons to see a shape"
         />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
         <StatTile
           label="Waiver claims per season"
           value={waiverClaimsPerSeason === null ? null : formatRate(waiverClaimsPerSeason)}
@@ -99,14 +102,19 @@ export function RosterOpsSection({
           value={avgFaabBidShare === null ? null : formatPercent(avgFaabBidShare)}
           emptyReason="These leagues run no FAAB"
         />
+        <StatTile
+          label="Waiver points produced"
+          value={waiverPointsProduced === null ? null : formatCount(waiverPointsProduced)}
+          sub="Points scored by players added off waivers, for the team that added them."
+          emptyReason="No waiver claims in this window"
+        />
+        <StatTile
+          label="Abandonment"
+          value={abandonmentCount === null ? null : formatCount(abandonmentCount)}
+          sub="Seasons that ended with several quiet weeks and an incomplete lineup."
+          emptyReason="No settled seasons yet"
+        />
       </div>
-
-      <StatTile
-        label="Waiver points produced"
-        value={waiverPointsProduced === null ? null : formatCount(waiverPointsProduced)}
-        sub="Points scored by players added off waivers, for the team that added them."
-        emptyReason="No waiver claims in this window"
-      />
 
       {/* Lineup efficiency never appears alone: the coverage clause is the
           whole point, since a ledger row only exists for a league someone has
@@ -136,13 +144,6 @@ export function RosterOpsSection({
           emptyReason="No settled weeks yet"
         />
       </div>
-
-      <StatTile
-        label="Abandonment"
-        value={abandonmentCount === null ? null : formatCount(abandonmentCount)}
-        sub="Seasons that ended with several quiet weeks and an incomplete lineup."
-        emptyReason="No settled seasons yet"
-      />
     </SectionFrame>
   );
 }

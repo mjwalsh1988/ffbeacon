@@ -92,11 +92,36 @@ const TRADE_PARTNERS: TradePartnerEntry[] = [
 
 const OVERPAYS: OverpayEntry[] = [
   {
-    subject: "RB",
-    subjectLabel: "Running backs",
-    playerId: null,
-    avgMarginPct: -0.08,
+    subject: "sample-player-a",
+    subjectLabel: "Example Receiver A",
+    playerId: "sample-player-a",
+    kind: "player",
+    position: "WR",
+    // PERCENT units, matching Signal Check's own margin: -18.4 means they came
+    // out eighteen point four percent behind market on these trades.
+    avgMarginPct: -18.4,
     sampleSize: 4,
+  },
+  {
+    subject: "RB",
+    subjectLabel: "Running back",
+    playerId: null,
+    kind: "position",
+    position: "RB",
+    avgMarginPct: -7.2,
+    sampleSize: 4,
+  },
+];
+
+const BARGAINS: OverpayEntry[] = [
+  {
+    subject: "sample-player-c",
+    subjectLabel: "Example Tight End C",
+    playerId: "sample-player-c",
+    kind: "player",
+    position: "TE",
+    avgMarginPct: 12.6,
+    sampleSize: 3,
   },
 ];
 
@@ -271,18 +296,40 @@ export const SAMPLE_MANAGER_REPORT: ManagerReport = {
     // Redraft side null on purpose: PerTypeStat never pools dynasty and
     // redraft margins, and this fixture also shows the case where only one
     // side has enough trades to read at all.
-    avgValueMargin: { dynasty: -0.04, redraft: null },
+    // PERCENT units, matching Signal Check's own margin: -4.2 means four
+    // point two percent under market.
+    avgValueMargin: { dynasty: -4.2, redraft: null },
     avgValueMarginSampleSize: { dynasty: 10, redraft: null },
-    verdictDistribution: { dynasty: { win: 4, fair: 5, loss: 1 }, redraft: null },
+    verdictDistribution: {
+      dynasty: { clear_win: 2, slight_win: 2, even: 4, slight_loss: 1, ungraded: 1 },
+      redraft: null,
+    },
+    // Net league value, which is what the real figure sums, so the sample
+    // exercises the same compact formatting a real report does.
     positionAppetite: {
-      dynasty: { RB: 0.3, WR: -0.1, QB: 0.05, TE: -0.05 },
+      dynasty: { RB: 4200, WR: -1850, QB: 640, TE: -310 },
       redraft: null,
     },
     ageLean: 0.15,
     ageLeanSampleSize: 10,
     picksTraded: { dynasty: 6, redraft: 0 },
+    pickFlow: {
+      dynasty: {
+        acquired: 4,
+        sent: 2,
+        roundsKnown: 6,
+        byRound: [
+          { round: 1, acquired: 1, sent: 0 },
+          { round: 2, acquired: 2, sent: 1 },
+          { round: 3, acquired: 1, sent: 1 },
+        ],
+        laterFromRound: null,
+      },
+      redraft: null,
+    },
     mostTradedWith: { dynasty: TRADE_PARTNERS, redraft: [] },
     overpays: { dynasty: OVERPAYS, redraft: [] },
+    bargains: { dynasty: BARGAINS, redraft: [] },
     tradesWithUnpricedPicks: { dynasty: 2, redraft: 0 },
   },
 

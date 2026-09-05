@@ -90,6 +90,7 @@ export function PerTypePair<T>({
   typeCounts,
   render,
   emptyReason,
+  stackSides = false,
 }: {
   lens: LeagueLens;
   label: string;
@@ -104,6 +105,16 @@ export function PerTypePair<T>({
   render: (value: T) => ReactNode;
   /** Shown when a side has played that type but this figure is null. */
   emptyReason: string;
+  /**
+   * Stack the dynasty and redraft halves vertically instead of side by side.
+   *
+   * The default is two across, which is right for a card that spans the whole
+   * content column. It is wrong for one that is already half of a two-column
+   * row: halving a half leaves about 250px, which is not enough for a chart
+   * with a label, a bar and a figure on every line. The caller knows which
+   * situation it is in; this component cannot.
+   */
+  stackSides?: boolean;
 }) {
   const sides = resolvePerTypePairSides({ lens, stat, sampleStat, typeCounts });
 
@@ -114,7 +125,11 @@ export function PerTypePair<T>({
   return (
     <div className="rounded-card border border-line bg-base/40 px-3 py-2.5">
       <h3 className="text-sm font-semibold text-ink">{label}</h3>
-      <div className={stacked ? "mt-2 grid gap-3 sm:grid-cols-2" : "mt-2"}>
+      <div
+        className={
+          stacked ? `mt-2 grid gap-3 ${stackSides ? "" : "sm:grid-cols-2"}` : "mt-2"
+        }
+      >
         {sides.map((side) => {
           const sampleNote =
             side.sampleSize !== null ? formatSample(side.sampleSize, sampleNoun) : "";

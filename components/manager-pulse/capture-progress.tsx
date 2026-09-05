@@ -31,14 +31,17 @@ import type { CaptureProgress, ManagerSection, SectionStatus } from "@/lib/manag
 import { useCaptureProgress, type CaptureProgressPollingOptions } from "./use-capture-progress";
 import { ProgressBar } from "./progress-bar";
 
+// Same order as MANAGER_NAV_ITEMS, and it has to stay that way: a reader
+// watching this list fill in and then scrolling the finished report should
+// meet the sections in the same sequence twice.
 const SECTION_ORDER: ManagerSection[] = [
   "identity",
+  "narrative",
   "results",
   "drafting",
   "affinity",
   "trading",
   "rosterOps",
-  "narrative",
   "leagues",
 ];
 

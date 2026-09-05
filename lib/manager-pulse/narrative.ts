@@ -59,6 +59,21 @@ function pct(share: number): string {
   return `${Math.round(Math.abs(share) * 100)}%`;
 }
 
+/**
+ * A trade margin, which arrives from Signal Check in PERCENT units, as the
+ * SHARE every wording threshold in this file is written in.
+ *
+ * These two conventions met without converting, and the result was the loudest
+ * wrong number on the page: an average margin the Trading section printed as
+ * "-0.6%" was multiplied by a hundred again here and read out as "Gives up 59%
+ * more value than market". The same missing conversion also made the dead zone
+ * a hundred times too small, so every manager with any measurable margin at all
+ * was called a payer-up or a value-getter.
+ */
+function marginShare(marginPct: number): number {
+  return marginPct / 100;
+}
+
 /** A rounds figure (0.83) as one decimal place ("0.8"). */
 function rounds1(value: number): string {
   return Math.abs(value).toFixed(1);
@@ -94,9 +109,20 @@ const TEMPLATES: Template[] = [
       const perSeason = report.trading.tradesPerSeason.all;
       if (count === null || perSeason === null) return null;
       if (count === 0 || perSeason < w.tradesOftenPerSeason) return null;
+      // PER LEAGUE-SEASON, NOT PER YEAR. A manager in thirty leagues at once
+      // makes "about 179.5 trades a year" true and useless: it describes how
+      // many leagues they joined, not how they play, and it is the figure a
+      // reader would compare against another manager in three leagues. The
+      // threshold above stays per-season, because that is what the setting
+      // says; the sentence quotes the rate that means something.
+      const leagueSeasons = report.counts.leagueSeasons;
+      const rate =
+        leagueSeasons > 0
+          ? `about ${(count / leagueSeasons).toFixed(1)} per league-season`
+          : `about ${perSeason.toFixed(1)} a year`;
       return {
         templateId: "trades_often",
-        text: `Trades a lot. ${plural(count, "trade")} in ${plural(report.identity.seasonsCovered, "season")}, about ${perSeason.toFixed(1)} a year.`,
+        text: `Trades a lot. ${plural(count, "trade")} across ${plural(leagueSeasons, "league-season")} in ${plural(report.identity.seasonsCovered, "season")}, ${rate}.`,
         sampleSize: count,
       };
     },
@@ -120,10 +146,11 @@ const TEMPLATES: Template[] = [
     build: (report, w) => {
       const margin = report.trading.avgValueMargin.dynasty;
       const sample = report.trading.avgValueMarginSampleSize.dynasty;
-      if (margin === null || sample === null || margin >= -w.marginDeadzone) return null;
+      if (margin === null || sample === null || marginShare(margin) >= -w.marginDeadzone)
+        return null;
       return {
         templateId: "pays_up_dynasty",
-        text: `Pays up in dynasty. Gives up ${pct(margin)} more value than market, over ${plural(sample, "graded trade")}.`,
+        text: `Pays up in dynasty. Gives up ${pct(marginShare(margin))} more value than market, over ${plural(sample, "graded trade")}.`,
         sampleSize: sample,
       };
     },
@@ -133,10 +160,11 @@ const TEMPLATES: Template[] = [
     build: (report, w) => {
       const margin = report.trading.avgValueMargin.dynasty;
       const sample = report.trading.avgValueMarginSampleSize.dynasty;
-      if (margin === null || sample === null || margin <= w.marginDeadzone) return null;
+      if (margin === null || sample === null || marginShare(margin) <= w.marginDeadzone)
+        return null;
       return {
         templateId: "gets_value_dynasty",
-        text: `Gets value in dynasty. Comes out ${pct(margin)} ahead of market, over ${plural(sample, "graded trade")}.`,
+        text: `Gets value in dynasty. Comes out ${pct(marginShare(margin))} ahead of market, over ${plural(sample, "graded trade")}.`,
         sampleSize: sample,
       };
     },
@@ -146,10 +174,11 @@ const TEMPLATES: Template[] = [
     build: (report, w) => {
       const margin = report.trading.avgValueMargin.redraft;
       const sample = report.trading.avgValueMarginSampleSize.redraft;
-      if (margin === null || sample === null || margin >= -w.marginDeadzone) return null;
+      if (margin === null || sample === null || marginShare(margin) >= -w.marginDeadzone)
+        return null;
       return {
         templateId: "pays_up_redraft",
-        text: `Pays up in redraft. Gives up ${pct(margin)} more value than market, over ${plural(sample, "graded trade")}.`,
+        text: `Pays up in redraft. Gives up ${pct(marginShare(margin))} more value than market, over ${plural(sample, "graded trade")}.`,
         sampleSize: sample,
       };
     },
@@ -159,10 +188,11 @@ const TEMPLATES: Template[] = [
     build: (report, w) => {
       const margin = report.trading.avgValueMargin.redraft;
       const sample = report.trading.avgValueMarginSampleSize.redraft;
-      if (margin === null || sample === null || margin <= w.marginDeadzone) return null;
+      if (margin === null || sample === null || marginShare(margin) <= w.marginDeadzone)
+        return null;
       return {
         templateId: "gets_value_redraft",
-        text: `Gets value in redraft. Comes out ${pct(margin)} ahead of market, over ${plural(sample, "graded trade")}.`,
+        text: `Gets value in redraft. Comes out ${pct(marginShare(margin))} ahead of market, over ${plural(sample, "graded trade")}.`,
         sampleSize: sample,
       };
     },

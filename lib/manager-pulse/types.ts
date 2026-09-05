@@ -234,7 +234,31 @@ export type ManagerAffinity = {
 // 6.5 Trading
 // ---------------------------------------------------------------------------
 
-export type TradeVerdictCounts = Partial<Record<string, number>>;
+/**
+ * The six outcomes a trade can land in, FROM THIS MANAGER'S SEAT.
+ *
+ * These are buckets, not Signal Check's own verdict sentence. That sentence
+ * carries the margin inside it ("Side A wins by 22.7% of total trade value."),
+ * so counting sentences produced one row per trade: a manager with 251 graded
+ * trades got a 251-row "distribution" in which almost every count was 1, which
+ * is a list of trades wearing a histogram's label. Bucketing by the margin the
+ * report already holds is what makes it a distribution.
+ *
+ * The two thresholds live in `wording` on the settings row, like every other
+ * line between one word and another in this feature.
+ */
+export const TRADE_VERDICT_BUCKETS = [
+  "clear_win",
+  "slight_win",
+  "even",
+  "slight_loss",
+  "clear_loss",
+  "ungraded",
+] as const;
+
+export type TradeVerdictBucket = (typeof TRADE_VERDICT_BUCKETS)[number];
+
+export type TradeVerdictCounts = Partial<Record<TradeVerdictBucket, number>>;
 
 export type PositionAppetite = Partial<Record<TradePosition, number>>;
 
@@ -243,6 +267,19 @@ export type OverpayEntry = {
   subject: string;
   subjectLabel: string;
   playerId: string | null;
+  /**
+   * Which of the two independent groupings produced this row.
+   *
+   * The card that renders these separates them, because they answer different
+   * questions: a player row is a trade target ("they pay up for this man"),
+   * and a position row is a standing habit ("they pay up for running backs").
+   * Mixed into one list, a reader cannot tell a name from a category without
+   * already knowing every player in the league.
+   */
+  kind: "player" | "position";
+  /** The position, for a player row we could resolve one for, and for every
+   *  position row. Drives the position chip on the card; never invented. */
+  position: TradePosition | null;
   /** Negative means they habitually give up more than they get, priced at market. */
   avgMarginPct: number;
   sampleSize: number;
@@ -252,6 +289,38 @@ export type TradePartnerEntry = {
   sleeperUserId: string;
   handle: string | null;
   tradeCount: number;
+};
+
+/**
+ * Which picks moved in, which moved out, and in which rounds.
+ *
+ * A single "picks traded" count cannot tell a manager who buys picks from one
+ * who sells them, and those are opposite strategies: the first is rebuilding,
+ * the second is going for it this year. It also cannot tell three firsts from
+ * three fourths. `byRound` is ascending by round and holds only rounds that
+ * actually moved, so a league that never trades past round four produces four
+ * rows rather than a chart padded with zeroes.
+ *
+ * `acquired` and `sent` count every pick that moved, including the ones whose
+ * round Sleeper did not publish, so they can legitimately exceed the sum of
+ * `byRound`. `roundsKnown` states how many of them carried a round, which is
+ * what stops the chart being read as the whole story.
+ */
+export type PickFlow = {
+  acquired: number;
+  sent: number;
+  roundsKnown: number;
+  /**
+   * One row per round, ascending, capped at `display.pickRoundsShown`.
+   *
+   * A `round` of null is the TAIL: every round past the cap, summed into one
+   * row, with `laterFromRound` naming where it starts. Nothing is dropped;
+   * some leagues run drafts past round thirty and charting each of those
+   * individually produced twenty-two rows, eighteen of them a single pick.
+   */
+  byRound: { round: number | null; acquired: number; sent: number }[];
+  /** The first round folded into the tail row, or null when there is no tail. */
+  laterFromRound: number | null;
 };
 
 export type ManagerTrading = {
@@ -267,9 +336,19 @@ export type ManagerTrading = {
   ageLean: number | null;
   ageLeanSampleSize: number;
   picksTraded: PerTypeStat<number>;
+  /** The same picks as `picksTraded`, split by direction and by round. */
+  pickFlow: PerTypeStat<PickFlow>;
   mostTradedWith: PerTypeStat<TradePartnerEntry[]>;
   /** The intersection of a negative margin and enough sample to be a pattern. */
   overpays: PerTypeStat<OverpayEntry[]>;
+  /**
+   * The same computation with the sign flipped: subjects this manager comes
+   * out AHEAD on. The mirror image of `overpays` and just as actionable, in
+   * the opposite direction: an overpay is what to sell them, a bargain is what
+   * they have historically bought well and you should think twice about
+   * handing over cheaply.
+   */
+  bargains: PerTypeStat<OverpayEntry[]>;
   /** Trades that moved a pick the value source cannot price. Flagged, never dropped or zeroed. */
   tradesWithUnpricedPicks: PerTypeStat<number>;
 };
@@ -384,7 +463,14 @@ export type ManagerReport = {
 export type TendencySlice = {
   tradeCount: number;
   tradesPerSeason: number;
-  /** Mean value margin from THIS manager's side, as a share. Negative pays up. */
+  /**
+   * Mean value margin from THIS manager's side, in PERCENT units (-4.2 means
+   * four point two percent under market). Negative pays up. Signal Check's own
+   * `marginPct` convention, carried through unchanged: every consumer reads it
+   * as a percent, and the two settings written as shares
+   * (`wording.marginDeadzone`, `wording.verdictClearMargin`) are converted at
+   * the point of comparison rather than here.
+   */
   avgValueMargin: number | null;
   /** Net value bought minus sold, per position. */
   positionAppetite: Partial<Record<TradePosition, number>>;

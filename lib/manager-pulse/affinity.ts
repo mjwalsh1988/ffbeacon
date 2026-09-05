@@ -268,6 +268,7 @@ function buildAvoids(
  */
 function buildRepeatDrafts(
   input: ManagerPulseInput,
+  repeatDraftsShown: number,
 ): { repeatDrafts: RepeatDraftEntry[]; repeatDraftsSampleSize: number } {
   const draftIdsByPlayer = new Map<string, Set<string>>();
   const distinctDraftIds = new Set<string>();
@@ -293,7 +294,11 @@ function buildRepeatDrafts(
     .sort((a, b) => {
       if (b.timesDrafted !== a.timesDrafted) return b.timesDrafted - a.timesDrafted;
       return a.name.localeCompare(b.name);
-    });
+    })
+    // Capped like every other list in this report. A manager who drafts thirty
+    // leagues a year produces hundreds of these, and every one of them ships
+    // inside the cached report document as well as onto the screen.
+    .slice(0, repeatDraftsShown);
 
   return { repeatDrafts, repeatDraftsSampleSize: distinctDraftIds.size };
 }
@@ -319,7 +324,10 @@ export function computeAffinity(input: ManagerPulseInput): ManagerAffinity {
     input.settings.display.avoidsShown,
   );
 
-  const { repeatDrafts, repeatDraftsSampleSize } = buildRepeatDrafts(input);
+  const { repeatDrafts, repeatDraftsSampleSize } = buildRepeatDrafts(
+    input,
+    input.settings.display.repeatDraftsShown,
+  );
 
   return {
     favourites,

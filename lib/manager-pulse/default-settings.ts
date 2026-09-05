@@ -34,6 +34,20 @@ export type ManagerPulseCaptureSettings = {
   tendencyTtlHours: number;
   /** The footprint sync's own freshness window. */
   captureTtlMinutes: number;
+  /**
+   * How long a run that is still open may be RESUMED by a later render
+   * instead of a new one being claimed.
+   *
+   * A capture takes minutes and the page re-renders while it drains, so those
+   * renders have to rejoin the run in flight rather than ask for another one
+   * the cooldown will refuse. But a run whose worker died mid-drain stays open
+   * forever, and resuming that one would park the reader on a progress bar
+   * that can never finish. Past this age the run is left where it is (an
+   * admin can still see it at /admin/manager-pulse/runs) and a fresh one is
+   * claimed. Comfortably longer than the worker's own ten-minute reclaim of a
+   * stalled job, so a run that is merely slow is still resumed.
+   */
+  resumeMaxAgeMinutes: number;
   jobMaxAttempts: number;
   /** Whether to count best ball leagues at all. */
   includeBestBall: boolean;
@@ -92,6 +106,25 @@ export type ManagerPulseDisplaySettings = {
   tradesShown: number;
   leagueRowsShown: number;
   narrativeSentencesMax: number;
+  /**
+   * Repeat-draft rows kept in the report.
+   *
+   * Uncapped, this list was the longest thing on the page by a wide margin: a
+   * manager who drafts thirty leagues a year has hundreds of players taken
+   * twice, and every one of them shipped inside the cached report document as
+   * well as onto the screen. Capped like every other list here.
+   */
+  repeatDraftsShown: number;
+  /**
+   * Draft-pick rounds charted individually before the tail is combined.
+   *
+   * Sleeper's round numbers run as deep as a league's draft does, and some go
+   * past thirty. Charting each of them gave the pick-flow card twenty-two rows,
+   * eighteen of which were a single pick, which is a long tail wearing a
+   * chart's clothes. Everything past this is summed into one "and later" row,
+   * so nothing is dropped and the shape stays readable.
+   */
+  pickRoundsShown: number;
 };
 
 export type ManagerPulseTendencySettings = {
@@ -143,6 +176,12 @@ export type ManagerPulseWordingSettings = {
   tradesRarePerSeason: number;
   /** Below this absolute margin share, pays-up versus gets-value is noise. */
   marginDeadzone: number;
+  /**
+   * At or above this absolute margin share, a trade reads as a clear win or a
+   * clear loss rather than a slight one. Sits between `marginDeadzone` and 1,
+   * and is the upper boundary of the verdict distribution's middle buckets.
+   */
+  verdictClearMargin: number;
   /** Below this absolute age lean, buys-young versus buys-production is noise. */
   ageLeanDeadzone: number;
   /** Lineup efficiency at or above which the lineup is called good. */
@@ -181,6 +220,7 @@ export const DEFAULT_MANAGER_PULSE_SETTINGS: ManagerPulseSettings = {
     reportTtlHours: 24,
     tendencyTtlHours: 72,
     captureTtlMinutes: 60,
+    resumeMaxAgeMinutes: 20,
     jobMaxAttempts: 3,
     includeBestBall: true,
     adminBypassThrottle: true,
@@ -210,6 +250,8 @@ export const DEFAULT_MANAGER_PULSE_SETTINGS: ManagerPulseSettings = {
     tradesShown: 20,
     leagueRowsShown: 50,
     narrativeSentencesMax: 6,
+    repeatDraftsShown: 15,
+    pickRoundsShown: 6,
   },
   tendency: {
     bandStepMax: 1,
@@ -227,6 +269,7 @@ export const DEFAULT_MANAGER_PULSE_SETTINGS: ManagerPulseSettings = {
     tradesOftenPerSeason: 3,
     tradesRarePerSeason: 0.5,
     marginDeadzone: 0.02,
+    verdictClearMargin: 0.15,
     ageLeanDeadzone: 0.05,
     lineupGood: 0.93,
     lineupPoor: 0.85,
@@ -235,7 +278,20 @@ export const DEFAULT_MANAGER_PULSE_SETTINGS: ManagerPulseSettings = {
     unluckyPointsForMin: 0.35,
     unluckyPointsForMax: 0.65,
   },
-  modelVersion: "mp-1",
+  // mp-2: the verdict distribution became six fixed buckets rather than a
+  // count of Signal Check's verdict sentences, the repeat-draft list is
+  // capped, and the draft pace is a median rather than a mean. A report stored
+  // under mp-1 holds a verdictDistribution keyed on sentences, which the new
+  // card cannot read, so every one of them has to rescore rather than be
+  // rendered as an empty distribution.
+  // mp-4: the pick flow's round list is capped at display.pickRoundsShown with
+  // the tail combined, so an mp-3 payload holds rows the chart now labels
+  // differently.
+  // mp-3: trading gained a pick flow (direction and round, not one count) and
+  // a bargains list beside the overpays, and the overpay rows now carry which
+  // grouping and which position produced them. A report stored under mp-2 has
+  // none of those fields, so it has to rescore rather than render half a card.
+  modelVersion: "mp-4",
 };
 
 /**
@@ -256,6 +312,7 @@ export const MANAGER_PULSE_SETTING_BOUNDS = {
     reportTtlHours: { min: 1, max: 168 },
     tendencyTtlHours: { min: 1, max: 336 },
     captureTtlMinutes: { min: 1, max: 1440 },
+    resumeMaxAgeMinutes: { min: 1, max: 240 },
     jobMaxAttempts: { min: 1, max: 10 },
   },
   lookup: {
@@ -283,6 +340,8 @@ export const MANAGER_PULSE_SETTING_BOUNDS = {
     tradesShown: { min: 1, max: 100 },
     leagueRowsShown: { min: 1, max: 500 },
     narrativeSentencesMax: { min: 1, max: 20 },
+    repeatDraftsShown: { min: 1, max: 200 },
+    pickRoundsShown: { min: 1, max: 40 },
   },
   tendency: {
     bandStepMax: { min: 0, max: 5 },
@@ -299,6 +358,7 @@ export const MANAGER_PULSE_SETTING_BOUNDS = {
     tradesOftenPerSeason: { min: 0.1, max: 50 },
     tradesRarePerSeason: { min: 0, max: 10 },
     marginDeadzone: { min: 0, max: 0.5 },
+    verdictClearMargin: { min: 0, max: 1 },
     ageLeanDeadzone: { min: 0, max: 1 },
     lineupGood: { min: 0.5, max: 1 },
     lineupPoor: { min: 0, max: 1 },

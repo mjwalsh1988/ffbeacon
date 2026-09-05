@@ -19,35 +19,67 @@ export function ManagerReportSkeleton() {
       <p role="status" aria-live="polite" className="sr-only">
         Loading the manager report.
       </p>
+      {/* THE SAME TWO COLUMNS THE REPORT LANDS IN. A skeleton that paints one
+          full-width column and then swaps in a page with a 340px rail moves
+          every section sideways at the moment the content arrives, which is
+          the shift a skeleton exists to prevent. */}
       <div aria-hidden="true" className="space-y-6">
-        <HeaderSkeleton />
-        <LensSkeleton />
-        <div className="space-y-6">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <SectionSkeleton key={i} rows={i === 0 ? 2 : 3} />
-          ))}
+        <MastheadSkeleton />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-6">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SectionSkeleton key={i} rows={i === 0 ? 2 : 3} />
+            ))}
+          </div>
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <RailCardSkeleton key={i} rows={i === 0 ? 6 : 3} />
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function HeaderSkeleton() {
+/** The avatar, the handle, the lens switch, and the five figure tiles. */
+function MastheadSkeleton() {
   return (
-    <div className="rounded-modal border border-line bg-surface/40 p-6">
-      <div className={`h-3 w-24 ${SHIMMER}`} />
-      <div className={`mt-3 h-9 w-64 ${SHIMMER}`} />
-      <div className="mt-4 flex gap-2">
-        <div className={`h-6 w-28 ${SHIMMER}`} />
-        <div className={`h-6 w-28 ${SHIMMER}`} />
-        <div className={`h-6 w-28 ${SHIMMER}`} />
+    <div className="rounded-modal border border-line bg-surface-elevated/40 px-4 py-5 sm:px-6 sm:py-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className={`h-16 w-16 rounded-full ${SHIMMER}`} />
+          <div>
+            <div className={`h-3 w-24 ${SHIMMER}`} />
+            <div className={`mt-2 h-8 w-52 ${SHIMMER}`} />
+            <div className={`mt-2 h-3 w-72 ${SHIMMER}`} />
+          </div>
+        </div>
+        <div className={`h-11 w-64 ${SHIMMER}`} />
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className={`h-14 w-full ${SHIMMER}`} />
+        ))}
       </div>
     </div>
   );
 }
 
-function LensSkeleton() {
-  return <div className={`h-11 w-64 ${SHIMMER}`} />;
+/** One collapsible rail card: a summary row and a few figure rows. */
+function RailCardSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="overflow-hidden rounded-modal border border-line bg-surface/40">
+      <div className="border-b border-line px-4 py-3">
+        <div className={`h-4 w-32 ${SHIMMER}`} />
+      </div>
+      <div className="space-y-2 px-4 py-3.5">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className={`h-5 w-full ${SHIMMER}`} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**

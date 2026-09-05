@@ -69,11 +69,13 @@ import { lensForCategory } from "./types";
 import type {
   ManagerTrading,
   OverpayEntry,
+  PickFlow,
   PerTypeStat,
   PoolableStat,
   PositionAppetite,
   TendencySlice,
   TradePartnerEntry,
+  TradeVerdictBucket,
   TradeVerdictCounts,
 } from "./types";
 import type {
@@ -96,8 +98,16 @@ type Lens = "dynasty" | "redraft";
  */
 const AGE_LEAN_REFERENCE_AGE = 26;
 
-/** The bucket a trade's verdict falls into when Signal Check could not grade it. */
-const UNGRADED_VERDICT_LABEL = "Not graded";
+/**
+ * Trade margins arrive from Signal Check in PERCENT units: `marginPct` of 4.2
+ * means four point two percent. The wording thresholds on the settings row are
+ * SHARES, because that is what every other threshold in this feature is. This
+ * converts one to the other at the single point of comparison rather than
+ * changing either convention.
+ */
+function shareToPct(share: number): number {
+  return share * 100;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Small shared helpers                                                       */
@@ -150,10 +160,35 @@ function computeMargin(
 /* Verdict distribution                                                       */
 /* -------------------------------------------------------------------------- */
 
-function verdictDistributionForLens(trades: ManagerTrade[]): TradeVerdictCounts {
+/**
+ * Which of the six buckets one trade lands in, from THIS manager's seat.
+ *
+ * `marginPct` is already signed toward the manager (load.ts negates it when
+ * they were on the losing side), so the sign is the direction and the
+ * magnitude is the size. A trade Signal Check could not price is `ungraded`
+ * and is never folded into `even`: "we could not tell" and "it was close" are
+ * different claims and the whole feature keeps them apart.
+ */
+export function verdictBucketFor(
+  marginPct: number | null,
+  wording: { marginDeadzone: number; verdictClearMargin: number },
+): TradeVerdictBucket {
+  if (marginPct === null || !Number.isFinite(marginPct)) return "ungraded";
+  const magnitude = Math.abs(marginPct);
+  if (magnitude < shareToPct(wording.marginDeadzone)) return "even";
+  if (magnitude >= shareToPct(wording.verdictClearMargin)) {
+    return marginPct > 0 ? "clear_win" : "clear_loss";
+  }
+  return marginPct > 0 ? "slight_win" : "slight_loss";
+}
+
+function verdictDistributionForLens(
+  trades: ManagerTrade[],
+  wording: { marginDeadzone: number; verdictClearMargin: number },
+): TradeVerdictCounts {
   const counts: TradeVerdictCounts = {};
   for (const trade of trades) {
-    const key = trade.verdictLabel ?? UNGRADED_VERDICT_LABEL;
+    const key = verdictBucketFor(trade.marginPct, wording);
     counts[key] = (counts[key] ?? 0) + 1;
   }
   return counts;
@@ -295,6 +330,57 @@ function tradesWithUnpricedPicksForLens(trades: ManagerTrade[]): number {
   return trades.filter((t) => t.hasUnpricedPick).length;
 }
 
+/**
+ * Picks in, picks out, and the round each one carried.
+ *
+ * `acquired` and `sent` count EVERY pick that moved, so together they equal
+ * `picksTradedForLens` over the same trades. `byRound` counts only the ones
+ * Sleeper published a round for, ascending, and only rounds that actually
+ * moved: a chart padded out to round five in a league that has never traded
+ * past round three would draw two empty columns and invite a reader to
+ * conclude something from them.
+ */
+function pickFlowForLens(trades: ManagerTrade[], roundsShown: number): PickFlow {
+  let acquired = 0;
+  let sent = 0;
+  let roundsKnown = 0;
+  const rounds = new Map<number, { acquired: number; sent: number }>();
+
+  const bump = (round: number, key: "acquired" | "sent") => {
+    const row = rounds.get(round) ?? { acquired: 0, sent: 0 };
+    row[key] += 1;
+    rounds.set(round, row);
+    roundsKnown += 1;
+  };
+
+  for (const trade of trades) {
+    acquired += trade.incomingPickCount;
+    sent += trade.outgoingPickCount;
+    for (const round of trade.incomingPickRounds) bump(round, "acquired");
+    for (const round of trade.outgoingPickRounds) bump(round, "sent");
+  }
+
+  const ordered = [...rounds.entries()]
+    .map(([round, row]) => ({ round, acquired: row.acquired, sent: row.sent }))
+    .sort((a, b) => a.round - b.round);
+
+  const head = ordered.filter((row) => row.round <= roundsShown);
+  const tail = ordered.filter((row) => row.round > roundsShown);
+
+  const byRound: PickFlow["byRound"] = [...head];
+  let laterFromRound: number | null = null;
+  if (tail.length > 0) {
+    laterFromRound = tail[0].round;
+    byRound.push({
+      round: null,
+      acquired: tail.reduce((sum, row) => sum + row.acquired, 0),
+      sent: tail.reduce((sum, row) => sum + row.sent, 0),
+    });
+  }
+
+  return { acquired, sent, roundsKnown, byRound, laterFromRound };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Most traded with                                                           */
 /* -------------------------------------------------------------------------- */
@@ -349,6 +435,17 @@ function overpaysForLens(
   lens: Lens,
   minSample: number,
   maxRows: number,
+  /**
+   * Which side of zero to report.
+   *
+   * "overpay" keeps subjects whose mean margin is below zero, sorted worst
+   * first: what this manager habitually pays up for. "bargain" is the same
+   * computation with the comparison and the sort flipped: what they habitually
+   * come out ahead on. One function rather than two, because two would be two
+   * places for the sample floor and the grouping rules to drift apart, and the
+   * whole point of the pair is that they are the same measurement.
+   */
+  direction: "overpay" | "bargain" = "overpay",
 ): OverpayEntry[] {
   const byPosition = new Map<TradePosition, ManagerTrade[]>();
   const byPlayer = new Map<string, ManagerTrade[]>();
@@ -375,11 +472,14 @@ function overpaysForLens(
     const graded = gradedTrades(group);
     if (graded.length < minSample) continue;
     const mean = meanMarginPct(graded);
-    if (mean === null || mean >= 0) continue;
+    if (mean === null) continue;
+    if (direction === "overpay" ? mean >= 0 : mean <= 0) continue;
     entries.push({
       subject: position,
       subjectLabel: TRADE_POSITION_LABEL[position],
       playerId: null,
+      kind: "position",
+      position,
       avgMarginPct: mean,
       sampleSize: graded.length,
     });
@@ -389,18 +489,26 @@ function overpaysForLens(
     const graded = gradedTrades(group);
     if (graded.length < minSample) continue;
     const mean = meanMarginPct(graded);
-    if (mean === null || mean >= 0) continue;
+    if (mean === null) continue;
+    if (direction === "overpay" ? mean >= 0 : mean <= 0) continue;
     const player = players[playerId];
     entries.push({
       subject: playerId,
       subjectLabel: player ? player.name : playerId,
       playerId,
+      kind: "player",
+      // Never invented: a player we hold no position for gets null and the
+      // card renders no chip rather than a guessed one.
+      position: player?.position ?? null,
       avgMarginPct: mean,
       sampleSize: graded.length,
     });
   }
 
-  entries.sort((a, b) => a.avgMarginPct - b.avgMarginPct);
+  // Strongest pattern first, whichever direction that is.
+  entries.sort((a, b) =>
+    direction === "overpay" ? a.avgMarginPct - b.avgMarginPct : b.avgMarginPct - a.avgMarginPct,
+  );
   return entries.slice(0, maxRows);
 }
 
@@ -447,8 +555,8 @@ export function computeTrading(input: ManagerPulseInput): ManagerTrading {
   };
 
   const verdictDistribution: PerTypeStat<TradeVerdictCounts> = {
-    dynasty: verdictDistributionForLens(dynastyTrades),
-    redraft: verdictDistributionForLens(redraftTrades),
+    dynasty: verdictDistributionForLens(dynastyTrades, settings.wording),
+    redraft: verdictDistributionForLens(redraftTrades, settings.wording),
   };
 
   const positionAppetite: PerTypeStat<PositionAppetite> = {
@@ -463,6 +571,11 @@ export function computeTrading(input: ManagerPulseInput): ManagerTrading {
     redraft: picksTradedForLens(redraftTrades),
   };
 
+  const pickFlow: PerTypeStat<PickFlow> = {
+    dynasty: pickFlowForLens(dynastyTrades, settings.display.pickRoundsShown),
+    redraft: pickFlowForLens(redraftTrades, settings.display.pickRoundsShown),
+  };
+
   const tradesShown = settings.display.tradesShown;
 
   const mostTradedWith: PerTypeStat<TradePartnerEntry[]> = {
@@ -473,6 +586,25 @@ export function computeTrading(input: ManagerPulseInput): ManagerTrading {
   const overpays: PerTypeStat<OverpayEntry[]> = {
     dynasty: overpaysForLens(dynastyTrades, players, "dynasty", samples.minOverpaySample, tradesShown),
     redraft: overpaysForLens(redraftTrades, players, "redraft", samples.minOverpaySample, tradesShown),
+  };
+
+  const bargains: PerTypeStat<OverpayEntry[]> = {
+    dynasty: overpaysForLens(
+      dynastyTrades,
+      players,
+      "dynasty",
+      samples.minOverpaySample,
+      tradesShown,
+      "bargain",
+    ),
+    redraft: overpaysForLens(
+      redraftTrades,
+      players,
+      "redraft",
+      samples.minOverpaySample,
+      tradesShown,
+      "bargain",
+    ),
   };
 
   const tradesWithUnpricedPicks: PerTypeStat<number> = {
@@ -490,8 +622,10 @@ export function computeTrading(input: ManagerPulseInput): ManagerTrading {
     ageLean: ageLeanResult.value,
     ageLeanSampleSize: ageLeanResult.sampleSize,
     picksTraded,
+    pickFlow,
     mostTradedWith,
     overpays,
+    bargains,
     tradesWithUnpricedPicks,
   };
 }

@@ -93,3 +93,44 @@ export function formatSeconds(v: number | null): string {
   const whole = Math.round(v);
   return `${whole} second${whole === 1 ? "" : "s"}`;
 }
+
+/**
+ * A duration in seconds, in whatever unit reads as a number a person would
+ * say out loud: "42 seconds", "33 minutes", "2.1 hours".
+ *
+ * The draft clock is why this exists. An asynchronous dynasty rookie draft
+ * runs for days with overnight pauses in it, so its honest pace lands in the
+ * thousands of seconds, and "2007 seconds a pick" is a figure nobody can read
+ * at a glance even though it is true.
+ */
+export function formatDuration(v: number | null): string {
+  if (!isFiniteNumber(v)) return DASH;
+  const seconds = Math.abs(v);
+  if (seconds < 90) {
+    const whole = Math.round(seconds);
+    return `${whole} second${whole === 1 ? "" : "s"}`;
+  }
+  if (seconds < 5400) {
+    const minutes = Math.round(seconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  const hours = seconds / 3600;
+  return `${hours.toFixed(1)} hours`;
+}
+
+/**
+ * A large league-value figure at a readable width: "131.6k", "1.2M", "845".
+ *
+ * Position appetite sums market values across hundreds of trades, so its raw
+ * figure runs to six digits. Printed in full it reads as an account balance
+ * rather than as a direction, and the direction is the whole point of the
+ * card. The sign is dropped on purpose: every caller states buying or selling
+ * in words beside it.
+ */
+export function formatCompactValue(v: number | null): string {
+  if (!isFiniteNumber(v)) return DASH;
+  const magnitude = Math.abs(v);
+  if (magnitude >= 1_000_000) return `${(magnitude / 1_000_000).toFixed(1)}M`;
+  if (magnitude >= 1_000) return `${(magnitude / 1_000).toFixed(1)}k`;
+  return formatCount(magnitude);
+}

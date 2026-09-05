@@ -64,6 +64,8 @@ function nullReport(): ManagerReport {
       ageLean: null,
       ageLeanSampleSize: 0,
       picksTraded: { dynasty: null, redraft: null },
+      pickFlow: { dynasty: null, redraft: null },
+      bargains: { dynasty: null, redraft: null },
       mostTradedWith: { dynasty: [], redraft: [] },
       overpays: { dynasty: [], redraft: [] },
       tradesWithUnpricedPicks: { dynasty: null, redraft: null },
@@ -117,7 +119,10 @@ function manyFiringReport(): ManagerReport {
 
     r.trading.tradeCount = { all: 20, dynasty: 14, redraft: 6 };
     r.trading.tradesPerSeason = { all: 5, dynasty: 3.5, redraft: 1.5 };
-    r.trading.avgValueMargin = { dynasty: -0.08, redraft: 0.05 };
+    // PERCENT units, straight off Signal Check's own margin: -8 is
+    // eight percent under market. The wording thresholds are shares, and
+    // narrative.ts converts at the point of comparison.
+    r.trading.avgValueMargin = { dynasty: -8, redraft: 5 };
     r.trading.avgValueMarginSampleSize = { dynasty: 11, redraft: 7 };
     r.trading.ageLean = 0.3;
     r.trading.ageLeanSampleSize = 9;
@@ -205,7 +210,7 @@ describe("buildNarrative", () => {
 
   it("pays_up_dynasty fires on a negative dynasty margin and names dynasty", () => {
     const report = withReport((r) => {
-      r.trading.avgValueMargin.dynasty = -0.08;
+      r.trading.avgValueMargin.dynasty = -8;
       r.trading.avgValueMarginSampleSize.dynasty = 11;
     });
     const sentence = buildNarrative(report, DEFAULT_MANAGER_PULSE_SETTINGS).sentences.find(
@@ -220,7 +225,7 @@ describe("buildNarrative", () => {
 
   it("gets_value_dynasty fires on a positive dynasty margin, never alongside pays_up_dynasty", () => {
     const report = withReport((r) => {
-      r.trading.avgValueMargin.dynasty = 0.08;
+      r.trading.avgValueMargin.dynasty = 8;
       r.trading.avgValueMarginSampleSize.dynasty = 5;
     });
     const ids = buildNarrative(report, DEFAULT_MANAGER_PULSE_SETTINGS).sentences.map((s) => s.templateId);
@@ -230,7 +235,7 @@ describe("buildNarrative", () => {
 
   it("pays_up_redraft fires on a negative redraft margin and names redraft", () => {
     const report = withReport((r) => {
-      r.trading.avgValueMargin.redraft = -0.1;
+      r.trading.avgValueMargin.redraft = -10;
       r.trading.avgValueMarginSampleSize.redraft = 6;
     });
     const sentence = buildNarrative(report, DEFAULT_MANAGER_PULSE_SETTINGS).sentences.find(
@@ -243,7 +248,7 @@ describe("buildNarrative", () => {
 
   it("gets_value_redraft fires on a positive redraft margin", () => {
     const report = withReport((r) => {
-      r.trading.avgValueMargin.redraft = 0.05;
+      r.trading.avgValueMargin.redraft = 5;
       r.trading.avgValueMarginSampleSize.redraft = 7;
     });
     const ids = buildNarrative(report, DEFAULT_MANAGER_PULSE_SETTINGS).sentences.map((s) => s.templateId);

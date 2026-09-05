@@ -161,7 +161,11 @@ export function bandAdjustment(
     (settings.frequentTradesPerSeason ?? TENDENCY_DEFAULTS.FREQUENT_TRADES_PER_SEASON);
   const paysUp = typeof slice.avgValueMargin === "number" && slice.avgValueMargin < 0;
   if (tradesOften && paysUp) {
-    const pct = Math.round(Math.abs(slice.avgValueMargin as number) * 100);
+    // `avgValueMargin` is in PERCENT units, straight off Signal Check's own
+    // margin. It was multiplied by a hundred here as though it were a share,
+    // which turned a manager who averaged half a percent under market into one
+    // who "averages 50% under market" in the reason a reader is shown.
+    const pct = Math.round(Math.abs(slice.avgValueMargin as number));
     return {
       steps: clampSteps(1, settings.bandStepMax),
       reason:

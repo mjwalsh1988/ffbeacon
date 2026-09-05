@@ -269,6 +269,14 @@ function gradeForLens(
  * A draft missing either timestamp, or with fewer than two total picks, is
  * excluded: there is no honest "seconds per pick" for a draft with one pick
  * or an unknown start.
+ *
+ * THE MIDDLE DRAFT, NOT THE AVERAGE ONE, for the same reason the per-pick
+ * clock below takes a median. A slow asynchronous rookie draft runs for days
+ * with overnight pauses inside it, so its pace lands in the thousands of
+ * seconds; one of those in a set of forty pulled the mean to "2007 seconds a
+ * pick, 483% of the allowed clock" for a manager whose live drafts all ran
+ * inside their timer. A median describes the drafts this manager actually
+ * sits in; a mean describes the worst one.
  */
 function computeDraftPace(drafts: ManagerDraftFacts[]): DraftPaceFact | null {
   const perDraftSeconds: number[] = [];
@@ -288,12 +296,15 @@ function computeDraftPace(drafts: ManagerDraftFacts[]): DraftPaceFact | null {
   if (perDraftSeconds.length === 0) return null;
 
   return {
-    secondsPerPick: mean(perDraftSeconds),
+    secondsPerPick: median([...perDraftSeconds].sort((a, b) => a - b)),
     // Only drafts that published a pick_timer contribute a clock share. A
     // manager whose observed drafts never carried a timer gets 0 here rather
     // than a null the type does not offer; draftsObserved is what tells a
     // reader whether this number rests on anything.
-    clockShareUsed: perDraftClockShare.length > 0 ? mean(perDraftClockShare) : 0,
+    clockShareUsed:
+      perDraftClockShare.length > 0
+        ? median([...perDraftClockShare].sort((a, b) => a - b))
+        : 0,
     draftsObserved: perDraftSeconds.length,
   };
 }

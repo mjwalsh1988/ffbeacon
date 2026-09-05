@@ -47,6 +47,19 @@ export const MANAGER_NAV_ITEMS: ManagerNavItem[] = [
     hint: "Who this is, and how many league-seasons we found",
     icon: "dashboard",
   },
+  // HOW TO DEAL COMES SECOND, DIRECTLY AFTER THE OVERVIEW. It is the section
+  // this whole tool exists to produce: every other section is the evidence
+  // behind it. It sat seventh, under everything that feeds it, which is the
+  // order the plan document happens to list them in rather than the order a
+  // reader wants them. Moving it here moves it in the rail, the mobile dock,
+  // the capture progress list and the report body at once, because all four
+  // read this one array.
+  {
+    id: "narrative",
+    label: "How to deal",
+    hint: "What the numbers below mean for a trade offer",
+    icon: "signal",
+  },
   {
     id: "results",
     label: "Results",
@@ -76,12 +89,6 @@ export const MANAGER_NAV_ITEMS: ManagerNavItem[] = [
     label: "Roster moves",
     hint: "Waivers, FAAB, and lineup efficiency",
     icon: "swap",
-  },
-  {
-    id: "narrative",
-    label: "How to deal",
-    hint: "What the numbers above mean for a trade offer",
-    icon: "signal",
   },
   {
     id: "leagues",

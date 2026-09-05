@@ -250,6 +250,94 @@ export async function startManagerCapture(params: {
 }
 
 /**
+ * Close out any league row whose JOB has already finished.
+ *
+ * THE RACE THIS EXISTS FOR, AND IT STALLS A RUN FOREVER.
+ * `enqueue_manager_pulse_capture` (migration 0257) does not duplicate a job
+ * for a league that is already syncing for this user: it LINKS the new run's
+ * league row to the existing job. The worker closes a job by updating every
+ * `manager_pulse_run_leagues` row that points at it. Those two steps are not
+ * ordered against each other, so a link written in the instant AFTER the
+ * worker's update lands on a job that is already `done`, and nothing will ever
+ * update that row again: the queue is empty, so no worker pass touches the job
+ * a second time. The run sits at "45 of 60 leagues read" for good, the poller
+ * keeps polling, and the reader is told the sync is still going when every
+ * league it was waiting on finished minutes ago.
+ *
+ * Reconciling on read is the fix because the JOB is the fact and the run row
+ * is bookkeeping about it. This writes nothing that is not already true: a row
+ * only moves when its own job says it is finished.
+ *
+ * Costs one indexed read on a run that still has open rows, and nothing at all
+ * once there are none, which is the common case.
+ *
+ * Never throws. A failed reconcile leaves the counts where they were.
+ */
+async function reconcileFinishedJobs(
+  admin: SupabaseClient<Database>,
+  runId: string,
+): Promise<void> {
+  try {
+    const { data: open, error } = await admin
+      .from("manager_pulse_run_leagues")
+      .select("id, job_id")
+      .eq("run_id", runId)
+      .in("status", ["pending", "queued"])
+      .not("job_id", "is", null);
+    if (error || !open || open.length === 0) return;
+
+    const jobIds = [...new Set(open.map((row) => row.job_id).filter((id): id is string => !!id))];
+    if (jobIds.length === 0) return;
+
+    const { data: jobs, error: jobsError } = await admin
+      .from("league_sync_jobs")
+      .select("id, status")
+      .in("id", jobIds);
+    if (jobsError || !jobs) return;
+
+    const statusByJob = new Map(jobs.map((job) => [job.id, job.status]));
+    const doneIds: string[] = [];
+    const failedIds: string[] = [];
+    for (const row of open) {
+      const jobStatus = row.job_id ? statusByJob.get(row.job_id) : undefined;
+      if (jobStatus === "done") doneIds.push(row.id);
+      else if (jobStatus === "failed") failedIds.push(row.id);
+    }
+
+    const now = new Date().toISOString();
+    if (doneIds.length > 0) {
+      await admin
+        .from("manager_pulse_run_leagues")
+        .update({ status: "done", detail: null, updated_at: now })
+        .in("id", doneIds);
+    }
+    if (failedIds.length > 0) {
+      await admin
+        .from("manager_pulse_run_leagues")
+        .update({
+          status: "failed",
+          detail: "This league could not be read from Sleeper.",
+          updated_at: now,
+        })
+        .in("id", failedIds);
+    }
+
+    if (doneIds.length + failedIds.length === open.length) {
+      // Nothing left waiting, so the run can move on. Guarded on 'capturing'
+      // exactly as the worker's own recount is, so a late close can never send
+      // a run backwards from 'computing', 'complete' or 'error'.
+      await admin
+        .from("manager_pulse_runs")
+        .update({ status: "computing", updated_at: now })
+        .eq("id", runId)
+        .eq("status", "capturing");
+    }
+  } catch {
+    // Bookkeeping. The report is built from the league rows either way.
+  }
+}
+
+/**
  * Real, counted progress for one run. Reads `manager_pulse_runs` for the
  * status and total, then a grouped count over `manager_pulse_run_leagues`
  * for `leaguesDone` / `leaguesFailed`, which is the live truth: the run row's
@@ -258,6 +346,9 @@ export async function startManagerCapture(params: {
  * run row's own counters if that grouped read fails, rather than failing the
  * whole call over a second query.
  *
+ * Reconciles first, so a league whose job finished but whose row was never
+ * closed does not hold the run open forever. See reconcileFinishedJobs.
+ *
  * Never throws.
  */
 export async function readCaptureProgress(
@@ -265,6 +356,8 @@ export async function readCaptureProgress(
   runId: string,
 ): Promise<CaptureProgress | null> {
   try {
+    await reconcileFinishedJobs(admin, runId);
+
     const { data: run, error: runError } = await admin
       .from("manager_pulse_runs")
       .select("id, status, leagues_total, leagues_done, leagues_failed, section_status, detail")
@@ -298,6 +391,75 @@ export async function readCaptureProgress(
       sectionStatus: (run.section_status ?? {}) as unknown as CaptureProgress["sectionStatus"],
       detail: run.detail,
     };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The run this reader already has open for this exact question, if there is
+ * one.
+ *
+ * A capture is not instant: it queues footprint jobs that a background worker
+ * drains over minutes, and the page renders again (a poll's `router.refresh`,
+ * a manual reload, a return visit) while that is happening. Every one of those
+ * renders used to walk straight back into `startManagerCapture`, which claims a
+ * NEW run, which is exactly what the per-user cooldown exists to refuse. The
+ * result was the worst possible ending: the reader waited out the whole
+ * capture, the leagues finished syncing, and the next render answered "one
+ * lookup at a time" and left the report unbuilt for an hour.
+ *
+ * A RUN IS THE UNIT OF WORK, SO A SECOND RENDER RESUMES IT RATHER THAN
+ * REPLACING IT. This finds the open one and the caller carries on with it, at
+ * no cooldown cost, because nothing new is being asked of Sleeper.
+ *
+ * Only runs for the SAME (reader, subject, window) qualify. A reader who moves
+ * on to a different manager is asking a different question and takes the
+ * normal path.
+ *
+ * AND ONLY A RUN THAT IS STILL MOVING. A run whose worker died mid-drain stays
+ * open forever, and resuming that one parks the reader on a progress bar that
+ * can never reach the end, which is a worse ending than the one this function
+ * exists to fix. `capture.resumeMaxAgeMinutes` bounds it, measured against
+ * `updated_at` (which the worker stamps on every recount) rather than
+ * `requested_at`, so a slow but live capture keeps qualifying and a dead one
+ * stops.
+ *
+ * Never throws: an unreadable run is simply no run, and the caller falls back
+ * to claiming a fresh one.
+ */
+export async function findOpenRun(
+  admin: SupabaseClient<Database>,
+  params: {
+    userId: string;
+    sleeperUserId: string;
+    seasonFrom: number;
+    seasonTo: number;
+    settings: ManagerPulseSettings;
+  },
+): Promise<{ runId: string; progress: CaptureProgress } | null> {
+  try {
+    const freshEnough = new Date(
+      Date.now() - params.settings.capture.resumeMaxAgeMinutes * 60_000,
+    ).toISOString();
+
+    const { data, error } = await admin
+      .from("manager_pulse_runs")
+      .select("id")
+      .eq("user_id", params.userId)
+      .eq("sleeper_user_id", params.sleeperUserId)
+      .eq("season_from", params.seasonFrom)
+      .eq("season_to", params.seasonTo)
+      .in("status", ["pending", "capturing", "computing"])
+      .gte("updated_at", freshEnough)
+      .order("requested_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+
+    const progress = await readCaptureProgress(admin, data.id);
+    if (!progress) return null;
+    return { runId: data.id, progress };
   } catch {
     return null;
   }

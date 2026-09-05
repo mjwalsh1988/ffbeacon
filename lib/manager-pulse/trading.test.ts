@@ -68,6 +68,8 @@ function trade(
     incomingPlayerIds: [],
     outgoingPlayerIds: [],
     incomingPickCount: 0,
+    incomingPickRounds: [],
+    outgoingPickRounds: [],
     outgoingPickCount: 0,
     marginPct: null,
     verdictLabel: null,

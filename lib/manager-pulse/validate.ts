@@ -31,6 +31,7 @@ export const managerPulseSettingsSchema = z
       reportTtlHours: bounded(B.capture.reportTtlHours),
       tendencyTtlHours: bounded(B.capture.tendencyTtlHours),
       captureTtlMinutes: bounded(B.capture.captureTtlMinutes),
+      resumeMaxAgeMinutes: bounded(B.capture.resumeMaxAgeMinutes),
       jobMaxAttempts: bounded(B.capture.jobMaxAttempts),
       includeBestBall: z.boolean(),
       adminBypassThrottle: z.boolean(),
@@ -64,6 +65,8 @@ export const managerPulseSettingsSchema = z
       tradesShown: bounded(B.display.tradesShown),
       leagueRowsShown: bounded(B.display.leagueRowsShown),
       narrativeSentencesMax: bounded(B.display.narrativeSentencesMax),
+      repeatDraftsShown: bounded(B.display.repeatDraftsShown),
+      pickRoundsShown: bounded(B.display.pickRoundsShown),
     }),
 
     tendency: z.object({
@@ -84,6 +87,7 @@ export const managerPulseSettingsSchema = z
       tradesOftenPerSeason: bounded(B.wording.tradesOftenPerSeason),
       tradesRarePerSeason: bounded(B.wording.tradesRarePerSeason),
       marginDeadzone: bounded(B.wording.marginDeadzone),
+      verdictClearMargin: bounded(B.wording.verdictClearMargin),
       ageLeanDeadzone: bounded(B.wording.ageLeanDeadzone),
       lineupGood: bounded(B.wording.lineupGood),
       lineupPoor: bounded(B.wording.lineupPoor),
@@ -146,6 +150,15 @@ export const managerPulseSettingsSchema = z
     message:
       "The rarely-trades threshold must be smaller than the trades-a-lot threshold, or a manager could be both.",
     path: ["wording", "tradesRarePerSeason"],
+  })
+  // The same overlap trap once more. Crossed, the verdict distribution's
+  // "even" band would swallow the "slight" one and no trade could ever be
+  // slight, so the bucket would exist on the page with a permanent zero
+  // beside it.
+  .refine((s) => s.wording.marginDeadzone < s.wording.verdictClearMargin, {
+    message:
+      "The even-trade deadzone must be smaller than the clear-win threshold, or the slight-win band disappears.",
+    path: ["wording", "marginDeadzone"],
   });
 
 export type ValidationResult =

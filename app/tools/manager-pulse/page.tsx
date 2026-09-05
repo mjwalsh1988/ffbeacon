@@ -5,7 +5,11 @@ import { pageShareMetadata } from "@/lib/page-og";
 import { createClient } from "@/lib/supabase/server";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import { PageBody } from "@/components/app-shell/page-body";
+import { PageColumns } from "@/components/app-shell/page-columns";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { listRecentLookups } from "@/lib/manager-pulse/service";
+import { RecentLookups } from "@/components/manager-pulse/recent-lookups";
+import { WhatYouGet } from "@/components/manager-pulse/what-you-get";
 import { ManagerSearchForm } from "./manager-search-form";
 // components/manager-pulse/sample-report.tsx (Wave 4, C4): the guest sample,
 // the same report components at full fidelity, fenced with the Sample badge
@@ -35,13 +39,44 @@ export default async function ManagerPulsePage() {
   } = await supabase.auth.getUser();
 
   let defaultHandle = "";
+  // The reader's own recent lookups, so the entry page is a way back into a
+  // report as well as a way into a new one. Every one of these is warm in the
+  // report cache, so following one costs no Sleeper traffic. Owner-scoped by
+  // RLS AND filtered on the user id, and it never throws.
+  let recent: Awaited<ReturnType<typeof listRecentLookups>> = [];
   if (user) {
-    const { data: prefs } = await supabase
-      .from("user_preferences")
-      .select("sleeper_league_settings")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const [{ data: prefs }, lookups] = await Promise.all([
+      supabase
+        .from("user_preferences")
+        .select("sleeper_league_settings")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      listRecentLookups(supabase, user.id),
+    ]);
     defaultHandle = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? "";
+    recent = lookups;
+  }
+
+  // SIGNED IN: the form and the reader's history in the main column, what the
+  // report contains in the rail. The page used to be one input field alone in
+  // the middle of an empty screen, which told a reader nothing about what
+  // typing a stranger's handle into it would produce.
+  if (user) {
+    return (
+      <main id="main">
+        <PageMasthead
+          eyebrow="Tools"
+          title="Manager Pulse"
+          description="Type a Sleeper handle and see how a manager actually plays: what they win, how they draft, and what they overpay for."
+        />
+        <PageColumns railLabel="What a Manager Pulse report contains" rail={<WhatYouGet />}>
+          <section aria-label="Look up a manager">
+            <ManagerSearchForm defaultHandle={defaultHandle} />
+          </section>
+          <RecentLookups lookups={recent} />
+        </PageColumns>
+      </main>
+    );
   }
 
   return (
@@ -53,39 +88,29 @@ export default async function ManagerPulsePage() {
           description="Type a Sleeper handle and see how a manager actually plays: what they win, how they draft, and what they overpay for."
         />
 
-        {user ? (
-          <section aria-label="Look up a manager" className="mt-8">
-            <div className="mx-auto max-w-2xl">
-              <ManagerSearchForm defaultHandle={defaultHandle} />
-            </div>
-          </section>
-        ) : (
-          // SignInCta carries its own <h2>, so this section is labelled by
-          // that heading rather than a second, redundant one wrapping it.
-          <section aria-labelledby="mp-signin-heading" className="mt-8">
-            <div className="mx-auto max-w-2xl">
-              <SignInCta />
-            </div>
-          </section>
-        )}
+        {/* SignInCta carries its own <h2>, so this section is labelled by that
+            heading rather than a second, redundant one wrapping it. */}
+        <section aria-labelledby="mp-signin-heading" className="mt-8">
+          <div className="mx-auto max-w-2xl">
+            <SignInCta />
+          </div>
+        </section>
 
-        {!user && (
-          <section aria-labelledby="mp-sample-heading" className="mt-12">
-            <h2
-              id="mp-sample-heading"
-              className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
-            >
-              What a report looks like
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-              Made-up numbers on a made-up manager, so you can see the shape of
-              a real one before you sign in.
-            </p>
-            <div className="mt-6">
-              <SampleManagerReport />
-            </div>
-          </section>
-        )}
+        <section aria-labelledby="mp-sample-heading" className="mt-12">
+          <h2
+            id="mp-sample-heading"
+            className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
+          >
+            What a report looks like
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-ink-muted">
+            Made-up numbers on a made-up manager, so you can see the shape of
+            a real one before you sign in.
+          </p>
+          <div className="mt-6">
+            <SampleManagerReport />
+          </div>
+        </section>
       </PageBody>
     </main>
   );

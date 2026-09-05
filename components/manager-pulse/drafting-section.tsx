@@ -28,7 +28,7 @@ import {
   formatSample,
   formatSigned,
   formatRate,
-  formatSeconds,
+  formatDuration,
 } from "./format";
 import { underLens, lensLabel } from "@/components/manager-shell/lens";
 import type { ManagerDrafting, LeagueLens } from "@/lib/manager-pulse/types";
@@ -57,11 +57,13 @@ export function DraftingSection({
   const avgGradeSample = underLens(drafting.avgDraftGradeSampleSize, lens);
 
   return (
-    <SectionFrame id="drafting" title="Draft habits" eyebrow="Section 3" accent="purple">
+    <SectionFrame id="drafting" title="Draft habits" accent="purple">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {/* The section's one hero figure: how far off market they pick. */}
         <StatTile
           label="Reach index"
           value={reachIndex === null ? null : formatSigned(reachIndex, "rounds")}
+          size="hero"
           sub="Positive means they pick earlier than the market."
           sampleSize={formatSample(reachSample, "draft") || undefined}
           emptyReason="Not enough drafts with market ADP"
@@ -223,10 +225,11 @@ function DraftClock({ drafting }: { drafting: ManagerDrafting }) {
           statement about the drafts, never a personal stat. */}
       {draftPace ? (
         <p className="rounded-card border border-dashed border-line bg-base/30 px-3 py-2 text-xs leading-relaxed text-ink-muted">
-          A fact about the room, not this manager: their drafts run at{" "}
-          {formatSeconds(draftPace.secondsPerPick)} a pick, using about{" "}
+          A fact about the room, not this manager: their middle draft runs at{" "}
+          {formatDuration(draftPace.secondsPerPick)} a pick, about{" "}
           {formatPercent(draftPace.clockShareUsed)} of the allowed clock. Measured on{" "}
-          {draftCount(draftPace.draftsObserved)}.
+          {draftCount(draftPace.draftsObserved)}. A slow offline rookie draft
+          spends most of that time overnight rather than on the clock.
         </p>
       ) : (
         <p className="rounded-card border border-dashed border-line bg-base/30 px-3 py-2 text-xs text-ink-muted">
@@ -236,9 +239,9 @@ function DraftClock({ drafting }: { drafting: ManagerDrafting }) {
 
       {perPickClock ? (
         <p className="rounded-card border border-line bg-base/40 px-3 py-2 text-sm text-ink">
-          About {formatSeconds(perPickClock.medianSeconds)} a pick, measured on{" "}
+          About {formatDuration(perPickClock.medianSeconds)} a pick, measured on{" "}
           {draftCount(perPickClock.sampleSize)}, accurate to about{" "}
-          {formatSeconds(perPickClock.errorBarMs / 1000)}.
+          {formatDuration(perPickClock.errorBarMs / 1000)}.
         </p>
       ) : (
         <p className="rounded-card border border-line bg-base/40 px-3 py-2 text-sm text-ink-muted">

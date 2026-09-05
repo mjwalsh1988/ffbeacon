@@ -223,6 +223,18 @@ export type ManagerTrade = {
   incomingPickCount: number;
   outgoingPickCount: number;
   /**
+   * The ROUND of every pick that moved, one entry per pick, on each side.
+   *
+   * Sleeper publishes a round on every traded pick, and a count alone cannot
+   * tell "traded away three firsts" from "traded away three fourths", which is
+   * the difference between a manager selling their future and one clearing out
+   * the back of a rookie draft. The arrays are parallel to the counts above
+   * rather than replacing them: a pick whose round Sleeper did not publish is
+   * still counted and simply contributes no round.
+   */
+  incomingPickRounds: number[];
+  outgoingPickRounds: number[];
+  /**
    * Signal Check's margin, SIGNED FROM THIS MANAGER'S SEAT. Positive means they
    * came out ahead at market. Null when the trade could not be graded, which is
    * a different thing from a margin of zero and must never be flattened to one.

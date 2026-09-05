@@ -53,7 +53,7 @@ import type { LeagueLens, ManagerSection } from "@/lib/manager-pulse/types";
 // typed slices. That is the point of the sample: it is not a mock-up of the
 // product, it is the product with a fixture behind it, so a layout that breaks
 // here breaks there too.
-import { IdentitySection } from "@/components/manager-pulse/identity-section";
+import { ManagerMasthead } from "@/components/manager-pulse/manager-masthead";
 import { ResultsSection } from "@/components/manager-pulse/results-section";
 import { DraftingSection } from "@/components/manager-pulse/drafting-section";
 import { AffinitySection } from "@/components/manager-pulse/affinity-section";
@@ -138,7 +138,16 @@ export function SampleManagerReport() {
       </div>
 
       <SampleSection id="identity">
-        <IdentitySection identity={report.identity} window={report.window} />
+        <ManagerMasthead
+          identity={report.identity}
+          window={report.window}
+          headingLevel={2}
+          isSample
+        />
+      </SampleSection>
+
+      <SampleSection id="narrative">
+        <NarrativeSection narrative={report.narrative} />
       </SampleSection>
 
       <SampleSection id="results">
@@ -161,12 +170,12 @@ export function SampleManagerReport() {
         <RosterOpsSection rosterOps={report.rosterOps} totalLeagueSeasons={counts} lens={lens} />
       </SampleSection>
 
-      <SampleSection id="narrative">
-        <NarrativeSection narrative={report.narrative} />
-      </SampleSection>
-
       <SampleSection id="leagues">
-        <LeaguesSection leagues={report.leagues} isSample />
+        <LeaguesSection
+          leagues={report.leagues}
+          totalLeagueSeasons={report.counts.leagueSeasons}
+          isSample
+        />
       </SampleSection>
     </section>
   );
