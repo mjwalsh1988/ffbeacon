@@ -1,6 +1,6 @@
 /**
  * Unit tests for `resolvePerTypePairSides`, the pure decision at the heart of
- * `PerTypePair` (docs/manager-pulse-plan.md section 6.0).
+ * `PerTypePair` (docs/manager-pulse/manager-pulse-plan.md section 6.0).
  *
  * This repo has no React Testing Library set up (no @testing-library/react in
  * package.json, and vitest.config.ts's `test.include` only picks up

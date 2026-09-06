@@ -422,7 +422,7 @@ When the underlying raw table changes (e.g. a value sync writes new rows to `pla
 
 ### Historical backfill on source integration
 
-When integrating a new data source, investigate historical API access during the same session. If historical data is available, write a backfill script and run it BEFORE the source goes live in nightly syncs. This avoids users seeing empty trend data after launch. If no historical access exists, document the limitation in `docs/data-sources.md` and accept that trends will accumulate from launch date forward.
+When integrating a new data source, investigate historical API access during the same session. If historical data is available, write a backfill script and run it BEFORE the source goes live in nightly syncs. This avoids users seeing empty trend data after launch. If no historical access exists, document the limitation in `docs/data-sources/data-sources.md` and accept that trends will accumulate from launch date forward.
 
 ABSOLUTE RULE: Backfill is a one-time operation. NEVER wire it into the nightly cron. Re-runs must be idempotent via the relevant unique constraint, but should not be scheduled — they would burn the public endpoint's resources for no new data.
 
@@ -1060,3 +1060,90 @@ Discord poll:
 - A rung that would make two people read the same is skipped, not used. Two
   Browns become "Brown, Brown" at the surname rung, which is a worse thing to
   say rather than a shorter way of saying the same thing.
+
+## Manager Pulse (the capture, and how it is made fast)
+
+`/tools/manager-pulse/[handle]`. One reader's whole Sleeper history read back
+to them. The plan of record is `docs/manager-pulse/manager-pulse-plan.md`; the
+2026-09-05 speed audit and the build that followed it are
+`docs/manager-pulse/manager-pulse-audit-and-speed-plan.md`. The rules below are
+that build's, and they hold for anything that touches the league sync queue,
+not only for Manager Pulse.
+
+ABSOLUTE RULE: the Sleeper call budget is
+`manager_pulse_settings.sync.sleeperCallsPerMinute`, enforced by ONE token
+bucket in `lib/sleeper-budget.ts` that every Sleeper call passes through
+(`safeFetch` acquires a token before every attempt). Never add a `sleep` as a
+rate limit. A fixed pause between jobs paces nothing: it is slower when the
+queue is empty and no safer when it is full.
+
+ABSOLUTE RULE: exactly one worker pass drains `league_sync_jobs` at a time,
+under `league_sync_worker_lease`. That is what lets an in-process bucket be the
+site's budget without a database round trip per call. A second drainer is the
+moment the bucket moves to the database, and `acquireSleeperToken` is the seam.
+Nothing else may run a drain pass inline: a route that wants work started now
+calls `wakeLeagueSyncWorker` and lets the lease holder do it.
+
+ABSOLUTE RULE: ONE CAPTURE SET. `captureLeagueRawData` in `lib/league-pulse.ts`
+is the only caller of the transaction, bracket and draft-selection stages, and
+both halves of the league pulse call it. A league synced by ANY tool holds
+everything every other tool reads, so a league League Pulse already fetched
+needs nothing more when Manager Pulse arrives.
+`leagues.capture_completed_at` is stamped only when the whole applicable set
+succeeded, and `lib/league-capture-set.test.ts` fails if a stage is called from
+anywhere else. `pulseLeagueDerived` passes `includeMatchups: false` because
+Power Pulse already syncs the slate on that path with the failed-week semantics
+it needs; `pulseLeagueFootprint` passes true.
+
+ABSOLUTE RULE: Manager Pulse freshness is `lib/manager-pulse/freshness.ts` and
+nobody else's. A SETTLED league-season (Sleeper says `status = 'complete'`, or
+its season is behind the current one) with a complete capture set is NEVER
+captured again. An unsettled one is re-captured after
+`capture.captureStaleAfterDays`. League Pulse keeps its own 60-minute TTL in
+`pulseLeagueCore`, untouched: a reader opening a deep view still gets a fresh
+league. The rule is applied TWICE, at enqueue time and again in the worker, so
+a job whose league went fresh while it waited closes without a Sleeper call.
+
+ABSOLUTE RULE: a handle being captured for one reader is JOINED by the next
+reader, never captured twice. `enqueue_manager_pulse_capture` links to an
+in-flight job for that league from ANY user before it tries to insert one, the
+live report is keyed by SUBJECT rather than by run, and the second reader's
+budget is untouched. Their panel counts the first reader's jobs finishing.
+
+ABSOLUTE RULE: the cooldown is a BUDGET of league-seasons queued per rolling
+hour (`capture.leaguesPerUserPerHour`), not one run per hour. Linked and fresh
+league-seasons cost nothing, and `try_claim_manager_pulse` RESUMES an open run
+for the same question rather than refusing it. Charging by the run made one
+large history lock a reader out for an hour, and refusing a resumed run showed
+the Throttled page to somebody who had already waited twenty minutes.
+
+ABSOLUTE RULE: a failed Sleeper request is never evidence about a manager or a
+league. `getSleeperLeaguesOrNull` and `getSleeperWeekTransactionsOrNull` return
+null for a FAILED request and `[]` only when Sleeper answered with nothing.
+Discovery with a failed season is an error that charges nothing and writes no
+run row; a failed transaction week throws so the job retries. Collapsing those
+two cases is how a 429 became a cached, confident, wrong report for 24 hours.
+
+ABSOLUTE RULE: the report is computed by the drainer
+(`lib/manager-pulse/finalize.ts`), never inside a page render. The page reads a
+cache or shows progress, and `service.ts` must never import `computeFootprint`.
+
+ABSOLUTE RULE: a live report is labelled with its coverage IN WORDS above the
+fold, lives only in `manager_pulse_live_reports`, is NEVER written to
+`manager_pulse_cache` or `manager_pulse_tendencies`, and is recomputed no more
+often than `shouldComputeLiveReport` allows. Nothing downstream may read a
+partial opinion.
+
+ABSOLUTE RULE: the progress bar's FILL is bound to counted work. The travelling
+band, the striped in-progress segment, the clock and the estimate decorate or
+annotate it and never move it. The clock is never inside a live region, the
+band and the segment are the only visible things allowed to be `aria-hidden`,
+and under `prefers-reduced-motion` nothing moves. The live region speaks on a
+status change, every fifth league, the estimate's first appearance and then at
+most once a minute, a live-report update at most once per 30 seconds naming
+only the COVERAGE, and completion. Never the clock, never every poll.
+
+ABSOLUTE RULE: `scripts/measure-manager-pulse.ts` is the ONLY code allowed to
+null `leagues.last_pulsed_at` or `leagues.capture_completed_at`. It refuses to
+reset a league that is somebody's live relayed room, and without `--cold` it
+writes nothing at all.

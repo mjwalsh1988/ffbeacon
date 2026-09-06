@@ -258,15 +258,6 @@ export function ManagerPulseSettingsManager({
           max={MANAGER_PULSE_SETTING_BOUNDS.capture.maxLeaguesPerSeason.max}
         />
         <Field
-          label="Run cooldown, seconds"
-          value={settings.capture.runCooldownSeconds}
-          onChange={(v) => patch("capture", { runCooldownSeconds: Math.trunc(v) })}
-          hint="Seconds one user must wait between runs."
-          step="60"
-          min={MANAGER_PULSE_SETTING_BOUNDS.capture.runCooldownSeconds.min}
-          max={MANAGER_PULSE_SETTING_BOUNDS.capture.runCooldownSeconds.max}
-        />
-        <Field
           label="Report TTL, hours"
           value={settings.capture.reportTtlHours}
           onChange={(v) => patch("capture", { reportTtlHours: Math.trunc(v) })}
@@ -285,22 +276,22 @@ export function ManagerPulseSettingsManager({
           max={MANAGER_PULSE_SETTING_BOUNDS.capture.tendencyTtlHours.max}
         />
         <Field
-          label="Capture TTL, minutes"
-          value={settings.capture.captureTtlMinutes}
-          onChange={(v) => patch("capture", { captureTtlMinutes: Math.trunc(v) })}
-          hint="Minutes before the footprint sync fetches from Sleeper again."
+          label="Re-capture an unfinished season after, days"
+          value={settings.capture.captureStaleAfterDays}
+          onChange={(v) => patch("capture", { captureStaleAfterDays: Math.trunc(v) })}
+          hint="An unsettled league-season whose capture set is older than this is re-captured. A settled one never is."
           step="1"
-          min={MANAGER_PULSE_SETTING_BOUNDS.capture.captureTtlMinutes.min}
-          max={MANAGER_PULSE_SETTING_BOUNDS.capture.captureTtlMinutes.max}
+          min={MANAGER_PULSE_SETTING_BOUNDS.capture.captureStaleAfterDays.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.capture.captureStaleAfterDays.max}
         />
         <Field
-          label="Resume an open run for, minutes"
-          value={settings.capture.resumeMaxAgeMinutes}
-          onChange={(v) => patch("capture", { resumeMaxAgeMinutes: Math.trunc(v) })}
-          hint="A capture still in flight is rejoined by later page loads rather than charged a second cooldown. Past this age it is abandoned and a fresh run is claimed."
+          label="League-seasons one reader may queue per hour"
+          value={settings.capture.leaguesPerUserPerHour}
+          onChange={(v) => patch("capture", { leaguesPerUserPerHour: Math.trunc(v) })}
+          hint="The cooldown as a budget. Linked and fresh leagues cost nothing."
           step="1"
-          min={MANAGER_PULSE_SETTING_BOUNDS.capture.resumeMaxAgeMinutes.min}
-          max={MANAGER_PULSE_SETTING_BOUNDS.capture.resumeMaxAgeMinutes.max}
+          min={MANAGER_PULSE_SETTING_BOUNDS.capture.leaguesPerUserPerHour.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.capture.leaguesPerUserPerHour.max}
         />
         <Field
           label="Job max attempts"
@@ -327,6 +318,111 @@ export function ManagerPulseSettingsManager({
             hint="On lets an admin look up as many managers as they like, as often as they like, which is what makes the tool testable. It skips throttling only: no extra data, no larger league cap, and no change to what a report says. Turn it off to feel exactly what a reader feels."
           />
         </div>
+      </Group>
+
+      <Group
+        title="Sync"
+        description="How the drainer talks to Sleeper and how the progress panel polls. Changes apply on the next pass; nothing is recomputed."
+      >
+        <Field
+          label="Sleeper calls per minute"
+          value={settings.sync.sleeperCallsPerMinute}
+          onChange={(v) => patch("sync", { sleeperCallsPerMinute: Math.trunc(v) })}
+          hint="The token bucket in front of every Sleeper call."
+          step="10"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.sleeperCallsPerMinute.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.sleeperCallsPerMinute.max}
+        />
+        <Field
+          label="Max calls per pass"
+          value={settings.sync.maxCallsPerPass}
+          onChange={(v) => patch("sync", { maxCallsPerPass: Math.trunc(v) })}
+          hint="A drainer pass hands off after this many calls."
+          step="10"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.maxCallsPerPass.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.maxCallsPerPass.max}
+        />
+        <Field
+          label="Job concurrency"
+          value={settings.sync.jobConcurrency}
+          onChange={(v) => patch("sync", { jobConcurrency: Math.trunc(v) })}
+          hint="Leagues one pass syncs at once. Cannot exceed jobs per claim."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.jobConcurrency.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.jobConcurrency.max}
+        />
+        <Field
+          label="Jobs per claim"
+          value={settings.sync.jobsPerClaim}
+          onChange={(v) => patch("sync", { jobsPerClaim: Math.trunc(v) })}
+          hint="Rows one claim takes."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.jobsPerClaim.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.jobsPerClaim.max}
+        />
+        <Field
+          label="Pass budget, seconds"
+          value={settings.sync.passBudgetSeconds}
+          onChange={(v) => patch("sync", { passBudgetSeconds: Math.trunc(v) })}
+          hint="Seconds one pass may run. Stays under the route's 300-second maxDuration."
+          step="10"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.passBudgetSeconds.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.passBudgetSeconds.max}
+        />
+        <Field
+          label="Stale processing, minutes"
+          value={settings.sync.staleProcessingMinutes}
+          onChange={(v) => patch("sync", { staleProcessingMinutes: Math.trunc(v) })}
+          hint="A job still processing after this many minutes had no worker finish it."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.staleProcessingMinutes.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.staleProcessingMinutes.max}
+        />
+        <Field
+          label="Poll interval, ms"
+          value={settings.sync.pollIntervalMs}
+          onChange={(v) => patch("sync", { pollIntervalMs: Math.trunc(v) })}
+          hint="The panel's poll while a run is open. Must stay below the failure backoff."
+          step="100"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.pollIntervalMs.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.pollIntervalMs.max}
+        />
+        <Field
+          label="Poll failure backoff, ms"
+          value={settings.sync.pollFailureBackoffMs}
+          onChange={(v) => patch("sync", { pollFailureBackoffMs: Math.trunc(v) })}
+          hint="The panel's poll after a failed request."
+          step="100"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.pollFailureBackoffMs.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.pollFailureBackoffMs.max}
+        />
+        <Field
+          label="Live report, first after"
+          value={settings.sync.liveReportFirstAfter}
+          onChange={(v) => patch("sync", { liveReportFirstAfter: Math.trunc(v) })}
+          hint="League-seasons finished before the first live report."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.liveReportFirstAfter.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.liveReportFirstAfter.max}
+        />
+        <Field
+          label="Live report, every N leagues"
+          value={settings.sync.liveReportEveryLeagues}
+          onChange={(v) => patch("sync", { liveReportEveryLeagues: Math.trunc(v) })}
+          hint="After the first live report, then every N more league-seasons."
+          step="1"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.liveReportEveryLeagues.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.liveReportEveryLeagues.max}
+        />
+        <Field
+          label="Live report, min interval ms"
+          value={settings.sync.liveReportMinIntervalMs}
+          onChange={(v) => patch("sync", { liveReportMinIntervalMs: Math.trunc(v) })}
+          hint="Never more often than this, however many leagues finish."
+          step="1000"
+          min={MANAGER_PULSE_SETTING_BOUNDS.sync.liveReportMinIntervalMs.min}
+          max={MANAGER_PULSE_SETTING_BOUNDS.sync.liveReportMinIntervalMs.max}
+        />
       </Group>
 
       <Group

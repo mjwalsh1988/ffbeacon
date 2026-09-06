@@ -43,7 +43,7 @@ export function underLens<T>(
  * The league types a PerTypeStat should render under the active lens.
  *
  * Under "all" this returns BOTH dynasty and redraft, because a value-priced
- * figure has no combined form (docs/manager-pulse-plan.md 6.0: averaging a
+ * figure has no combined form (docs/manager-pulse/manager-pulse-plan.md 6.0: averaging a
  * dynasty margin with a redraft margin produces a number with no unit) and the
  * two are shown side by side instead. Under a specific lens it returns just
  * that one. This is the whole dynasty/redraft-never-pools rule expressed as one

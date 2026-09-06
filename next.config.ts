@@ -109,7 +109,7 @@ const nextConfig: NextConfig = {
       //
       // The Ryan Gold pair that used to sit here is gone. Both of its articles
       // were removed on 2026-07-30 as front-office news with no fantasy bearing
-      // (docs/beacon-brief-removals-2026-07-30.md), which left the redirect
+      // (docs/beacon-brief/beacon-brief-removals-2026-07-30.md), which left the redirect
       // pointing at a deleted page. A permanent redirect to a 404 is worse for
       // both readers and crawlers than the 404 itself, so the pair came out with
       // the articles. The retired slug now 404s, which is the honest answer.

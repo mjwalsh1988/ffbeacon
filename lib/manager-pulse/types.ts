@@ -9,7 +9,7 @@
  *   engine, two consumers: the /tools/manager-pulse page, and League Pulse
  *   Trade Ideas (section 8), which reads the compact tendency DTO only.
  *
- * THE RULES THIS FILE'S SHAPES ENCODE (docs/manager-pulse-plan.md)
+ * THE RULES THIS FILE'S SHAPES ENCODE (docs/manager-pulse/manager-pulse-plan.md)
  *
  *   1. PURE ENGINE. Every module in lib/manager-pulse/ up through engine.ts
  *      takes plain data and returns plain data: no SupabaseClient, no fetch,
@@ -519,21 +519,31 @@ export type ManagerSection =
   | "narrative"
   | "leagues";
 
-export type SectionStatus = "pending" | "ready" | "unavailable";
-
 /** Real, counted progress. Never a fraction bound to a timer. */
 export type CaptureProgress = {
   runId: string;
   status: "pending" | "capturing" | "computing" | "complete" | "error" | "throttled";
+  /** ISO, from manager_pulse_runs.requested_at. The clock's anchor. */
+  requestedAt: string;
   leaguesTotal: number;
   leaguesDone: number;
   leaguesFailed: number;
-  sectionStatus: Partial<Record<ManagerSection, SectionStatus>>;
+  /** Linked jobs currently 'processing'. */
+  leaguesProcessing: number;
+  /**
+   * How many pending jobs belonging to OTHER lookups were created before this
+   * run's own oldest pending job. This is a measure of how busy the queue is,
+   * NOT a position in a line: since migration 0263 the claim interleaves
+   * owners round-robin rather than draining oldest-first, so a lower number
+   * here does not mean this run's jobs are picked up sooner.
+   */
+  queueAhead: number;
+  /** ISO of the newest updated_at across this run's jobs; null when it has none. */
+  workerSeenAt: string | null;
+  /** manager_pulse_live_reports.version for this run's subject; 0 when none. */
+  partialVersion: number;
   detail: string | null;
 };
-
-/** Whichever sections are already computed while capture drains. */
-export type PartialReport = Partial<Pick<ManagerReport, ManagerSection>>;
 
 export type GetManagerFootprintRequest = {
   /** One of handle or sleeperUserId is required. */
@@ -541,8 +551,6 @@ export type GetManagerFootprintRequest = {
   sleeperUserId?: string;
   /** Window size in seasons, clamped to settings.capture bounds. */
   seasons?: number;
-  /** A subset of sections, for a partial load. Omit for the full report. */
-  sections?: ManagerSection[];
   /** How stale, in ms, a cached report may be before it is treated as absent. */
   maxAge?: number;
 };
@@ -550,9 +558,15 @@ export type GetManagerFootprintRequest = {
 /** The full report. Never throws. */
 export type ManagerFootprintResult =
   | { status: "ready"; report: ManagerReport; generatedAt: string; stale: boolean }
-  | { status: "building"; progress: CaptureProgress; partial: PartialReport }
+  | { status: "building"; progress: CaptureProgress }
   | { status: "not_found"; handle: string }
-  | { status: "throttled"; retryAfterSeconds: number }
+  | {
+      status: "throttled";
+      retryAfterSeconds: number;
+      /** The league-season budget this hour, when the caller has it (MPS-T028, MPS-T045). */
+      budgetUsed?: number;
+      budgetTotal?: number;
+    }
   | { status: "empty"; reason: "no_leagues" | "window_empty" }
   | { status: "error"; detail: string };
 

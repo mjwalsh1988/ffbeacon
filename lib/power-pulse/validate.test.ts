@@ -130,7 +130,7 @@ describe("mergePowerPulseSettings: war fallback", () => {
 });
 
 /**
- * Opponent strength (3.1 and 3.3 of docs/projection-engine-plan.md): the
+ * Opponent strength (3.1 and 3.3 of docs/projection-engine/projection-engine-plan.md): the
  * current-season lookup and the shrunk-multiplier read are both settings
  * values now, so a partial admin save must not silently drop a position's
  * reliability the way a partial war save must not drop a field.

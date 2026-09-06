@@ -19,7 +19,7 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
-import { isValidSleeperHandle } from "@/lib/manager-pulse/discover";
+import { isValidSleeperHandle } from "@/lib/manager-pulse/handle";
 
 export function ManagerSearchForm({ defaultHandle = "" }: { defaultHandle?: string }) {
   const router = useRouter();

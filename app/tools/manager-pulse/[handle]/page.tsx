@@ -1,34 +1,45 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+// Aliased: this route already exports its own `dynamic` (Next's route-segment
+// config below, `export const dynamic = "force-dynamic"`), and the two names
+// would collide.
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, Clock, SearchX, Users } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { isValidSleeperHandle } from "@/lib/manager-pulse/discover";
-import type { LeagueLens, ManagerReport, ManagerSection } from "@/lib/manager-pulse/types";
+import type { LeagueLens, ManagerReport } from "@/lib/manager-pulse/types";
 import { formatEastern } from "@/lib/datetime";
-import {
-  ManagerShell,
-  LensSwitch,
-  defaultLens,
-  MANAGER_NAV_ITEMS,
-  managerSectionElementId,
-} from "@/components/manager-shell";
+import { ManagerShell, LensSwitch, defaultLens } from "@/components/manager-shell";
 import { ManagerSearchForm } from "../manager-search-form";
 import { ManagerReportSkeleton } from "./report-skeleton";
 
 // lib/manager-pulse/service.ts (Wave 3, B2) landed while this page was being
-// written. THE PUBLIC DOOR per docs/manager-pulse-plan.md 3.1:
+// written. THE PUBLIC DOOR per docs/manager-pulse/manager-pulse-plan.md 3.1:
 // getManagerFootprint(admin, userId, request) never throws. `userId` is the
 // SIGNED-IN READER (what the cooldown metres), never the report's subject.
 import { getManagerFootprint } from "@/lib/manager-pulse/service";
 
-// components/manager-pulse/capture-progress.tsx owns its own polling (GET
-// /api/manager-pulse/runs/[id] via use-capture-progress.ts). It takes the whole
-// CaptureProgress this render already has, so the panel paints real counts on
-// first frame instead of an empty bar waiting for its first poll to land.
-import { CaptureProgressPanel } from "@/components/manager-pulse/capture-progress";
+// The polling constants (MPS-T044) for the "building" branch's live report,
+// read once here rather than left to the hook's own defaults, so an admin
+// tuning `manager_pulse_settings.sync` changes this page's poll cadence
+// without a deploy.
+import { loadManagerPulseSettings } from "@/lib/manager-pulse/settings";
 
+// The whole "building" experience (capture progress, the coverage banner, and
+// the live report itself once the drainer has written one) lives in its own
+// client component (MPS-T043) because it has to poll and hold state; see that
+// file's own header for why the section tree is composed there again rather
+// than imported from here.
+//
+// A STATIC IMPORT, deliberately. Making this dynamic was tried and measured:
+// it moved the route from 24 kB to 24.6 kB, because next/dynamic on a client
+// boundary from a server component still pulls that boundary into the initial
+// payload. The split that actually pays lives one level down, inside
+// live-manager-report.tsx, which lazily loads the masthead / rail / section
+// tree (components/manager-pulse/live-report-body.tsx) only once a live report
+// exists to render. That is where the weight was.
+import { LiveManagerReport } from "@/components/manager-pulse/live-manager-report";
 // The eight report sections (Wave 4, C2 covers 6.1-6.4, C3 covers 6.5-6.8),
 // matching their actual prop shapes: each takes the specific ManagerReport
 // slice it renders (not the whole report), and only the ones built on
@@ -52,10 +63,11 @@ import { LeaguesSection } from "@/components/manager-pulse/leagues-section";
 import { SectionFrame } from "@/components/manager-pulse/section-frame";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * These pages describe a named real person, assembled from their public
- * Sleeper history. They must never be indexed (docs/manager-pulse-plan.md
+ * Sleeper history. They must never be indexed (docs/manager-pulse/manager-pulse-plan.md
  * 7.1), regardless of whether the lookup below succeeds.
  */
 export async function generateMetadata({
@@ -83,7 +95,7 @@ export default async function ManagerPulseReportPage({
   const handle = rawHandle.trim().toLowerCase();
 
   // SIGNED IN ONLY, gated server-side, independently of the entry page's own
-  // gate (docs/manager-pulse-plan.md 7.2: a client prop is never a security
+  // gate (docs/manager-pulse/manager-pulse-plan.md 7.2: a client prop is never a security
   // boundary). Cheap: one auth read, no Sleeper call and no compute, so it
   // stays on the page's own await rather than inside the boundary below.
   const supabase = await createClient();
@@ -101,7 +113,7 @@ export default async function ManagerPulseReportPage({
   }
 
   // EVERYTHING THAT CAN COST A SLEEPER ROUND TRIP OR A COMPUTE LIVES INSIDE
-  // THIS ONE BOUNDARY (docs/manager-pulse-plan.md 7.4, finding 1). The page
+  // THIS ONE BOUNDARY (docs/manager-pulse/manager-pulse-plan.md 7.4, finding 1). The page
   // itself never awaits `getManagerFootprint`: on a cold lookup that call can
   // carry several Sleeper requests, and blocking the whole page on it left
   // eight `<Suspense>` boundaries below with nothing left to suspend on,
@@ -131,13 +143,24 @@ async function ManagerReportBoundary({
   lensParam: string | undefined;
 }) {
   const adminClient = createAdminClient();
-  const result = await getManagerFootprint(adminClient, userId, { handle });
+  // One read of one small indexed row, handed to the service so it does not
+  // repeat it. The building branch below needs the panel's poll interval out
+  // of the same row, so reading it here costs nothing over reading it there:
+  // the service was going to make this query on every path anyway.
+  const settings = await loadManagerPulseSettings(adminClient);
+  const result = await getManagerFootprint(adminClient, userId, { handle }, settings);
 
   if (result.status === "not_found") {
     return <NotFoundState handle={result.handle} />;
   }
   if (result.status === "throttled") {
-    return <ThrottledState retryAfterSeconds={result.retryAfterSeconds} />;
+    return (
+      <ThrottledState
+        retryAfterSeconds={result.retryAfterSeconds}
+        budgetUsed={result.budgetUsed}
+        budgetTotal={result.budgetTotal}
+      />
+    );
   }
   if (result.status === "empty") {
     return <EmptyState handle={handle} reason={result.reason} />;
@@ -148,17 +171,18 @@ async function ManagerReportBoundary({
 
   if (result.status === "building") {
     const requestedLens = isLens(lensParam) ? lensParam : "all";
+    const pollingFromSettings = {
+      pollIntervalMs: settings.sync.pollIntervalMs,
+      failureBackoffMs: settings.sync.pollFailureBackoffMs,
+    };
     return (
       <ManagerShell handle={handle}>
-        <div className="space-y-6">
-          {result.partial.identity ? (
-            <ManagerMasthead identity={result.partial.identity} />
-          ) : (
-            <ReportHeading handle={handle} />
-          )}
-          <CaptureProgressPanel progress={result.progress} />
-          <PartialSections partial={result.partial} lens={requestedLens} />
-        </div>
+        <LiveManagerReport
+          handle={handle}
+          initialProgress={result.progress}
+          polling={pollingFromSettings}
+          lens={requestedLens}
+        />
       </ManagerShell>
     );
   }
@@ -193,8 +217,8 @@ async function ManagerReportBoundary({
           note={
             result.stale ? (
               <p role="status" className="text-xs text-ink-subtle">
-                Showing a saved report from {formatEastern(result.generatedAt)} while
-                we check for anything newer.
+                Showing the report generated {formatEastern(result.generatedAt)}. A fresh
+                capture will be possible once your hourly budget refills.
               </p>
             ) : null
           }
@@ -214,27 +238,6 @@ async function ManagerReportBoundary({
         </ReportColumns>
       </div>
     </ManagerShell>
-  );
-}
-
-/**
- * The page's one <h1>. None of the eight report sections render one:
- * components/manager-pulse/section-frame.tsx gives every section its own
- * <h2>, the same way components/dashboard-panel.tsx's Panel does elsewhere, so
- * this is the only place on the page that names the manager at heading level
- * one. Kept deliberately light (an eyebrow plus the handle) because the
- * Overview section immediately below already carries the avatar and the
- * headline "league-seasons found" figure; this exists for the heading
- * hierarchy, not to repeat that card.
- */
-function ReportHeading({ handle }: { handle: string }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-        Manager Pulse
-      </p>
-      <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-3xl">{handle}</h1>
-    </div>
   );
 }
 
@@ -274,145 +277,6 @@ function ReportSections({ report, lens }: { report: ManagerReport; lens: LeagueL
   );
 }
 
-/* ---------- Building: real sections where we have them, a placeholder otherwise ---------- */
-
-function PartialSections({
-  partial,
-  lens,
-}: {
-  partial: Partial<Pick<ManagerReport, ManagerSection>>;
-  lens: LeagueLens;
-}) {
-  const counts = partial.identity
-    ? {
-        leagueSeasons: partial.identity.leagueSeasonsFound,
-        dynasty: partial.identity.splits.dynasty + partial.identity.splits.bestBallDynasty,
-        redraft: partial.identity.splits.redraft + partial.identity.splits.bestBallRedraft,
-      }
-    : { leagueSeasons: 0, dynasty: 0, redraft: 0 };
-
-  return (
-    <div className="space-y-3">
-      {MANAGER_NAV_ITEMS.map((item) => (
-        <PartialSection
-          key={item.id}
-          id={item.id}
-          label={item.label}
-          partial={partial}
-          counts={counts}
-          lens={lens}
-        />
-      ))}
-    </div>
-  );
-}
-
-function PartialSection({
-  id,
-  label,
-  partial,
-  counts,
-  lens,
-}: {
-  id: ManagerSection;
-  label: string;
-  partial: Partial<Pick<ManagerReport, ManagerSection>>;
-  counts: { leagueSeasons: number; dynasty: number; redraft: number };
-  lens: LeagueLens;
-}) {
-  // Every list and figure the section itself renders already states its own
-  // sample size, so a section that has not landed yet renders as a plain
-  // waiting notice rather than a zero the report never claimed.
-  if (id === "identity") {
-    // The masthead above already renders this section when it is ready, so
-    // there is nothing left to draw here but the waiting notice the nav rail's
-    // Overview row needs an anchor for.
-    return partial.identity ? null : <PendingSection id={id} label={label} />;
-  }
-  if (id === "results") {
-    return partial.results ? (
-      <ResultsSection results={partial.results} lens={lens} />
-    ) : (
-      <PendingSection id={id} label={label} />
-    );
-  }
-  if (id === "drafting") {
-    return partial.drafting ? (
-      <DraftingSection drafting={partial.drafting} lens={lens} />
-    ) : (
-      <PendingSection id={id} label={label} />
-    );
-  }
-  if (id === "affinity") {
-    return partial.affinity ? (
-      <AffinitySection affinity={partial.affinity} />
-    ) : (
-      <PendingSection id={id} label={label} />
-    );
-  }
-  if (id === "trading") {
-    return partial.trading ? (
-      <TradingSection trading={partial.trading} counts={counts} lens={lens} />
-    ) : (
-      <PendingSection id={id} label={label} />
-    );
-  }
-  if (id === "rosterOps") {
-    return partial.rosterOps ? (
-      <RosterOpsSection
-        rosterOps={partial.rosterOps}
-        totalLeagueSeasons={counts}
-        lens={lens}
-      />
-    ) : (
-      <PendingSection id={id} label={label} />
-    );
-  }
-  if (id === "narrative") {
-    return partial.narrative ? (
-      <NarrativeSection narrative={partial.narrative} />
-    ) : (
-      <PendingSection id={id} label={label} />
-    );
-  }
-  return partial.leagues ? (
-    <LeaguesSection leagues={partial.leagues} totalLeagueSeasons={counts.leagueSeasons} />
-  ) : (
-    <PendingSection id={id} label={label} />
-  );
-}
-
-/**
- * The anchor a nav row needs for a section that has not landed yet.
- *
- * The nav rail and the mobile dock link to `#identity`, `#results` and so on
- * unconditionally, so during a build those anchors have to exist or activating
- * a nav link does nothing.
- *
- * ONE LINE, NOT A CARD. Eight full-height cards each saying "still reading
- * leagues" filled three screens with the same sentence written eight times,
- * under a progress panel that had already listed all eight sections and their
- * state. This is the anchor and the heading, and nothing else.
- *
- * No `role="status"`: the capture progress panel above is the one live region
- * on this page, and eight static strings are not status updates.
- */
-function PendingSection({ id, label }: { id: ManagerSection; label: string }) {
-  const headingId = `${managerSectionElementId(id)}-heading`;
-  return (
-    <section
-      id={managerSectionElementId(id)}
-      aria-labelledby={headingId}
-      className="flex scroll-mt-24 items-center justify-between gap-3 rounded-card border border-dashed border-line bg-surface/30 px-4 py-3"
-    >
-      <h2 id={headingId} className="text-sm font-semibold text-ink-muted">
-        {label}
-      </h2>
-      <span className="text-xs text-ink-subtle">Still reading leagues</span>
-    </section>
-  );
-}
-
 /* ---------- Not found ---------- */
 
 function NotFoundState({ handle }: { handle: string }) {
@@ -432,14 +296,27 @@ function NotFoundState({ handle }: { handle: string }) {
 
 /* ---------- Throttled ---------- */
 
-function ThrottledState({ retryAfterSeconds }: { retryAfterSeconds: number }) {
+function ThrottledState({
+  retryAfterSeconds,
+  budgetUsed,
+  budgetTotal,
+}: {
+  retryAfterSeconds: number;
+  /** The league-season budget this hour, when the caller has it (MPS-T028, MPS-T045). */
+  budgetUsed?: number;
+  budgetTotal?: number;
+}) {
   const retryAt = new Date(Date.now() + retryAfterSeconds * 1000).toISOString();
+  const body =
+    budgetUsed !== undefined && budgetTotal !== undefined
+      ? `You have queued ${budgetUsed} of ${budgetTotal} league-seasons this hour. You can queue more after ${formatEastern(retryAt)}. Reports you have already generated stay available, and a manager someone else is already capturing costs you nothing.`
+      : `You can look up another manager after ${formatEastern(retryAt)}. Reports you have already generated stay available in the meantime.`;
   return (
     <StatePage
       icon={Clock}
       eyebrow="Manager Pulse"
       title="One lookup at a time."
-      body={`You can look up another manager after ${formatEastern(retryAt)}. Reports you have already generated stay available in the meantime.`}
+      body={body}
     >
       <Link
         href="/tools/manager-pulse"

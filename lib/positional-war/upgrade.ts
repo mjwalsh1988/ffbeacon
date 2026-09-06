@@ -28,7 +28,7 @@ import { loadPositionalWarView, loadViewerCandidates } from "@/lib/league-positi
 import type { WarCurvePoint } from "@/lib/positional-war/types";
 
 /**
- * The upgrade what-if (section 15.1.2 of docs/league-pulse-positional-war-plan.md).
+ * The upgrade what-if (section 15.1.2 of docs/league-pulse/league-pulse-positional-war-plan.md).
  *
  * THE ARCHITECTURAL CONSTRAINT THIS FILE MUST NEVER VIOLATE
  *

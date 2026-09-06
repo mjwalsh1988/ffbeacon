@@ -1,5 +1,5 @@
 /**
- * The guest-view fixture for Manager Pulse (docs/manager-pulse-plan.md 7.3).
+ * The guest-view fixture for Manager Pulse (docs/manager-pulse/manager-pulse-plan.md 7.3).
  *
  * A signed-out visitor to /tools/manager-pulse sees a sign-in prompt where the
  * search box would be, and the full report below it, rendered from this

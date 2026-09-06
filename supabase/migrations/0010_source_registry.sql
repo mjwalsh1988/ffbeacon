@@ -13,7 +13,7 @@
 --   service_role  : ALL
 --
 -- Registry-driven dropdown for which data source backs rankings/trade_values.
--- See /docs/data-sources.md for the source taxonomy and fallback rules.
+-- See /docs/data-sources/data-sources.md for the source taxonomy and fallback rules.
 
 create table if not exists public.source_registry (
   slug text primary key,

@@ -20,7 +20,7 @@
  *   draft's start and end time and its pick count. It describes the room this
  *   manager happened to sit in, not a personal trait. Nothing downstream may
  *   present it as a personal stat, rank it against other managers, or feed it
- *   into Trade Ideas. See docs/manager-pulse-plan.md section 2.3A.
+ *   into Trade Ideas. See docs/manager-pulse/manager-pulse-plan.md section 2.3A.
  *
  * PER-PICK CLOCK IS THE ONE REAL PERSONAL TIMING FIGURE, AND IT STARTS EMPTY
  *   Sleeper publishes no per-pick timestamp anywhere (verified in both the

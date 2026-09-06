@@ -1,7 +1,7 @@
 /**
  * The one component that renders a `PerTypeStat`.
  *
- * Every value-priced figure in Manager Pulse (docs/manager-pulse-plan.md
+ * Every value-priced figure in Manager Pulse (docs/manager-pulse/manager-pulse-plan.md
  * section 6.0: trade margins, verdict distribution, position appetite, picks
  * traded, most traded with, overpays, unpriced-pick trades) goes through this,
  * so the never-pool rule lives in one place. Under a specific lens it renders

@@ -5,11 +5,11 @@ vi.mock("@/lib/sleeper", async (importOriginal) => {
   return {
     ...actual,
     getSleeperUser: vi.fn(),
-    getSleeperLeagues: vi.fn(),
+    getSleeperLeaguesOrNull: vi.fn(),
   };
 });
 
-import { getSleeperLeagues, getSleeperUser, type SleeperLeague } from "@/lib/sleeper";
+import { getSleeperLeaguesOrNull, getSleeperUser, type SleeperLeague } from "@/lib/sleeper";
 import { DEFAULT_MANAGER_PULSE_SETTINGS } from "./default-settings";
 import {
   HANDLE_PATTERN,
@@ -21,7 +21,7 @@ import {
 } from "./discover";
 
 const mockGetSleeperUser = vi.mocked(getSleeperUser);
-const mockGetSleeperLeagues = vi.mocked(getSleeperLeagues);
+const mockGetSleeperLeagues = vi.mocked(getSleeperLeaguesOrNull);
 
 beforeEach(() => {
   mockGetSleeperUser.mockReset();
@@ -279,5 +279,31 @@ describe("discoverLeagueSeasons", () => {
     // Only the per-season user endpoint is ever called, never a lookup keyed
     // on the previous league id.
     expect(mockGetSleeperLeagues).toHaveBeenCalledWith("u1", "2026");
+  });
+
+  /*
+   * F4/MPS-T008: a failed request is not the same fact as an empty season.
+   * `getSleeperLeaguesOrNull` returns null when the REQUEST failed (a 429, a
+   * timeout) and [] only when Sleeper genuinely answered with nothing. A
+   * season that failed must be named back to the caller so it can refuse to
+   * cache an undercounted report, rather than silently contributing zero
+   * leagues indistinguishable from a season with none.
+   */
+  it("reports a failed season separately from an empty one, and still returns the rest", async () => {
+    mockGetSleeperLeagues.mockImplementation(async (_userId, season) => {
+      if (season === "2024") return null; // the request itself failed
+      if (season === "2025") return []; // Sleeper answered: no leagues
+      return [league({ league_id: `league-${season}`, season })];
+    });
+
+    const { leagueSeasons, failedSeasons } = await discoverLeagueSeasons({
+      sleeperUserId: "u1",
+      seasonFrom: 2024,
+      seasonTo: 2026,
+      settings: DEFAULT_MANAGER_PULSE_SETTINGS,
+    });
+
+    expect(failedSeasons).toEqual([2024]);
+    expect(leagueSeasons.map((l) => l.sleeperLeagueId)).toEqual(["league-2026"]);
   });
 });

@@ -13,7 +13,7 @@ import { WhatYouGet } from "@/components/manager-pulse/what-you-get";
 import { ManagerSearchForm } from "./manager-search-form";
 // components/manager-pulse/sample-report.tsx (Wave 4, C4): the guest sample,
 // the same report components at full fidelity, fenced with the Sample badge
-// and caption rules from docs/manager-pulse-plan.md 7.3. Takes no props.
+// and caption rules from docs/manager-pulse/manager-pulse-plan.md 7.3. Takes no props.
 import { SampleManagerReport } from "@/components/manager-pulse/sample-report";
 
 export const metadata: Metadata = {

@@ -249,7 +249,7 @@ function shiftBand(band: AcceptanceBand, steps: number | undefined): AcceptanceB
  * is: an offer with the arithmetic already done.
  *
  * `tendencyBandSteps` is the ONE thing Manager Pulse is allowed to move here
- * (docs/manager-pulse-plan.md section 8.3): the band this function would
+ * (docs/manager-pulse/manager-pulse-plan.md section 8.3): the band this function would
  * already have computed, shifted by at most one step in either direction.
  * See lib/trade-finder/tendency.ts bandAdjustment, which computes and clamps
  * it before it ever reaches here. Clamped again to +-1 below as a second,
@@ -572,7 +572,7 @@ const STRATEGY_WEIGHTS: Record<TradeStrategy, ScoreWeights> = {
  * that lives in a projection, so the shorter the horizon, the more a
  * projection is actually answering the question being asked.
  *
- * See docs/projection-engine-plan.md, Part 4, for the table this constant
+ * See docs/projection-engine/projection-engine-plan.md, Part 4, for the table this constant
  * implements:
  *
  *   Redraft, any mode      | projected wins dominant | trade value secondary
@@ -759,7 +759,7 @@ export function scoreSuggestion(params: {
 
   let total: number;
   if (horizon === "rebuilder") {
-    // THE ONE HARD RULE (docs/projection-engine-plan.md, Part 4): a rebuilder
+    // THE ONE HARD RULE (docs/projection-engine/projection-engine-plan.md, Part 4): a rebuilder
     // has told us they do not care who wins in week 12, so lineupScore and
     // winsScore are never added to the sum, not multiplied by something small.
     // A candidate's ordering under this branch cannot move no matter what a

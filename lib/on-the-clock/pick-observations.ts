@@ -1,5 +1,5 @@
 /**
- * Real per-pick draft timing, captured going forward (docs/manager-pulse-plan.md
+ * Real per-pick draft timing, captured going forward (docs/manager-pulse/manager-pulse-plan.md
  * section 2.3, part B). Sleeper publishes NO timestamp on a draft pick, in the
  * REST payload or the GraphQL type. The only honest measurement is the moment
  * OUR poll first sees a pick, so this module writes that moment to

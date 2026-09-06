@@ -431,7 +431,7 @@ export async function performDraftSync(admin: Client, params: PerformSyncParams)
       console.error("[on-the-clock/sync] draft-selections ledger write failed", ledgerErr);
     }
 
-    // Real per-pick draft timing (MP-T018, docs/manager-pulse-plan.md 2.3B/C).
+    // Real per-pick draft timing (MP-T018, docs/manager-pulse/manager-pulse-plan.md 2.3B/C).
     // Sleeper never timestamps a pick; the first moment THIS poll sees it is
     // the only honest measurement we get, so it is written to
     // draft_pick_observations rather than being lost with the cache row it

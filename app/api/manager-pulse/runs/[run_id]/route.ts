@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { readCaptureProgress } from "@/lib/manager-pulse/capture";
+import { loadManagerPulseSettings } from "@/lib/manager-pulse/settings";
+import { claimManagerPulseRunPollSlot } from "@/lib/manager-pulse/run-poll-rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,7 @@ const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
  * GET /api/manager-pulse/runs/[run_id]
  *
  * Real, counted progress for one Manager Pulse run
- * (docs/manager-pulse-plan.md sections 4.5 and 7.4). The client-side poller
+ * (docs/manager-pulse/manager-pulse-plan.md sections 4.5 and 7.4). The client-side poller
  * reads this to drive the progress bar and the per-section status list while
  * a capture drains, and to back off and stop once the run reaches a terminal
  * status.
@@ -36,6 +38,15 @@ const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
  *     status, counts, and a server-written detail string. `detail` is
  *     rendered as text, never as HTML, the same rule every other
  *     server-written status string in this feature holds.
+ *   - Rate limited AFTER the ownership check, sharing one bucket with the
+ *     report route (lib/manager-pulse/run-poll-rate-limit.ts), so a stale link
+ *     or a forged run id costs a reader nothing from that budget. The limit
+ *     fails OPEN on its own outage: an already-open progress panel must not
+ *     turn into an error page because a rate limit check failed.
+ *
+ * Settings are loaded once here and threaded into both the rate limit's bucket
+ * size (sync.pollIntervalMs) and readCaptureProgress, so a poll never reads
+ * the single-row settings table twice.
  */
 export async function GET(
   _req: Request,
@@ -78,7 +89,17 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404, headers: NO_STORE_HEADERS });
   }
 
-  const progress = await readCaptureProgress(admin, runId);
+  const settings = await loadManagerPulseSettings(admin);
+
+  const allowed = await claimManagerPulseRunPollSlot(user.id, settings.sync.pollIntervalMs);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Slow down and try again shortly." },
+      { status: 429, headers: NO_STORE_HEADERS },
+    );
+  }
+
+  const progress = await readCaptureProgress(admin, runId, settings);
   if (!progress) {
     return NextResponse.json({ error: "Not found" }, { status: 404, headers: NO_STORE_HEADERS });
   }
@@ -86,10 +107,14 @@ export async function GET(
   return NextResponse.json(
     {
       status: progress.status,
+      requestedAt: progress.requestedAt,
       leaguesTotal: progress.leaguesTotal,
       leaguesDone: progress.leaguesDone,
       leaguesFailed: progress.leaguesFailed,
-      sectionStatus: progress.sectionStatus,
+      leaguesProcessing: progress.leaguesProcessing,
+      queueAhead: progress.queueAhead,
+      workerSeenAt: progress.workerSeenAt,
+      partialVersion: progress.partialVersion,
       detail: progress.detail,
     },
     { status: 200, headers: NO_STORE_HEADERS },

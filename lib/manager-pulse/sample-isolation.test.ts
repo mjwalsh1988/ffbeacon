@@ -13,7 +13,7 @@
  * app/tools/manager-pulse for an import of ./sample (or
  * @/lib/manager-pulse/sample), and fails the build if anything imports it
  * other than components/manager-pulse/sample-report.tsx (the guest view,
- * which is what section 7.3 of docs/manager-pulse-plan.md asks for) and this
+ * which is what section 7.3 of docs/manager-pulse/manager-pulse-plan.md asks for) and this
  * file's own sanity check below. If a real read path ever imports this
  * module, a fabricated number reaches a page about a real person, which is
  * exactly the failure this guard exists to catch before it ships.

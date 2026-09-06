@@ -507,7 +507,7 @@ describe("scoreSuggestion, horizon weight (Part 4: rest-of-season horizon)", () 
     // package over the wins package.
     expect(scoreValuePkg).toBeGreaterThan(scoreWinsPkg);
 
-    // THE ONE HARD RULE (docs/projection-engine-plan.md, Part 4). Same two
+    // THE ONE HARD RULE (docs/projection-engine/projection-engine-plan.md, Part 4). Same two
     // packages, lineupDelta and winsDelta swapped out for unrelated numbers on
     // both sides, everything else held fixed. If the rebuilder branch read the
     // projection at all, at least one of these four totals would move off the

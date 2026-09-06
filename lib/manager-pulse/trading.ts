@@ -1,5 +1,5 @@
 /**
- * Manager Pulse: trading section (docs/manager-pulse-plan.md 6.5), plus the
+ * Manager Pulse: trading section (docs/manager-pulse/manager-pulse-plan.md 6.5), plus the
  * cross-tool tendency DTO builder (section 8.1).
  *
  * PURE. No Supabase, no fetch, no React, no Date.now(). Takes a

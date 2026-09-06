@@ -1,7 +1,7 @@
 /**
  * Cross-league Positional WAR compute sharing (E4).
  *
- * Section 6 of docs/league-pulse-positional-war-plan.md establishes that a
+ * Section 6 of docs/league-pulse/league-pulse-positional-war-plan.md establishes that a
  * curve is a pure function of the fingerprint's inputs: no roster, no
  * ownership, nothing league-specific except its settings. Two leagues whose
  * fingerprints match therefore produce byte-identical curves, so the second

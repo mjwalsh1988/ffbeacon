@@ -16,6 +16,11 @@ export const MANAGER_PULSE_SUBPAGES = [
     description: "Recent lookups, how far each got, and what failed.",
   },
   {
+    href: "/admin/manager-pulse/queue",
+    label: "Queue",
+    description: "Queue depth, who is waiting, and whether the worker is keeping up.",
+  },
+  {
     href: "/admin/manager-pulse/cache",
     label: "Cache",
     description: "Stored reports and tendencies, and how to clear them.",

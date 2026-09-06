@@ -34,10 +34,15 @@ export default defineConfig({
     // skips those files is worse than having no test: the suite reports green
     // while the assertions never run. The oxc override above is what makes a
     // .tsx test transformable here.
+    // scripts/ is here for the same reason .tsx is: a test the runner does not
+    // discover reports nothing and reads as green. scripts/measure-manager-pulse.ts
+    // holds the only code allowed to null a league's capture stamps, so its
+    // poll-transition and argument parsing tests have to actually run.
     include: [
       "lib/**/*.test.{ts,tsx}",
       "app/**/*.test.{ts,tsx}",
       "components/**/*.test.{ts,tsx}",
+      "scripts/**/*.test.{ts,tsx}",
     ],
     globals: false,
   },

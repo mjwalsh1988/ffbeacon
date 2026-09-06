@@ -89,4 +89,60 @@ describe("progressState", () => {
       expect(state.text).not.toMatch(/%/);
     }
   });
+
+  it("names the in-progress count in the text when processing is above zero", () => {
+    const state = progressState(31, 0, 87, 3);
+    expect(state.kind).toBe("determinate");
+    if (state.kind === "determinate") {
+      expect(state.text).toBe("31 of 87 leagues read, 3 in progress");
+    }
+  });
+
+  it("names both in-progress and failed counts when both are above zero", () => {
+    const state = progressState(31, 2, 87, 3);
+    if (state.kind === "determinate") {
+      expect(state.text).toContain("3 in progress");
+      expect(state.text).toContain("2 failed");
+    }
+  });
+
+  it("omits the in-progress phrase entirely when processing is zero", () => {
+    const state = progressState(31, 0, 87, 0);
+    if (state.kind === "determinate") {
+      expect(state.text).not.toContain("in progress");
+    }
+  });
+
+  it("the processing fraction never pushes the total shown past 1.0", () => {
+    const state = progressState(80, 0, 100, 40);
+    expect(state.kind).toBe("determinate");
+    if (state.kind === "determinate") {
+      expect(state.fraction + state.processingFraction).toBeLessThanOrEqual(1);
+      expect(state.fraction + state.processingFraction).toBeCloseTo(1, 5);
+    }
+  });
+
+  it("the processing fraction is zero when nothing is processing", () => {
+    const state = progressState(31, 0, 87, 0);
+    if (state.kind === "determinate") {
+      expect(state.processingFraction).toBe(0);
+    }
+  });
+
+  it("a negative processing count contributes nothing", () => {
+    const state = progressState(31, 0, 87, -5);
+    if (state.kind === "determinate") {
+      expect(state.processingFraction).toBe(0);
+      expect(state.text).not.toContain("in progress");
+    }
+  });
+
+  it("the indeterminate branch ignores processing entirely", () => {
+    const state = progressState(6, 0, null, 40);
+    expect(state.kind).toBe("indeterminate");
+    if (state.kind === "indeterminate") {
+      expect(state.text).not.toContain("in progress");
+      expect("processingFraction" in state).toBe(false);
+    }
+  });
 });

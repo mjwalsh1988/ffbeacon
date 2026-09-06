@@ -1,5 +1,5 @@
 /**
- * Manager Pulse: "How to deal with them" (docs/manager-pulse-plan.md 6.7).
+ * Manager Pulse: "How to deal with them" (docs/manager-pulse/manager-pulse-plan.md 6.7).
  *
  * PURE. No Supabase, no fetch, no React, no `Date.now()`, and this is the
  * whole point of the module: NO LANGUAGE MODEL, EVER. Every sentence is a
@@ -20,7 +20,7 @@
  *   redraft" in the sentence itself, never leaving a reader to assume which
  *   game's value scale produced the number.
  *
- * COPY RULES (docs/manager-pulse-plan.md section 14, restated here because
+ * COPY RULES (docs/manager-pulse/manager-pulse-plan.md section 14, restated here because
  * this file is where they are enforced)
  *   - The shortest version of every string that still says the thing.
  *   - Plain words. "Pays up for" beats "exhibits a value premium on".

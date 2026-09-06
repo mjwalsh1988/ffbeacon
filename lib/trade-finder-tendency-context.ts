@@ -9,7 +9,7 @@
  * `tendencyThresholds`, so a first paint could show a tendency-adjusted band
  * and a "trades often" sentence, and the reader's very next interaction, a
  * plain Search press, would silently drop both with no wrong number produced
- * and no visible reason for the change. See docs/manager-pulse-plan.md
+ * and no visible reason for the change. See docs/manager-pulse/manager-pulse-plan.md
  * section 8 and CLAUDE.md's Trade Ideas section for what a tendency may and
  * may not do to a suggestion.
  *

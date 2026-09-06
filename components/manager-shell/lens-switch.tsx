@@ -2,7 +2,7 @@
 
 /**
  * The All / Dynasty / Redraft filter that sits at the top of a Manager Pulse
- * report (docs/manager-pulse-plan.md section 6.0).
+ * report (docs/manager-pulse/manager-pulse-plan.md section 6.0).
  *
  * Dynasty and redraft are different games with different value scales, so the
  * whole report reads through this one lens. It lives in `?lens=` so a filtered

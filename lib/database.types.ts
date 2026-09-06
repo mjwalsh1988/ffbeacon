@@ -2575,6 +2575,7 @@ export type Database = {
         Row: {
           attempts: number;
           created_at: string;
+          duration_ms: number | null;
           finished_at: string | null;
           id: string;
           job_kind: string;
@@ -2583,6 +2584,7 @@ export type Database = {
           manager_run_id: string | null;
           request_id: string | null;
           run_after: string;
+          sleeper_calls: number | null;
           sleeper_league_id: string;
           status: string;
           updated_at: string;
@@ -2591,6 +2593,7 @@ export type Database = {
         Insert: {
           attempts?: number;
           created_at?: string;
+          duration_ms?: number | null;
           finished_at?: string | null;
           id?: string;
           job_kind?: string;
@@ -2599,6 +2602,7 @@ export type Database = {
           manager_run_id?: string | null;
           request_id?: string | null;
           run_after?: string;
+          sleeper_calls?: number | null;
           sleeper_league_id: string;
           status?: string;
           updated_at?: string;
@@ -2607,6 +2611,7 @@ export type Database = {
         Update: {
           attempts?: number;
           created_at?: string;
+          duration_ms?: number | null;
           finished_at?: string | null;
           id?: string;
           job_kind?: string;
@@ -2615,6 +2620,7 @@ export type Database = {
           manager_run_id?: string | null;
           request_id?: string | null;
           run_after?: string;
+          sleeper_calls?: number | null;
           sleeper_league_id?: string;
           status?: string;
           updated_at?: string;
@@ -2636,6 +2642,27 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      league_sync_worker_lease: {
+        Row: {
+          held_until: string;
+          holder: string | null;
+          id: string;
+          updated_at: string;
+        };
+        Insert: {
+          held_until?: string;
+          holder?: string | null;
+          id?: string;
+          updated_at?: string;
+        };
+        Update: {
+          held_until?: string;
+          holder?: string | null;
+          id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       league_transactions: {
         Row: {
@@ -2751,6 +2778,8 @@ export type Database = {
       };
       leagues: {
         Row: {
+          capture_completed_at: string | null;
+          capture_error: string | null;
           created_at: string;
           format_config_id: string | null;
           id: string;
@@ -2781,6 +2810,8 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          capture_completed_at?: string | null;
+          capture_error?: string | null;
           created_at?: string;
           format_config_id?: string | null;
           id?: string;
@@ -2811,6 +2842,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          capture_completed_at?: string | null;
+          capture_error?: string | null;
           created_at?: string;
           format_config_id?: string | null;
           id?: string;
@@ -2898,6 +2931,42 @@ export type Database = {
         };
         Relationships: [];
       };
+      manager_pulse_live_reports: {
+        Row: {
+          computed_at: string;
+          coverage: number;
+          coverage_total: number;
+          model_version: string;
+          report: Json;
+          season_from: number;
+          season_to: number;
+          sleeper_user_id: string;
+          version: number;
+        };
+        Insert: {
+          computed_at?: string;
+          coverage?: number;
+          coverage_total?: number;
+          model_version: string;
+          report: Json;
+          season_from: number;
+          season_to: number;
+          sleeper_user_id: string;
+          version?: number;
+        };
+        Update: {
+          computed_at?: string;
+          coverage?: number;
+          coverage_total?: number;
+          model_version?: string;
+          report?: Json;
+          season_from?: number;
+          season_to?: number;
+          sleeper_user_id?: string;
+          version?: number;
+        };
+        Relationships: [];
+      };
       manager_pulse_run_leagues: {
         Row: {
           created_at: string;
@@ -2964,13 +3033,15 @@ export type Database = {
           counts_against_cooldown: boolean;
           detail: string | null;
           id: string;
+          leagues_charged: number;
           leagues_done: number;
           leagues_failed: number;
           leagues_total: number;
+          live_checkpoint_at: string | null;
+          live_checkpoint_done: number;
           requested_at: string;
           season_from: number;
           season_to: number;
-          section_status: Json;
           sleeper_handle: string | null;
           sleeper_user_id: string;
           status: string;
@@ -2982,13 +3053,15 @@ export type Database = {
           counts_against_cooldown?: boolean;
           detail?: string | null;
           id?: string;
+          leagues_charged?: number;
           leagues_done?: number;
           leagues_failed?: number;
           leagues_total?: number;
+          live_checkpoint_at?: string | null;
+          live_checkpoint_done?: number;
           requested_at?: string;
           season_from: number;
           season_to: number;
-          section_status?: Json;
           sleeper_handle?: string | null;
           sleeper_user_id: string;
           status?: string;
@@ -3000,13 +3073,15 @@ export type Database = {
           counts_against_cooldown?: boolean;
           detail?: string | null;
           id?: string;
+          leagues_charged?: number;
           leagues_done?: number;
           leagues_failed?: number;
           leagues_total?: number;
+          live_checkpoint_at?: string | null;
+          live_checkpoint_done?: number;
           requested_at?: string;
           season_from?: number;
           season_to?: number;
-          section_status?: Json;
           sleeper_handle?: string | null;
           sleeper_user_id?: string;
           status?: string;
@@ -6816,6 +6891,7 @@ export type Database = {
         Returns: {
           attempts: number;
           created_at: string;
+          duration_ms: number | null;
           finished_at: string | null;
           id: string;
           job_kind: string;
@@ -6824,6 +6900,7 @@ export type Database = {
           manager_run_id: string | null;
           request_id: string | null;
           run_after: string;
+          sleeper_calls: number | null;
           sleeper_league_id: string;
           status: string;
           updated_at: string;
@@ -6937,6 +7014,10 @@ export type Database = {
         Args: { p_actor_key: string };
         Returns: undefined;
       };
+      release_league_sync_lease: {
+        Args: { p_holder: string };
+        Returns: undefined;
+      };
       release_on_the_clock_sync: {
         Args: { p_draft_id: string };
         Returns: undefined;
@@ -6948,6 +7029,10 @@ export type Database = {
       signal_links_valid: { Args: { links: Json }; Returns: boolean };
       signal_target_publicly_viewable: {
         Args: { t_id: string; t_type: string };
+        Returns: boolean;
+      };
+      try_acquire_league_sync_lease: {
+        Args: { p_holder: string; p_seconds: number };
         Returns: boolean;
       };
       try_claim_league_refresh: {
@@ -6970,7 +7055,9 @@ export type Database = {
       };
       try_claim_manager_pulse: {
         Args: {
-          p_cooldown_seconds?: number;
+          p_budget_window_seconds?: number;
+          p_league_budget: number;
+          p_leagues_requested: number;
           p_season_from: number;
           p_season_to: number;
           p_sleeper_handle: string;

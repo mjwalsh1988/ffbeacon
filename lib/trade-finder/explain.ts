@@ -628,7 +628,7 @@ function capitalize(s: string): string {
 /**
  * Manager Pulse: what this counterparty's own trading history says, its own
  * short lines (`TradeSuggestion.tendencyNotes`), separate from `whyThem`.
- * Per docs/manager-pulse-plan.md section 8.4, the reader sees these as a
+ * Per docs/manager-pulse/manager-pulse-plan.md section 8.4, the reader sees these as a
  * quiet line under the acceptance band, with a link to the manager's full
  * report.
  *

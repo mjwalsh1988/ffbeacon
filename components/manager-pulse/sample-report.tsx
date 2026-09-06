@@ -1,7 +1,7 @@
 /**
  * The guest view of Manager Pulse: what /tools/manager-pulse shows below the
  * sign-in prompt, in full, before anyone has typed a Sleeper handle
- * (docs/manager-pulse-plan.md 7.2 and 7.3).
+ * (docs/manager-pulse/manager-pulse-plan.md 7.2 and 7.3).
  *
  * Full fidelity on purpose: this renders SAMPLE_MANAGER_REPORT through the
  * SAME eight section components the real report uses, so a guest sees the

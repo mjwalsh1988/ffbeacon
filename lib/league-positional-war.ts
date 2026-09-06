@@ -4,7 +4,7 @@
  * Mirrors lib/league-power-pulse.ts in shape: load one league's world, run
  * the model, upsert the cache, never throw to the caller. The differences
  * from Power Pulse are all in section 4 and section 6 of
- * docs/league-pulse-positional-war-plan.md: this model reads no roster (it
+ * docs/league-pulse/league-pulse-positional-war-plan.md: this model reads no roster (it
  * evaluates the whole projectable universe against a league-average
  * reference team, not any one team's players), does not vary by value source
  * or format, and its result is a pure enough function of the league's

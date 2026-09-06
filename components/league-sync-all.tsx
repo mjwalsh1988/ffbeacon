@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Info, RefreshCw } from "lucide-react";
 import { formatEastern } from "@/lib/datetime";
 import type { BulkSyncState } from "@/lib/league-bulk-sync-types";
+import { ProgressBar } from "@/components/manager-pulse/progress-bar";
+import { ElapsedClock } from "@/components/manager-pulse/elapsed-clock";
 
 /**
  * Sync all, on My Sleeper Leagues only.
@@ -34,8 +36,11 @@ import type { BulkSyncState } from "@/lib/league-bulk-sync-types";
  * and the same choice, as the per-row button.
  */
 
-/** How often to ask the server how far the queue got, while one is running. */
-const POLL_MS = 8_000;
+/**
+ * How often to ask the server how far the queue got, while one is running,
+ * when the caller does not pass its own `pollIntervalMs`.
+ */
+const DEFAULT_POLL_INTERVAL_MS = 2_000;
 
 /**
  * Floor between page refreshes while a batch runs.
@@ -58,12 +63,15 @@ export function LeagueSyncAll({
   initialState,
   leagueCount,
   onStateChange,
+  pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
 }: {
   initialState: BulkSyncState;
   /** Leagues on the page right now, for the button's accessible name. */
   leagueCount: number;
   /** Lets the surrounding list mark its rows queued the moment this returns. */
   onStateChange?: (state: BulkSyncState) => void;
+  /** How often to poll while a batch runs. Defaults to 2000ms. */
+  pollIntervalMs?: number;
 }) {
   const router = useRouter();
   const [state, setState] = useState<BulkSyncState>(initialState);
@@ -118,12 +126,12 @@ export function LeagueSyncAll({
       }
     };
 
-    const id = setInterval(tick, POLL_MS);
+    const id = setInterval(tick, pollIntervalMs);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [state.active, publish, router]);
+  }, [state.active, publish, router, pollIntervalMs]);
 
   const start = async () => {
     if (submitting || state.active || !state.canStart) return;
@@ -215,7 +223,9 @@ export function LeagueSyncAll({
             aria-hidden="true"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-purple"
           >
-            <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${busy ? "animate-spin motion-reduce:animate-none" : ""}`}
+            />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ink">Sync all leagues</p>
@@ -243,7 +253,7 @@ export function LeagueSyncAll({
         >
           <RefreshCw
             aria-hidden="true"
-            className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 shrink-0 ${busy ? "animate-spin motion-reduce:animate-none" : ""}`}
           />
           {label}
         </button>
@@ -324,10 +334,25 @@ function NoticeBox({
           {notice.body}
         </p>
         {showProgress && (
-          <p className="mt-1.5 font-mono text-xs tabular-nums text-ink-muted">
-            {state.done} of {state.total} synced
-            {state.failed > 0 ? `, ${state.failed} failed` : ""}
-          </p>
+          <div className="mt-2">
+            <ProgressBar
+              id={`${id}-bar`}
+              done={state.done}
+              failed={state.failed}
+              total={state.total > 0 ? state.total : null}
+              processing={state.processing}
+              ariaLabelledBy={`${id}-count`}
+            />
+            <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 font-mono text-xs tabular-nums text-ink-muted">
+              <span id={`${id}-count`}>
+                {state.done} of {state.total} synced
+                {state.failed > 0 ? `, ${state.failed} failed` : ""}
+              </span>
+              {state.active && state.requestedAt ? (
+                <ElapsedClock requestedAt={state.requestedAt} running={state.active} />
+              ) : null}
+            </p>
+          </div>
         )}
       </div>
     </div>

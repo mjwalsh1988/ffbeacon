@@ -959,7 +959,7 @@ Header now exposes a registry-driven **Source:** dropdown next to the
 - `app/actions/preferences.ts` — `saveSourcePreference` server action
   upserts `user_preferences.default_source_slug` for the signed-in user
   after validating the slug against the registry.
-- `docs/data-sources.md` — taxonomy, fallback rules, "how to add a source",
+- `docs/data-sources/data-sources.md` — taxonomy, fallback rules, "how to add a source",
   and the never-display-attribution rule (which the dropdown
   intentionally exempts — *display_name* is the only user-visible source
   reference).
@@ -1424,7 +1424,7 @@ selector). Results can be frozen and shared via an unguessable permalink with a
 branded OG image. Admins tune behavior via DB-backed settings, a versioned
 calibration rules engine, and a regression test set.
 
-Deep engineering reference: `docs/signal-check.md` (read that for exact math,
+Deep engineering reference: `docs/signal-check/signal-check.md` (read that for exact math,
 file map, and extension guide). This section is the plan-level summary.
 
 ### A. Locked decisions

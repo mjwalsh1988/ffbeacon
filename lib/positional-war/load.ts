@@ -8,7 +8,7 @@
  * the same season and week window. Two twelve-team leagues both asking for
  * (2026, week 5 through week 17, pts_ppr) get the exact same universe, so the
  * read is memoized rather than re-run per league. See
- * docs/league-pulse-positional-war-plan.md section 12.
+ * docs/league-pulse/league-pulse-positional-war-plan.md section 12.
  *
  * WHY THE CACHE IS SLICED, and this is the load-bearing decision in this file.
  *

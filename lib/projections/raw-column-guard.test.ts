@@ -3,7 +3,7 @@
  *
  * lib/projections/read.ts loadAdjustedProjections is the one path every
  * consumer of player_weekly_projections is meant to route through (see
- * docs/projection-engine-plan.md, section "3.9 Which source a reader gets").
+ * docs/projection-engine/projection-engine-plan.md, section "3.9 Which source a reader gets").
  * A module that reads projected_pts_ppr / projected_pts_half_ppr /
  * projected_pts_std directly has stepped around that path, and the two
  * numbers on a page can start disagreeing the moment it does.

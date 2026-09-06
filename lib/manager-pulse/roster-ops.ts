@@ -1,5 +1,5 @@
 /**
- * Manager Pulse: roster management section (docs/manager-pulse-plan.md 6.6).
+ * Manager Pulse: roster management section (docs/manager-pulse/manager-pulse-plan.md 6.6).
  *
  * Pure. No Supabase, no fetch, no clock, no React. Everything here is
  * arithmetic over the arrays `ManagerPulseInput` already carries.

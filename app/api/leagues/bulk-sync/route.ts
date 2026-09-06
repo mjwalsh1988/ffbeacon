@@ -10,8 +10,8 @@ import {
   BULK_SYNC_COOLDOWN_SECONDS,
   enqueueBulkLeagueSync,
   loadBulkSyncState,
-  runLeagueSyncWorker,
 } from "@/lib/league-bulk-sync";
+import { wakeLeagueSyncWorker } from "@/lib/league-sync-wake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -129,19 +129,15 @@ export async function POST(req: Request) {
   }
 
   // A head start, not the mechanism. The cron worker owns the queue and would
-  // reach these rows on its own within the minute; running one pass after the
-  // response means the first few leagues are usually already done by the time
-  // the reader has finished reading the notice. The claim is atomic, so this
-  // racing the cron costs nothing worse than one of them finding no work.
+  // reach these rows on its own within the minute; waking it now means the
+  // first few leagues are usually already done by the time the reader has
+  // finished reading the notice. This no longer runs an inline pass itself:
+  // exactly one worker pass may drain league_sync_jobs at a time (the lease
+  // in league_sync_worker_lease), and a second inline drainer here would be
+  // the moment the in-process Sleeper token bucket stops being the site's
+  // real budget for queue traffic. wakeLeagueSyncWorker never throws.
   after(async () => {
-    try {
-      await runLeagueSyncWorker(admin);
-    } catch (err) {
-      console.error(
-        "[bulk-sync] head-start worker pass failed:",
-        err instanceof Error ? err.message : err,
-      );
-    }
+    await wakeLeagueSyncWorker("bulk-sync-enqueue");
   });
 
   return NextResponse.json({

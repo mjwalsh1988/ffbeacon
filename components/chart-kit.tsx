@@ -239,7 +239,7 @@ export type SeriesStyle = {
  * against, not the validator's lighter #1a1a19 default.
  *
  * Contrast is checked at the plan's own bar (WCAG AA text contrast, 4.5:1
- * minimum, per docs/league-pulse-positional-war-plan.md section 11.4), which
+ * minimum, per docs/league-pulse/league-pulse-positional-war-plan.md section 11.4), which
  * is stricter than the dataviz skill's 3:1 mark-contrast relief band. All six
  * clear 4.5:1; five of six clear AAA (7:1). QB is brand-fixed purple and
  * clears AA only (4.95:1), which the plan anticipates ("AAA where the hue

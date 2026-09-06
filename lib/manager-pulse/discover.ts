@@ -1,7 +1,7 @@
 /**
  * Manager Pulse: handle to user id to league-seasons.
  *
- * docs/manager-pulse-plan.md sections 2.1, 4.1-4.5 and 9.
+ * docs/manager-pulse/manager-pulse-plan.md sections 2.1, 4.1-4.5 and 9.
  *
  * HANDLE VALIDATION HAPPENS BEFORE ANY NETWORK CALL. A handle reaches this
  * from a URL segment, so it is untrusted input. Sleeper's own handle grammar
@@ -25,22 +25,19 @@
  */
 
 import { categorizeLeague, type LeagueCategoryKey } from "@/lib/league-category";
-import { getSleeperUser, getSleeperLeagues, mapLimit } from "@/lib/sleeper";
+import { getSleeperUser, getSleeperLeaguesOrNull, mapLimit } from "@/lib/sleeper";
 import type { ManagerLeagueCategory, ManagerPulseSettings } from "./types";
 
-/** Sleeper's own handle grammar: lowercase alphanumeric plus underscore, 1-32 chars. */
-export const HANDLE_PATTERN = /^[a-z0-9_]{1,32}$/;
-
 /**
- * True when `raw` already matches Sleeper's handle grammar exactly, with no
- * normalization performed here. Uppercase, spaces, path separators, and an
- * empty or over-length string are all rejected, on purpose: this is the gate
- * that runs before any fetch, so it has to reject what it is actually given,
- * not a cleaned-up version of it.
+ * Re-exported from `./handle`, which holds the single copy of the grammar. It
+ * was moved out of this file because this file imports `lib/sleeper.ts`, which
+ * now carries the Sleeper call budget and therefore `node:async_hooks`, which
+ * webpack cannot bundle for a browser. The search form is a client component
+ * and imports `@/lib/manager-pulse/handle` directly.
  */
-export function isValidSleeperHandle(raw: string): boolean {
-  return typeof raw === "string" && HANDLE_PATTERN.test(raw);
-}
+import { isValidSleeperHandle } from "./handle";
+
+export { HANDLE_PATTERN, isValidSleeperHandle } from "./handle";
 
 /** How many Sleeper season requests run at once while walking a discovery window. */
 const SEASON_FETCH_CONCURRENCY = 3;
@@ -93,13 +90,26 @@ export async function resolveManagerHandle(
  * Best ball leagues are dropped entirely, before capping, when
  * `settings.capture.includeBestBall` is false: they should not count against
  * either cap for a reader who has turned them off.
+ *
+ * A SEASON WHOSE REQUEST FAILED IS NOT A SEASON WITH NO LEAGUES.
+ * `getSleeperLeaguesOrNull` returns null when the request itself failed (a
+ * timeout, a 5xx, a 429) and `[]` only when Sleeper genuinely answered with
+ * nothing. Collapsing those two would cache "no leagues this season" for a
+ * season Sleeper never actually spoke about, for as long as the report's TTL
+ * holds. A failed season contributes no leagues to the result and its number
+ * is reported back in `failedSeasons`, so the caller can refuse to proceed
+ * rather than quietly serving an undercounted report.
  */
 export async function discoverLeagueSeasons(params: {
   sleeperUserId: string;
   seasonFrom: number;
   seasonTo: number;
   settings: ManagerPulseSettings;
-}): Promise<{ leagueSeasons: DiscoveredLeagueSeason[]; skipped: number }> {
+}): Promise<{
+  leagueSeasons: DiscoveredLeagueSeason[];
+  skipped: number;
+  failedSeasons: number[];
+}> {
   const { sleeperUserId, seasonFrom, seasonTo, settings } = params;
 
   const seasons: number[] = [];
@@ -109,11 +119,16 @@ export async function discoverLeagueSeasons(params: {
 
   const perSeason = await mapLimit(seasons, SEASON_FETCH_CONCURRENCY, async (season) => ({
     season,
-    leagues: await getSleeperLeagues(sleeperUserId, String(season)),
+    leagues: await getSleeperLeaguesOrNull(sleeperUserId, String(season)),
   }));
 
   const found: DiscoveredLeagueSeason[] = [];
+  const failedSeasons: number[] = [];
   for (const { season, leagues } of perSeason) {
+    if (leagues === null) {
+      failedSeasons.push(season);
+      continue;
+    }
     for (const league of leagues) {
       if (!league.league_id) continue;
       const category: LeagueCategoryKey = categorizeLeague(league);
@@ -131,7 +146,7 @@ export async function discoverLeagueSeasons(params: {
   }
 
   const { kept, skipped } = selectLeagueSeasons(found, settings);
-  return { leagueSeasons: kept, skipped };
+  return { leagueSeasons: kept, skipped, failedSeasons };
 }
 
 /**

@@ -26,6 +26,103 @@ function isRunStatus(value: string): value is RunStatus {
   return (RUN_STATUSES as readonly string[]).includes(value);
 }
 
+/** The two job kinds league_sync_jobs_job_kind_check permits (migration
+ *  0255). 'pulse' is a Sync all job; 'footprint' is a Manager Pulse capture
+ *  job. Both are drained by the same worker, from the same table, which is
+ *  why their telemetry is compared side by side here. */
+const JOB_KINDS = ["pulse", "footprint"] as const;
+type JobKind = (typeof JOB_KINDS)[number];
+
+const JOB_KIND_LABEL: Record<JobKind, string> = {
+  pulse: "Sync all",
+  footprint: "Manager Pulse capture",
+};
+
+function isJobKind(value: string): value is JobKind {
+  return (JOB_KINDS as readonly string[]).includes(value);
+}
+
+/** Telemetry window for MPS-T049: the last 24 hours of finished jobs. */
+const TELEMETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Real ceiling on how many finished jobs this page will read to build the
+ *  percentile table. The window is already bounded by time; this additionally
+ *  bounds the READ so a day busier than usual cannot turn a 24-hour window
+ *  into an unbounded select. Ordered newest-first, so a capped read still
+ *  reflects the most recent slice of the window rather than an arbitrary one.
+ *  PostgREST caps a plain select at 1000 rows regardless of a larger
+ *  `.limit()`, so this cap is reached by paging (see TELEMETRY_PAGE_SIZE)
+ *  rather than by a single `.limit(TELEMETRY_ROW_CAP)` call. */
+const TELEMETRY_ROW_CAP = 10000;
+
+/** Page size for loadJobTelemetry, matching PostgREST's own 1000-row cap on a
+ *  plain select. */
+const TELEMETRY_PAGE_SIZE = 1000;
+
+type TelemetryBucket = { durations: number[]; calls: number[] };
+
+type TelemetryRow = {
+  job_kind: string;
+  duration_ms: number | null;
+  sleeper_calls: number | null;
+};
+
+/**
+ * Duration and Sleeper-call samples per job kind, over the telemetry window.
+ *
+ * duration_ms and sleeper_calls are both nullable (migration 0264): a job that
+ * finished before that migration carries neither. Those jobs are counted in
+ * the sample size but excluded from BOTH percentile arrays, so a null never
+ * becomes a false zero and never silently drags a percentile down.
+ *
+ * Paged up to TELEMETRY_ROW_CAP, newest-first, so the cap is real rather than
+ * silently truncated at PostgREST's own 1000-row default.
+ */
+async function loadJobTelemetry(
+  admin: ReturnType<typeof createAdminClient>,
+): Promise<{ byKind: Map<JobKind, TelemetryBucket>; capped: boolean }> {
+  const cutoff = new Date(Date.now() - TELEMETRY_WINDOW_MS).toISOString();
+  const rows: TelemetryRow[] = [];
+  let capped = false;
+  for (let from = 0; from < TELEMETRY_ROW_CAP; from += TELEMETRY_PAGE_SIZE) {
+    const to = Math.min(from + TELEMETRY_PAGE_SIZE, TELEMETRY_ROW_CAP) - 1;
+    const { data, error } = await admin
+      .from("league_sync_jobs")
+      .select("job_kind, duration_ms, sleeper_calls")
+      .not("finished_at", "is", null)
+      .gte("finished_at", cutoff)
+      .order("finished_at", { ascending: false })
+      .range(from, to);
+    if (error || !data || data.length === 0) break;
+    rows.push(...(data as TelemetryRow[]));
+    if (data.length < to - from + 1) break;
+    if (to + 1 >= TELEMETRY_ROW_CAP) capped = true;
+  }
+
+  const byKind = new Map<JobKind, TelemetryBucket>();
+  for (const row of rows) {
+    const kind: JobKind = isJobKind(row.job_kind) ? row.job_kind : "pulse";
+    const bucket = byKind.get(kind) ?? { durations: [], calls: [] };
+    if (row.duration_ms != null) bucket.durations.push(row.duration_ms);
+    if (row.sleeper_calls != null) bucket.calls.push(row.sleeper_calls);
+    byKind.set(kind, bucket);
+  }
+  for (const bucket of byKind.values()) {
+    bucket.durations.sort((a, b) => a - b);
+    bucket.calls.sort((a, b) => a - b);
+  }
+  return { byKind, capped };
+}
+
+/** Nearest-rank percentile. Small samples make interpolation false precision,
+ *  and a null return (empty sample) is rendered as "no data yet" rather than
+ *  a misleading zero. */
+function percentileNearestRank(sortedAsc: number[], p: number): number | null {
+  if (sortedAsc.length === 0) return null;
+  const rank = Math.ceil(p * sortedAsc.length);
+  return sortedAsc[Math.max(0, Math.min(sortedAsc.length - 1, rank - 1))];
+}
+
 type RunRow = {
   id: string;
   sleeper_user_id: string;
@@ -40,7 +137,6 @@ type RunRow = {
   counts_against_cooldown: boolean;
   requested_at: string;
   completed_at: string | null;
-  section_status: Record<string, string> | null;
 };
 
 type RunLeagueRow = {
@@ -52,40 +148,6 @@ type RunLeagueRow = {
   status: string;
   detail: string | null;
 };
-
-/** Same words the report and its progress panel use for these eight
- *  sections, so an admin reading a run's section_status recognizes the same
- *  names a reader would have seen on screen. */
-const SECTION_LABEL: Record<string, string> = {
-  identity: "Overview",
-  results: "Results",
-  drafting: "Drafting",
-  affinity: "Who they like",
-  trading: "Trading",
-  rosterOps: "Roster moves",
-  narrative: "How to deal",
-  leagues: "Leagues",
-};
-
-const SECTION_ORDER = [
-  "identity",
-  "results",
-  "drafting",
-  "affinity",
-  "trading",
-  "rosterOps",
-  "narrative",
-  "leagues",
-] as const;
-
-/** manager_pulse_runs.section_status is a jsonb map of section id to
- *  "pending" | "ready" | "unavailable", populated as the capture drains. Read
- *  defensively since it is jsonb: anything other than a plain string map
- *  renders as though the run recorded nothing, rather than throwing. */
-function sectionStatusEntries(value: Record<string, string> | null): Array<[string, string]> {
-  if (!value || typeof value !== "object") return [];
-  return SECTION_ORDER.filter((id) => typeof value[id] === "string").map((id) => [id, value[id]]);
-}
 
 /** Rows per page when paging manager_pulse_run_leagues. PostgREST caps a
  *  plain select at 1000 regardless of a larger `.limit()`. */
@@ -162,13 +224,16 @@ export default async function ManagerPulseRunsPage({
   let query = admin
     .from("manager_pulse_runs")
     .select(
-      "id, sleeper_user_id, sleeper_handle, season_from, season_to, status, leagues_total, leagues_done, leagues_failed, detail, counts_against_cooldown, requested_at, completed_at, section_status",
+      "id, sleeper_user_id, sleeper_handle, season_from, season_to, status, leagues_total, leagues_done, leagues_failed, detail, counts_against_cooldown, requested_at, completed_at",
       { count: "exact" },
     )
     .order("requested_at", { ascending: false });
   if (statusFilter) query = query.eq("status", statusFilter);
 
-  const { data, count, error } = await query.range(from, to);
+  const [{ data, count, error }, telemetry] = await Promise.all([
+    query.range(from, to),
+    loadJobTelemetry(admin),
+  ]);
 
   const runs = (data ?? []) as RunRow[];
   const totalCount = count ?? 0;
@@ -200,6 +265,87 @@ export default async function ManagerPulseRunsPage({
           reader&apos;s hourly cooldown, so two runs close together for the same handle is not a sign
           the limit is broken.
         </p>
+
+        <section aria-labelledby="mp-runs-telemetry" className="mt-8">
+          <h2 id="mp-runs-telemetry" className="text-lg font-semibold tracking-tight text-ink">
+            Job telemetry, last 24 hours
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-ink-muted">
+            p50 and p95 of how long a job took and how many Sleeper calls it made, by job kind, for
+            every job that finished in the last 24 hours.
+          </p>
+          {telemetry.capped ? (
+            <p className="mt-2 rounded-card border border-signal-warning/40 bg-signal-warning/10 px-3 py-2 text-xs text-signal-warning">
+              This reads at most {TELEMETRY_ROW_CAP} finished jobs, newest first. On a day busier than
+              that cap, the figures below reflect a shorter, more recent slice of the 24-hour window
+              rather than all of it.
+            </p>
+          ) : null}
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Job telemetry table, scrollable"
+            className="mt-3 overflow-x-auto rounded-card border border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <table className="w-full text-sm">
+              <caption className="sr-only">
+                Duration and Sleeper call count percentiles by job kind, over the last 24 hours
+              </caption>
+              <thead className="bg-surface/60 text-xs uppercase tracking-wide text-ink-subtle">
+                <tr>
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
+                    Job kind
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
+                    Duration p50
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
+                    Duration p95
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
+                    Sleeper calls p50
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
+                    Sleeper calls p95
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
+                    Sample
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {JOB_KINDS.map((kind) => {
+                  const bucket = telemetry.byKind.get(kind);
+                  const durations = bucket?.durations ?? [];
+                  const calls = bucket?.calls ?? [];
+                  const durationP50 = percentileNearestRank(durations, 0.5);
+                  const durationP95 = percentileNearestRank(durations, 0.95);
+                  const callsP50 = percentileNearestRank(calls, 0.5);
+                  const callsP95 = percentileNearestRank(calls, 0.95);
+                  return (
+                    <tr key={kind} className="border-t border-line/60">
+                      <th scope="row" className="px-3 py-2 text-left font-normal text-ink">
+                        {JOB_KIND_LABEL[kind]}
+                      </th>
+                      <td className="px-3 py-2 text-ink-muted">{formatDuration(durationP50)}</td>
+                      <td className="px-3 py-2 text-ink-muted">{formatDuration(durationP95)}</td>
+                      <td className="px-3 py-2 text-ink-muted">{callsP50 ?? "n/a"}</td>
+                      <td className="px-3 py-2 text-ink-muted">{callsP95 ?? "n/a"}</td>
+                      <td className="px-3 py-2 text-ink-muted">
+                        {durations.length} duration, {calls.length} call sample
+                        {calls.length === 1 ? "" : "s"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-ink-subtle">
+            A job that finished before duration_ms and sleeper_calls existed (migration 0264) is
+            simply left out of both samples above; its absence is never counted as a zero.
+          </p>
+        </section>
 
         {error ? (
           <p className="mt-6 rounded-card border border-signal-danger/40 bg-signal-danger/10 px-3 py-2 text-sm text-signal-danger">
@@ -307,7 +453,6 @@ export default async function ManagerPulseRunsPage({
                     <tbody>
                       {runs.map((run) => {
                         const leagues = leaguesByRun.get(run.id) ?? [];
-                        const sectionEntries = sectionStatusEntries(run.section_status);
                         const durationMs =
                           run.status === "complete" && run.completed_at
                             ? new Date(run.completed_at).getTime() - new Date(run.requested_at).getTime()
@@ -377,26 +522,6 @@ export default async function ManagerPulseRunsPage({
                                         {lg.detail ? (
                                           <p className="mt-1 text-[11px] text-ink-subtle">{lg.detail}</p>
                                         ) : null}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                                <p className="mt-3 text-xs font-semibold text-ink-subtle">
-                                  Section status
-                                </p>
-                                {sectionEntries.length === 0 ? (
-                                  <p className="mt-1 max-w-xs text-xs text-ink-subtle">
-                                    No section status has been recorded for this run yet.
-                                  </p>
-                                ) : (
-                                  <ul className="mt-1 max-w-xs space-y-1">
-                                    {sectionEntries.map(([id, status]) => (
-                                      <li
-                                        key={id}
-                                        className="flex items-center justify-between gap-2 text-xs text-ink-muted"
-                                      >
-                                        <span className="text-ink">{SECTION_LABEL[id] ?? id}</span>
-                                        <span>{status}</span>
                                       </li>
                                     ))}
                                   </ul>

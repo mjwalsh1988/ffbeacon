@@ -8,7 +8,7 @@
  * THE NULL RULE. A null in this feature means "we could not measure this",
  * never "this measured as zero". Every formatter below returns a plain dash
  * for null and never a "0", a "0%" or an empty string standing in for a real
- * value. `docs/manager-pulse-plan.md` section 14 states the same rule for the
+ * value. `docs/manager-pulse/manager-pulse-plan.md` section 14 states the same rule for the
  * whole feature; this file is where it is enforced for display.
  */
 

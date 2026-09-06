@@ -740,7 +740,7 @@ function collect(
     // Trade Ideas does today. See lib/trade-finder/tendency.ts for what each
     // of these is and is not allowed to do: never the value or wins math,
     // only the acceptance band by at most one step, package ordering, and
-    // reason sentences (docs/manager-pulse-plan.md section 8.3).
+    // reason sentences (docs/manager-pulse/manager-pulse-plan.md section 8.3).
     const theirTendencySlice = sliceFor(
       input.managerTendencies?.get(theirs.team.rosterId),
       input.isDynasty,
@@ -899,7 +899,7 @@ function collect(
       }),
       whyYou: buildWhyYou(myImpact, goal, helped?.position ?? null),
       // whyThem is unchanged from before Manager Pulse existed: tendency
-      // sentences no longer ride along inside it (docs/manager-pulse-plan.md
+      // sentences no longer ride along inside it (docs/manager-pulse/manager-pulse-plan.md
       // section 8.4 wants them as their own quiet line on the card, not
       // folded into the counterparty paragraph).
       whyThem: buildWhyThem(

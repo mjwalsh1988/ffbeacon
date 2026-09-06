@@ -26,28 +26,20 @@ export type ManagerPulseCaptureSettings = {
   maxLeaguesPerRun: number;
   /** Guard against a handle that sits in an unreasonable number of leagues. */
   maxLeaguesPerSeason: number;
-  /** Per user, between runs. */
-  runCooldownSeconds: number;
   /** How long a computed report serves. */
   reportTtlHours: number;
   /** How long a tendency row serves. */
   tendencyTtlHours: number;
-  /** The footprint sync's own freshness window. */
-  captureTtlMinutes: number;
   /**
-   * How long a run that is still open may be RESUMED by a later render
-   * instead of a new one being claimed.
-   *
-   * A capture takes minutes and the page re-renders while it drains, so those
-   * renders have to rejoin the run in flight rather than ask for another one
-   * the cooldown will refuse. But a run whose worker died mid-drain stays open
-   * forever, and resuming that one would park the reader on a progress bar
-   * that can never finish. Past this age the run is left where it is (an
-   * admin can still see it at /admin/manager-pulse/runs) and a fresh one is
-   * claimed. Comfortably longer than the worker's own ten-minute reclaim of a
-   * stalled job, so a run that is merely slow is still resumed.
+   * Manager Pulse only. An unsettled league-season whose capture set is
+   * older than this is re-captured. A settled one never is.
    */
-  resumeMaxAgeMinutes: number;
+  captureStaleAfterDays: number;
+  /**
+   * The cooldown as a budget: league-seasons one reader may QUEUE per
+   * rolling hour. Linked and fresh leagues cost nothing.
+   */
+  leaguesPerUserPerHour: number;
   jobMaxAttempts: number;
   /** Whether to count best ball leagues at all. */
   includeBestBall: boolean;
@@ -63,6 +55,31 @@ export type ManagerPulseCaptureSettings = {
    * many leagues a run may queue, and changes nothing about what a report says.
    */
   adminBypassThrottle: boolean;
+};
+
+export type ManagerPulseSyncSettings = {
+  /** The token bucket in front of every Sleeper call. */
+  sleeperCallsPerMinute: number;
+  /** A drainer pass hands off after this many calls. */
+  maxCallsPerPass: number;
+  /** Leagues one pass syncs at once. */
+  jobConcurrency: number;
+  /** Rows one claim takes. */
+  jobsPerClaim: number;
+  /** Seconds one pass may run. Under the route's maxDuration of 300. */
+  passBudgetSeconds: number;
+  /** A job still 'processing' after this many minutes had no worker finish it. */
+  staleProcessingMinutes: number;
+  /** The panel's poll while a run is open. */
+  pollIntervalMs: number;
+  /** The panel's poll after a failed request. */
+  pollFailureBackoffMs: number;
+  /** League-seasons finished before the first live report. */
+  liveReportFirstAfter: number;
+  /** Then every N more. */
+  liveReportEveryLeagues: number;
+  /** And never more often than this. */
+  liveReportMinIntervalMs: number;
 };
 
 export type ManagerPulseLookupSettings = {
@@ -199,6 +216,7 @@ export type ManagerPulseWordingSettings = {
 
 export type ManagerPulseSettings = {
   capture: ManagerPulseCaptureSettings;
+  sync: ManagerPulseSyncSettings;
   lookup: ManagerPulseLookupSettings;
   samples: ManagerPulseSampleSettings;
   draft: ManagerPulseDraftSettings;
@@ -214,16 +232,28 @@ export const DEFAULT_MANAGER_PULSE_SETTINGS: ManagerPulseSettings = {
     seasonWindowDefault: 4,
     seasonWindowMax: 6,
     seasonWindowMin: 1,
-    maxLeaguesPerRun: 60,
-    maxLeaguesPerSeason: 40,
-    runCooldownSeconds: 3600,
+    maxLeaguesPerRun: 250,
+    maxLeaguesPerSeason: 60,
     reportTtlHours: 24,
     tendencyTtlHours: 72,
-    captureTtlMinutes: 60,
-    resumeMaxAgeMinutes: 20,
+    captureStaleAfterDays: 14,
+    leaguesPerUserPerHour: 150,
     jobMaxAttempts: 3,
     includeBestBall: true,
     adminBypassThrottle: true,
+  },
+  sync: {
+    sleeperCallsPerMinute: 600,
+    maxCallsPerPass: 2400,
+    jobConcurrency: 3,
+    jobsPerClaim: 12,
+    passBudgetSeconds: 280,
+    staleProcessingMinutes: 10,
+    pollIntervalMs: 2000,
+    pollFailureBackoffMs: 8000,
+    liveReportFirstAfter: 3,
+    liveReportEveryLeagues: 5,
+    liveReportMinIntervalMs: 20000,
   },
   lookup: {
     handleLookupPerMinute: 10,
@@ -308,12 +338,24 @@ export const MANAGER_PULSE_SETTING_BOUNDS = {
     seasonWindowMin: { min: 1, max: 10 },
     maxLeaguesPerRun: { min: 1, max: 500 },
     maxLeaguesPerSeason: { min: 1, max: 200 },
-    runCooldownSeconds: { min: 0, max: 86400 },
     reportTtlHours: { min: 1, max: 168 },
     tendencyTtlHours: { min: 1, max: 336 },
-    captureTtlMinutes: { min: 1, max: 1440 },
-    resumeMaxAgeMinutes: { min: 1, max: 240 },
+    captureStaleAfterDays: { min: 1, max: 90 },
+    leaguesPerUserPerHour: { min: 1, max: 5000 },
     jobMaxAttempts: { min: 1, max: 10 },
+  },
+  sync: {
+    sleeperCallsPerMinute: { min: 60, max: 950 },
+    maxCallsPerPass: { min: 100, max: 10000 },
+    jobConcurrency: { min: 1, max: 8 },
+    jobsPerClaim: { min: 1, max: 50 },
+    passBudgetSeconds: { min: 30, max: 290 },
+    staleProcessingMinutes: { min: 2, max: 60 },
+    pollIntervalMs: { min: 1000, max: 30000 },
+    pollFailureBackoffMs: { min: 2000, max: 60000 },
+    liveReportFirstAfter: { min: 1, max: 50 },
+    liveReportEveryLeagues: { min: 1, max: 50 },
+    liveReportMinIntervalMs: { min: 5000, max: 120000 },
   },
   lookup: {
     handleLookupPerMinute: { min: 1, max: 120 },
@@ -412,6 +454,7 @@ export function mergeManagerPulseSettings(stored: unknown): ManagerPulseSettings
 
   return {
     capture: mergeGroup(base.capture, s.capture),
+    sync: mergeGroup(base.sync, s.sync),
     lookup: mergeGroup(base.lookup, s.lookup),
     samples: mergeGroup(base.samples, s.samples),
     draft: mergeGroup(base.draft, s.draft),

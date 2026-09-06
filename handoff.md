@@ -1,7 +1,7 @@
 # Handoff
 
 Session of 2026-09-04. Build: **Manager Pulse**. Plan of record:
-`docs/manager-pulse-plan.md` (its section 15 records where the plan and the
+`docs/manager-pulse/manager-pulse-plan.md` (its section 15 records where the plan and the
 shipped code differ). Tasks: `progress.md`, prefixes `MP-T###` and `MP-R###`.
 
 The previous entry (the Projection Engine build, session of 2026-09-01) is
@@ -110,7 +110,7 @@ Probed live; do not re-litigate:
 
 ## If you pick this up cold
 
-Read `docs/manager-pulse-plan.md` sections 1 to 3 for what the feature is, then
+Read `docs/manager-pulse/manager-pulse-plan.md` sections 1 to 3 for what the feature is, then
 its section 15 for what actually shipped, then the `MP-R###` entries at the end
 of `progress.md`, which are the review findings and what was done about each.
 

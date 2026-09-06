@@ -102,7 +102,7 @@ describe("the readability the boxes exist to buy", () => {
   });
 
   it("the narrow box is taller than it is wide, never fewer series", () => {
-    // docs/league-pulse-positional-war-plan.md: if six curves are unreadable
+    // docs/league-pulse/league-pulse-positional-war-plan.md: if six curves are unreadable
     // below the breakpoint the fallback is a taller aspect ratio, never
     // dropping a position. Nothing in this module can drop a series; it has no
     // access to one.

@@ -5,7 +5,7 @@
  *
  * League Pulse's rail links to eight separate routes. Manager Pulse is one
  * page, so every row here is an in-page anchor instead: pressing one scrolls to
- * that section rather than navigating anywhere (docs/manager-pulse-plan.md
+ * that section rather than navigating anywhere (docs/manager-pulse/manager-pulse-plan.md
  * 7.5). Because the URL pathname never changes, the "current" row cannot come
  * from a route match the way League Pulse's rail can (see lib/nav-types.ts
  * findActiveTrail, which only ever matches an href). `useManagerActiveSection`

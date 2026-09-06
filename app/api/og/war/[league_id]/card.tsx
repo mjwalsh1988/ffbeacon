@@ -12,7 +12,7 @@ import { ImageResponse } from "next/og";
 import { POSITION_SERIES, markerPath } from "@/components/chart-kit";
 import { PULSE_POSITIONS } from "@/lib/power-pulse/types";
 // The scarcest/deepest selection is shared with the rail summary card (E6),
-// not reimplemented here: docs/league-pulse-positional-war-plan.md 15.5.2
+// not reimplemented here: docs/league-pulse/league-pulse-positional-war-plan.md 15.5.2
 // says the card's headline must use the same deterministic template the rail
 // summary uses, and importing this rather than duplicating the tie-break
 // logic (max war_rank_1, ties by min cliff_rank, a tertiary position-order

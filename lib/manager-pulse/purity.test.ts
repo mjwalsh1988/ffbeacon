@@ -73,7 +73,7 @@ function listSourceFiles(dir: string): string[] {
 /* Rule 1: purity of the pure modules                                         */
 /* -------------------------------------------------------------------------- */
 
-/** The exact set of modules docs/manager-pulse-plan.md section 3 declares pure, through engine.ts. */
+/** The exact set of modules docs/manager-pulse/manager-pulse-plan.md section 3 declares pure, through engine.ts. */
 const PURE_MODULE_NAMES = [
   "types.ts",
   "input-types.ts",
@@ -87,6 +87,9 @@ const PURE_MODULE_NAMES = [
   "tendencies.ts",
   "fingerprint.ts",
   "default-settings.ts",
+  "progress-estimate.ts",
+  "freshness.ts",
+  "handle.ts",
 ];
 
 /**
@@ -106,7 +109,10 @@ const IMPURE_MODULE_REASONS: Record<string, string> = {
   "capture.ts": "queues jobs and claims the cooldown",
   "load.ts": "the only module that reads the database",
   "service.ts": "the public door: cache, capture, engine, write",
+  "finalize.ts": "reads the run row, computes and writes the cache, closes the run",
+  "live-report.ts": "reads and writes manager_pulse_live_reports and the run's checkpoint columns",
   "rate-limit.ts": "claims a rate-limit slot",
+  "run-poll-rate-limit.ts": "claims a rate-limit slot via a service-role client",
   "sample.ts": "a static fixture, but it is data rather than a pure function",
 };
 
@@ -170,7 +176,7 @@ function describePurityViolations(violations: PurityViolation[]): string {
   const lines = violations.map((v) => `${v.file}:${v.line}  [${v.token}]  ${v.text}`).join("\n");
   return (
     `${lines}\n\n` +
-    `Found ${violations.length} banned token(s) in a module docs/manager-pulse-plan.md section 3 ` +
+    `Found ${violations.length} banned token(s) in a module docs/manager-pulse/manager-pulse-plan.md section 3 ` +
     `declares pure. Remove the dependency, or add a reasoned entry to ALLOWLIST in ` +
     `lib/manager-pulse/purity.test.ts naming the exact file and token.`
   );

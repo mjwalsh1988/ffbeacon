@@ -1,5 +1,5 @@
 /**
- * Manager Pulse: results section (docs/manager-pulse-plan.md 6.2).
+ * Manager Pulse: results section (docs/manager-pulse/manager-pulse-plan.md 6.2).
  *
  * Pure. No Supabase, no fetch, no clock. Every field on `ManagerResults` is
  * scale-free by construction (a rate, a percentile, a count), so it is safe to

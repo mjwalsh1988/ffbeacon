@@ -532,7 +532,7 @@ export type TradeSuggestion = {
    * reads null for this league's game type, or when every figure a tendency
    * could offer sits below `minSample` (see lib/trade-finder/tendency.ts):
    * "no data" and "data too thin to trust" both render nothing here rather
-   * than a hedge. Per docs/manager-pulse-plan.md section 8.4, the reader sees
+   * than a hedge. Per docs/manager-pulse/manager-pulse-plan.md section 8.4, the reader sees
    * this as its own quiet line under the acceptance band, with a link to that
    * manager's full Manager Pulse report when a handle is available
    * (`counterparty.ownerHandle`).

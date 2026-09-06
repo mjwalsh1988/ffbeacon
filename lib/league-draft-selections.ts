@@ -60,6 +60,8 @@ export interface CaptureDraftSelectionsResult {
   draftsConsidered: number;
   draftsCaptured: number;
   picksWritten: number;
+  /** How many draft-pick requests failed (the REQUEST failed, not "no picks"). */
+  fetchFailures: number;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -104,6 +106,7 @@ export async function captureLeagueDraftSelections(
     draftsConsidered: 0,
     draftsCaptured: 0,
     picksWritten: 0,
+    fetchFailures: 0,
   };
 
   try {
@@ -150,6 +153,7 @@ export async function captureLeagueDraftSelections(
 
     let draftsCaptured = 0;
     let picksWritten = 0;
+    let fetchFailures = 0;
 
     for (const [index, draft] of pending.entries()) {
       if (index > 0) await sleep(FETCH_SPACING_MS);
@@ -163,6 +167,7 @@ export async function captureLeagueDraftSelections(
       // pending forever. It also burned a slot of the per-run budget ahead of
       // drafts that would have succeeded.
       if (picks === null) {
+        fetchFailures += 1;
         await supabase
           .from("league_drafts")
           .update({ pick_capture_attempts: (draft.pick_capture_attempts ?? 0) + 1 })
@@ -215,7 +220,7 @@ export async function captureLeagueDraftSelections(
       }
     }
 
-    return { draftsConsidered: completed.length, draftsCaptured, picksWritten };
+    return { draftsConsidered: completed.length, draftsCaptured, picksWritten, fetchFailures };
   } catch (err) {
     console.warn(
       `[league-draft-selections] capture failed for league ${leagueRowId}:`,

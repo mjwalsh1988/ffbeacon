@@ -191,3 +191,53 @@ function safeRead(rel: string): string | null {
     return null;
   }
 }
+
+/**
+ * live-manager-report.tsx (docs/manager-pulse/manager-pulse-audit-and-speed-plan.md
+ * MPS-T043) is a client component that has to render the same masthead / rail
+ * / section tree app/tools/manager-pulse/[handle]/page.tsx renders for a
+ * finished report, without importing anything FROM that page: a page module
+ * is not a normal import target, and doing so would drag the page's own
+ * server-only imports (createAdminClient, getManagerFootprint, and so on)
+ * into a client bundle. So its allowed surface is narrow and explicit, and
+ * this asserts it stays that way: components/manager-pulse/* (the sections,
+ * the panel, its own siblings), components/manager-shell/* (LensSwitch, the
+ * nav items), lib/manager-pulse/types (the shapes only), lib/datetime, and
+ * React or Next's own client modules.
+ */
+const LIVE_REPORT_CLIENT_FILES = [
+  "components/manager-pulse/live-manager-report.tsx",
+  // The lazily loaded half. It holds the masthead, the rail and all seven
+  // section imports that live-manager-report.tsx used to hold directly, so it
+  // inherits exactly the constraint this guard exists to enforce. Splitting
+  // the tree out for code-splitting must not smuggle it out of the guard.
+  "components/manager-pulse/live-report-body.tsx",
+];
+
+describe.each(LIVE_REPORT_CLIENT_FILES)("%s imports only from its declared surface", (file) => {
+  it("holds", () => {
+    const source = readFileSync(path.join(ROOT, file), "utf8");
+
+    const allowedRuntimePackages = new Set(["react"]);
+    const allowedRuntimePrefixes = [
+      "@/components/manager-pulse/",
+      "@/components/manager-shell",
+      "@/lib/manager-pulse/types",
+      "@/lib/datetime",
+      "./", // a sibling module in this same components/manager-pulse directory
+      "next/",
+    ];
+
+    const violations: string[] = [];
+    for (const { specifier } of runtimeImports(source)) {
+      if (allowedRuntimePackages.has(specifier)) continue;
+      if (allowedRuntimePrefixes.some((prefix) => specifier.startsWith(prefix))) continue;
+      violations.push(specifier);
+    }
+
+    expect(
+      violations,
+      `${file} imports a runtime value from a module outside its declared surface (components/manager-pulse/*, components/manager-shell/*, lib/manager-pulse/types, lib/datetime, React/Next client modules): ${violations.join(", ")}`,
+    ).toEqual([]);
+  });
+});

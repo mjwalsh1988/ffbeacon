@@ -13,7 +13,7 @@ import { TradeOutcomePanel } from "@/components/trade-ideas/trade-outcome";
  * Positional WAR as labelled context on the asset card (extension E3).
  *
  * Three things are pinned here, matching the three constraints in
- * docs/league-pulse-positional-war-plan.md section 15.3: the template renders
+ * docs/league-pulse/league-pulse-positional-war-plan.md section 15.3: the template renders
  * every figure exactly (constraint 2), a missing or non-matching map is a
  * no-op that leaves the rest of the verdict untouched (constraint 1, this file
  * never reads the cache itself), and the rendered block sits outside the

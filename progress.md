@@ -3943,7 +3943,7 @@ T558 | completed | the rest of the round-two findings
 T559 | completed | league-feed trades hid the consolidation credit that decided them
      | files: components/signal-check-trade-card.tsx, components/value-adjustment-row.tsx,
      |        app/tools/signal-check/trade-result.tsx,
-     |        app/tools/signal-check/v/[shareId]/page.tsx, docs/signal-check.md
+     |        app/tools/signal-check/v/[shareId]/page.tsx, docs/signal-check/signal-check.md
      | Trades pulled from a Sleeper league are graded by the same pipeline as the
      | calculator, and the consolidation credit was computed and folded into the
      | verdict and the margin, but SignalCheckTradeCard never rendered the "Value
@@ -3955,7 +3955,7 @@ T559 | completed | league-feed trades hid the consolidation credit that decided 
      | and poolMax, so the gap was only ever in the render.
      | The row moved from app/tools/signal-check/ to components/ because the card
      | is the third surface to need it and a shared component importing out of a
-     | route folder inverts the dependency. docs/signal-check.md now lists all
+     | route folder inverts the dependency. docs/signal-check/signal-check.md now lists all
      | four surfaces so a fifth cannot quietly skip it.
      | verified: yes
 T560 | completed | the slotless pick: blended over history, and never disclosed
@@ -3963,7 +3963,7 @@ T560 | completed | the slotless pick: blended over history, and never disclosed
      |        confidence.ts, builder-view.ts, freeze.ts, _test-kit.ts,
      |        pipeline.test.ts, trade-shape.test.ts,
      |        app/tools/signal-check/trade-result.tsx,
-     |        components/signal-check-trade-card.tsx, docs/signal-check.md
+     |        components/signal-check-trade-card.tsx, docs/signal-check/signal-check.md
      | Reported as "the import gets a different answer than typing the same trade
      | in by hand". It does, and most of the gap is not a bug: the builder only
      | offers slotted picks, Sleeper never says where a traded pick lands, so the
@@ -3999,7 +3999,7 @@ T561 | completed | place a traded pick by projected finish instead of blending i
      |        app/tools/signal-check/{import-actions.ts,trade-result.tsx},
      |        app/leagues/[league_id]/transactions/page.tsx,
      |        components/{signal-check-trade-card.tsx,player-profile/trades-tab.tsx},
-     |        docs/signal-check.md
+     |        docs/signal-check/signal-check.md
      | Where the league is known, a Sleeper-sourced pick is now placed in the
      | round rather than blended across it. Published draft order first
      | (league_drafts.slot_to_roster_id, via the EXISTING lib/league-pick-slots.ts,
@@ -4050,7 +4050,7 @@ T561 | completed | place a traded pick by projected finish instead of blending i
 
 ## Beacon Steals: draft value against the market (2026-08-12)
 
-Plan of record: `docs/beacon-steals-plan.md`. Read it first; it carries the data
+Plan of record: `docs/beacon-steals/beacon-steals-plan.md`. Read it first; it carries the data
 audit, the two failure modes found by running the naive version against prod, and
 the schema and math this task list implements.
 
@@ -4058,7 +4058,7 @@ Scope note from the owner: build everything EXCEPT a standalone `/tools` page.
 The launch surface is the draft guide under `/guides`.
 
 T562 | completed | write the Beacon Steals plan of record
-     | files: docs/beacon-steals-plan.md
+     | files: docs/beacon-steals/beacon-steals-plan.md
      | depends on: none
      | Full technical plan. Records the audit (7,552 On The Clock picks stored,
      | 99 completed League Pulse drafts with NO picks stored anywhere, Sleeper
@@ -7431,7 +7431,7 @@ T691 | completed | A shareable card names the injury, not the roster paperwork
 
 # League Pulse: Positional WAR
 
-Plan: `docs/league-pulse-positional-war-plan.md` (written 2026-08-26 against `c068818`).
+Plan: `docs/league-pulse/league-pulse-positional-war-plan.md` (written 2026-08-26 against `c068818`).
 Task ids are the plan's own `T-WAR-##`. Started 2026-08-26.
 
 Task format for this feature:
@@ -7640,17 +7640,17 @@ T-WAR-23 | completed | Migration 0213: Signal Guide global term "Positional WAR"
      | verified: yes (row present, is_global true, is_published true, 2180 characters)
 
 T-WAR-24 | in_progress | CLAUDE.md: the Positional WAR naming rule + the on-demand/no-cron/source-independent rules
-     | files: CLAUDE.md, docs/data-sources.md
+     | files: CLAUDE.md, docs/data-sources/data-sources.md
      | depends on: none
      | notes: CLAUDE.md done. Added the route to the League Pulse naming rules, a sync
      |   rule line, an observability paragraph to the Power Pulse section, and a full
      |   "Positional WAR (League Pulse positional scarcity)" section carrying the naming
      |   rule, the never-rerun-the-optimizer rule, the source and format independence
      |   rule, the on-demand/no-cron rule, the structural-versus-weekly specification,
-     |   the module map, and the storage and observability notes. docs/data-sources.md
+     |   the module map, and the storage and observability notes. docs/data-sources/data-sources.md
      |   still to check.
 
-     | docs/data-sources.md done: a new "Surfaces that are deliberately
+     | docs/data-sources/data-sources.md done: a new "Surfaces that are deliberately
      |   source-independent" subsection under "Where source filtering is applied",
      |   naming Power Pulse and Positional WAR, stating neither carries a source column
      |   nor may gain one, and recording that the fingerprint's lack of a source field is
@@ -9310,7 +9310,7 @@ T-WYR-03 | completed | Draft pick pricing: a 14 day window, and the last known o
 
 # Redraft parity, draft grades and the post-draft handoff (RD-T###)
 
-Plan: `docs/redraft-and-draft-grades-plan.md`. Started 2026-08-31.
+Plan: `docs/draft-grades/redraft-and-draft-grades-plan.md`. Started 2026-08-31.
 
 ```
 RD-T001 | completed | Guard playoff_week_start = 0 in the On The Clock week window
@@ -9319,7 +9319,7 @@ RD-T001 | completed | Guard playoff_week_start = 0 in the On The Clock week wind
      | verified: yes
 
 RD-T010 | completed | Re-measure fallback variance on the startable range only
-     | files: scripts/measure-position-variance.ts, docs/redraft-and-draft-grades-plan.md
+     | files: scripts/measure-position-variance.ts, docs/draft-grades/redraft-and-draft-grades-plan.md
      | depends on: none
      | verified: yes
 RD-T011 | completed | Scoring-aware fallback variance (ppr / half / std)
@@ -9715,7 +9715,7 @@ shape for Discord.
 
 # The FF Beacon Projection Engine (PE-T###)
 
-Plan of record: `docs/projection-engine-plan.md`. Started 2026-09-01.
+Plan of record: `docs/projection-engine/projection-engine-plan.md`. Started 2026-09-01.
 
 Goal: stop shipping Sleeper's projection with four multipliers on it and start
 shipping our own, measured against Sleeper's on the same graded weeks. Ships
@@ -9731,7 +9731,7 @@ handoff are updated after every task.
 ## Phase 0 - Records
 PE-T000 | completed | Plan of record written from the session audit, with every
        measurement, algorithm, schema change, settings key and source
-     | files: docs/projection-engine-plan.md
+     | files: docs/projection-engine/projection-engine-plan.md
      | verified: yes (research only; no code)
 PE-T001 | completed | progress.md and handoff.md seeded for this build
      | files: progress.md, handoff.md
@@ -11088,7 +11088,7 @@ T717 | completed | Lineups after the whistle: a report, not a stale forecast
 
 # Manager Pulse (prefix MP-T###)
 
-Plan of record: `docs/manager-pulse-plan.md`. Started 2026-09-04.
+Plan of record: `docs/manager-pulse/manager-pulse-plan.md`. Started 2026-09-04.
 
 Conventions carried over: every migration task applies via MCP, saves SQL to
 /supabase/migrations/, ships RLS in the same file, runs the RLS verification
@@ -11860,9 +11860,128 @@ MP-FINAL | completed | Final verification
        banned-character scan is clean across all 120 changed files; the only matches
        are inside narrative.test.ts, which lists those characters because it is the
        test asserting narrative output contains none of them.
-     | notes: docs/manager-pulse-plan.md gained section 15 reconciling the plan with
+     | notes: docs/manager-pulse/manager-pulse-plan.md gained section 15 reconciling the plan with
        what shipped (ten migrations rather than seven, two settings groups that were
        not planned, one that was removed, and a plan instruction in section 5.7 that
        would have been a security bug had it been followed).
      | notes: handoff.md rewritten for a cold start.
+     | notes: NOT COMMITTED and NOT PUSHED, by instruction.
+
+MPS-T000 to MPS-T053 | completed | Manager Pulse speed build, per
+  docs/manager-pulse/manager-pulse-audit-and-speed-plan.md Part 5.
+     | notes: migrations 0261 (leagues.capture_completed_at / capture_error),
+       0262 (manager_pulse_live_reports plus the run checkpoint columns), 0263
+       (claim_league_sync_jobs interleaves owners), 0264 (league_sync_worker_lease
+       plus league_sync_jobs.sleeper_calls / duration_ms), 0265 (the league-season
+       budget and the cross-user job link), 0266 (drop manager_pulse_runs.section_status).
+       All six applied via MCP and verified: 0263 returns 2 of each owner from a
+       5-and-2 backlog at p_limit 4; 0265 refuses 140+20 against 150 with a real
+       retry time, resumes an open run for the same question, and turns two
+       readers on one league into ONE job, two linked run_leagues rows and a
+       charge of 1 and 0. Every function grants EXECUTE to service_role only.
+     | notes: DEVIATION, app/api/leagues/bulk-sync/route.ts no longer runs a
+       head-start drain pass inline. Under the 0264 lease exactly one pass may
+       drain the queue, and a second inline drainer would break the guarantee
+       that the in-process token bucket is the site's Sleeper budget. It calls
+       wakeLeagueSyncWorker("bulk-sync-enqueue") instead, which keeps the head
+       start and honours the lease.
+     | notes: DEVIATION the plan did not anticipate. lib/sleeper-budget.ts
+       imports node:async_hooks, so lib/sleeper.ts can no longer be imported by
+       a client component: `next build` failed with UnhandledSchemeError twice.
+       currentNflSeason moved to lib/nfl-season.ts and the handle grammar moved
+       to lib/manager-pulse/handle.ts, both pure, both re-exported from their old
+       homes so every server import is unchanged and there is still one copy of
+       each rule. lib/client-sleeper-import.test.ts is the new guard: no
+       "use client" file may VALUE-import from @/lib/sleeper (a type-only import
+       is erased and stays allowed). tsc and vitest cannot catch this class of
+       break; only next build sees it, and only at the very end.
+     | notes: DEVIATION, MPS-T053's safety guard. The plan names a `league_relay`
+       table to check before resetting a league. No such table exists; the real
+       "this league is somebody's live room" flag is community_leagues.is_active
+       (migration 0234), which is what the script checks.
+     | notes: NOT DONE, and why. MPS-T038 (the Sleeper GraphQL core bundle) is
+       marked optional in the plan and explicitly deferred until after Phase 3
+       has shipped and been measured, so its effect can be measured on its own.
+       MPS-T017, MPS-T054 and MPS-T050 are measurement tasks: they need a live
+       deployment, three real Sleeper handles and an admin session. The TOOLING
+       for them shipped (scripts/measure-manager-pulse.ts, npm run
+       measure:manager-pulse, plus its tests) but no run was made, so Part 9's
+       tables are still empty and section 4.8 still holds estimates rather than
+       measurements.
+     | notes: vitest.config.ts now includes scripts/**/*.test.ts. The
+       measurement script's tests existed but the runner was not discovering
+       them, which reports green over assertions that never ran.
+     | verified: npx tsc --noEmit exits 0. npx vitest run is 285 files, 4346
+       tests, all passing (up from 271 files, 4226 tests). npm run build is
+       clean with /api/manager-pulse/runs/[run_id]/report and
+       /admin/manager-pulse/queue registered. The banned-character scan over all
+       113 changed files is clean: the only matches anywhere are pre-existing
+       lines in CLAUDE.md and plan.md that this session did not write.
+     | notes: NOT COMMITTED and NOT PUSHED, by instruction.
+
+MPS-REVIEW | completed | Four independent Opus reviews, and the fixes they found
+     | notes: the session was interrupted here. Seven fix agents were dispatched
+       and all seven died at once on an API session limit, before any of them
+       made an edit. Verified on resume rather than assumed: tsc exited 0, the
+       suite was 285 files / 4346 tests green, and four sampled defects
+       (service.ts private currentSeason, the globals.css stripe alphas, the
+       capture.ts NOT IN filter, the 10000-row telemetry cap) were all still
+       present, so nothing was half-applied. Clean restart, no rollback needed.
+     | notes: migration 0267 was the one thing that HAD landed before the cutoff.
+       Three database findings: the queue-ahead count had no index and was a
+       sequential scan of the whole job table on every 2-second poll;
+       claim_league_sync_jobs ranked the entire pending set before taking twelve
+       rows (30 ms and 2.5 MB of sort at 10,000 pending); and the cross-user link
+       could attach a Manager Pulse footprint run to a Sync all 'pulse' job,
+       which does not take the capture set, so the report counted a league-season
+       that was never captured. Plus a fourth: a reader whose first lookup needed
+       more than 150 league-seasons was refused on an EMPTY window and handed a
+       null retry time, so LARGE (the plan's own reference handle) could never
+       run at all. Verified live: a 250-league first lookup is admitted, a repeat
+       over budget is refused with a real retry time, and owner interleaving
+       still returns 2 of each from a 5-and-2 backlog.
+     | notes: BLOCKER found by review, MPS-T001 had never been implemented.
+       service.ts still held a private currentSeason() on UTC while
+       currentNflSeason ran on local time, which is finding F14 verbatim: around
+       the March rollover the cache read and the run row key to different
+       windows. Fixed, and the regression test the plan asked for was written,
+       which is why the miss went unnoticed in the first place.
+     | notes: three accessibility BLOCKERS fixed. The final report swap changed
+       the root element type, so React unmounted the whole tree and a screen
+       reader lost its cursor on a report someone had been reading for minutes.
+       The first live report could arrive completely silent, from two independent
+       causes at once. And an h2 sat above the page's h1 for the whole live phase.
+     | notes: DEVIATION with measurement. next/dynamic on the page did NOT split
+       the bundle (24 kB to 24.6 kB, slightly worse) because a next/dynamic on a
+       client boundary from a server component still pulls it into the initial
+       payload. Reverted, and the split moved one level down: the masthead, rail
+       and seven sections are now components/manager-pulse/live-report-body.tsx,
+       lazily loaded from live-manager-report.tsx only when a live report exists.
+       Measured: /tools/manager-pulse/[handle] 24 kB / 138 kB before, 11.1 kB /
+       123 kB after. client-boundary.test.ts was widened to cover the new module,
+       or the split would have smuggled the section tree out of that guard.
+     | notes: the stripe contrast was fixed twice. The first pass used the alphas
+       named in the review and measured 2.24:1, still under the 3:1 threshold;
+       recomputed against the real track colour and raised to 0.75 / 0.50, which
+       measure 3.19:1 and 3.38:1. The numbers are in a comment so the next change
+       recomputes rather than guesses.
+     | notes: also fixed: no rate limit on either run route (one bucket, fails
+       open on the progress route so a limiter outage cannot break every open
+       panel); an unbounded token wait that let a background 429 stall an
+       interactive render for up to 30 seconds (the AsyncLocalStorage job context
+       is now the seam, interactive callers get a 1.5 s deadline and no retry);
+       a full-minute burst allowance cut to a fifth; log injection through
+       x-wake-reason; the cron secret posted to whatever NEXT_PUBLIC_SITE_URL
+       said; three admin reads whose "sample was capped" flag could never fire
+       because PostgREST truncates at 1000 whatever the .limit() says; a
+       capture-set failure inside the 60-minute core cache reported to the reader
+       as a league successfully read; capture_completed_at stamped on the derived
+       path without checking the matchup slate actually exists; and a measurement
+       script that would delete a stranger's lookup history and took a session
+       cookie on argv where the process table can read it.
+     | verified: npx tsc --noEmit exits 0. npx vitest run is 285 files, 4373
+       tests, all passing (4346 before the fixes, so 27 new tests). npm run build
+       is clean. The banned-character scan is clean across all 117 changed code
+       files: zero em dashes, en dashes, curly quotes, apostrophes, ellipses,
+       non-breaking spaces or middots.
      | notes: NOT COMMITTED and NOT PUSHED, by instruction.

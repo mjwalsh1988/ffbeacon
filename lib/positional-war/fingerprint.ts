@@ -1,7 +1,7 @@
 /**
  * The Positional WAR cross-league cache key.
  *
- * Section 6 of docs/league-pulse-positional-war-plan.md derives the result as a
+ * Section 6 of docs/league-pulse/league-pulse-positional-war-plan.md derives the result as a
  * pure function of a short, enumerable list of inputs (season, the startable
  * slot multiset, team count, normalized scoring, the reliability/availability/
  * injury/opponent/variance/recency blocks of the resolved Power Pulse settings,

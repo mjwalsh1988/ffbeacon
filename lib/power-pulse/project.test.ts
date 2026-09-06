@@ -5,7 +5,7 @@ import { defenseSeasonsFor } from "@/lib/projections/defense-seasons";
 import type { DefenseRow } from "./load";
 
 /**
- * opponentMultiplier's new contract (docs/projection-engine-plan.md 3.1):
+ * opponentMultiplier's new contract (docs/projection-engine/projection-engine-plan.md 3.1):
  * `seasons` is a list of CANDIDATES, most recent first. The function walks
  * them in order and keeps the first two rows that exist and clear
  * settings.opponent.minGamesSampled, applying currentSeasonWeight to whichever

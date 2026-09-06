@@ -10,7 +10,7 @@
  * projectPlayerWeek() exactly the way Power Pulse does. No caller reads a
  * points column directly, and no caller picks a source for itself.
  *
- * See docs/projection-engine-plan.md, section "3.9 Which source a reader
+ * See docs/projection-engine/projection-engine-plan.md, section "3.9 Which source a reader
  * gets" and Part 4.
  */
 
@@ -115,7 +115,7 @@ export async function loadAdjustedProjections(params: {
   const dbClient = supabase as SupabaseClient<Database>;
 
   // Both settings documents live in the same league_power_pulse_settings row
-  // (see the settings block in docs/projection-engine-plan.md Part 2), and
+  // (see the settings block in docs/projection-engine/projection-engine-plan.md Part 2), and
   // loadPowerPulseSettings already merges beaconProjections as part of the
   // one document it returns, so there is nothing left for this file to load
   // or merge a second time. A missing row, an unreadable row, or a query

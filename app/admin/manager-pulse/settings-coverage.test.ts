@@ -1,6 +1,6 @@
 /**
  * Every Manager Pulse setting must be reachable from a form field on
- * /admin/manager-pulse, per the ABSOLUTE RULE in docs/manager-pulse-plan.md
+ * /admin/manager-pulse, per the ABSOLUTE RULE in docs/manager-pulse/manager-pulse-plan.md
  * section 5.1: a knob added to the defaults and never wired to a form field
  * fails this test.
  *

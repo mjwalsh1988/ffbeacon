@@ -27,14 +27,27 @@ export const managerPulseSettingsSchema = z
       seasonWindowMin: bounded(B.capture.seasonWindowMin),
       maxLeaguesPerRun: bounded(B.capture.maxLeaguesPerRun),
       maxLeaguesPerSeason: bounded(B.capture.maxLeaguesPerSeason),
-      runCooldownSeconds: bounded(B.capture.runCooldownSeconds),
       reportTtlHours: bounded(B.capture.reportTtlHours),
       tendencyTtlHours: bounded(B.capture.tendencyTtlHours),
-      captureTtlMinutes: bounded(B.capture.captureTtlMinutes),
-      resumeMaxAgeMinutes: bounded(B.capture.resumeMaxAgeMinutes),
+      captureStaleAfterDays: bounded(B.capture.captureStaleAfterDays),
+      leaguesPerUserPerHour: bounded(B.capture.leaguesPerUserPerHour),
       jobMaxAttempts: bounded(B.capture.jobMaxAttempts),
       includeBestBall: z.boolean(),
       adminBypassThrottle: z.boolean(),
+    }),
+
+    sync: z.object({
+      sleeperCallsPerMinute: bounded(B.sync.sleeperCallsPerMinute),
+      maxCallsPerPass: bounded(B.sync.maxCallsPerPass),
+      jobConcurrency: bounded(B.sync.jobConcurrency),
+      jobsPerClaim: bounded(B.sync.jobsPerClaim),
+      passBudgetSeconds: bounded(B.sync.passBudgetSeconds),
+      staleProcessingMinutes: bounded(B.sync.staleProcessingMinutes),
+      pollIntervalMs: bounded(B.sync.pollIntervalMs),
+      pollFailureBackoffMs: bounded(B.sync.pollFailureBackoffMs),
+      liveReportFirstAfter: bounded(B.sync.liveReportFirstAfter),
+      liveReportEveryLeagues: bounded(B.sync.liveReportEveryLeagues),
+      liveReportMinIntervalMs: bounded(B.sync.liveReportMinIntervalMs),
     }),
 
     lookup: z.object({
@@ -121,6 +134,14 @@ export const managerPulseSettingsSchema = z
   .refine((s) => s.capture.seasonWindowMin <= s.capture.seasonWindowMax, {
     message: "The minimum season window cannot be larger than the maximum window.",
     path: ["capture", "seasonWindowMin"],
+  })
+  .refine((s) => s.sync.jobConcurrency <= s.sync.jobsPerClaim, {
+    message: "A pass cannot run more leagues at once than it claims.",
+    path: ["sync", "jobConcurrency"],
+  })
+  .refine((s) => s.sync.pollIntervalMs < s.sync.pollFailureBackoffMs, {
+    message: "The poll interval must be smaller than the failure backoff.",
+    path: ["sync", "pollIntervalMs"],
   })
   .refine((s) => s.tendency.confidenceLowMax < s.tendency.confidenceMediumMax, {
     message: "The low-confidence sample ceiling must be smaller than the medium-confidence ceiling.",

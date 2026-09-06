@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { pulseLeagueCore, pulseLeagueDerived, pulseLeagueFootprint } from "@/lib/league-pulse";
+import { currentNflSeason, mapLimit } from "@/lib/sleeper";
+import { configureSleeperBudget, countSleeperCalls } from "@/lib/sleeper-budget";
 import {
   BULK_SYNC_COOLDOWN_SECONDS,
   IDLE_BULK_SYNC_STATE,
@@ -8,6 +10,12 @@ import {
   type LeagueSyncJobStatus,
 } from "@/lib/league-bulk-sync-types";
 import { loadManagerPulseSettings } from "@/lib/manager-pulse/settings";
+import { managerPulseNeedsCapture } from "@/lib/manager-pulse/freshness";
+import { finalizeManagerPulseRun } from "@/lib/manager-pulse/finalize";
+import { shouldComputeLiveReport, computeLiveReport } from "@/lib/manager-pulse/live-report";
+import { coalesce } from "@/lib/request-coalesce";
+import type { ManagerPulseSettings } from "@/lib/manager-pulse/types";
+import type { ManagerPulseSyncSettings } from "@/lib/manager-pulse/default-settings";
 
 /**
  * Sync all: one press, every league, drained by a worker.
@@ -38,6 +46,15 @@ import { loadManagerPulseSettings } from "@/lib/manager-pulse/settings";
  *   no Sleeper traffic; a league nobody has ever opened does the full sync. With
  *   a twelve-hour gap between presses, near enough everything is stale by the
  *   next one anyway, so forcing would buy nothing and spend a great deal.
+ *
+ * HOW A PASS IS PACED, NOW THAT THERE IS EXACTLY ONE DRAINER
+ *   A lease row (league_sync_worker_lease, migration 0264) makes exactly one
+ *   worker pass drain this queue at a time. With one drainer, the process-wide
+ *   Sleeper token bucket (lib/sleeper-budget.ts) in front of every Sleeper call
+ *   IS the site's budget for queue traffic: there is no fixed pause between
+ *   jobs here, because the bucket is what paces them. A pass renews its lease
+ *   before every claim and stops claiming the moment a renewal fails, because
+ *   that means another pass now holds it.
  */
 
 type Admin = SupabaseClient<Database>;
@@ -53,64 +70,18 @@ export {
 };
 
 /**
- * Leagues a single worker run will take.
- *
- * Five is what the budget below can finish in the bad case: a cold league sync
- * is commonly five to fifteen seconds, plus the pace between them. A run that
- * claims more than it reaches releases the rest, so overshooting costs a little
- * churn rather than a stalled queue, and a batch of already-fresh leagues (each
- * one indexed read, no Sleeper traffic) clears all five in seconds.
- *
- * On the one-minute schedule that settles at four or five leagues a minute:
- * around 200 Sleeper calls a minute at the very worst, against guidance of a
- * thousand.
- */
-const MAX_JOBS_PER_RUN = 8;
-
-/**
- * Breather between leagues inside one run, so a run is a trickle, not a burst.
- *
- * A FOOTPRINT JOB PAYS A SHORTER ONE, because it is a genuinely smaller piece
- * of work: `pulseLeagueFootprint` fetches the league, its rosters, members,
- * drafts, transactions and brackets, and skips the matchup sync and all four
- * per-league computes a full pulse runs. Pacing it like a full pulse spends
- * budget on waiting rather than on syncing.
- *
- * Why this matters beyond throughput: the queue is FIFO and site-wide, so one
- * Manager Pulse lookup at the 60-league cap used to need twelve minutes of
- * exclusive drain, and every "Sync all" press and every other lookup queued
- * behind it. Raising the batch and shortening the footprint pace roughly
- * halves that. It does not make the queue FAIR, which would need per-owner
- * round-robin in the claim RPC; that is a known limitation, recorded rather
- * than pretended away.
- */
-const PACE_MS = 2_500;
-const FOOTPRINT_PACE_MS = 1_200;
-
-/**
- * Soft wall clock for a run. Well under the route's maxDuration, and under the
- * one-minute cadence so runs do not stack up on each other.
- */
-const RUN_BUDGET_MS = 50_000;
-
-/**
  * Tries per league before it is left failed for the reader to retry by hand.
  *
- * This is the CODE FALLBACK only, used when a worker run's settings read
- * genuinely throws (loadManagerPulseSettings itself never throws; it already
- * falls back to DEFAULT_MANAGER_PULSE_SETTINGS on a missing row or a query
- * error, so this branch exists only for a defensive belt-and-braces case). The
- * live value is `manager_pulse_settings.capture.jobMaxAttempts`, admin-edited
- * at /admin/manager-pulse, and it governs Manager Pulse footprint jobs and
- * Sync all bulk-sync jobs alike, because both job kinds are drained from this
- * same league_sync_jobs queue by this same worker.
+ * This is the CODE FALLBACK only, used inside the settings read: the live
+ * value is `manager_pulse_settings.capture.jobMaxAttempts`, admin-edited at
+ * /admin/manager-pulse, and it governs Manager Pulse footprint jobs and Sync
+ * all bulk-sync jobs alike, because both job kinds are drained from this same
+ * league_sync_jobs queue by this same worker. `loadManagerPulseSettings`
+ * itself never throws (it already falls back to
+ * DEFAULT_MANAGER_PULSE_SETTINGS on a missing row or a query error), so this
+ * constant exists only as a belt-and-braces literal beside that one read.
  */
 const MAX_ATTEMPTS = 3;
-
-/** A job still 'processing' after this had no worker finish it. */
-const STALE_PROCESSING_MS = 10 * 60_000;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /* -------------------------------------------------------------------------- */
 /* Enqueue                                                                    */
@@ -280,7 +251,12 @@ export type WorkerSummary = {
   reaped: number;
   released: number;
   requestsCompleted: number;
+  finalized: number;
+  liveReports: number;
+  callsMade: number;
 };
+
+type JobOutcome = { ok: true; skipped?: "fresh" } | { ok: false; error: string };
 
 /**
  * Send a job back to pending with a backoff, or mark it failed once it has had
@@ -289,12 +265,17 @@ export type WorkerSummary = {
  * Every transition is guarded on the status the job was in, so a run that took
  * longer than the stale window cannot overwrite the decision another run has
  * already made about the same job.
+ *
+ * `outcomeMeta` (call count, duration) is recorded only on the TERMINAL
+ * (`failed`) update. A job going back to `pending` is not finished, so there is
+ * nothing yet to report about how it finally settled.
  */
 async function failOrRetry(
   admin: Admin,
   job: LeagueSyncJob,
   message: string,
   maxAttempts: number,
+  outcomeMeta?: { calls: number; durationMs: number },
   staleBefore?: string,
 ): Promise<"retry" | "failed" | "lost"> {
   const attempts = job.attempts + 1;
@@ -311,6 +292,9 @@ async function failOrRetry(
             last_error: message,
             updated_at: now,
             finished_at: now,
+            ...(outcomeMeta
+              ? { sleeper_calls: outcomeMeta.calls, duration_ms: outcomeMeta.durationMs }
+              : {}),
           }
         : {
             status: "pending",
@@ -345,8 +329,9 @@ async function reapStaleJobs(
   summary: WorkerSummary,
   touched: Set<string>,
   maxAttempts: number,
+  staleWindowMs: number,
 ): Promise<void> {
-  const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
+  const cutoff = new Date(Date.now() - staleWindowMs).toISOString();
   const { data: stale } = await admin
     .from("league_sync_jobs")
     .select("*")
@@ -361,6 +346,7 @@ async function reapStaleJobs(
       job,
       "reclaimed after a stalled sync (worker crash or timeout)",
       maxAttempts,
+      undefined,
       cutoff,
     );
     if (outcome === "lost") continue;
@@ -390,6 +376,10 @@ async function reapStaleJobs(
  * be more than one, because `enqueue_manager_pulse_capture` LINKS a run to an
  * already in-flight job for the same user and league rather than duplicating
  * it (migration 0257), so more than one run can be waiting on the same job.
+ *
+ * Returns the set of run ids this job's rows belonged to, so a caller in the
+ * job loop (settleJob) can fold them into `runsTouched` and check whether any
+ * of them just crossed the first live-report checkpoint.
  */
 /**
  * The fixed set of reasons a league-season can fail, and nothing else.
@@ -413,8 +403,8 @@ async function closeManagerPulseRunLeagues(
   job: LeagueSyncJob,
   status: "done" | "failed",
   reason?: RunLeagueFailureReason,
-): Promise<void> {
-  if (!job.manager_run_id) return;
+): Promise<Set<string>> {
+  if (!job.manager_run_id) return new Set();
 
   const now = new Date().toISOString();
   const { data: rows, error: updErr } = await admin
@@ -433,13 +423,14 @@ async function closeManagerPulseRunLeagues(
     console.warn(
       `[league-sync-worker] could not close manager_pulse_run_leagues for job ${job.id}: ${updErr.message}`,
     );
-    return;
+    return new Set();
   }
 
   const runIds = new Set((rows ?? []).map((r) => r.run_id));
   for (const runId of runIds) {
     await recountManagerPulseRun(admin, runId);
   }
+  return runIds;
 }
 
 /**
@@ -489,7 +480,7 @@ async function recountManagerPulseRun(admin: Admin, runId: string): Promise<void
  * Run one league, exactly the way opening that league would run it: a full
  * pulse for a 'pulse' job (Sync all), or the lighter footprint capture for a
  * 'footprint' job (Manager Pulse). See lib/league-pulse.ts
- * pulseLeagueFootprint and docs/manager-pulse-plan.md section 4.4 for why the
+ * pulseLeagueFootprint and docs/manager-pulse/manager-pulse-plan.md section 4.4 for why the
  * two differ.
  *
  * Core first so a league Sleeper does not know about fails before any derived
@@ -511,6 +502,155 @@ async function syncOneLeague(
   }
   await pulseLeagueDerived(admin, core.leagueRowId, { resynced: !core.cached });
   return { ok: true };
+}
+
+/**
+ * Run one job, applying the footprint job's run-time freshness re-check first
+ * (MPS-T035): a league that went fresh while its job waited in the queue
+ * settles as `done` with no Sleeper call at all, rather than re-syncing a
+ * league nothing has changed about since it was queued.
+ *
+ * `currentSeason` is computed ONCE per pass by the caller
+ * (`Number(currentNflSeason())`) and threaded through, since
+ * `managerPulseNeedsCapture` is a pure function of its arguments and must not
+ * read the clock itself.
+ *
+ * Never throws: syncOneLeague's own throw is caught here and reported as a
+ * normal failed outcome, matching the retry/backoff path every other failure
+ * takes.
+ */
+async function runOneJob(
+  admin: Admin,
+  job: LeagueSyncJob,
+  settings: ManagerPulseSettings,
+  currentSeason: number,
+): Promise<JobOutcome> {
+  try {
+    if (job.job_kind === "footprint") {
+      const { data: league } = await admin
+        .from("leagues")
+        .select("capture_completed_at, status, season")
+        .eq("sleeper_league_id", job.sleeper_league_id)
+        .maybeSingle();
+      if (league && !managerPulseNeedsCapture(league, settings, Date.now(), currentSeason)) {
+        return { ok: true, skipped: "fresh" };
+      }
+    }
+    return await syncOneLeague(admin, job);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "the sync threw" };
+  }
+}
+
+/**
+ * Whether a run just crossed its FIRST live-report checkpoint, and if so,
+ * compute it right after the batch that crossed it, so the reader watching
+ * the progress bar sees something better than a bare count as soon as it is
+ * available rather than waiting for a later checkpoint sweep. Only the
+ * first checkpoint is handled here; repeat ones go through
+ * `liveReportCheckpoints`.
+ */
+async function maybeComputeFirstLiveReport(
+  admin: Admin,
+  runId: string,
+  settings: ManagerPulseSettings,
+  summary: WorkerSummary,
+): Promise<void> {
+  const { data: run } = await admin
+    .from("manager_pulse_runs")
+    .select("leagues_done, live_checkpoint_done")
+    .eq("id", runId)
+    .maybeSingle();
+  if (!run) return;
+  if (run.leagues_done >= settings.sync.liveReportFirstAfter && run.live_checkpoint_done === 0) {
+    await computeLiveReport(admin, runId, settings);
+    summary.liveReports += 1;
+  }
+}
+
+/**
+ * Settle one job's outcome: write the terminal `done` state, or run it
+ * through the retry/backoff ladder toward a terminal `failed` state.
+ *
+ * `sleeper_calls` and `duration_ms` are written on both terminal updates
+ * (`done` and `failed`), never on a `pending` retry, since a job that is going
+ * around again has not finished settling yet.
+ *
+ * `closeManagerPulseRunLeagues` is only called from the two terminal
+ * branches, and every run id it returns is folded into `runsTouched` (for the
+ * repeat live-report sweep) and `firstCheckpointCandidates` (for the first
+ * one). Neither checkpoint is computed HERE: this runs inside `mapLimit`, so
+ * awaiting a compute in this function would occupy one of
+ * `sync.jobConcurrency` job slots for the compute's whole duration. The
+ * caller reads `firstCheckpointCandidates` after `mapLimit` returns, outside
+ * any concurrency slot.
+ */
+async function settleJob(
+  admin: Admin,
+  job: LeagueSyncJob,
+  outcome: JobOutcome,
+  calls: number,
+  durationMs: number,
+  settings: ManagerPulseSettings,
+  summary: WorkerSummary,
+  runsTouched: Set<string>,
+  firstCheckpointCandidates: Set<string>,
+): Promise<void> {
+  const maxAttempts = settings.capture.jobMaxAttempts ?? MAX_ATTEMPTS;
+
+  if (outcome.ok) {
+    const now = new Date().toISOString();
+    await admin
+      .from("league_sync_jobs")
+      .update({
+        status: "done",
+        last_error: null,
+        sleeper_calls: calls,
+        duration_ms: durationMs,
+        updated_at: now,
+        finished_at: now,
+      })
+      .eq("id", job.id)
+      .eq("status", "processing");
+    summary.done += 1;
+    const runIds = await closeManagerPulseRunLeagues(admin, job, "done");
+    for (const runId of runIds) {
+      runsTouched.add(runId);
+      firstCheckpointCandidates.add(runId);
+    }
+    return;
+  }
+
+  console.warn(
+    `[league-sync-worker] ${job.sleeper_league_id} failed: ${outcome.error}`,
+  );
+  const result = await failOrRetry(admin, job, outcome.error, maxAttempts, { calls, durationMs });
+  if (result === "failed") {
+    summary.failed += 1;
+    // outcome.error is logged above and deliberately NOT written to a
+    // reader-visible column. See RUN_LEAGUE_FAILURE_TEXT.
+    const runIds = await closeManagerPulseRunLeagues(admin, job, "failed", "sync_failed");
+    for (const runId of runIds) {
+      runsTouched.add(runId);
+      firstCheckpointCandidates.add(runId);
+    }
+  } else if (result === "retry") {
+    summary.retried += 1;
+  }
+}
+
+/** Send jobs claimed but never reached back to pending, so the next pass picks them up right away. */
+async function releaseJobs(admin: Admin, jobs: LeagueSyncJob[], summary: WorkerSummary): Promise<void> {
+  const now = new Date().toISOString();
+  await admin
+    .from("league_sync_jobs")
+    .update({ status: "pending", run_after: now, updated_at: now })
+    .in(
+      "id",
+      jobs.map((j) => j.id),
+    )
+    .eq("status", "processing");
+  summary.released += jobs.length;
 }
 
 /**
@@ -541,11 +681,161 @@ async function closeFinishedRequests(
 }
 
 /**
- * One pass of the queue. Safe to call concurrently with itself: the claim is
- * atomic and every transition is guarded, so two overlapping runs take different
- * jobs rather than the same ones twice.
+ * Runs finalized at the HEAD of a pass, before a single job is claimed.
+ * Capped small (not the full backlog) because each one is a full
+ * `loadManagerPulseInput` (about 15 paged queries over up to
+ * `capture.maxLeaguesPerRun` league-seasons) plus `computeFootprint`, run
+ * serially, and this work sits in front of the pass's first Sleeper call.
+ * Stacking up to `TAIL_FINALIZE_LIMIT` of those here could itself run long
+ * enough to let the pass's lease expire before the claim loop's own renewals
+ * even begin. The rest of the backlog is finalized at the tail instead,
+ * where a slow run only delays cleanup, not every job this pass would have
+ * claimed.
  */
-export async function runLeagueSyncWorker(admin: Admin): Promise<WorkerSummary> {
+const HEAD_FINALIZE_LIMIT = 2;
+
+/** Runs finalized at the tail of a pass, once this pass's own jobs are done. */
+const TAIL_FINALIZE_LIMIT = 10;
+
+/**
+ * Finalize any Manager Pulse run that finished capturing and is waiting to be
+ * built into a report (MPS-T040). Bounded to the oldest `limit` so this never
+ * turns into a full-table sweep, and each run is coalesced on its own id so a
+ * run cannot be finalized twice by two overlapping passes. Called once at the
+ * head of a pass (capped to `HEAD_FINALIZE_LIMIT`) and once at the tail
+ * (capped to `TAIL_FINALIZE_LIMIT`), so a big backlog is worked down over
+ * several passes rather than blocking the head of any one of them.
+ */
+async function finalizeComputingRuns(
+  admin: Admin,
+  settings: ManagerPulseSettings,
+  summary: WorkerSummary,
+  limit: number,
+): Promise<void> {
+  const { data: runs } = await admin
+    .from("manager_pulse_runs")
+    .select("id")
+    .eq("status", "computing")
+    .is("completed_at", null)
+    .order("updated_at", { ascending: true })
+    .limit(limit);
+  for (const run of runs ?? []) {
+    await coalesce(`finalize:${run.id}`, () => finalizeManagerPulseRun(admin, run.id, settings));
+    summary.finalized += 1;
+  }
+}
+
+/**
+ * The minimum gap, in milliseconds, a run must leave between its last
+ * checkpoint and its next one, once it has at least one checkpoint already
+ * (`lastCheckpointDone > 0`; the first checkpoint has no such gate and is
+ * handled separately by `maybeComputeFirstLiveReport`).
+ *
+ * This sweep used to run once, after the whole pass's job loop, so a run
+ * ever got at most one repeat checkpoint per `passBudgetSeconds` (280s
+ * default): far slower than `liveReportEveryLeagues` / `liveReportMinIntervalMs`
+ * promise on their own. Moving the sweep inside the claim loop (below) so it
+ * runs once per claimed batch fixes that pacing, but only if the gate that
+ * decides whether a checkpoint actually fires does not fire on every batch:
+ * `shouldComputeLiveReport`'s own gates (>= liveReportEveryLeagues leagues
+ * since last time, AND >= liveReportMinIntervalMs elapsed) are satisfied by
+ * roughly one checkpoint every liveReportMinIntervalMs once a run is
+ * progressing, because leagues complete faster than that fixed interval.
+ * For a 250-league run that is on the order of 50 checkpoints
+ * (250 / liveReportEveryLeagues), each re-reading everything finished so
+ * far: 5 + 10 + ... + 250 league-reads, quadratic in league count and
+ * roughly 25x a single full read of the run. That is worse than the bug
+ * being fixed.
+ *
+ * This gate adds a SECOND, GROWING requirement on top of (never looser than)
+ * `shouldComputeLiveReport`'s own: the required gap since the last
+ * checkpoint scales with how much the last checkpoint already covered, so a
+ * small run still checkpoints close to every `liveReportMinIntervalMs` (a
+ * reader on an empty page benefits most from an early update), while a large
+ * one spaces its later checkpoints out (a checkpoint near the end costs
+ * nearly as much as the real thing and moves the number on screen the
+ * least). Modeled at a roughly constant per-league processing rate implied
+ * by the 250-league / ~19-minute case in section 4.4, this produces
+ * checkpoints at roughly 3, 10, 23, 48, 94 and 180 leagues covered: about 6
+ * checkpoints, whose costs sum to roughly 360 league-reads, about 1.4x a
+ * single full read of the run, better than today's own worst case (roughly
+ * 5x, via the once-per-pass bug) and far below the roughly 25x a naive fix
+ * would cost.
+ */
+function checkpointGapMs(lastCheckpointDone: number, sync: ManagerPulseSyncSettings): number {
+  return sync.liveReportMinIntervalMs * (1 + lastCheckpointDone / sync.liveReportEveryLeagues);
+}
+
+/**
+ * The repeat live-report sweep (MPS-T041). Runs once per claimed batch
+ * (inside the claim loop) and once more after the loop ends, for every run
+ * touched so far this pass: read its checkpoint state and compute a fresh
+ * live report when it is due. Only a run still `capturing` is eligible: a
+ * run that has moved on to `computing` is about to be finalized into the
+ * real report, and a live report is read by the progress panel only.
+ *
+ * `checkpointGapMs` is checked first, cheaply, off the row already read: it
+ * can only make a checkpoint LESS likely than `shouldComputeLiveReport`
+ * alone would, so it never re-introduces the once-per-pass bug this
+ * replaces, only defends against firing too often instead.
+ */
+async function liveReportCheckpoints(
+  admin: Admin,
+  settings: ManagerPulseSettings,
+  runsTouched: Set<string>,
+  summary: WorkerSummary,
+): Promise<void> {
+  for (const runId of runsTouched) {
+    const { data: run } = await admin
+      .from("manager_pulse_runs")
+      .select("status, leagues_done, live_checkpoint_done, live_checkpoint_at")
+      .eq("id", runId)
+      .maybeSingle();
+    if (!run || run.status !== "capturing") continue;
+    if (run.live_checkpoint_done > 0 && run.live_checkpoint_at) {
+      const gap = checkpointGapMs(run.live_checkpoint_done, settings.sync);
+      if (Date.now() - Date.parse(run.live_checkpoint_at) < gap) continue;
+    }
+    const due = shouldComputeLiveReport({
+      leaguesDone: run.leagues_done,
+      lastCheckpointDone: run.live_checkpoint_done,
+      lastCheckpointAt: run.live_checkpoint_at,
+      nowMs: Date.now(),
+      sync: settings.sync,
+    });
+    if (due) {
+      await computeLiveReport(admin, runId, settings);
+      summary.liveReports += 1;
+    }
+  }
+}
+
+/** Renew (or first-acquire) this pass's lease. False means another pass now holds it. */
+async function renewLease(admin: Admin, holder: string, seconds: number): Promise<boolean> {
+  const { data } = await admin.rpc("try_acquire_league_sync_lease", {
+    p_holder: holder,
+    p_seconds: seconds,
+  });
+  return data === true;
+}
+
+/**
+ * One pass of the queue. `renewLease` runs before every claim, `options.holder`
+ * naming this pass: its first call also serves as the acquire when nobody
+ * holds the lease yet, and every call after that is a genuine renewal. Claiming
+ * stops the moment a renewal fails, because that means some other pass now
+ * holds it. Exactly one pass drains the queue at a time (see the module doc
+ * comment); the caller is responsible for releasing the lease after this
+ * returns (the cron route also pre-checks the lease itself, so a held lease
+ * can be reported without ever starting a pass).
+ */
+export async function runLeagueSyncWorker(
+  admin: Admin,
+  options: { holder: string },
+): Promise<WorkerSummary> {
+  const settings = await loadManagerPulseSettings(admin); // never throws
+  const sync = settings.sync;
+  configureSleeperBudget(sync.sleeperCallsPerMinute);
   const summary: WorkerSummary = {
     claimed: 0,
     done: 0,
@@ -554,112 +844,97 @@ export async function runLeagueSyncWorker(admin: Admin): Promise<WorkerSummary> 
     reaped: 0,
     released: 0,
     requestsCompleted: 0,
+    finalized: 0,
+    liveReports: 0,
+    callsMade: 0,
   };
-  const deadline = Date.now() + RUN_BUDGET_MS;
+  const deadline = Date.now() + sync.passBudgetSeconds * 1000;
+  const leaseSeconds = sync.passBudgetSeconds + 30;
   const touched = new Set<string>();
+  const runsTouched = new Set<string>();
+  let calls = 0;
 
-  // Loaded once per worker run, not once per job: the setting can only move
-  // by an admin save, and re-reading it on every job would be a query per
-  // league for a number that never changes mid-run.
-  let maxAttempts = MAX_ATTEMPTS;
-  try {
-    const settings = await loadManagerPulseSettings(admin);
-    maxAttempts = settings.capture.jobMaxAttempts;
-  } catch {
-    // loadManagerPulseSettings already falls back to the code defaults
-    // internally; this catch only guards against a genuine throw reaching
-    // here, so a settings outage can never stall the queue.
-  }
+  // Computed once per pass, not once per job: managerPulseNeedsCapture is a
+  // pure function and must not read the clock itself.
+  const currentSeason = Number(currentNflSeason());
+  const maxAttempts = settings.capture.jobMaxAttempts ?? MAX_ATTEMPTS;
 
-  await reapStaleJobs(admin, summary, touched, maxAttempts);
+  await reapStaleJobs(admin, summary, touched, maxAttempts, sync.staleProcessingMinutes * 60_000);
+  await finalizeComputingRuns(admin, settings, summary, HEAD_FINALIZE_LIMIT); // T040, capped
 
-  const { data: claimed, error: claimErr } = await admin.rpc(
-    "claim_league_sync_jobs",
-    { p_limit: MAX_JOBS_PER_RUN },
-  );
-  if (claimErr) {
-    console.error("[league-sync-worker] claim failed", claimErr);
-    await closeFinishedRequests(admin, touched, summary);
-    return summary;
-  }
+  // Top off the lease right after the head-of-pass work above. That work
+  // renews nothing on its own, and if it ran long enough, the claim loop's
+  // OWN first renewal (below) might never even execute: the deadline check
+  // that guards the loop could already have tripped, in which case a lease
+  // acquired once at the top of this pass would otherwise sit unrenewed
+  // until this function returns.
+  await renewLease(admin, options.holder, leaseSeconds);
 
-  const jobs = (claimed ?? []) as LeagueSyncJob[];
-  summary.claimed = jobs.length;
+  while (Date.now() < deadline && calls < sync.maxCallsPerPass) {
+    const renewed = await renewLease(admin, options.holder, leaseSeconds);
+    if (!renewed) break; // somebody else holds it now
+    const { data: claimed, error } = await admin.rpc("claim_league_sync_jobs", {
+      p_limit: sync.jobsPerClaim,
+    });
+    if (error || !claimed || claimed.length === 0) break;
+    const jobs = claimed as LeagueSyncJob[];
+    summary.claimed += jobs.length;
 
-  let i = 0;
-  for (; i < jobs.length; i++) {
-    if (Date.now() >= deadline) break;
-    const job = jobs[i];
-    // See the comment in reapStaleJobs: a job carries request_id OR
-    // manager_run_id, never both. closeFinishedRequests only knows about
-    // request_id owners.
-    if (job.request_id) touched.add(job.request_id);
-
-    // Pace between leagues, never before the first, and never past the deadline.
-    // The gap is set by the job we are about to run, not the one just finished.
-    if (i > 0) {
-      const pace = job.job_kind === "footprint" ? FOOTPRINT_PACE_MS : PACE_MS;
-      const wait = Math.min(pace, deadline - Date.now());
-      if (wait > 0) await sleep(wait);
-      if (Date.now() >= deadline) break;
-    }
-
-    let outcome: { ok: true } | { ok: false; error: string };
-    try {
-      outcome = await syncOneLeague(admin, job);
-    } catch (err) {
-      outcome = {
-        ok: false,
-        error: err instanceof Error ? err.message : "the sync threw",
-      };
-    }
-
-    if (outcome.ok) {
-      const now = new Date().toISOString();
-      await admin
-        .from("league_sync_jobs")
-        .update({
-          status: "done",
-          last_error: null,
-          updated_at: now,
-          finished_at: now,
-        })
-        .eq("id", job.id)
-        .eq("status", "processing");
-      summary.done += 1;
-      await closeManagerPulseRunLeagues(admin, job, "done");
-    } else {
-      console.warn(
-        `[league-sync-worker] ${job.sleeper_league_id} failed: ${outcome.error}`,
+    const leftover: LeagueSyncJob[] = [];
+    const firstCheckpointCandidates = new Set<string>();
+    await mapLimit(jobs, sync.jobConcurrency, async (job) => {
+      if (Date.now() >= deadline || calls >= sync.maxCallsPerPass) {
+        leftover.push(job);
+        return;
+      }
+      // See the comment in reapStaleJobs: a job carries request_id OR
+      // manager_run_id, never both. closeFinishedRequests only knows about
+      // request_id owners.
+      if (job.request_id) touched.add(job.request_id);
+      const startedAt = Date.now();
+      const { result: outcome, calls: jobCalls } = await countSleeperCalls(() =>
+        runOneJob(admin, job, settings, currentSeason),
       );
-      const result = await failOrRetry(admin, job, outcome.error, maxAttempts);
-      if (result === "failed") {
-        summary.failed += 1;
-        // outcome.error is logged above and deliberately NOT written to a
-        // reader-visible column. See RUN_LEAGUE_FAILURE_TEXT.
-        await closeManagerPulseRunLeagues(admin, job, "failed", "sync_failed");
-      } else if (result === "retry") {
-        summary.retried += 1;
+      calls += jobCalls;
+      summary.callsMade += jobCalls;
+      await settleJob(
+        admin,
+        job,
+        outcome,
+        jobCalls,
+        Date.now() - startedAt,
+        settings,
+        summary,
+        runsTouched,
+        firstCheckpointCandidates,
+      );
+    });
+    if (leftover.length > 0) await releaseJobs(admin, leftover, summary);
+
+    // The first live-report checkpoint runs here, OUTSIDE mapLimit's own
+    // concurrency slots, rather than awaited inside settleJob: computing one
+    // is a full loadManagerPulseInput plus computeFootprint, and awaiting
+    // that inside the mapLimit body would occupy one of sync.jobConcurrency
+    // slots for its whole duration.
+    if (firstCheckpointCandidates.size > 0) {
+      await renewLease(admin, options.holder, leaseSeconds);
+      for (const runId of firstCheckpointCandidates) {
+        await maybeComputeFirstLiveReport(admin, runId, settings, summary);
       }
     }
-  }
 
-  // Jobs we claimed but never reached go straight back to pending, so the next
-  // run picks them up in a minute rather than waiting out the stale window.
-  const leftover = jobs.slice(i);
-  if (leftover.length > 0) {
-    const now = new Date().toISOString();
-    await admin
-      .from("league_sync_jobs")
-      .update({ status: "pending", run_after: now, updated_at: now })
-      .in(
-        "id",
-        leftover.map((j) => j.id),
-      )
-      .eq("status", "processing");
-    summary.released = leftover.length;
+    // Repeat checkpoints (MPS-T041) run once per claimed batch instead of
+    // once per pass, so a long pass gets more than one live update. See
+    // checkpointGapMs for why this cannot become the quadratic it looks
+    // like.
+    await liveReportCheckpoints(admin, settings, runsTouched, summary);
   }
 
   await closeFinishedRequests(admin, touched, summary);
+  // A final sweep for anything the in-loop calls above did not already
+  // catch (for example a run only touched by work before the loop started).
+  await liveReportCheckpoints(admin, settings, runsTouched, summary); // T041
+  await renewLease(admin, options.holder, leaseSeconds);
+  await finalizeComputingRuns(admin, settings, summary, TAIL_FINALIZE_LIMIT);
   return summary;
 }

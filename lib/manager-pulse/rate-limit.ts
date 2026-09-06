@@ -5,7 +5,7 @@ import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
 import type { ManagerPulseSettings } from "./default-settings";
 
 /**
- * The rate limit on resolving a Sleeper handle: docs/manager-pulse-plan.md
+ * The rate limit on resolving a Sleeper handle: docs/manager-pulse/manager-pulse-plan.md
  * section 9, "Rate limits: ... plus claimRateLimitSlot on the handle lookup
  * endpoint so an authenticated user cannot enumerate handles at speed."
  *

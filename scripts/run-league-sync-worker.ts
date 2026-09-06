@@ -11,6 +11,7 @@
  * --watch is how you see a queued batch actually drain against a dev server.
  */
 
+import { randomUUID } from "node:crypto";
 import { getServiceClient } from "./_supabase";
 import { runLeagueSyncWorker } from "../lib/league-bulk-sync";
 
@@ -19,10 +20,11 @@ const PASS_GAP_MS = 5_000;
 async function main() {
   const watch = process.argv.slice(2).includes("--watch");
   const supabase = getServiceClient();
+  const holder = `script:${randomUUID()}`;
 
   for (let pass = 1; ; pass++) {
     const startedAt = Date.now();
-    const summary = await runLeagueSyncWorker(supabase);
+    const summary = await runLeagueSyncWorker(supabase, { holder });
     const elapsed = Date.now() - startedAt;
     console.log(
       `[league-sync-worker] pass ${pass} in ${elapsed}ms: ${JSON.stringify(summary)}`,

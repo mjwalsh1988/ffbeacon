@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Search } from "lucide-react";
-import { currentNflSeason } from "@/lib/sleeper";
+import { currentNflSeason } from "@/lib/nfl-season";
 
 export function LeaguePulseForm({
   defaultUsername,

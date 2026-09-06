@@ -39,6 +39,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { currentNflSeason } from "@/lib/nfl-season";
 import { loadManagerPulseSettings } from "./settings";
 import {
   startManagerCapture,
@@ -48,19 +49,13 @@ import {
 } from "./capture";
 import { isValidSleeperHandle, resolveManagerHandle } from "./discover";
 import { claimManagerLookupSlot } from "./rate-limit";
-import { loadManagerPulseInput } from "./load";
-import { computeFootprint } from "./engine";
-import { buildTendency, tendencySamples } from "./tendencies";
-import { managerPulseFingerprint } from "./fingerprint";
 import type {
   GetManagerFootprintRequest,
   GetManagerTendenciesRequest,
   ManagerFootprintResult,
-  ManagerLeagueCategory,
   ManagerPulseSettings,
   ManagerReport,
   ManagerTendency,
-  PartialReport,
 } from "./types";
 
 type Admin = SupabaseClient<Database>;
@@ -158,71 +153,14 @@ async function readCachedReportByHandle(
 }
 
 /**
- * Store a report and its tendency row.
+ * Mark a run finished, so its progress row stops reading as in flight.
  *
- * Non-fatal by design. A failed write means the next reader recomputes, which
- * is slower and correct. Failing the request instead would throw away a report
- * we have already built, which is slower and ruder.
+ * `service.ts` calls this only from the MPS-T002 guarantee below: a run that
+ * never gets past the capture step and throws for some other reason is still
+ * closed as error rather than left open. The normal "capture finished, report
+ * built" close happens in `finalize.ts`, which owns its own copy of this
+ * helper so it does not have to import the render path to reach it.
  */
-async function writeReport(
-  admin: Admin,
-  params: {
-    sleeperUserId: string;
-    handle: string;
-    seasonFrom: number;
-    seasonTo: number;
-    modelVersion: string;
-    report: ManagerReport;
-    fingerprint: string;
-    tendency: ManagerTendency;
-  },
-): Promise<void> {
-  const samples = tendencySamples(params.tendency);
-  try {
-    const { error: reportError } = await admin.from("manager_pulse_cache").upsert(
-      {
-        sleeper_user_id: params.sleeperUserId,
-        sleeper_handle: params.handle,
-        season_from: params.seasonFrom,
-        season_to: params.seasonTo,
-        model_version: params.modelVersion,
-        report: params.report as unknown as Database["public"]["Tables"]["manager_pulse_cache"]["Insert"]["report"],
-        fingerprint: params.fingerprint,
-        league_seasons_counted: params.report.counts.leagueSeasons,
-        dynasty_seasons_counted: params.report.counts.dynasty,
-        redraft_seasons_counted: params.report.counts.redraft,
-        generated_at: params.report.generatedAt,
-      },
-      { onConflict: "sleeper_user_id,season_from,season_to,model_version" },
-    );
-    if (reportError) throw new Error(reportError.message);
-
-    const { error: tendencyError } = await admin.from("manager_pulse_tendencies").upsert(
-      {
-        sleeper_user_id: params.sleeperUserId,
-        sleeper_handle: params.handle,
-        tendency:
-          params.tendency as unknown as Database["public"]["Tables"]["manager_pulse_tendencies"]["Insert"]["tendency"],
-        dynasty_sample: samples.dynasty,
-        redraft_sample: samples.redraft,
-        seasons_covered: params.tendency.seasonsCovered,
-        season_from: params.seasonFrom,
-        season_to: params.seasonTo,
-        model_version: params.modelVersion,
-        generated_at: params.report.generatedAt,
-      },
-      { onConflict: "sleeper_user_id" },
-    );
-    if (tendencyError) throw new Error(tendencyError.message);
-  } catch (err) {
-    console.error(
-      "[manager-pulse/service] report write failed:",
-      err instanceof Error ? err.message : err,
-    );
-  }
-}
-
-/** Mark a run finished, so its progress row stops reading as in flight. */
 async function closeRun(
   admin: Admin,
   runId: string,
@@ -297,9 +235,21 @@ export async function getManagerFootprint(
   admin: Admin,
   userId: string,
   request: GetManagerFootprintRequest,
+  /**
+   * The settings row, when the caller already holds it. The page reads it to
+   * decide the panel's poll interval, and reading it twice per render is one
+   * indexed query nobody needs. Omitted, it is read here as before.
+   */
+  presetSettings?: ManagerPulseSettings,
 ): Promise<ManagerFootprintResult> {
+  // MPS-T002's guarantee, kept even though most of what it originally
+  // guarded (a thrown compute) moved out to finalize.ts in MPS-T040: a run
+  // that reaches "started" or "warm" and then something in THIS function
+  // throws before returning is still closed as error rather than left open
+  // for a reader who will never see the drainer's finalize pass explain why.
+  let openRunId: string | null = null;
   try {
-    const settings = await loadManagerPulseSettings(admin);
+    const settings = presetSettings ?? (await loadManagerPulseSettings(admin));
     // Resolved once, from the database rather than from the caller, and used
     // for both throttles below. See canBypassThrottle.
     const bypassThrottle = await canBypassThrottle(admin, userId, settings);
@@ -317,7 +267,6 @@ export async function getManagerFootprint(
     // costs nothing; a well-formed guess costs a slot.
     let sleeperUserId = request.sleeperUserId ?? null;
     let handle = request.handle ?? "";
-    let avatarUrl: string | null = null;
     let resolvedSubject: {
       sleeperUserId: string;
       handle: string;
@@ -369,7 +318,6 @@ export async function getManagerFootprint(
       resolvedSubject = resolved;
       sleeperUserId = resolved.sleeperUserId;
       handle = resolved.handle;
-      avatarUrl = resolved.avatarUrl;
     }
 
     // 1. Warm cache. A reader whose report is already built pays nothing.
@@ -429,6 +377,10 @@ export async function getManagerFootprint(
           ...(resolvedSubject ? { resolved: resolvedSubject } : {}),
         });
 
+    if (capture.status === "started" || capture.status === "warm") {
+      openRunId = capture.runId;
+    }
+
     if (capture.status === "not_found") return { status: "not_found", handle };
     if (capture.status === "empty") return { status: "empty", reason: "no_leagues" };
     if (capture.status === "throttled") {
@@ -443,97 +395,28 @@ export async function getManagerFootprint(
           stale: true,
         };
       }
-      return { status: "throttled", retryAfterSeconds: capture.retryAfterSeconds };
+      return {
+        status: "throttled",
+        retryAfterSeconds: capture.retryAfterSeconds,
+        budgetUsed: capture.budgetUsed,
+        budgetTotal: capture.budgetTotal,
+      };
     }
     if (capture.status === "error") return { status: "error", detail: capture.detail };
 
-    // 3. Still draining. Hand back real progress plus whatever is already built.
-    if (capture.status === "started" && capture.progress.status === "capturing") {
-      const partial: PartialReport = cached
-        ? ({ ...cached.report } as unknown as PartialReport)
-        : {};
-      return { status: "building", progress: capture.progress, partial };
-    }
-
-    // 4. Everything needed is present. Build the report.
-    const runLeagues = await readRunLeagues(admin, capture.runId);
-    if (runLeagues.length === 0) {
-      await closeRun(admin, capture.runId, "complete", "No league-seasons in the window.");
-      return { status: "empty", reason: "window_empty" };
-    }
-
-    const input = await loadManagerPulseInput(admin, {
-      sleeperUserId,
-      handle,
-      avatarUrl,
-      seasonFrom,
-      seasonTo,
-      settings,
-      leagueSeasons: runLeagues.map((l) => ({
-        sleeperLeagueId: l.sleeperLeagueId,
-        season: l.season,
-        category: l.category,
-        leagueName: l.leagueName,
-      })),
-      leagueSeasonsSkipped: 0,
-    });
-
-    const generatedAt = new Date().toISOString();
-    const report = computeFootprint(input, generatedAt);
-
-    const fingerprint = managerPulseFingerprint({
-      seasonFrom,
-      seasonTo,
-      leagueSeasons: input.leagueSeasons.map((s) => ({
-        leagueId: s.sleeperLeagueId,
-        season: s.season,
-      })),
-      modelVersion,
-      counts: {
-        transactions: input.moves.length,
-        drafts: input.drafts.length,
-        settledMatchups: input.weeklyMoves.length,
-      },
-      // display is part of the fingerprint too: affinity.ts, results.ts and
-      // narrative.ts all slice their "top N" lists INSIDE computeFootprint,
-      // and the sliced result is what gets baked into manager_pulse_cache.
-      // Leaving display out meant raising favouritesShown (or any other
-      // display count) changed nothing for an existing report until the
-      // model version was bumped, because nothing ever noticed the setting
-      // had moved.
-      settings: { samples: settings.samples, draft: settings.draft, display: settings.display },
-    });
-
-    // A fingerprint that matches the cached one means nothing that can change
-    // the report has changed, so the cached generatedAt is the honest timestamp
-    // and there is no reason to rewrite the row.
-    if (cached && cached.fingerprint === fingerprint) {
-      await closeRun(admin, capture.runId, "complete", null);
-      return {
-        status: "ready",
-        report: cached.report,
-        generatedAt: cached.generatedAt,
-        stale: false,
-      };
-    }
-
-    const tendency = buildTendency(input, report);
-    await writeReport(admin, {
-      sleeperUserId,
-      handle,
-      seasonFrom,
-      seasonTo,
-      modelVersion,
-      report,
-      fingerprint,
-      tendency,
-    });
-    await closeRun(admin, capture.runId, "complete", null);
-
-    return { status: "ready", report, generatedAt, stale: false };
+    // Both remaining outcomes ("started": still reading leagues, "warm":
+    // done reading and waiting to be computed) hand back real progress and
+    // nothing else. The render path never loads or computes a report: a
+    // background pass finalizes the run (finalize.ts) once its leagues are
+    // in, woken by the same signal T003 uses to wake the drainer, and the
+    // panel reads a live checkpoint (live-report.ts) in the meantime.
+    return { status: "building", progress: capture.progress };
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Unknown error";
     console.error("[manager-pulse/service] getManagerFootprint failed:", detail);
+    if (openRunId) {
+      await closeRun(admin, openRunId, "error", "The report could not be built.");
+    }
     return { status: "error", detail: "The report could not be built." };
   }
 }
@@ -635,56 +518,17 @@ function resolveWindow(
   const size = Math.min(seasonWindowMax, Math.max(seasonWindowMin, requested));
   // The current NFL season is the top of the window. Derived here rather than
   // from a clock inside the engine, which stays pure.
-  const seasonTo = currentSeason();
+  //
+  // MPS-T001 (finding F14): this used to be a private copy of the rollover
+  // rule, using getUTCMonth() / getUTCFullYear(). capture.ts computes the
+  // same window with currentNflSeason(), which uses LOCAL time. Two copies of
+  // one rule disagreed for a few hours around every March rollover on a
+  // non-UTC runtime, so the cache read here and the run row capture.ts wrote
+  // could land in different season windows. Importing the one shared,
+  // client-safe copy from lib/nfl-season.ts (not lib/sleeper.ts, which pulls
+  // in node:async_hooks) closes that gap.
+  const seasonTo = Number(currentNflSeason());
   return { seasonFrom: seasonTo - (size - 1), seasonTo };
-}
-
-/**
- * The season a Manager Pulse window ends on.
- *
- * Sleeper rolls its league year over in the spring, so a lookup in February is
- * still asking about the season that just finished. Matching
- * `currentNflSeason()` in lib/sleeper.ts rather than restating the rule.
- */
-function currentSeason(): number {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  // Before March the NFL season in progress is the previous calendar year's.
-  return now.getUTCMonth() < 2 ? year - 1 : year;
-}
-
-type RunLeague = {
-  sleeperLeagueId: string;
-  season: number;
-  leagueName: string | null;
-  category: ManagerLeagueCategory | null;
-};
-
-/** The league-seasons this run decided the report covers. Paged. */
-async function readRunLeagues(admin: Admin, runId: string): Promise<RunLeague[]> {
-  const out: RunLeague[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await admin
-      .from("manager_pulse_run_leagues")
-      .select("sleeper_league_id, season, league_name, league_category, status")
-      .eq("run_id", runId)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      // A league we could not read contributes nothing rather than contributing
-      // a hole the report would have to explain twice.
-      if (row.status === "failed" || row.status === "skipped") continue;
-      out.push({
-        sleeperLeagueId: row.sleeper_league_id,
-        season: row.season,
-        leagueName: row.league_name,
-        category: (row.league_category as ManagerLeagueCategory | null) ?? null,
-      });
-    }
-    if (data.length < PAGE) break;
-  }
-  return out;
 }
 
 /* -------------------------------------------------------------------------- */

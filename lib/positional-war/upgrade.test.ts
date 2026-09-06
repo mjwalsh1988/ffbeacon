@@ -1,6 +1,6 @@
 /**
  * Tests for the upgrade what-if (section 15.1.2 of
- * docs/league-pulse-positional-war-plan.md), acceptance criteria E1b-1
+ * docs/league-pulse/league-pulse-positional-war-plan.md), acceptance criteria E1b-1
  * through E1b-5 plus the additional cases the plan calls out.
  *
  * WHAT IS REAL AND WHAT IS FAKED

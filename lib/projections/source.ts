@@ -2,7 +2,7 @@
  * Which projection source a reader gets, and which sources actually have
  * rows for a window.
  *
- * See docs/projection-engine-plan.md, section "3.9 Which source a reader
+ * See docs/projection-engine/projection-engine-plan.md, section "3.9 Which source a reader
  * gets". Every read of player_weekly_projections is meant to go through
  * lib/projections/read.ts, which calls resolveProjectionSource so no caller
  * picks a source for itself and no caller reads a points column directly.

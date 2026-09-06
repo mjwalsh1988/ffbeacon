@@ -84,7 +84,7 @@ function RailCardSkeleton({ rows = 4 }: { rows?: number }) {
 
 /**
  * One report section's placeholder: the accent-number-and-subtitle shape the
- * real sections use (docs/manager-pulse-plan.md 7.5), so the page does not
+ * real sections use (docs/manager-pulse/manager-pulse-plan.md 7.5), so the page does not
  * visibly resize when the real card swaps in.
  */
 export function SectionSkeleton({

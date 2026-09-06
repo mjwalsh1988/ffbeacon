@@ -22,7 +22,7 @@
  * the type was the worse one, and it is the one a desktop screenshot cannot
  * show you.
  *
- * THE FIX, which is the one docs/league-pulse-positional-war-plan.md
+ * THE FIX, which is the one docs/league-pulse/league-pulse-positional-war-plan.md
  * prescribes: a taller aspect ratio below the breakpoint, never fewer series.
  * Below 640 CSS px the coordinate space is sized to the container itself, so
  * the scale factor is never below 1 and a 10-unit label never renders under 10

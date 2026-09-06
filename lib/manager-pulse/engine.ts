@@ -1,5 +1,5 @@
 /**
- * Manager Pulse: the assembly point (docs/manager-pulse-plan.md section 3).
+ * Manager Pulse: the assembly point (docs/manager-pulse/manager-pulse-plan.md section 3).
  *
  * PURE. No Supabase, no fetch, no React, no `Date.now()`. `computeFootprint`
  * takes the plain `ManagerPulseInput` every other module in this directory

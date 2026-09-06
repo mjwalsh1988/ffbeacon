@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  currentNflSeason,
   getAllSleeperTransactions,
+  getNflState,
   getSleeperDraft,
   getSleeperLeague,
   getSleeperLeagueDrafts,
@@ -16,6 +18,7 @@ import {
   type SleeperTransaction,
   type SleeperTradedPick,
 } from "@/lib/sleeper";
+import { resolveCurrentWeek, syncLeagueMatchups } from "@/lib/league-matchups";
 import { deriveFormatSlug } from "@/lib/sleeper-to-format";
 import { calculateLeaguePowerRankings } from "@/lib/league-power-rankings";
 import { refreshPowerPulse } from "@/lib/league-power-pulse";
@@ -412,8 +415,12 @@ export async function pulseLeagueDerived(
         // `leg` is Sleeper's own current week for this league. Projected out of
         // the stored raw object rather than selecting the whole of it, and
         // needed here because whether a game has been played is what decides
-        // whether it is a result.
-        "id, sleeper_league_id, season, leg:metadata->settings->leg",
+        // whether it is a result. `status`, `playoff_week_start` and
+        // `last_scored_leg` are widened onto this same select and handed down
+        // to captureLeagueRawData as `meta` below, so a real resync does not
+        // pay for a second primary-key select of the same row for the same
+        // fields.
+        "id, sleeper_league_id, season, status, leg:metadata->settings->leg, playoff_week_start:metadata->settings->playoff_week_start, last_scored_leg:metadata->settings->last_scored_leg",
       )
       .eq("id", leagueRowId)
       .maybeSingle();
@@ -448,16 +455,25 @@ export async function pulseLeagueDerived(
     await Promise.all([
       (async () => {
         if (force || resynced) {
-          try {
-            await timed("transactions", () =>
-              syncTransactions(supabase, leagueRowId, league.sleeper_league_id, season, force),
-            );
-          } catch (err) {
-            console.warn(
-              `[pulseLeague] transaction sync failed for league ${leagueRowId}:`,
-              (err as Error).message,
-            );
-          }
+          await timed("capture-set", () =>
+            captureLeagueRawData(
+              supabase,
+              {
+                leagueRowId,
+                sleeperLeagueId: league.sleeper_league_id,
+                season,
+                // Already on hand from the select above; passing it down
+                // saves captureLeagueRawData its own primary-key select.
+                meta: {
+                  status: league.status ?? null,
+                  leg: legValue,
+                  playoffWeekStart: Number(league.playoff_week_start),
+                  lastScoredLeg: Number(league.last_scored_leg),
+                },
+              },
+              { force, includeMatchups: false },
+            ),
+          );
         }
 
         // Turning transactions and played matchups into feed entries.
@@ -543,29 +559,6 @@ export async function pulseLeagueDerived(
       includeManagerLedger
         ? timed("manager-ledger", () => refreshManagerLedger(supabase, leagueRowId, { force }))
         : Promise.resolve(),
-
-      // Completed drafts into the pick ledger. A finished draft never changes,
-      // so its picks are worth exactly one Sleeper request ever; the capture
-      // skips anything already stored and caps itself per run. Gated on an
-      // actual resync so a cached load never touches Sleeper for this.
-      (async () => {
-        if (!force && !resynced) return;
-        try {
-          const captured = await timed("draft-picks", () =>
-            captureLeagueDraftSelections(supabase, leagueRowId),
-          );
-          if (captured.draftsCaptured > 0) {
-            console.log(
-              `[pulseLeague] captured ${captured.picksWritten} picks from ${captured.draftsCaptured} completed drafts for league ${leagueRowId}`,
-            );
-          }
-        } catch (err) {
-          console.warn(
-            `[pulseLeague] draft-pick capture failed for league ${leagueRowId}:`,
-            (err as Error).message,
-          );
-        }
-      })(),
     ]);
 
     const { count } = await supabase
@@ -583,6 +576,198 @@ export async function pulseLeagueDerived(
   });
 }
 
+export type CaptureRawOptions = {
+  force: boolean;
+  /**
+   * Whether this call syncs the matchup slate. The derived half passes false
+   * because refreshPowerPulse syncs the slate itself with the failed-week
+   * semantics Power Pulse needs and running it twice in one pass would refetch
+   * the volatile window twice. The footprint path passes true: nothing else on
+   * that path touches the slate.
+   */
+  includeMatchups: boolean;
+};
+
+export type CaptureRawResult = {
+  transactions: "ok" | "failed";
+  brackets: "ok" | "failed" | "not_applicable";
+  draftSelections: "ok" | "failed";
+  matchups: "ok" | "failed" | "skipped";
+  complete: boolean;
+};
+
+/**
+ * The applicability fields captureLeagueRawData needs (status, leg,
+ * playoff_week_start, last_scored_leg), for a caller that already read this
+ * league row and can hand the values down instead of paying for a second
+ * primary-key select of the same row.
+ */
+export type CaptureRawLeagueMeta = {
+  status: string | null;
+  leg: number;
+  playoffWeekStart: number;
+  lastScoredLeg: number;
+};
+
+/**
+ * THE CAPTURE SET. Everything a league sync writes beyond the core rows,
+ * whoever asked for the sync. lib/league-capture-set.test.ts asserts that
+ * pulseLeagueDerived and pulseLeagueFootprint both call this and that nothing
+ * else calls the stage functions directly.
+ *
+ * Stamps leagues.capture_completed_at only when every applicable stage
+ * succeeded, and writes capture_error otherwise. Never throws; a stage failure
+ * is a value in the result, and the FOOTPRINT caller turns an incomplete
+ * result into a failed job so the worker retries it.
+ */
+export async function captureLeagueRawData(
+  supabase: ServiceClient,
+  league: {
+    leagueRowId: string;
+    sleeperLeagueId: string;
+    season: number;
+    /**
+     * Present when the caller already has this row (pulseLeagueDerived reads
+     * its own league row moments before calling this function and widens
+     * that select). Absent for pulseLeagueFootprint, which has no such row
+     * on hand and falls back to reading it here.
+     */
+    meta?: CaptureRawLeagueMeta;
+  },
+  options: CaptureRawOptions,
+): Promise<CaptureRawResult> {
+  const { leagueRowId, sleeperLeagueId, season } = league;
+  const result: CaptureRawResult = {
+    transactions: "failed",
+    brackets: "not_applicable",
+    draftSelections: "failed",
+    matchups: "skipped",
+    complete: false,
+  };
+
+  let status: string | null;
+  let leg: number;
+  let playoffWeekStart: number;
+  let lastScoredLeg: number;
+  if (league.meta) {
+    ({ status, leg, playoffWeekStart, lastScoredLeg } = league.meta);
+  } else {
+    // One read for everything the stages need to decide applicability, for a
+    // caller that did not already have this row.
+    const { data: row } = await supabase
+      .from("leagues")
+      .select(
+        "status, leg:metadata->settings->leg, playoff_week_start:metadata->settings->playoff_week_start, last_scored_leg:metadata->settings->last_scored_leg",
+      )
+      .eq("id", leagueRowId)
+      .maybeSingle();
+    status = row?.status ?? null;
+    leg = Number(row?.leg);
+    playoffWeekStart = Number(row?.playoff_week_start);
+    lastScoredLeg = Number(row?.last_scored_leg);
+  }
+  const seasonComplete = status === "complete" || season < Number(currentNflSeason());
+  const playoffsStarted =
+    seasonComplete ||
+    (Number.isFinite(leg) && Number.isFinite(playoffWeekStart) && leg >= playoffWeekStart);
+
+  try {
+    await syncTransactions(
+      supabase,
+      leagueRowId,
+      sleeperLeagueId,
+      season,
+      options.force,
+      lastScoredLeg,
+      seasonComplete,
+    );
+    result.transactions = "ok";
+  } catch (err) {
+    console.warn(`[captureLeagueRawData] transactions failed for ${leagueRowId}:`, (err as Error).message);
+  }
+
+  if (playoffsStarted) {
+    const bracketsOk = await captureLeagueBrackets(supabase, leagueRowId, sleeperLeagueId);
+    result.brackets = bracketsOk ? "ok" : "failed";
+  }
+
+  try {
+    const captured = await captureLeagueDraftSelections(supabase, leagueRowId);
+    result.draftSelections = captured.fetchFailures > 0 ? "failed" : "ok";
+  } catch (err) {
+    console.warn(`[captureLeagueRawData] draft selections failed for ${leagueRowId}:`, (err as Error).message);
+  }
+
+  if (options.includeMatchups) {
+    // Wrapped so the function's own "never throws" contract holds regardless
+    // of who calls it, rather than resting on the fact that the derived path
+    // (the only caller today whose Promise.all a throw here would take down)
+    // happens to pass includeMatchups: false. A page must still render if
+    // this throws, the same reasoning that wraps every stage above it.
+    try {
+      const nflState = await getNflState();
+      const currentWeek = resolveCurrentWeek(
+        nflState,
+        season,
+        Number.isFinite(playoffWeekStart) ? playoffWeekStart : 15,
+      );
+      const sync = await syncLeagueMatchups(supabase, leagueRowId, sleeperLeagueId, season, currentWeek, {
+        force: options.force,
+      });
+      result.matchups = sync.ok && sync.failedWeeks.length === 0 ? "ok" : "failed";
+    } catch (err) {
+      console.warn(`[captureLeagueRawData] matchups failed for ${leagueRowId}:`, (err as Error).message);
+      result.matchups = "failed";
+    }
+  } else {
+    // The caller (pulseLeagueDerived) passes includeMatchups: false on the
+    // assumption that refreshPowerPulse syncs the slate itself, with the
+    // failed-week semantics Power Pulse needs. That assumption does not
+    // always hold: refreshPowerPulse backs off after a recent non-'ok'
+    // verdict, and can itself report failedWeeks without writing a single row
+    // (lib/league-power-pulse.ts). Trusting the skip on its own would stamp
+    // capture_completed_at over a league-season that has never actually
+    // captured a slate, and Manager Pulse's settled-forever rule would then
+    // never look at it again. One bounded existence check settles it without
+    // a Sleeper call of its own; it does not solve the race against a
+    // Power Pulse run still in flight beside this one, it only refuses to
+    // claim victory it cannot see, and a later pass picks it up once the
+    // slate lands.
+    const { count: matchupRowCount } = await supabase
+      .from("league_matchups")
+      .select("id", { count: "exact", head: true })
+      .eq("league_id", leagueRowId)
+      .eq("season", season);
+    if (!matchupRowCount) {
+      result.matchups = "failed";
+    }
+  }
+
+  result.complete =
+    result.transactions === "ok" &&
+    result.brackets !== "failed" &&
+    result.draftSelections === "ok" &&
+    result.matchups !== "failed";
+
+  const now = new Date().toISOString();
+  await supabase
+    .from("leagues")
+    .update(
+      result.complete
+        ? { capture_completed_at: now, capture_error: null, updated_at: now }
+        : {
+            capture_error: `incomplete: ${Object.entries(result)
+              .filter(([k, v]) => k !== "complete" && v === "failed")
+              .map(([k]) => k)
+              .join(", ")}`,
+            updated_at: now,
+          },
+    )
+    .eq("id", leagueRowId);
+
+  return result;
+}
+
 /**
  * The lighter capture a Manager Pulse run queues instead of a full pulse: the
  * league, its rosters, its members, its drafts and its traded picks (all via
@@ -594,16 +779,21 @@ export async function pulseLeagueDerived(
  * that for the sections built on top of this capture, and it can queue dozens
  * of league-seasons for one report, so running the full pulse on each of them
  * would spend most of an hour of compute nobody asked for. See
- * docs/manager-pulse-plan.md section 4.4.
+ * docs/manager-pulse/manager-pulse-plan.md section 4.4.
  *
  * Shares pulseLeagueCore's in-process coalescing (a footprint job and a page
  * render of the same league collapse into one execution) and its 60-minute
  * TTL: on a cache hit, core makes no Sleeper request, and this function skips
  * its own Sleeper requests (the transaction pull and the bracket fetch) for
- * the same reason. `last_pulsed_at` and `pulse_status` are stamped by
- * pulseLeagueCore alone, only after core's own child rows land; the
- * transaction and bracket writes below run AFTER that stamp, the same
- * ordering pulseLeague already uses for its derived half.
+ * the same reason, UNLESS the capture set itself has never completed
+ * (`leagues.capture_completed_at` is null), in which case it runs anyway. A
+ * core cache hit only says the league/roster/member rows are fresh; it says
+ * nothing about whether an earlier capture set finished, and a cached core
+ * that skipped the set outright is exactly how a failed bracket or
+ * transaction stage settled as done and was never retried. `last_pulsed_at`
+ * and `pulse_status` are stamped by pulseLeagueCore alone, only after core's
+ * own child rows land; the transaction and bracket writes below run AFTER
+ * that stamp, the same ordering pulseLeague already uses for its derived half.
  */
 export async function pulseLeagueFootprint(
   supabase: ServiceClient,
@@ -614,47 +804,47 @@ export async function pulseLeagueFootprint(
   const core = await pulseLeagueCore(supabase, sleeperLeagueId, options);
   if (!core.ok) return core;
 
-  // A cache hit means core made no Sleeper request. Treat that as this
+  // A cache hit means core made no Sleeper request, which is usually this
   // function's own signal to skip Sleeper too, the same `force || resynced`
-  // gate pulseLeagueDerived applies to its own transaction sync.
+  // gate pulseLeagueDerived applies to its own transaction sync. But a cache
+  // hit only proves the CORE rows (league, rosters, members) are fresh; it
+  // says nothing about whether the CAPTURE SET (transactions, brackets, draft
+  // selections, matchups) ever finished. A capture-set failure inside the
+  // 60-minute core window leaves `capture_completed_at` null while
+  // `last_pulsed_at` stays fresh, and gating on `resynced` alone let that
+  // league settle as `ok: true` with zero Sleeper calls and no retry: the
+  // worker's own run-time freshness check (lib/league-bulk-sync.ts) correctly
+  // re-queues a league whose capture set never completed, and this function
+  // then silently skipped it anyway. See
+  // docs/manager-pulse/manager-pulse-audit-and-speed-plan.md Part 3.3 and F8.
   const resynced = !core.cached;
+  let captureIncomplete = false;
+  if (!force && !resynced) {
+    const { data: captureState } = await supabase
+      .from("leagues")
+      .select("capture_completed_at")
+      .eq("id", core.leagueRowId)
+      .maybeSingle();
+    captureIncomplete = !captureState?.capture_completed_at;
+  }
 
-  const transactions = await coalesce(
-    `footprint-derived:${core.leagueRowId}:${force}`,
-    async () => {
-      if (force || resynced) {
-        try {
-          await syncTransactions(
-            supabase,
-            core.leagueRowId,
-            sleeperLeagueId,
-            core.season,
-            force,
-          );
-        } catch (err) {
-          console.warn(
-            `[pulseLeagueFootprint] transaction sync failed for league ${core.leagueRowId}:`,
-            (err as Error).message,
-          );
-        }
+  const raw = await coalesce(`footprint-derived:${core.leagueRowId}:${force}`, async () => {
+    if (!(force || resynced || captureIncomplete)) return null;
+    return captureLeagueRawData(
+      supabase,
+      { leagueRowId: core.leagueRowId, sleeperLeagueId, season: core.season },
+      { force, includeMatchups: true },
+    );
+  });
+  if (raw && !raw.complete) {
+    return { ok: false, error: "capture set incomplete", sleeperLeagueId };
+  }
 
-        try {
-          await captureLeagueBrackets(supabase, core.leagueRowId, sleeperLeagueId);
-        } catch (err) {
-          console.warn(
-            `[pulseLeagueFootprint] bracket capture failed for league ${core.leagueRowId}:`,
-            (err as Error).message,
-          );
-        }
-      }
-
-      const { count } = await supabase
-        .from("league_transactions")
-        .select("id", { count: "exact", head: true })
-        .eq("league_id", core.leagueRowId);
-      return count ?? 0;
-    },
-  );
+  const { count } = await supabase
+    .from("league_transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("league_id", core.leagueRowId);
+  const transactions = count ?? 0;
 
   return {
     ok: true,
@@ -680,12 +870,17 @@ export async function pulseLeagueFootprint(
  * rule: `leagues.metadata` already carries the raw Sleeper league object
  * pulseLeagueCore wrote moments earlier, and this merges the brackets key
  * into it instead of clobbering those sibling keys.
+ *
+ * Returns true when at least one bracket was written this run, or when a
+ * prior run already wrote the one this run's fetch could not confirm (the
+ * merge preserves it, so the stored pair is complete either way). Returns
+ * false only when both fetches failed and there is nothing to merge.
  */
 async function captureLeagueBrackets(
   supabase: ServiceClient,
   leagueRowId: string,
   sleeperLeagueId: string,
-): Promise<void> {
+): Promise<boolean> {
   const [winners, losers] = await Promise.all([
     getSleeperWinnersBracket(sleeperLeagueId),
     getSleeperLosersBracket(sleeperLeagueId),
@@ -694,7 +889,7 @@ async function captureLeagueBrackets(
   const patch: Record<string, unknown> = {};
   if (winners !== null) patch.winners = winners;
   if (losers !== null) patch.losers = losers;
-  if (Object.keys(patch).length === 0) return;
+  if (Object.keys(patch).length === 0) return false;
 
   const { data: existing, error: readErr } = await supabase
     .from("leagues")
@@ -705,7 +900,7 @@ async function captureLeagueBrackets(
     console.warn(
       `[pulseLeagueFootprint] could not read metadata for league ${leagueRowId}: ${readErr.message}`,
     );
-    return;
+    return false;
   }
 
   const currentMetadata = (existing?.metadata ?? {}) as Record<string, unknown>;
@@ -726,7 +921,9 @@ async function captureLeagueBrackets(
     console.warn(
       `[pulseLeagueFootprint] could not write brackets for league ${leagueRowId}: ${writeErr.message}`,
     );
+    return false;
   }
+  return true;
 }
 
 /**
@@ -737,6 +934,13 @@ async function captureLeagueBrackets(
  * stored week onward, instead of walking from week 0 every single sync. A force
  * refresh still walks the whole thing, because that is what a user pressing
  * refresh is asking for.
+ *
+ * `lastScoredLeg` caps the far end of the walk. Sleeper's transactions
+ * endpoint has no "how many weeks exist" answer, so without a cap the walk
+ * asks about weeks well past the league's actual last scored week; a settled
+ * league still stops on its own via the empty-week streak, but a live league's
+ * own scored week is the honest ceiling. Passed in from captureLeagueRawData's
+ * own league read rather than queried again here.
  */
 async function syncTransactions(
   supabase: ServiceClient,
@@ -744,6 +948,8 @@ async function syncTransactions(
   sleeperLeagueId: string,
   season: number,
   force: boolean,
+  lastScoredLeg: number,
+  seasonSettled: boolean,
 ): Promise<void> {
   let fromWeek = 0;
   if (!force) {
@@ -762,7 +968,19 @@ async function syncTransactions(
     if (storedMax !== null && Number.isFinite(storedMax)) fromWeek = Math.max(0, storedMax - 1);
   }
 
-  const transactions = await getAllSleeperTransactions(sleeperLeagueId, 25, 3, fromWeek);
+  // MPS-T037's code and its own prose disagreed on the fallback when
+  // last_scored_leg is absent: the code said 25, the sentence right after it
+  // said 18 for a settled league. Resolved toward the prose: a settled
+  // league-season cannot have transactions past week 18 (there is no week 19
+  // in any Sleeper league), so walking to 25 there is seven wasted requests
+  // per such league. An unsettled league missing last_scored_leg (early in a
+  // season, or metadata not yet populated) keeps the wider 25-week ceiling.
+  const maxWeek = Number.isFinite(lastScoredLeg) && lastScoredLeg > 0
+    ? lastScoredLeg + 1
+    : seasonSettled
+      ? 18
+      : 25;
+  const transactions = await getAllSleeperTransactions(sleeperLeagueId, maxWeek, 3, fromWeek);
   await upsertTransactions(supabase, leagueRowId, transactions, season);
 }
 

@@ -1,3 +1,5 @@
+import { acquireSleeperToken, pauseSleeperBudget, isSleeperJobContext } from "@/lib/sleeper-budget";
+
 const BASE = "https://api.sleeper.app/v1";
 
 /** The schedule and projections host. Same origin, no /v1 prefix. */
@@ -15,35 +17,86 @@ const DEFAULT_TIMEOUT_MS = 20_000;
  */
 export const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 
+/** Statuses worth a second try: Sleeper is asking us to slow down, not refusing the request. */
+const RETRYABLE = new Set([429, 503]);
+
+/** Never wait longer than this on a single retry, however large Retry-After claims to be. */
+const MAX_RETRY_AFTER_MS = 30_000;
+
+/** How long to wait before the retry, from the response's Retry-After header (seconds or an
+ * HTTP date), or a small jittered default when the header is missing. */
+function retryAfterMs(response: Response): number {
+  const header = response.headers.get("retry-after");
+  if (!header) return 2_000 + Math.floor(Math.random() * 1_000);
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, seconds * 1000));
+  const at = Date.parse(header);
+  return Number.isFinite(at) ? Math.min(MAX_RETRY_AFTER_MS, Math.max(0, at - Date.now())) : 2_000;
+}
+
+/**
+ * Every Sleeper request goes through here, and every call first acquires a
+ * token from the process-wide budget (lib/sleeper-budget.ts), so a burst of
+ * requests spreads itself out instead of hammering Sleeper. Outside a queue
+ * job that acquire is deadline-bound (lib/sleeper-budget.ts), so a starved or
+ * paused budget returns null here rather than blocking an interactive render.
+ *
+ * Retrying on a 429/503 only happens INSIDE a queue job. There, one retry
+ * after the server's own Retry-After is worth the wait, and a second refusal
+ * is not a fact about this one URL, it is a fact about our current rate, so it
+ * pauses the WHOLE budget (every caller in the process) rather than just
+ * returning null to this caller. Outside a job, on an interactive request
+ * path, a single refusal is answered immediately: waiting out Retry-After
+ * there could block a page render for up to 30 seconds, and one 429 is one
+ * data point, not enough to conclude the whole process needs to slow down.
+ */
 async function safeFetch<T>(
   url: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxBytes = MAX_RESPONSE_BYTES,
 ): Promise<T | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      headers,
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      await acquireSleeperToken();
+      const response = await fetch(url, {
+        headers,
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (RETRYABLE.has(response.status)) {
+        const insideJob = isSleeperJobContext();
+        if (attempt === 0 && insideJob) {
+          const wait = retryAfterMs(response);
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+        if (insideJob) {
+          // Second refusal inside a job: a fact about our rate, not this URL.
+          const wait = retryAfterMs(response);
+          pauseSleeperBudget(Math.max(wait, 10_000));
+        }
+        return null;
+      }
+      if (!response.ok) return null;
 
-    // Fast reject when the server declares an over-limit body up front.
-    const declared = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declared) && declared > maxBytes) return null;
+      // Fast reject when the server declares an over-limit body up front.
+      const declared = Number(response.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > maxBytes) return null;
 
-    // Enforce the cap while reading, since Content-Length may be absent or wrong
-    // (chunked / gzipped responses). Abort past the cap rather than buffer unbounded.
-    const text = await readCapped(response, maxBytes);
-    if (text === null) return null;
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+      // Enforce the cap while reading, since Content-Length may be absent or wrong
+      // (chunked / gzipped responses). Abort past the cap rather than buffer unbounded.
+      const text = await readCapped(response, maxBytes);
+      if (text === null) return null;
+      return JSON.parse(text) as T;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return null;
 }
 
 /** Read a response body enforcing a hard byte cap. Returns null if the cap is exceeded.
@@ -160,6 +213,14 @@ export async function getSleeperLeagues(
   return (await safeFetch<SleeperLeague[]>(`${BASE}/user/${userId}/leagues/nfl/${season}`)) ?? [];
 }
 
+/** Null when the REQUEST failed; [] when Sleeper answered with no leagues. */
+export async function getSleeperLeaguesOrNull(
+  userId: string,
+  season: string,
+): Promise<SleeperLeague[] | null> {
+  return safeFetch<SleeperLeague[]>(`${BASE}/user/${encodeURIComponent(userId)}/leagues/nfl/${season}`);
+}
+
 export async function getSleeperLeague(leagueId: string): Promise<SleeperLeague | null> {
   return safeFetch<SleeperLeague>(`${BASE}/league/${leagueId}`);
 }
@@ -178,6 +239,16 @@ export async function getSleeperWeekTransactions(
 ): Promise<SleeperTransaction[]> {
   return (
     (await safeFetch<SleeperTransaction[]>(`${BASE}/league/${leagueId}/transactions/${week}`)) ?? []
+  );
+}
+
+/** Null when the REQUEST failed; [] when Sleeper answered with no transactions. */
+export async function getSleeperWeekTransactionsOrNull(
+  leagueId: string,
+  week: number,
+): Promise<SleeperTransaction[] | null> {
+  return safeFetch<SleeperTransaction[]>(
+    `${BASE}/league/${encodeURIComponent(leagueId)}/transactions/${Math.trunc(week)}`,
   );
 }
 
@@ -224,6 +295,13 @@ export async function mapLimit<T, R>(
  *
  * `fromWeek` exists because past weeks are settled history. A caller that has
  * already stored weeks 0 through 9 only needs to ask about 9 onward.
+ *
+ * A week whose request fails (as opposed to answering with no transactions)
+ * throws rather than being silently treated as empty: a throttled or timed-out
+ * week could otherwise stop the emptyStop counter and cut the walk short, or
+ * simply drop that week's real transactions on the floor. Callers that must
+ * render regardless (the deep view) already wrap this in a try/catch; callers
+ * that must retry (the footprint worker) rely on the throw propagating.
  */
 export async function getAllSleeperTransactions(
   leagueId: string,
@@ -241,12 +319,18 @@ export async function getAllSleeperTransactions(
       weeks.push(w);
     }
     const batches = await mapLimit(weeks, SLEEPER_BATCH_SIZE, (week) =>
-      getSleeperWeekTransactions(leagueId, week),
+      getSleeperWeekTransactionsOrNull(leagueId, week),
     );
+
+    for (let i = 0; i < weeks.length; i += 1) {
+      if (batches[i] === null) {
+        throw new Error(`Sleeper did not answer for week ${weeks[i]} of league ${leagueId}`);
+      }
+    }
 
     let stop = false;
     for (let i = 0; i < weeks.length; i += 1) {
-      const batch = batches[i];
+      const batch = batches[i] as SleeperTransaction[];
       if (batch.length === 0) {
         emptyStreak += 1;
         if (emptyStreak >= emptyStop && weeks[i] > 0) {
@@ -792,9 +876,12 @@ export async function getSleeperPlayers(): Promise<Record<string, SleeperPlayer>
   return safeFetch<Record<string, SleeperPlayer>>(`${BASE}/players/nfl`, 90_000);
 }
 
-export function currentNflSeason(): string {
-  const now = new Date();
-  // NFL season "year" rolls over March-ish. If we're past March, this year is the season.
-  const year = now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1;
-  return String(year);
-}
+/**
+ * Re-exported from `lib/nfl-season.ts`, which holds the single copy of the
+ * rollover rule. It was moved out of this file because this file now imports
+ * the Sleeper call budget, which imports `node:async_hooks`, which webpack
+ * cannot bundle for a browser: a client component that wants the season and
+ * nothing else imports `@/lib/nfl-season` directly.
+ * `lib/client-sleeper-import.test.ts` holds that line.
+ */
+export { currentNflSeason } from "./nfl-season";

@@ -504,7 +504,7 @@ export function readPoints(metadata: unknown, key: ScoringKey): number {
  * row Postgres returned last silently decide what the page said. A default
  * would make forgetting it invisible.
  *
- * See docs/projection-engine-plan.md, section "3.9 Which source a reader
+ * See docs/projection-engine/projection-engine-plan.md, section "3.9 Which source a reader
  * gets", and lib/projections/raw-column-guard.test.ts, which allow-lists this
  * file for the raw read rather than for the pinned source.
  */

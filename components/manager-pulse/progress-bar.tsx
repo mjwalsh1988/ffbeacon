@@ -1,5 +1,5 @@
 /**
- * A real progress bar for a Manager Pulse capture (docs/manager-pulse-plan.md
+ * A real progress bar for a Manager Pulse capture (docs/manager-pulse/manager-pulse-plan.md
  * 7.4). Presentational only: it takes counted work and renders it.
  *
  * ABSOLUTE RULE: NO PROGRESS BAR ANIMATES ON A TIMER. The fill is bound to a
@@ -16,7 +16,7 @@
 
 export type ProgressBarState =
   | { kind: "indeterminate"; text: string }
-  | { kind: "determinate"; fraction: number; text: string };
+  | { kind: "determinate"; fraction: number; processingFraction: number; text: string };
 
 /**
  * Decide the bar's state from real counts.
@@ -28,6 +28,12 @@ export type ProgressBarState =
  * - Otherwise: determinate, fraction clamped to [0, 1] even if `done` and
  *   `failed` overshoot `total` (a stale read racing a fresher count).
  *
+ * `processing` (leagues currently being read, as opposed to already read or
+ * failed) never pushes the total shown past 1: `processingFraction` is
+ * clamped to whatever room is left after `fraction`. The indeterminate branch
+ * ignores `processing` entirely, since there is no total to take a fraction
+ * of yet.
+ *
  * The text always names counts, never a percentage, because "31 of 44
  * leagues read" survives being spoken aloud and a bare "70%" does not say
  * what it is 70% of.
@@ -36,6 +42,7 @@ export function progressState(
   done: number,
   failed: number,
   total: number | null,
+  processing = 0,
 ): ProgressBarState {
   if (total === null) {
     return {
@@ -50,21 +57,25 @@ export function progressState(
 
   const safeDone = Math.max(0, done);
   const safeFailed = Math.max(0, failed);
+  const safeProcessing = Math.max(0, processing);
   const attempted = Math.min(safeDone + safeFailed, total);
   const fraction = Math.min(1, Math.max(0, attempted / total));
+  const processingFraction = Math.min(1 - fraction, safeProcessing / total);
 
-  const text =
-    safeFailed > 0
-      ? `${safeDone} of ${total} leagues read, ${safeFailed} failed`
-      : `${safeDone} of ${total} leagues read`;
+  const parts = [`${safeDone} of ${total} leagues read`];
+  if (safeProcessing > 0) parts.push(`${safeProcessing} in progress`);
+  if (safeFailed > 0) parts.push(`${safeFailed} failed`);
+  const text = parts.join(", ");
 
-  return { kind: "determinate", fraction, text };
+  return { kind: "determinate", fraction, processingFraction, text };
 }
 
 export function ProgressBar({
   done,
   failed,
   total,
+  processing = 0,
+  waiting = false,
   id,
   className,
   ariaLabel = "Report progress",
@@ -73,6 +84,13 @@ export function ProgressBar({
   done: number;
   failed: number;
   total: number | null;
+  /** Leagues currently being read, distinct from already-read or failed.
+   *  Rendered as a striped decorative segment on the determinate branch only. */
+  processing?: number;
+  /** True when the run appears stalled (no worker heartbeat recently). Slows
+   *  and dims the moving highlight rather than stopping it outright, since
+   *  work may still resume. Has no effect on the indeterminate branch. */
+  waiting?: boolean;
   /** Passed through to the outer element, so a caller can `aria-describedby` it. */
   id?: string;
   className?: string;
@@ -84,7 +102,7 @@ export function ProgressBar({
    *  so the name is not a second, differently worded copy of visible text. */
   ariaLabelledBy?: string;
 }) {
-  const state = progressState(done, failed, total);
+  const state = progressState(done, failed, total, processing);
   const percent = state.kind === "determinate" ? Math.round(state.fraction * 100) : null;
 
   return (
@@ -100,13 +118,33 @@ export function ProgressBar({
       aria-valuetext={state.text}
       aria-label={ariaLabelledBy ? undefined : ariaLabel}
       aria-labelledby={ariaLabelledBy}
-      className={`h-2.5 w-full overflow-hidden rounded-full border border-line bg-surface ${className ?? ""}`}
+      className={`relative h-2.5 w-full overflow-hidden rounded-full border border-line bg-surface ${className ?? ""}`}
     >
       {state.kind === "determinate" ? (
-        <div
-          className="h-full rounded-full bg-beacon transition-[width] duration-300 motion-reduce:transition-none"
-          style={{ width: `${state.fraction * 100}%` }}
-        />
+        <>
+          <div
+            className="h-full rounded-full bg-beacon transition-[width] duration-300 motion-reduce:transition-none"
+            style={{ width: `${state.fraction * 100}%` }}
+          />
+          {/* The striped segment showing leagues currently being read, ahead
+              of the solid fill. Purely decorative: the fill above already
+              carries the counted fraction, and the bar's accessible name and
+              value come from aria-valuetext / aria-valuenow, not from this. */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-y-0 mp-processing"
+            style={{ left: `${state.fraction * 100}%`, width: `${state.processingFraction * 100}%` }}
+          />
+          {/* The moving highlight sweeping across the read portion of the
+              bar, decorative motion layered on top of the real fill. Slowed
+              and dimmed while `waiting` is true, and dropped entirely under
+              prefers-reduced-motion. */}
+          <div
+            aria-hidden="true"
+            className={`absolute inset-y-0 left-0 mp-current ${waiting ? "mp-current-waiting" : ""}`}
+            style={{ width: `${state.fraction * 100}%` }}
+          />
+        </>
       ) : (
         // Indeterminate: a fixed, non-animated pattern rather than a moving
         // sweep. It never implies a known amount of progress, and it never

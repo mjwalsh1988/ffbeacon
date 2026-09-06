@@ -4,7 +4,7 @@
  * Trade count and trades per season are scale-free, so they read straight
  * through `underLens` like the Results section does. Everything else here is
  * priced in league value, so it goes through `PerTypePair`
- * (docs/manager-pulse-plan.md section 6.0): dynasty and redraft never pool,
+ * (docs/manager-pulse/manager-pulse-plan.md section 6.0): dynasty and redraft never pool,
  * and under the All lens both render side by side rather than one standing in
  * for the other.
  *

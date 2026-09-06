@@ -1,7 +1,7 @@
 /**
  * Manager Pulse tendencies, read into Trade Finder.
  *
- * ABSOLUTE RULE, restated from docs/manager-pulse-plan.md section 8.3: a
+ * ABSOLUTE RULE, restated from docs/manager-pulse/manager-pulse-plan.md section 8.3: a
  * tendency never touches the VALUE math or the WINS math. Both sides of every
  * trade are still priced and simulated exactly as they are today. What lives
  * here may only ever affect three things: the acceptance band, by at most one
