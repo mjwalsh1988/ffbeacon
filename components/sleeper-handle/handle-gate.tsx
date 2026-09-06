@@ -70,6 +70,7 @@ export function SleeperHandleGate({
   manageHref,
   clearHref,
   actions,
+  compact = false,
   className,
 }: {
   state: HandleGateState;
@@ -90,6 +91,13 @@ export function SleeperHandleGate({
   manageHref?: string;
   clearHref?: string;
   actions?: ReactNode;
+  /**
+   * Straight through to the card, and meaningless without one.
+   *
+   * The three formless states render a form rather than a card, and a form has
+   * nothing to shrink, so this is deliberately not threaded into that branch.
+   */
+  compact?: boolean;
   className?: string;
 }) {
   const plan = gateRenderPlan(state);
@@ -112,6 +120,7 @@ export function SleeperHandleGate({
         manageHref={manageHref}
         clearHref={clearHref}
         actions={actions}
+        compact={compact}
         className={className}
       >
         {renderForm({

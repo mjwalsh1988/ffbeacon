@@ -185,6 +185,12 @@ export function LeaguePanel({
   const [allError, setAllError] = useState<string | null>(null);
 
   const connected = leagues.length > 0;
+  // A reader whose handle we already have never sees a form here: the card is
+  // a status line and their leagues are the thing they came for, so the space
+  // around it closes up. Anyone still typing a handle keeps the room the form
+  // needs.
+  const savedIdentity =
+    gate.kind === "member-saved" || gate.kind === "member-overridden";
   // The COMMITTED league, not the highlighted one. Everything downstream of
   // this (the free agent list, the bid priced against a roster) belongs to the
   // league that was actually loaded. Pricing against a row the reader has
@@ -201,6 +207,9 @@ export function LeaguePanel({
     sleeperLeagueId: l.sleeperLeagueId,
     name: l.name,
     avatar: l.avatar,
+    // Feeds the list's own type toggles. Resolved on the server, so a chip
+    // here means what it means everywhere else on the site.
+    categoryKey: l.categoryKey,
     meta:
       l.synced && l.rosterId !== null
         ? l.remainingBudget !== null
@@ -547,7 +556,7 @@ export function LeaguePanel({
         </div>
       </div>
 
-      <div className="mt-5 space-y-5">
+      <div className={savedIdentity ? "mt-3 space-y-3" : "mt-5 space-y-5"}>
         {/* Step 1: who are you.
             The gate decides whether that is a question at all. A reader with a
             saved handle gets the identity card and their leagues; everyone else
@@ -564,6 +573,7 @@ export function LeaguePanel({
           statusMessage={cardMessage}
           onRetry={retryAutoLookup}
           clearHref="/tools/faab"
+          compact={savedIdentity}
           className="max-w-3xl"
           renderForm={() => (
             <form

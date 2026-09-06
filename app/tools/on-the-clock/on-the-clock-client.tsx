@@ -89,10 +89,7 @@ import {
 } from "@/lib/on-the-clock/lookup-failure";
 import { SleeperHandleGate } from "@/components/sleeper-handle/handle-gate";
 import type { IdentityCardStatus } from "@/components/sleeper-handle/identity-card";
-import {
-  gateViewer,
-  type SleeperViewer,
-} from "@/lib/sleeper-handle/types";
+import { gateViewer, type SleeperViewer } from "@/lib/sleeper-handle/types";
 import type { HandleGateState } from "@/lib/sleeper-handle/types";
 import type { PulsePlayerSummary } from "@/lib/on-the-clock/pulse-types";
 import type {
@@ -422,7 +419,8 @@ export function OnTheClockClient({
   // URL-first answer and covers those two states.
   const actingViewer = gateViewer(handleGate) ?? urlViewer;
   const savedIdentity =
-    handleGate.kind === "member-saved" || handleGate.kind === "member-overridden";
+    handleGate.kind === "member-saved" ||
+    handleGate.kind === "member-overridden";
   const autoLookup: LookupRequest | null =
     handleGate.kind === "member-saved"
       ? { saved: true }
@@ -2014,6 +2012,63 @@ export function OnTheClockClient({
 
   // ----- Step 2: Choose draft -----
   if (step === "pick-league") {
+    // The saved states open on this step with the lookup still in flight, so
+    // the first thing here is honest about that rather than an empty picker
+    // claiming there are no drafts.
+    const draftPicker =
+      connecting && leagues.length === 0 ? (
+        <LoadingCard label="Loading your leagues..." />
+      ) : (
+        <LeaguePicker
+          leagues={leagues}
+          onSelect={selectLeague}
+          onRefresh={refreshLeagues}
+          refreshing={refreshing}
+          error={refreshError}
+          truncated={truncated}
+        />
+      );
+
+    // A reader whose handle is saved LANDS on this step: step 1 never happened
+    // for them, so nothing here is a question and the cockpit shell around it
+    // was pure decoration that pushed their own drafts below the fold. The
+    // card stays, unchanged inside, as a slim status line with the drafts
+    // directly under it. Everyone who typed a handle keeps the guided panel
+    // below, back button and all.
+    if (savedIdentity) {
+      return beforeRoom(
+        <div id={STEP_PANEL_ID} className="mx-auto max-w-4xl scroll-mt-24">
+          <SleeperHandleGate
+            state={handleGate}
+            toolName="On The Clock"
+            nextPath="/tools/on-the-clock"
+            // 2, not 3. The panel h2 that used to sit above this card went
+            // with the panel, and the picker's own heading below is an h2, so
+            // the card is now that heading's sibling rather than a level-3
+            // child of nothing.
+            headingLevel={2}
+            compact
+            status={autoStatus}
+            statusMessage={autoMessage}
+            onRetry={runAutoLookup}
+            clearHref="/tools/on-the-clock"
+            renderForm={({ saveByDefault }) => (
+              <UsernameGate
+                defaultUsername=""
+                defaultSeason={defaultSeason}
+                onConnect={connect}
+                pending={connecting}
+                error={connectError}
+                saveByDefault={saveByDefault}
+                showSaveOption
+              />
+            )}
+          />
+          <div className="mt-3">{draftPicker}</div>
+        </div>,
+      );
+    }
+
     return beforeRoom(
       <div className="mx-auto max-w-4xl">
         <div
@@ -2033,43 +2088,16 @@ export function OnTheClockClient({
                 "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
             }}
           />
-          {/* A reader who typed a username got here from step 1 and can go
-              back to it. A reader whose handle is saved never saw step 1, so a
-              back button would point at a screen they have not been on; the
-              identity card says who they are here and reveals the same form
-              behind Change. */}
-          {savedIdentity ? (
-            <SleeperHandleGate
-              state={handleGate}
-              toolName="On The Clock"
-              nextPath="/tools/on-the-clock"
-              headingLevel={3}
-              status={autoStatus}
-              statusMessage={autoMessage}
-              onRetry={runAutoLookup}
-              clearHref="/tools/on-the-clock"
-              renderForm={({ saveByDefault }) => (
-                <UsernameGate
-                  defaultUsername=""
-                  defaultSeason={defaultSeason}
-                  onConnect={connect}
-                  pending={connecting}
-                  error={connectError}
-                  saveByDefault={saveByDefault}
-                  showSaveOption
-                />
-              )}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setStep("connect")}
-              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
-              Change username
-            </button>
-          )}
+          {/* This reader typed a username to get here, so they can go back to
+              the screen they typed it on. */}
+          <button
+            type="button"
+            onClick={() => setStep("connect")}
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          >
+            <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
+            Change username
+          </button>
           <div className="mt-4 flex items-center gap-3">
             <span
               aria-hidden="true"
@@ -2095,23 +2123,7 @@ export function OnTheClockClient({
           <div className="mt-6">
             <StepRail current={2} {...stepOneRailLabels} />
           </div>
-          <div className="mt-5">
-            {/* The saved states open on this step with the lookup still in
-                flight, so the first thing here is honest about that rather
-                than an empty picker claiming there are no drafts. */}
-            {connecting && leagues.length === 0 ? (
-              <LoadingCard label="Loading your leagues..." />
-            ) : (
-              <LeaguePicker
-                leagues={leagues}
-                onSelect={selectLeague}
-                onRefresh={refreshLeagues}
-                refreshing={refreshing}
-                error={refreshError}
-                truncated={truncated}
-              />
-            )}
-          </div>
+          <div className="mt-5">{draftPicker}</div>
         </div>
       </div>,
     );

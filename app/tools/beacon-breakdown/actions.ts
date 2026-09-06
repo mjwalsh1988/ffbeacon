@@ -29,6 +29,10 @@ import { headers } from "next/headers";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import { getSleeperLeagues, getSleeperUser } from "@/lib/sleeper";
+import {
+  categorizeLeague,
+  type LeagueCategoryKey,
+} from "@/lib/league-category";
 import { syncLeagueOnDemand } from "@/lib/league-on-demand-sync";
 import {
   ensureSleeperUserId,
@@ -77,6 +81,14 @@ export type BreakdownLeague = {
   teams: number | null;
   /** Sleeper's own league image id, straight off the payload. May be null. */
   avatar: string | null;
+  /**
+   * Which bucket the league is in, for the list's type toggles.
+   *
+   * Classified HERE rather than on the client because the only input is the
+   * raw Sleeper `settings` object, and shipping that whole object to the
+   * browser to derive one word from it is a lot of payload for a chip.
+   */
+  categoryKey: LeagueCategoryKey;
 };
 
 /**
@@ -90,11 +102,7 @@ export type BreakdownLeague = {
  * opens the form.
  */
 export type ConnectBreakdownFailure =
-  | "invalid-input"
-  | "no-saved-handle"
-  | "rate-limited"
-  | "not-found"
-  | "empty";
+  "invalid-input" | "no-saved-handle" | "rate-limited" | "not-found" | "empty";
 
 export type ConnectBreakdownResult =
   | { ok: true; sleeperUserId: string; leagues: BreakdownLeague[] }
@@ -266,6 +274,7 @@ export async function connectBreakdownLeagues(
       synced: Boolean(row && (rosterCountByLeagueRow.get(row.id) ?? 0) > 0),
       teams: l.total_rosters ?? null,
       avatar: l.avatar ?? null,
+      categoryKey: categorizeLeague(l),
     };
   });
 

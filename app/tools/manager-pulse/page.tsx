@@ -82,7 +82,8 @@ export default async function ManagerPulsePage() {
               toolName="Manager Pulse"
               handle={saved}
               headingLevel={2}
-              className="mb-6"
+              compact
+              className="mb-3"
               actions={
                 <Link
                   href={`/tools/manager-pulse/${encodeURIComponent(

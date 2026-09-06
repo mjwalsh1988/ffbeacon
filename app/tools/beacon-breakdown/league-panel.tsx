@@ -355,8 +355,14 @@ export function LeaguePanel({
       // has read yet is not: picking it reads it.
       disabledReason: noTeam ? "We could not find your team in it" : null,
       busyLabel: syncing ? "Reading it from Sleeper now" : null,
+      categoryKey: league.categoryKey,
     };
   });
+
+  // In saved mode the card is a status line and the leagues are the page, so
+  // the gaps around it close right up. The guest disclosure keeps its own
+  // breathing room: there the form IS what the reader came to use.
+  const resultsGap = savedMode ? "mt-2" : "mt-4";
 
   const connectForm = (
     <form onSubmit={onConnect} className="flex flex-wrap items-end gap-3">
@@ -433,7 +439,7 @@ export function LeaguePanel({
       {pickError && (
         <p
           role="alert"
-          className="mt-3 rounded-card border border-signal-warning/40 bg-signal-warning/5 px-3 py-2 text-sm text-ink"
+          className={`${resultsGap} rounded-card border border-signal-warning/40 bg-signal-warning/5 px-3 py-2 text-sm text-ink`}
         >
           {pickError}
         </p>
@@ -443,7 +449,7 @@ export function LeaguePanel({
         <div
           ref={listRef}
           tabIndex={-1}
-          className="mt-4 focus-visible:outline-none"
+          className={`${resultsGap} focus-visible:outline-none`}
         >
           <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             Your {season} leagues
@@ -507,7 +513,7 @@ export function LeaguePanel({
     }
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         <SleeperHandleGate
           state={handleGate}
           toolName="the Beacon Breakdown"
@@ -516,6 +522,7 @@ export function LeaguePanel({
           status={status}
           statusMessage={statusMessage}
           onRetry={retry}
+          compact
           renderForm={() => connectForm}
         />
         {results}

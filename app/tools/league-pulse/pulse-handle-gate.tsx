@@ -30,6 +30,7 @@ export function PulseHandleGate({
   status = "idle",
   statusMessage,
   clearHref,
+  compact = false,
 }: {
   state: HandleGateState;
   /** The handle this visit is acting for, prefilled outside the card. */
@@ -39,6 +40,12 @@ export function PulseHandleGate({
   statusMessage?: string | null;
   /** Where "Switch to your saved handle" goes, when a link overrode it. */
   clearHref?: string;
+  /**
+   * True on the two states that render the card, where the page has dropped
+   * the cockpit around it and the card is a status line above the leagues
+   * rather than the thing the reader came for.
+   */
+  compact?: boolean;
 }) {
   return (
     <SleeperHandleGate
@@ -53,6 +60,7 @@ export function PulseHandleGate({
       status={status}
       statusMessage={statusMessage}
       clearHref={clearHref}
+      compact={compact}
       renderForm={({ saveByDefault, inCard }) => (
         <LeaguePulseForm
           // Inside the card the field starts empty on purpose. The reader

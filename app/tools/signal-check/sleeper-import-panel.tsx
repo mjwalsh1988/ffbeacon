@@ -308,6 +308,7 @@ export function SleeperImportPanel({
         handle={handle}
         headingLevel={2}
         changeLabel="Change username"
+        compact
       >
         <SaveHandleForm
           defaultUsername={handle.username}
@@ -316,7 +317,7 @@ export function SleeperImportPanel({
         />
       </SleeperIdentityCard>
 
-      <div className="mt-5 space-y-5">
+      <div className="mt-3 space-y-4">
         <p className="text-sm leading-relaxed text-ink-muted">
           Choose a league, then tap the trade you want to analyze. We detect the
           league format automatically.
@@ -347,6 +348,7 @@ export function SleeperImportPanel({
                   name: l.name,
                   avatar: l.avatar,
                   meta: l.season,
+                  categoryKey: l.categoryKey,
                 }))}
                 value={leagueId}
                 onChange={selectLeague}

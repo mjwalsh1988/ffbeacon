@@ -1,7 +1,18 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useMemo, useState } from "react";
 import { LeagueLogo } from "@/components/league-logo";
+import { LeagueFilterBar } from "@/components/league-filter-bar";
+import {
+  describeLeagueFilter,
+  filterByLeagueQuery,
+  matchesLeagueType,
+  presentLeagueCategories,
+  LEAGUE_FILTER_MIN_ROWS,
+  type LeagueTypeFilter,
+} from "@/lib/league-filter";
+import { leagueCategoryLabel } from "@/lib/league-category";
+import type { LeagueCategoryKey } from "@/lib/league-category";
 
 /**
  * One league, as a choice in a list.
@@ -19,6 +30,13 @@ export type LeagueChoice = {
   disabledReason?: string | null;
   /** A row doing async work right now, said out loud. */
   busyLabel?: string | null;
+  /**
+   * Which bucket this league is in, for the type toggles.
+   *
+   * Optional because a caller that cannot classify its rows should get the
+   * text filter and no chips, rather than a row of chips that all mean "All".
+   */
+  categoryKey?: LeagueCategoryKey | null;
 };
 
 /**
@@ -75,6 +93,7 @@ export function LeagueChoiceList({
   value,
   onChange,
   logoSize = 40,
+  filterLabel = "Filter your leagues",
   className = "",
 }: {
   /** Accessible name of the group. "Your leagues". */
@@ -84,70 +103,119 @@ export function LeagueChoiceList({
   value: string;
   onChange: (sleeperLeagueId: string) => void;
   logoSize?: 32 | 40 | 48;
+  /** The filter's accessible name, when the list is long enough to get one. */
+  filterLabel?: string;
   className?: string;
 }) {
   const groupName = useId();
+  const countId = useId();
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState<LeagueTypeFilter>("all");
+
+  // Only on a list long enough to be worth scanning. A search box above three
+  // rows is one more thing to tab past on the way to the rows.
+  const showFilter = choices.length >= LEAGUE_FILTER_MIN_ROWS;
+
+  const categories = useMemo(
+    () => presentLeagueCategories(choices, (c) => c.categoryKey),
+    [choices],
+  );
+
+  const visible = useMemo(() => {
+    if (!showFilter) return choices;
+    const byType = choices.filter((c) =>
+      matchesLeagueType(c.categoryKey, type),
+    );
+    return filterByLeagueQuery(byType, query, (c) =>
+      // Everything the row shows, so a reader can find a league by the season
+      // or the FAAB line as well as by its name.
+      [c.name, c.meta, c.disabledReason].filter(Boolean).join(" "),
+    );
+  }, [choices, query, type, showFilter]);
 
   return (
-    <div
-      role="radiogroup"
-      aria-label={label}
-      className={`grid gap-2 ${className}`}
-    >
-      {choices.map((choice) => {
-        const disabled = Boolean(choice.disabledReason);
-        const selected = value === choice.sleeperLeagueId;
-        return (
-          <label
-            key={choice.sleeperLeagueId}
-            className={[
-              "flex min-h-11 cursor-pointer items-center gap-3 rounded-card border p-3 transition-colors",
-              selected
-                ? "border-brand-purple bg-brand-purple/10"
-                : "border-line bg-surface hover:border-line-accent",
-              disabled ? "cursor-not-allowed opacity-60" : "",
-              "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan",
-            ].join(" ")}
-          >
-            <input
-              type="radio"
-              name={groupName}
-              value={choice.sleeperLeagueId}
-              checked={selected}
-              disabled={disabled}
-              onChange={() => onChange(choice.sleeperLeagueId)}
-              // Visually hidden, not display:none. A hidden radio is not
-              // focusable and the whole group would drop out of the tab order.
-              className="sr-only"
-            />
-            <LeagueLogo
-              avatarId={choice.avatar}
-              name={choice.name}
-              size={logoSize}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-ink">
-                {choice.name}
-              </span>
-              {choice.meta && (
-                <span className="mt-0.5 block text-xs text-ink-muted">
-                  {choice.meta}
+    <div className={`grid gap-2 ${className}`}>
+      {showFilter && (
+        <LeagueFilterBar
+          query={query}
+          onQueryChange={setQuery}
+          type={type}
+          onTypeChange={setType}
+          categories={categories}
+          countId={countId}
+          countText={describeLeagueFilter(
+            visible.length,
+            choices.length,
+            query,
+            type === "all" ? null : leagueCategoryLabel(type),
+          )}
+          label={filterLabel}
+        />
+      )}
+
+      {visible.length === 0 ? (
+        <p className="rounded-card border border-dashed border-line bg-base/40 p-4 text-sm text-ink-muted">
+          No leagues match that. Clear the filter to see all {choices.length}{" "}
+          again.
+        </p>
+      ) : (
+        <div role="radiogroup" aria-label={label} className="grid gap-2">
+          {visible.map((choice) => {
+            const disabled = Boolean(choice.disabledReason);
+            const selected = value === choice.sleeperLeagueId;
+            return (
+              <label
+                key={choice.sleeperLeagueId}
+                className={[
+                  "flex min-h-11 cursor-pointer items-center gap-3 rounded-card border p-3 transition-colors",
+                  selected
+                    ? "border-brand-purple bg-brand-purple/10"
+                    : "border-line bg-surface hover:border-line-accent",
+                  disabled ? "cursor-not-allowed opacity-60" : "",
+                  "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-cyan",
+                ].join(" ")}
+              >
+                <input
+                  type="radio"
+                  name={groupName}
+                  value={choice.sleeperLeagueId}
+                  checked={selected}
+                  disabled={disabled}
+                  onChange={() => onChange(choice.sleeperLeagueId)}
+                  // Visually hidden, not display:none. A hidden radio is not
+                  // focusable and the whole group would drop out of the tab order.
+                  className="sr-only"
+                />
+                <LeagueLogo
+                  avatarId={choice.avatar}
+                  name={choice.name}
+                  size={logoSize}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-ink">
+                    {choice.name}
+                  </span>
+                  {choice.meta && (
+                    <span className="mt-0.5 block text-xs text-ink-muted">
+                      {choice.meta}
+                    </span>
+                  )}
+                  {choice.busyLabel && (
+                    <span className="mt-0.5 block text-xs text-brand-cyan">
+                      {choice.busyLabel}
+                    </span>
+                  )}
+                  {choice.disabledReason && (
+                    <span className="mt-0.5 block text-xs text-ink-subtle">
+                      {choice.disabledReason}
+                    </span>
+                  )}
                 </span>
-              )}
-              {choice.busyLabel && (
-                <span className="mt-0.5 block text-xs text-brand-cyan">
-                  {choice.busyLabel}
-                </span>
-              )}
-              {choice.disabledReason && (
-                <span className="mt-0.5 block text-xs text-ink-subtle">
-                  {choice.disabledReason}
-                </span>
-              )}
-            </span>
-          </label>
-        );
-      })}
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

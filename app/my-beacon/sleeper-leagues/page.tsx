@@ -146,7 +146,10 @@ export default async function SleeperLeaguesPage() {
   });
 
   return (
-    <div className="space-y-6">
+    /* Connected, the card is a status line and the leagues are what the reader
+       came for, so the gaps close up. Not connected, the form IS the page and
+       it keeps its room. */
+    <div className={handle ? "space-y-4" : "space-y-6"}>
       {handle ? (
         /* The card is its own labelled section, so it is not wrapped in a
            second one. Connected, the whole connection is one row plus the way
@@ -158,6 +161,7 @@ export default async function SleeperLeaguesPage() {
           toolName="My Beacon"
           handle={handle}
           headingLevel={2}
+          compact
           status={lookupFailed ? "failed" : "idle"}
           statusMessage={
             lookupFailed
@@ -189,12 +193,15 @@ export default async function SleeperLeaguesPage() {
         </section>
       )}
 
-      <section aria-labelledby="leagues-heading">
+      {/* Not "leagues-heading": LeagueResults renders its own sr-only h2 under
+          that id, and two of them on one page means this section's
+          aria-labelledby resolves to whichever came first. */}
+      <section aria-labelledby="my-leagues-heading">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <SectionEyebrow>Active leagues</SectionEyebrow>
             <h2
-              id="leagues-heading"
+              id="my-leagues-heading"
               className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
             >
               Your {season} season
@@ -239,7 +246,7 @@ export default async function SleeperLeaguesPage() {
         )}
 
         {leagues.length > 0 && (
-          <div className="mt-6">
+          <div className="mt-4">
             {/* Cross-league views sit above the per-league table, because they
                 are the summary and the table is the detail. Dashboard only:
                 the public tool has no account to gather leagues against. */}

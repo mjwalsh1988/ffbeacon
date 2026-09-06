@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -15,14 +16,26 @@ import {
   Users,
   Eye,
   EyeOff,
+  Search,
   SlidersHorizontal,
   Trophy,
 } from "lucide-react";
+import { LeagueFilterBar } from "@/components/league-filter-bar";
+import {
+  describeLeagueFilter,
+  filterByLeagueQuery,
+  matchesLeagueType,
+  presentLeagueCategories,
+  LEAGUE_FILTER_MIN_ROWS,
+  type LeagueTypeFilter,
+} from "@/lib/league-filter";
 import { LeagueOpenLink } from "@/components/league-open-link";
 import { LeagueLogo } from "@/components/league-logo";
 import type { SleeperLeague } from "@/lib/sleeper";
 import {
+  categorizeLeague,
   groupLeaguesByCategory,
+  leagueCategoryLabel,
   type LeagueCategoryGroup,
   type StandingLookup,
 } from "@/lib/league-category";
@@ -76,6 +89,31 @@ function statusKeyOf(
   summary: LeagueTeamStatusSummary | null | undefined,
 ): TeamStatusKey | null {
   return summary?.status?.key ?? null;
+}
+
+/**
+ * What a row can be found by: everything a reader can SEE on it.
+ *
+ * Not the league name alone. The row shows a season, a Sleeper status and, once
+ * we have pulsed the league, how the reader's own team is doing, and a filter
+ * that ignores three of the four things on screen is a filter that appears
+ * broken the first time somebody types "dynasty" or "2026". Sleeper ids and
+ * avatar hashes are deliberately absent: nothing a reader cannot read should be
+ * able to keep a row on screen.
+ */
+function leagueFilterText(
+  league: SleeperLeague,
+  teamStatuses: TeamStatusMap,
+): string {
+  const parts = [
+    league.name,
+    `${league.season} season`,
+    describeStatus(league.status).label,
+    `${league.total_rosters} teams`,
+  ];
+  const standing = teamStatuses[league.league_id]?.status?.label;
+  if (standing) parts.push(standing);
+  return parts.join(" ");
 }
 
 /**
@@ -219,6 +257,32 @@ export function LeagueResults({
   const [openLeagueId, setOpenLeagueId] = useState<string | null>(null);
   const openLeague = leagues.find((l) => l.league_id === openLeagueId) ?? null;
 
+  // ONE quick filter, owned here rather than per renderer.
+  //
+  // Four list variants render off this component's `leagues` array (public
+  // desktop, public mobile, dashboard desktop, dashboard mobile), and two of
+  // them are on screen together at any width transition. A filter held inside
+  // one of them could show a reader eleven rows on a phone and three on a
+  // tablet. Filtering the array they all read from is the only arrangement
+  // where they cannot disagree.
+  // Two controls, because they answer two different questions: "which one is
+  // the dynasty league" is a type question, "where is Ohio's Finest" is a name
+  // question, and neither control can answer the other. They combine.
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<LeagueTypeFilter>("all");
+  const filterCountId = useId();
+  // Under six rows a reader can see the whole list, and the bar is one more
+  // thing to tab past on the way to it.
+  const showFilter = leagues.length >= LEAGUE_FILTER_MIN_ROWS;
+
+  // Only the buckets this reader actually has. The bar drops the chips
+  // entirely below two of them, because a single chip can only ever show
+  // everything or show nothing.
+  const presentCategories = useMemo(
+    () => presentLeagueCategories(leagues, categorizeLeague),
+    [leagues],
+  );
+
   // Lift the dashboard toggle state to this component so the Featured
   // radio (mutually exclusive) and the Show toggle (independent per row)
   // can update optimistically while a server action persists.
@@ -259,17 +323,42 @@ export function LeagueResults({
   const bulkStatuses: BulkStatusMap =
     variant === "dashboard" ? bulkState.jobStatuses : {};
 
+  // The quick filter runs FIRST and everything downstream reads its output, so
+  // the dashboard's Show-all switch narrows what the search left rather than
+  // the two fighting over the same array.
+  // Type first, then text. The order is not arbitrary: the chips narrow to a
+  // bucket the reader can name, and the text box then searches inside it,
+  // which is how somebody with a dynasty and a redraft league of the same name
+  // finds the one they meant.
+  const filteredLeagues = useMemo(() => {
+    if (!showFilter) return leagues;
+    const byType = leagues.filter((league) =>
+      matchesLeagueType(categorizeLeague(league), typeFilter),
+    );
+    return filterByLeagueQuery(byType, query, (league) =>
+      leagueFilterText(league, teamStatuses),
+    );
+  }, [showFilter, leagues, query, typeFilter, teamStatuses]);
+
+  // Null when the chips are showing everything, so the announced sentence
+  // names only the half of the filter that is actually doing something.
+  const typeLabel =
+    typeFilter === "all" ? null : leagueCategoryLabel(typeFilter);
+  const filterIsActive = Boolean(query.trim()) || typeFilter !== "all";
+  const noMatches =
+    showFilter && filterIsActive && filteredLeagues.length === 0;
+
   // Filter the leagues array passed down to the dashboard renderers.
   // When `showAll` is true we pass everything through. When false, we
   // keep only the ones that are explicitly Featured or in the Shown
   // set, leagues the user has signaled they care about for their
   // public profile.
   const visibleLeagues = useMemo(() => {
-    if (variant !== "dashboard" || showAll) return leagues;
-    return leagues.filter(
+    if (variant !== "dashboard" || showAll) return filteredLeagues;
+    return filteredLeagues.filter(
       (l) => featuredId === l.league_id || shownIds.has(l.league_id),
     );
-  }, [variant, showAll, leagues, featuredId, shownIds]);
+  }, [variant, showAll, filteredLeagues, featuredId, shownIds]);
 
   // The standing of the reader's own team per league, reduced to the one field
   // the sort needs. Built from the cached statuses this component was already
@@ -289,8 +378,8 @@ export function LeagueResults({
   // groups the full list; dashboard groups whatever the Show-all filter left
   // visible.
   const publicGroups = useMemo(
-    () => groupLeaguesByCategory(leagues, standings),
-    [leagues, standings],
+    () => groupLeaguesByCategory(filteredLeagues, standings),
+    [filteredLeagues, standings],
   );
   const dashboardGroups = useMemo(
     () => groupLeaguesByCategory(visibleLeagues, standings),
@@ -361,7 +450,38 @@ export function LeagueResults({
           Your Sleeper leagues
         </h2>
 
-        {variant === "dashboard" ? (
+        {/* Above the lists at EVERY width. A phone is where a long league list
+            is hardest to scan, so it is the last place to drop the bar. The
+            bar owns its own live region; the sentence is built here, because
+            only this component knows how many rows survived. */}
+        {showFilter && (
+          <LeagueFilterBar
+            query={query}
+            onQueryChange={setQuery}
+            type={typeFilter}
+            onTypeChange={setTypeFilter}
+            categories={presentCategories}
+            countId={filterCountId}
+            countText={describeLeagueFilter(
+              filteredLeagues.length,
+              leagues.length,
+              query,
+              typeLabel,
+            )}
+            className="mb-4"
+          />
+        )}
+
+        {noMatches ? (
+          <QueryEmptyState
+            query={query}
+            typeLabel={typeLabel}
+            onClear={() => {
+              setQuery("");
+              setTypeFilter("all");
+            }}
+          />
+        ) : variant === "dashboard" ? (
           <>
             {bulkSync && (
               <LeagueSyncAll
@@ -373,7 +493,10 @@ export function LeagueResults({
             <DashboardFilter
               showAll={showAll}
               onChange={setShowAll}
-              totalCount={leagues.length}
+              // What the quick filter left, not the whole account: this panel
+              // describes the Show-all switch, and the switch only ever acts
+              // on the rows that survived the search.
+              totalCount={filteredLeagues.length}
               visibleCount={visibleLeagues.length}
               profileLeagueCount={profileLeagueCount}
             />
@@ -421,7 +544,7 @@ export function LeagueResults({
           </>
         ) : (
           <>
-            <StandingOrderNote leagueCount={leagues.length} />
+            <StandingOrderNote leagueCount={filteredLeagues.length} />
             <div className="space-y-8">
               {publicGroups.map((group) => (
                 <LeagueCategorySection key={group.key} group={group}>
@@ -1248,6 +1371,59 @@ function DashboardFilter({
           <EyeOff aria-hidden="true" className="h-3.5 w-3.5" />
         )}
         <span>Show all leagues</span>
+      </button>
+    </div>
+  );
+}
+
+/**
+ * What a reader gets when the quick filter matches nothing.
+ *
+ * One honest panel, not four empty lists. It names whichever half of the
+ * filter is on: the query gets quoted back, because a typo is the usual reason
+ * and a reader cannot see one they made in a box that has scrolled off the
+ * top, and a chip on its own gets named too, because "no leagues" over a
+ * pressed Dynasty button is otherwise indistinguishable from a broken page.
+ * The way out is a real button, not only the small clear control in the field,
+ * since that one does not release the chip.
+ */
+function QueryEmptyState({
+  query,
+  typeLabel,
+  onClear,
+}: {
+  query: string;
+  typeLabel: string | null;
+  onClear: () => void;
+}) {
+  const trimmed = query.trim();
+  const headline = trimmed
+    ? typeLabel
+      ? `No ${typeLabel} leagues match "${trimmed}".`
+      : `No leagues match "${trimmed}".`
+    : `You have no ${typeLabel} leagues this season.`;
+
+  return (
+    <div className="flex flex-col items-start gap-4 rounded-card border border-dashed border-line bg-base/40 p-6 sm:flex-row sm:items-center">
+      <span
+        aria-hidden="true"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-line bg-surface text-brand-cyan"
+      >
+        <Search className="h-5 w-5" />
+      </span>
+      <div className="flex-1">
+        <p className="text-base font-semibold text-ink">{headline}</p>
+        <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+          Try part of the name instead of all of it, or clear the filter to get
+          every league back.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onClear}
+        className="inline-flex h-11 min-h-11 items-center rounded-card border border-line bg-surface px-4 text-sm font-medium text-ink hover:border-line-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+      >
+        Clear filters
       </button>
     </div>
   );

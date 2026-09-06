@@ -41,15 +41,26 @@ import {
   loadSavedSleeperHandle,
 } from "@/lib/sleeper-handle/resolve";
 import { loadFaabSettings } from "@/lib/faab/settings";
+import {
+  categorizeLeague,
+  type LeagueCategoryKey,
+} from "@/lib/league-category";
 import { calculateLeagueFaab } from "@/lib/faab/league-faab";
-import { calculateAcrossLeagues, MAX_PRICED_LEAGUES } from "@/lib/faab/multi-league";
+import {
+  calculateAcrossLeagues,
+  MAX_PRICED_LEAGUES,
+} from "@/lib/faab/multi-league";
 import { syncLeagueOnDemand } from "@/lib/league-on-demand-sync";
 import { loadPlayerOutlook, type PlayerOutlook } from "@/lib/faab/outlook";
 import {
   loadLeagueFreeAgents,
   type FreeAgentOption,
 } from "@/lib/faab/free-agents";
-import type { LeagueFaabReport, MultiLeagueRow, NeedLevel } from "@/lib/faab/types";
+import type {
+  LeagueFaabReport,
+  MultiLeagueRow,
+  NeedLevel,
+} from "@/lib/faab/types";
 
 const SLEEPER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const PLAYER_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
@@ -71,15 +82,20 @@ async function claimSlot(bucket: string, max: number): Promise<boolean> {
   try {
     const requestHeaders = await headers();
     const actorKey = await resolveRateLimitActorKey(
-      new Request("https://ffbeacon.internal/faab", { headers: requestHeaders }),
+      new Request("https://ffbeacon.internal/faab", {
+        headers: requestHeaders,
+      }),
     );
     const admin = createAdminClient();
-    const { data, error } = await admin.rpc("try_claim_rate_limit" as never, {
-      p_bucket: bucket,
-      p_key: actorKey,
-      p_max_requests: max,
-      p_window_seconds: RATE_WINDOW_SECONDS,
-    } as never);
+    const { data, error } = await admin.rpc(
+      "try_claim_rate_limit" as never,
+      {
+        p_bucket: bucket,
+        p_key: actorKey,
+        p_max_requests: max,
+        p_window_seconds: RATE_WINDOW_SECONDS,
+      } as never,
+    );
     if (error) throw new Error(error.message);
     return Boolean(data);
   } catch (err) {
@@ -93,8 +109,7 @@ function readNeed(value: unknown): NeedLevel {
 }
 
 export type OutlookResult =
-  | { ok: true; outlook: PlayerOutlook }
-  | { ok: false; error: string };
+  { ok: true; outlook: PlayerOutlook } | { ok: false; error: string };
 
 /**
  * One player's rest-of-season outlook, for the calculator with no league
@@ -125,8 +140,13 @@ export async function fetchPlayerOutlook(input: {
   const settings = await loadFaabSettings(admin);
 
   try {
-    const outlook = await loadPlayerOutlook(admin, { playerId, formatSlug, settings });
-    if (!outlook) return { ok: false, error: "We have no data for that player." };
+    const outlook = await loadPlayerOutlook(admin, {
+      playerId,
+      formatSlug,
+      settings,
+    });
+    if (!outlook)
+      return { ok: false, error: "We have no data for that player." };
     return { ok: true, outlook };
   } catch (err) {
     console.error("[faab] outlook failed", err);
@@ -173,8 +193,16 @@ export async function fetchLeagueFreeAgents(input: {
   const admin = createAdminClient();
 
   const [{ data: league }, { data: format }] = await Promise.all([
-    admin.from("leagues").select("id").eq("sleeper_league_id", sleeperLeagueId).maybeSingle(),
-    admin.from("format_configs").select("id").eq("slug", formatSlug).maybeSingle(),
+    admin
+      .from("leagues")
+      .select("id")
+      .eq("sleeper_league_id", sleeperLeagueId)
+      .maybeSingle(),
+    admin
+      .from("format_configs")
+      .select("id")
+      .eq("slug", formatSlug)
+      .maybeSingle(),
   ]);
 
   if (!league) {
@@ -206,7 +234,10 @@ export async function fetchLeagueFreeAgents(input: {
     };
   } catch (err) {
     console.error("[faab] free agent list failed", err);
-    return { ok: false, error: "Something went wrong reading that league's rosters." };
+    return {
+      ok: false,
+      error: "Something went wrong reading that league's rosters.",
+    };
   }
 }
 
@@ -224,6 +255,12 @@ export type ConnectedLeague = {
   synced: boolean;
   /** Remaining FAAB, when the league publishes a budget. */
   remainingBudget: number | null;
+  /**
+   * Which bucket the picker's type toggles put this league in, from the site's
+   * one classification rule. Computed here rather than shipping the raw
+   * Sleeper settings the panel has no other use for.
+   */
+  categoryKey: LeagueCategoryKey;
 };
 
 /**
@@ -335,7 +372,8 @@ export async function connectSleeperLeagues(
       .sleeperUserId;
   }
 
-  const sleeperUserId = cachedUserId ?? (await getSleeperUser(username))?.user_id ?? null;
+  const sleeperUserId =
+    cachedUserId ?? (await getSleeperUser(username))?.user_id ?? null;
   if (!sleeperUserId) {
     return {
       ok: false,
@@ -370,7 +408,9 @@ export async function connectSleeperLeagues(
   const { data: rosterRows } = rowIds.length
     ? await admin
         .from("rosters")
-        .select("league_id, sleeper_roster_id, owner_user_id, co_owners, waiver_budget")
+        .select(
+          "league_id, sleeper_roster_id, owner_user_id, co_owners, waiver_budget",
+        )
         .in("league_id", rowIds)
     : { data: [] as never[] };
 
@@ -398,7 +438,9 @@ export async function connectSleeperLeagues(
   const out: ConnectedLeague[] = leagues.map((l) => {
     const row = rowBySleeperId.get(l.league_id);
     const mine = row ? mineByLeagueRow.get(row.id) : undefined;
-    const meta = (row?.metadata ?? {}) as { settings?: Record<string, unknown> };
+    const meta = (row?.metadata ?? {}) as {
+      settings?: Record<string, unknown>;
+    };
     const total = Number(meta.settings?.waiver_budget);
     const remaining =
       mine && Number.isFinite(total)
@@ -414,6 +456,7 @@ export async function connectSleeperLeagues(
       teamName: null,
       synced: Boolean(row && (rosterCountByLeagueRow.get(row.id) ?? 0) > 0),
       remainingBudget: remaining,
+      categoryKey: categorizeLeague(l),
     };
   });
 
@@ -432,8 +475,7 @@ export type LeagueSyncPatch = {
 };
 
 export type SyncConnectedLeagueResult =
-  | { ok: true; patch: LeagueSyncPatch }
-  | { ok: false; error: string };
+  { ok: true; patch: LeagueSyncPatch } | { ok: false; error: string };
 
 /**
  * Sync one league the reader just picked, then report what it changed.
@@ -468,13 +510,16 @@ export async function syncConnectedLeague(input: {
   try {
     const requestHeaders = await headers();
     actorKey = await resolveRateLimitActorKey(
-      new Request("https://ffbeacon.internal/faab", { headers: requestHeaders }),
+      new Request("https://ffbeacon.internal/faab", {
+        headers: requestHeaders,
+      }),
     );
   } catch (err) {
     console.error("[faab] could not derive a sync limit key", err);
     return {
       ok: false,
-      error: "Syncing is unavailable right now. Open the league in League Pulse instead.",
+      error:
+        "Syncing is unavailable right now. Open the league in League Pulse instead.",
     };
   }
 
@@ -482,7 +527,10 @@ export async function syncConnectedLeague(input: {
   const outcome = await syncLeagueOnDemand(admin, sleeperLeagueId, actorKey);
   if (!outcome.ok) return { ok: false, error: outcome.error };
 
-  return { ok: true, patch: await readLeagueMembership(admin, sleeperLeagueId, sleeperUserId) };
+  return {
+    ok: true,
+    patch: await readLeagueMembership(admin, sleeperLeagueId, sleeperUserId),
+  };
 }
 
 /**
@@ -536,8 +584,7 @@ async function readLeagueMembership(
 }
 
 export type LeagueBidResult =
-  | { ok: true; report: LeagueFaabReport }
-  | { ok: false; error: string };
+  { ok: true; report: LeagueFaabReport } | { ok: false; error: string };
 
 /** Price one bid in one league. */
 export async function runLeagueBid(input: {
@@ -563,7 +610,10 @@ export async function runLeagueBid(input: {
   }
 
   if (!(await claimSlot("faab_league_bid", SINGLE_RATE_MAX))) {
-    return { ok: false, error: "That is a lot of bids in one minute. Give it a moment." };
+    return {
+      ok: false,
+      error: "That is a lot of bids in one minute. Give it a moment.",
+    };
   }
 
   const admin = createAdminClient();
@@ -581,11 +631,13 @@ export async function runLeagueBid(input: {
 
   const settings = await loadFaabSettings(admin);
   const budgetOverride =
-    input.budgetOverride != null && Number.isFinite(Number(input.budgetOverride))
+    input.budgetOverride != null &&
+    Number.isFinite(Number(input.budgetOverride))
       ? Number(input.budgetOverride)
       : null;
   const fallbackBudget =
-    input.fallbackBudget != null && Number.isFinite(Number(input.fallbackBudget))
+    input.fallbackBudget != null &&
+    Number.isFinite(Number(input.fallbackBudget))
       ? Number(input.fallbackBudget)
       : null;
 
@@ -603,7 +655,10 @@ export async function runLeagueBid(input: {
     return { ok: true, report: outcome.report };
   } catch (err) {
     console.error("[faab] league bid failed", err);
-    return { ok: false, error: "Something went wrong pricing that bid. Try again." };
+    return {
+      ok: false,
+      error: "Something went wrong pricing that bid. Try again.",
+    };
   }
 }
 
@@ -629,7 +684,9 @@ export async function runAllLeagueBids(input: {
   }
   const sleeperLeagueIds = (
     Array.isArray(input.sleeperLeagueIds) ? input.sleeperLeagueIds : []
-  ).filter((id): id is string => typeof id === "string" && SLEEPER_ID_PATTERN.test(id));
+  ).filter(
+    (id): id is string => typeof id === "string" && SLEEPER_ID_PATTERN.test(id),
+  );
   if (sleeperLeagueIds.length === 0) {
     return { ok: false, error: "No leagues to check" };
   }
@@ -637,7 +694,8 @@ export async function runAllLeagueBids(input: {
   if (!(await claimSlot("faab_all_leagues", ALL_LEAGUES_RATE_MAX))) {
     return {
       ok: false,
-      error: "Checking every league is heavy work. Give it a minute and try again.",
+      error:
+        "Checking every league is heavy work. Give it a minute and try again.",
     };
   }
 
@@ -651,7 +709,8 @@ export async function runAllLeagueBids(input: {
       candidateSleeperId,
       needLevel: readNeed(input.needLevel),
       fallbackBudget:
-        input.fallbackBudget != null && Number.isFinite(Number(input.fallbackBudget))
+        input.fallbackBudget != null &&
+        Number.isFinite(Number(input.fallbackBudget))
           ? Number(input.fallbackBudget)
           : null,
       settings,
@@ -664,6 +723,9 @@ export async function runAllLeagueBids(input: {
     };
   } catch (err) {
     console.error("[faab] all-leagues bid failed", err);
-    return { ok: false, error: "Something went wrong checking your leagues. Try again." };
+    return {
+      ok: false,
+      error: "Something went wrong checking your leagues. Try again.",
+    };
   }
 }

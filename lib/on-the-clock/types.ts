@@ -13,6 +13,7 @@
  */
 
 import type { KeeperStyle } from "@/lib/sleeper-to-format";
+import type { LeagueCategoryKey } from "@/lib/league-category";
 
 export type { KeeperStyle };
 
@@ -394,6 +395,13 @@ export interface LeagueCard {
    * one-year league and the room's explanatory copy must not call it one.
    */
   keeperStyle: KeeperStyle;
+  /**
+   * Which bucket the picker's type toggles put this league in, from the site's
+   * one classification rule (`categorizeLeague`). Computed on the server from
+   * the raw Sleeper league so the client never has to guess a type out of a
+   * label string. Null only for a card built before this field existed.
+   */
+  categoryKey?: LeagueCategoryKey | null;
 }
 
 /** The draft header + lock/sync state, whitelisted for the wire. */

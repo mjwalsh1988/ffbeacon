@@ -5,13 +5,25 @@ import {
   loadSavedSleeperHandle,
 } from "@/lib/sleeper-handle/resolve";
 import type { SavedSleeperHandle } from "@/lib/sleeper-handle/types";
-import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
+import {
+  getSleeperUser,
+  getSleeperLeagues,
+  currentNflSeason,
+} from "@/lib/sleeper";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { claimLookup, claimIpBudget } from "@/lib/on-the-clock/cache";
-import { isValidUsername, isValidSeason, normalizeUsername } from "@/lib/on-the-clock/validation";
+import {
+  isValidUsername,
+  isValidSeason,
+  normalizeUsername,
+} from "@/lib/on-the-clock/validation";
 import { getTrustedClientIp } from "@/lib/client-ip";
-import { ffbeaconFormatCandidates, detectLeagueFormat } from "@/lib/on-the-clock/format-detect";
+import {
+  ffbeaconFormatCandidates,
+  detectLeagueFormat,
+} from "@/lib/on-the-clock/format-detect";
 import { deriveKeeperStyle } from "@/lib/sleeper-to-format";
+import { categorizeLeague } from "@/lib/league-category";
 import type { LeagueCard } from "@/lib/on-the-clock/types";
 
 export const dynamic = "force-dynamic";
@@ -135,7 +147,10 @@ export async function GET(req: Request) {
     return json({ error: "Try again in a moment." }, 503);
   }
   if (!allowed) {
-    return json({ error: "Too many lookups. Try again in a few seconds." }, 429);
+    return json(
+      { error: "Too many lookups. Try again in a few seconds." },
+      429,
+    );
   }
 
   // Saved mode already knows the Sleeper user id (D3), so it skips the lookup
@@ -146,13 +161,19 @@ export async function GET(req: Request) {
   if (saved && sessionClient) {
     const filled = await ensureSleeperUserId(sessionClient, saved);
     if (!filled.sleeperUserId) {
-      return json({ error: "We could not find a Sleeper user with that name." }, 404);
+      return json(
+        { error: "We could not find a Sleeper user with that name." },
+        404,
+      );
     }
     sleeperUserId = filled.sleeperUserId;
   } else {
     const user = await getSleeperUser(usernameRaw);
     if (!user) {
-      return json({ error: "We could not find a Sleeper user with that name." }, 404);
+      return json(
+        { error: "We could not find a Sleeper user with that name." },
+        404,
+      );
     }
     sleeperUserId = user.user_id;
   }
@@ -166,9 +187,15 @@ export async function GET(req: Request) {
   // account can never crowd out an actively drafting league.
   const candidates = leagues
     .filter((l) => typeof l.draft_id === "string" && l.draft_id.length > 0)
-    .sort((a, b) => STAGE_ORDER[stageOf(a.status)] - STAGE_ORDER[stageOf(b.status)]);
+    .sort(
+      (a, b) => STAGE_ORDER[stageOf(a.status)] - STAGE_ORDER[stageOf(b.status)],
+    );
 
-  const perStageCount: Record<string, number> = { drafting: 0, pre_draft: 0, completed: 0 };
+  const perStageCount: Record<string, number> = {
+    drafting: 0,
+    pre_draft: 0,
+    completed: 0,
+  };
   const capped: typeof candidates = [];
   let truncated = false;
   for (const l of candidates) {
@@ -207,11 +234,21 @@ export async function GET(req: Request) {
       // prices a keeper league off the redraft board, which is right, but the
       // room's copy has to be able to call it a keeper league.
       keeperStyle: deriveKeeperStyle(l),
+      // The picker's type toggles read this rather than re-deriving a bucket
+      // from a label, so a chip means the same thing here as everywhere else
+      // on the site.
+      categoryKey: categorizeLeague(l),
     };
   });
 
   // userId is the resolved Sleeper user_id (public data). The client uses it to
   // detect the connected user's team/picks inside the room (My Draft, "your turn",
   // "Your pick" markers). Additive field; existing fields unchanged.
-  return json({ ok: true, season: seasonRaw, userId: sleeperUserId, leagues: cards, truncated });
+  return json({
+    ok: true,
+    season: seasonRaw,
+    userId: sleeperUserId,
+    leagues: cards,
+    truncated,
+  });
 }

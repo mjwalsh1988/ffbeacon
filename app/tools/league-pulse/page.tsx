@@ -6,7 +6,11 @@ import { LeagueResults } from "./league-results";
 import { PulseHandleGate } from "./pulse-handle-gate";
 import { ScrollToResults } from "./scroll-to-results";
 import { StepRail } from "./step-rail";
-import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
+import {
+  getSleeperUser,
+  getSleeperLeagues,
+  currentNflSeason,
+} from "@/lib/sleeper";
 import { createClient } from "@/lib/supabase/server";
 import {
   resolveHandleGate,
@@ -153,16 +157,15 @@ export default async function LeaguePulsePage({
     gate.kind === "member-saved" && Boolean(lookupUsername) && !sleeperUserId;
   const pageError = savedHandleFailed ? null : error;
 
-  // The cockpit's own copy. A reader who has a card in front of them has
-  // already done the connecting, so the wording describes what happened rather
-  // than asking for a username they can see on the screen.
+  // A reader with a handle on file has already done the connecting, so the
+  // cockpit around the card (icon badge, eyebrow, blurb, step rail, panel
+  // padding) is a screen of scaffolding explaining a step they finished on a
+  // previous visit. It costs roughly 300px of the first screen, which is
+  // exactly the space their leagues wanted. So the two card states collapse to
+  // the card alone, and only the states that still need the guided form keep
+  // the cockpit.
   const showsIdentityCard =
     gate.kind === "member-saved" || gate.kind === "member-overridden";
-  const cockpitBlurb = !showsIdentityCard
-    ? "Paste your Sleeper handle and pick a season. We hit Sleeper directly and return every active league for that user, no account required."
-    : sleeperUserId
-      ? "Loaded straight from Sleeper for the handle above. Press Change to look up a different one."
-      : "Sleeper did not return an account for that handle. Try another one below.";
 
   // Confirmed Discord members skip the invite: the hero button scrolls them
   // down to the lookup form, and the bottom CTA points at the rest of the tools.
@@ -178,82 +181,120 @@ export default async function LeaguePulsePage({
         <section
           id="league-pulse-connect"
           aria-labelledby="sync-heading"
-          className="mt-8 scroll-mt-24"
+          className={
+            showsIdentityCard ? "mt-4 scroll-mt-24" : "mt-8 scroll-mt-24"
+          }
         >
-          {/* Contained lookup shell: the form lives inside a centered cockpit
-              card (icon badge, step rail, glow wash) so the entry experience
-              reads as a guided wizard, matching On The Clock. */}
-          <div className="mx-auto max-w-3xl">
-            <div
-              className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
-              style={{
-                backgroundImage:
-                  "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
-              }}
-            >
-              {/* Beacon-gradient accent bar pinned to the top of the shell. */}
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 top-0 h-px"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
-                }}
+          {showsIdentityCard ? (
+            // The card alone, at full container width so it lines up with the
+            // league table under it and reads as that table's status line. It
+            // is also the shortest arrangement: the narrow cockpit column made
+            // the heading wrap on a phone.
+            <div>
+              {/* The section is aria-labelledby this, and the card's own h3
+                  already names the state on screen, so the visible h2 would be
+                  the same sentence twice. sr-only rather than deleted: the
+                  label has to resolve to a real node, and the document outline
+                  still needs the h2 above the card's h3. */}
+              <h2 id="sync-heading" className="sr-only">
+                Your Sleeper account
+              </h2>
+              <PulseHandleGate
+                state={gate}
+                defaultUsername={lookupUsername}
+                defaultSeason={season}
+                status={savedHandleFailed ? "failed" : "idle"}
+                statusMessage={savedHandleFailed ? error : null}
+                clearHref={`/tools/league-pulse?season=${encodeURIComponent(season)}`}
+                compact
               />
-              <div className="flex items-center gap-3">
-                <span
-                  aria-hidden="true"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-base text-brand-cyan"
-                >
-                  <Activity className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
-                    League lookup
-                  </p>
-                  {/* The heading follows the state. Telling a reader whose
-                      leagues are already on screen to connect their account
-                      describes a step they finished on a previous visit. */}
-                  <h2
-                    id="sync-heading"
-                    className="text-lg font-semibold tracking-tight text-ink sm:text-xl"
-                  >
-                    {showsIdentityCard
-                      ? "Your Sleeper account"
-                      : "Connect your Sleeper account"}
-                  </h2>
-                </div>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                {cockpitBlurb}
-              </p>
-
-              <div className="mt-6">
-                <StepRail current={currentStep} />
-              </div>
-              <div className="mt-5">
-                <PulseHandleGate
-                  state={gate}
-                  defaultUsername={lookupUsername}
-                  defaultSeason={season}
-                  status={savedHandleFailed ? "failed" : "idle"}
-                  statusMessage={savedHandleFailed ? error : null}
-                  // Dropping the param is what hands the page back to the saved
-                  // handle, so the way out of a shared link is a plain link.
-                  clearHref={`/tools/league-pulse?season=${encodeURIComponent(season)}`}
-                />
-              </div>
-
               {pageError && (
                 <p
                   role="alert"
-                  className="mt-5 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
+                  className="mt-3 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
                 >
                   {pageError}
                 </p>
               )}
             </div>
-          </div>
+          ) : (
+            /* Contained lookup shell: the form lives inside a centered cockpit
+               card (icon badge, step rail, glow wash) so the entry experience
+               reads as a guided wizard, matching On The Clock. A reader with
+               nothing on file still has the whole lookup to do, so this stays
+               exactly as it was. */
+            <div className="mx-auto max-w-3xl">
+              <div
+                className="relative overflow-hidden rounded-modal border border-brand-purple/25 bg-surface/30 p-5 sm:p-8"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(ellipse at 0% 0%, rgba(168, 85, 247, 0.10) 0%, transparent 55%), radial-gradient(ellipse at 100% 0%, rgba(34, 211, 238, 0.08) 0%, transparent 60%)",
+                }}
+              >
+                {/* Beacon-gradient accent bar pinned to the top of the shell. */}
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-0 top-0 h-px"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
+                  }}
+                />
+                <div className="flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-card border border-brand-cyan/40 bg-base text-brand-cyan"
+                  >
+                    <Activity className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
+                      League lookup
+                    </p>
+                    {/* Only ever rendered for a reader with no handle on file,
+                      so it asks for one. The saved states carry their own
+                      sr-only h2 above the card instead. */}
+                    <h2
+                      id="sync-heading"
+                      className="text-lg font-semibold tracking-tight text-ink sm:text-xl"
+                    >
+                      Connect your Sleeper account
+                    </h2>
+                  </div>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                  Paste your Sleeper handle and pick a season. We hit Sleeper
+                  directly and return every active league for that user, no
+                  account required.
+                </p>
+
+                <div className="mt-6">
+                  <StepRail current={currentStep} />
+                </div>
+                <div className="mt-5">
+                  <PulseHandleGate
+                    state={gate}
+                    defaultUsername={lookupUsername}
+                    defaultSeason={season}
+                    status={savedHandleFailed ? "failed" : "idle"}
+                    statusMessage={savedHandleFailed ? error : null}
+                    // Dropping the param is what hands the page back to the saved
+                    // handle, so the way out of a shared link is a plain link.
+                    clearHref={`/tools/league-pulse?season=${encodeURIComponent(season)}`}
+                  />
+                </div>
+
+                {pageError && (
+                  <p
+                    role="alert"
+                    className="mt-5 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
+                  >
+                    {pageError}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
         {sleeperUserId && (
@@ -269,7 +310,13 @@ export default async function LeaguePulsePage({
                 headingId="results-heading"
               />
             )}
-            <div className="pt-10 sm:pt-12">
+            {/* A reader who arrived with their handle already on file did not
+                ask for a lookup, so there is no lookup to put distance from.
+                The gap that separates a search from its results is just the
+                distance between them and their leagues. */}
+            <div
+              className={showsIdentityCard ? "pt-5 sm:pt-6" : "pt-10 sm:pt-12"}
+            >
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <SectionEyebrow>Your leagues</SectionEyebrow>
@@ -348,9 +395,9 @@ function Masthead({
       title="Every Sleeper league you own, in one accessible table."
       description={
         <>
-          Drop in your Sleeper username and we&apos;ll pull every active
-          league (roster shape, season, status) right from the source. No
-          account required for this view.
+          Drop in your Sleeper username and we&apos;ll pull every active league
+          (roster shape, season, status) right from the source. No account
+          required for this view.
           {showSaveHint && (
             <>
               {" "}

@@ -45,6 +45,7 @@ export function SleeperIdentityCard({
   clearHref,
   actions,
   changeLabel = "Change",
+  compact = false,
   className = "",
 }: {
   /** "League Pulse", "On The Clock", "the FAAB Calculator". */
@@ -69,6 +70,16 @@ export function SleeperIdentityCard({
   /** Extra controls beside Change (Manager Pulse's "Open my own report"). */
   actions?: ReactNode;
   changeLabel?: string;
+  /**
+   * The same card, less tall.
+   *
+   * Nothing inside changes except its scale and where the footer link sits:
+   * on a tool page this card is a STATUS LINE above the reader's leagues, not
+   * a destination, and the whole point of hiding the search form was to put
+   * the leagues near the top of the page. A full-size panel in its place gives
+   * back exactly the vertical space that was saved.
+   */
+  compact?: boolean;
   className?: string;
 }) {
   const headingId = useId();
@@ -153,15 +164,21 @@ export function SleeperIdentityCard({
   return (
     <section
       aria-labelledby={headingId}
-      className={`rounded-card border border-brand-cyan/30 bg-surface/40 p-4 sm:p-5 ${className}`}
+      className={`rounded-card border border-brand-cyan/30 bg-surface/40 ${
+        compact ? "p-3" : "p-4 sm:p-5"
+      } ${className}`}
     >
-      <div className="flex flex-wrap items-start gap-3">
-        <SleeperAvatar avatarId={avatarId} title="" size={40} />
+      <div
+        className={`flex flex-wrap items-center gap-3 ${compact ? "" : "items-start"}`}
+      >
+        <SleeperAvatar avatarId={avatarId} title="" size={compact ? 32 : 40} />
 
         <div className="min-w-0 flex-1">
           <Heading
             id={headingId}
-            className="text-base font-semibold tracking-tight text-ink"
+            className={`font-semibold tracking-tight text-ink ${
+              compact ? "text-sm" : "text-base"
+            }`}
           >
             {acting ? (
               <>
@@ -201,6 +218,15 @@ export function SleeperIdentityCard({
 
         <div className="flex flex-wrap items-center gap-2">
           {actions}
+          {compact && manageHref && (
+            <Link
+              href={manageHref}
+              className="inline-flex min-h-11 items-center gap-1.5 px-1 text-sm text-ink-subtle underline-offset-4 hover:text-brand-cyan hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <Settings2 aria-hidden="true" className="h-3.5 w-3.5" />
+              Manage
+            </Link>
+          )}
           {children && (
             <button
               ref={buttonRef}
@@ -257,7 +283,7 @@ export function SleeperIdentityCard({
         {open && children ? <div className="mt-4">{children}</div> : null}
       </div>
 
-      {manageHref && (
+      {!compact && manageHref && (
         <p className="mt-4 text-sm">
           <Link
             href={manageHref}

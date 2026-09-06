@@ -20,7 +20,7 @@ export interface LeagueCategoryGroup {
   leagues: SleeperLeague[];
 }
 
-const CATEGORY_ORDER: { key: LeagueCategoryKey; label: string }[] = [
+export const CATEGORY_ORDER: { key: LeagueCategoryKey; label: string }[] = [
   { key: "dynasty", label: "Dynasty" },
   { key: "redraft", label: "Redraft" },
   { key: "best-ball-dynasty", label: "Best Ball Dynasty" },
@@ -44,6 +44,11 @@ const CATEGORY_ORDER: { key: LeagueCategoryKey; label: string }[] = [
  * Only type 2 is dynasty; every other type groups as redraft (or best-ball
  * redraft), which is where keeper and chopped leagues land.
  */
+/** The display label for one bucket, so a filter chip and a group heading agree. */
+export function leagueCategoryLabel(key: LeagueCategoryKey): string {
+  return CATEGORY_ORDER.find((c) => c.key === key)?.label ?? "Other";
+}
+
 export function categorizeLeague(league: SleeperLeague): LeagueCategoryKey {
   const isBestBall = Number(league.settings?.best_ball ?? 0) === 1;
   const isDynasty = Number(league.settings?.type ?? 0) === 2;

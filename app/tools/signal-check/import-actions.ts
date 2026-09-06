@@ -9,6 +9,10 @@ import {
   type SleeperLeague,
 } from "@/lib/sleeper";
 import { formatTeamLabel } from "@/lib/team-label";
+import {
+  categorizeLeague,
+  type LeagueCategoryKey,
+} from "@/lib/league-category";
 import { pulseLeague, normalizeDraftPicks } from "@/lib/league-pulse";
 import {
   ensureSleeperUserId,
@@ -21,19 +25,29 @@ import {
   describeDerivedFormat,
   pickClosestSupportedFormat,
 } from "@/lib/sleeper-to-format";
-import { resolveFormat, supportedFormatCandidates } from "@/lib/signal-check/format";
+import {
+  resolveFormat,
+  supportedFormatCandidates,
+} from "@/lib/signal-check/format";
 import { buildValueResolver } from "@/lib/signal-check/values";
-import { loadSignalCheckSettings, loadActiveRuleset } from "@/lib/signal-check/settings";
+import {
+  loadSignalCheckSettings,
+  loadActiveRuleset,
+} from "@/lib/signal-check/settings";
 import { runPipeline } from "@/lib/signal-check/pipeline";
 import { freezeAnalysis } from "@/lib/signal-check/freeze";
-import { toBuilderView, type BuilderView } from "@/lib/signal-check/builder-view";
+import {
+  toBuilderView,
+  type BuilderView,
+} from "@/lib/signal-check/builder-view";
 import { buildPickPositionResolver } from "@/lib/league-pick-position";
 import { SignalCheckError } from "@/lib/signal-check/errors";
 import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
 import { headers } from "next/headers";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 
-type AnalysisInsert = Database["public"]["Tables"]["signal_check_analyses"]["Insert"];
+type AnalysisInsert =
+  Database["public"]["Tables"]["signal_check_analyses"]["Insert"];
 
 export interface ImportLeague {
   sleeperLeagueId: string;
@@ -45,6 +59,14 @@ export interface ImportLeague {
    * same-sized placeholder so the column stays aligned.
    */
   avatar: string | null;
+  /**
+   * Which bucket the league is in, for the list's type toggles.
+   *
+   * Classified here rather than on the client because the only input is the
+   * raw Sleeper `settings` object, and shipping that whole object to the
+   * browser to derive one word from it is a lot of payload for a chip.
+   */
+  categoryKey: LeagueCategoryKey;
 }
 
 export interface ImportTradeTeam {
@@ -73,8 +95,7 @@ export type ListLeaguesResult =
   | { ok: false; error: string; needsUsername?: boolean };
 
 export type ListTradesResult =
-  | { ok: true; trades: ImportTrade[] }
-  | { ok: false; error: string };
+  { ok: true; trades: ImportTrade[] } | { ok: false; error: string };
 
 export type ImportAnalyzeResult =
   | {
@@ -120,7 +141,9 @@ async function savedIdentity(): Promise<ImportIdentity | null> {
  * Null means Sleeper could not resolve the saved handle right now, which is a
  * different answer from "that league is not yours" and is reported as one.
  */
-async function sleeperUserIdFor(identity: ImportIdentity): Promise<string | null> {
+async function sleeperUserIdFor(
+  identity: ImportIdentity,
+): Promise<string | null> {
   if (identity.handle.sleeperUserId) return identity.handle.sleeperUserId;
   const filled = await ensureSleeperUserId(identity.supabase, identity.handle);
   return filled.sleeperUserId;
@@ -147,7 +170,10 @@ export async function listImportLeagues(): Promise<ListLeaguesResult> {
   }
   const sleeperUserId = await sleeperUserIdFor(id);
   if (!sleeperUserId) {
-    return { ok: false, error: `No Sleeper user found for "${id.handle.username}".` };
+    return {
+      ok: false,
+      error: `No Sleeper user found for "${id.handle.username}".`,
+    };
   }
   const season = currentNflSeason();
   const leagues = await getSleeperLeagues(sleeperUserId, season);
@@ -161,6 +187,7 @@ export async function listImportLeagues(): Promise<ListLeaguesResult> {
       name: l.name ?? "League",
       season: l.season ?? season,
       avatar: l.avatar ?? null,
+      categoryKey: categorizeLeague(l),
     })),
   };
 }
@@ -175,7 +202,11 @@ async function userOwnsLeague(
 
 function rosterLabelMap(
   rosters: { sleeper_roster_id: number; owner_user_id: string | null }[],
-  users: { sleeper_user_id: string; display_name: string | null; team_name: string | null }[],
+  users: {
+    sleeper_user_id: string;
+    display_name: string | null;
+    team_name: string | null;
+  }[],
 ): Map<number, string> {
   const userById = new Map(users.map((u) => [u.sleeper_user_id, u]));
   const map = new Map<number, string>();
@@ -194,14 +225,19 @@ function rosterLabelMap(
 }
 
 /** Distinct receiving roster ids from a trade's adds + normalized picks. */
-function tradeRosters(adds: Record<string, number> | null, picks: unknown[]): number[] {
+function tradeRosters(
+  adds: Record<string, number> | null,
+  picks: unknown[],
+): number[] {
   const set = new Set<number>();
   for (const rid of Object.values(adds ?? {})) set.add(Number(rid));
   for (const p of picks) {
     const owner = (p as { owner_id?: unknown }).owner_id;
     if (owner != null) set.add(Number(owner));
   }
-  return Array.from(set).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  return Array.from(set)
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
 }
 
 const IMPORT_RATE_WINDOW_SECONDS = 60;
@@ -231,12 +267,15 @@ async function claimImportSlot(bucket: string, max: number): Promise<boolean> {
       }),
     );
     const admin = createAdminClient();
-    const { data, error } = await admin.rpc("try_claim_rate_limit" as never, {
-      p_bucket: bucket,
-      p_key: actorKey,
-      p_max_requests: max,
-      p_window_seconds: IMPORT_RATE_WINDOW_SECONDS,
-    } as never);
+    const { data, error } = await admin.rpc(
+      "try_claim_rate_limit" as never,
+      {
+        p_bucket: bucket,
+        p_key: actorKey,
+        p_max_requests: max,
+        p_window_seconds: IMPORT_RATE_WINDOW_SECONDS,
+      } as never,
+    );
     if (error) throw new Error(error.message);
     return Boolean(data);
   } catch (err) {
@@ -245,7 +284,9 @@ async function claimImportSlot(bucket: string, max: number): Promise<boolean> {
   }
 }
 
-export async function listLeagueTrades(sleeperLeagueId: string): Promise<ListTradesResult> {
+export async function listLeagueTrades(
+  sleeperLeagueId: string,
+): Promise<ListTradesResult> {
   if (!/^[0-9]{1,32}$/.test(sleeperLeagueId)) {
     return { ok: false, error: "Invalid league id." };
   }
@@ -255,36 +296,53 @@ export async function listLeagueTrades(sleeperLeagueId: string): Promise<ListTra
     return { ok: false, error: "Sleeper imports are currently unavailable." };
   }
   const id = await savedIdentity();
-  if (!id) return { ok: false, error: "Sign in and save your Sleeper username first." };
+  if (!id)
+    return {
+      ok: false,
+      error: "Sign in and save your Sleeper username first.",
+    };
   const sleeperUserId = await sleeperUserIdFor(id);
   if (!sleeperUserId) {
-    return { ok: false, error: `No Sleeper user found for "${id.handle.username}".` };
+    return {
+      ok: false,
+      error: `No Sleeper user found for "${id.handle.username}".`,
+    };
   }
   if (!(await userOwnsLeague(sleeperUserId, sleeperLeagueId))) {
-    return { ok: false, error: "That league is not linked to your Sleeper account." };
+    return {
+      ok: false,
+      error: "That league is not linked to your Sleeper account.",
+    };
   }
 
   // After the cheap checks, before pulseLeague, which is the expensive half.
-  if (!(await claimImportSlot("signal_check_import_trades", IMPORT_TRADES_MAX))) {
+  if (
+    !(await claimImportSlot("signal_check_import_trades", IMPORT_TRADES_MAX))
+  ) {
     return { ok: false, error: "Slow down a moment and try that again." };
   }
 
   const pulse = await pulseLeague(admin, sleeperLeagueId);
-  if (!pulse.ok) return { ok: false, error: "Could not load that league from Sleeper." };
+  if (!pulse.ok)
+    return { ok: false, error: "Could not load that league from Sleeper." };
 
-  const [{ data: txRows }, { data: rosters }, { data: users }] = await Promise.all([
-    admin
-      .from("league_transactions")
-      .select("sleeper_transaction_id, week, adds, draft_picks")
-      .eq("league_id", pulse.leagueRowId)
-      .eq("type", "trade")
-      .order("created_at_sleeper", { ascending: false }),
-    admin.from("rosters").select("sleeper_roster_id, owner_user_id").eq("league_id", pulse.leagueRowId),
-    admin
-      .from("league_users")
-      .select("sleeper_user_id, display_name, team_name")
-      .eq("league_id", pulse.leagueRowId),
-  ]);
+  const [{ data: txRows }, { data: rosters }, { data: users }] =
+    await Promise.all([
+      admin
+        .from("league_transactions")
+        .select("sleeper_transaction_id, week, adds, draft_picks")
+        .eq("league_id", pulse.leagueRowId)
+        .eq("type", "trade")
+        .order("created_at_sleeper", { ascending: false }),
+      admin
+        .from("rosters")
+        .select("sleeper_roster_id, owner_user_id")
+        .eq("league_id", pulse.leagueRowId),
+      admin
+        .from("league_users")
+        .select("sleeper_user_id, display_name, team_name")
+        .eq("league_id", pulse.leagueRowId),
+    ]);
 
   const labels = rosterLabelMap(rosters ?? [], users ?? []);
   const trades: ImportTrade[] = (txRows ?? []).map((t) => {
@@ -295,7 +353,9 @@ export async function listLeagueTrades(sleeperLeagueId: string): Promise<ListTra
       rosterId: rid,
       teamName: labels.get(rid) ?? `Team ${rid}`,
       playerCount: Object.values(adds).filter((r) => Number(r) === rid).length,
-      pickCount: picks.filter((p) => Number((p as { owner_id?: unknown }).owner_id) === rid).length,
+      pickCount: picks.filter(
+        (p) => Number((p as { owner_id?: unknown }).owner_id) === rid,
+      ).length,
     }));
     const weekLabel = t.week != null ? `Week ${t.week}: ` : "";
     return {
@@ -314,13 +374,18 @@ function buildEvidence(league: SleeperLeague): string[] {
   const positions = league.roster_positions ?? [];
   const derived = deriveLeagueFormat(league);
   const lines: string[] = [];
-  lines.push(`Detected: ${derived.league_type} ${derived.scoring_type}${derived.is_superflex ? " superflex" : ""}${derived.is_tep ? " TEP" : ""}`);
-  if (positions.includes("SUPER_FLEX")) lines.push("roster_positions includes SUPER_FLEX");
+  lines.push(
+    `Detected: ${derived.league_type} ${derived.scoring_type}${derived.is_superflex ? " superflex" : ""}${derived.is_tep ? " TEP" : ""}`,
+  );
+  if (positions.includes("SUPER_FLEX"))
+    lines.push("roster_positions includes SUPER_FLEX");
   const qb = positions.filter((p) => p === "QB").length;
   if (qb >= 2) lines.push(`${qb} QB starting slots`);
   if (scoring.rec != null) lines.push(`scoring_settings.rec = ${scoring.rec}`);
-  if (scoring.bonus_rec_te != null) lines.push(`scoring_settings.bonus_rec_te = ${scoring.bonus_rec_te}`);
-  if (Number(league.settings?.type ?? 0) === 2) lines.push("settings.type = 2 (dynasty)");
+  if (scoring.bonus_rec_te != null)
+    lines.push(`scoring_settings.bonus_rec_te = ${scoring.bonus_rec_te}`);
+  if (Number(league.settings?.type ?? 0) === 2)
+    lines.push("settings.type = 2 (dynasty)");
   return lines;
 }
 
@@ -329,15 +394,21 @@ async function mapSleeperPlayers(
   sleeperIds: string[],
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
-  const numeric = Array.from(new Set(sleeperIds.filter((id) => /^\d+$/.test(id))));
+  const numeric = Array.from(
+    new Set(sleeperIds.filter((id) => /^\d+$/.test(id))),
+  );
   for (let i = 0; i < numeric.length; i += 200) {
     const chunk = numeric.slice(i, i + 200);
     const ors = chunk.map((id) => `external_ids->>sleeper.eq.${id}`).join(",");
-    const { data } = await admin.from("players").select("id, external_ids").or(ors);
+    const { data } = await admin
+      .from("players")
+      .select("id, external_ids")
+      .or(ors);
     for (const row of data ?? []) {
       const ext = row.external_ids as Record<string, unknown> | null;
       const sid = ext?.sleeper;
-      if (typeof sid === "string" || typeof sid === "number") map.set(String(sid), row.id);
+      if (typeof sid === "string" || typeof sid === "number")
+        map.set(String(sid), row.id);
     }
   }
   return map;
@@ -349,7 +420,10 @@ export async function importAndAnalyze(args: {
   makePublic?: boolean;
 }): Promise<ImportAnalyzeResult> {
   const { sleeperLeagueId, sleeperTransactionId } = args;
-  if (!/^[0-9]{1,32}$/.test(sleeperLeagueId) || !/^[0-9]{1,32}$/.test(sleeperTransactionId)) {
+  if (
+    !/^[0-9]{1,32}$/.test(sleeperLeagueId) ||
+    !/^[0-9]{1,32}$/.test(sleeperTransactionId)
+  ) {
     return { ok: false, error: "Invalid league or trade id." };
   }
 
@@ -360,24 +434,37 @@ export async function importAndAnalyze(args: {
   }
 
   const id = await savedIdentity();
-  if (!id) return { ok: false, error: "Sign in and save your Sleeper username first." };
+  if (!id)
+    return {
+      ok: false,
+      error: "Sign in and save your Sleeper username first.",
+    };
   const sleeperUserId = await sleeperUserIdFor(id);
   if (!sleeperUserId) {
-    return { ok: false, error: `No Sleeper user found for "${id.handle.username}".` };
+    return {
+      ok: false,
+      error: `No Sleeper user found for "${id.handle.username}".`,
+    };
   }
   if (!(await userOwnsLeague(sleeperUserId, sleeperLeagueId))) {
-    return { ok: false, error: "That league is not linked to your Sleeper account." };
+    return {
+      ok: false,
+      error: "That league is not linked to your Sleeper account.",
+    };
   }
 
   // Same reasoning as listLeagueTrades: the ownership check above rests on a
   // self-asserted id, so the meter is the guard that actually holds. Lower
   // than the trade list's, because this one also runs a full analysis.
-  if (!(await claimImportSlot("signal_check_import_analyze", IMPORT_ANALYZE_MAX))) {
+  if (
+    !(await claimImportSlot("signal_check_import_analyze", IMPORT_ANALYZE_MAX))
+  ) {
     return { ok: false, error: "Slow down a moment and try that again." };
   }
 
   const pulse = await pulseLeague(admin, sleeperLeagueId);
-  if (!pulse.ok) return { ok: false, error: "Could not load that league from Sleeper." };
+  if (!pulse.ok)
+    return { ok: false, error: "Could not load that league from Sleeper." };
 
   const { data: league } = await admin
     .from("leagues")
@@ -392,7 +479,8 @@ export async function importAndAnalyze(args: {
     .eq("league_id", pulse.leagueRowId)
     .eq("sleeper_transaction_id", sleeperTransactionId)
     .maybeSingle();
-  if (!tx || tx.type !== "trade") return { ok: false, error: "That trade could not be found." };
+  if (!tx || tx.type !== "trade")
+    return { ok: false, error: "That trade could not be found." };
 
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
   const derived = deriveLeagueFormat(sleeperLeague);
@@ -425,7 +513,11 @@ export async function importAndAnalyze(args: {
   const picks = normalizeDraftPicks(tx.draft_picks);
   const rosters = tradeRosters(adds, picks);
   if (rosters.length !== 2) {
-    return { ok: false, error: "Signal Check can analyze two-team trades. This trade involves a different number of teams." };
+    return {
+      ok: false,
+      error:
+        "Signal Check can analyze two-team trades. This trade involves a different number of teams.",
+    };
   }
   const [rosterA, rosterB] = rosters;
 
@@ -441,7 +533,10 @@ export async function importAndAnalyze(args: {
     };
   }
 
-  const sideAssets: Record<SideKey, AnalysisInput["sides"]["a"]> = { a: [], b: [] };
+  const sideAssets: Record<SideKey, AnalysisInput["sides"]["a"]> = {
+    a: [],
+    b: [],
+  };
   // Built in lockstep with sideAssets so the result can render headshots.
   const assetMeta: Record<SideKey, ImportAssetMeta[]> = { a: [], b: [] };
   const rosterToSide = (rid: number): SideKey => (rid === rosterA ? "a" : "b");
@@ -465,7 +560,12 @@ export async function importAndAnalyze(args: {
       const season = Number(pick.season);
       const round = Number(pick.round);
       const owner = Number(pick.owner_id);
-      if (!Number.isFinite(season) || !Number.isFinite(round) || !Number.isFinite(owner)) continue;
+      if (
+        !Number.isFinite(season) ||
+        !Number.isFinite(round) ||
+        !Number.isFinite(owner)
+      )
+        continue;
       if (owner !== rosterA && owner !== rosterB) continue;
       const side = rosterToSide(owner);
       // Sleeper never sends the position in the round, so we take it from the
@@ -473,7 +573,9 @@ export async function importAndAnalyze(args: {
       // finish of the pick's ORIGINAL team (roster_id, often a third team).
       // Failing both, the engine falls back to the season+round blend.
       const origin = Number(pick.roster_id);
-      const placed = Number.isFinite(origin) ? pickPositions.resolve(origin, season) : null;
+      const placed = Number.isFinite(origin)
+        ? pickPositions.resolve(origin, season)
+        : null;
       sideAssets[side].push(
         placed
           ? {
@@ -494,8 +596,14 @@ export async function importAndAnalyze(args: {
   const input: AnalysisInput = { formatSlug: format.slug, sides: sideAssets };
 
   const [{ data: rosterRows }, { data: userRows }] = await Promise.all([
-    admin.from("rosters").select("sleeper_roster_id, owner_user_id").eq("league_id", league.id),
-    admin.from("league_users").select("sleeper_user_id, display_name, team_name").eq("league_id", league.id),
+    admin
+      .from("rosters")
+      .select("sleeper_roster_id, owner_user_id")
+      .eq("league_id", league.id),
+    admin
+      .from("league_users")
+      .select("sleeper_user_id, display_name, team_name")
+      .eq("league_id", league.id),
   ]);
   const labels = rosterLabelMap(rosterRows ?? [], userRows ?? []);
   const teamLabels: Partial<Record<SideKey, string | null>> = {
@@ -533,7 +641,11 @@ export async function importAndAnalyze(args: {
         createdAtIso: new Date().toISOString(),
         teamLabels,
         // Private import context: never copied into public_payload.
-        sleeperContext: { sleeperLeagueId, sleeperTransactionId, rosterIds: rosters },
+        sleeperContext: {
+          sleeperLeagueId,
+          sleeperTransactionId,
+          rosterIds: rosters,
+        },
         formatDetectionEvidence: { lines: evidence, derived },
       });
       const { error } = await admin
@@ -545,7 +657,8 @@ export async function importAndAnalyze(args: {
 
     return { ok: true, view, assetMeta, evidence, notices, shareUrl };
   } catch (err) {
-    if (err instanceof SignalCheckError) return { ok: false, error: err.message };
+    if (err instanceof SignalCheckError)
+      return { ok: false, error: err.message };
     console.error("[signal-check import] failed", err);
     return { ok: false, error: "Something went wrong analyzing that trade." };
   }
