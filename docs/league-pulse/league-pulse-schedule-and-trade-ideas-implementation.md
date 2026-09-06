@@ -1,7 +1,7 @@
 # Implementation report: Schedules and Trade Ideas
 
 Built 2026-08-21 against `bf6b6e3`. Plan:
-`docs/league-pulse-schedule-and-trade-ideas-plan.md`. Task log with the full
+`docs/league-pulse/league-pulse-schedule-and-trade-ideas-plan.md`. Task log with the full
 reasoning behind each decision: the tail of `progress.md`, tasks T626 to T673.
 
 **Nothing is committed or pushed.** The working tree holds every change.

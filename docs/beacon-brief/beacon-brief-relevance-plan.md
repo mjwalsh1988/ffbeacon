@@ -3,7 +3,7 @@
 STATUS, 2026-07-30: implemented. Migration 0153 carries the settings, the
 constraint, and both prompt rewrites. The gate runs at threshold 2. The 43
 approved article removals are recorded in
-`docs/beacon-brief-removals-2026-07-30.md`.
+`docs/beacon-brief/beacon-brief-removals-2026-07-30.md`.
 
 Two things in this document were wrong when it was written and are corrected in
 place below: section 2.6 (the duplicate problem was already fixed the day before)

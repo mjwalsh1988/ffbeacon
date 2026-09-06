@@ -1,7 +1,7 @@
 # Beacon Brief article removals, 2026-07-30
 
 The slug list below was approved by the site owner and removed with
-`npm run remove:brief-articles -- --file docs/beacon-brief-removals-2026-07-30.md --apply`.
+`npm run remove:brief-articles -- --file docs/beacon-brief/beacon-brief-removals-2026-07-30.md --apply`.
 The script ignores blank lines and lines starting with `#`, so this file is both
 the record and the input.
 

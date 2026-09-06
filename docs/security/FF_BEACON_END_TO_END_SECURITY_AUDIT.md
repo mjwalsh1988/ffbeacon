@@ -1428,7 +1428,7 @@ Dependencies between fixes: FFB-SEC-001 and FFB-SEC-014 share one migration. FFB
 - New tests under lib/ and a route-test harness per section 12. Findings FFB-SEC-001 (regression), FFB-SEC-005, FFB-SEC-006, FFB-SEC-009, and the authz/RLS gaps. Required for the controls to be durable. Moderate.
 
 ### Documentation
-- docs/data-sources.md and docs/security (update with the applied fixes). Optional.
+- docs/data-sources/data-sources.md and docs/security (update with the applied fixes). Optional.
 
 ## 16. Proposed new files
 

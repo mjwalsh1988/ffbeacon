@@ -3,7 +3,7 @@
 Written 2026-08-26, against the build sitting in the working tree at the end of
 that session. Nothing in this build is committed or pushed.
 
-The plan it implements is `docs/league-pulse-positional-war-plan.md`, written
+The plan it implements is `docs/league-pulse/league-pulse-positional-war-plan.md`, written
 the same day against `main` at `c068818`. Task ids below are the plan's own
 `T-WAR-##`, and the live status of each is in `progress.md` under "League Pulse:
 Positional WAR".

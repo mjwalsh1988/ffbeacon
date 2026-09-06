@@ -1432,7 +1432,7 @@ T-WAR-23 | pending | Migration 0213: Signal Guide global term "Positional WAR", 
          | verified: no
 
 T-WAR-24 | pending | CLAUDE.md: the Positional WAR naming rule (section 3) + the on-demand/no-cron/source-independent rules
-         | files: CLAUDE.md, docs/data-sources.md
+         | files: CLAUDE.md, docs/data-sources/data-sources.md
          | depends on: T-WAR-21
          | verified: no
 
