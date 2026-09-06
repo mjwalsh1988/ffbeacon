@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatTeamLabel } from "@/lib/team-label";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -89,14 +91,17 @@ export default async function TeamDetailPage({
     username: usernameParam,
     picks: picksParam,
   } = await searchParams;
-  const searchedUsername =
-    typeof usernameParam === "string" && usernameParam.trim()
-      ? usernameParam.trim()
-      : null;
   const sleeperRosterId = Number(roster_id);
   if (!Number.isFinite(sleeperRosterId)) notFound();
 
   const supabase = await createClient();
+
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
+  // `linkUsername` is what a link built here may carry, which is the handle
+  // only when the reader arrived on one.
+  const viewer = await resolveSleeperViewer(supabase, usernameParam);
+  const linkUsername = viewerLinkUsername(viewer);
   const adminClient = createAdminClient();
 
   const { data: league } = await supabase
@@ -177,20 +182,21 @@ export default async function TeamDetailPage({
     supabase,
     league.id,
     sleeperLeagueId,
-    searchedUsername,
+    viewer,
     league.season != null ? String(league.season) : null,
   );
 
-  // Back-links forward the searched handle so the switcher and overview
-  // context survive the round trip; the copy link stays clean for sharing.
-  const homeHref = searchedUsername
-    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+  // Back-links forward the handle only for a reader who arrived on one, so
+  // the switcher and overview context survive a shared link without a saved
+  // reader publishing their own handle. The copy link stays clean either way.
+  const homeHref = linkUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
     : "/tools/league-pulse";
-  const leagueHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(searchedUsername)}`
+  const leagueHref = linkUsername
+    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(linkUsername)}`
     : `/leagues/${sleeperLeagueId}`;
-  const backToTeamsHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}#team-${sleeperRosterId}`
+  const backToTeamsHref = linkUsername
+    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(linkUsername)}#team-${sleeperRosterId}`
     : `/leagues/${sleeperLeagueId}?tab=teams#team-${sleeperRosterId}`;
 
   // The same masthead every other League Pulse section carries. A team page is
@@ -201,6 +207,7 @@ export default async function TeamDetailPage({
   const coverageOk = context.coverage !== "none";
   const mastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -232,7 +239,7 @@ export default async function TeamDetailPage({
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab="teams"
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={homeHref}
       crumbs={[{ label: league.name, href: leagueHref }, { label: team.teamName }]}
       copyHref={`/leagues/${sleeperLeagueId}/teams/${roster_id}`}

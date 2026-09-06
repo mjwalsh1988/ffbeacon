@@ -95,6 +95,7 @@ export async function PositionalWarPanel({
   rosterPositions,
   scoringSettings,
   searchedUsername,
+  viewerSleeperUserId,
   focusedRosterId,
   axisMode,
   variant,
@@ -115,6 +116,10 @@ export async function PositionalWarPanel({
   rosterPositions: string[];
   scoringSettings: ScoringSettings;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, which matchViewerRoster tries before the
+   *  handle: a saved handle is a Sleeper username and the candidates carry
+   *  display names, and Sleeper lets the two differ. */
+  viewerSleeperUserId: string | null;
   focusedRosterId: number | null;
   axisMode: WarAxisMode;
   variant: "dashboard" | "preview";
@@ -157,7 +162,12 @@ export async function PositionalWarPanel({
     );
   }
 
-  const viewerRosterId = matchViewerRoster(candidates, searchedUsername, focusedRosterId);
+  const viewerRosterId = matchViewerRoster(
+    candidates,
+    searchedUsername,
+    focusedRosterId,
+    viewerSleeperUserId,
+  );
 
   // Every player the surfaces will actually render, so the value read below
   // asks about exactly those and no more. Six positions capped at 36 is at

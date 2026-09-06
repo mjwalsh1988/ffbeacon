@@ -41,6 +41,7 @@ function leagueSeason(
   return {
     leagueId: null,
     leagueName: "Test League",
+    avatar: null,
     category: "dynasty",
     sleeperLeagueType: 2,
     teamCount: 12,

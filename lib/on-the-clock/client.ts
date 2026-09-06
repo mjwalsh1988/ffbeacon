@@ -139,9 +139,24 @@ export interface LeaguesResponse {
   truncated: boolean;
 }
 
-/** GET /api/on-the-clock/leagues?username=&season= */
-export function fetchLeagues(username: string, season: string): Promise<ApiResult<LeaguesResponse>> {
-  const qs = new URLSearchParams({ username, season }).toString();
+/**
+ * Which identity a league lookup is for.
+ *
+ * `{ saved: true }` sends NO username. The route reads the reader's saved
+ * handle out of their session instead, which is the only way an identity can
+ * reach a URL bar, a proxy log or a Referer header by accident. A username
+ * typed into the form travels as `{ username }` exactly as it always has.
+ */
+export type LookupRequest = { username: string } | { saved: true };
+
+/** GET /api/on-the-clock/leagues?username=&season=, or ?saved=1&season= */
+export function fetchLeagues(
+  lookup: LookupRequest,
+  season: string,
+): Promise<ApiResult<LeaguesResponse>> {
+  const qs = new URLSearchParams(
+    "saved" in lookup ? { saved: "1", season } : { username: lookup.username, season },
+  ).toString();
   return request(`/api/on-the-clock/leagues?${qs}`, { method: "GET" }, (body) => ({
     season: typeof body.season === "string" ? body.season : season,
     userId: typeof body.userId === "string" ? body.userId : null,

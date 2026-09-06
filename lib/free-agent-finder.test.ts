@@ -10,6 +10,7 @@ function row(over: Partial<FreeAgentLeague> = {}): FreeAgentLeague {
   return {
     sleeperLeagueId: "1",
     leagueName: "League",
+    avatar: null,
     isFreeAgent: true,
     rosteredBy: null,
     isYours: false,

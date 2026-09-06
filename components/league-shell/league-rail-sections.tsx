@@ -29,6 +29,7 @@ import type { Route } from "next";
 import type { NavNode } from "@/lib/nav-types";
 import { RegisterRailSections } from "@/components/app-shell/rail-sections";
 import { useLeagueRefresh } from "@/lib/use-league-refresh";
+import type { SleeperViewer } from "@/lib/sleeper-handle/types";
 import { LEAGUE_NAV_ITEMS, leagueTabHref, type LeagueTabId } from "./nav-items";
 
 export const LEAGUE_RAIL_SECTION_ID = "league-sections";
@@ -37,12 +38,14 @@ export function LeagueRailSections({
   sleeperLeagueId,
   leagueName,
   activeTab,
-  searchedUsername,
+  viewer,
 }: {
   sleeperLeagueId: string;
   leagueName: string;
   activeTab: LeagueTabId;
-  searchedUsername: string | null;
+  /** Who this page is acting for. leagueTabHref carries the handle into the
+   *  row hrefs only when the reader arrived on a ?username= link. */
+  viewer: SleeperViewer | null;
 }) {
   const { refresh, pending, status, announcement } = useLeagueRefresh(sleeperLeagueId);
 
@@ -71,7 +74,7 @@ export function LeagueRailSections({
           ...LEAGUE_NAV_ITEMS.map((item) => ({
             id: `league-${item.id}`,
             label: item.label,
-            href: leagueTabHref(sleeperLeagueId, item.id, searchedUsername) as Route,
+            href: leagueTabHref(sleeperLeagueId, item.id, viewer) as Route,
             hint: item.hint,
             icon: item.icon,
           })),
@@ -85,7 +88,7 @@ export function LeagueRailSections({
         ],
       },
     ],
-    [sleeperLeagueId, leagueName, searchedUsername, pending, refreshHint, refresh],
+    [sleeperLeagueId, leagueName, viewer, pending, refreshHint, refresh],
   );
 
   return (

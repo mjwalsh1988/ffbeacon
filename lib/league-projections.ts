@@ -10,6 +10,15 @@
 export type ProjectionInput = {
   sleeperLeagueId: string;
   leagueName: string;
+  /**
+   * Sleeper's own league logo id, for the row's decorative logo.
+   *
+   * Optional because the caller builds this list from the live Sleeper payload
+   * and a league Sleeper has no image for simply has nothing here. There is no
+   * avatar column on `leagues` and none is to be added: the id lives in the raw
+   * league object, which is stored verbatim in `leagues.metadata`.
+   */
+  avatar?: string | null;
   /** 1 for the projected champion. Null when this league has no Power Pulse. */
   projectedSeed: number | null;
   /** Teams the finish is out of. Null alongside a null seed. */
@@ -21,6 +30,8 @@ export type ProjectionInput = {
 export type ProjectedLeague = {
   sleeperLeagueId: string;
   leagueName: string;
+  /** Sleeper's league logo id, or null. Decorative; the name is the label. */
+  avatar: string | null;
   projectedSeed: number;
   rankedTeamCount: number;
   statusLabel: string | null;
@@ -124,6 +135,7 @@ export function summarizeProjections(
     leagues.push({
       sleeperLeagueId: input.sleeperLeagueId,
       leagueName: input.leagueName,
+      avatar: input.avatar ?? null,
       projectedSeed: input.projectedSeed,
       rankedTeamCount: input.rankedTeamCount,
       statusLabel: input.statusLabel,

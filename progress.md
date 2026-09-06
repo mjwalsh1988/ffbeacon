@@ -11985,3 +11985,129 @@ MPS-REVIEW | completed | Four independent Opus reviews, and the fixes they found
        files: zero em dashes, en dashes, curly quotes, apostrophes, ellipses,
        non-breaking spaces or middots.
      | notes: NOT COMMITTED and NOT PUSHED, by instruction.
+
+SH-T001 to SH-T060 | completed | Saved Sleeper handle: every tool opens on the
+       reader's own leagues, and every league list shows its logo
+     | plan: docs/saved-handle/saved-handle-plan.md
+     | migration: supabase/migrations/0268_sleeper_handle_settings_shape.sql
+       (comment only, applied via MCP and verified with col_description; no
+       schema, policy or grant change, so generated types are unchanged)
+     | notes: three deliverables. A signed-in reader with a saved Sleeper
+       username never types it again: seven tools now open as though the search
+       had already run, with the search form UNMOUNTED rather than hidden and an
+       identity card naming the handle behind a Change disclosure. A reader with
+       no saved handle sees the form as before plus a notice that an account
+       skips the step. Every league list on the site gained the league's own
+       Sleeper logo in its own column, vertically centred across both lines of a
+       phone row.
+     | notes: the defect the build exists to prevent, and the reason for the
+       one-resolver rule: the ten league deep views match a reader to a roster by
+       league_users.display_name, because League Pulse forwards
+       user.display_name into ?username=. A saved handle is a USERNAME, and
+       Sleeper lets those differ. Falling the deep views back to the saved handle
+       with the old matcher would have silently highlighted nobody's team for
+       anyone whose two names are not the same. matchViewerRoster now prefers
+       rosters.owner_user_id and co_owners and keeps the name path for
+       URL-driven guests. Seven scattered copies of the settings read is how that
+       stayed invisible; lib/sleeper-handle/guard.test.ts now fails the suite on
+       any read of the identity keys outside lib/sleeper-handle/resolve.ts.
+     | notes: saving a handle resolves it on Sleeper first and refuses one
+       Sleeper cannot find, which is a change from the two client-side forms this
+       replaces (they saved any string typed). It stores the sleeper_user_id
+       beside the username, so a tool visit costs ONE Sleeper call instead of
+       two. Both old forms are deleted; app/actions/sleeper-handle.ts is the only
+       writer, through the reader's own session client so owner-only RLS is the
+       boundary rather than something around it.
+     | notes: auto-runs go through the same rate limits as the manual paths and
+       under the lib/sleeper-budget.ts token bucket. On The Clock's 10-second
+       per-(ip, username) cooldown means a double reload produces a 429; that is
+       a Retry state on the card, never a reason to drop the reader back to a
+       form, and lib/on-the-clock/lookup-failure.ts is the one place that decides.
+     | notes: two native selects became components/league-choice-list.tsx, a
+       radiogroup of NATIVE radios in labels, because a select cannot show an
+       image. Native radios keep arrow-key movement from the platform. The
+       Beacon Breakdown picker gained a "Use this league" button rather than
+       navigating on selection, because arrow keys move selection in a
+       radiogroup and navigating on change would trap a keyboard reader on the
+       first row.
+     | notes: no new table, no new column, no backfill. A league's logo id comes
+       from leagues.metadata->>avatar or the live SleeperLeague.avatar, per the
+       rule that source data lives in metadata. lib/sleeper-avatar-url.ts
+       validates the id against ^[A-Za-z0-9]{1,64}$ so a stored string cannot
+       decide which host an img points at.
+     | notes: Manager Pulse is the one deliberate divergence from the no-search-
+       box rule. Its search is for OTHER people, so hiding it behind the reader's
+       own handle would hide the tool; it gets the card plus an "Open my own
+       report" button and no auto-navigation, because a report costs a capture
+       budget.
+     | notes: four independent reviews followed (implementation, security,
+       accessibility, performance) and every blocker they found was fixed.
+       The five that mattered: the two League Pulse header strips were
+       misaligned because `sr-only` is position:absolute and drops out of a
+       grid, shifting every heading one track left; the FAAB and Signal Check
+       radiogroups fired a Sleeper sync and a rate-limited action on EVERY
+       arrow-key press, so a keyboard reader could lock themselves out of a
+       tool a mouse user never had trouble with (both now select-then-commit,
+       matching Breakdown); `ensureSleeperUserId` was called from eight tool
+       paths and NO deep view, so the username-versus-display-name defect this
+       whole build exists to fix was not actually fixed for any pre-0268 row
+       (the fill moved into `resolveSleeperViewer`, which is the one thing all
+       ten deep views go through); the identity card focused its own button
+       before React re-rendered, so a screen reader announced "Close, expanded"
+       at the moment the card collapsed; and the card moved focus into the form
+       on a plain page load whenever a saved handle stopped resolving.
+     | notes: also fixed: `getSleeperLeagues` interpolated an unencoded user id
+       that can now come from a user-writable jsonb column; `sleeper_user_id`
+       and `sleeper_avatar` are shape-checked at the one door every read comes
+       through, and the comment there states plainly that this column can never
+       be an authorization boundary because its owner can write all of it; the
+       FAAB saved branch spent a Sleeper call before claiming its rate-limit
+       slot; `revalidatePath("/", "layout")` purged the whole site's cache six
+       times a minute per account and is now four paths; the switcher made an
+       unmetered live Sleeper call on all ten deep views for any signed-in
+       reader, member of that league or not; `createClient` is memoized per
+       request, which collapses four GoTrue round trips to one on My Beacon;
+       co-owners were dropped by the Schedules and Trade Ideas matchers; and
+       the guard test was evadable three ways (raw column read, destructuring,
+       aliasing) and missed writes entirely.
+     | notes: a SECOND round of four independent reviews followed the fixes,
+       and found that one of those fixes had introduced a blocker of its own.
+       Moving the Signal Check league picker to select-then-commit left two
+       other consumers keyed on the highlighted row: `useStepScroll` (which
+       moves focus as well as scroll, so the first arrow press threw a keyboard
+       reader out of the radiogroup and league two was unreachable) and the
+       trade section itself, which mounted on selection and announced "No
+       completed trades found in this league yet" about a league nothing had
+       looked at. Both now key on `loadedLeagueId`.
+     | notes: the rest of that round: the FAAB and Signal Check commit buttons
+       disabled themselves in the same commit as their own click, and a browser
+       blurs a focused element the moment it is disabled, so focus fell to the
+       document body silently; Beacon Breakdown had no failure discriminator, so
+       a 429 on its auto-run force-opened the username form and asked a reader
+       whose handle is fine to retype it, which is the exact case D7 forbids;
+       its auto-run also fired on every page load that already had a league
+       applied, spending a Sleeper call and a rate-limit slot on a list nothing
+       rendered; On The Clock sent a throttled reader back to step 1 against its
+       own comment, and raised two assertive alerts for one failure; the pre-0268
+       backfill was unmetered on a value its owner can reset at will, which made
+       it a lever on the shared Sleeper budget across ten routes, and it is now
+       claimed from a small hourly bucket; League Pulse could spend three Sleeper
+       calls in one render on an unresolvable handle; person avatars fetched the
+       full-size upload at 20 to 40 px; /login accepted a backslash-prefixed
+       `next`, which resolves to an external origin; the Signal Check import
+       actions had no rate limit at all while resting on a self-asserted id; and
+       the guard test was defeatable by optional chaining, bracket access, a
+       line break and destructuring, all four of which now fail it (verified
+       with throwaway probe files).
+     | notes: three hand-rolled copies of "which roster is mine" became one:
+       the Schedules board and the trade finder now call `matchViewerRoster`
+       rather than agreeing with it by coincidence. The dead `inline` mode of
+       the shared save form was deleted; all four call sites always saved, and
+       the D5 checkbox it carried was unreachable while every tool rendered its
+       own live copy.
+     | verified: npx tsc --noEmit exits 0. npx vitest run is 293 files, 4445
+       tests, all passing. npm run build is clean. Prettier run over every file
+       it flagged. The banned-character scan is clean across all 133 changed
+       code files: zero em dashes, en dashes, curly quotes, apostrophes,
+       ellipses, non-breaking spaces or middots.
+     | notes: NOT COMMITTED and NOT PUSHED, by instruction.

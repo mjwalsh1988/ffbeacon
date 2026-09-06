@@ -110,7 +110,7 @@ export async function loadScheduleBoard(
     supabase
       .from("rosters")
       .select(
-        "id, sleeper_roster_id, owner_user_id, wins, losses, ties, points_for",
+        "id, sleeper_roster_id, owner_user_id, co_owners, wins, losses, ties, points_for",
       )
       .eq("league_id", leagueRowId)
       .order("sleeper_roster_id", { ascending: true }),
@@ -144,6 +144,10 @@ export async function loadScheduleBoard(
       teamName:
         user?.team_name || user?.display_name || `Team ${r.sleeper_roster_id}`,
       ownerHandle: user?.display_name ?? null,
+      ownerUserId: r.owner_user_id ?? null,
+      coOwnerIds: Array.isArray(r.co_owners)
+        ? r.co_owners.filter((id): id is string => typeof id === "string")
+        : [],
       ownerAvatarId: user?.avatar ?? null,
       record: {
         wins: Number(r.wins ?? 0),

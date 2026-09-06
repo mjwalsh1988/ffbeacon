@@ -1,5 +1,6 @@
 import { LeagueSwitcher, type SwitcherLeague } from "@/components/league-switcher";
 import { CopyLinkButton } from "@/components/copy-link-button";
+import type { SleeperViewer } from "@/lib/sleeper-handle/types";
 
 /**
  * Shared header action cluster for every League Pulse deep-view surface
@@ -20,6 +21,19 @@ import { CopyLinkButton } from "@/components/copy-link-button";
  * reading a league, and it was the only control here that could push the row
  * onto a second line.
  *
+ * COPY LINK IS ALWAYS THE CANONICAL URL, with no `?username=`, and that is
+ * deliberate rather than an omission: `copyHref` is built clean by all ten
+ * pages, including when the reader themselves arrived on a `?username=` link.
+ *
+ * The reason is what a copied link is FOR. A link that resolves to the
+ * RECIPIENT's own saved handle shows them their own team, which is the correct
+ * reading of "your team"; forwarding the sender's handle would highlight a
+ * stranger's roster on the recipient's screen and give them no way to tell
+ * why. In-view navigation is the opposite case and does forward the param when
+ * the reader arrived on one (`viewerLinkUsername` in
+ * components/league-shell/nav-items.ts), because there the reader is still
+ * looking at the identity they asked for.
+ *
  * `w-full` on mobile is load-bearing. Most deep-view headers put this cluster
  * in a `flex flex-wrap` row beside the breadcrumb, where a flex item sizes to
  * its content: without it the whole cluster shrank to a narrow column against
@@ -29,13 +43,15 @@ export function LeagueHeaderActions({
   copyHref,
   copyAriaLabel,
   otherLeagues,
-  searchedUsername,
+  viewer,
   className,
 }: {
   copyHref: string;
   copyAriaLabel: string;
   otherLeagues: SwitcherLeague[];
-  searchedUsername: string | null;
+  /** Who this page is acting for. The switcher names them and decides, from
+   *  `viewer.source`, whether its own links carry the handle. */
+  viewer: SleeperViewer | null;
   className?: string;
 }) {
   return (
@@ -50,10 +66,7 @@ export function LeagueHeaderActions({
         }`}
       >
         {otherLeagues.length > 0 && (
-          <LeagueSwitcher
-            leagues={otherLeagues}
-            searchedUsername={searchedUsername}
-          />
+          <LeagueSwitcher leagues={otherLeagues} viewer={viewer} />
         )}
         <CopyLinkButton
           href={copyHref}

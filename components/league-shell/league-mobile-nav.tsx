@@ -13,21 +13,23 @@
  * opening a sheet of the other four. See components/mobile-nav-dock.tsx.
  *
  * Reads the same list as the rail (nav-items.ts), so a section can never appear
- * in one and go missing from the other, and forwards the searched Sleeper handle
- * on every hop the way `leagueTabHref` already does.
+ * in one and go missing from the other, and carries the Sleeper handle on every
+ * hop under exactly the rule `leagueTabHref` applies: only for a reader who
+ * arrived on a ?username= link.
  */
 
 import { MobileNavDock } from "@/components/mobile-nav-dock";
+import type { SleeperViewer } from "@/lib/sleeper-handle/types";
 import { LEAGUE_NAV_ITEMS, leagueTabHref, type LeagueTabId } from "./nav-items";
 
 export function LeagueMobileNav({
   sleeperLeagueId,
   activeTab,
-  searchedUsername,
+  viewer,
 }: {
   sleeperLeagueId: string;
   activeTab: LeagueTabId;
-  searchedUsername: string | null;
+  viewer: SleeperViewer | null;
 }) {
   const current =
     LEAGUE_NAV_ITEMS.find((item) => item.id === activeTab) ?? LEAGUE_NAV_ITEMS[0];
@@ -50,7 +52,7 @@ export function LeagueMobileNav({
             label: item.label,
             hint: item.hint,
             icon: item.icon,
-            href: leagueTabHref(sleeperLeagueId, item.id, searchedUsername),
+            href: leagueTabHref(sleeperLeagueId, item.id, viewer),
           })),
         },
       ]}

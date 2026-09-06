@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { loadSavedSleeperHandle } from "@/lib/sleeper-handle/resolve";
 import { ProfileForm } from "./profile-form";
 import { AvatarUploader } from "./avatar-uploader";
 
@@ -20,11 +20,12 @@ export default async function ProfilePage() {
 
   const { data: prefs } = await supabase
     .from("user_preferences")
-    .select("first_name, last_name, bio, avatar_path, sleeper_league_settings")
+    .select("first_name, last_name, bio, avatar_path")
     .eq("user_id", user!.id)
     .maybeSingle();
 
-  const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
+  // The saved handle comes through the one module allowed to read it (D1).
+  const savedHandle = await loadSavedSleeperHandle(supabase);
   const displayName =
     typeof user!.user_metadata?.display_name === "string"
       ? (user!.user_metadata.display_name as string)
@@ -75,7 +76,7 @@ export default async function ProfilePage() {
             initialFirstName={prefs?.first_name ?? ""}
             initialLastName={prefs?.last_name ?? ""}
             initialDisplayName={displayName}
-            initialSleeperUsername={settings.username ?? ""}
+            initialSleeperUsername={savedHandle?.username ?? ""}
             initialBio={prefs?.bio ?? ""}
           />
         </div>

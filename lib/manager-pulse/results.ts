@@ -310,6 +310,7 @@ export function computeLeagueRows(input: ManagerPulseInput): ManagerLeagueRow[] 
     sleeperLeagueId: s.sleeperLeagueId,
     season: s.season,
     leagueName: s.leagueName,
+    avatar: s.avatar,
     category: s.category,
     lens: lensForCategory(s.category),
     teamCount: s.teamCount,

@@ -224,6 +224,14 @@ export type ScheduleTeam = {
   rosterRowId: string;
   teamName: string;
   ownerHandle: string | null;
+  /** rosters.owner_user_id, the Sleeper user id verbatim. Picking the reader's
+   *  own team prefers it over the handle above, because a saved handle is a
+   *  Sleeper USERNAME while ownerHandle is a DISPLAY NAME. */
+  ownerUserId: string | null;
+  /** rosters.co_owners. A co-owner is an owner for the purpose of "your team",
+   *  and leaving them out found a co-owner's team on five surfaces and not on
+   *  this one. lib/league-viewer.ts matchViewerRoster is the canonical rule. */
+  coOwnerIds: string[];
   ownerAvatarId: string | null;
   record: { wins: number; losses: number; ties: number };
   pointsFor: number;

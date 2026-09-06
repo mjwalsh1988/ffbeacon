@@ -176,11 +176,24 @@ export async function resolveUpgradeViewerRoster(
     leagueRowId: string;
     submittedRosterId: number;
     searchedUsername: string | null;
+    /**
+     * The viewer's Sleeper user id, resolved SERVER SIDE from the session by
+     * the caller. matchViewerRoster tries it before the handle, because a
+     * saved handle is a Sleeper username while the candidates carry display
+     * names. It is never taken off the request payload: an id from the wire
+     * would let a caller name somebody else's roster and have gate 2 agree.
+     */
+    viewerSleeperUserId: string | null;
     focusedRosterId: number | null;
   },
 ): Promise<{ ok: true; rosterId: number } | { ok: false; reason: "no-viewer" | "roster-mismatch" }> {
   const candidates: ViewerCandidate[] = await loadViewerCandidates(supabase, params.leagueRowId);
-  const derived = matchViewerRoster(candidates, params.searchedUsername, params.focusedRosterId);
+  const derived = matchViewerRoster(
+    candidates,
+    params.searchedUsername,
+    params.focusedRosterId,
+    params.viewerSleeperUserId,
+  );
   if (derived === null) return { ok: false, reason: "no-viewer" };
   if (derived !== params.submittedRosterId) return { ok: false, reason: "roster-mismatch" };
   return { ok: true, rosterId: derived };

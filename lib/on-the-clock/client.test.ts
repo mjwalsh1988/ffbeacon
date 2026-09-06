@@ -31,7 +31,7 @@ describe("fetchLeagues", () => {
     fetchMock.mockResolvedValueOnce(
       res(200, { ok: true, season: "2026", userId: "u1", leagues: [{ leagueId: "L1" }], truncated: false }),
     );
-    const result = await fetchLeagues("Mike", "2026");
+    const result = await fetchLeagues({ username: "Mike" }, "2026");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
@@ -47,9 +47,20 @@ describe("fetchLeagues", () => {
     }
   });
 
+  it("sends saved=1 and NO username when the lookup is the saved identity", async () => {
+    fetchMock.mockResolvedValueOnce(
+      res(200, { ok: true, season: "2026", userId: "u1", leagues: [], truncated: false }),
+    );
+    await fetchLeagues({ saved: true }, "2026");
+
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain("saved=1");
+    expect(url).not.toContain("username");
+  });
+
   it("maps 503 to feature-disabled with the route message", async () => {
     fetchMock.mockResolvedValueOnce(res(503, { error: "On The Clock is not available yet." }));
-    const result = await fetchLeagues("Mike", "2026");
+    const result = await fetchLeagues({ username: "Mike" }, "2026");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe("feature-disabled");
@@ -59,19 +70,19 @@ describe("fetchLeagues", () => {
 
   it("maps 429 to throttled and 404 to not-found", async () => {
     fetchMock.mockResolvedValueOnce(res(429, { error: "Too many lookups." }));
-    const throttled = await fetchLeagues("Mike", "2026");
+    const throttled = await fetchLeagues({ username: "Mike" }, "2026");
     expect(throttled.ok).toBe(false);
     if (!throttled.ok) expect(throttled.code).toBe("throttled");
 
     fetchMock.mockResolvedValueOnce(res(404, { error: "We could not find a Sleeper user with that name." }));
-    const missing = await fetchLeagues("Ghost", "2026");
+    const missing = await fetchLeagues({ username: "Ghost" }, "2026");
     expect(missing.ok).toBe(false);
     if (!missing.ok) expect(missing.code).toBe("not-found");
   });
 
   it("maps a network failure to the network code", async () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    const result = await fetchLeagues("Mike", "2026");
+    const result = await fetchLeagues({ username: "Mike" }, "2026");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("network");
   });

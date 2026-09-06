@@ -84,7 +84,7 @@ function weekOptionLabel(option: ScheduleWeekOption): string {
 
 export function ScheduleControls({
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   view,
   week,
   rosterId,
@@ -92,7 +92,7 @@ export function ScheduleControls({
   teams,
 }: {
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   view: "week" | "team";
   week: number;
   /** Null in week mode, and in team mode before a team has been chosen. */
@@ -140,7 +140,7 @@ export function ScheduleControls({
     router.push(
       withUsername(
         `/leagues/${sleeperLeagueId}/schedules?${params.toString()}`,
-        searchedUsername,
+        linkUsername,
       ),
     );
   };

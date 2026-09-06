@@ -84,7 +84,7 @@ const FEATURED_TOOLS: FeaturedTool[] = [
     href: "/tools/league-pulse",
     title: "Sleeper League Pulse",
     description:
-      "Type in your Sleeper username and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
+      "Type in your Sleeper username, or save it once and skip the typing, and pull back every league you are in: real rosters, recent trades, draft picks, and power rankings tuned to each league's own scoring.",
     cta: "Check your league's pulse",
     icon: Workflow,
     badge: "New features",

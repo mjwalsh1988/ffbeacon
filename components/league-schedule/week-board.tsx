@@ -55,11 +55,11 @@ function describeWeek(week: ScheduleWeekView): string {
 export function WeekBoard({
   week,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
 }: {
   week: ScheduleWeekView;
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
 }) {
   return (
     <Panel
@@ -84,7 +84,7 @@ export function WeekBoard({
               <MatchupRow
                 matchup={matchup}
                 sleeperLeagueId={sleeperLeagueId}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 // Flat, always. See the note at the top of this file: the board
                 // owns the emphasis on a single-week surface.
                 // The real week state, so the card gets its cyan state edge.

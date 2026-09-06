@@ -6,9 +6,13 @@
  * everywhere instead of poking at the jsonb directly so the shape stays
  * consistent and we never accidentally clobber sibling keys.
  *
- * Shape (kept in sync with the column comment in migration 0028):
+ * Shape (kept in sync with the column comments in migrations 0028 and 0268):
  *   {
- *     username?: string,                  // linked Sleeper handle
+ *     username?: string,                  // linked Sleeper handle, lowercased
+ *     sleeper_user_id?: string,           // resolved from Sleeper at save time
+ *     sleeper_display_name?: string,      // from Sleeper at save time
+ *     sleeper_avatar?: string | null,     // Sleeper avatar id at save time
+ *     handle_verified_at?: string,        // ISO time of the last resolution
  *     featured_league_id?: string | null, // sleeper_league_id pinned to profile
  *     shown_league_ids?: string[],        // sleeper_league_ids visible on profile
  *     signal_league_ids?: string[]        // ordered sleeper_league_ids featured on
@@ -18,13 +22,36 @@
  *                                         // render (the public page never calls
  *                                         // Sleeper).
  *   }
+ *
+ * The five identity keys are written only by app/actions/sleeper-handle.ts
+ * saveSleeperHandle, after the handle resolved on Sleeper. They are read only
+ * through lib/sleeper-handle/resolve.ts; lib/sleeper-handle/guard.test.ts
+ * fails the suite on any other read.
  */
 export type SleeperLeagueSettings = {
   username?: string | null;
+  sleeper_user_id?: string | null;
+  sleeper_display_name?: string | null;
+  sleeper_avatar?: string | null;
+  handle_verified_at?: string | null;
   featured_league_id?: string | null;
   shown_league_ids?: string[];
   signal_league_ids?: string[];
 };
+
+/** The keys migration 0268 documents beside `username`, all plain strings. */
+const IDENTITY_KEYS = [
+  "sleeper_user_id",
+  "sleeper_display_name",
+  "sleeper_avatar",
+  "handle_verified_at",
+] as const;
+
+/** Sleeper user ids are digit strings. This one reaches a URL path segment. */
+const SLEEPER_USER_ID_PATTERN = /^[0-9]{1,32}$/;
+
+/** Matches lib/sleeper-avatar-url.ts, which builds the URL from this value. */
+const SLEEPER_AVATAR_ID_PATTERN = /^[A-Za-z0-9]{1,64}$/;
 
 /**
  * Coerce an unknown jsonb value into the typed settings shape. Treats
@@ -42,6 +69,33 @@ export function parseSleeperLeagueSettings(value: unknown): SleeperLeagueSetting
     out.username = record.username;
   } else if (record.username === null) {
     out.username = null;
+  }
+
+  // The four identity keys coerce the way `username` does: a non-empty string
+  // is kept, an explicit null is kept as a clear, anything else is dropped so a
+  // hostile or half-written jsonb cannot reach a consumer.
+  //
+  // Two of them are additionally shape-checked, and the reason is worth stating.
+  // `saveSleeperHandle` is the only code path that writes these, and it resolves
+  // the handle on Sleeper first, so every value it writes is one Sleeper itself
+  // returned. The DATABASE does not enforce that: `authenticated` holds a column
+  // grant on `sleeper_league_settings`, which it needs in order to own its own
+  // preferences, so an account owner can PATCH this jsonb directly and put any
+  // string in it. `sleeper_user_id` then reaches a URL path segment and
+  // `sleeper_avatar` reaches an image URL, so both are validated here, at the
+  // one door every read comes through, rather than at each consumer.
+  //
+  // This is a shape check and NOT an authorization boundary. Nothing in this
+  // column may gate access to anything, because its owner can write all of it.
+  for (const key of IDENTITY_KEYS) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) {
+      if (key === "sleeper_user_id" && !SLEEPER_USER_ID_PATTERN.test(value)) continue;
+      if (key === "sleeper_avatar" && !SLEEPER_AVATAR_ID_PATTERN.test(value)) continue;
+      out[key] = value;
+    } else if (value === null) {
+      out[key] = null;
+    }
   }
 
   if (typeof record.featured_league_id === "string" && record.featured_league_id.length > 0) {

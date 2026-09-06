@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -50,6 +52,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { league_id } = await params;
   const supabase = await createClient();
+
   const { data: league } = await supabase
     .from("leagues")
     .select("name")
@@ -81,11 +84,6 @@ export default async function LeaguePowerPulsePage({
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
-  const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim()
-      ? sp.username.trim()
-      : null;
-
   // Core pulse only: the league, its rosters and its members. The derived half
   // is what computes Power Pulse when it is stale, and that is the slow part, so
   // it runs inside the Suspense boundaries below and the header, tabs and intro
@@ -95,6 +93,14 @@ export default async function LeaguePowerPulsePage({
   if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
+
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
+  // `linkUsername` is what a link built on this page may carry, which is the
+  // handle only when the reader arrived on one.
+  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const searchedUsername = viewer?.username ?? null;
+  const linkUsername = viewerLinkUsername(viewer);
   const { data: league } = await supabase
     .from("leagues")
     .select(
@@ -108,15 +114,17 @@ export default async function LeaguePowerPulsePage({
     supabase,
     league.id,
     sleeperLeagueId,
-    searchedUsername,
+    viewer,
     league.season != null ? String(league.season) : null,
   );
 
-  const homeHref = searchedUsername
-    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+  // No handle on either link for a saved reader: /tools/league-pulse resolves
+  // the same identity itself, and the deep view matches on the Sleeper user id.
+  const homeHref = linkUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
     : "/tools/league-pulse";
-  const leagueHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(searchedUsername)}`
+  const leagueHref = linkUsername
+    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(linkUsername)}`
     : `/leagues/${sleeperLeagueId}`;
 
   // Format is derived from the league's own Sleeper settings; only the value
@@ -170,6 +178,7 @@ export default async function LeaguePowerPulsePage({
     : null;
   const mastheadProps: LeagueMastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -201,7 +210,7 @@ export default async function LeaguePowerPulsePage({
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab="power-pulse"
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={homeHref}
       crumbs={[
         { label: league.name, href: leagueHref },
@@ -273,6 +282,8 @@ export default async function LeaguePowerPulsePage({
             sourceSlug={coverageOk ? context.sourceSlug : null}
             resynced={!pulseResult.cached}
             searchedUsername={searchedUsername}
+            viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+            linkUsername={linkUsername}
             scoringDescription={scoringDescription}
             playoffTeams={playoffTeams}
             valueLabel={valueLabel}
@@ -361,6 +372,8 @@ async function PowerPulseBody({
   sourceSlug,
   resynced,
   searchedUsername,
+  viewerSleeperUserId,
+  linkUsername,
   scoringDescription,
   playoffTeams,
   valueLabel,
@@ -381,6 +394,11 @@ async function PowerPulseBody({
   sourceSlug: string | null;
   resynced: boolean;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, tried before the handle: a saved handle is
+   *  a Sleeper username while the candidates carry display names. */
+  viewerSleeperUserId: string | null;
+  /** The handle links inside this section may carry, or null. */
+  linkUsername: string | null;
   scoringDescription: string;
   playoffTeams: number;
   valueLabel: string | null;
@@ -466,7 +484,7 @@ async function PowerPulseBody({
               <PulseRankingsTable
                 teams={view.teams}
                 sleeperLeagueId={sleeperLeagueId}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 valueLabel={valueLabel}
                 emphasis={emphasis}
               />
@@ -495,9 +513,10 @@ async function PowerPulseBody({
                 rosterPositions={rosterPositions}
                 scoringSettings={scoringSettings}
                 searchedUsername={searchedUsername}
+                viewerSleeperUserId={viewerSleeperUserId}
                 exploreHref={
-                  searchedUsername
-                    ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
+                  linkUsername
+                    ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(linkUsername)}`
                     : `/leagues/${sleeperLeagueId}/positional-war`
                 }
               />
@@ -732,6 +751,7 @@ async function PositionalWarBlock({
   rosterPositions,
   scoringSettings,
   searchedUsername,
+  viewerSleeperUserId,
   exploreHref,
 }: {
   leagueRowId: string;
@@ -741,6 +761,9 @@ async function PositionalWarBlock({
   rosterPositions: string[];
   scoringSettings: ScoringSettings;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, tried before the handle: a saved handle is
+   *  a Sleeper username while the candidates carry display names. */
+  viewerSleeperUserId: string | null;
   exploreHref: string;
 }) {
   const supabase = await createClient();
@@ -757,6 +780,7 @@ async function PositionalWarBlock({
       rosterPositions={rosterPositions}
       scoringSettings={scoringSettings}
       searchedUsername={searchedUsername}
+      viewerSleeperUserId={viewerSleeperUserId}
       focusedRosterId={null}
       variant="preview"
       exploreHref={exploreHref}

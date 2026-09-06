@@ -34,6 +34,7 @@ import {
   describeSource,
 } from "@/lib/source";
 import { currentNflSeason } from "@/lib/sleeper";
+import { resolveHandleGate } from "@/lib/sleeper-handle/resolve";
 import { SITE } from "@/lib/site";
 import { pageShareMetadata } from "@/lib/page-og";
 import { BreakdownSelector, type PickedPlayer } from "./breakdown-selector";
@@ -55,7 +56,10 @@ import { DiscordCtaSection } from "@/components/discord-cta-section";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { PageBody } from "@/components/app-shell/page-body";
-import { PageMasthead, type MastheadChip } from "@/components/app-shell/page-masthead";
+import {
+  PageMasthead,
+  type MastheadChip,
+} from "@/components/app-shell/page-masthead";
 
 export const dynamic = "force-dynamic";
 
@@ -72,10 +76,21 @@ type SearchParams = {
 };
 
 /** Build a URL for this tool, replacing only the params named. */
-function buildHref(base: SearchParams, overrides: Partial<SearchParams>): string {
+function buildHref(
+  base: SearchParams,
+  overrides: Partial<SearchParams>,
+): string {
   const merged = { ...base, ...overrides };
   const params = new URLSearchParams();
-  for (const key of ["a", "b", "format", "source", "lens", "league", "roster"] as const) {
+  for (const key of [
+    "a",
+    "b",
+    "format",
+    "source",
+    "lens",
+    "league",
+    "roster",
+  ] as const) {
     const value = merged[key];
     if (value) params.set(key, value);
   }
@@ -104,7 +119,9 @@ export async function generateMetadata({
     const nameOf = (slug: string) => {
       const row = (data ?? []).find((p) => p.slug === slug);
       if (!row) return null;
-      return row.full_name ?? `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim();
+      return (
+        row.full_name ?? `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim()
+      );
     };
     const nameA = nameOf(a);
     const nameB = nameOf(b);
@@ -125,7 +142,14 @@ export async function generateMetadata({
         openGraph: {
           title,
           description,
-          images: [{ url: ogUrl, width: 1200, height: 630, alt: `${nameA} versus ${nameB}` }],
+          images: [
+            {
+              url: ogUrl,
+              width: 1200,
+              height: 630,
+              alt: `${nameA} versus ${nameB}`,
+            },
+          ],
         },
         twitter: {
           card: "summary_large_image",
@@ -172,18 +196,25 @@ export default async function BeaconBreakdownPage({
   // Resolve the display labels for the format/source context bar. When we run a
   // breakdown these also come back inside the result, but the empty-state
   // selector needs them up front.
-  const [formatResolution, sourceResolution, registry, activeFormats] = await Promise.all([
-    resolveFormatSlug(supabase, params.format),
-    resolveSourceSlug(supabase, params.source),
-    getAvailableSources(supabase),
-    getActiveFormats(supabase),
-  ]);
+  const [formatResolution, sourceResolution, registry, activeFormats] =
+    await Promise.all([
+      resolveFormatSlug(supabase, params.format),
+      resolveSourceSlug(supabase, params.source),
+      getAvailableSources(supabase),
+      getActiveFormats(supabase),
+    ]);
   // Picked in memory from the request-cached list rather than a second
   // slug-keyed round trip.
-  const formatRow = activeFormats.find((f) => f.slug === formatResolution.slug) ?? null;
+  const formatRow =
+    activeFormats.find((f) => f.slug === formatResolution.slug) ?? null;
   const formatDisplay = formatRow?.display_name ?? formatResolution.slug;
   const valueResolution = formatRow
-    ? resolveSourceForFormat(registry, "player_value_history", formatRow.slug, sourceResolution.slug)
+    ? resolveSourceForFormat(
+        registry,
+        "player_value_history",
+        formatRow.slug,
+        sourceResolution.slug,
+      )
     : null;
   const sourceDisplay = valueResolution?.source
     ? describeSource(registry, valueResolution.source)
@@ -293,8 +324,10 @@ async function BreakdownShell({
           role="alert"
           className="rounded-card border border-signal-warning/40 bg-signal-warning/5 px-4 py-3 text-sm text-ink"
         >
-          We couldn&apos;t find {lookup.missing.length > 1 ? "those players" : "that player"}. They
-          may be inactive or the link may be out of date. Pick two players to try again.
+          We couldn&apos;t find{" "}
+          {lookup.missing.length > 1 ? "those players" : "that player"}. They
+          may be inactive or the link may be out of date. Pick two players to
+          try again.
         </p>
         <BreakdownSelector
           formatDisplay={formatDisplayFallback}
@@ -330,8 +363,9 @@ async function BreakdownShell({
           className="rounded-card border border-dashed border-line bg-surface px-4 py-2 text-sm text-ink-muted"
         >
           <span className="font-medium text-ink">Heads up:</span> No{" "}
-          {context.fallbackBanner.requested} values for {context.fallbackBanner.formatDisplay}.
-          Showing {context.fallbackBanner.actual} values instead.
+          {context.fallbackBanner.requested} values for{" "}
+          {context.fallbackBanner.formatDisplay}. Showing{" "}
+          {context.fallbackBanner.actual} values instead.
         </p>
       )}
 
@@ -345,13 +379,44 @@ async function BreakdownShell({
 
       <MatchupHeader a={a} b={b} valueIsBeacon={context.valueIsBeacon} />
 
-      <LensSwitch active={lens} hrefForLens={(next) => buildHref(params, { lens: next })} />
+      <LensSwitch
+        active={lens}
+        hrefForLens={(next) => buildHref(params, { lens: next })}
+      />
 
       <Suspense fallback={<AnalysisSkeleton />}>
         <BreakdownAnalysis core={core} params={params} lens={lens} />
       </Suspense>
     </div>
   );
+}
+
+/**
+ * The connected league's Sleeper image id, or null.
+ *
+ * Read through the admin client because `leagues.metadata` is the stored raw
+ * Sleeper object and the row may belong to a league the reader is not in, which
+ * is already true of everything else the connector touches. Never throws: a
+ * missing logo renders the same-sized placeholder and the row stays aligned.
+ */
+async function loadLeagueAvatar(
+  sleeperLeagueId: string,
+): Promise<string | null> {
+  try {
+    // The arrow expression, not `select("metadata")`. That column holds the
+    // entire raw Sleeper league object (scoring settings, roster positions,
+    // the lot), several kB fetched to read one short string. Every other
+    // loader in this feature projects it the same way.
+    const { data } = await createAdminClient()
+      .from("leagues")
+      .select("avatar:metadata->>avatar")
+      .eq("sleeper_league_id", sleeperLeagueId)
+      .maybeSingle<{ avatar: unknown }>();
+    const avatar = data?.avatar;
+    return typeof avatar === "string" && avatar.length > 0 ? avatar : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -381,9 +446,28 @@ async function BreakdownAnalysis({
   const pulseSettings = await loadPowerPulseSettings(createAdminClient());
 
   const rosterId = params.roster ? Number(params.roster) : NaN;
-  const wantsLeague = Boolean(params.league) && Number.isInteger(rosterId) && rosterId > 0;
+  const wantsLeague =
+    Boolean(params.league) && Number.isInteger(rosterId) && rosterId > 0;
 
-  const [extrasMap, stats, tradesA, tradesB, leagueMode] = await Promise.all([
+  // Who the league connector is acting for. This tool carries no `?username=`
+  // param, so the precedence in D2 collapses to "the saved handle, or nothing":
+  // a reader with one saved gets the identity card and their leagues waiting,
+  // everyone else gets the form they have today.
+  const [
+    handleGate,
+    leagueAvatar,
+    extrasMap,
+    stats,
+    tradesA,
+    tradesB,
+    leagueMode,
+  ] = await Promise.all([
+    resolveHandleGate(supabase, undefined),
+    // Sleeper's own league image, for the connected-league card. It lives in
+    // the stored source object (leagues.metadata), which is where the Data
+    // Architecture rule puts source data; there is no avatar column and none
+    // is to be added.
+    wantsLeague ? loadLeagueAvatar(params.league!) : Promise.resolve(null),
     loadBreakdownExtras(
       supabase,
       [a, b].map((p) => ({
@@ -406,8 +490,12 @@ async function BreakdownAnalysis({
       pulseSettings,
     ),
     loadBreakdownStats(supabase, a, b),
-    a.sleeperId ? findPlayerTrades(supabase, a.sleeperId, { limit: 3 }) : Promise.resolve([]),
-    b.sleeperId ? findPlayerTrades(supabase, b.sleeperId, { limit: 3 }) : Promise.resolve([]),
+    a.sleeperId
+      ? findPlayerTrades(supabase, a.sleeperId, { limit: 3 })
+      : Promise.resolve([]),
+    b.sleeperId
+      ? findPlayerTrades(supabase, b.sleeperId, { limit: 3 })
+      : Promise.resolve([]),
     wantsLeague
       ? loadLeagueMode({
           sleeperLeagueId: params.league!,
@@ -555,11 +643,16 @@ async function BreakdownAnalysis({
                 record: leagueReport.team.record,
                 season: leagueReport.league.season,
                 scoringDescription: leagueReport.league.scoringDescription,
+                avatar: leagueAvatar,
               }
             : null
         }
+        handleGate={handleGate}
         defaultSeason={currentNflSeason()}
-        applyHrefBase={buildHref(params, { league: undefined, roster: undefined })}
+        applyHrefBase={buildHref(params, {
+          league: undefined,
+          roster: undefined,
+        })}
         clearHref={buildHref(params, { league: undefined, roster: undefined })}
       />
 
@@ -597,9 +690,10 @@ function PackageHandoff({ aName, bName }: { aName: string; bName: string }) {
         Is this actually a bigger trade?
       </h3>
       <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-        Real trades are rarely one for one. If {aName} and {bName} are only part of the deal, build
-        the whole thing in Signal Check: it prices multi-player packages and draft picks together
-        and grades the trade end to end.
+        Real trades are rarely one for one. If {aName} and {bName} are only part
+        of the deal, build the whole thing in Signal Check: it prices
+        multi-player packages and draft picks together and grades the trade end
+        to end.
       </p>
       <Link
         href="/tools/signal-check"
@@ -629,18 +723,27 @@ function EmptyState({
           role="status"
           className="rounded-card border border-brand-cyan/40 bg-brand-cyan/5 px-4 py-2 text-sm text-ink-muted"
         >
-          <span className="font-medium text-ink">Your league is connected.</span> Pick two players
-          and we will score them under your league&apos;s own rules and against your roster.
+          <span className="font-medium text-ink">
+            Your league is connected.
+          </span>{" "}
+          Pick two players and we will score them under your league&apos;s own
+          rules and against your roster.
         </p>
       )}
 
-      <BreakdownSelector formatDisplay={formatDisplay} sourceDisplay={sourceDisplay} />
+      <BreakdownSelector
+        formatDisplay={formatDisplay}
+        sourceDisplay={sourceDisplay}
+      />
 
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-cyan">
           How it works
         </p>
-        <ul role="list" className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ul
+          role="list"
+          className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        >
           <HowCard
             icon={Users}
             title="Pick two players"
@@ -747,9 +850,10 @@ function Masthead({
             Two players. One verdict.
           </span>
           <span className="mt-3 block">
-            Compare players head-to-head on value, rankings, rest-of-season projections, and how
-            often each one actually hits his number. Connect a league and we&apos;ll tell you what
-            each is worth to your starting lineup.
+            Compare players head-to-head on value, rankings, rest-of-season
+            projections, and how often each one actually hits his number.
+            Connect a league and we&apos;ll tell you what each is worth to your
+            starting lineup.
           </span>
         </>
       }

@@ -151,7 +151,12 @@ export function TradeFinder(props: {
   isSignedIn: boolean;
   /** league mode */
   sleeperLeagueId?: string;
+  /** The viewer's handle, used to work out which team is theirs. */
   searchedUsername?: string | null;
+  /** The handle a link built in here may carry, or null. Separate from the
+   *  one above on purpose: a reader on their own saved identity is matched to
+   *  their team but navigates on clean URLs (viewerLinkUsername). */
+  linkUsername?: string | null;
   /**
    * The reader's own team name, as formatTeamLabel renders it.
    *
@@ -446,12 +451,12 @@ export function TradeFinder(props: {
           outgoing: s.outgoing.map(toBuildAsset),
         },
         {
-          searchedUsername: props.searchedUsername ?? null,
+          searchedUsername: props.linkUsername ?? null,
           source: props.source ?? null,
         },
       );
     },
-    [props.myRosterId, props.searchedUsername, props.sleeperLeagueId, props.source],
+    [props.myRosterId, props.linkUsername, props.sleeperLeagueId, props.source],
   );
 
   /**
@@ -1087,7 +1092,7 @@ export function TradeFinder(props: {
               suggestion={shownSuggestion}
               grade={shownGrade}
               sleeperLeagueId={leagueIdOf(shownSuggestion, currentSaved?.sleeperLeagueId)}
-              searchedUsername={props.searchedUsername ?? null}
+              linkUsername={props.linkUsername ?? null}
               headingId={headingId}
               leagueLabel={leagueNameOf(shownSuggestion, currentSaved?.leagueName)}
               // The grade moves into the evaluation below whenever there is

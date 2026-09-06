@@ -3,6 +3,8 @@ import { Suspense, cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -100,6 +102,7 @@ const loadBuilderLeague = cache(
     resynced: boolean,
     sourceSlug: string | null,
     searchedUsername: string | null,
+    viewerSleeperUserId: string | null,
     rosterParam: number | null,
   ) => {
     const supabase = await createClient();
@@ -108,7 +111,14 @@ const loadBuilderLeague = cache(
     return loadTradeFinderLeague(supabase, {
       sleeperLeagueId,
       sourceSlug,
-      identity: { username: searchedUsername, rosterId: rosterParam },
+      // The Sleeper user id first (resolveMyRosterId tries roster, then id,
+      // then handle), because a saved handle is a username and the teams carry
+      // display names.
+      identity: {
+        sleeperUserId: viewerSleeperUserId,
+        username: searchedUsername,
+        rosterId: rosterParam,
+      },
     });
   },
 );
@@ -120,6 +130,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { league_id } = await params;
   const supabase = await createClient();
+
   const { data: league } = await supabase
     .from("leagues")
     .select("name")
@@ -159,10 +170,6 @@ export default async function LeagueTradeFinderPage({
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
   const mode: TradeIdeasMode = sp.mode === "build" ? "build" : "suggested";
-  const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim()
-      ? sp.username.trim()
-      : null;
   const rosterParam = (() => {
     if (typeof sp.roster !== "string" || !sp.roster.trim()) return null;
     const n = Number.parseInt(sp.roster, 10);
@@ -178,6 +185,14 @@ export default async function LeagueTradeFinderPage({
   if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
+
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
+  // `linkUsername` is what a link built here may carry, which is the handle
+  // only when the reader arrived on one.
+  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const searchedUsername = viewer?.username ?? null;
+  const linkUsername = viewerLinkUsername(viewer);
   const { data: league } = await supabase
     .from("leagues")
     .select(
@@ -195,12 +210,14 @@ export default async function LeagueTradeFinderPage({
     supabase,
     league.id,
     sleeperLeagueId,
-    searchedUsername,
+    viewer,
     league.season != null ? String(league.season) : null,
   );
 
-  const qs = searchedUsername
-    ? `?username=${encodeURIComponent(searchedUsername)}`
+  // No handle on the crumbs for a saved reader: /tools/league-pulse resolves
+  // the same identity itself, and the deep view matches on the Sleeper user id.
+  const qs = linkUsername
+    ? `?username=${encodeURIComponent(linkUsername)}`
     : "";
   const homeHref = `/tools/league-pulse${qs}`;
   const leagueHref = `/leagues/${sleeperLeagueId}${qs}`;
@@ -222,6 +239,7 @@ export default async function LeagueTradeFinderPage({
     : null;
   const mastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -253,7 +271,7 @@ export default async function LeagueTradeFinderPage({
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab="trade-ideas"
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={homeHref}
       crumbs={[
         { label: league.name, href: leagueHref },
@@ -304,7 +322,7 @@ export default async function LeagueTradeFinderPage({
           <ModeTabs
             active={mode}
             sleeperLeagueId={sleeperLeagueId}
-            searchedUsername={searchedUsername}
+            linkUsername={linkUsername}
             source={sp.source ?? null}
             rosterId={rosterParam}
           />
@@ -328,6 +346,8 @@ export default async function LeagueTradeFinderPage({
                   sourceSlug={resolvedSource.slug}
                   season={league.season ?? null}
                   searchedUsername={searchedUsername}
+                  viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+                  linkUsername={linkUsername}
                   rosterParam={rosterParam}
                   proposalParams={{ with: sp.with, in: sp.in, out: sp.out }}
                 />
@@ -352,6 +372,8 @@ export default async function LeagueTradeFinderPage({
                     sourceSlug={resolvedSource.slug}
                     season={league.season ?? null}
                     searchedUsername={searchedUsername}
+                    viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+                    linkUsername={linkUsername}
                     rosterParam={rosterParam}
                     isSignedIn={Boolean(user)}
                   />
@@ -379,6 +401,7 @@ export default async function LeagueTradeFinderPage({
                   formatConfigId={context.formatConfigId}
                   season={league.season ?? null}
                   searchedUsername={searchedUsername}
+                  viewerSleeperUserId={viewer?.sleeperUserId ?? null}
                   rosterParam={rosterParam}
                 />
               </Suspense>
@@ -501,6 +524,8 @@ async function TradeFinderSection({
   sourceSlug,
   season,
   searchedUsername,
+  viewerSleeperUserId,
+  linkUsername,
   rosterParam,
   isSignedIn,
 }: {
@@ -511,6 +536,12 @@ async function TradeFinderSection({
   sourceSlug: string | null;
   season: number | null;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, which decides whose team is theirs before
+   *  the handle does: a saved handle is a Sleeper USERNAME while league_users
+   *  carries a DISPLAY NAME, and Sleeper lets the two differ. */
+  viewerSleeperUserId: string | null;
+  /** The handle a link built in this section may carry, or null. */
+  linkUsername: string | null;
   rosterParam: number | null;
   isSignedIn: boolean;
 }) {
@@ -548,6 +579,7 @@ async function TradeFinderSection({
     resynced,
     sourceSlug,
     searchedUsername,
+    viewerSleeperUserId,
     rosterParam,
   );
 
@@ -572,7 +604,7 @@ async function TradeFinderSection({
           ownerHandle: t.ownerHandle,
         }))}
         sleeperLeagueId={sleeperLeagueId}
-        searchedUsername={searchedUsername}
+        linkUsername={linkUsername}
       />
     );
   }
@@ -734,6 +766,7 @@ async function TradeFinderSection({
       isSignedIn={isSignedIn}
       sleeperLeagueId={sleeperLeagueId}
       searchedUsername={searchedUsername}
+      linkUsername={linkUsername}
       source={sourceSlug}
       // What makes "Open in builder" possible on a card: the builder needs to
       // know whose side of the deal is whose, and only the page knows that.
@@ -805,6 +838,8 @@ async function BuildSection({
   sourceSlug,
   season,
   searchedUsername,
+  viewerSleeperUserId,
+  linkUsername,
   rosterParam,
   proposalParams,
   emphasis,
@@ -815,6 +850,12 @@ async function BuildSection({
   sourceSlug: string | null;
   season: number | null;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, which decides whose team is theirs before
+   *  the handle does: a saved handle is a Sleeper USERNAME while league_users
+   *  carries a DISPLAY NAME, and Sleeper lets the two differ. */
+  viewerSleeperUserId: string | null;
+  /** The handle a link built in this section may carry, or null. */
+  linkUsername: string | null;
   rosterParam: number | null;
   proposalParams: ProposalParams;
   /** Names the value half for this league. See lib/league-emphasis.ts. */
@@ -838,6 +879,7 @@ async function BuildSection({
     resynced,
     sourceSlug,
     searchedUsername,
+    viewerSleeperUserId,
     rosterParam,
   );
 
@@ -862,7 +904,7 @@ async function BuildSection({
           ownerHandle: t.ownerHandle,
         }))}
         sleeperLeagueId={sleeperLeagueId}
-        searchedUsername={searchedUsername}
+        linkUsername={linkUsername}
         mode="build"
       />
     );
@@ -922,7 +964,7 @@ async function BuildSection({
       mode: "build",
       roster: String(myRosterId),
     });
-    if (searchedUsername) qs.set("username", searchedUsername);
+    if (linkUsername) qs.set("username", linkUsername);
     if (sourceSlug) qs.set("source", sourceSlug);
     return `/leagues/${sleeperLeagueId}/trade-ideas?${qs.toString()}`;
   })();
@@ -934,7 +976,7 @@ async function BuildSection({
       : `/leagues/${sleeperLeagueId}/trade-ideas?${encodeProposalQuery(
           decoded.proposal,
           {
-            searchedUsername,
+            searchedUsername: linkUsername,
             source: sourceSlug,
           },
         )}#trade-evaluation`;
@@ -958,7 +1000,7 @@ async function BuildSection({
       <TradeBuilder
         key={`${decoded.proposal?.theirRosterId ?? "none"}|${proposalParams.in ?? ""}|${proposalParams.out ?? ""}`}
         sleeperLeagueId={sleeperLeagueId}
-        searchedUsername={searchedUsername}
+        linkUsername={linkUsername}
         source={sourceSlug}
         myRosterId={myRosterId}
         teams={teams}
@@ -1006,6 +1048,7 @@ async function BuildSection({
               sourceSlug={sourceSlug}
               season={season}
               searchedUsername={searchedUsername}
+              viewerSleeperUserId={viewerSleeperUserId}
               proposal={decoded.proposal}
               myTeamLabel={myTeam?.teamName ?? "Your team"}
               theirTeamLabel={theirTeam?.teamName ?? "The other team"}
@@ -1036,6 +1079,7 @@ async function ProposalEvaluation({
   sourceSlug,
   season,
   searchedUsername,
+  viewerSleeperUserId,
   proposal,
   myTeamLabel,
   theirTeamLabel,
@@ -1050,6 +1094,9 @@ async function ProposalEvaluation({
   sourceSlug: string | null;
   season: number | null;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, tried before the handle when ownership is
+   *  re-derived. */
+  viewerSleeperUserId: string | null;
   proposal: TradeProposal;
   myTeamLabel: string;
   theirTeamLabel: string;
@@ -1072,6 +1119,7 @@ async function ProposalEvaluation({
     resynced,
     sourceSlug,
     searchedUsername,
+    viewerSleeperUserId,
     rosterParam,
   );
 
@@ -1087,7 +1135,11 @@ async function ProposalEvaluation({
     const validated = await validateProposal(supabase, adminClient, {
       sleeperLeagueId,
       sourceSlug,
-      identity: { username: searchedUsername, rosterId: proposal.myRosterId },
+      identity: {
+        sleeperUserId: viewerSleeperUserId,
+        username: searchedUsername,
+        rosterId: proposal.myRosterId,
+      },
       proposal,
       finder,
     });
@@ -1168,6 +1220,7 @@ async function YourTeamRail({
   formatConfigId,
   season,
   searchedUsername,
+  viewerSleeperUserId,
   rosterParam,
 }: {
   sleeperLeagueId: string;
@@ -1177,6 +1230,8 @@ async function YourTeamRail({
   formatConfigId: string | null;
   season: number | null;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, tried before the handle. */
+  viewerSleeperUserId: string | null;
   rosterParam: number | null;
 }) {
   const finderLeague = await loadBuilderLeague(
@@ -1185,6 +1240,7 @@ async function YourTeamRail({
     resynced,
     sourceSlug,
     searchedUsername,
+    viewerSleeperUserId,
     rosterParam,
   );
   if (!finderLeague || finderLeague.myRosterId === null) return null;
@@ -1289,12 +1345,13 @@ function YourTeamSkeleton() {
 function TeamChooser({
   teams,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   mode,
 }: {
   teams: { rosterId: number; teamName: string; ownerHandle: string | null }[];
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  /** The handle each choice link may carry, or null. */
+  linkUsername: string | null;
   /** Carried through the answer, so picking a team does not also switch tab. */
   mode?: TradeIdeasMode;
 }) {
@@ -1307,7 +1364,7 @@ function TeamChooser({
         {teams.map((team) => {
           const qs = new URLSearchParams({ roster: String(team.rosterId) });
           if (mode) qs.set("mode", mode);
-          if (searchedUsername) qs.set("username", searchedUsername);
+          if (linkUsername) qs.set("username", linkUsername);
           return (
             <li key={team.rosterId}>
               <Link

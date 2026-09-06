@@ -42,6 +42,7 @@ export async function PositionalWarSection({
   rosterPositions,
   scoringSettings,
   searchedUsername,
+  viewerSleeperUserId,
   focusedRosterId,
   war,
   variant,
@@ -60,6 +61,10 @@ export async function PositionalWarSection({
   rosterPositions: string[];
   scoringSettings: ScoringSettings;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, which matchViewerRoster tries before the
+   *  handle: a saved handle is a Sleeper username and the candidates carry
+   *  display names, and Sleeper lets the two differ. */
+  viewerSleeperUserId: string | null;
   focusedRosterId: number | null;
   war?: string | string[] | null;
   variant: "dashboard" | "preview";
@@ -89,6 +94,7 @@ export async function PositionalWarSection({
       rosterPositions={rosterPositions}
       scoringSettings={scoringSettings}
       searchedUsername={searchedUsername}
+      viewerSleeperUserId={viewerSleeperUserId}
       focusedRosterId={focusedRosterId}
       // The preview is one point and a link onward, so it never offers the
       // axis toggle and always draws the default axis.
@@ -123,6 +129,7 @@ export async function WarRailSection({
   leagueRowId,
   season,
   searchedUsername,
+  viewerSleeperUserId,
   focusedRosterId,
   positionalWarHref,
 }: {
@@ -130,6 +137,10 @@ export async function WarRailSection({
   leagueRowId: string;
   season: number;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, which matchViewerRoster tries before the
+   *  handle: a saved handle is a Sleeper username and the candidates carry
+   *  display names, and Sleeper lets the two differ. */
+  viewerSleeperUserId: string | null;
   focusedRosterId: number | null;
   positionalWarHref: string;
 }) {
@@ -143,6 +154,7 @@ export async function WarRailSection({
       leagueRowId={leagueRowId}
       season={season}
       searchedUsername={searchedUsername}
+      viewerSleeperUserId={viewerSleeperUserId}
       focusedRosterId={focusedRosterId}
       positionalWarHref={positionalWarHref}
     />

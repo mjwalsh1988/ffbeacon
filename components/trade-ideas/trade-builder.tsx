@@ -116,7 +116,7 @@ function fmtValue(value: number): string {
 
 export function TradeBuilder({
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   source,
   myRosterId,
   teams,
@@ -125,7 +125,7 @@ export function TradeBuilder({
   initialProposal,
 }: {
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   source: string | null;
   myRosterId: number;
   /** Every team in the league, the reader's own included. */
@@ -328,7 +328,7 @@ export function TradeBuilder({
 
   const evaluateHref = proposal
     ? `${proposalHref(sleeperLeagueId, proposal, {
-        searchedUsername,
+        searchedUsername: linkUsername,
         source,
       })}#trade-evaluation`
     : null;

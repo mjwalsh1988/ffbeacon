@@ -7,16 +7,16 @@ import {
   ChevronRight,
   Loader2,
   LogIn,
-  RefreshCw,
   Sparkles,
+  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { useStepScroll } from "@/lib/use-step-scroll";
-import {
-  mergeSleeperLeagueSettings,
-  parseSleeperLeagueSettings,
-} from "@/lib/sleeper-league-settings";
+import { SleeperIdentityCard } from "@/components/sleeper-handle/identity-card";
+import { SaveHandleForm } from "@/components/sleeper-handle/save-handle-form";
+import { SaveHandleNotice } from "@/components/sleeper-handle/save-handle-notice";
+import { LeagueChoiceList } from "@/components/league-choice-list";
+import type { SavedSleeperHandle } from "@/lib/sleeper-handle/types";
 import type { BuilderView } from "@/lib/signal-check/builder-view";
 import type { SideKey } from "@/lib/signal-check/types";
 import { TradeResult, type ResultAssetMetaBySide } from "./trade-result";
@@ -34,17 +34,25 @@ const TRADE_LIST_ID = "sc-import-trades";
 
 function teamAssetsText(t: ImportTradeTeam): string {
   const parts: string[] = [];
-  if (t.playerCount > 0) parts.push(`${t.playerCount} player${t.playerCount === 1 ? "" : "s"}`);
-  if (t.pickCount > 0) parts.push(`${t.pickCount} pick${t.pickCount === 1 ? "" : "s"}`);
+  if (t.playerCount > 0)
+    parts.push(`${t.playerCount} player${t.playerCount === 1 ? "" : "s"}`);
+  if (t.pickCount > 0)
+    parts.push(`${t.pickCount} pick${t.pickCount === 1 ? "" : "s"}`);
   return parts.join(", ") || "nothing";
 }
 
 /**
  * Inline Sleeper import for the Signal Check page. Adapts to auth state:
- *  - signed out: a notice inviting sign-in
- *  - signed in, no saved username: a small inline form to save it
- *  - signed in with username: pick a league, then pick a trade card, which
- *    imports and analyzes it right here (no separate page).
+ *  - signed out: the sign-in button and the guest notice
+ *  - signed in, no saved handle: the shared save form, which always saves
+ *  - signed in with a handle: the identity card, then pick a league and a
+ *    trade card, which imports and analyzes it right here (no separate page).
+ *
+ * Saving here ALWAYS saves, which is why the form is `mode="settings"` and
+ * carries no "save this" checkbox. Every other tool offers a one-off lookup
+ * because it can act for a handle typed into the box; this one cannot.
+ * `listImportLeagues` reads the SAVED handle on the server on every call, so a
+ * handle that was not saved would change nothing about what gets imported.
  *
  * The panel is shown or hidden by the workspace around it, which swaps it in
  * for the trade builder. Every state therefore carries the same way back:
@@ -60,7 +68,20 @@ export function SleeperImportPanel({
   initialUsername: string | null;
   onBack: () => void;
 }) {
-  const [username, setUsername] = useState<string | null>(initialUsername);
+  // The server render knows the handle; the panel starts with the name alone
+  // and takes the rest (display name, avatar, Sleeper user id) off the first
+  // league list, which resolves the same identity server-side anyway.
+  const [handle, setHandle] = useState<SavedSleeperHandle | null>(
+    initialUsername
+      ? {
+          username: initialUsername,
+          sleeperUserId: null,
+          displayName: null,
+          avatar: null,
+          verifiedAt: null,
+        }
+      : null,
+  );
 
   const [leagues, setLeagues] = useState<ImportLeague[]>([]);
   const [leaguesLoaded, setLeaguesLoaded] = useState(false);
@@ -68,13 +89,26 @@ export function SleeperImportPanel({
   const [loadingLeagues, startLeagues] = useTransition();
 
   const [leagueId, setLeagueId] = useState("");
+  /**
+   * The league whose trades are on screen, which is NOT the highlighted one.
+   *
+   * Selection moves on every arrow key in a radiogroup. Keying the scroll and
+   * the trade section on `leagueId` therefore pulled focus out of the group on
+   * the first Down press (useStepScroll focuses as well as scrolls, so league
+   * two was unreachable) and mounted an empty trade list that said "No
+   * completed trades found in this league yet" about a league nothing had
+   * looked at yet. Both belong to the league that was actually loaded.
+   */
+  const [loadedLeagueId, setLoadedLeagueId] = useState("");
   const [trades, setTrades] = useState<ImportTrade[]>([]);
   const [tradesError, setTradesError] = useState<string | null>(null);
   const [loadingTrades, startTrades] = useTransition();
 
   const [selectedTradeId, setSelectedTradeId] = useState("");
   const [view, setView] = useState<BuilderView | null>(null);
-  const [assetMeta, setAssetMeta] = useState<ResultAssetMetaBySide | null>(null);
+  const [assetMeta, setAssetMeta] = useState<ResultAssetMetaBySide | null>(
+    null,
+  );
   const [evidence, setEvidence] = useState<string[]>([]);
   const [notices, setNotices] = useState<string[]>([]);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -87,18 +121,26 @@ export function SleeperImportPanel({
   // Choosing a league is a question being answered, so land on the trades it
   // found rather than leaving the reader on the select they have finished
   // with. Clearing the league back to none moves nobody.
-  useStepScroll(leagueId || null, { id: TRADE_LIST_ID });
+  useStepScroll(loadedLeagueId || null, { id: TRADE_LIST_ID });
 
   function loadLeagues() {
     setLeaguesError(null);
     startLeagues(async () => {
       const res = await listImportLeagues();
       if (res.ok) {
+        // The server resolved the identity to make this call, so take the full
+        // handle back rather than showing a card with no face on it.
+        setHandle(res.handle);
         setLeagues(res.leagues);
         setLeaguesLoaded(true);
-        if (res.leagues.length === 1) selectLeague(res.leagues[0].sleeperLeagueId);
+        // One league is not a choice, so it is selected AND loaded. No arrow
+        // key was involved, so the hazard the two-step exists for cannot apply.
+        if (res.leagues.length === 1) {
+          selectLeague(res.leagues[0].sleeperLeagueId);
+          loadLeagueTrades(res.leagues[0].sleeperLeagueId);
+        }
       } else {
-        if (res.needsUsername) setUsername(null);
+        if (res.needsUsername) setHandle(null);
         setLeaguesError(res.error);
         setLeaguesLoaded(true);
       }
@@ -106,11 +148,28 @@ export function SleeperImportPanel({
   }
 
   // The panel only mounts once the reader asks for it, so load the league list
-  // as soon as we have a username to load it with.
+  // as soon as we have a handle to load it with.
   useEffect(() => {
-    if (username && !leaguesLoaded && !loadingLeagues) loadLeagues();
+    if (handle && !leaguesLoaded && !loadingLeagues) loadLeagues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username, leaguesLoaded]);
+  }, [handle?.username, leaguesLoaded]);
+
+  /**
+   * A handle was just saved. It may belong to a different Sleeper account, so
+   * the league list, the trade list and any result on screen are all about
+   * somebody else now and are cleared rather than left to look current.
+   */
+  function onHandleSaved(saved: SavedSleeperHandle) {
+    setHandle(saved);
+    setLeagues([]);
+    setLeaguesError(null);
+    setLeaguesLoaded(false);
+    setLeagueId("");
+    setTrades([]);
+    setTradesError(null);
+    setSelectedTradeId("");
+    resetResult();
+  }
 
   function resetResult() {
     setView(null);
@@ -121,17 +180,40 @@ export function SleeperImportPanel({
     setAnalyzeError(null);
   }
 
+  /**
+   * Choosing a row, which is deliberately NOT loading it.
+   *
+   * `LeagueChoiceList` is a real radiogroup, so arrow keys move between rows
+   * AND change the selection. Loading on change would therefore run
+   * `listLeagueTrades` (a full `pulseLeague`) once per arrow press, and a
+   * keyboard reader could not reach the fifth league without starting four
+   * league syncs. The `<select>` this replaced never had that problem, because
+   * a platform picker commits on Enter. So the row is the choice and
+   * "Load this league" is the action, matching the Beacon Breakdown picker.
+   */
   function selectLeague(id: string) {
     setLeagueId(id);
+    setLoadedLeagueId("");
     setTrades([]);
     setTradesError(null);
     setSelectedTradeId("");
     resetResult();
+  }
+
+  /** The action. Only ever runs when the reader asked for it. */
+  function loadLeagueTrades(id: string) {
     if (!id) return;
+    setLoadedLeagueId("");
+    setTrades([]);
+    setTradesError(null);
+    setSelectedTradeId("");
+    resetResult();
     startTrades(async () => {
       const res = await listLeagueTrades(id);
-      if (res.ok) setTrades(res.trades);
-      else setTradesError(res.error);
+      if (res.ok) {
+        setTrades(res.trades);
+        setLoadedLeagueId(id);
+      } else setTradesError(res.error);
     });
   }
 
@@ -191,12 +273,13 @@ export function SleeperImportPanel({
             Sign in to import trades
           </Link>
         </div>
+        <SaveHandleNotice state="guest" nextPath="/tools/signal-check" />
       </PanelShell>
     );
   }
 
-  // ---- Signed in, no username: inline save form ------------------------
-  if (!username) {
+  // ---- Signed in, no saved handle: the shared save form ----------------
+  if (!handle) {
     return (
       <PanelShell>
         <BackBar onBack={onBack} />
@@ -205,85 +288,139 @@ export function SleeperImportPanel({
           description="We use your saved handle to find your leagues. We never post anything to Sleeper, and your league details stay private."
         />
         <div className="mt-4">
-          <UsernameSaveForm
-            onSaved={(value) => {
-              setUsername(value);
-              setLeaguesLoaded(false);
-            }}
+          <SaveHandleForm
+            submitLabel="Save and continue"
+            onSaved={onHandleSaved}
           />
+          <SavedHandleHint />
         </div>
       </PanelShell>
     );
   }
 
-  // ---- Signed in, username present: league + trade picker --------------
+  // ---- Signed in with a handle: league + trade picker -------------------
   return (
     <PanelShell>
       <BackBar onBack={onBack} />
-      <PanelHeader
-        title="Import a completed trade"
-        description="Choose a league, then tap the trade you want to analyze. We detect the league format automatically."
-      />
+
+      <SleeperIdentityCard
+        toolName="the Sleeper import"
+        handle={handle}
+        headingLevel={2}
+        changeLabel="Change username"
+      >
+        <SaveHandleForm
+          defaultUsername={handle.username}
+          submitLabel="Save username"
+          onSaved={onHandleSaved}
+        />
+      </SleeperIdentityCard>
 
       <div className="mt-5 space-y-5">
-        {/* League select */}
+        <p className="text-sm leading-relaxed text-ink-muted">
+          Choose a league, then tap the trade you want to analyze. We detect the
+          league format automatically.
+        </p>
+
+        {/* League picker. A list rather than a select, because a select cannot
+            show a league its own logo. */}
         <div>
-          <label htmlFor="sc-import-league" className="block text-sm font-medium text-ink">
-            Your Sleeper league
-          </label>
-          <div className="mt-2 flex items-center gap-2">
-            <select
-              id="sc-import-league"
-              value={leagueId}
-              onChange={(e) => selectLeague(e.target.value)}
-              disabled={loadingLeagues}
-              className="min-h-11 w-full max-w-md rounded-card border border-line bg-base px-3 py-2 text-sm text-ink focus:border-brand-purple focus:outline-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+          <p className="text-sm font-medium text-ink">Your Sleeper league</p>
+
+          {loadingLeagues ? (
+            <div
+              role="status"
+              className="mt-2 flex items-center gap-2 rounded-card border border-line bg-base/40 p-4 text-sm text-ink-muted"
             >
-              <option value="">
-                {loadingLeagues ? "Loading your leagues..." : "Select a league"}
-              </option>
-              {leagues.map((l) => (
-                <option key={l.sleeperLeagueId} value={l.sleeperLeagueId}>
-                  {l.name} ({l.season})
-                </option>
-              ))}
-            </select>
-          </div>
+              <Loader2
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin text-brand-cyan"
+              />
+              Loading your leagues...
+            </div>
+          ) : leagues.length > 0 ? (
+            <>
+              <LeagueChoiceList
+                label="Your Sleeper league"
+                choices={leagues.map((l) => ({
+                  sleeperLeagueId: l.sleeperLeagueId,
+                  name: l.name,
+                  avatar: l.avatar,
+                  meta: l.season,
+                }))}
+                value={leagueId}
+                onChange={selectLeague}
+                logoSize={40}
+                className="mt-2 max-w-md"
+              />
+              <button
+                type="button"
+                onClick={() => loadLeagueTrades(leagueId)}
+                // Disabled only while the work is in flight, never because the
+                // league is already loaded: a browser blurs a focused element the
+                // moment it is disabled, and a button that disables itself in the
+                // same commit as its own click drops the reader at <body>.
+                disabled={!leagueId || loadingTrades}
+                className="mt-3 inline-flex h-11 min-h-11 items-center justify-center rounded-card border border-brand-purple/40 bg-brand-purple/10 px-4 text-sm font-medium text-ink transition-colors hover:border-brand-purple disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                {loadingTrades ? "Loading trades..." : "Load this league"}
+              </button>
+            </>
+          ) : null}
+
           {leaguesError && (
             <p role="alert" className="mt-2 text-sm text-signal-danger">
               {leaguesError}
             </p>
           )}
-          {!loadingLeagues && leaguesLoaded && !leaguesError && leagues.length === 0 && (
-            <p role="status" className="mt-2 text-sm text-ink-muted">
-              No active leagues found for your Sleeper account this season.
-            </p>
-          )}
+          {!loadingLeagues &&
+            leaguesLoaded &&
+            !leaguesError &&
+            leagues.length === 0 && (
+              <p role="status" className="mt-2 text-sm text-ink-muted">
+                No active leagues found for your Sleeper account this season.
+              </p>
+            )}
         </div>
 
         {/* Trade cards */}
-        {leagueId && (
+        {loadedLeagueId && (
           <div id={TRADE_LIST_ID} className="scroll-mt-24">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-ink">Pick a trade to analyze</p>
+              <p className="text-sm font-medium text-ink">
+                Pick a trade to analyze
+              </p>
               {trades.length > 0 && (
                 <span className="text-xs text-ink-subtle">
-                  {trades.length} completed {trades.length === 1 ? "trade" : "trades"}
+                  {trades.length} completed{" "}
+                  {trades.length === 1 ? "trade" : "trades"}
                 </span>
               )}
             </div>
 
             {loadingTrades ? (
-              <div role="status" className="mt-2 flex items-center gap-2 rounded-card border border-line bg-base/40 p-4 text-sm text-ink-muted">
-                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-brand-cyan" />
+              <div
+                role="status"
+                className="mt-2 flex items-center gap-2 rounded-card border border-line bg-base/40 p-4 text-sm text-ink-muted"
+              >
+                <Loader2
+                  aria-hidden="true"
+                  className="h-4 w-4 animate-spin text-brand-cyan"
+                />
                 Loading trades from this league...
               </div>
             ) : tradesError ? (
-              <p role="alert" className="mt-2 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger">
+              <p
+                role="alert"
+                className="mt-2 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
+              >
                 {tradesError}
               </p>
             ) : trades.length === 0 ? (
-              <p role="status" className="mt-2 rounded-card border border-dashed border-line bg-base/40 p-4 text-sm text-ink-muted">
+              <p
+                role="status"
+                className="mt-2 rounded-card border border-dashed border-line bg-base/40 p-4 text-sm text-ink-muted"
+              >
                 No completed trades found in this league yet.
               </p>
             ) : (
@@ -319,26 +456,45 @@ export function SleeperImportPanel({
                           {t.week != null ? `Week ${t.week}` : "Trade"}
                         </span>
                         {busy ? (
-                          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-brand-cyan" />
+                          <Loader2
+                            aria-hidden="true"
+                            className="h-4 w-4 animate-spin text-brand-cyan"
+                          />
                         ) : (
-                          <ChevronRight aria-hidden="true" className="h-4 w-4 text-ink-subtle" />
+                          <ChevronRight
+                            aria-hidden="true"
+                            className="h-4 w-4 text-ink-subtle"
+                          />
                         )}
                       </div>
 
                       {t.teams.length === 2 ? (
                         <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-ink">{t.teams[0].teamName}</p>
-                            <p className="truncate text-xs text-ink-subtle">gets {teamAssetsText(t.teams[0])}</p>
+                            <p className="truncate text-sm font-medium text-ink">
+                              {t.teams[0].teamName}
+                            </p>
+                            <p className="truncate text-xs text-ink-subtle">
+                              gets {teamAssetsText(t.teams[0])}
+                            </p>
                           </div>
-                          <ArrowLeftRight aria-hidden="true" className="h-4 w-4 text-brand-cyan" />
+                          <ArrowLeftRight
+                            aria-hidden="true"
+                            className="h-4 w-4 text-brand-cyan"
+                          />
                           <div className="min-w-0 text-right">
-                            <p className="truncate text-sm font-medium text-ink">{t.teams[1].teamName}</p>
-                            <p className="truncate text-xs text-ink-subtle">gets {teamAssetsText(t.teams[1])}</p>
+                            <p className="truncate text-sm font-medium text-ink">
+                              {t.teams[1].teamName}
+                            </p>
+                            <p className="truncate text-xs text-ink-subtle">
+                              gets {teamAssetsText(t.teams[1])}
+                            </p>
                           </div>
                         </div>
                       ) : (
-                        <p className="mt-2 truncate text-sm text-ink">{t.label}</p>
+                        <p className="mt-2 truncate text-sm text-ink">
+                          {t.label}
+                        </p>
                       )}
                     </button>
                   );
@@ -349,7 +505,10 @@ export function SleeperImportPanel({
         )}
 
         {analyzeError && (
-          <p role="alert" className="rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger">
+          <p
+            role="alert"
+            className="rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
+          >
             {analyzeError}
           </p>
         )}
@@ -404,7 +563,10 @@ export function SleeperImportPanel({
                   <summary className="cursor-pointer text-sm font-medium text-ink">
                     How we detected your league format
                   </summary>
-                  <ul role="list" className="mt-2 space-y-1 text-sm text-ink-muted">
+                  <ul
+                    role="list"
+                    className="mt-2 space-y-1 text-sm text-ink-muted"
+                  >
                     {evidence.map((e, i) => (
                       <li key={i}>{e}</li>
                     ))}
@@ -416,8 +578,8 @@ export function SleeperImportPanel({
         </div>
 
         <p className="text-xs text-ink-subtle">
-          Your league and team details stay private. They are only shared if you create a public
-          link, and even then only the trade summary is shown.
+          Your league and team details stay private. They are only shared if you
+          create a public link, and even then only the trade summary is shown.
         </p>
 
         {/* Second way out, for anyone who has scrolled past the first. */}
@@ -449,7 +611,13 @@ function PanelShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PanelHeader({ title, description }: { title: string; description: string }) {
+function PanelHeader({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
     <div className="flex items-start gap-3">
       <span
@@ -463,7 +631,9 @@ function PanelHeader({ title, description }: { title: string; description: strin
           Sleeper import
         </p>
         <h2 className="mt-0.5 text-lg font-semibold text-ink">{title}</h2>
-        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-muted">{description}</p>
+        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-muted">
+          {description}
+        </p>
       </div>
     </div>
   );
@@ -474,7 +644,13 @@ function PanelHeader({ title, description }: { title: string; description: strin
  * above it, so the route back has to be obvious from every state, not tucked
  * into a corner as an X.
  */
-function BackBar({ onBack, className = "mb-4" }: { onBack: () => void; className?: string }) {
+function BackBar({
+  onBack,
+  className = "mb-4",
+}: {
+  onBack: () => void;
+  className?: string;
+}) {
   return (
     <div className={className}>
       <button
@@ -489,88 +665,29 @@ function BackBar({ onBack, className = "mb-4" }: { onBack: () => void; className
   );
 }
 
-/* ---------- inline username save ---------- */
+/* ---------- the save hint ---------- */
 
-function UsernameSaveForm({ onSaved }: { onSaved: (username: string) => void }) {
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const cleaned = value.trim();
-    if (cleaned.length === 0) {
-      setError("Enter your Sleeper username.");
-      return;
-    }
-    setError(null);
-    startTransition(async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setError("You are not signed in.");
-        return;
-      }
-      // Read-merge-write so other keys in the jsonb are preserved.
-      const { data: existing } = await supabase
-        .from("user_preferences")
-        .select("sleeper_league_settings")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const current = parseSleeperLeagueSettings(existing?.sleeper_league_settings);
-      const next = mergeSleeperLeagueSettings(current, { username: cleaned });
-      const { error: upsertError } = await supabase.from("user_preferences").upsert(
-        {
-          user_id: user.id,
-          sleeper_league_settings: next,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
-      );
-      if (upsertError) {
-        setError(upsertError.message);
-        return;
-      }
-      onSaved(cleaned);
-    });
-  }
-
+/**
+ * The one sentence under the save form, for a signed-in reader with nothing
+ * saved yet.
+ *
+ * Deliberately not `SaveHandleNotice state="member-unsaved"`, whose sentence
+ * says to tick the save box above. This form has no box: it always saves, for
+ * the reason in the panel header. Same visual treatment so the two read as one
+ * thing across the site.
+ */
+function SavedHandleHint() {
   return (
-    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-      <div>
-        <label htmlFor="sc-import-username" className="block text-sm font-medium text-ink">
-          Sleeper username
-        </label>
-        <input
-          id="sc-import-username"
-          autoComplete="off"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="your-handle"
-          className="mt-2 min-h-11 w-full rounded-card border border-line bg-base px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-brand-purple focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-        />
-      </div>
-      <button
-        type="submit"
-        disabled={pending}
-        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-      >
-        {pending ? (
-          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-        ) : (
-          <RefreshCw aria-hidden="true" className="h-4 w-4" />
-        )}
-        {pending ? "Saving..." : "Save and continue"}
-      </button>
-      <p aria-live="polite" className="min-h-[1.25rem] text-sm sm:col-span-2">
-        {error && (
-          <span role="alert" className="text-signal-danger">
-            {error}
-          </span>
-        )}
-      </p>
-    </form>
+    <p className="mt-4 flex items-start gap-2.5 rounded-card border border-line bg-base/50 p-3 text-sm leading-relaxed text-ink-muted">
+      <UserPlus
+        aria-hidden="true"
+        className="mt-0.5 h-4 w-4 shrink-0 text-brand-cyan"
+      />
+      <span>
+        We save this to your account, so every FF Beacon tool opens on your
+        leagues from now on. You can change it here or in My Beacon whenever you
+        like.
+      </span>
+    </p>
   );
 }

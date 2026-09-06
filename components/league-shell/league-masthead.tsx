@@ -19,11 +19,16 @@
  */
 
 import { CalendarDays, Users, Trophy, LayoutGrid, Calculator } from "lucide-react";
+import { LeagueLogo } from "@/components/league-logo";
 import { humanizeLeagueStatus } from "@/lib/league-status";
 import type { FormatTag } from "@/lib/league-format-tags";
 
 export type LeagueMastheadProps = {
   leagueName: string;
+  /** Sleeper's avatar id for this league, from `leagues.metadata->>avatar`.
+   *  Decorative: the league name is right beside it. Null renders the same
+   *  sized placeholder, so the header never reflows between leagues. */
+  avatarId?: string | null;
   season: string | number | null;
   teamCount: number | null;
   status: string | null;
@@ -46,6 +51,7 @@ export type LeagueMastheadProps = {
 
 export function LeagueMasthead({
   leagueName,
+  avatarId = null,
   season,
   teamCount,
   status,
@@ -90,12 +96,17 @@ export function LeagueMasthead({
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-brand-cyan">
             League Pulse
           </p>
-          <h1
-            id="league-masthead-title"
-            className="lp-league-name mt-2 text-[clamp(1.9rem,5.2vw,3.5rem)]"
-          >
-            {leagueName}
-          </h1>
+          {/* The same logo the reader just clicked on a list, at the top of
+              what opened. Decorative: the name is the next element. */}
+          <div className="mt-2 flex items-center gap-3 sm:gap-4">
+            <LeagueLogo avatarId={avatarId} name={leagueName} size={64} />
+            <h1
+              id="league-masthead-title"
+              className="lp-league-name min-w-0 text-[clamp(1.9rem,5.2vw,3.5rem)]"
+            >
+              {leagueName}
+            </h1>
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <StatusPill status={status} />
             {season != null && (

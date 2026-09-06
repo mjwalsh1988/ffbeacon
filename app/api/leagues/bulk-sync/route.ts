@@ -1,11 +1,10 @@
 import { NextResponse, after } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
 import {
-  currentNflSeason,
-  getSleeperLeagues,
-  getSleeperUser,
-} from "@/lib/sleeper";
+  ensureSleeperUserId,
+  loadSavedSleeperHandle,
+} from "@/lib/sleeper-handle/resolve";
+import { currentNflSeason, getSleeperLeagues } from "@/lib/sleeper";
 import {
   BULK_SYNC_COOLDOWN_SECONDS,
   enqueueBulkLeagueSync,
@@ -59,14 +58,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const { data: prefs } = await supabase
-    .from("user_preferences")
-    .select("sleeper_league_settings")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
-  const username = settings.username?.trim();
-  if (!username) {
+  // Resolved from the session, never from the body. See the header.
+  const saved = await loadSavedSleeperHandle(supabase);
+  if (!saved) {
     return NextResponse.json(
       { error: "Save your Sleeper username first, then Sync all has something to sync." },
       { status: 400 },
@@ -89,16 +83,22 @@ export async function POST(req: Request) {
     );
   }
 
-  const sleeperUser = await getSleeperUser(username);
-  if (!sleeperUser) {
+  // The saved identity carries the Sleeper user id, so this is one Sleeper
+  // call rather than two. `ensureSleeperUserId` fills it in for a row saved
+  // before migration 0268 and writes it back; a handle Sleeper can no longer
+  // resolve leaves it null, which is the 404 below.
+  const handle = saved.sleeperUserId
+    ? saved
+    : await ensureSleeperUserId(supabase, saved);
+  if (!handle.sleeperUserId) {
     return NextResponse.json(
-      { error: `We could not load Sleeper user "${username}".` },
+      { error: `We could not load Sleeper user "${handle.username}".` },
       { status: 404 },
     );
   }
 
   const season = currentNflSeason();
-  const leagues = await getSleeperLeagues(sleeperUser.user_id, season);
+  const leagues = await getSleeperLeagues(handle.sleeperUserId, season);
   const toQueue: LeagueToQueue[] = (leagues ?? [])
     .filter((l) => l.league_id)
     .map((l) => ({ sleeperLeagueId: l.league_id, leagueName: l.name ?? null }));

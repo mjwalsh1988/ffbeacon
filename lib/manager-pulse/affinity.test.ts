@@ -30,6 +30,7 @@ function leagueSeason(overrides: Partial<ManagerLeagueSeason> & { sleeperLeagueI
   return {
     leagueId: null,
     leagueName: "Test League",
+    avatar: null,
     category: "dynasty",
     sleeperLeagueType: 2,
     teamCount: 12,

@@ -23,6 +23,8 @@ function team(
     rosterRowId: `r-${rosterId}`,
     teamName: NAMES[rosterId],
     ownerHandle: null,
+    ownerUserId: null,
+  coOwnerIds: [],
     ownerAvatarId: null,
     record: { wins: record[0], losses: record[1], ties: record[2] },
     pointsFor,

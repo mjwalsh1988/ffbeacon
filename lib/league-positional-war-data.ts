@@ -379,7 +379,7 @@ export const loadViewerCandidates = cache(async function loadViewerCandidates(
   const [rostersRes, usersRes] = await Promise.all([
     supabase
       .from("rosters")
-      .select("sleeper_roster_id, owner_user_id")
+      .select("sleeper_roster_id, owner_user_id, co_owners")
       .eq("league_id", leagueRowId),
     supabase
       .from("league_users")
@@ -394,6 +394,10 @@ export const loadViewerCandidates = cache(async function loadViewerCandidates(
   return (rostersRes.data ?? []).map((r) => ({
     sleeperRosterId: r.sleeper_roster_id,
     ownerSleeperUsername: r.owner_user_id ? (usernameByUserId.get(r.owner_user_id) ?? null) : null,
+    // The Sleeper user id verbatim, which is what matchViewerRoster prefers:
+    // a saved handle is a username and the name above is a display name.
+    ownerSleeperUserId: r.owner_user_id ?? null,
+    coOwnerIds: asStringArray(r.co_owners),
   }));
 });
 

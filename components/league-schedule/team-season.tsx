@@ -192,14 +192,14 @@ export function TeamSeason({
   team,
   rows,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   playoffWeekStart,
   summary,
 }: {
   team: ScheduleTeam;
   rows: SeasonRow[];
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   playoffWeekStart: number;
   summary: {
     remainingSosRank: number | null;
@@ -338,7 +338,7 @@ export function TeamSeason({
                 team={team}
                 baseline={baseline}
                 sleeperLeagueId={sleeperLeagueId}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 dividerBefore={firstPlayoffWeek !== null && row.week === firstPlayoffWeek}
                 playoffWeekStart={playoffWeekStart}
               />
@@ -413,7 +413,7 @@ function SeasonTableRow({
   team,
   baseline,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   dividerBefore,
   playoffWeekStart,
 }: {
@@ -421,7 +421,7 @@ function SeasonTableRow({
   team: ScheduleTeam;
   baseline: number | null;
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   dividerBefore: boolean;
   playoffWeekStart: number;
 }) {
@@ -458,7 +458,7 @@ function SeasonTableRow({
 
   const href = withUsername(
     `/leagues/${sleeperLeagueId}/schedules/${row.week}/${team.sleeperRosterId}`,
-    searchedUsername,
+    linkUsername,
   );
 
   return (

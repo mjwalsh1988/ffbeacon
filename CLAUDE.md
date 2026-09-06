@@ -1061,6 +1061,79 @@ Discord poll:
   Browns become "Brown, Brown" at the surname rung, which is a worse thing to
   say rather than a shorter way of saying the same thing.
 
+## Saved Sleeper handle (the identity every tool opens on)
+
+A reader who is signed in and has saved a Sleeper username never types it
+again. Every tool that starts with a username search opens as though that
+search had already happened, and the search form is not on screen: an identity
+card says which handle the tool is running under, with a Change control that
+brings the form back. A reader who is signed out, or signed in with nothing
+saved, sees the form as before plus a short notice saying an account skips this
+step in future.
+
+ABSOLUTE RULE: the reader's Sleeper identity is read through
+`lib/sleeper-handle/resolve.ts` and nowhere else. `loadSavedSleeperHandle` for
+"who is this reader", `resolveSleeperViewer` for "who is this surface acting
+for", `resolveHandleGate` for a surface that renders a card or a form.
+`lib/sleeper-handle/guard.test.ts` fails the suite on any other read of the
+identity keys on `user_preferences.sleeper_league_settings`. Seven scattered
+copies of that read is how the username-versus-display-name defect below stayed
+invisible.
+
+ABSOLUTE RULE: `?username=` wins over the saved handle, always. It is the
+shareable-link mechanism, and a reader following someone else's link sees that
+person's leagues and team exactly as before. The identity card says in words
+when the URL won, and offers the way back.
+
+ABSOLUTE RULE: a saved handle is written only by
+`app/actions/sleeper-handle.ts saveSleeperHandle`, which resolves it on Sleeper
+first and stores the `sleeper_user_id`, display name and avatar beside it
+(migration 0268 documents the keys). A handle Sleeper cannot find is REFUSED,
+not saved. The two client-side forms that used to write any string a reader
+typed are gone; a handle that does not exist is a handle every tool then fails
+on, silently, on every future visit.
+
+ABSOLUTE RULE: roster matching prefers the Sleeper user id
+(`rosters.owner_user_id`, `co_owners`) and falls back to the display name only
+when no id is known. Sleeper usernames and display names are different strings
+and are allowed to differ. The league deep views match on `display_name`
+because League Pulse forwards `user.display_name` into the link, so falling
+those views back to a saved USERNAME with the old matcher would silently
+highlight nobody's team.
+
+When the saved handle is in force the search form is UNMOUNTED, not hidden, and
+Change mounts it with focus inside. A hidden form still holds a focusable input
+for a keyboard reader landing in a box the page says is not there.
+
+An auto-run for a saved handle is ONE Sleeper call: the cached user id, no
+`getSleeperUser`. It goes through the same rate limit as the manual path, and
+`lib/sleeper-budget.ts` still sits under all of it. A 429 on an auto-run is a
+Retry state on the card, never a reason to drop the reader back to the form;
+On The Clock's 10-second per-(ip, username) cooldown means a double reload
+will produce one.
+
+Manager Pulse keeps its search box under the identity card, and the card offers
+"Open my own report" instead. Its search is for OTHER people, so hiding it
+behind the reader's own handle would hide the tool. It does not auto-navigate
+to the reader's own report either: a report costs a capture budget, and someone
+who came to scout an opponent would have paid it for nothing.
+
+A league's logo comes from `leagues.metadata->>avatar` or the live
+`SleeperLeague.avatar`. There is no avatar column and none is to be added, per
+the Data Architecture rule that source data lives in `metadata`. Every logo
+renders through `components/league-logo.tsx`: decorative (`alt=""`, the league
+name is always adjacent visible text), square-cornered (circles are reserved
+for people), with a same-sized placeholder for a league that has none so the
+column stays aligned. It sits in its own column on every league list at every
+breakpoint. The one permitted exception is the league switcher's native mobile
+`<select>`, because there the native picker IS the accessibility feature.
+
+A native `<select>` cannot show an image, so the FAAB and Signal Check league
+pickers became `components/league-choice-list.tsx`, a `role="radiogroup"` of
+native radios wrapped in labels. Native radios, not `role="radio"` on divs:
+arrow-key movement, checked state and form participation come from the
+platform, so the keyboard behaviour is not worse than the control it replaces.
+
 ## Manager Pulse (the capture, and how it is made fast)
 
 `/tools/manager-pulse/[handle]`. One reader's whole Sleeper history read back

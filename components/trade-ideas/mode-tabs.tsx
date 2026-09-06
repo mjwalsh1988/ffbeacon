@@ -36,20 +36,20 @@ const TABS: {
 export function ModeTabs({
   active,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   source,
   rosterId,
 }: {
   active: TradeIdeasMode;
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   source: string | null;
   rosterId: number | null;
 }) {
   function href(mode: TradeIdeasMode): string {
     const qs = new URLSearchParams();
     qs.set("mode", mode);
-    if (searchedUsername) qs.set("username", searchedUsername);
+    if (linkUsername) qs.set("username", linkUsername);
     if (source) qs.set("source", source);
     if (rosterId !== null) qs.set("roster", String(rosterId));
     return `/leagues/${sleeperLeagueId}/trade-ideas?${qs.toString()}`;

@@ -9,6 +9,7 @@ before that date cite the old flat paths listed in the last column.
 | manager-pulse | manager-pulse-plan.md | Plan of record for Manager Pulse, with section 15 on what shipped differently | docs/manager-pulse-plan.md |
 | manager-pulse | manager-pulse-audit-and-speed-plan.md | 2026-09-05 audit and the plan to make the sync fast, the panel live, and the cap higher | new |
 | beacon-link | beacon-link-plan.md | 2026-09-05 plan to link a reader's Sleeper account and act on it (lineups, trades, waivers) across the tools and inside League Pulse | new |
+| saved-handle | saved-handle-plan.md | 2026-09-05 plan: every tool and league view opens on the reader's saved Sleeper handle with no search, a notice for readers who have not saved one, and a logo column on every league list | new |
 | league-pulse | league-format-resolution.md | How a league view derives its format from Sleeper scoring | docs/league-format-resolution.md |
 | league-pulse | league-pulse-positional-war-plan.md | Positional WAR build plan | docs/league-pulse-positional-war-plan.md |
 | league-pulse | league-pulse-positional-war-implementation-review.md | Positional WAR review against the plan | docs/league-pulse-positional-war-implementation-review.md |

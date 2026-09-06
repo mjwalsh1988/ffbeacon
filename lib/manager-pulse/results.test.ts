@@ -10,6 +10,7 @@ function season(overrides: Partial<ManagerLeagueSeason>): ManagerLeagueSeason {
     sleeperLeagueId: "sleeper-league",
     season: 2025,
     leagueName: "Test League",
+    avatar: null,
     category: "redraft",
     sleeperLeagueType: 0,
     teamCount: 10,

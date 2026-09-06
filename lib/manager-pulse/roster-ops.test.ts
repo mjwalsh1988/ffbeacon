@@ -37,6 +37,7 @@ function leagueSeason(overrides: Partial<ManagerLeagueSeason> = {}): ManagerLeag
     sleeperLeagueId: "L1",
     season: 2025,
     leagueName: "Test League",
+    avatar: null,
     category: "dynasty",
     sleeperLeagueType: 2,
     teamCount: 12,

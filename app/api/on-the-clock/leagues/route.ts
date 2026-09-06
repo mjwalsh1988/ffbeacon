@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import {
+  ensureSleeperUserId,
+  loadSavedSleeperHandle,
+} from "@/lib/sleeper-handle/resolve";
+import type { SavedSleeperHandle } from "@/lib/sleeper-handle/types";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
 import { claimLookup, claimIpBudget } from "@/lib/on-the-clock/cache";
@@ -13,6 +18,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/on-the-clock/leagues?username=&season=
+ * GET /api/on-the-clock/leagues?saved=1&season=
  *
  * Resolve a Sleeper username to its active-draft leagues for a season. This is the
  * Sleeper fan-out surface, so it is guarded three ways before any Sleeper call:
@@ -20,6 +26,19 @@ export const dynamic = "force-dynamic";
  *   2. strict input validation (username + season regexes),
  *   3. a durable per-(ip, username) claim RPC so a rotated-username attack cannot
  *      fan out unbounded Sleeper calls across server instances.
+ *
+ * SAVED MODE (`saved=1`) is the auto-run a tool page performs for a signed-in
+ * reader who saved a Sleeper handle. The handle comes from the SESSION, read
+ * server-side through `loadSavedSleeperHandle`; the client never sends it, so
+ * there is nothing in the query string for a caller to forge and no way to ask
+ * this route about somebody else's saved identity. No session, or a session with
+ * nothing saved, is a 401. Every guard above still runs, in the same order, on
+ * the username the session produced.
+ *
+ * Saved mode also spends ONE Sleeper call instead of two: the saved identity
+ * carries the `sleeper_user_id` resolved at save time, so `getSleeperUser` is
+ * skipped entirely. A row saved before that id existed gets it filled in once
+ * by `ensureSleeperUserId`, and every later visit is back to one call.
  *
  * To avoid over-hitting Sleeper, league detection uses ONLY the league objects from
  * one getSleeperLeagues call (which carry status + draft_id). We do NOT fan out a
@@ -60,8 +79,27 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const usernameRaw = url.searchParams.get("username") ?? "";
+  const savedMode = url.searchParams.get("saved") === "1";
   const seasonRaw = url.searchParams.get("season") ?? currentNflSeason();
+
+  // In saved mode the identity comes from the session and the `username` param
+  // is ignored entirely, so a caller cannot smuggle one in beside `saved=1`.
+  let saved: SavedSleeperHandle | null = null;
+  let sessionClient: Awaited<ReturnType<typeof createClient>> | null = null;
+  if (savedMode) {
+    sessionClient = await createClient();
+    saved = await loadSavedSleeperHandle(sessionClient);
+    if (!saved) {
+      return json(
+        { error: "Sign in and save your Sleeper username first." },
+        401,
+      );
+    }
+  }
+
+  const usernameRaw = saved
+    ? saved.username
+    : (url.searchParams.get("username") ?? "");
 
   if (!isValidUsername(usernameRaw)) {
     return json({ error: "Enter a valid Sleeper username." }, 400);
@@ -100,12 +138,26 @@ export async function GET(req: Request) {
     return json({ error: "Too many lookups. Try again in a few seconds." }, 429);
   }
 
-  const user = await getSleeperUser(usernameRaw);
-  if (!user) {
-    return json({ error: "We could not find a Sleeper user with that name." }, 404);
+  // Saved mode already knows the Sleeper user id (D3), so it skips the lookup
+  // call. `ensureSleeperUserId` covers the one visit after an older row, and
+  // writes the id back through the reader's own session client so the
+  // owner-only RLS policy stays the boundary.
+  let sleeperUserId: string;
+  if (saved && sessionClient) {
+    const filled = await ensureSleeperUserId(sessionClient, saved);
+    if (!filled.sleeperUserId) {
+      return json({ error: "We could not find a Sleeper user with that name." }, 404);
+    }
+    sleeperUserId = filled.sleeperUserId;
+  } else {
+    const user = await getSleeperUser(usernameRaw);
+    if (!user) {
+      return json({ error: "We could not find a Sleeper user with that name." }, 404);
+    }
+    sleeperUserId = user.user_id;
   }
 
-  const leagues = await getSleeperLeagues(user.user_id, seasonRaw);
+  const leagues = await getSleeperLeagues(sleeperUserId, seasonRaw);
   const cap = settings.limits.maxActiveLeagues;
 
   // Every league with a draft id qualifies: active and pre-draft leagues open in
@@ -161,5 +213,5 @@ export async function GET(req: Request) {
   // userId is the resolved Sleeper user_id (public data). The client uses it to
   // detect the connected user's team/picks inside the room (My Draft, "your turn",
   // "Your pick" markers). Additive field; existing fields unchanged.
-  return json({ ok: true, season: seasonRaw, userId: user.user_id, leagues: cards, truncated });
+  return json({ ok: true, season: seasonRaw, userId: sleeperUserId, leagues: cards, truncated });
 }

@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { SidePanel } from "@/components/side-panel";
+import { LeagueLogo } from "@/components/league-logo";
 import { searchFreeAgent } from "@/app/my-beacon/sleeper-leagues/free-agent-actions";
 import {
   ROSTER_SLOT_LABEL,
@@ -539,6 +540,10 @@ function ReportList({
  * agent is a filled check in a green well, a rostered player is a barred circle
  * in a plain one, and both carry the words. The words are what a screen reader
  * gets; the icons are aria-hidden because they say the same thing twice.
+ *
+ * The league logo leads the row and says nothing: it is decorative, the league
+ * name is right beside it, and the link's aria-label is unchanged. It renders
+ * at every width; the gap tightens on a phone rather than the logo dropping.
  */
 function LeagueRow({
   league,
@@ -568,12 +573,17 @@ function LeagueRow({
       <Link
         href={href}
         aria-label={`${league.leagueName}. ${playerName} is ${league.isFreeAgent ? "a free agent here" : detail.toLowerCase()}. Open this league.`}
-        className={`flex items-center gap-3 rounded-card border px-3 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
+        className={`flex items-center gap-2.5 rounded-card border px-3 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:gap-3 ${
           league.isFreeAgent
             ? "border-signal-success/45 bg-signal-success/10 hover:border-signal-success/80"
             : "border-line bg-base/40 hover:border-line-accent hover:bg-surface"
         }`}
       >
+        <LeagueLogo
+          avatarId={league.avatar}
+          name={league.leagueName}
+          size={32}
+        />
         <span
           aria-hidden="true"
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${

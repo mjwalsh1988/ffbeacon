@@ -30,6 +30,14 @@ type AnySupabase =
 export type ExposureLeague = {
   sleeperLeagueId: string;
   name: string;
+  /**
+   * Sleeper's own league logo id, or null when the league has no image.
+   *
+   * Read straight out of `leagues.metadata`, which holds the raw Sleeper league
+   * object verbatim. There is no avatar column and none is to be added: this is
+   * source data, so it lives in `metadata` per the Data Architecture rule.
+   */
+  avatar: string | null;
 };
 
 export type PlayerExposureRow = {
@@ -97,7 +105,10 @@ export async function loadPlayerExposure(
   try {
     const { data: leagueRows } = await supabase
       .from("leagues")
-      .select("id, sleeper_league_id, name")
+      // `avatar` is projected out of the stored raw Sleeper object rather than
+      // selecting the whole of it, the same arrow syntax lib/league-pulse.ts
+      // uses for `leg`. No new column, no migration.
+      .select("id, sleeper_league_id, name, avatar:metadata->>avatar")
       .in("sleeper_league_id", sleeperLeagueIds.slice(0, PAGE));
     if (!leagueRows || leagueRows.length === 0) {
       return {
@@ -112,6 +123,7 @@ export async function loadPlayerExposure(
         {
           sleeperLeagueId: l.sleeper_league_id,
           name: l.name ?? "Untitled league",
+          avatar: typeof l.avatar === "string" ? l.avatar : null,
         },
       ]),
     );

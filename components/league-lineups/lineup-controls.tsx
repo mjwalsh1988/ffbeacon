@@ -48,14 +48,14 @@ function weekOptionLabel(option: LineupWeekOption): string {
 
 export function LineupControls({
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   week,
   weeks,
   rosterId,
   teams,
 }: {
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   week: number;
   weeks: LineupWeekOption[];
   rosterId: number;
@@ -69,7 +69,7 @@ export function LineupControls({
     params.set("roster", String(next.roster ?? rosterId));
     params.set("week", String(next.week ?? week));
     router.push(
-      withUsername(`/leagues/${sleeperLeagueId}/lineups?${params.toString()}`, searchedUsername),
+      withUsername(`/leagues/${sleeperLeagueId}/lineups?${params.toString()}`, linkUsername),
     );
   };
 

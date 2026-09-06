@@ -286,10 +286,10 @@ const CURVE_QB_ALL_OWNED: PositionCurve = {
 };
 
 const VIEWER_CANDIDATES: ViewerCandidate[] = [
-  { sleeperRosterId: 1, ownerSleeperUsername: "vieweruser" },
-  { sleeperRosterId: 2, ownerSleeperUsername: "rival2" },
-  { sleeperRosterId: 3, ownerSleeperUsername: "rival3" },
-  { sleeperRosterId: 4, ownerSleeperUsername: "rival4" },
+  { sleeperRosterId: 1, ownerSleeperUsername: "vieweruser", ownerSleeperUserId: "u-1", coOwnerIds: [] },
+  { sleeperRosterId: 2, ownerSleeperUsername: "rival2", ownerSleeperUserId: "u-2", coOwnerIds: [] },
+  { sleeperRosterId: 3, ownerSleeperUsername: "rival3", ownerSleeperUserId: "u-3", coOwnerIds: [] },
+  { sleeperRosterId: 4, ownerSleeperUsername: "rival4", ownerSleeperUserId: "u-4", coOwnerIds: [] },
 ];
 
 function weeklyDistribution(
@@ -518,6 +518,7 @@ describe("E1b-2: the viewer's roster is re-derived, never trusted from the paylo
       leagueRowId: LEAGUE_ROW_ID,
       submittedRosterId: 1,
       searchedUsername: "vieweruser",
+      viewerSleeperUserId: null,
       focusedRosterId: null,
     });
     expect(result).toEqual({ ok: true, rosterId: 1 });
@@ -529,6 +530,7 @@ describe("E1b-2: the viewer's roster is re-derived, never trusted from the paylo
       leagueRowId: LEAGUE_ROW_ID,
       submittedRosterId: 2,
       searchedUsername: "vieweruser",
+      viewerSleeperUserId: null,
       focusedRosterId: null,
     });
     expect(result).toEqual({ ok: false, reason: "roster-mismatch" });
@@ -540,6 +542,7 @@ describe("E1b-2: the viewer's roster is re-derived, never trusted from the paylo
       leagueRowId: LEAGUE_ROW_ID,
       submittedRosterId: 1,
       searchedUsername: "nobody-in-this-league",
+      viewerSleeperUserId: null,
       focusedRosterId: null,
     });
     expect(result).toEqual({ ok: false, reason: "no-viewer" });
@@ -553,6 +556,7 @@ describe("E1b-2: the viewer's roster is re-derived, never trusted from the paylo
       position: "QB",
       submittedRosterId: 2, // forged: the viewer is roster 1
       searchedUsername: "vieweruser",
+      viewerSleeperUserId: null,
       focusedRosterId: null,
     });
     expect(outcome).toEqual({ ok: false, reason: "roster-mismatch" });

@@ -14,7 +14,9 @@ function row(over: Partial<PlayerExposureRow> = {}): PlayerExposureRow {
     position: "RB",
     team: "KC",
     leagueCount: 1,
-    leagues: [{ sleeperLeagueId: "L1", name: "Dynasty Warriors" }],
+    leagues: [
+      { sleeperLeagueId: "L1", name: "Dynasty Warriors", avatar: null },
+    ],
     sharePct: 100,
     rank: 1,
     tied: false,
@@ -90,8 +92,8 @@ describe("searchExposureRows", () => {
       position: "WR",
       team: "LAR",
       leagues: [
-        { sleeperLeagueId: "L1", name: "Dynasty Warriors" },
-        { sleeperLeagueId: "L2", name: "Sunday Money" },
+        { sleeperLeagueId: "L1", name: "Dynasty Warriors", avatar: null },
+        { sleeperLeagueId: "L2", name: "Sunday Money", avatar: null },
       ],
     }),
     row({
@@ -99,7 +101,9 @@ describe("searchExposureRows", () => {
       name: "Bijan Robinson",
       position: "RB",
       team: "ATL",
-      leagues: [{ sleeperLeagueId: "L1", name: "Dynasty Warriors" }],
+      leagues: [
+        { sleeperLeagueId: "L1", name: "Dynasty Warriors", avatar: null },
+      ],
     }),
   ];
 
@@ -137,7 +141,9 @@ describe("searchExposureRows", () => {
     const withLeague = [
       row({
         name: "Sunday Sunday",
-        leagues: [{ sleeperLeagueId: "L2", name: "Sunday Money" }],
+        leagues: [
+          { sleeperLeagueId: "L2", name: "Sunday Money", avatar: null },
+        ],
       }),
     ];
     const [match] = searchExposureRows(withLeague, "sunday");

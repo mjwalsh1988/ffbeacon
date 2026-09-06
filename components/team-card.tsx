@@ -36,9 +36,10 @@ type TeamCardProps = {
   expanded?: boolean;
   /** Provided by TeamFilter on the league inline view. Omit to render a non-collapsible card. */
   onToggleExpand?: () => void;
-  /** Forwarded from `?username=` so the "View team page" link keeps the
-   * in-view league switcher context on the team detail page. */
-  searchedUsername?: string | null;
+  /** The `?username=` the "View team page" link should carry, or null.
+   * `viewerLinkUsername` decides: only a reader who ARRIVED on a link keeps
+   * the handle, so a saved reader's copied link resolves to the recipient. */
+  linkUsername?: string | null;
   /** True when the league's selected value source is FF Beacon, so each
    * position subtotal renders with the FF Beacon mark. */
   valueIsBeacon?: boolean;
@@ -98,7 +99,7 @@ export function TeamCard({
   headingLevel = "h2",
   expanded: expandedProp,
   onToggleExpand,
-  searchedUsername = null,
+  linkUsername = null,
   valueIsBeacon = false,
   teamStatus = null,
   sourceSlug = null,
@@ -446,8 +447,8 @@ export function TeamCard({
             <footer className="border-t border-line p-4 sm:p-5">
               <Link
                 href={
-                  searchedUsername
-                    ? `/leagues/${sleeperLeagueId}/teams/${sleeperRosterId}?username=${encodeURIComponent(searchedUsername)}`
+                  linkUsername
+                    ? `/leagues/${sleeperLeagueId}/teams/${sleeperRosterId}?username=${encodeURIComponent(linkUsername)}`
                     : `/leagues/${sleeperLeagueId}/teams/${sleeperRosterId}`
                 }
                 className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-base px-4 py-2 text-sm font-medium text-ink hover:border-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"

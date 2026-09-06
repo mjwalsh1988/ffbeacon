@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Trophy } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import {
-  getSleeperUser,
-  getSleeperLeagues,
-  currentNflSeason,
-} from "@/lib/sleeper";
+import { getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import {
+  ensureSleeperUserId,
+  loadSavedSleeperHandle,
+} from "@/lib/sleeper-handle/resolve";
 import { deriveStatusVariant } from "@/lib/sleeper-to-format";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -23,7 +23,8 @@ import {
 import type { ProjectionInput } from "@/lib/league-projections";
 import { LeagueResults } from "@/app/tools/league-pulse/league-results";
 import { LeagueQuickLinks } from "@/components/league-quick-links";
-import { SleeperConnection } from "./sleeper-connection";
+import { SleeperIdentityCard } from "@/components/sleeper-handle/identity-card";
+import { SaveHandleForm } from "@/components/sleeper-handle/save-handle-form";
 
 export const metadata: Metadata = {
   title: "My Sleeper Leagues",
@@ -31,6 +32,24 @@ export const metadata: Metadata = {
     "Save your Sleeper username and view every active league in one accessible table.",
 };
 
+/**
+ * The settings page for the reader's Sleeper connection, and the league table
+ * that connection produces.
+ *
+ * THIS PAGE IS THE DESTINATION, NOT A PROMPT
+ *   Every tool that shows an identity card links here with "Manage your Sleeper
+ *   connection", so there is no save-your-handle notice on this page: a notice
+ *   pointing at the page you are already reading is noise. For the same reason
+ *   the form here is `mode="settings"`, which always saves. There is no "just
+ *   this once" checkbox, because saving is the only thing this page does.
+ *
+ * ONE SLEEPER CALL, NOT TWO
+ *   The saved identity carries the Sleeper user id (D3), so the league list is
+ *   fetched straight from it. `ensureSleeperUserId` fills that id in for a row
+ *   saved before migration 0268 and writes it back, so the next visit is one
+ *   call too. A handle that no longer resolves leaves the id null, which is the
+ *   `failed` state: the card opens its own form and says so as an alert.
+ */
 export default async function SleeperLeaguesPage() {
   const supabase = await createClient();
   // Layout already gated on auth, but re-fetching the user here is cheap
@@ -45,14 +64,25 @@ export default async function SleeperLeaguesPage() {
     .eq("user_id", user!.id)
     .maybeSingle();
 
+  // The LEAGUE keys of the jsonb only. The reader's identity comes from the
+  // resolver below; lib/sleeper-handle/guard.test.ts is what keeps it that way.
   const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
-  const sleeperUsername = settings.username ?? "";
   const featuredLeagueId = settings.featured_league_id ?? null;
   const shownLeagueIds = settings.shown_league_ids ?? [];
   const season = currentNflSeason();
 
+  const saved = await loadSavedSleeperHandle(supabase);
+  // A row written before migration 0268 has no id yet. One lookup fills it in
+  // and stores it; a failed lookup returns the handle unchanged, which is the
+  // "no longer resolves" state below rather than a reason to clear anything.
+  const handle =
+    saved && !saved.sleeperUserId
+      ? await ensureSleeperUserId(supabase, saved)
+      : saved;
+  const sleeperUserId = handle?.sleeperUserId ?? null;
+  const lookupFailed = Boolean(handle) && !sleeperUserId;
+
   let leagues: Awaited<ReturnType<typeof getSleeperLeagues>> = [];
-  let sleeperUser = null;
   // Standing per league, read from cache only. Same contract as the public
   // tool: this page never triggers a sync, so unopened leagues report pending.
   let teamStatuses: Record<string, LeagueTeamStatusSummary> = {};
@@ -66,33 +96,36 @@ export default async function SleeperLeaguesPage() {
   // this is also what turns Sync all on: LeagueResults renders the button only
   // when it is present, so the public tool, which never passes it, never shows it.
   const bulkSync = await loadBulkSyncState(supabase, user!.id);
-  if (sleeperUsername) {
-    sleeperUser = await getSleeperUser(sleeperUsername);
-    if (sleeperUser) {
-      leagues = await getSleeperLeagues(sleeperUser.user_id, season);
-      if (leagues.length > 0) {
-        const leagueIds = leagues.map((l) => l.league_id);
-        // Independent reads against the same synced rows, so they go together.
-        const [statusMap, exposureResult] = await Promise.all([
-          loadSearchedTeamStatuses(
-            supabase,
-            leagueIds,
-            sleeperUser.user_id,
-            Number(season),
-            resolvedSource.slug,
-            // Redraft rooms get the redraft wording on their tag. Read off the
-            // Sleeper payload we already have rather than our own table.
-            Object.fromEntries(
-              leagues.map((l) => [l.league_id, deriveStatusVariant(l)]),
-            ),
+
+  if (sleeperUserId) {
+    leagues = await getSleeperLeagues(sleeperUserId, season);
+    if (leagues.length > 0) {
+      const leagueIds = leagues.map((l) => l.league_id);
+      // Independent reads against the same synced rows, so they go together.
+      const [statusMap, exposureResult] = await Promise.all([
+        loadSearchedTeamStatuses(
+          supabase,
+          leagueIds,
+          sleeperUserId,
+          Number(season),
+          resolvedSource.slug,
+          // Redraft rooms get the redraft wording on their tag. Read off the
+          // Sleeper payload we already have rather than our own table.
+          Object.fromEntries(
+            leagues.map((l) => [l.league_id, deriveStatusVariant(l)]),
           ),
-          loadPlayerExposure(supabase, leagueIds, sleeperUser.user_id),
-        ]);
-        teamStatuses = Object.fromEntries(statusMap);
-        exposure = exposureResult;
-      }
+        ),
+        loadPlayerExposure(supabase, leagueIds, sleeperUserId),
+      ]);
+      teamStatuses = Object.fromEntries(statusMap);
+      exposure = exposureResult;
     }
   }
+
+  // What the league table and the cross-league panels match a roster against.
+  // Sleeper's display name is what league_users stores, so it leads; the handle
+  // is the fallback for an identity saved before we captured a display name.
+  const rosterMatchName = handle?.displayName ?? handle?.username ?? null;
 
   // Every league Sleeper reports, paired with whatever standing we already hold
   // for it. Leagues with no Power Pulse row arrive with a null seed and are
@@ -103,6 +136,9 @@ export default async function SleeperLeaguesPage() {
     return {
       sleeperLeagueId: league.league_id,
       leagueName: league.name,
+      // Straight off the live Sleeper payload; there is no avatar column on
+      // `leagues` and none is to be added.
+      avatar: league.avatar ?? null,
       projectedSeed: summary?.projectedSeed ?? null,
       rankedTeamCount: summary?.rankedTeamCount ?? null,
       statusLabel: summary?.status?.label ?? null,
@@ -111,25 +147,47 @@ export default async function SleeperLeaguesPage() {
 
   return (
     <div className="space-y-6">
-      <section aria-labelledby="connect-heading">
-        {/* Collapses to one row once a handle is saved. Everything the expanded
-            form does is still here, one press away; it just stops being the
-            first three inches of the page on every return visit. */}
-        <SleeperConnection
-          savedUsername={sleeperUsername}
-          lookupFailed={Boolean(sleeperUsername) && !sleeperUser}
-        />
-
-        {sleeperUsername && !sleeperUser && (
-          <p
-            role="alert"
-            className="mt-4 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
+      {handle ? (
+        /* The card is its own labelled section, so it is not wrapped in a
+           second one. Connected, the whole connection is one row plus the way
+           back into the form, instead of the pitch a returning reader has
+           already read. */
+        <SleeperIdentityCard
+          // This page IS the settings page, so the footer link would point here.
+          manageHref={null}
+          toolName="My Beacon"
+          handle={handle}
+          headingLevel={2}
+          status={lookupFailed ? "failed" : "idle"}
+          statusMessage={
+            lookupFailed
+              ? `Sleeper no longer has an account called "${handle.username}", so we could not load your leagues. Save the handle you use now and they will come back.`
+              : null
+          }
+        >
+          <SaveHandleForm
+            defaultUsername={handle.username}
+            submitLabel="Save username"
+          />
+        </SleeperIdentityCard>
+      ) : (
+        <section aria-labelledby="connect-heading">
+          <SectionEyebrow>Sleeper connection</SectionEyebrow>
+          <h2
+            id="connect-heading"
+            className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl"
           >
-            We could not load Sleeper user &quot;{sleeperUsername}&quot;.
-            Double-check the spelling above.
+            Link your Sleeper username.
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+            We save your handle so every visit auto-loads your leagues, no
+            re-typing, no re-pasting. Change it anytime.
           </p>
-        )}
-      </section>
+          <div className="mt-6 rounded-card border border-line bg-surface p-5">
+            <SaveHandleForm submitLabel="Save username" />
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="leagues-heading">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -166,14 +224,14 @@ export default async function SleeperLeaguesPage() {
           </div>
         </div>
 
-        {!sleeperUsername && (
+        {!handle && (
           <EmptyState
             title="No Sleeper username saved yet."
             body="Add yours above and we'll pull every active league for the current season."
           />
         )}
 
-        {sleeperUser && leagues.length === 0 && (
+        {sleeperUserId && leagues.length === 0 && (
           <EmptyState
             title={`No active leagues found for ${season}.`}
             body="If you joined a league after this page loaded, refresh to pick it up."
@@ -188,20 +246,16 @@ export default async function SleeperLeaguesPage() {
             <LeagueQuickLinks
               exposure={exposure}
               projections={projections}
-              sleeperUsername={
-                sleeperUser?.display_name ?? sleeperUsername ?? null
-              }
+              sleeperUsername={rosterMatchName}
               sleeperLeagueIds={leagues.map((l) => l.league_id)}
-              sleeperUserId={sleeperUser?.user_id ?? null}
+              sleeperUserId={sleeperUserId}
               sourceSlug={resolvedSource.slug}
             />
             <LeagueResults
               variant="dashboard"
               leagues={leagues}
               season={season}
-              sleeperUsername={
-                sleeperUser?.display_name ?? sleeperUsername ?? null
-              }
+              sleeperUsername={rosterMatchName}
               featuredLeagueId={featuredLeagueId}
               shownLeagueIds={shownLeagueIds}
               teamStatuses={teamStatuses}

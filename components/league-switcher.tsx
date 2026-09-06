@@ -5,7 +5,12 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, ChevronDown, Search } from "lucide-react";
+import { LeagueLogo } from "@/components/league-logo";
 import { humanizeLeagueStatus } from "@/lib/league-status";
+import {
+  viewerLinkUsername,
+  type SleeperViewer,
+} from "@/lib/sleeper-handle/types";
 
 /**
  * One row in the switcher list. Mirrors the subset of a Sleeper league the
@@ -19,6 +24,9 @@ export type SwitcherLeague = {
   status: string | null;
   totalRosters: number | null;
   season: string;
+  /** Sleeper's avatar id, straight off the live payload. Null for the many
+   *  leagues that never set one; the logo renders its placeholder. */
+  avatar: string | null;
 };
 
 /**
@@ -37,6 +45,15 @@ export type SwitcherLeague = {
  *   region) with a filter textbox for users in many leagues. Escape closes and
  *   restores focus to the trigger; an outside click closes silently.
  *
+ * THE MOBILE PICKER SHOWS NO LOGO, AND THAT IS DELIBERATE. A native <option>
+ * cannot carry an image, and the native picker is here precisely because it IS
+ * the accessibility feature on a phone: the platform wheel, the platform
+ * keyboard behaviour, the platform screen reader. Swapping it for a styled list
+ * to gain a decorative image would trade a real affordance for a picture. This
+ * is the one place on the site where a league list shows a logo at one
+ * breakpoint and not another (D12), and nothing a reader can ACT on is missing:
+ * every league's name is in both presentations.
+ *
  * The desktop panel is PORTALED to document.body and positioned fixed against
  * the trigger, rather than being absolutely positioned inside the trigger's
  * container. Every deep-view surface wraps its actions in
@@ -48,10 +65,12 @@ export type SwitcherLeague = {
  */
 export function LeagueSwitcher({
   leagues,
-  searchedUsername,
+  viewer,
 }: {
   leagues: SwitcherLeague[];
-  searchedUsername: string | null;
+  /** Who the page is acting for. Names the list, and decides whether the row
+   *  hrefs carry `?username=` (only for a reader who arrived on one). */
+  viewer: SleeperViewer | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -159,10 +178,16 @@ export function LeagueSwitcher({
 
   if (leagues.length === 0) return null;
 
+  // Only a reader who arrived on ?username= carries it onward. A reader on
+  // their own saved identity hops between leagues on clean URLs and still
+  // lands on their own team, because the deep view matches the Sleeper user
+  // id their saved identity carries.
+  const linkUsername = viewerLinkUsername(viewer);
+
   const hrefFor = (l: SwitcherLeague): string => {
     const params = new URLSearchParams();
     params.set("tab", "teams");
-    if (searchedUsername) params.set("username", searchedUsername);
+    if (linkUsername) params.set("username", linkUsername);
     params.set("name", l.name);
     return `/leagues/${l.sleeperLeagueId}?${params.toString()}`;
   };
@@ -238,11 +263,11 @@ export function LeagueSwitcher({
           >
             <div className="shrink-0 border-b border-line p-3">
               <p id={listLabelId} className="mb-2 text-xs text-ink-muted">
-                {searchedUsername ? (
+                {viewer ? (
                   <>
                     Other leagues for{" "}
                     <span className="font-medium text-ink">
-                      @{searchedUsername}
+                      @{viewer.username}
                     </span>
                   </>
                 ) : (
@@ -284,14 +309,17 @@ export function LeagueSwitcher({
                     <Link
                       href={hrefFor(l)}
                       onClick={() => setOpen(false)}
-                      className="block px-3 py-2.5 hover:bg-surface focus:bg-surface focus:outline-none"
+                      className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-surface focus:bg-surface focus:outline-none"
                     >
-                      <span className="block truncate text-sm font-medium text-ink">
-                        {l.name}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-ink-subtle">
-                        {l.season}, {l.totalRosters ?? "?"} teams
-                        {l.status ? `, ${humanizeLeagueStatus(l.status)}` : ""}
+                      <LeagueLogo avatarId={l.avatar} name={l.name} size={32} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-ink">
+                          {l.name}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-ink-subtle">
+                          {l.season}, {l.totalRosters ?? "?"} teams
+                          {l.status ? `, ${humanizeLeagueStatus(l.status)}` : ""}
+                        </span>
                       </span>
                     </Link>
                   </li>

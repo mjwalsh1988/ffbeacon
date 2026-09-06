@@ -23,6 +23,7 @@ import type { ReactNode } from "react";
 import { LeagueBreadcrumb, type LeagueCrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
 import type { SwitcherLeague } from "@/components/league-switcher";
+import type { SleeperViewer } from "@/lib/sleeper-handle/types";
 import { LeagueRailSections } from "./league-rail-sections";
 import { LeagueMobileNav } from "./league-mobile-nav";
 import { LeagueMasthead, type LeagueMastheadProps } from "./league-masthead";
@@ -31,7 +32,7 @@ import type { LeagueTabId } from "./nav-items";
 export function LeagueShell({
   sleeperLeagueId,
   activeTab,
-  searchedUsername,
+  viewer,
   homeHref,
   crumbs,
   copyHref,
@@ -43,8 +44,12 @@ export function LeagueShell({
 }: {
   sleeperLeagueId: string;
   activeTab: LeagueTabId;
-  searchedUsername: string | null;
-  /** Back-link for the League Pulse crumb, with the searched handle attached. */
+  /** Who this page is acting for: the ?username= handle when there is one,
+   *  otherwise the reader's saved handle. Every link built below carries the
+   *  handle only when the reader arrived on one. */
+  viewer: SleeperViewer | null;
+  /** Back-link for the League Pulse crumb. Carries the handle only for a
+   *  ?username= reader; /tools/league-pulse resolves a saved one itself. */
   homeHref: string;
   crumbs: LeagueCrumb[];
   copyHref: string;
@@ -63,7 +68,7 @@ export function LeagueShell({
         sleeperLeagueId={sleeperLeagueId}
         leagueName={masthead.leagueName}
         activeTab={activeTab}
-        searchedUsername={searchedUsername}
+        viewer={viewer}
       />
       <div className="w-full">
         <div className="min-w-0 flex-1">
@@ -83,7 +88,7 @@ export function LeagueShell({
                 copyHref={copyHref}
                 copyAriaLabel={copyAriaLabel}
                 otherLeagues={otherLeagues}
-                searchedUsername={searchedUsername}
+                viewer={viewer}
               />
             </div>
           </div>
@@ -98,7 +103,7 @@ export function LeagueShell({
             <LeagueMobileNav
               sleeperLeagueId={sleeperLeagueId}
               activeTab={activeTab}
-              searchedUsername={searchedUsername}
+              viewer={viewer}
             />
             <div className="mt-6">{children}</div>
           </div>

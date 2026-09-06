@@ -36,13 +36,12 @@ import type { ManagerLeagueCategory, ManagerPulseSettings } from "./types";
  * and imports `@/lib/manager-pulse/handle` directly.
  */
 import { isValidSleeperHandle } from "./handle";
+import { sleeperAvatarUrl } from "@/lib/sleeper-avatar-url";
 
 export { HANDLE_PATTERN, isValidSleeperHandle } from "./handle";
 
 /** How many Sleeper season requests run at once while walking a discovery window. */
 const SEASON_FETCH_CONCURRENCY = 3;
-
-const SLEEPER_AVATAR_BASE = "https://sleepercdn.com/avatars";
 
 export type DiscoveredLeagueSeason = {
   sleeperLeagueId: string;
@@ -77,7 +76,10 @@ export async function resolveManagerHandle(
   return {
     sleeperUserId: user.user_id,
     handle: user.username || handle,
-    avatarUrl: user.avatar ? `${SLEEPER_AVATAR_BASE}/${user.avatar}` : null,
+    // Through the shared builder, which validates the id. Sleeper returns this
+    // value, so it is trusted in practice, but there is one place that decides
+    // what a Sleeper avatar URL looks like and this is not a second one.
+    avatarUrl: sleeperAvatarUrl(user.avatar),
   };
 }
 

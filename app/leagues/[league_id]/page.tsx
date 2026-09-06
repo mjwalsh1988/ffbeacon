@@ -13,6 +13,11 @@ import { loadPowerPulseView, buildPulseLeaders } from "@/lib/league-power-pulse-
 import { loadTransactionVolume } from "@/lib/league-transaction-volume";
 import { loadViewerCandidates } from "@/lib/league-positional-war-data";
 import { matchViewerRoster } from "@/lib/league-viewer";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import {
+  viewerLinkUsername,
+  type SleeperViewer,
+} from "@/lib/sleeper-handle/types";
 import { TransactionVolumePanel } from "@/components/league-overview/transaction-volume-panel";
 import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
 import { loadLeagueReadiness, type LeagueReadiness } from "@/lib/league-readiness";
@@ -140,15 +145,21 @@ export default async function LeagueDeepViewPage({
     acat: activityCategoryParam,
     ateam: activityTeamParam,
   } = await searchParams;
-  const searchedUsername =
-    typeof usernameParam === "string" && usernameParam.trim() ? usernameParam.trim() : null;
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle. `linkUsername` is what a link
+  // built on this page may carry, which is the handle only when the reader
+  // arrived on one.
+  const supabase = await createClient();
+  const viewer = await resolveSleeperViewer(supabase, usernameParam);
+  const searchedUsername = viewer?.username ?? null;
+  const linkUsername = viewerLinkUsername(viewer);
 
   // Transactions is its own full page now, not an inline tab. The tab nav
   // links straight there; this redirect catches legacy ?tab=transactions
   // links (and any bookmarks) so nobody lands on a blank tab.
   if (tabParam === "transactions") {
     const qs = new URLSearchParams();
-    if (searchedUsername) qs.set("username", searchedUsername);
+    if (linkUsername) qs.set("username", linkUsername);
     if (typeof sourceParam === "string" && sourceParam) qs.set("source", sourceParam);
     const s = qs.toString();
     redirect(`/leagues/${sleeperLeagueId}/transactions${s ? `?${s}` : ""}`);
@@ -176,7 +187,6 @@ export default async function LeagueDeepViewPage({
   }
 
   // Read the canonical row for render (anon-readable, RLS-safe).
-  const supabase = await createClient();
   const { data: league } = await supabase
     .from("leagues")
     .select(
@@ -208,8 +218,10 @@ export default async function LeagueDeepViewPage({
 
   // Breadcrumb back-link. Forward the searched handle so the logo crumb lands
   // the user back on their own league results, not a blank search form.
-  const backHref = searchedUsername
-    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+  // No param for a saved viewer: /tools/league-pulse resolves the same handle
+  // itself, and a clean link is the one worth copying.
+  const backHref = linkUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
     : "/tools/league-pulse";
 
   // Header action data: the searched user's OTHER leagues (for the in-view
@@ -220,7 +232,7 @@ export default async function LeagueDeepViewPage({
     supabase,
     league.id,
     sleeperLeagueId,
-    searchedUsername,
+    viewer,
     league.season != null ? String(league.season) : null,
   );
 
@@ -265,31 +277,25 @@ export default async function LeagueDeepViewPage({
     : null;
   const activityRosterId = parseRosterId(activityTeamParam);
 
-  // In-view links (username forwarded so the Teams chips default correctly).
-  const teamsHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}?tab=teams`;
-  const transactionsHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}/transactions?username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}/transactions`;
-  const powerPulseHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}/power-pulse?username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}/power-pulse`;
-  const tradeIdeasHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}/trade-ideas?username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}/trade-ideas`;
-  const scheduleHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}/schedules?username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}/schedules`;
-  const positionalWarHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}/positional-war?username=${encodeURIComponent(searchedUsername)}`
-    : `/leagues/${sleeperLeagueId}/positional-war`;
+  // In-view links. The handle rides along only for a reader who arrived on
+  // one; a saved reader hops on clean URLs and still lands on their own team,
+  // because the deep views match the Sleeper user id their identity carries.
+  const carry = linkUsername
+    ? `username=${encodeURIComponent(linkUsername)}`
+    : "";
+  const teamsHref = `/leagues/${sleeperLeagueId}?tab=teams${carry ? `&${carry}` : ""}`;
+  const transactionsHref = `/leagues/${sleeperLeagueId}/transactions${carry ? `?${carry}` : ""}`;
+  const powerPulseHref = `/leagues/${sleeperLeagueId}/power-pulse${carry ? `?${carry}` : ""}`;
+  const tradeIdeasHref = `/leagues/${sleeperLeagueId}/trade-ideas${carry ? `?${carry}` : ""}`;
+  const scheduleHref = `/leagues/${sleeperLeagueId}/schedules${carry ? `?${carry}` : ""}`;
+  const positionalWarHref = `/leagues/${sleeperLeagueId}/positional-war${carry ? `?${carry}` : ""}`;
 
   // The masthead is identical on every League Pulse section, so its inputs are
   // assembled once here and handed to the shell, which renders it above
   // whatever this section shows.
   const mastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -309,7 +315,7 @@ export default async function LeagueDeepViewPage({
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab={activeTab}
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={backHref}
       crumbs={[{ label: league.name }]}
       copyHref={`/leagues/${sleeperLeagueId}`}
@@ -351,7 +357,7 @@ export default async function LeagueDeepViewPage({
               <ActivitySection
                 leagueRowId={league.id}
                 sleeperLeagueId={sleeperLeagueId}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 days={activityDays}
                 category={activityCategory}
                 rosterId={activityRosterId}
@@ -371,7 +377,7 @@ export default async function LeagueDeepViewPage({
                 sourceDisplay={sourceDisplay}
                 leagueSeason={league.season != null ? String(league.season) : null}
                 leagueStatus={league.status ?? null}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 includePicks={includePicks}
                 showPicksToggle={showPicksToggle}
                 rankMode={rankMode}
@@ -397,6 +403,7 @@ export default async function LeagueDeepViewPage({
                 formatSlug={formatSlug}
                 sourceSlug={sourceSlug}
                 searchedUsername={searchedUsername}
+                viewerSleeperUserId={viewer?.sleeperUserId ?? null}
                 focusedRosterId={focusedRosterId}
                 transactionsHref={transactionsHref}
                 resynced={!pulseResult.cached}
@@ -443,6 +450,7 @@ export default async function LeagueDeepViewPage({
                 leagueRowId={league.id}
                 season={Number(league.season ?? 0)}
                 searchedUsername={searchedUsername}
+                viewerSleeperUserId={viewer?.sleeperUserId ?? null}
                 focusedRosterId={focusedRosterId}
                 positionalWarHref={positionalWarHref}
               />
@@ -504,6 +512,8 @@ export default async function LeagueDeepViewPage({
             formatSlug={formatSlug}
             sourceSlug={sourceSlug}
             searchedUsername={searchedUsername}
+            viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+            linkUsername={linkUsername}
             focusedRosterId={focusedRosterId}
             leagueSeason={league.season != null ? String(league.season) : null}
             leagueStatus={league.status ?? null}
@@ -579,6 +589,7 @@ async function OverviewInsights({
   formatSlug,
   sourceSlug,
   searchedUsername,
+  viewerSleeperUserId,
   focusedRosterId,
   transactionsHref,
   resynced,
@@ -588,6 +599,10 @@ async function OverviewInsights({
   formatSlug: string | null;
   sourceSlug: string | null;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id. matchViewerRoster tries it before the
+   *  handle, because a saved handle is a username while the candidates carry
+   *  display names, and the two are allowed to differ. */
+  viewerSleeperUserId: string | null;
   focusedRosterId: number | null;
   transactionsHref: string;
   resynced: boolean;
@@ -628,7 +643,12 @@ async function OverviewInsights({
       {showVolume && (
         <TransactionVolumePanel
           volume={volume}
-          viewerRosterId={matchViewerRoster(candidates, searchedUsername, focusedRosterId)}
+          viewerRosterId={matchViewerRoster(
+            candidates,
+            searchedUsername,
+            focusedRosterId,
+            viewerSleeperUserId,
+          )}
           transactionsHref={transactionsHref}
         />
       )}
@@ -673,7 +693,7 @@ async function OverviewInsights({
 async function ActivitySection({
   leagueRowId,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   days,
   category,
   rosterId,
@@ -683,7 +703,9 @@ async function ActivitySection({
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  /** The handle every link in and around the panel should carry, or null.
+   *  The log is not filtered by it; it only rides the links. */
+  linkUsername: string | null;
   days: number;
   category: ActivityCategory | null;
   rosterId: number | null;
@@ -699,7 +721,10 @@ async function ActivitySection({
     category,
     rosterId,
     limit: ACTIVITY_PANEL_ROWS,
-    searchedUsername,
+    // Link building only: ActivityContext.searchedUsername is read by
+    // writeup.ts withUsername() and by nothing else, so it takes the gated
+    // value rather than the viewer's handle.
+    searchedUsername: linkUsername,
   });
 
   // EVERY PARAM THE PAGE READS HAS TO SURVIVE A FILTER CLICK. `rank` and `picks`
@@ -707,7 +732,7 @@ async function ActivitySection({
   // activity chip silently re-sorted that table under the reader, unannounced,
   // with focus already moved up to the panel heading.
   const carry: Record<string, string> = {};
-  if (searchedUsername) carry.username = searchedUsername;
+  if (linkUsername) carry.username = linkUsername;
   if (sourceParam) carry.source = sourceParam;
   if (rankParam) carry.rank = rankParam;
   if (picksParam) carry.picks = picksParam;
@@ -815,6 +840,8 @@ async function TeamsPanel({
   formatSlug,
   sourceSlug,
   searchedUsername,
+  viewerSleeperUserId,
+  linkUsername,
   focusedRosterId,
   leagueSeason,
   leagueStatus,
@@ -828,6 +855,8 @@ async function TeamsPanel({
   formatSlug: string | null;
   sourceSlug: string | null;
   searchedUsername: string | null;
+  viewerSleeperUserId: string | null;
+  linkUsername: string | null;
   focusedRosterId: number | null;
   leagueSeason: string | null;
   leagueStatus: string | null;
@@ -928,6 +957,8 @@ async function TeamsPanel({
         teams={teams}
         sleeperLeagueId={sleeperLeagueId}
         searchedUsername={searchedUsername}
+        viewerSleeperUserId={viewerSleeperUserId}
+        linkUsername={linkUsername}
         focusedRosterId={focusedRosterId}
         valueIsBeacon={sourceSlug === "ffbeacon"}
         statusByRoster={statusByRoster}
@@ -947,7 +978,7 @@ async function PowerRankingsSection({
   sourceDisplay,
   leagueSeason,
   leagueStatus,
-  searchedUsername,
+  linkUsername,
   includePicks,
   showPicksToggle,
   rankMode,
@@ -962,7 +993,8 @@ async function PowerRankingsSection({
   sourceDisplay: string;
   leagueSeason: string | null;
   leagueStatus: string | null;
-  searchedUsername: string | null;
+  /** The handle each row link should carry, or null. */
+  linkUsername: string | null;
   includePicks: boolean;
   showPicksToggle: boolean;
   /** Requested row order. Falls back to value when Power Pulse has no rows. */
@@ -1211,7 +1243,7 @@ async function PowerRankingsSection({
               <PowerRankingsRow
                 key={t.rosterRowId}
                 sleeperLeagueId={sleeperLeagueId}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 teamCount={teamCount}
                 valueIsBeacon={sourceSlug === "ffbeacon"}
                 showPicks={includePicks}

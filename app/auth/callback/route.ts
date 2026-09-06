@@ -35,8 +35,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
 
+  // Both slashes, for the reason app/login/login-form.tsx states: a leading
+  // "/" followed by a backslash enters the URL authority state the same way
+  // "//" does. This one is already safe because the result is concatenated
+  // onto `origin`, but the two checks should not disagree about what a
+  // same-origin path is.
   const redirectPath =
-    candidate.startsWith("/") && !candidate.startsWith("//") ? candidate : "/";
+    candidate.startsWith("/") &&
+    candidate[1] !== "/" &&
+    candidate[1] !== "\\"
+      ? candidate
+      : "/";
   const response = NextResponse.redirect(`${origin}${redirectPath}`);
 
   // Consume the one-shot return cookie so it doesn't influence later

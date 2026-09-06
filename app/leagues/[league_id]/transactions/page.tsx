@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatTeamLabelCompact } from "@/lib/team-label";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
@@ -49,6 +51,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { league_id } = await params;
   const supabase = await createClient();
+
   const { data: league } = await supabase
     .from("leagues")
     .select("name, season")
@@ -91,11 +94,6 @@ export default async function LeagueTransactionsPage({
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
-  const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim()
-      ? sp.username.trim()
-      : null;
-
   // First-touch pulse, split in two exactly as the deep view does. The core is
   // the league, its rosters and its members: everything the header, tabs and
   // info panel need. The derived half (transaction history, trade values, Power
@@ -107,6 +105,13 @@ export default async function LeagueTransactionsPage({
   if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
+
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
+  // `linkUsername` is what a link built here may carry, which is the handle
+  // only when the reader arrived on one.
+  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const linkUsername = viewerLinkUsername(viewer);
   const { data: league } = await supabase
     .from("leagues")
     .select(
@@ -126,7 +131,7 @@ export default async function LeagueTransactionsPage({
       supabase,
       league.id,
       sleeperLeagueId,
-      searchedUsername,
+      viewer,
       league.season != null ? String(league.season) : null,
     ),
     // Format is derived from the Sleeper league settings; only the value source
@@ -136,13 +141,14 @@ export default async function LeagueTransactionsPage({
     ),
   ]);
 
-  // Back-links forward the searched handle so the switcher and overview
-  // context survive the round trip.
-  const homeHref = searchedUsername
-    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+  // Back-links carry the handle only for a reader who arrived on one, so the
+  // switcher and overview context survive a shared link without a saved reader
+  // publishing their own handle into every hop.
+  const homeHref = linkUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
     : "/tools/league-pulse";
-  const leagueHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(searchedUsername)}`
+  const leagueHref = linkUsername
+    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(linkUsername)}`
     : `/leagues/${sleeperLeagueId}`;
   // Copy link is the clean, shareable canonical URL (no personal username).
   const copyHref = `/leagues/${sleeperLeagueId}/transactions`;
@@ -174,6 +180,7 @@ export default async function LeagueTransactionsPage({
 
   const mastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -189,18 +196,19 @@ export default async function LeagueTransactionsPage({
     pickSourceDisplay,
   };
 
-  // In-view links back to the other deep-view surfaces (username forwarded so
-  // the switcher + Teams owner default survive the hop).
+  // In-view links back to the other deep-view surfaces. The handle rides along
+  // only for a reader who arrived on one; a saved reader's own team is still
+  // found on the other side, by their Sleeper user id.
   const overviewHref = leagueHref;
-  const teamsHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(searchedUsername)}`
+  const teamsHref = linkUsername
+    ? `/leagues/${sleeperLeagueId}?tab=teams&username=${encodeURIComponent(linkUsername)}`
     : `/leagues/${sleeperLeagueId}?tab=teams`;
 
   return (
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab="transactions"
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={homeHref}
       crumbs={[{ label: league.name, href: leagueHref }, { label: "Transactions" }]}
       copyHref={copyHref}

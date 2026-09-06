@@ -6,7 +6,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { loadSignalCheckSettings } from "@/lib/signal-check/settings";
 import { supportedFormats } from "@/lib/signal-check/format";
 import { resolveFormatSlug } from "@/lib/preferences";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { isSignedIn, loadSavedSleeperHandle } from "@/lib/sleeper-handle/resolve";
 import type { FormatOption } from "./signal-check-builder";
 import { SignalCheckWorkspace } from "./signal-check-workspace";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -48,23 +48,16 @@ export default async function SignalCheckPage({
   }));
 
   // The inline Sleeper import panel adapts to auth state. We resolve the signed
-  // in user and their saved Sleeper username here so the panel can open straight
-  // into the league picker (or the save-username step) without a round trip.
+  // in reader and their saved Sleeper handle here so the panel can open straight
+  // into the league picker (or the save-handle step) without a round trip.
+  //
+  // The handle comes from the one resolver (D1). This page has no `?username=`
+  // path: the import reads the SAVED handle server-side on every call, so a
+  // link that named someone else's handle would not change what it imports.
   const cookieClient = await createClient();
-  const {
-    data: { user },
-  } = await cookieClient.auth.getUser();
-  const signedIn = Boolean(user);
-
-  let savedUsername: string | null = null;
-  if (user) {
-    const { data: prefs } = await cookieClient
-      .from("user_preferences")
-      .select("sleeper_league_settings")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    savedUsername = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
-  }
+  const signedIn = await isSignedIn(cookieClient);
+  const savedHandle = signedIn ? await loadSavedSleeperHandle(cookieClient) : null;
+  const savedUsername = savedHandle?.username ?? null;
 
   // The builder opens on the format the reader already has selected in the
   // site header, so the trade is priced on their own scale without them being

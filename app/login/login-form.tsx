@@ -44,12 +44,21 @@ export function LoginForm({
       ? window.location.origin
       : (process.env.NEXT_PUBLIC_SITE_URL ?? "");
 
-  // Sanitize the post-login destination. Must be a same-origin path,
-  // anything starting with `//` or an absolute URL is rejected as an
-  // open-redirect attempt. /my-beacon is the default landing for
-  // logged-in users.
+  // Sanitize the post-login destination. Must be a same-origin path;
+  // anything else is rejected as an open-redirect attempt. /my-beacon is the
+  // default landing for logged-in users.
+  //
+  // The second character is what matters, and it is BOTH slashes. A leading
+  // "/" followed by "/" is protocol-relative, and a leading "/" followed by a
+  // BACKSLASH is treated the same way: `location.assign` resolves against the
+  // current base using WHATWG URL rules, where a backslash there enters the
+  // authority state and the destination becomes an external origin. Testing
+  // only for "//" let the backslash form through.
   const safeNext =
-    initial.next && initial.next.startsWith("/") && !initial.next.startsWith("//")
+    initial.next &&
+    initial.next.startsWith("/") &&
+    initial.next[1] !== "/" &&
+    initial.next[1] !== "\\"
       ? initial.next
       : "/my-beacon";
   // The OAuth/email flows redirect through /auth/callback which only

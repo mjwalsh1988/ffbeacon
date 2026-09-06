@@ -5,19 +5,31 @@ import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  mergeSleeperLeagueSettings,
-  parseSleeperLeagueSettings,
-} from "@/lib/sleeper-league-settings";
+  clearSleeperHandle,
+  saveSleeperHandle,
+} from "@/app/actions/sleeper-handle";
 
 const MAX_NAME = 80;
 const MAX_BIO = 2000;
 
 /**
  * Edit-profile form. Display name is written to the auth user (user_metadata),
- * everything else to the owner's user_preferences row. The Sleeper username is
- * merged into the existing sleeper_league_settings jsonb so sibling keys
- * (featured/shown league ids) are never clobbered. All writes are gated by the
- * owner-only RLS policies on user_preferences.
+ * the name and bio to the owner's user_preferences row, both gated by the
+ * owner-only RLS policies on that table.
+ *
+ * THE SLEEPER USERNAME IS NOT WRITTEN HERE
+ *   It used to be, straight into the jsonb from the browser, which meant any
+ *   string a reader typed became their saved handle and every tool then failed
+ *   on it silently forever. It now goes through `saveSleeperHandle`, which
+ *   resolves the handle on Sleeper first and refuses one Sleeper cannot find,
+ *   and an emptied field goes through `clearSleeperHandle`. Both read-merge-
+ *   write, so the league keys of the same jsonb survive.
+ *
+ *   The handle goes LAST, after the rest of the profile has already been
+ *   written. A refused handle is a message about that one field; it must not
+ *   throw away the name and bio the reader edited in the same pass. When that
+ *   happens the status says both halves out loud rather than reporting a
+ *   failure the rest of the form did not have.
  */
 export function ProfileForm({
   initialFirstName,
@@ -39,7 +51,11 @@ export function ProfileForm({
   const [sleeperUsername, setSleeperUsername] = useState(initialSleeperUsername);
   const [bio, setBio] = useState(initialBio);
   const [status, setStatus] = useState<
-    { kind: "idle" | "saved" } | { kind: "error"; message: string }
+    | { kind: "idle" | "saved" }
+    | { kind: "error"; message: string }
+    // Everything except the Sleeper username saved. The message is why that
+    // one field did not.
+    | { kind: "partial"; message: string }
   >({ kind: "idle" });
   const [pending, startTransition] = useTransition();
 
@@ -72,18 +88,8 @@ export function ProfileForm({
         return;
       }
 
-      // 2) Read-merge-write the sleeper settings so we don't clobber other keys.
-      const { data: existing } = await supabase
-        .from("user_preferences")
-        .select("sleeper_league_settings")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const cleanedSleeper = sleeperUsername.trim();
-      const nextSettings = mergeSleeperLeagueSettings(
-        parseSleeperLeagueSettings(existing?.sleeper_league_settings),
-        { username: cleanedSleeper.length > 0 ? cleanedSleeper : null },
-      );
-
+      // 2) Name and bio. The Sleeper jsonb is deliberately absent from this
+      //    upsert: nothing outside app/actions/sleeper-handle.ts writes it.
       const cleanedFirst = firstName.trim();
       const cleanedLast = lastName.trim();
       const cleanedBio = bio.trim();
@@ -96,7 +102,6 @@ export function ProfileForm({
             first_name: cleanedFirst.length > 0 ? cleanedFirst : null,
             last_name: cleanedLast.length > 0 ? cleanedLast : null,
             bio: cleanedBio.length > 0 ? cleanedBio : null,
-            sleeper_league_settings: nextSettings,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" },
@@ -106,7 +111,30 @@ export function ProfileForm({
         return;
       }
 
-      setStatus({ kind: "saved" });
+      // 3) The handle, only when it actually changed. An untouched field must
+      //    not spend a Sleeper call or a rate-limit slot on every save.
+      const cleanedSleeper = sleeperUsername.trim();
+      let handleError: string | null = null;
+      if (cleanedSleeper !== initialSleeperUsername.trim()) {
+        if (cleanedSleeper.length === 0) {
+          const cleared = await clearSleeperHandle();
+          if (!cleared.ok) {
+            handleError =
+              cleared.error ?? "We could not clear your Sleeper username.";
+          }
+        } else {
+          const result = await saveSleeperHandle({ username: cleanedSleeper });
+          if (!result.ok) handleError = result.error;
+        }
+      }
+
+      // The rest of the profile is already written either way, so the refresh
+      // runs on both paths and the reader is told which half did not land.
+      setStatus(
+        handleError
+          ? { kind: "partial", message: handleError }
+          : { kind: "saved" },
+      );
       router.refresh();
     });
   };
@@ -152,7 +180,7 @@ export function ProfileForm({
         onChange={setSleeperUsername}
         maxLength={MAX_NAME}
         autoComplete="off"
-        hint="Used to sync your Sleeper leagues. Same handle as My Sleeper Leagues."
+        hint="Used to sync your Sleeper leagues, and the same handle as My Sleeper Leagues. We check it with Sleeper before saving, so it has to be one that exists. Clear the field to disconnect."
       />
 
       <div>
@@ -190,6 +218,12 @@ export function ProfileForm({
         >
           {status.kind === "saved" && (
             <p className="text-signal-success">Profile saved.</p>
+          )}
+          {status.kind === "partial" && (
+            <p role="alert" className="text-signal-warning">
+              Profile saved, but your Sleeper username was not changed.{" "}
+              {status.message}
+            </p>
           )}
           {status.kind === "error" && (
             <p role="alert" className="text-signal-danger">

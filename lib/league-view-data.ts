@@ -61,6 +61,12 @@ export type TeamCardData = {
   teamName: string;
   /** Sleeper handle (display_name on league_users). Used to match the searched username against the team's owner. */
   ownerSleeperUsername: string | null;
+  /** rosters.owner_user_id, the Sleeper user id verbatim. matchViewerRoster
+   * prefers it over the name above, because a saved handle is a Sleeper
+   * USERNAME and the name above is a DISPLAY NAME. */
+  ownerSleeperUserId: string | null;
+  /** rosters.co_owners: the Sleeper user ids sharing this roster. */
+  coOwnerIds: string[];
   ownerDisplayName: string | null;
   /** Sleeper avatar id (the raw string Sleeper returns; build the URL as
    * `https://sleepercdn.com/avatars/{id}`). null when the user has no avatar set. */
@@ -149,7 +155,7 @@ export async function loadLeagueTeamCards(
     supabase
       .from("rosters")
       .select(
-        "id, sleeper_roster_id, owner_user_id, player_ids, starter_ids, draft_pick_assets, wins, losses, ties, points_for",
+        "id, sleeper_roster_id, owner_user_id, co_owners, player_ids, starter_ids, draft_pick_assets, wins, losses, ties, points_for",
       )
       .eq("league_id", leagueRowId)
       .order("sleeper_roster_id", { ascending: true }),
@@ -269,6 +275,8 @@ export async function loadLeagueTeamCards(
       sleeperRosterId: r.sleeper_roster_id,
       teamName,
       ownerSleeperUsername: user?.display_name ?? null,
+      ownerSleeperUserId: r.owner_user_id ?? null,
+      coOwnerIds: asStringArray(r.co_owners),
       ownerDisplayName,
       ownerAvatarId: user?.avatar ?? null,
       record: {

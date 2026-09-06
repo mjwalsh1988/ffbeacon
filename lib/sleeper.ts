@@ -202,15 +202,36 @@ export type SleeperDraft = {
   last_picked?: number | null;
 };
 
-export async function getSleeperUser(username: string): Promise<SleeperUser | null> {
-  return safeFetch<SleeperUser>(`${BASE}/user/${encodeURIComponent(username)}`);
+/**
+ * `timeoutMs` exists for one caller: `lib/sleeper-handle/resolve.ts`, which
+ * resolves a handle DURING A PAGE RENDER to backfill a pre-0268 row. The
+ * default 20 seconds is right for a queue job and far too long to hold a
+ * render, so that path passes a short one and degrades to null instead.
+ */
+export async function getSleeperUser(
+  username: string,
+  timeoutMs?: number,
+): Promise<SleeperUser | null> {
+  return safeFetch<SleeperUser>(
+    `${BASE}/user/${encodeURIComponent(username)}`,
+    timeoutMs,
+  );
 }
 
 export async function getSleeperLeagues(
   userId: string,
   season: string,
 ): Promise<SleeperLeague[]> {
-  return (await safeFetch<SleeperLeague[]>(`${BASE}/user/${userId}/leagues/nfl/${season}`)) ?? [];
+  // Encoded to match getSleeperLeaguesOrNull below. The id used to arrive only
+  // from a Sleeper response; since the saved handle started carrying a cached
+  // one, it can also arrive from a jsonb column the account owner can write, so
+  // an unencoded segment would let a stored string steer the request onto a
+  // different path (and safeFetch follows redirects).
+  return (
+    (await safeFetch<SleeperLeague[]>(
+      `${BASE}/user/${encodeURIComponent(userId)}/leagues/nfl/${season}`,
+    )) ?? []
+  );
 }
 
 /** Null when the REQUEST failed; [] when Sleeper answered with no leagues. */

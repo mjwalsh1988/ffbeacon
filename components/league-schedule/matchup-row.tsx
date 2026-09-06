@@ -45,14 +45,14 @@ import {
 export function MatchupRow({
   matchup,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   isCurrent,
   emphasise,
   headingLevel = 3,
 }: {
   matchup: ScheduleMatchup;
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   /** The live NFL week gets the one elevated surface on the board. */
   /** The live week. Drives the cyan state edge, always. */
   isCurrent: boolean;
@@ -76,7 +76,7 @@ export function MatchupRow({
 
   const href = withUsername(
     `/leagues/${sleeperLeagueId}/schedules/${week}/${home.sleeperRosterId}`,
-    searchedUsername,
+    linkUsername,
   );
 
   const raised = emphasise ?? isCurrent;

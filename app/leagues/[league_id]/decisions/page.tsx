@@ -29,6 +29,8 @@ import {
 import { refreshManagerLedger } from "@/lib/league-manager-ledger";
 import { loadViewerCandidates } from "@/lib/league-positional-war-data";
 import { matchViewerRoster } from "@/lib/league-viewer";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatRelative } from "@/lib/datetime";
 import { games, pct, pts, record } from "@/components/manager-ledger/format";
 import { ListChecks } from "lucide-react";
@@ -74,6 +76,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { league_id } = await params;
   const supabase = await createClient();
+
   const { data: league } = await supabase
     .from("leagues")
     .select("name")
@@ -100,8 +103,6 @@ export default async function DecisionsPage({
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
-  const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim() ? sp.username.trim() : null;
   const focusedRosterId = (() => {
     if (typeof sp.roster !== "string" || !sp.roster.trim()) return null;
     const n = Number.parseInt(sp.roster, 10);
@@ -113,6 +114,14 @@ export default async function DecisionsPage({
   if (!pulseResult.ok) notFound();
 
   const supabase = await createClient();
+
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
+  // `linkUsername` is what a link built on this page may carry, which is the
+  // handle only when the reader arrived on one.
+  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const searchedUsername = viewer?.username ?? null;
+  const linkUsername = viewerLinkUsername(viewer);
   const { data: league } = await supabase
     .from("leagues")
     .select(
@@ -129,17 +138,19 @@ export default async function DecisionsPage({
       supabase,
       league.id,
       sleeperLeagueId,
-      searchedUsername,
+      viewer,
       league.season != null ? String(league.season) : null,
     ),
     resolveSourceSlug(supabase, sp.source),
   ]);
 
-  const homeHref = searchedUsername
-    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+  // No handle on either link for a saved reader: /tools/league-pulse resolves
+  // the same identity itself, and the deep view matches on the Sleeper user id.
+  const homeHref = linkUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
     : "/tools/league-pulse";
-  const leagueHref = searchedUsername
-    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(searchedUsername)}`
+  const leagueHref = linkUsername
+    ? `/leagues/${sleeperLeagueId}?username=${encodeURIComponent(linkUsername)}`
     : `/leagues/${sleeperLeagueId}`;
 
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
@@ -149,6 +160,7 @@ export default async function DecisionsPage({
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
   const mastheadProps: LeagueMastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -176,7 +188,7 @@ export default async function DecisionsPage({
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab="decisions"
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={homeHref}
       crumbs={[{ label: league.name, href: leagueHref }, { label: "Decisions" }]}
       copyHref={`/leagues/${sleeperLeagueId}/decisions`}
@@ -226,6 +238,7 @@ export default async function DecisionsPage({
             season={Number(league.season ?? 0)}
             storedStatus={league.manager_ledger_status}
             searchedUsername={searchedUsername}
+            viewerSleeperUserId={viewer?.sleeperUserId ?? null}
             focusedRosterId={focusedRosterId}
           />
         </Suspense>
@@ -275,12 +288,16 @@ async function LedgerSection({
   season,
   storedStatus,
   searchedUsername,
+  viewerSleeperUserId,
   focusedRosterId,
 }: {
   leagueRowId: string;
   season: number;
   storedStatus: string | null;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, tried before the handle: a saved handle is
+   *  a Sleeper username while the candidates carry display names. */
+  viewerSleeperUserId: string | null;
   focusedRosterId: number | null;
 }) {
   const supabase = await createClient();
@@ -318,7 +335,12 @@ async function LedgerSection({
     );
   }
 
-  const viewerRosterId = matchViewerRoster(candidates, searchedUsername, focusedRosterId);
+  const viewerRosterId = matchViewerRoster(
+    candidates,
+    searchedUsername,
+    focusedRosterId,
+    viewerSleeperUserId,
+  );
   const viewer = viewerRosterId === null
     ? null
     : (view.teams.find((t) => t.sleeperRosterId === viewerRosterId) ?? null);

@@ -13,6 +13,7 @@
  */
 
 import { RefreshCw, ArrowRight, Users, CheckCircle2 } from "lucide-react";
+import { LeagueLogo } from "@/components/league-logo";
 import type { LeagueCard } from "@/lib/on-the-clock/types";
 import { EmptyCard, ErrorCard, LoadingCard } from "./states";
 
@@ -149,7 +150,16 @@ export function LeaguePicker({
                             : "border-line bg-surface/60 hover:border-brand-cyan/60"
                         }`}
                       >
-                        <span className="min-w-0">
+                        {/* First child of the card, so every card in the grid
+                            starts on the same left edge whether or not the
+                            league set a logo. Decorative: the name is the next
+                            thing in the button. */}
+                        <LeagueLogo
+                          avatarId={l.avatar}
+                          name={l.name}
+                          size={48}
+                        />
+                        <span className="min-w-0 flex-1">
                           <span className="block truncate text-base font-semibold text-ink">
                             {l.name}
                           </span>

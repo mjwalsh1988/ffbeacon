@@ -17,11 +17,33 @@ const STEPS = [
   { n: 4, label: "Draft with signals", hint: "Best value, live" },
 ] as const;
 
-export function StepRail({ current }: { current: 1 | 2 | 3 | 4 }) {
+/**
+ * `stepOneLabel` and `stepOneHint` exist for the reader whose Sleeper handle is
+ * already saved. Step one is done before they arrive, and a rail that still
+ * tells them to enter a username is describing somebody else's visit. The
+ * caller passes "Connected as @handle" instead.
+ */
+export function StepRail({
+  current,
+  stepOneLabel,
+  stepOneHint,
+}: {
+  current: 1 | 2 | 3 | 4;
+  stepOneLabel?: string;
+  stepOneHint?: string;
+}) {
   return (
     <nav aria-label="Setup progress">
       <ol role="list" className="flex flex-wrap items-stretch gap-2 sm:gap-3">
-        {STEPS.map((s) => {
+        {STEPS.map((step) => {
+          const s =
+            step.n === 1
+              ? {
+                  n: 1 as const,
+                  label: stepOneLabel ?? step.label,
+                  hint: stepOneHint ?? step.hint,
+                }
+              : step;
           const done = s.n < current;
           const active = s.n === current;
           const state = done ? "Completed" : active ? "Current step" : "Upcoming";

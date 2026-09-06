@@ -50,6 +50,14 @@ export type ManagerLeagueSeason = {
   sleeperLeagueId: string;
   season: number;
   leagueName: string;
+  /**
+   * Sleeper's own league logo id, or null when the league has no image.
+   *
+   * Lifted out of the raw Sleeper league object we already store verbatim in
+   * `leagues.metadata`. There is no avatar column on `leagues` and none is to
+   * be added: this is source data, so it lives in `metadata`.
+   */
+  avatar: string | null;
   category: ManagerLeagueCategory;
   /** Sleeper's own settings.type. 0 redraft, 1 keeper, 2 dynasty, 3 chopped. */
   sleeperLeagueType: number | null;

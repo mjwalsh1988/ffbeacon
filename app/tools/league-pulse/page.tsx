@@ -2,13 +2,17 @@ import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
 import { Workflow, Sparkles, Lock, ArrowRight, Activity } from "lucide-react";
-import { LeaguePulseForm } from "./league-pulse-form";
 import { LeagueResults } from "./league-results";
+import { PulseHandleGate } from "./pulse-handle-gate";
 import { ScrollToResults } from "./scroll-to-results";
 import { StepRail } from "./step-rail";
 import { getSleeperUser, getSleeperLeagues, currentNflSeason } from "@/lib/sleeper";
 import { createClient } from "@/lib/supabase/server";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import {
+  resolveHandleGate,
+  resolveSleeperViewer,
+} from "@/lib/sleeper-handle/resolve";
+import { gateViewer } from "@/lib/sleeper-handle/types";
 import { deriveStatusVariant } from "@/lib/sleeper-to-format";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
@@ -46,41 +50,45 @@ export default async function LeaguePulsePage({
   const usernameInput = params.username?.trim();
   const season = params.season?.trim() || currentNflSeason();
 
-  // Logged-in state drives two things: hide the "sign in to save" CTA, and
-  // pre-fill the search input with the saved Sleeper handle so the user never
-  // has to paste it again.
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  const isLoggedIn = Boolean(authUser);
 
-  let savedUsername = "";
-  if (authUser) {
-    const { data: prefs } = await supabase
-      .from("user_preferences")
-      .select("sleeper_league_settings")
-      .eq("user_id", authUser.id)
-      .maybeSingle();
-    savedUsername =
-      parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? "";
-  }
+  // D1: one resolver. This page does not read the saved handle out of the
+  // preferences jsonb itself; the gate decides which of the four states it is
+  // in (guest, member-unsaved, member-saved, member-overridden) and everything
+  // below reads off that.
+  // D3, the pre-0268 backfill, happens INSIDE the resolver and not here.
+  // `resolveHandleGate` fills a missing Sleeper user id through the same
+  // metered, memoized path the ten league deep views use. Repeating it here
+  // was a second `getSleeperUser` in the same render whenever the first one
+  // failed, on a page that is force-dynamic and has no boundary in front of
+  // it, and the lookup further down would then make a third.
+  const gate = await resolveHandleGate(supabase, params.username);
 
-  // URL param wins (shareable links); otherwise fall back to the saved handle.
-  const defaultUsername = usernameInput ?? savedUsername;
+  // D2: the URL wins, then the saved handle, then nothing. `gateViewer` answers
+  // that for the two states carrying an identity; a signed-out reader following
+  // a shareable link is the remaining case, and it is the resolver's to answer.
+  // Both reads are memoized per request, so this costs no extra query.
+  const viewer =
+    gateViewer(gate) ?? (await resolveSleeperViewer(supabase, params.username));
+
+  // Drives the "sign in to save" copy and the bottom CTA, nothing else.
+  const isLoggedIn = gate.kind !== "guest";
 
   // What we actually look up. A signed-in reader who has already told us their
   // handle should not have to press a button to be told what we already know,
-  // so the saved handle searches itself. Typing a different one still wins,
+  // so the saved handle searches itself. A link naming someone else still wins,
   // because the URL param is checked first.
-  const lookupUsername = defaultUsername.trim();
+  const lookupUsername = viewer?.username ?? "";
   // True only when the reader asked for this search. Drives the auto-scroll:
   // yanking someone down past the hero on a plain page visit, and moving their
   // focus while they are still reading the top of the page, is the opposite of
-  // helpful.
+  // helpful. Tied to the URL param alone, so an auto-run never scrolls.
   const searchWasRequested = Boolean(usernameInput);
 
-  let user = null;
+  // The saved identity already carries these for a reader who saved one, which
+  // is what lets the lookup below be a single Sleeper call.
+  let sleeperUserId = viewer?.sleeperUserId ?? null;
+  let sleeperDisplayName = viewer?.displayName ?? null;
   let leagues: Awaited<ReturnType<typeof getSleeperLeagues>> = [];
   let error: string | null = null;
 
@@ -92,18 +100,28 @@ export default async function LeaguePulsePage({
   const resolvedSource = await resolveSourceSlug(supabase, undefined);
 
   if (lookupUsername) {
-    user = await getSleeperUser(lookupUsername);
-    if (!user) {
+    // D3: with the cached id in hand this is ONE Sleeper call, not two. A
+    // Sleeper user id never changes, so it stays correct even for a reader who
+    // renamed themselves after saving.
+    if (!sleeperUserId) {
+      const user = await getSleeperUser(lookupUsername);
+      if (user) {
+        sleeperUserId = user.user_id;
+        sleeperDisplayName = user.display_name ?? null;
+      }
+    }
+
+    if (!sleeperUserId) {
       error = searchWasRequested
         ? `No Sleeper user found for "${lookupUsername}".`
         : `We could not load your saved Sleeper handle, "${lookupUsername}". Sleeper may be down, or the account may have been renamed. Search below to try another.`;
     } else {
-      leagues = await getSleeperLeagues(user.user_id, season);
+      leagues = await getSleeperLeagues(sleeperUserId, season);
       if (leagues.length > 0) {
         const statusMap = await loadSearchedTeamStatuses(
           supabase,
           leagues.map((l) => l.league_id),
-          user.user_id,
+          sleeperUserId,
           Number(season),
           resolvedSource.slug,
           // Redraft rooms get the redraft wording on their tag. Read off the
@@ -117,9 +135,34 @@ export default async function LeaguePulsePage({
     }
   }
 
+  // Who the results are for, in the wording a reader recognises. The display
+  // name and the username are different strings on Sleeper, so the fallback
+  // matters rather than being defensive noise.
+  const viewerLabel = sleeperDisplayName ?? lookupUsername;
+
   // Drive the lookup step rail: once a valid user resolved (leagues below), the
   // flow has advanced to "choose a league". A failed lookup stays on step 1.
-  const currentStep: 1 | 2 | 3 = user ? 2 : 1;
+  // A reader with a saved handle therefore lands on step 2 on arrival, because
+  // their auto-run already answered step 1 for them.
+  const currentStep: 1 | 2 | 3 = sleeperUserId ? 2 : 1;
+
+  // The card is on screen for these two states, so it carries the "your saved
+  // handle no longer resolves" sentence and opens its own form (D3). The page
+  // does not also print it underneath: one failure, said once.
+  const savedHandleFailed =
+    gate.kind === "member-saved" && Boolean(lookupUsername) && !sleeperUserId;
+  const pageError = savedHandleFailed ? null : error;
+
+  // The cockpit's own copy. A reader who has a card in front of them has
+  // already done the connecting, so the wording describes what happened rather
+  // than asking for a username they can see on the screen.
+  const showsIdentityCard =
+    gate.kind === "member-saved" || gate.kind === "member-overridden";
+  const cockpitBlurb = !showsIdentityCard
+    ? "Paste your Sleeper handle and pick a season. We hit Sleeper directly and return every active league for that user, no account required."
+    : sleeperUserId
+      ? "Loaded straight from Sleeper for the handle above. Press Change to look up a different one."
+      : "Sleeper did not return an account for that handle. Try another one below.";
 
   // Confirmed Discord members skip the invite: the hero button scrolls them
   // down to the lookup form, and the bottom CTA points at the rest of the tools.
@@ -128,7 +171,10 @@ export default async function LeaguePulsePage({
   return (
     <main id="main">
       <PageBody>
-        <Masthead isMember={isMember} />
+        {/* The "sign in to save" sentence is only true for a reader who has
+            nothing saved. Saying it to someone whose handle is already on file
+            sends them to a page to do a thing they did. */}
+        <Masthead isMember={isMember} showSaveHint={!showsIdentityCard} />
         <section
           id="league-pulse-connect"
           aria-labelledby="sync-heading"
@@ -165,43 +211,52 @@ export default async function LeaguePulsePage({
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
                     League lookup
                   </p>
+                  {/* The heading follows the state. Telling a reader whose
+                      leagues are already on screen to connect their account
+                      describes a step they finished on a previous visit. */}
                   <h2
                     id="sync-heading"
                     className="text-lg font-semibold tracking-tight text-ink sm:text-xl"
                   >
-                    Connect your Sleeper account
+                    {showsIdentityCard
+                      ? "Your Sleeper account"
+                      : "Connect your Sleeper account"}
                   </h2>
                 </div>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                Paste your Sleeper handle and pick a season. We hit Sleeper
-                directly and return every active league for that user, no
-                account required.
+                {cockpitBlurb}
               </p>
 
               <div className="mt-6">
                 <StepRail current={currentStep} />
               </div>
               <div className="mt-5">
-                <LeaguePulseForm
-                  defaultUsername={defaultUsername}
+                <PulseHandleGate
+                  state={gate}
+                  defaultUsername={lookupUsername}
                   defaultSeason={season}
+                  status={savedHandleFailed ? "failed" : "idle"}
+                  statusMessage={savedHandleFailed ? error : null}
+                  // Dropping the param is what hands the page back to the saved
+                  // handle, so the way out of a shared link is a plain link.
+                  clearHref={`/tools/league-pulse?season=${encodeURIComponent(season)}`}
                 />
               </div>
 
-              {error && (
+              {pageError && (
                 <p
                   role="alert"
                   className="mt-5 rounded-card border border-signal-danger/40 bg-signal-danger/10 p-4 text-sm text-signal-danger"
                 >
-                  {error}
+                  {pageError}
                 </p>
               )}
             </div>
           </div>
         </section>
 
-        {user && (
+        {sleeperUserId && (
           <section
             id="league-results"
             aria-labelledby="results-heading"
@@ -209,7 +264,7 @@ export default async function LeaguePulsePage({
           >
             {searchWasRequested && (
               <ScrollToResults
-                key={`${user.user_id}-${season}`}
+                key={`${sleeperUserId}-${season}`}
                 targetId="league-results"
                 headingId="results-heading"
               />
@@ -224,7 +279,7 @@ export default async function LeaguePulsePage({
                   >
                     {leagues.length}{" "}
                     {leagues.length === 1 ? "league" : "leagues"} for{" "}
-                    <span className="text-brand-cyan">{user.display_name}</span>
+                    <span className="text-brand-cyan">{viewerLabel}</span>
                   </h2>
                   <p className="mt-2 text-sm text-ink-muted">
                     {season} season. Sourced live from Sleeper.
@@ -254,7 +309,7 @@ export default async function LeaguePulsePage({
                 <LeagueResults
                   leagues={leagues}
                   season={season}
-                  sleeperUsername={user.display_name ?? lookupUsername ?? null}
+                  sleeperUsername={viewerLabel || null}
                   teamStatuses={teamStatuses}
                   sourceSlug={resolvedSource.slug}
                 />
@@ -279,7 +334,14 @@ export default async function LeaguePulsePage({
 
 /* ---------- Masthead ---------- */
 
-function Masthead({ isMember }: { isMember: boolean }) {
+function Masthead({
+  isMember,
+  showSaveHint,
+}: {
+  isMember: boolean;
+  /** False once a handle is on file: the pitch has already been taken up. */
+  showSaveHint: boolean;
+}) {
   return (
     <PageMasthead
       eyebrow="Tools"
@@ -288,14 +350,19 @@ function Masthead({ isMember }: { isMember: boolean }) {
         <>
           Drop in your Sleeper username and we&apos;ll pull every active
           league (roster shape, season, status) right from the source. No
-          account required for this view.{" "}
-          <Link
-            href="/my-beacon/sleeper-leagues"
-            className="text-brand-purple underline-offset-4 hover:underline"
-          >
-            Sign in to save your username
-          </Link>{" "}
-          and load it instantly each visit.
+          account required for this view.
+          {showSaveHint && (
+            <>
+              {" "}
+              <Link
+                href="/my-beacon/sleeper-leagues"
+                className="text-brand-purple underline-offset-4 hover:underline"
+              >
+                Sign in to save your username
+              </Link>{" "}
+              and load it instantly each visit.
+            </>
+          )}
         </>
       }
       actions={

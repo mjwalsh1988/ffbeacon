@@ -131,6 +131,8 @@ const LEAGUES: ManagerLeagueRow[] = [
     sleeperLeagueId: "900000000000000001",
     season: 2026,
     leagueName: "Example Dynasty League",
+    // Invented rows: no logo is asserted for a league that does not exist.
+    avatar: null,
     category: "dynasty",
     lens: "dynasty",
     teamCount: 12,
@@ -146,6 +148,8 @@ const LEAGUES: ManagerLeagueRow[] = [
     sleeperLeagueId: "900000000000000002",
     season: 2025,
     leagueName: "Example Dynasty League",
+    // Invented rows: no logo is asserted for a league that does not exist.
+    avatar: null,
     category: "dynasty",
     lens: "dynasty",
     teamCount: 12,
@@ -163,6 +167,8 @@ const LEAGUES: ManagerLeagueRow[] = [
     sleeperLeagueId: "900000000000000003",
     season: 2026,
     leagueName: "Example Redraft League",
+    // Invented rows: no logo is asserted for a league that does not exist.
+    avatar: null,
     category: "redraft",
     lens: "redraft",
     teamCount: 10,
@@ -178,6 +184,8 @@ const LEAGUES: ManagerLeagueRow[] = [
     sleeperLeagueId: "900000000000000004",
     season: 2024,
     leagueName: "Example Best Ball League",
+    // Invented rows: no logo is asserted for a league that does not exist.
+    avatar: null,
     category: "best-ball-redraft",
     lens: "redraft",
     teamCount: 12,

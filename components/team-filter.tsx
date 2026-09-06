@@ -10,10 +10,18 @@ import type { TeamStatus } from "@/lib/league-team-status";
 export type TeamFilterProps = {
   teams: TeamCardData[];
   sleeperLeagueId: string;
-  /** Sleeper username from `?username=` query param. When it matches a team's
-   * owner display_name (case-insensitive), only that team is visible on first
-   * paint. Anything else falls back to the full list. */
+  /** The viewer's Sleeper handle. When it matches a team's owner display_name
+   * (case-insensitive), only that team is visible on first paint. Anything
+   * else falls back to the full list. */
   searchedUsername?: string | null;
+  /** The viewer's Sleeper USER ID, which matchViewerRoster tries first. A
+   * saved handle is a username and the name above is a display name, so the
+   * two can differ and only the id is exact. */
+  viewerSleeperUserId?: string | null;
+  /** The `?username=` in-card links should carry, or null. Separate from
+   * `searchedUsername` on purpose: a reader on their own saved identity is
+   * matched to their team but navigates on clean URLs. */
+  linkUsername?: string | null;
   /** Sleeper roster_id from `?roster=` query param (set by Power Rankings
    * row links). Takes priority over `searchedUsername` for the default
    * selection so deep-links zero in on the specific team. */
@@ -42,6 +50,8 @@ export function TeamFilter({
   teams,
   sleeperLeagueId,
   searchedUsername,
+  viewerSleeperUserId = null,
+  linkUsername = null,
   focusedRosterId,
   valueIsBeacon = false,
   statusByRoster = {},
@@ -49,8 +59,14 @@ export function TeamFilter({
   isDynasty = false,
 }: TeamFilterProps) {
   const ownerRosterId = useMemo(
-    () => matchViewerRoster(teams, searchedUsername, focusedRosterId),
-    [teams, searchedUsername, focusedRosterId],
+    () =>
+      matchViewerRoster(
+        teams,
+        searchedUsername,
+        focusedRosterId,
+        viewerSleeperUserId,
+      ),
+    [teams, searchedUsername, focusedRosterId, viewerSleeperUserId],
   );
 
   const [selectedRosterIds, setSelectedRosterIds] = useState<Set<number>>(
@@ -185,7 +201,7 @@ export function TeamFilter({
                 headingLevel="h2"
                 expanded={expandedRosterIds.has(t.sleeperRosterId)}
                 onToggleExpand={() => handleToggleExpand(t.sleeperRosterId)}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 valueIsBeacon={valueIsBeacon}
                 teamStatus={statusByRoster[t.rosterRowId] ?? null}
                 sourceSlug={sourceSlug}

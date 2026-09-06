@@ -11,7 +11,10 @@ import {
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { loadFaabSettings } from "@/lib/faab/settings";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import {
+  resolveHandleGate,
+  resolveSleeperViewer,
+} from "@/lib/sleeper-handle/resolve";
 import { loadFaabPlayerListCached } from "@/lib/faab/player-list";
 import { FaabForm, type FaabPlayer } from "./faab-form";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -37,26 +40,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * The signed-in reader's linked Sleeper handle, for prefilling the league box.
- * Null for a signed-out visitor, which is the common case, so this stays off
- * the critical path and runs alongside the other independent reads.
- */
-async function loadSavedSleeperUsername(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: prefs } = await supabase
-    .from("user_preferences")
-    .select("sleeper_league_settings")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  return parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
-}
-
-/**
  * Seasons the optional league panel offers.
  *
  * Derived here rather than in the browser so the list is identical in the
@@ -77,7 +60,12 @@ function seasonOptions(): string[] {
 export default async function FaabPage({
   searchParams,
 }: {
-  searchParams: Promise<{ format?: string; source?: string }>;
+  searchParams: Promise<{
+    format?: string;
+    source?: string;
+    /** Shareable-link override (D2). Wins over the reader's saved handle. */
+    username?: string | string[];
+  }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -94,19 +82,23 @@ export default async function FaabPage({
   const requestedSourceSlug = sourceResolution.slug;
 
   // These four are independent of each other, so they go together rather than
-  // in a waterfall: the format lookup, the source registry, the reader's linked
-  // Sleeper handle, and their Discord membership.
-  const [{ data: format }, registry, savedSleeperUsername, isMember] =
-    await Promise.all([
-      supabase
-        .from("format_configs")
-        .select("id, slug, display_name")
-        .eq("slug", formatSlug)
-        .maybeSingle(),
-      getAvailableSources(supabase),
-      loadSavedSleeperUsername(supabase),
-      isDiscordMember(),
-    ]);
+  // in a waterfall: the format lookup, the source registry, who the league
+  // panel is acting for, and the reader's Discord membership.
+  const [{ data: format }, registry, handleGate, urlViewer, isMember] = await Promise.all([
+    supabase
+      .from("format_configs")
+      .select("id, slug, display_name")
+      .eq("slug", formatSlug)
+      .maybeSingle(),
+    getAvailableSources(supabase),
+    resolveHandleGate(supabase, params.username),
+    // The gate answers "guest" for a signed-out reader without ever consulting
+    // the URL, so on its own a shared `?username=` link would do nothing for
+    // the readers most likely to be following one. This is the same
+    // fall-through League Pulse uses, and both reads are memoized per request.
+    resolveSleeperViewer(supabase, params.username),
+    isDiscordMember(),
+  ]);
 
   let players: FaabPlayer[] = [];
   let fallbackBanner: { requested: string | null; actual: string } | null = null;
@@ -219,7 +211,8 @@ export default async function FaabPage({
           seasons={seasonOptions()}
           formatSlug={format?.slug ?? formatSlug}
           rankingsSourceSlug={rankingsSourceSlug}
-          initialSleeperUsername={savedSleeperUsername}
+          handleGate={handleGate}
+          urlViewer={urlViewer}
         />
       </PageBody>
       <DiscordCtaSection

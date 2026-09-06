@@ -2,6 +2,7 @@
 
 import { X, Users, CalendarDays, Trophy, ArrowRight } from "lucide-react";
 import { LeagueOpenLink } from "@/components/league-open-link";
+import { LeagueLogo } from "@/components/league-logo";
 import type { SleeperLeague } from "@/lib/sleeper";
 import type { LeagueTeamStatusSummary } from "@/lib/league-team-status-data";
 import { SlideUpDialog } from "@/components/slide-up-dialog";
@@ -86,6 +87,12 @@ export function LeagueDetailSheet({
         {/* Header, name + close. The close button is the first focusable
             element so screen reader users can dismiss without tab-trawling. */}
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6 sm:py-5">
+          {/* The same logo the reader tapped on the list, so the sheet is
+              visibly the thing they opened. Decorative: the name is right
+              beside it as the heading. */}
+          <span className="mt-1 shrink-0">
+            <LeagueLogo avatarId={league.avatar} name={league.name} size={48} />
+          </span>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
               League details

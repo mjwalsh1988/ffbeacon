@@ -14,8 +14,10 @@
  */
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { Panel } from "@/components/dashboard-panel";
+import { SleeperAvatar } from "@/components/sleeper-avatar";
 import {
   SignalStatusCard,
   type SignalStatus,
@@ -33,6 +35,8 @@ export type BeaconRailFacts = {
   boardCount: number;
   /** The saved Sleeper handle, or null when none is connected. */
   sleeperUsername: string | null;
+  /** Sleeper avatar id captured when the handle was saved, or null. */
+  sleeperAvatar: string | null;
   /** Month and year the account was created, already formatted. */
   memberSince: string;
   isAdmin: boolean;
@@ -80,6 +84,17 @@ export function BeaconRail({
           <RailFact
             label="Sleeper"
             value={facts.sleeperUsername ? `@${facts.sleeperUsername}` : "Not connected"}
+            /* Decorative: the handle is right beside it as text, so an
+               alt-texted second copy would only say the same thing twice. */
+            icon={
+              facts.sleeperUsername && facts.sleeperAvatar ? (
+                <SleeperAvatar
+                  avatarId={facts.sleeperAvatar}
+                  title=""
+                  size={24}
+                />
+              ) : null
+            }
             hint={
               facts.sleeperUsername
                 ? "Your leagues sync from this handle"
@@ -127,6 +142,7 @@ function RailFact({
   value,
   valueLabel,
   hint,
+  icon,
   accent = "cyan",
 }: {
   label: string;
@@ -134,6 +150,8 @@ function RailFact({
   /** Read instead of `value` when the visible text is abbreviated. */
   valueLabel?: string;
   hint?: string;
+  /** A decorative mark shown before the value. Never carries meaning of its own. */
+  icon?: ReactNode;
   accent?: "cyan" | "purple" | "muted";
 }) {
   const color =
@@ -148,14 +166,19 @@ function RailFact({
         {label}
       </dt>
       <dd className={`mt-0.5 text-sm font-semibold ${color}`}>
-        {valueLabel ? (
-          <>
-            <span aria-hidden="true">{value}</span>
-            <span className="sr-only">{valueLabel}</span>
-          </>
-        ) : (
-          value
-        )}
+        <span className="flex items-center gap-1.5">
+          {icon}
+          <span className="min-w-0 break-words">
+            {valueLabel ? (
+              <>
+                <span aria-hidden="true">{value}</span>
+                <span className="sr-only">{valueLabel}</span>
+              </>
+            ) : (
+              value
+            )}
+          </span>
+        </span>
         {hint && (
           <span className="mt-0.5 block text-[11px] font-normal leading-tight text-ink-muted">
             {hint}

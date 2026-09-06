@@ -60,7 +60,7 @@ export function PowerRankingsRow({
   data,
   teamCount,
   sleeperLeagueId,
-  searchedUsername = null,
+  linkUsername = null,
   valueIsBeacon = false,
   showPicks = true,
 }: {
@@ -69,7 +69,7 @@ export function PowerRankingsRow({
   sleeperLeagueId: string;
   /** Forwarded from `?username=` so the team link keeps the in-view league
    * switcher alive when it lands back on the main deep view. */
-  searchedUsername?: string | null;
+  linkUsername?: string | null;
   /** True when the league's selected value source is FF Beacon, so the total
    * team value renders with the FF Beacon mark. */
   valueIsBeacon?: boolean;
@@ -84,7 +84,7 @@ export function PowerRankingsRow({
       tab: "teams",
       roster: String(data.sleeperRosterId),
     });
-    if (searchedUsername) qs.set("username", searchedUsername);
+    if (linkUsername) qs.set("username", linkUsername);
     return `/leagues/${sleeperLeagueId}?${qs.toString()}`;
   })();
 

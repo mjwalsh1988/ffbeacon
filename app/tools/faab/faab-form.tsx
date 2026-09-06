@@ -20,6 +20,10 @@ import { ManualResult } from "./manual-result";
 import { PlayerCombobox, type FaabPlayer } from "./player-combobox";
 import { calculateFaabRecommendation } from "@/lib/faab/calculate-faab";
 import type {
+  HandleGateState,
+  SleeperViewer,
+} from "@/lib/sleeper-handle/types";
+import type {
   FaabResult,
   FaabSettings,
   NeedLevel as FaabNeedLevel,
@@ -52,7 +56,8 @@ export function FaabForm({
   seasons,
   formatSlug,
   rankingsSourceSlug = null,
-  initialSleeperUsername = null,
+  handleGate,
+  urlViewer,
 }: {
   /**
    * The page hero, rendered on the server and handed in so this component can
@@ -67,9 +72,10 @@ export function FaabForm({
   formatSlug: string;
   /** Resolved rankings source slug, used to list a league's free agents. */
   rankingsSourceSlug?: string | null;
-  /** The signed-in reader's linked Sleeper handle, prefilled into the league
-   * box. Null when signed out or not linked. */
-  initialSleeperUsername?: string | null;
+  /** Who the league panel is acting for, resolved on the server. Decides
+   * whether the panel shows the identity card or the username form. */
+  handleGate: HandleGateState;
+  urlViewer: SleeperViewer | null;
   /** Seasons offered by the league panel. Server-derived. */
   seasons: string[];
   /** Display name of the source backing the rankings (e.g. "KTC",
@@ -151,7 +157,8 @@ export function FaabForm({
         fallbackBudget={budgetValid ? budget : userDefaults.defaultBudget}
         leagueModeNotice={settings.copy.leagueModeNotice}
         seasons={seasons}
-        initialUsername={initialSleeperUsername}
+        gate={handleGate}
+        urlViewer={urlViewer}
         formatSlug={formatSlug}
         sourceSlug={rankingsSourceSlug}
       />

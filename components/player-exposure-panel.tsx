@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { SidePanel } from "@/components/side-panel";
+import { LeagueLogo } from "@/components/league-logo";
 import {
   FILTER_THRESHOLD,
   PanelFilterField,
@@ -272,11 +273,24 @@ export function PlayerExposurePanel({
                               <ul role="list" className="mt-1.5 space-y-0.5">
                                 {row.leagues.map((league) => (
                                   <li key={league.sleeperLeagueId}>
+                                    {/* The logo is decorative and the name is
+                                        right beside it, so the link's name is
+                                        unchanged. `min-h-11` is what the logo
+                                        buys the row: at 32 px plus the padding
+                                        the target clears 44 px, which the bare
+                                        text line did not. */}
                                     <Link
                                       href={leagueHref(league, sleeperUsername)}
-                                      className="block truncate rounded-sm py-1 text-xs font-medium text-ink-muted hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                                      className="flex min-h-11 items-center gap-2 rounded-sm py-1 text-xs font-medium text-ink-muted hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
                                     >
-                                      {league.name}
+                                      <LeagueLogo
+                                        avatarId={league.avatar}
+                                        name={league.name}
+                                        size={32}
+                                      />
+                                      <span className="truncate">
+                                        {league.name}
+                                      </span>
                                     </Link>
                                   </li>
                                 ))}

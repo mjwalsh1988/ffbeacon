@@ -407,6 +407,11 @@ export type ManagerLeagueRow = {
   sleeperLeagueId: string;
   season: number;
   leagueName: string;
+  /**
+   * Sleeper's own league logo id, or null when the league has no image.
+   * Decorative on screen: the league name is always beside it.
+   */
+  avatar: string | null;
   category: ManagerLeagueCategory;
   lens: "dynasty" | "redraft";
   teamCount: number | null;

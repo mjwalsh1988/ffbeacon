@@ -1,7 +1,8 @@
 "use server";
 
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import {
   claimWarUpgradeEntrySlot,
@@ -91,10 +92,21 @@ export async function requestUpgradeWhatIf(raw: unknown): Promise<UpgradeWhatIfO
 
   // Gate 2: re-derive the viewer's roster. A forged or stale submittedRosterId
   // is refused here, before any rate-limit slot is spent.
+  //
+  // The Sleeper user id comes from the READER'S OWN SESSION, never from the
+  // payload. A saved handle is a Sleeper username and league_users carries
+  // display names, so the id is the only exact match; taking one off the wire
+  // would hand a caller the ability to name any roster and have this gate
+  // agree with them.
+  const sessionViewer = await resolveSleeperViewer(
+    await createClient(),
+    input.searchedUsername ?? undefined,
+  );
   const viewer = await resolveUpgradeViewerRoster(admin, {
     leagueRowId: leagueRow.id,
     submittedRosterId: input.submittedRosterId,
     searchedUsername: input.searchedUsername,
+    viewerSleeperUserId: sessionViewer?.sleeperUserId ?? null,
     focusedRosterId: input.focusedRosterId,
   });
   if (!viewer.ok) {

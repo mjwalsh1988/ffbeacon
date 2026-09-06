@@ -7,6 +7,11 @@
  * opt-in extra, not a sign-in wall, so this takes a Sleeper username the same
  * way /tools/league-pulse and the FAAB calculator do.
  *
+ * A reader who saved a handle in My Beacon sends `{ saved: true }` instead, and
+ * the handle is read here, server-side, from their own row. The username never
+ * crosses the wire on that path: one that did would be a handle anybody could
+ * send, which would turn "use mine" into "look up anyone" (D1, D3, D7).
+ *
  * The heavy work is NOT here. Picking a league navigates to a URL carrying the
  * league and roster, and the page computes the comparison server-side through
  * lib/breakdown/league-mode.ts, which has its own cache and rate limit. That
@@ -21,10 +26,15 @@
  */
 
 import { headers } from "next/headers";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import { getSleeperLeagues, getSleeperUser } from "@/lib/sleeper";
 import { syncLeagueOnDemand } from "@/lib/league-on-demand-sync";
+import {
+  ensureSleeperUserId,
+  loadSavedSleeperHandle,
+} from "@/lib/sleeper-handle/resolve";
+import { LOOKUP_THROTTLED_MESSAGE } from "@/lib/on-the-clock/lookup-failure";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
 const RATE_WINDOW_SECONDS = 60;
@@ -34,15 +44,20 @@ async function claimSlot(bucket: string, max: number): Promise<boolean> {
   try {
     const requestHeaders = await headers();
     const actorKey = await resolveRateLimitActorKey(
-      new Request("https://ffbeacon.internal/breakdown", { headers: requestHeaders }),
+      new Request("https://ffbeacon.internal/breakdown", {
+        headers: requestHeaders,
+      }),
     );
     const admin = createAdminClient();
-    const { data, error } = await admin.rpc("try_claim_rate_limit" as never, {
-      p_bucket: bucket,
-      p_key: actorKey,
-      p_max_requests: max,
-      p_window_seconds: RATE_WINDOW_SECONDS,
-    } as never);
+    const { data, error } = await admin.rpc(
+      "try_claim_rate_limit" as never,
+      {
+        p_bucket: bucket,
+        p_key: actorKey,
+        p_max_requests: max,
+        p_window_seconds: RATE_WINDOW_SECONDS,
+      } as never,
+    );
     if (error) throw new Error(error.message);
     return Boolean(data);
   } catch (err) {
@@ -60,39 +75,150 @@ export type BreakdownLeague = {
   /** False when nobody has ever opened this league in League Pulse. */
   synced: boolean;
   teams: number | null;
+  /** Sleeper's own league image id, straight off the payload. May be null. */
+  avatar: string | null;
 };
+
+/**
+ * Why a connect failed, so the caller can tell "wait a moment" apart from
+ * "your handle is wrong".
+ *
+ * A message string is not something a caller can branch on, and the difference
+ * matters: D7 says a 429 on an AUTO-RUN keeps the identity card with a Retry,
+ * and never drops the reader into a username form to retype a handle that is
+ * perfectly fine. Without this the panel could only ever say "failed", which
+ * opens the form.
+ */
+export type ConnectBreakdownFailure =
+  | "invalid-input"
+  | "no-saved-handle"
+  | "rate-limited"
+  | "not-found"
+  | "empty";
 
 export type ConnectBreakdownResult =
   | { ok: true; sleeperUserId: string; leagues: BreakdownLeague[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; reason: ConnectBreakdownFailure };
 
-export async function connectBreakdownLeagues(input: {
-  username: string;
-  season: string;
-}): Promise<ConnectBreakdownResult> {
+/**
+ * Either the reader typed a handle, or they have one saved and we read it here.
+ *
+ * The saved branch never takes a username from the client. A handle that
+ * arrived over the wire is a handle anyone can send, so trusting one labelled
+ * "saved" would make the whole saved path a way to look up a stranger with
+ * somebody else's rate-limit slot. The only thing the client says is "use
+ * mine", and the server decides what that means.
+ */
+export type ConnectBreakdownInput = { season: string } & (
+  { username: string; saved?: false } | { saved: true; username?: never }
+);
+
+/**
+ * Resolve the Sleeper identity this lookup runs as.
+ *
+ * Both branches end in the same pair (username for the messages, user id for
+ * the Sleeper call). The saved branch skips `getSleeperUser` entirely when the
+ * id was cached at save time, which is the one Sleeper call per visit that D3
+ * exists to save.
+ */
+async function resolveConnectIdentity(
+  input: ConnectBreakdownInput,
+): Promise<
+  | { ok: true; username: string; sleeperUserId: string }
+  | { ok: false; error: string; reason: ConnectBreakdownFailure }
+> {
+  if (input.saved === true) {
+    const supabase = await createClient();
+    const saved = await loadSavedSleeperHandle(supabase);
+    if (!saved) {
+      return {
+        ok: false,
+        reason: "no-saved-handle",
+        error:
+          "You have no saved Sleeper username. Type one below, or save it in My Beacon.",
+      };
+    }
+
+    if (!(await claimSlot("breakdown_connect", CONNECT_RATE_MAX))) {
+      return {
+        ok: false,
+        reason: "rate-limited",
+        error: LOOKUP_THROTTLED_MESSAGE,
+      };
+    }
+
+    // Null only for a row saved before the id was stored. One Sleeper call
+    // fills it in and writes it back, so the next visit costs nothing.
+    const filled = saved.sleeperUserId
+      ? saved
+      : await ensureSleeperUserId(supabase, saved);
+    if (!filled.sleeperUserId) {
+      return {
+        ok: false,
+        reason: "not-found",
+        error: `Sleeper no longer has a user called "${saved.username}". Type the current one below.`,
+      };
+    }
+    return {
+      ok: true,
+      username: filled.username,
+      sleeperUserId: filled.sleeperUserId,
+    };
+  }
+
   const username = String(input.username ?? "").trim();
   // The dot is allowed because Sleeper handles may contain one, but a run of
   // them would become a path segment in the Sleeper URL this is about to build.
   if (!USERNAME_PATTERN.test(username) || username.includes("..")) {
-    return { ok: false, error: "That does not look like a Sleeper username." };
-  }
-  const season = String(input.season ?? "").trim();
-  if (!/^\d{4}$/.test(season)) {
-    return { ok: false, error: "Pick a season." };
+    return {
+      ok: false,
+      reason: "invalid-input",
+      error: "That does not look like a Sleeper username.",
+    };
   }
 
   if (!(await claimSlot("breakdown_connect", CONNECT_RATE_MAX))) {
-    return { ok: false, error: "That is a lot of lookups in one minute. Give it a moment." };
+    return {
+      ok: false,
+      reason: "rate-limited",
+      error: LOOKUP_THROTTLED_MESSAGE,
+    };
   }
 
   const user = await getSleeperUser(username);
   if (!user) {
-    return { ok: false, error: `Sleeper has no user called "${username}".` };
+    return {
+      ok: false,
+      reason: "not-found",
+      error: `Sleeper has no user called "${username}".`,
+    };
+  }
+  return { ok: true, username, sleeperUserId: user.user_id };
+}
+
+export async function connectBreakdownLeagues(
+  input: ConnectBreakdownInput,
+): Promise<ConnectBreakdownResult> {
+  // The season is checked first because it costs nothing and it is the one
+  // input that is wrong just as often on the saved path as on the typed one.
+  const season = String(input.season ?? "").trim();
+  if (!/^\d{4}$/.test(season)) {
+    return { ok: false, reason: "invalid-input", error: "Pick a season." };
   }
 
-  const leagues = await getSleeperLeagues(user.user_id, season);
+  // Shape and ownership first, then the rate-limit slot, then Sleeper. A
+  // request that was never going to run must not spend the reader's budget.
+  const identity = await resolveConnectIdentity(input);
+  if (!identity.ok) return identity;
+  const { username, sleeperUserId } = identity;
+
+  const leagues = await getSleeperLeagues(sleeperUserId, season);
   if (leagues.length === 0) {
-    return { ok: false, error: `No ${season} leagues found for ${username}.` };
+    return {
+      ok: false,
+      reason: "empty",
+      error: `No ${season} leagues found for ${username}.`,
+    };
   }
 
   const admin = createAdminClient();
@@ -103,7 +229,9 @@ export async function connectBreakdownLeagues(input: {
     .select("id, sleeper_league_id")
     .in("sleeper_league_id", sleeperIds);
 
-  const rowBySleeperId = new Map((leagueRows ?? []).map((l) => [l.sleeper_league_id, l]));
+  const rowBySleeperId = new Map(
+    (leagueRows ?? []).map((l) => [l.sleeper_league_id, l]),
+  );
   const rowIds = (leagueRows ?? []).map((l) => l.id);
 
   const { data: rosterRows } = rowIds.length
@@ -116,11 +244,14 @@ export async function connectBreakdownLeagues(input: {
   const mineByLeagueRow = new Map<string, number>();
   const rosterCountByLeagueRow = new Map<string, number>();
   for (const r of rosterRows ?? []) {
-    rosterCountByLeagueRow.set(r.league_id, (rosterCountByLeagueRow.get(r.league_id) ?? 0) + 1);
+    rosterCountByLeagueRow.set(
+      r.league_id,
+      (rosterCountByLeagueRow.get(r.league_id) ?? 0) + 1,
+    );
     const co = Array.isArray(r.co_owners) ? r.co_owners : [];
     const owns =
-      r.owner_user_id === user.user_id ||
-      co.some((c) => typeof c === "string" && c === user.user_id);
+      r.owner_user_id === sleeperUserId ||
+      co.some((c) => typeof c === "string" && c === sleeperUserId);
     if (owns) mineByLeagueRow.set(r.league_id, Number(r.sleeper_roster_id));
   }
 
@@ -134,6 +265,7 @@ export async function connectBreakdownLeagues(input: {
       rosterId,
       synced: Boolean(row && (rosterCountByLeagueRow.get(row.id) ?? 0) > 0),
       teams: l.total_rosters ?? null,
+      avatar: l.avatar ?? null,
     };
   });
 
@@ -146,7 +278,7 @@ export async function connectBreakdownLeagues(input: {
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
 
-  return { ok: true, sleeperUserId: user.user_id, leagues: out };
+  return { ok: true, sleeperUserId, leagues: out };
 }
 
 export type SyncBreakdownLeagueResult =
@@ -181,13 +313,16 @@ export async function syncBreakdownLeague(input: {
   try {
     const requestHeaders = await headers();
     actorKey = await resolveRateLimitActorKey(
-      new Request("https://ffbeacon.internal/breakdown", { headers: requestHeaders }),
+      new Request("https://ffbeacon.internal/breakdown", {
+        headers: requestHeaders,
+      }),
     );
   } catch (err) {
     console.error("[breakdown] could not derive a sync limit key", err);
     return {
       ok: false,
-      error: "Syncing is unavailable right now. Open the league in League Pulse instead.",
+      error:
+        "Syncing is unavailable right now. Open the league in League Pulse instead.",
     };
   }
 

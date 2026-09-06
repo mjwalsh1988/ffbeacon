@@ -5,8 +5,8 @@ import {
   ListOrdered,
   Shield,
   Star,
-  Trophy,
 } from "lucide-react";
+import { LeagueLogo } from "@/components/league-logo";
 import {
   loadBoardTopN,
   type FeaturedBoardMeta,
@@ -173,13 +173,12 @@ export function FeaturedLeagueBlock({
       title={league.name}
     >
       <div className="rounded-card border border-line bg-surface p-4 sm:p-5">
+        {/* The league's own logo, where a generic trophy used to sit. It is
+            decorative: the league name is the block's heading directly above,
+            and a league with no logo gets a same-sized placeholder so the card
+            keeps its shape. Rendered at every width. */}
         <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-line bg-base text-brand-cyan"
-          >
-            <Trophy className="h-5 w-5" />
-          </span>
+          <LeagueLogo avatarId={league.avatar} name={league.name} size={40} />
           <p className="mt-0.5 text-sm text-ink-muted">
             {league.season} season
             {league.totalRosters ? `, ${league.totalRosters} teams` : ""}

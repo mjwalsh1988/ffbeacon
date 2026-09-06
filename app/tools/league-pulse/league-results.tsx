@@ -19,6 +19,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { LeagueOpenLink } from "@/components/league-open-link";
+import { LeagueLogo } from "@/components/league-logo";
 import type { SleeperLeague } from "@/lib/sleeper";
 import {
   groupLeaguesByCategory,
@@ -138,9 +139,23 @@ function leagueHref(
  * "how am I doing" scan, and how the LEAGUE is doing is not that; it moves to
  * the detail sheet, which already leads with it, and stays in the row button's
  * accessible name so nothing is lost to a screen reader.
+ *
+ * The first track is the league's own logo, 3rem for a 48px image. It is a
+ * fixed track rather than an auto one so a league with no logo (Sleeper leagues
+ * mostly have none) still reserves the same width and the names below it stay
+ * on one left edge.
  */
-const PUBLIC_GRID = "grid-cols-[minmax(0,1fr)_7rem_4.5rem_16rem]";
+const PUBLIC_GRID = "grid-cols-[3rem_minmax(0,1fr)_7rem_4.5rem_16rem]";
 const MOBILE_GRID = "grid-cols-[minmax(0,1fr)_1.5rem]";
+
+/**
+ * Phone rows: the logo column and everything else.
+ *
+ * The logo spans BOTH rows of the row (the name line and the standing line
+ * beneath it) and centres itself across them, which is why it lives on the `li`
+ * rather than inside the button. 2.5rem holds the 40px phone logo.
+ */
+const MOBILE_LOGO_GRID = "grid-cols-[2.5rem_minmax(0,1fr)]";
 
 /**
  * League results render in two variants:
@@ -704,6 +719,12 @@ function DesktopPublicList({
         aria-hidden="true"
         className={`grid items-center gap-3 border-b border-line bg-surface px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ink-subtle ${PUBLIC_GRID}`}
       >
+        {/* An in-flow placeholder holding the logo track open. NOT sr-only:
+            that compiles to position:absolute, which takes the element out
+            of the grid flow entirely, so every heading below shifted one
+            track left and sat over the wrong column. It says nothing either
+            way, because this whole strip is aria-hidden. */}
+        <span />
         <span>League</span>
         <span className="text-center">Status</span>
         <span className="text-center">Teams</span>
@@ -722,11 +743,11 @@ function DesktopPublicList({
               key={league.league_id}
               className={`group grid items-center gap-3 px-4 transition-colors hover:bg-surface/60 focus-within:bg-surface/60 ${PUBLIC_GRID}`}
             >
-              {/* col-span-3 + subgrid: the link is one grid item that borrows the
-                  parent's first three tracks, so its cells cannot drift off the
-                  headings above them. Horizontal padding lives on the li, not
-                  here, because padding on a subgrid item would shift its tracks
-                  out of step with the parent's. */}
+              {/* col-span-4 + subgrid: the link is one grid item that borrows the
+                  parent's first four tracks (logo, league, status, teams), so
+                  its cells cannot drift off the headings above them. Horizontal
+                  padding lives on the li, not here, because padding on a subgrid
+                  item would shift its tracks out of step with the parent's. */}
               <LeagueOpenLink
                 sleeperLeagueId={league.league_id}
                 href={leagueHref(
@@ -735,8 +756,15 @@ function DesktopPublicList({
                   league.name,
                 )}
                 ariaLabel={`Open ${league.name}, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
-                className="col-span-3 grid grid-cols-subgrid items-center py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan"
+                className="col-span-4 grid grid-cols-subgrid items-center py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan"
               >
+                {/* Decorative, and the name is right beside it, so it adds
+                    nothing to the link's accessible name. */}
+                <LeagueLogo
+                  avatarId={league.avatar}
+                  name={league.name}
+                  size={48}
+                />
                 <span className="min-w-0">
                   <span className="flex items-center gap-1.5 text-base font-semibold text-ink">
                     <span className="truncate">{league.name}</span>
@@ -816,10 +844,15 @@ function MobilePublicList({
     <div className="overflow-hidden rounded-card border border-line md:hidden">
       <div
         aria-hidden="true"
-        className={`grid items-center gap-3 border-b border-line bg-surface px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ink-subtle ${MOBILE_GRID}`}
+        className={`grid items-center gap-3 border-b border-line bg-surface px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ink-subtle ${MOBILE_LOGO_GRID}`}
       >
-        <span>League and your team</span>
+        {/* An in-flow placeholder holding the logo track open. NOT sr-only:
+            that compiles to position:absolute, which takes the element out
+            of the grid flow entirely, so every heading below shifted one
+            track left and sat over the wrong column. It says nothing either
+            way, because this whole strip is aria-hidden. */}
         <span />
+        <span>League and your team</span>
       </div>
       <ul
         role="list"
@@ -834,14 +867,24 @@ function MobilePublicList({
           return (
             <li
               key={league.league_id}
-              className="group transition-colors hover:bg-surface/60 focus-within:bg-surface/60"
+              className={`group grid gap-x-3 px-4 transition-colors hover:bg-surface/60 focus-within:bg-surface/60 ${MOBILE_LOGO_GRID}`}
             >
+              {/* Column one of the row, spanning the name line and the standing
+                  line under it, so it is centred against the pair rather than
+                  hanging off the top of the row. */}
+              <span className="row-span-2 self-center">
+                <LeagueLogo
+                  avatarId={league.avatar}
+                  name={league.name}
+                  size={40}
+                />
+              </span>
               <button
                 type="button"
                 onClick={() => onOpen(league.league_id)}
                 aria-haspopup="dialog"
                 aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams. ${describeTeamStanding(summary, league.total_rosters)}`}
-                className={`grid w-full items-center gap-3 px-4 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan ${MOBILE_GRID}`}
+                className={`grid w-full items-center gap-3 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-cyan ${MOBILE_GRID}`}
               >
                 <span className="min-w-0">
                   <span className="block truncate text-base font-semibold text-ink">
@@ -864,7 +907,7 @@ function MobilePublicList({
               </button>
               {/* The row's headline on mobile, not a footnote to it: the width
                   the league-status badge used to take now belongs to this. */}
-              <div className="px-4 pb-3 pt-2">
+              <div className="pb-3 pt-2">
                 <TeamStandingCell
                   summary={summary}
                   leagueName={league.name}
@@ -920,7 +963,13 @@ function DesktopDashboardTable({
             the width two labelled pill buttons were spending. */}
         <thead className="bg-surface text-xs font-semibold uppercase tracking-wide text-ink-subtle">
           <tr>
+            {/* The logo cell holds a decorative image and nothing to announce,
+                so the heading names the column for anyone navigating the table
+                by cell without adding a word to any row. */}
             <th scope="col" className="px-4 py-3 text-left">
+              <span className="sr-only">League logo</span>
+            </th>
+            <th scope="col" className="py-3 pr-4 text-left">
               League
             </th>
             <th scope="col" className="px-3 py-3 text-center">
@@ -946,7 +995,14 @@ function DesktopDashboardTable({
                 key={league.league_id}
                 className="transition-colors hover:bg-surface/40"
               >
-                <td className="px-4 py-4">
+                <td className="px-4 py-4 align-middle">
+                  <LeagueLogo
+                    avatarId={league.avatar}
+                    name={league.name}
+                    size={48}
+                  />
+                </td>
+                <td className="py-4 pr-4">
                   {/* The switches sit OUTSIDE the link, not merely beside it: a
                       button inside a link is invalid markup and a browser will
                       not let you press it reliably. The link is still the only
@@ -1072,8 +1128,17 @@ function MobileDashboardCards({
         return (
           <li
             key={league.league_id}
-            className="group rounded-card border border-line bg-surface transition-colors hover:bg-surface-elevated focus-within:bg-surface-elevated"
+            className={`group grid gap-x-3 rounded-card border border-line bg-surface px-4 transition-colors hover:bg-surface-elevated focus-within:bg-surface-elevated ${MOBILE_LOGO_GRID}`}
           >
+            {/* Column one of the card, spanning the name line and the standing
+                line under it, so it is centred against the pair. */}
+            <span className="row-span-2 self-center">
+              <LeagueLogo
+                avatarId={league.avatar}
+                name={league.name}
+                size={40}
+              />
+            </span>
             {/* The standing block sits below the button rather than inside it:
                 it can hold a Sync button, and a button inside a button is
                 invalid markup. */}
@@ -1082,7 +1147,7 @@ function MobileDashboardCards({
               onClick={() => onOpen(league.league_id)}
               aria-haspopup="dialog"
               aria-label={`Open details for ${league.name}, ${label}, ${league.total_rosters} teams. ${isFeatured ? "Featured." : "Not featured."} ${isShown ? "Shown on profile." : "Hidden from profile."} ${describeTeamStanding(summary, league.total_rosters, bulkStatus)}`}
-              className="block w-full px-4 pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
+              className="block w-full pt-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-brand-cyan"
             >
               <span className="flex flex-wrap items-start justify-between gap-2">
                 <span className="inline-flex items-center gap-1.5 text-base font-semibold text-ink">
@@ -1099,7 +1164,7 @@ function MobileDashboardCards({
                 {league.total_rosters} teams, {league.season}
               </span>
             </button>
-            <div className="px-4 pb-4 pt-3">
+            <div className="pb-4 pt-3">
               <TeamStandingCell
                 summary={summary}
                 leagueName={league.name}

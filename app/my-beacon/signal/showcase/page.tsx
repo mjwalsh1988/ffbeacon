@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSleeperUser } from "@/lib/sleeper";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import {
+  ensureSleeperUserId,
+  loadSavedSleeperHandle,
+} from "@/lib/sleeper-handle/resolve";
 import { loadOwnerSignal } from "@/lib/signal/editor-data";
 import { SignalEditorShell } from "@/components/signal/signal-editor-shell";
 import { LinksEditor } from "../links-editor";
@@ -67,40 +70,47 @@ export default async function SignalShowcasePage() {
     }
   }
 
-  // Featured-league picker data: the owner's already-synced leagues. We resolve
-  // their Sleeper user id from the saved username and match synced league_users
-  // rows. (This editor page MAY call Sleeper; the public profile never does.)
+  // Featured-league picker data: the owner's already-synced leagues, matched
+  // against synced league_users rows by the reader's Sleeper user id.
+  //
+  // That id is stored with the handle (D3), so this page usually reaches
+  // Sleeper zero times. `ensureSleeperUserId` is the one call a row saved
+  // before migration 0268 still costs, and it writes the id back.
   const { data: prefs } = await supabase
     .from("user_preferences")
     .select("sleeper_league_settings")
     .eq("user_id", user!.id)
     .maybeSingle();
+  // The LEAGUE keys only: signal_league_ids. The identity is resolved below.
   const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
 
+  const savedHandle = await loadSavedSleeperHandle(supabase);
+  const handle =
+    savedHandle && !savedHandle.sleeperUserId
+      ? await ensureSleeperUserId(supabase, savedHandle)
+      : savedHandle;
+
   let leagueOptions: SignalLeagueOption[] = [];
-  if (settings.username) {
-    const sleeperUser = await getSleeperUser(settings.username);
-    if (sleeperUser) {
-      const { data: memberships } = await supabase
-        .from("league_users")
-        .select("league_id")
-        .eq("sleeper_user_id", sleeperUser.user_id);
-      const leagueIds = Array.from(
-        new Set((memberships ?? []).map((m) => m.league_id)),
-      );
-      if (leagueIds.length > 0) {
-        const { data: leagueRows } = await supabase
-          .from("leagues")
-          .select("id, sleeper_league_id, name, season, total_rosters")
-          .in("id", leagueIds)
-          .order("season", { ascending: false });
-        leagueOptions = (leagueRows ?? []).map((l) => ({
-          sleeperLeagueId: l.sleeper_league_id,
-          name: l.name,
-          season: l.season,
-          totalRosters: l.total_rosters,
-        }));
-      }
+  if (handle?.sleeperUserId) {
+    const { data: memberships } = await supabase
+      .from("league_users")
+      .select("league_id")
+      .eq("sleeper_user_id", handle.sleeperUserId);
+    const leagueIds = Array.from(
+      new Set((memberships ?? []).map((m) => m.league_id)),
+    );
+    if (leagueIds.length > 0) {
+      const { data: leagueRows } = await supabase
+        .from("leagues")
+        .select("id, sleeper_league_id, name, season, total_rosters")
+        .in("id", leagueIds)
+        .order("season", { ascending: false });
+      leagueOptions = (leagueRows ?? []).map((l) => ({
+        sleeperLeagueId: l.sleeper_league_id,
+        name: l.name,
+        season: l.season,
+        totalRosters: l.total_rosters,
+      }));
     }
   }
 

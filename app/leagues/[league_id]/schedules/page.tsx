@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { ownerLine } from "@/lib/team-label";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
@@ -52,6 +54,7 @@ import {
   sidesFor,
   withUsername,
 } from "@/components/league-schedule/format";
+import { matchViewerRoster } from "@/lib/league-viewer";
 
 export const dynamic = "force-dynamic";
 
@@ -123,10 +126,6 @@ export default async function LeagueSchedulePage({
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
-  const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim()
-      ? sp.username.trim()
-      : null;
   const view: "week" | "team" = sp.view === "team" ? "team" : "week";
   const requestedWeek = intOrNull(sp.week);
   const requestedRoster = intOrNull(sp.roster);
@@ -142,20 +141,30 @@ export default async function LeagueSchedulePage({
 
   const supabase = await createClient();
 
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
+  // `linkUsername` is what a link built on this page may carry, which is the
+  // handle only when the reader arrived on one.
+  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const searchedUsername = viewer?.username ?? null;
+  const linkUsername = viewerLinkUsername(viewer);
+
   const { otherLeagues } = await loadLeagueHeaderActions(
     supabase,
     league.id,
     sleeperLeagueId,
-    searchedUsername,
+    viewer,
     league.season != null ? String(league.season) : null,
   );
 
-  const homeHref = searchedUsername
-    ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+  // No handle on either link for a saved reader: /tools/league-pulse resolves
+  // the same identity itself, and the deep view matches on the Sleeper user id.
+  const homeHref = linkUsername
+    ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
     : "/tools/league-pulse";
   const leagueHref = withUsername(
     `/leagues/${sleeperLeagueId}`,
-    searchedUsername,
+    linkUsername,
   );
 
   // Format is derived from the league's own Sleeper settings; only the value
@@ -186,6 +195,7 @@ export default async function LeagueSchedulePage({
     : null;
   const mastheadProps: LeagueMastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -218,7 +228,7 @@ export default async function LeagueSchedulePage({
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab="schedules"
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={homeHref}
       crumbs={[{ label: league.name, href: leagueHref }, { label: "Schedules" }]}
       copyHref={`/leagues/${sleeperLeagueId}/schedules`}
@@ -279,6 +289,8 @@ export default async function LeagueSchedulePage({
             playoffWeekStart={playoffWeekStart}
             resynced={!pulseCached}
             searchedUsername={searchedUsername}
+            viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+            linkUsername={linkUsername}
             view={view}
             requestedWeek={requestedWeek}
             requestedRoster={requestedRoster}
@@ -341,6 +353,8 @@ async function ScheduleBody({
   playoffWeekStart,
   resynced,
   searchedUsername,
+  viewerSleeperUserId,
+  linkUsername,
   view,
   requestedWeek,
   requestedRoster,
@@ -351,6 +365,11 @@ async function ScheduleBody({
   playoffWeekStart: number;
   resynced: boolean;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, tried before the handle: a saved handle is
+   *  a Sleeper username while the teams carry display names. */
+  viewerSleeperUserId: string | null;
+  /** The handle every link in this section may carry, or null. */
+  linkUsername: string | null;
   view: "week" | "team";
   requestedWeek: number | null;
   requestedRoster: number | null;
@@ -377,6 +396,7 @@ async function ScheduleBody({
     board,
     requestedRoster,
     searchedUsername,
+    viewerSleeperUserId,
   );
   const insightWeeks: InsightWeek[] = board.weeks.map((week) => ({
     week: week.week,
@@ -396,7 +416,7 @@ async function ScheduleBody({
     <div className="mt-6 space-y-6">
       <ScheduleControls
         sleeperLeagueId={sleeperLeagueId}
-        searchedUsername={searchedUsername}
+        linkUsername={linkUsername}
         view={view}
         week={selectedWeek}
         rosterId={
@@ -449,7 +469,7 @@ async function ScheduleBody({
                 team={selectedTeam}
                 rows={buildSeasonRows(board, selectedTeam.sleeperRosterId)}
                 sleeperLeagueId={sleeperLeagueId}
-                searchedUsername={searchedUsername}
+                linkUsername={linkUsername}
                 playoffWeekStart={board.playoffWeekStart}
                 summary={{
                   remainingSosRank: selectedTeam.sosRank,
@@ -487,7 +507,7 @@ async function ScheduleBody({
             <WeekBoard
               week={weekView}
               sleeperLeagueId={sleeperLeagueId}
-              searchedUsername={searchedUsername}
+              linkUsername={linkUsername}
             />
           )}
         </div>
@@ -505,7 +525,7 @@ async function ScheduleBody({
             board={board}
             insightWeeks={insightWeeks}
             sleeperLeagueId={sleeperLeagueId}
-            searchedUsername={searchedUsername}
+            linkUsername={linkUsername}
           />
           <SourcesPanel />
         </aside>
@@ -750,12 +770,13 @@ function SpotlightPanel({
   board,
   insightWeeks,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
 }: {
   board: ScheduleBoard;
   insightWeeks: InsightWeek[];
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  /** The handle each spotlight link may carry, or null. */
+  linkUsername: string | null;
 }) {
   const week =
     insightWeeks.find((w) => w.week === board.currentWeek) ??
@@ -787,7 +808,7 @@ function SpotlightPanel({
               label="Closest game"
               matchup={spotlight.closest}
               sleeperLeagueId={sleeperLeagueId}
-              searchedUsername={searchedUsername}
+              linkUsername={linkUsername}
             />
           )}
           {spotlight.mismatch && spotlight.mismatch !== spotlight.closest && (
@@ -795,7 +816,7 @@ function SpotlightPanel({
               label="Biggest mismatch"
               matchup={spotlight.mismatch}
               sleeperLeagueId={sleeperLeagueId}
-              searchedUsername={searchedUsername}
+              linkUsername={linkUsername}
             />
           )}
         </ul>
@@ -814,16 +835,16 @@ function SpotlightItem({
   label,
   matchup,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
 }: {
   label: string;
   matchup: ScheduleMatchup;
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
 }) {
   const href = withUsername(
     `/leagues/${sleeperLeagueId}/schedules/${matchup.week}/${matchup.home.sleeperRosterId}`,
-    searchedUsername,
+    linkUsername,
   );
   const away = matchup.away;
   const prob = matchup.homeWinProb;
@@ -1001,21 +1022,31 @@ function resolveSelectedTeam(
   board: ScheduleBoard,
   requested: number | null,
   searchedUsername: string | null,
+  viewerSleeperUserId: string | null,
 ): ScheduleTeam | null {
-  const byRequest =
-    requested === null
-      ? null
-      : (board.teams.find((t) => t.sleeperRosterId === requested) ?? null);
+  // The precedence (explicit roster, then Sleeper user id, then co-owner id,
+  // then display name) is `matchViewerRoster`, and it lives in exactly one
+  // place. A second copy here agreed with it by coincidence, which is the
+  // arrangement that let the display-name-only match survive as long as it did.
+  const matched = matchViewerRoster(
+    board.teams.map((t) => ({
+      sleeperRosterId: t.sleeperRosterId,
+      ownerSleeperUsername: t.ownerHandle,
+      ownerSleeperUserId: t.ownerUserId,
+      coOwnerIds: t.coOwnerIds,
+    })),
+    searchedUsername,
+    requested,
+    viewerSleeperUserId,
+  );
 
-  const handle = searchedUsername?.toLowerCase() ?? null;
-  const byHandle =
-    handle === null
-      ? null
-      : (board.teams.find(
-          (t) => (t.ownerHandle ?? "").toLowerCase() === handle,
-        ) ?? null);
-
-  return byRequest ?? byHandle ?? board.teams[0] ?? null;
+  // The tail is this page's own: a schedule board always shows SOME team, so
+  // an unmatched reader lands on the first rather than on an empty page.
+  return (
+    board.teams.find((t) => t.sleeperRosterId === matched) ??
+    board.teams[0] ??
+    null
+  );
 }
 
 /**

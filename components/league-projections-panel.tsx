@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Medal, Sparkles, TrendingDown, Trophy } from "lucide-react";
 import { SidePanel } from "@/components/side-panel";
+import { LeagueLogo } from "@/components/league-logo";
 import {
   FILTER_THRESHOLD,
   PanelFilterField,
@@ -199,6 +200,11 @@ function Stat({
  * The finish leads the accessible name because that is what the list is sorted
  * on and what the reader came for; the league name follows. A medal on the top
  * three matches the trophy the league list already puts on the same finishes.
+ *
+ * The logo leads the row visually and says nothing: it is decorative, the
+ * league name is right beside it, and the link's aria-label is unchanged. It
+ * renders at every width, so the gap tightens on a phone rather than the logo
+ * being dropped.
  */
 function LeagueRow({
   league,
@@ -227,8 +233,13 @@ function LeagueRow({
       <Link
         href={href}
         aria-label={`${ordinal(projectedSeed)} of ${rankedTeamCount} in ${league.leagueName}${league.statusLabel ? `, ${league.statusLabel}` : ""}. Open this league.`}
-        className="flex items-center gap-3 rounded-card border border-line bg-base/40 px-3 py-2.5 transition-colors hover:border-line-accent hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        className="flex items-center gap-2.5 rounded-card border border-line bg-base/40 px-3 py-2.5 transition-colors hover:border-line-accent hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:gap-3"
       >
+        <LeagueLogo
+          avatarId={league.avatar}
+          name={league.leagueName}
+          size={32}
+        />
         <span
           aria-hidden="true"
           className={`inline-flex h-9 w-11 shrink-0 items-center justify-center gap-1 rounded-full border font-mono text-xs font-bold tabular-nums ${

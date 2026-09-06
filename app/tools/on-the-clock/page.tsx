@@ -17,7 +17,10 @@ import {
 import { currentNflSeason } from "@/lib/sleeper";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { loadOnTheClockSettings } from "@/lib/on-the-clock/settings";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import {
+  resolveHandleGate,
+  resolveSleeperViewer,
+} from "@/lib/sleeper-handle/resolve";
 import { OnTheClockClient } from "./on-the-clock-client";
 import { StartDraftingButton } from "./start-drafting-button";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
@@ -45,11 +48,16 @@ export const dynamic = "force-dynamic";
 /**
  * On The Clock - public live-draft helper (PHASE 5: live data wiring).
  *
- * Server shell: resolves the dynamic NFL season, the signed-in user's saved
- * Sleeper handle (prefill), and the admin On The Clock settings (feature flag +
- * Realtime toggle + sync cooldown). When the feature is OFF it renders a clean
- * "not enabled yet" state instead of the cockpit. When ON, the client wires the
- * leagues / draft / sync routes and Supabase Realtime.
+ * Server shell: resolves the dynamic NFL season, the reader's Sleeper handle
+ * gate, and the admin On The Clock settings (feature flag + Realtime toggle +
+ * sync cooldown). When the feature is OFF it renders a clean "not enabled yet"
+ * state instead of the cockpit. When ON, the client wires the leagues / draft /
+ * sync routes and Supabase Realtime.
+ *
+ * The gate is the whole identity answer, not a prefill: which of the four
+ * states this reader is in, the saved handle behind it, and the Sleeper user id
+ * saved alongside it. `?username=` still wins over a saved handle (D2), so a
+ * shared link opens on the handle it names.
  *
  * The draft DATA is live (Phase 5). PHASE 6A/6A.2: the available big board is the
  * real FF Beacon ranked board. The value SOURCE is FORCED to FF Beacon and the
@@ -58,27 +66,27 @@ export const dynamic = "force-dynamic";
  * known only after a league is selected). Team Need + Trade Analyzer remain
  * sample/mock until Phase 6B/6C.
  */
-export default async function OnTheClockPage() {
+export default async function OnTheClockPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ username?: string | string[] }>;
+}) {
   const season = currentNflSeason();
 
   // Admin settings drive the feature gate, Realtime toggle, and sync cooldown.
   const admin = createAdminClient();
   const settings = await loadOnTheClockSettings(admin);
 
-  // Saved Sleeper handle (signed-in users) prefills the username gate.
-  let savedUsername = "";
+  const params = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (authUser) {
-    const { data: prefs } = await supabase
-      .from("user_preferences")
-      .select("sleeper_league_settings")
-      .eq("user_id", authUser.id)
-      .maybeSingle();
-    savedUsername = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? "";
-  }
+  // Both, in parallel. The gate answers "guest" for a signed-out reader
+  // without ever consulting the URL, so on its own a shared `?username=` link
+  // would do nothing for the readers most likely to be following one. Both
+  // reads are memoized per request, so this is one round trip, not two.
+  const [handleGate, urlViewer] = await Promise.all([
+    resolveHandleGate(supabase, params.username),
+    resolveSleeperViewer(supabase, params.username),
+  ]);
 
   // Confirmed Discord members don't need the "Join our Discord" CTAs; the hero
   // button becomes a scroll-to-draft shortcut and the bottom CTA points them
@@ -106,7 +114,8 @@ export default async function OnTheClockPage() {
               <OnTheClockClient
                 masthead={<Masthead isMember={isMember} season={season} />}
                 defaultSeason={season}
-                defaultUsername={savedUsername}
+                handleGate={handleGate}
+                urlViewer={urlViewer}
                 realtimeEnabled={settings.sync.realtimeEnabled}
                 autoRefreshEnabled={settings.sync.autoRefreshEnabled}
                 autoRefreshSeconds={settings.sync.autoRefreshSeconds}

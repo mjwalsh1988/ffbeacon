@@ -41,6 +41,7 @@ import { claimRateLimitSlot } from "@/lib/rate-limit-claim";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { findTrades } from "@/lib/trade-finder/engine";
 import { loadTradeFinderLeague } from "@/lib/trade-finder-data";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { loadTendencyContext } from "@/lib/trade-finder-tendency-context";
 import {
   findCrossLeagueTrade,
@@ -315,10 +316,21 @@ export async function findLeagueTrade(input: {
   } = await supabase.auth.getUser();
 
   const resolvedSource = await resolveSourceSlug(supabase, input.source ?? undefined);
+
+  // The reader's own Sleeper identity, from their SESSION rather than from the
+  // payload. It is what makes this work for a signed-in reader on a clean URL:
+  // a saved handle is a Sleeper USERNAME while league_users carries a DISPLAY
+  // NAME, so the handle below can legitimately match nobody.
+  const sessionViewer = await resolveSleeperViewer(
+    supabase,
+    typeof input.username === "string" ? input.username : undefined,
+  );
+
   const league = await loadTradeFinderLeague(supabase, {
     sleeperLeagueId,
     sourceSlug: resolvedSource.slug,
     identity: {
+      sleeperUserId: sessionViewer?.sleeperUserId ?? null,
       username:
         typeof input.username === "string" && input.username.trim()
           ? input.username.trim()

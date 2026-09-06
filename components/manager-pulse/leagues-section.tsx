@@ -24,6 +24,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Crown, Medal, Trophy } from "lucide-react";
 import { SectionFrame } from "./section-frame";
+import { LeagueLogo } from "@/components/league-logo";
 import type { ManagerLeagueCategory, ManagerLeagueRow } from "@/lib/manager-pulse/types";
 
 const CATEGORY_LABEL: Record<ManagerLeagueCategory, string> = {
@@ -199,18 +200,24 @@ function LeagueCard({ row }: { row: ManagerLeagueRow }) {
   return (
     <li className="flex flex-col rounded-card border border-line bg-base/40 px-3 py-2.5 transition-colors hover:border-brand-cyan/40">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          {row.hasLeaguePulseLink ? (
-            <Link
-              href={`/leagues/${row.sleeperLeagueId}`}
-              className="inline-flex min-h-11 items-center gap-1 text-left text-sm font-semibold text-ink transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-            >
-              <span className="line-clamp-2">{nameText}</span>
-              <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-            </Link>
-          ) : (
-            <p className="line-clamp-2 text-sm font-semibold text-ink">{nameText}</p>
-          )}
+        {/* The logo is decorative and sits beside the name, which is the label.
+            It renders at every width; nothing about the card is dropped on a
+            phone to make room for it. */}
+        <div className="flex min-w-0 items-center gap-2">
+          <LeagueLogo avatarId={row.avatar} name={row.leagueName} size={32} />
+          <div className="min-w-0">
+            {row.hasLeaguePulseLink ? (
+              <Link
+                href={`/leagues/${row.sleeperLeagueId}`}
+                className="inline-flex min-h-11 items-center gap-1 text-left text-sm font-semibold text-ink transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+              >
+                <span className="line-clamp-2">{nameText}</span>
+                <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+              </Link>
+            ) : (
+              <p className="line-clamp-2 text-sm font-semibold text-ink">{nameText}</p>
+            )}
+          </div>
         </div>
         <p className="shrink-0 text-right font-mono text-xl font-extrabold leading-none tabular-nums text-ink">
           {recordLabel(row)}
@@ -313,24 +320,33 @@ function LeaguesTable({ rows, isSample }: { rows: ManagerLeagueRow[]; isSample?:
           return (
             <tr key={key} className="hover:bg-surface">
               <th scope="row" className="py-2 pr-3 text-left align-top font-normal">
-                {row.hasLeaguePulseLink ? (
-                  <Link
-                    href={`/leagues/${row.sleeperLeagueId}`}
-                    className="inline-flex min-h-11 items-center rounded text-left font-medium text-ink transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-                  >
-                    {nameText}
-                  </Link>
-                ) : (
-                  <span className="block font-medium text-ink">{nameText}</span>
-                )}
-                {/* A sibling of the link, not a child: below sm this is the only
-                    place type, finish and result reach a reader, and nesting it
-                    inside the link would fold it into the link's own accessible
-                    name, announcing a destination that is really a data
-                    summary. */}
-                <span className="mt-0.5 block text-xs text-ink-subtle sm:hidden">
-                  {mobileSummary}
-                </span>
+                {/* The logo is decorative, so it adds nothing to the row
+                    header's accessible name, which a `th` builds from its whole
+                    subtree. Centred against the block so it sits between the
+                    name line and the phone-only summary line beneath it. */}
+                <div className="flex items-center gap-2">
+                  <LeagueLogo avatarId={row.avatar} name={row.leagueName} size={32} />
+                  <div className="min-w-0">
+                    {row.hasLeaguePulseLink ? (
+                      <Link
+                        href={`/leagues/${row.sleeperLeagueId}`}
+                        className="inline-flex min-h-11 items-center rounded text-left font-medium text-ink transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                      >
+                        {nameText}
+                      </Link>
+                    ) : (
+                      <span className="block font-medium text-ink">{nameText}</span>
+                    )}
+                    {/* A sibling of the link, not a child: below sm this is the
+                        only place type, finish and result reach a reader, and
+                        nesting it inside the link would fold it into the link's
+                        own accessible name, announcing a destination that is
+                        really a data summary. */}
+                    <span className="mt-0.5 block text-xs text-ink-subtle sm:hidden">
+                      {mobileSummary}
+                    </span>
+                  </div>
+                </div>
               </th>
               <td className="hidden py-2 pr-3 align-top text-ink-muted sm:table-cell">
                 {categoryLabel}

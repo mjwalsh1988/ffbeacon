@@ -7,6 +7,12 @@
  * extra, not a sign-in wall. So these take a Sleeper username the same way
  * /tools/league-pulse does, rather than requiring an account.
  *
+ * A signed-in reader with a saved handle passes `{ saved: true }` instead of a
+ * username. The handle is then read server-side through
+ * `lib/sleeper-handle/resolve.ts`, never taken from the browser, and the
+ * Sleeper user id cached beside it means the lookup costs one Sleeper call
+ * instead of two.
+ *
  * All three are expensive by design. Pricing one league runs a full projection
  * pass over every roster plus two season simulations, and the all-leagues call
  * does that up to ten times. They are rate limited per actor and fail closed,
@@ -27,9 +33,13 @@
  */
 
 import { headers } from "next/headers";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 import { getSleeperLeagues, getSleeperUser } from "@/lib/sleeper";
+import {
+  ensureSleeperUserId,
+  loadSavedSleeperHandle,
+} from "@/lib/sleeper-handle/resolve";
 import { loadFaabSettings } from "@/lib/faab/settings";
 import { calculateLeagueFaab } from "@/lib/faab/league-faab";
 import { calculateAcrossLeagues, MAX_PRICED_LEAGUES } from "@/lib/faab/multi-league";
@@ -204,6 +214,8 @@ export type ConnectedLeague = {
   sleeperLeagueId: string;
   name: string;
   season: string;
+  /** Sleeper's own avatar id for the league. Null when it has no custom image. */
+  avatar: string | null;
   totalRosters: number | null;
   /** Your roster in it. Null when we hold no rosters for the league yet. */
   rosterId: number | null;
@@ -214,9 +226,35 @@ export type ConnectedLeague = {
   remainingBudget: number | null;
 };
 
+/**
+ * Why a lookup did not produce leagues.
+ *
+ * The panel needs the difference: a rate limit is worth a Retry button, a
+ * handle Sleeper cannot resolve is worth opening the form. A message string is
+ * not something a caller can branch on.
+ */
+export type ConnectFailure =
+  | "invalid-input"
+  | "no-saved-handle"
+  | "rate-limited"
+  | "unknown-user"
+  | "no-leagues";
+
 export type ConnectResult =
-  | { ok: true; sleeperUserId: string; leagues: ConnectedLeague[] }
-  | { ok: false; error: string };
+  | {
+      ok: true;
+      sleeperUserId: string;
+      /** The handle the lookup actually ran for, resolved server-side. */
+      username: string;
+      leagues: ConnectedLeague[];
+    }
+  | { ok: false; error: string; reason: ConnectFailure };
+
+/** What the caller is asking for: a typed handle, or the one we already hold. */
+export type ConnectInput = { season: string } & (
+  | { username: string; saved?: undefined }
+  | { saved: true; username?: undefined }
+);
 
 /**
  * Find the reader's leagues for a season.
@@ -225,34 +263,95 @@ export type ConnectResult =
  * that. Our own tables decide which of those we can actually price: a league
  * nobody has opened in League Pulse has no stored rosters, and pricing a bid
  * against rosters we do not have would be a guess dressed as an answer.
+ *
+ * Every cheap check runs BEFORE the rate-limit claim, so a typo or a missing
+ * handle costs the reader nothing out of their minute's budget.
  */
-export async function connectSleeperLeagues(input: {
-  username: string;
-  season: string;
-}): Promise<ConnectResult> {
-  const username = String(input.username ?? "").trim();
+export async function connectSleeperLeagues(
+  input: ConnectInput,
+): Promise<ConnectResult> {
+  const season = String(input.season ?? "").trim();
+  if (!/^\d{4}$/.test(season)) {
+    return { ok: false, error: "Pick a season.", reason: "invalid-input" };
+  }
+
+  const useSaved = input.saved === true;
+
+  let username = "";
+  // Filled from the saved identity when we already hold it, which is what lets
+  // the auto-run skip getSleeperUser entirely.
+  let cachedUserId: string | null = null;
+  // Held over the rate-limit claim so the pre-0268 upgrade happens after it.
+  let pendingHandle: Awaited<ReturnType<typeof loadSavedSleeperHandle>> = null;
+  let pendingClient: Awaited<ReturnType<typeof createClient>> | null = null;
+
+  if (useSaved) {
+    // Server-side, always. A handle the browser sent us is a handle anyone can
+    // send us, and this branch exists precisely because it is not one.
+    const supabase = await createClient();
+    const handle = await loadSavedSleeperHandle(supabase);
+    if (!handle) {
+      return {
+        ok: false,
+        error: "We have no Sleeper username saved for you yet.",
+        reason: "no-saved-handle",
+      };
+    }
+    username = handle.username.trim();
+    cachedUserId = handle.sleeperUserId;
+    // NOTE: a row saved before the id was stored is upgraded AFTER the rate
+    // limit below, never here. `ensureSleeperUserId` spends a Sleeper call and
+    // a write, and doing that before the claim would let a reader who clears
+    // their own cached id draw on the shared budget in lib/sleeper-budget.ts
+    // without spending any of their own. The Breakdown action orders it the
+    // same way.
+    pendingHandle = handle;
+    pendingClient = supabase;
+  } else {
+    username = String(input.username ?? "").trim();
+  }
+
   // The dot is allowed because Sleeper handles may contain one, but a run of
   // them would become a path segment in the Sleeper URL this is about to build.
   if (!USERNAME_PATTERN.test(username) || username.includes("..")) {
-    return { ok: false, error: "That does not look like a Sleeper username." };
-  }
-  const season = String(input.season ?? "").trim();
-  if (!/^\d{4}$/.test(season)) {
-    return { ok: false, error: "Pick a season." };
+    return {
+      ok: false,
+      error: "That does not look like a Sleeper username.",
+      reason: "invalid-input",
+    };
   }
 
   if (!(await claimSlot("faab_connect", CONNECT_RATE_MAX))) {
-    return { ok: false, error: "That is a lot of lookups in one minute. Give it a moment." };
+    return {
+      ok: false,
+      error: "That is a lot of lookups in one minute. Give it a moment.",
+      reason: "rate-limited",
+    };
   }
 
-  const user = await getSleeperUser(username);
-  if (!user) {
-    return { ok: false, error: `Sleeper has no user called "${username}".` };
+  // The slot is claimed. Now the pre-0268 upgrade may spend its call.
+  if (!cachedUserId && pendingHandle && pendingClient) {
+    cachedUserId = (await ensureSleeperUserId(pendingClient, pendingHandle))
+      .sleeperUserId;
   }
+
+  const sleeperUserId = cachedUserId ?? (await getSleeperUser(username))?.user_id ?? null;
+  if (!sleeperUserId) {
+    return {
+      ok: false,
+      error: `Sleeper has no user called "${username}".`,
+      reason: "unknown-user",
+    };
+  }
+  const user = { user_id: sleeperUserId };
 
   const leagues = await getSleeperLeagues(user.user_id, season);
   if (leagues.length === 0) {
-    return { ok: false, error: `No ${season} leagues found for ${username}.` };
+    return {
+      ok: false,
+      error: `No ${season} leagues found for ${username}.`,
+      reason: "no-leagues",
+    };
   }
 
   const admin = createAdminClient();
@@ -309,6 +408,7 @@ export async function connectSleeperLeagues(input: {
       sleeperLeagueId: l.league_id,
       name: l.name,
       season: l.season,
+      avatar: l.avatar ?? null,
       totalRosters: l.total_rosters ?? null,
       rosterId: mine?.rosterId ?? null,
       teamName: null,
@@ -322,7 +422,7 @@ export async function connectSleeperLeagues(input: {
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
 
-  return { ok: true, sleeperUserId: user.user_id, leagues: out };
+  return { ok: true, sleeperUserId: user.user_id, username, leagues: out };
 }
 
 export type LeagueSyncPatch = {

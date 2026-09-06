@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Suspense, cache } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
+import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
@@ -141,20 +143,26 @@ export default async function LeagueLineupsPage({
 }) {
   const { league_id: sleeperLeagueId } = await params;
   const sp = await searchParams;
-  const searchedUsername =
-    typeof sp.username === "string" && sp.username.trim() ? sp.username.trim() : null;
-
   const adminClient = createAdminClient();
   const synced = await getSyncedLeague(sleeperLeagueId);
   if (!synced) notFound();
   const { league, cached: pulseCached } = synced;
 
   const supabase = await createClient();
+
+  // Who this page is acting for: the ?username= handle when there is one,
+  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
+  // `linkUsername` is what a link built here may carry, which is the handle
+  // only when the reader arrived on one.
+  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const searchedUsername = viewer?.username ?? null;
+  const linkUsername = viewerLinkUsername(viewer);
+
   const { otherLeagues } = await loadLeagueHeaderActions(
     supabase,
     league.id,
     sleeperLeagueId,
-    searchedUsername,
+    viewer,
     league.season != null ? String(league.season) : null,
   );
 
@@ -172,6 +180,7 @@ export default async function LeagueLineupsPage({
 
   const mastheadProps: LeagueMastheadProps = {
     leagueName: league.name,
+    avatarId: sleeperLeague.avatar ?? null,
     season: league.season ?? null,
     teamCount: league.total_rosters ?? null,
     status: league.status ?? null,
@@ -191,16 +200,17 @@ export default async function LeagueLineupsPage({
         : null,
   };
 
-  const leagueHref = withUsername(`/leagues/${sleeperLeagueId}`, searchedUsername);
+  // The handle rides on a link only for a reader who arrived on one.
+  const leagueHref = withUsername(`/leagues/${sleeperLeagueId}`, linkUsername);
 
   return (
     <LeagueShell
       sleeperLeagueId={sleeperLeagueId}
       activeTab="lineups"
-      searchedUsername={searchedUsername}
+      viewer={viewer}
       homeHref={
-        searchedUsername
-          ? `/tools/league-pulse?username=${encodeURIComponent(searchedUsername)}`
+        linkUsername
+          ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
           : "/tools/league-pulse"
       }
       crumbs={[{ label: league.name, href: leagueHref }, { label: "Lineups" }]}
@@ -252,6 +262,8 @@ export default async function LeagueLineupsPage({
             metadata={league.metadata}
             resynced={!pulseCached}
             searchedUsername={searchedUsername}
+            viewerSleeperUserId={viewer?.sleeperUserId ?? null}
+            linkUsername={linkUsername}
             requestedRoster={intOrNull(sp.roster)}
             requestedWeek={intOrNull(sp.week)}
             formatConfigId={coverageOk ? context.formatConfigId : null}
@@ -292,6 +304,8 @@ async function LineupBody({
   metadata,
   resynced,
   searchedUsername,
+  viewerSleeperUserId,
+  linkUsername,
   requestedRoster,
   requestedWeek,
   formatConfigId,
@@ -303,6 +317,12 @@ async function LineupBody({
   metadata: unknown;
   resynced: boolean;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id. resolveRosterId tries it before the handle,
+   *  because a saved handle is a Sleeper USERNAME while league_users carries a
+   *  DISPLAY NAME, and Sleeper lets the two differ. */
+  viewerSleeperUserId: string | null;
+  /** The handle every link in this section may carry, or null. */
+  linkUsername: string | null;
   requestedRoster: number | null;
   requestedWeek: number | null;
   formatConfigId: string | null;
@@ -331,7 +351,13 @@ async function LineupBody({
   const [currentWeek, storedWeeks, rosterId, valueContext] = await Promise.all([
     resolveScheduleWeek(season, playoffWeekStart),
     loadStoredWeeks(supabase, leagueRowId, season),
-    resolveRosterId(supabase, leagueRowId, requestedRoster, searchedUsername),
+    resolveRosterId(
+      supabase,
+      leagueRowId,
+      requestedRoster,
+      searchedUsername,
+      viewerSleeperUserId,
+    ),
     loadLeagueValueContext(adminClient, leagueRowId),
   ]);
 
@@ -400,14 +426,14 @@ async function LineupBody({
 
   const decisionsHref = withUsername(
     `/leagues/${sleeperLeagueId}/decisions`,
-    searchedUsername,
+    linkUsername,
   );
 
   return (
     <div className="mt-6 space-y-6">
       <LineupControls
         sleeperLeagueId={sleeperLeagueId}
-        searchedUsername={searchedUsername}
+        linkUsername={linkUsername}
         week={week}
         weeks={weekOptions}
         rosterId={rosterId}
@@ -738,26 +764,29 @@ async function loadStoredWeeks(
 /**
  * Whose lineup to show.
  *
- * The explicit `?roster=` wins. Failing that, the searched Sleeper handle
- * picks their own team, which is the whole reason that param is carried across
- * every link in this section. Failing that, the first roster, so the page has
- * something to render rather than an empty state a reader cannot act on.
+ * The explicit `?roster=` wins. Failing that, the viewer's own team: by their
+ * Sleeper USER ID first, which is exact, then by their handle against the
+ * owner's display name, which is what a guest arriving on a `?username=` link
+ * has. Failing all of that, the first roster, so the page has something to
+ * render rather than an empty state a reader cannot act on.
  */
 async function resolveRosterId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   leagueRowId: string,
   requested: number | null,
   searchedUsername: string | null,
+  viewerSleeperUserId: string | null,
 ): Promise<number | null> {
   const { data } = await supabase
     .from("rosters")
-    .select("sleeper_roster_id, owner_user_id, league_users!inner(display_name)")
+    .select("sleeper_roster_id, owner_user_id, co_owners, league_users!inner(display_name)")
     .eq("league_id", leagueRowId)
     .order("sleeper_roster_id", { ascending: true });
 
   const rows = (data ?? []) as unknown as Array<{
     sleeper_roster_id: number;
     owner_user_id: string | null;
+    co_owners: unknown;
     league_users: { display_name: string | null } | Array<{ display_name: string | null }> | null;
   }>;
 
@@ -778,6 +807,18 @@ async function resolveRosterId(
 
   const ids = rows.map((r) => Number(r.sleeper_roster_id));
   if (requested !== null && ids.includes(requested)) return requested;
+
+  // The Sleeper user id is exact, so it is tried before the handle. Owner
+  // first, then co-owners, matching lib/league-viewer.ts.
+  const userId = viewerSleeperUserId?.trim() || null;
+  if (userId) {
+    const owned = rows.find((r) => r.owner_user_id === userId);
+    if (owned) return Number(owned.sleeper_roster_id);
+    const shared = rows.find((r) =>
+      (Array.isArray(r.co_owners) ? r.co_owners : []).some((id) => id === userId),
+    );
+    if (shared) return Number(shared.sleeper_roster_id);
+  }
 
   const handle = searchedUsername?.trim().toLowerCase() ?? null;
   if (handle) {

@@ -116,7 +116,7 @@ const TOOLS: Tool[] = [
     pitch:
       "Bring every Sleeper league you're in into one place. See your full roster portfolio at a glance, with values and standings tuned to each league's actual scoring.",
     bullets: [
-      "One-step pull of every league tied to your Sleeper username",
+      "Every league tied to your Sleeper username, and saving it once means no typing at all",
       "Real rosters, recent trades, and accurate draft pick values",
       "Power rankings calibrated to your league's actual settings",
       "Tap any team to see a full breakdown of their roster",

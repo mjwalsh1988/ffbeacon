@@ -26,6 +26,7 @@ function ranked(over: Partial<ProjectedLeague> = {}): ProjectedLeague {
   return {
     sleeperLeagueId: "1",
     leagueName: "League",
+    avatar: null,
     projectedSeed: 1,
     rankedTeamCount: 12,
     statusLabel: null,

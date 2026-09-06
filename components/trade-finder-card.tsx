@@ -99,7 +99,7 @@ export function TradeFinderCard({
   suggestion,
   grade,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   headingId,
   leagueLabel,
   showGrade = true,
@@ -108,7 +108,7 @@ export function TradeFinderCard({
   suggestion: TradeSuggestion;
   grade: SuggestionGrade | null;
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   /** Ties the card's heading to the region that owns it. */
   headingId: string;
   /** Shown in the cross-league panel, where the league is not implied. */
@@ -134,7 +134,7 @@ export function TradeFinderCard({
 }) {
   const teamHref = (() => {
     const qs = new URLSearchParams();
-    if (searchedUsername) qs.set("username", searchedUsername);
+    if (linkUsername) qs.set("username", linkUsername);
     const s = qs.toString();
     return `/leagues/${sleeperLeagueId}/teams/${suggestion.counterparty.rosterId}${s ? `?${s}` : ""}`;
   })();

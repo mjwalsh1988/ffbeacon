@@ -7,9 +7,12 @@
  * Power Pulse, Positional WAR, Decisions, Trade Ideas, and Transactions are
  * full routes of their own.
  *
- * `leagueTabHref` knows which is which and forwards the searched Sleeper handle
- * either way, so the in-view switcher and the Teams-tab owner default survive
- * every hop.
+ * `leagueTabHref` knows which is which, and forwards the Sleeper handle ONLY
+ * when the reader arrived on a `?username=` link. A reader on their own saved
+ * identity navigates between tabs on clean URLs, so a link they copy resolves
+ * to the RECIPIENT's saved handle, which is the correct reading of "your team".
+ * Their own team still highlights on every hop, because the deep views match on
+ * the Sleeper user id the saved identity carries (D3).
  *
  * There is deliberately no Activity entry. The activity log was a full route
  * for a while and it rendered the same panel, from the same loader, that the
@@ -19,6 +22,10 @@
  */
 
 import type { NavIconName } from "@/components/app-shell/nav-icons";
+import {
+  viewerLinkUsername,
+  type SleeperViewer,
+} from "@/lib/sleeper-handle/types";
 
 export type LeagueTabId =
   | "overview"
@@ -101,14 +108,20 @@ export const LEAGUE_NAV_ITEMS: LeagueNavItem[] = [
   },
 ];
 
-/** The href for one section of a league, with the searched handle forwarded. */
+/**
+ * The href for one section of a league.
+ *
+ * `?username=` is forwarded only for a viewer whose source is "url", per
+ * `viewerLinkUsername`. See the file header for why.
+ */
 export function leagueTabHref(
   sleeperLeagueId: string,
   tabId: LeagueTabId,
-  searchedUsername: string | null,
+  viewer: SleeperViewer | null,
 ): string {
   const qs = new URLSearchParams();
-  if (searchedUsername) qs.set("username", searchedUsername);
+  const linkUsername = viewerLinkUsername(viewer);
+  if (linkUsername) qs.set("username", linkUsername);
 
   if (
     tabId === "lineups" ||

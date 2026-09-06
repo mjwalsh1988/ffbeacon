@@ -1,4 +1,5 @@
 import { ImageWithFallback } from "@/components/image-with-fallback";
+import { sleeperAvatarUrl } from "@/lib/sleeper-avatar-url";
 
 type SleeperAvatarProps = {
   /** Raw avatar id from league_users.avatar (e.g. "ab12cd..."). null/undefined renders the fallback. */
@@ -12,8 +13,6 @@ type SleeperAvatarProps = {
   size?: number;
 };
 
-const AVATAR_BASE = "https://sleepercdn.com/avatars";
-
 /**
  * Renders a Sleeper team/owner avatar. The avatar id is the raw Sleeper-side
  * identifier; this component builds the URL and routes rendering plus the
@@ -21,6 +20,10 @@ const AVATAR_BASE = "https://sleepercdn.com/avatars";
  * dead avatar URL never shows as a broken image.
  */
 export function SleeperAvatar({ avatarId, title, size = 36 }: SleeperAvatarProps) {
-  const src = avatarId ? `${AVATAR_BASE}/${avatarId}` : null;
+  // The thumbnail below 64 px, the same expression components/league-logo.tsx
+  // uses. Every call site of this component is 20 to 40 px, so the full-size
+  // asset was a user's original upload downscaled in the browser: on a
+  // twelve-team rankings table that is twelve of them.
+  const src = sleeperAvatarUrl(avatarId, size >= 64 ? "full" : "thumb");
   return <ImageWithFallback src={src} alt={title} size={size} />;
 }

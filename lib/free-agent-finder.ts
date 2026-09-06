@@ -47,6 +47,14 @@ export const ROSTER_SLOT_LABEL: Record<RosterSlot, string> = {
 export type FreeAgentLeague = {
   sleeperLeagueId: string;
   leagueName: string;
+  /**
+   * Sleeper's own league logo id, or null when the league has no image.
+   *
+   * Read straight out of `leagues.metadata`, which holds the raw Sleeper league
+   * object verbatim. There is no avatar column and none is to be added: this is
+   * source data, so it lives in `metadata` per the Data Architecture rule.
+   */
+  avatar: string | null;
   /** True when no roster in this league holds him. */
   isFreeAgent: boolean;
   /** The manager holding him. Null when he is free, or when the roster has no owner. */
@@ -166,7 +174,10 @@ export async function findFreeAgentLeagues(
   try {
     const { data: leagueRows } = await supabase
       .from("leagues")
-      .select("id, sleeper_league_id, name")
+      // `avatar` is projected out of the stored raw Sleeper object rather than
+      // selecting the whole of it, the same arrow syntax lib/league-pulse.ts
+      // uses for `leg`. No new column, no migration.
+      .select("id, sleeper_league_id, name, avatar:metadata->>avatar")
       .in("sleeper_league_id", wanted);
     if (!leagueRows || leagueRows.length === 0) {
       return { ...EMPTY_FREE_AGENT_REPORT, unsyncedCount: wanted.length };
@@ -178,6 +189,7 @@ export async function findFreeAgentLeagues(
         {
           sleeperLeagueId: l.sleeper_league_id,
           name: l.name ?? "Untitled league",
+          avatar: typeof l.avatar === "string" ? l.avatar : null,
         },
       ]),
     );
@@ -226,6 +238,7 @@ export async function findFreeAgentLeagues(
       leagues.push({
         sleeperLeagueId: league.sleeperLeagueId,
         leagueName: league.name,
+        avatar: league.avatar,
         isFreeAgent: !hit,
         rosteredBy: hit ? (ownerNames.get(rowId) ?? null) : null,
         isYours: Boolean(

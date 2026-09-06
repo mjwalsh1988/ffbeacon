@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveFormats, getAvailableSources } from "@/lib/source";
 import { resolveFormatSlug, resolveSourceSlug } from "@/lib/preferences";
 import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import { loadSavedSleeperHandle } from "@/lib/sleeper-handle/resolve";
 import { shortFormatName } from "@/lib/format-display";
 import { SITE_TIME_ZONE } from "@/lib/datetime";
 import { PageBody } from "@/components/app-shell/page-body";
@@ -51,6 +52,7 @@ export default async function MyBeaconLayout({
     sources,
     formatRes,
     sourceRes,
+    savedHandle,
   ] = await Promise.all([
     supabase
       .from("user_preferences")
@@ -72,6 +74,10 @@ export default async function MyBeaconLayout({
     // cookie, then default. For a signed-in user that is almost always the DB.
     resolveFormatSlug(supabase, undefined),
     resolveSourceSlug(supabase, undefined),
+    // The reader's Sleeper identity, through the one module allowed to read it
+    // (D1). The prefs row above is still parsed below, but for the LEAGUE keys
+    // only; the handle, its display name and its avatar come from here.
+    loadSavedSleeperHandle(supabase),
   ]);
 
   // Resolve the uploaded avatar (if any) to a public URL so the Signal card can
@@ -113,6 +119,8 @@ export default async function MyBeaconLayout({
   const displayName =
     metaDisplayName || firstName || emailLocalPart || "fantasy player";
 
+  // The LEAGUE keys of this jsonb only. The identity keys are read through
+  // loadSavedSleeperHandle above and nowhere else.
   const settings = parseSleeperLeagueSettings(prefs?.sleeper_league_settings);
 
   // Leagues on the public profile: the union of "featured" and "shown". A
@@ -144,7 +152,8 @@ export default async function MyBeaconLayout({
     sourceDisplay,
     profileLeagueCount: profileLeagueIds.size,
     boardCount: boardCount ?? 0,
-    sleeperUsername: settings.username?.trim() || null,
+    sleeperUsername: savedHandle?.username ?? null,
+    sleeperAvatar: savedHandle?.avatar ?? null,
     memberSince,
     isAdmin: Boolean(prefs?.is_admin),
   };

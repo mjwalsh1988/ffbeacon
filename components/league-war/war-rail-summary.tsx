@@ -100,6 +100,7 @@ export async function WarRailSummary({
   leagueRowId,
   season,
   searchedUsername,
+  viewerSleeperUserId,
   focusedRosterId,
   positionalWarHref,
 }: {
@@ -107,6 +108,10 @@ export async function WarRailSummary({
   leagueRowId: string;
   season: number;
   searchedUsername: string | null;
+  /** The viewer's Sleeper user id, which matchViewerRoster tries before the
+   *  handle: a saved handle is a Sleeper username and the candidates carry
+   *  display names, and Sleeper lets the two differ. */
+  viewerSleeperUserId: string | null;
   focusedRosterId: number | null;
   /** Where "Explore Positional WAR" goes, with the searched handle forwarded. */
   positionalWarHref: string;
@@ -138,7 +143,12 @@ export async function WarRailSummary({
   });
 
   let yourBestLine: string | null = null;
-  const rosterId = matchViewerRoster(candidates, searchedUsername, focusedRosterId);
+  const rosterId = matchViewerRoster(
+    candidates,
+    searchedUsername,
+    focusedRosterId,
+    viewerSleeperUserId,
+  );
   if (rosterId !== null) {
     const overlay = await loadViewerOverlay(supabase, leagueRowId, rosterId);
     if (overlay) {

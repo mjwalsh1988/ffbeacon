@@ -79,8 +79,21 @@ import {
   fetchTransactions,
   fetchPulse,
   fetchPlayerBrief,
+  type LookupRequest,
   type OtcPulsePayload,
 } from "@/lib/on-the-clock/client";
+import {
+  classifyLookupFailure,
+  LOOKUP_FAILED_MESSAGE,
+  LOOKUP_THROTTLED_MESSAGE,
+} from "@/lib/on-the-clock/lookup-failure";
+import { SleeperHandleGate } from "@/components/sleeper-handle/handle-gate";
+import type { IdentityCardStatus } from "@/components/sleeper-handle/identity-card";
+import {
+  gateViewer,
+  type SleeperViewer,
+} from "@/lib/sleeper-handle/types";
+import type { HandleGateState } from "@/lib/sleeper-handle/types";
 import type { PulsePlayerSummary } from "@/lib/on-the-clock/pulse-types";
 import type {
   HistoryTransaction,
@@ -366,7 +379,8 @@ function coercePosition(pos: string | null): DraftPosition | null {
 export function OnTheClockClient({
   masthead,
   defaultSeason,
-  defaultUsername = "",
+  handleGate,
+  urlViewer,
   realtimeEnabled = true,
   autoRefreshEnabled = true,
   autoRefreshSeconds = 60,
@@ -380,7 +394,13 @@ export function OnTheClockClient({
    */
   masthead: ReactNode;
   defaultSeason: string;
-  defaultUsername?: string;
+  /**
+   * Which of the four identity states this reader is in, resolved server-side.
+   * The two saved ones skip step 1 entirely and load their leagues on arrival.
+   */
+  handleGate: HandleGateState;
+  /** The URL-first viewer, for the two gate states that carry none. */
+  urlViewer: SleeperViewer | null;
   realtimeEnabled?: boolean;
   /** Whether an open room refreshes itself without anyone pressing Sync. */
   autoRefreshEnabled?: boolean;
@@ -389,8 +409,42 @@ export function OnTheClockClient({
   /** Admin On The Clock settings (drives the Team Need engine). */
   settings: OnTheClockSettings;
 }) {
+  // ----- identity -----
+  //
+  // A reader with a saved handle has already answered step 1, so the page opens
+  // on step 2 and fetches their leagues itself. `autoLookup` is the request that
+  // fetch uses: the saved states send NO username (the route reads the session),
+  // and a shareable `?username=` link sends the handle it names, because that is
+  // the identity the reader followed the link to see.
+  // `gateViewer` is null for a guest and for a signed-in reader with nothing
+  // saved, so a shared `?username=` link would be inert for exactly the
+  // readers most likely to be following one. `urlViewer` is the page's own
+  // URL-first answer and covers those two states.
+  const actingViewer = gateViewer(handleGate) ?? urlViewer;
+  const savedIdentity =
+    handleGate.kind === "member-saved" || handleGate.kind === "member-overridden";
+  const autoLookup: LookupRequest | null =
+    handleGate.kind === "member-saved"
+      ? { saved: true }
+      : handleGate.kind === "member-overridden"
+        ? { username: handleGate.viewer.username }
+        : null;
+  const actingUsername = actingViewer?.username ?? "";
+
+  // Step 1 is already answered for these readers, so the rail names the answer
+  // instead of asking the question again.
+  const stepOneRailLabels =
+    savedIdentity && actingUsername
+      ? {
+          stepOneLabel: `Connected as @${actingUsername}`,
+          stepOneHint: "Change it any time",
+        }
+      : {};
+
   // ----- flow -----
-  const [step, setStep] = useState<Step>("connect");
+  const [step, setStep] = useState<Step>(
+    savedIdentity ? "pick-league" : "connect",
+  );
   // Each step replaces the whole page, but the URL never changes, so nothing
   // moves the scroll position on its own. Picking a league from the bottom of
   // a long list used to open the draft room already scrolled halfway down it.
@@ -413,10 +467,37 @@ export function OnTheClockClient({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
-  const lookupRef = useRef<{ username: string; season: string }>({
+  /**
+   * What the last successful lookup was for.
+   *
+   * `username` is the reader's real Sleeper handle in EVERY state, including
+   * the saved one where the query string deliberately carries no username: it
+   * is filled from the resolved viewer rather than from the request. The format
+   * report dialog names it, so an empty string there would file a report nobody
+   * can trace back.
+   *
+   * `request` is what to send to repeat the lookup. Keeping it means Refresh
+   * repeats a SAVED lookup as a saved lookup instead of putting the handle back
+   * into a URL.
+   */
+  const lookupRef = useRef<{
+    username: string;
+    season: string;
+    request: LookupRequest | null;
+  }>({
     username: "",
     season: defaultSeason,
+    request: null,
   });
+
+  // The identity card's own state, which is only ever about the auto-run: what
+  // it is doing, and what to say if it did not work.
+  const [autoStatus, setAutoStatus] = useState<IdentityCardStatus>(
+    autoLookup ? "loading" : "idle",
+  );
+  const [autoMessage, setAutoMessage] = useState<string | null>(
+    autoLookup ? "Loading your leagues." : null,
+  );
 
   // ----- draft room -----
   const [league, setLeague] = useState<LeagueCard | null>(null);
@@ -1205,41 +1286,119 @@ export function OnTheClockClient({
   }, [myNextPick, simulatedRemaining, settings.alerts.maxGoneBefore]);
 
   // ----- discovery handlers -----
+  //
+  // Three modes, and "auto" is the one that differs. A lookup a reader STARTED
+  // reports its failure in the form they are looking at. A lookup the page ran
+  // FOR them has no form on screen, so the identity card says what happened,
+  // and a 429 from the route's ten-second cooldown keeps them where they are
+  // with a Retry rather than sending them back to type a username they did not
+  // type in the first place. See lib/on-the-clock/lookup-failure.ts.
   const runLookup = useCallback(
-    async (username: string, season: string, mode: "connect" | "refresh") => {
-      if (mode === "connect") {
-        setConnecting(true);
-        setConnectError(null);
-      } else {
+    async (
+      lookup: LookupRequest,
+      username: string,
+      season: string,
+      mode: "connect" | "refresh" | "auto",
+    ) => {
+      if (mode === "refresh") {
         setRefreshing(true);
         setRefreshError(null);
+      } else {
+        setConnecting(true);
+        setConnectError(null);
       }
-      const result = await fetchLeagues(username, season);
+      if (mode === "auto") {
+        setAutoStatus("loading");
+        setAutoMessage("Loading your leagues.");
+      }
+
+      const result = await fetchLeagues(lookup, season);
       if (result.ok) {
         setLeagues(result.data.leagues);
         setTruncated(result.data.truncated);
         setMyUserId(result.data.userId);
-        lookupRef.current = { username, season };
-        if (mode === "connect") setStep("pick-league");
+        lookupRef.current = { username, season, request: lookup };
+        if (mode !== "refresh") setStep("pick-league");
+        if (mode === "auto") {
+          setAutoStatus("idle");
+          setAutoMessage(
+            result.data.leagues.length === 1
+              ? "Loaded 1 league."
+              : `Loaded ${result.data.leagues.length} leagues.`,
+          );
+        }
+      } else if (mode === "auto") {
+        const failure = classifyLookupFailure(result.status);
+        setAutoStatus(failure);
+        // ONE message, on the card. The route's own sentence names the handle
+        // Sleeper could not find, so it leads; the shared instruction follows
+        // it. Putting the diagnosis in the form instead meant two assertive
+        // regions mounting in consecutive commits for a single event, and an
+        // assertive region interrupts, so the half that says what to do was
+        // the half most likely to be cut off.
+        setAutoMessage(
+          failure === "throttled"
+            ? LOOKUP_THROTTLED_MESSAGE
+            : `${result.message} ${LOOKUP_FAILED_MESSAGE}`,
+        );
+        // A throttled reader STAYS ON STEP 2 with the card and its Retry.
+        // Sending them back to step 1 is what the 10-second per-(ip, username)
+        // cooldown makes happen on a double reload, and it would ask someone
+        // whose handle is fine to type it again. It would also move focus, via
+        // the step-keyed useStepScroll, about a second after they arrived.
+        //
+        // The card carries the instruction. The route's own sentence (which
+        // names the handle Sleeper could not find) goes in the form the card
+        // opens, where the reader is about to correct it, and only for a real
+        // failure. Two assertive alerts for one event means the first one, the
+        // one that says what to do, is the one that gets cut off.
+        if (failure === "failed") setStep("connect");
       } else if (mode === "connect") {
         setConnectError(result.message);
       } else {
         setRefreshError(result.message);
       }
-      if (mode === "connect") setConnecting(false);
-      else setRefreshing(false);
+
+      if (mode === "refresh") setRefreshing(false);
+      else setConnecting(false);
     },
     [],
   );
 
   const connect = (username: string, season: string) => {
-    void runLookup(username, season, "connect");
+    void runLookup({ username }, username, season, "connect");
   };
   const refreshLeagues = () => {
-    const { username, season } = lookupRef.current;
-    if (!username) return;
-    void runLookup(username, season, "refresh");
+    const { username, season, request } = lookupRef.current;
+    if (!request) return;
+    void runLookup(request, username, season, "refresh");
   };
+
+  /**
+   * The auto-run, once per mount.
+   *
+   * The ref, not the effect's deps, is what makes it once: StrictMode mounts a
+   * component twice in development, and a second lookup would be refused by the
+   * route's own ten-second cooldown and shown to the reader as a failure of the
+   * first.
+   */
+  const autoRanRef = useRef(false);
+  const runAutoLookup = () => {
+    if (!autoLookup) return;
+    void runLookup(autoLookup, actingUsername, defaultSeason, "auto");
+  };
+  // Kept in a ref, synced in an effect rather than during render, so the mount
+  // effect below can call the latest closure without listing it as a dep.
+  const autoLookupRef = useRef(runAutoLookup);
+  useEffect(() => {
+    autoLookupRef.current = runAutoLookup;
+  });
+
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    autoRanRef.current = true;
+    autoLookupRef.current();
+  }, []);
 
   // ----- board load (FF Beacon, format auto-detected from the league) -----
   //
@@ -1802,26 +1961,50 @@ export function OnTheClockClient({
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
                 Draft cockpit
               </p>
-              <h3 className="text-lg font-semibold tracking-tight text-ink sm:text-xl">
-                Connect your draft to begin
-              </h3>
+              {/* h2, not h3. The identity card below renders at 3, and two
+                  sibling h3s where the second is plainly the child of the
+                  first is what a heading-navigation reader hears otherwise.
+                  It also closes a pre-existing h1-to-h3 skip under the page
+                  masthead. */}
+              <h2 className="text-lg font-semibold tracking-tight text-ink sm:text-xl">
+                {savedIdentity ? "Your drafts" : "Connect your draft to begin"}
+              </h2>
             </div>
           </div>
+          {/* A reader whose handle is saved did not type anything to get here,
+              so telling them to enter a username would be describing somebody
+              else's visit. What went wrong, if anything did, is the card's
+              status line below. */}
           <p className="mt-2 text-sm text-ink-muted">
-            Enter your Sleeper username to load every draft you are in, whether
-            drafting now, pre-draft, or completed, and step into the cockpit.
+            {savedIdentity
+              ? "We load every draft on your saved Sleeper username, whether drafting now, pre-draft, or completed. Press Change to look up a different one."
+              : "Enter your Sleeper username to load every draft you are in, whether drafting now, pre-draft, or completed, and step into the cockpit."}
           </p>
 
           <div className="mt-6">
-            <StepRail current={1} />
+            <StepRail current={1} {...stepOneRailLabels} />
           </div>
           <div className="mt-5">
-            <UsernameGate
-              defaultUsername={defaultUsername}
-              defaultSeason={defaultSeason}
-              onConnect={connect}
-              pending={connecting}
-              error={connectError}
+            <SleeperHandleGate
+              state={handleGate}
+              toolName="On The Clock"
+              nextPath="/tools/on-the-clock"
+              headingLevel={3}
+              status={autoStatus}
+              statusMessage={autoMessage}
+              onRetry={runAutoLookup}
+              clearHref="/tools/on-the-clock"
+              renderForm={({ saveByDefault, inCard, handle }) => (
+                <UsernameGate
+                  defaultUsername={inCard ? "" : (handle?.username ?? "")}
+                  defaultSeason={defaultSeason}
+                  onConnect={connect}
+                  pending={connecting}
+                  error={connectError}
+                  saveByDefault={saveByDefault}
+                  showSaveOption={handleGate.kind !== "guest"}
+                />
+              )}
             />
           </div>
         </div>
@@ -1850,14 +2033,43 @@ export function OnTheClockClient({
                 "linear-gradient(90deg, transparent 0%, #A855F7 30%, #22D3EE 70%, transparent 100%)",
             }}
           />
-          <button
-            type="button"
-            onClick={() => setStep("connect")}
-            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-          >
-            <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
-            Change username
-          </button>
+          {/* A reader who typed a username got here from step 1 and can go
+              back to it. A reader whose handle is saved never saw step 1, so a
+              back button would point at a screen they have not been on; the
+              identity card says who they are here and reveals the same form
+              behind Change. */}
+          {savedIdentity ? (
+            <SleeperHandleGate
+              state={handleGate}
+              toolName="On The Clock"
+              nextPath="/tools/on-the-clock"
+              headingLevel={3}
+              status={autoStatus}
+              statusMessage={autoMessage}
+              onRetry={runAutoLookup}
+              clearHref="/tools/on-the-clock"
+              renderForm={({ saveByDefault }) => (
+                <UsernameGate
+                  defaultUsername=""
+                  defaultSeason={defaultSeason}
+                  onConnect={connect}
+                  pending={connecting}
+                  error={connectError}
+                  saveByDefault={saveByDefault}
+                  showSaveOption
+                />
+              )}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setStep("connect")}
+              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <ArrowLeft aria-hidden="true" className="h-3.5 w-3.5" />
+              Change username
+            </button>
+          )}
           <div className="mt-4 flex items-center gap-3">
             <span
               aria-hidden="true"
@@ -1881,17 +2093,24 @@ export function OnTheClockClient({
           </p>
 
           <div className="mt-6">
-            <StepRail current={2} />
+            <StepRail current={2} {...stepOneRailLabels} />
           </div>
           <div className="mt-5">
-            <LeaguePicker
-              leagues={leagues}
-              onSelect={selectLeague}
-              onRefresh={refreshLeagues}
-              refreshing={refreshing}
-              error={refreshError}
-              truncated={truncated}
-            />
+            {/* The saved states open on this step with the lookup still in
+                flight, so the first thing here is honest about that rather
+                than an empty picker claiming there are no drafts. */}
+            {connecting && leagues.length === 0 ? (
+              <LoadingCard label="Loading your leagues..." />
+            ) : (
+              <LeaguePicker
+                leagues={leagues}
+                onSelect={selectLeague}
+                onRefresh={refreshLeagues}
+                refreshing={refreshing}
+                error={refreshError}
+                truncated={truncated}
+              />
+            )}
           </div>
         </div>
       </div>,

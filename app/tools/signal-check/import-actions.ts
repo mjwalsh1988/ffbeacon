@@ -4,14 +4,17 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { SITE } from "@/lib/site";
 import type { Database } from "@/lib/database.types";
 import {
-  getSleeperUser,
   getSleeperLeagues,
   currentNflSeason,
   type SleeperLeague,
 } from "@/lib/sleeper";
 import { formatTeamLabel } from "@/lib/team-label";
 import { pulseLeague, normalizeDraftPicks } from "@/lib/league-pulse";
-import { parseSleeperLeagueSettings } from "@/lib/sleeper-league-settings";
+import {
+  ensureSleeperUserId,
+  loadSavedSleeperHandle,
+} from "@/lib/sleeper-handle/resolve";
+import type { SavedSleeperHandle } from "@/lib/sleeper-handle/types";
 import {
   deriveLeagueFormat,
   mapToFormatSlug,
@@ -27,6 +30,8 @@ import { toBuilderView, type BuilderView } from "@/lib/signal-check/builder-view
 import { buildPickPositionResolver } from "@/lib/league-pick-position";
 import { SignalCheckError } from "@/lib/signal-check/errors";
 import type { AnalysisInput, SideKey } from "@/lib/signal-check/types";
+import { headers } from "next/headers";
+import { resolveRateLimitActorKey } from "@/lib/rate-limit-actor";
 
 type AnalysisInsert = Database["public"]["Tables"]["signal_check_analyses"]["Insert"];
 
@@ -34,6 +39,12 @@ export interface ImportLeague {
   sleeperLeagueId: string;
   name: string;
   season: string;
+  /**
+   * Sleeper's own league logo id, straight off the payload. Null for the many
+   * leagues that never set one, which the logo component renders as a
+   * same-sized placeholder so the column stays aligned.
+   */
+  avatar: string | null;
 }
 
 export interface ImportTradeTeam {
@@ -58,7 +69,7 @@ export interface ImportAssetMeta {
 }
 
 export type ListLeaguesResult =
-  | { ok: true; username: string; leagues: ImportLeague[] }
+  | { ok: true; handle: SavedSleeperHandle; leagues: ImportLeague[] }
   | { ok: false; error: string; needsUsername?: boolean };
 
 export type ListTradesResult =
@@ -76,20 +87,43 @@ export type ImportAnalyzeResult =
     }
   | { ok: false; error: string };
 
-async function savedUsername(): Promise<{ userId: string; username: string } | null> {
+type ImportIdentity = {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  /** The FF Beacon account. A frozen analysis belongs to it, not to the handle. */
+  userId: string;
+  handle: SavedSleeperHandle;
+};
+
+/**
+ * The signed-in reader and the Sleeper handle they saved, or null.
+ *
+ * The handle comes from `lib/sleeper-handle/resolve.ts`, which is the one
+ * module allowed to read it (D1). This panel has no `?username=` path, so the
+ * saved handle is the only identity it ever acts for.
+ */
+async function savedIdentity(): Promise<ImportIdentity | null> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data: prefs } = await supabase
-    .from("user_preferences")
-    .select("sleeper_league_settings")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const username = parseSleeperLeagueSettings(prefs?.sleeper_league_settings).username ?? null;
-  if (!username) return null;
-  return { userId: user.id, username };
+  const handle = await loadSavedSleeperHandle(supabase);
+  if (!handle) return null;
+  return { supabase, userId: user.id, handle };
+}
+
+/**
+ * The reader's Sleeper user id, without a `getSleeperUser` call in the common
+ * case (D3). A handle saved before migration 0268 carries no id, so it is
+ * resolved once and written back; every visit after that costs nothing.
+ *
+ * Null means Sleeper could not resolve the saved handle right now, which is a
+ * different answer from "that league is not yours" and is reported as one.
+ */
+async function sleeperUserIdFor(identity: ImportIdentity): Promise<string | null> {
+  if (identity.handle.sleeperUserId) return identity.handle.sleeperUserId;
+  const filled = await ensureSleeperUserId(identity.supabase, identity.handle);
+  return filled.sleeperUserId;
 }
 
 /**
@@ -103,7 +137,7 @@ export async function listImportLeagues(): Promise<ListLeaguesResult> {
   if (!settings.enabled || !settings.sleeperImportsEnabled) {
     return { ok: false, error: "Sleeper imports are currently unavailable." };
   }
-  const id = await savedUsername();
+  const id = await savedIdentity();
   if (!id) {
     return {
       ok: false,
@@ -111,25 +145,31 @@ export async function listImportLeagues(): Promise<ListLeaguesResult> {
       error: "Save your Sleeper username first to import a trade.",
     };
   }
-  const user = await getSleeperUser(id.username);
-  if (!user) return { ok: false, error: `No Sleeper user found for "${id.username}".` };
+  const sleeperUserId = await sleeperUserIdFor(id);
+  if (!sleeperUserId) {
+    return { ok: false, error: `No Sleeper user found for "${id.handle.username}".` };
+  }
   const season = currentNflSeason();
-  const leagues = await getSleeperLeagues(user.user_id, season);
+  const leagues = await getSleeperLeagues(sleeperUserId, season);
   return {
     ok: true,
-    username: id.username,
+    // The whole identity, so the panel's card can show the reader's Sleeper
+    // avatar and display name without a second call.
+    handle: { ...id.handle, sleeperUserId },
     leagues: leagues.map((l) => ({
       sleeperLeagueId: l.league_id,
       name: l.name ?? "League",
       season: l.season ?? season,
+      avatar: l.avatar ?? null,
     })),
   };
 }
 
-async function userOwnsLeague(username: string, sleeperLeagueId: string): Promise<boolean> {
-  const user = await getSleeperUser(username);
-  if (!user) return false;
-  const leagues = await getSleeperLeagues(user.user_id, currentNflSeason());
+async function userOwnsLeague(
+  sleeperUserId: string,
+  sleeperLeagueId: string,
+): Promise<boolean> {
+  const leagues = await getSleeperLeagues(sleeperUserId, currentNflSeason());
   return leagues.some((l) => l.league_id === sleeperLeagueId);
 }
 
@@ -164,6 +204,47 @@ function tradeRosters(adds: Record<string, number> | null, picks: unknown[]): nu
   return Array.from(set).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
 }
 
+const IMPORT_RATE_WINDOW_SECONDS = 60;
+const IMPORT_TRADES_MAX = 12;
+const IMPORT_ANALYZE_MAX = 8;
+
+/**
+ * Fails closed. A limit we cannot evaluate is not a limit that passes.
+ *
+ * WHY THIS EXISTS ON A SIGNED-IN-ONLY ACTION. `userOwnsLeague` reads the
+ * reader's Sleeper user id out of `user_preferences.sleeper_league_settings`,
+ * and `authenticated` holds a column grant on that jsonb because it has to own
+ * its own preferences. So the id is SELF-ASSERTED: a reader can PATCH it
+ * through PostgREST and the ownership check then agrees with them. Nothing
+ * confidential is behind it (league transactions are public-read under RLS and
+ * already rendered at /leagues/[id]/transactions), so what an attacker gains
+ * is not data but COMPUTE: `pulseLeague` on an arbitrary league id, repeatedly.
+ * The meter is the guard that actually holds, so the meter is the one that has
+ * to be here.
+ */
+async function claimImportSlot(bucket: string, max: number): Promise<boolean> {
+  try {
+    const requestHeaders = await headers();
+    const actorKey = await resolveRateLimitActorKey(
+      new Request("https://ffbeacon.internal/signal-check-import", {
+        headers: requestHeaders,
+      }),
+    );
+    const admin = createAdminClient();
+    const { data, error } = await admin.rpc("try_claim_rate_limit" as never, {
+      p_bucket: bucket,
+      p_key: actorKey,
+      p_max_requests: max,
+      p_window_seconds: IMPORT_RATE_WINDOW_SECONDS,
+    } as never);
+    if (error) throw new Error(error.message);
+    return Boolean(data);
+  } catch (err) {
+    console.error("[signal-check-import] rate-limit check failed", err);
+    return false;
+  }
+}
+
 export async function listLeagueTrades(sleeperLeagueId: string): Promise<ListTradesResult> {
   if (!/^[0-9]{1,32}$/.test(sleeperLeagueId)) {
     return { ok: false, error: "Invalid league id." };
@@ -173,10 +254,19 @@ export async function listLeagueTrades(sleeperLeagueId: string): Promise<ListTra
   if (!settings.enabled || !settings.sleeperImportsEnabled) {
     return { ok: false, error: "Sleeper imports are currently unavailable." };
   }
-  const id = await savedUsername();
+  const id = await savedIdentity();
   if (!id) return { ok: false, error: "Sign in and save your Sleeper username first." };
-  if (!(await userOwnsLeague(id.username, sleeperLeagueId))) {
+  const sleeperUserId = await sleeperUserIdFor(id);
+  if (!sleeperUserId) {
+    return { ok: false, error: `No Sleeper user found for "${id.handle.username}".` };
+  }
+  if (!(await userOwnsLeague(sleeperUserId, sleeperLeagueId))) {
     return { ok: false, error: "That league is not linked to your Sleeper account." };
+  }
+
+  // After the cheap checks, before pulseLeague, which is the expensive half.
+  if (!(await claimImportSlot("signal_check_import_trades", IMPORT_TRADES_MAX))) {
+    return { ok: false, error: "Slow down a moment and try that again." };
   }
 
   const pulse = await pulseLeague(admin, sleeperLeagueId);
@@ -269,10 +359,21 @@ export async function importAndAnalyze(args: {
     return { ok: false, error: "Sleeper imports are currently unavailable." };
   }
 
-  const id = await savedUsername();
+  const id = await savedIdentity();
   if (!id) return { ok: false, error: "Sign in and save your Sleeper username first." };
-  if (!(await userOwnsLeague(id.username, sleeperLeagueId))) {
+  const sleeperUserId = await sleeperUserIdFor(id);
+  if (!sleeperUserId) {
+    return { ok: false, error: `No Sleeper user found for "${id.handle.username}".` };
+  }
+  if (!(await userOwnsLeague(sleeperUserId, sleeperLeagueId))) {
     return { ok: false, error: "That league is not linked to your Sleeper account." };
+  }
+
+  // Same reasoning as listLeagueTrades: the ownership check above rests on a
+  // self-asserted id, so the meter is the guard that actually holds. Lower
+  // than the trade list's, because this one also runs a full analysis.
+  if (!(await claimImportSlot("signal_check_import_analyze", IMPORT_ANALYZE_MAX))) {
+    return { ok: false, error: "Slow down a moment and try that again." };
   }
 
   const pulse = await pulseLeague(admin, sleeperLeagueId);

@@ -402,6 +402,10 @@ function buildLeagueSeasons(
       sleeperLeagueId: req.sleeperLeagueId,
       season: req.season,
       leagueName: req.leagueName ?? leagueRow.name,
+      // Lifted from the raw object this function already reads, rather than
+      // widening the select with a second expression for a field that is
+      // sitting right here.
+      avatar: typeof rawLeague?.avatar === "string" ? rawLeague.avatar : null,
       category,
       sleeperLeagueType,
       teamCount: leagueRow.total_rosters ?? rosters.length ?? null,

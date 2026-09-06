@@ -43,6 +43,10 @@ import { type ScoringSettings } from "@/lib/league-scoring";
 import { loadAdjustedProjections } from "@/lib/projections/read";
 import { computeAgeDecimal } from "@/lib/player-age";
 import type { FinderPick, FinderPlayer, FinderTeam } from "@/lib/trade-finder/types";
+import {
+  matchViewerRoster,
+  type ViewerCandidate,
+} from "@/lib/league-viewer";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -212,29 +216,35 @@ async function loadPickValues(
 }
 
 
-/** Which roster belongs to the reader, from whatever the caller knows. */
+/**
+ * Which roster belongs to the reader, from whatever the caller knows.
+ *
+ * Delegates to `matchViewerRoster`, which is the one implementation of this
+ * precedence (explicit roster, then Sleeper user id, then co-owner id, then
+ * display name). It used to be hand-rolled here, agreeing with the canonical
+ * rule by coincidence and with a comment that already named it as canonical.
+ */
 function resolveMyRosterId(
   teams: TeamCardData[],
   identity: RosterIdentity,
-  ownerByRoster: Map<number, string | null>,
+  ownerByRoster: Map<number, string[]>,
 ): number | null {
-  if (identity.rosterId != null) {
-    const hit = teams.find((t) => t.sleeperRosterId === identity.rosterId);
-    if (hit) return hit.sleeperRosterId;
-  }
-  if (identity.sleeperUserId) {
-    for (const [rosterId, ownerId] of ownerByRoster) {
-      if (ownerId === identity.sleeperUserId) return rosterId;
-    }
-  }
-  if (identity.username) {
-    const wanted = identity.username.trim().toLowerCase();
-    const hit = teams.find(
-      (t) => (t.ownerSleeperUsername ?? "").trim().toLowerCase() === wanted,
-    );
-    if (hit) return hit.sleeperRosterId;
-  }
-  return null;
+  const candidates: ViewerCandidate[] = teams.map((t) => {
+    const owners = ownerByRoster.get(t.sleeperRosterId) ?? [];
+    return {
+      sleeperRosterId: t.sleeperRosterId,
+      ownerSleeperUsername: t.ownerSleeperUsername,
+      // The first entry is rosters.owner_user_id, the rest are co_owners.
+      ownerSleeperUserId: owners[0] ?? null,
+      coOwnerIds: owners.slice(1),
+    };
+  });
+  return matchViewerRoster(
+    candidates,
+    identity.username,
+    identity.rosterId,
+    identity.sleeperUserId,
+  );
 }
 
 /**
@@ -293,7 +303,7 @@ export async function loadTradeFinderLeague(
     ),
     supabase
       .from("rosters")
-      .select("sleeper_roster_id, owner_user_id, reserve_ids, taxi_ids")
+      .select("sleeper_roster_id, owner_user_id, co_owners, reserve_ids, taxi_ids")
       .eq("league_id", league.id),
     isDynasty
       ? loadPickValues(
@@ -310,11 +320,18 @@ export async function loadTradeFinderLeague(
 
   if (cards.length < 2) return null;
 
-  const ownerByRoster = new Map<number, string | null>();
+  // Owner AND co-owners. A co-owner is an owner for the purpose of "which team
+  // is mine", and omitting them found a co-owner's team on the league overview
+  // and not here. lib/league-viewer.ts matchViewerRoster is the canonical rule.
+  const ownerByRoster = new Map<number, string[]>();
   const inactiveByRoster = new Map<number, Set<string>>();
   for (const row of rosterRows.data ?? []) {
     const rosterId = Number(row.sleeper_roster_id);
-    ownerByRoster.set(rosterId, row.owner_user_id ?? null);
+    const owners = [
+      row.owner_user_id,
+      ...(Array.isArray(row.co_owners) ? row.co_owners : []),
+    ].filter((id): id is string => typeof id === "string" && id.length > 0);
+    ownerByRoster.set(rosterId, owners);
     inactiveByRoster.set(
       rosterId,
       new Set([...asStringArray(row.reserve_ids), ...asStringArray(row.taxi_ids)]),

@@ -450,6 +450,44 @@ describe("ledger absence", () => {
   });
 });
 
+describe("league logo", () => {
+  it("lifts the avatar id out of the stored Sleeper object", async () => {
+    const client = fakeClient({
+      leagues: [leagueRow({ metadata: { avatar: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4" } })],
+      rosters: [rosterRow({ sleeper_roster_id: 1, owner_user_id: "user-1" })],
+    });
+
+    const result = await loadManagerPulseInput(
+      client,
+      baseParams({
+        leagueSeasons: [
+          { sleeperLeagueId: "sleeper-league-1", season: 2026, category: "dynasty", leagueName: null },
+        ],
+      }),
+    );
+
+    expect(result.leagueSeasons[0].avatar).toBe("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4");
+  });
+
+  it("gives null when the stored object carries no avatar", async () => {
+    const client = fakeClient({
+      leagues: [leagueRow({ metadata: {} })],
+      rosters: [rosterRow({ sleeper_roster_id: 1, owner_user_id: "user-1" })],
+    });
+
+    const result = await loadManagerPulseInput(
+      client,
+      baseParams({
+        leagueSeasons: [
+          { sleeperLeagueId: "sleeper-league-1", season: 2026, category: "dynasty", leagueName: null },
+        ],
+      }),
+    );
+
+    expect(result.leagueSeasons[0].avatar).toBeNull();
+  });
+});
+
 describe("bracket absence", () => {
   it("gives null champion, runner-up and playoff ids when no bracket is stored, never empty arrays", async () => {
     const client = fakeClient({

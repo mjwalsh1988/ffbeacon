@@ -79,13 +79,13 @@ function DivergenceChip({ team }: { team: PulseTeam }) {
 export function PulseRankingsTable({
   teams,
   sleeperLeagueId,
-  searchedUsername,
+  linkUsername,
   valueLabel,
   emphasis,
 }: {
   teams: PulseTeam[];
   sleeperLeagueId: string;
-  searchedUsername: string | null;
+  linkUsername: string | null;
   /** e.g. "Dynasty PPR Superflex via FF Beacon". Shown in the value header. */
   valueLabel: string | null;
   /**
@@ -117,7 +117,7 @@ export function PulseRankingsTable({
       tab: "teams",
       roster: String(team.sleeperRosterId),
     });
-    if (searchedUsername) qs.set("username", searchedUsername);
+    if (linkUsername) qs.set("username", linkUsername);
     return `/leagues/${sleeperLeagueId}?${qs.toString()}`;
   };
 
