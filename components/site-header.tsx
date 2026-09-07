@@ -245,7 +245,7 @@ export async function SiteHeader() {
               <Link
                 href="/my-beacon"
                 aria-label="Go to your My Beacon dashboard"
-                className="inline-flex h-11 w-11 aspect-square shrink-0 items-center justify-center rounded-card bg-beacon text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                className="relative inline-flex h-9 w-9 aspect-square shrink-0 items-center justify-center rounded-card bg-beacon text-black before:absolute before:left-1/2 before:top-1/2 before:h-11 before:w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 <UserIcon />
               </Link>

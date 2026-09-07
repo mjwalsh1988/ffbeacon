@@ -64,7 +64,11 @@ export function DonateLauncher({
         // cluster taller than the other three.
         className="relative inline-flex h-9 min-h-9 items-center justify-center gap-1.5 rounded-card border border-brand-cyan/50 bg-brand-cyan/10 px-2 text-sm font-semibold text-ink transition-colors before:absolute before:left-0 before:top-1/2 before:h-11 before:w-full before:-translate-y-1/2 before:content-[''] hover:border-brand-cyan hover:bg-brand-cyan/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan sm:px-3"
       >
-        <Heart aria-hidden="true" className="h-[18px] w-[18px] text-brand-cyan" />
+        <Heart
+          aria-hidden="true"
+          fill="currentColor"
+          className="h-[18px] w-[18px] text-signal-danger"
+        />
         {/* Not aria-hidden. The aria-label already supersedes this text for a
             screen reader, and hiding it as well would leave a control whose
             visible word and accessible name are maintained in two places with
