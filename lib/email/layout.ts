@@ -189,6 +189,18 @@ export function emailHeading(text: string): string {
 }
 
 /**
+ * A second-level body heading.
+ *
+ * `emailHeading` emits an h1, which is right for the one heading that names the
+ * message. An email with two of them has no structure for a reader navigating by
+ * heading, and the donation receipt was the first message here to need a second
+ * level. Same type scale, one step down in weight and size.
+ */
+export function emailSubheading(text: string): string {
+  return `<h2 style="margin:22px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.35;color:${C.ink};">${esc(text)}</h2>`;
+}
+
+/**
  * A numbered step list (badge + title + body + link). `body` is raw HTML so a step
  * can include an inline link; pass only trusted static copy there. `title` and
  * `linkLabel` are escaped.

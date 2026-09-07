@@ -22,6 +22,8 @@ import { RailToggle } from "@/components/app-shell/rail-toggle";
 import { buildNavTree } from "@/lib/nav-tree";
 import { getNavViewer } from "@/lib/nav-viewer";
 import { BeamLauncher } from "@/components/beam/beam-launcher";
+import { DonateLauncher } from "@/components/donate/donate-launcher";
+import { stripeConfigured } from "@/lib/donate/stripe";
 
 async function loadHeaderData(): Promise<{
   formats: FormatOption[];
@@ -210,6 +212,10 @@ export async function SiteHeader() {
           {/* Ask BEAM: the same reach as search, at every breakpoint, because
               it answers the questions search cannot. Opens the slide-in panel. */}
           <BeamLauncher starters={beamStarters} />
+          {/* Donate: sits to the right of the two product controls, at every
+              breakpoint. Last in the cluster on purpose, because it is the one
+              control here that is not part of using the site. */}
+          <DonateLauncher cardEnabled={stripeConfigured()} />
           {/* Desktop: source + format toggles are tucked into a single popover
               to save header space. The navigation drawer carries the same two
               controls at smaller widths. */}

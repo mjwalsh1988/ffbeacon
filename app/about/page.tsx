@@ -10,6 +10,7 @@ import {
   Clock,
   Contrast,
   Eye,
+  HeartHandshake,
   Keyboard,
   Newspaper,
   Radar,
@@ -201,6 +202,12 @@ export default async function AboutPage() {
                   title="Who builds this"
                   body="Michael, twenty seasons in, and why a fantasy site needed building this way."
                 />
+                <LinkTile
+                  href="/donate"
+                  icon={HeartHandshake}
+                  title="Support the work"
+                  body="Nothing here is paywalled and nothing will be. A donation pays the hosting bill."
+                />
               </div>
             </Panel>
           </>
@@ -389,6 +396,61 @@ export default async function AboutPage() {
               settings rather than whatever you have picked globally. A trade is graded
               in the league it happened in, because that is the only format it ever
               meant anything in.
+            </p>
+          </div>
+        </Panel>
+
+        {/* Sits after the data section and before the founder section on
+            purpose. A reader who has just been told where every number comes
+            from is the reader best placed to hear who pays for it, and the
+            person they are being asked to support is introduced immediately
+            below. */}
+        <Panel
+          eyebrow="Support"
+          title="Free to use, funded by one person"
+          helper="No subscription, no paywall, no locked tier, and no company behind it."
+          glow
+        >
+          <div className="space-y-4 text-sm leading-relaxed text-ink-muted">
+            <p>
+              FF Beacon is entirely self funded. The hosting, the database, the data
+              feeds, the domain and the email all come off one personal card. There is
+              no investor waiting for a return and nobody to answer to about what the
+              numbers say.
+            </p>
+            <p>
+              Everything stays free whatever you do. The tools, the rankings, the Brief,
+              the guides, and the help you get from real people in Discord are open to
+              anyone who turns up. There is no donor tier, no early access, and no
+              advantage on the board, because a site that reads the same for everybody
+              is the entire point of this one.
+            </p>
+            <p>
+              If it has saved you from a bad trade, or made a draft easier to follow by
+              ear, a one-time donation puts something back into the bill. Card, Apple
+              Pay, Google Pay, PayPal and Venmo all work, and any amount is welcome.
+              None is expected.
+            </p>
+            <p>
+              One thing worth saying plainly rather than burying: a donation is a gift,
+              not a purchase, so it is final and is not refunded. Nothing is being sold
+              here, so there is nothing to send back. If a charge is clearly a mistake,
+              a duplicate or an amount you did not mean to send, get in touch and we
+              will try to put it right.
+            </p>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Link
+              href="/donate"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-card bg-beacon px-5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+            >
+              <HeartHandshake aria-hidden="true" className="h-4 w-4" />
+              Make a donation
+            </Link>
+            <p className="text-xs leading-relaxed text-ink-subtle">
+              The Donate button in the site header opens the same thing without leaving
+              the page you are on.
             </p>
           </div>
         </Panel>

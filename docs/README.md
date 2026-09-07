@@ -25,6 +25,7 @@ before that date cite the old flat paths listed in the last column.
 | signal-check | signal-check.md | Signal Check trade analyzer engineering reference | docs/signal-check.md |
 | signal-profile | phase5-plan.md | Signal public profile, phase 5 block builder | docs/phase5-plan.md |
 | data-sources | data-sources.md | Source taxonomy for rankings, values and projections | docs/data-sources.md |
+| donations | donations.md | 2026-09-06: one-time donations by card, wallet, PayPal and Venmo, why hosted Stripe Checkout, the branded receipt sent from our own webhook, the donation_receipts ledger, and what the legal pages gained | new |
 | security | FF_BEACON_END_TO_END_SECURITY_AUDIT.md | The end to end audit | unchanged |
 | security | FF_BEACON_SECURITY_FINDINGS.json | Findings ledger | unchanged |
 | security | FF_BEACON_SECURITY_REMEDIATION_REPORT.md | What was remediated | unchanged |

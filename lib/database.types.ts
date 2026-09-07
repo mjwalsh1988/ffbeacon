@@ -1203,6 +1203,60 @@ export type Database = {
         };
         Relationships: [];
       };
+      donation_receipts: {
+        Row: {
+          amount_total_cents: number;
+          attempts: number;
+          claimed_at: string | null;
+          created_at: string;
+          currency: string;
+          id: string;
+          last_error: string | null;
+          livemode: boolean | null;
+          metadata: Json | null;
+          receipt_sent_at: string | null;
+          status: string;
+          stripe_payment_intent_id: string | null;
+          stripe_session_id: string;
+          surface: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          amount_total_cents: number;
+          attempts?: number;
+          claimed_at?: string | null;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          last_error?: string | null;
+          livemode?: boolean | null;
+          metadata?: Json | null;
+          receipt_sent_at?: string | null;
+          status?: string;
+          stripe_payment_intent_id?: string | null;
+          stripe_session_id: string;
+          surface?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          amount_total_cents?: number;
+          attempts?: number;
+          claimed_at?: string | null;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          last_error?: string | null;
+          livemode?: boolean | null;
+          metadata?: Json | null;
+          receipt_sent_at?: string | null;
+          status?: string;
+          stripe_payment_intent_id?: string | null;
+          stripe_session_id?: string;
+          surface?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       draft_market_adp: {
         Row: {
           adp: number;
@@ -7033,6 +7087,14 @@ export type Database = {
       };
       try_acquire_league_sync_lease: {
         Args: { p_holder: string; p_seconds: number };
+        Returns: boolean;
+      };
+      try_claim_donation_receipt: {
+        Args: {
+          p_max_attempts?: number;
+          p_session_id: string;
+          p_stale_seconds?: number;
+        };
         Returns: boolean;
       };
       try_claim_league_refresh: {

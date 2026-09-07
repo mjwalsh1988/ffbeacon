@@ -410,7 +410,21 @@ For canonical merged tables like `players` where one row represents the union of
 
 NEVER drop raw source data on the floor during ingestion. Even if we "only need 3 fields right now," store the full object.
 
-Tables currently subject to this rule: `player_value_history`, `rankings`, `projections`, `player_stats`, `news_items`, `players`, `leagues`, `rosters`, `league_users`, `league_transactions`, `draft_pick_values`, `player_market_snapshots`. Add to this list whenever a new ingestion table lands.
+Tables currently subject to this rule: `player_value_history`, `rankings`, `projections`, `player_stats`, `news_items`, `players`, `leagues`, `rosters`, `league_users`, `league_transactions`, `draft_pick_values`, `player_market_snapshots`, `donation_receipts` (see the exception below). Add to this list whenever a new ingestion table lands.
+
+#### The one exception: personal data from a system of record
+
+Store an allow-listed projection instead of the raw object when ALL THREE hold:
+
+1. The source is an authoritative **system of record** for that object, with its own retention obligation and an API to read it back.
+2. The object contains **personal data of an identified living person**.
+3. Our row stores **identifiers sufficient to retrieve the original on demand**.
+
+When they hold, name the allowed keys in the migration, write the projection as a pure function, and TEST it against a payload with every identity field populated. The test asserts that no name, address or email appears anywhere in the output, not merely that three keys were deleted.
+
+Why the rule bends only here. The rule is absolute for the tables above because those sources do not hand history back: KeepTradeCut will not return last Tuesday's values, and Sleeper's transaction list is whatever it is today, so `metadata` is the only copy that will ever exist. A payment processor inverts every term, and a published privacy policy outranks a repository convention. `donation_receipts` is the only table on this exception today, and the reasoning is written out in migration 0270 and `lib/donate/redact.ts`.
+
+**An allow-list, never a deny-list.** A deny-list keeps every field the third party has not yet been named in it, so a Dashboard setting or a new API version silently starts storing identity with no code change to review. That is not hypothetical: it is exactly how the first version of `redactStripeEvent` was written and what review caught.
 
 ### Pre-Calculated (Derived) Tables
 

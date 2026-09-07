@@ -10,8 +10,21 @@ export const SITE = {
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://ffbeacon.com",
   author: {
     name: "Michael",
+    /**
+     * The full legal name, used ONLY where a contract or a privacy notice has to
+     * name a real party: the Terms of Service and the Privacy Policy. Everywhere
+     * else on the site the byline is the first name, which is the voice the
+     * product is written in. A binding agreement with a first name in it is
+     * harder to enforce, so the two are kept apart rather than one being
+     * promoted over the other.
+     */
+    legalName: "Michael Walsh",
     bylineHref: "/author/michael",
   },
+  /** Where legal notices, privacy requests and data-deletion requests land. */
+  legalContactEmail: "michael@ffbeacon.com",
+  /** Whose law governs the Terms, and where a dispute is heard. */
+  governingState: "Indiana",
 };
 
 import type { Route } from "next";
@@ -289,6 +302,9 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
     links: [
       { label: "About", href: "/about" },
       { label: "Author", href: "/author/michael" },
+      // The header's Donate button is the fast path; this is the one people can
+      // find again later, and the one that survives being pasted into a message.
+      { label: "Donate", href: "/donate" },
       { label: "Terms of Service", href: "/terms" },
       { label: "Privacy Policy", href: "/privacy" },
     ],

@@ -200,6 +200,16 @@ const PAGE_CARDS: Record<string, PageCard> = {
     path: "/guides",
     badge: "Guides",
   },
+  donate: {
+    eyebrow: "Support FF Beacon",
+    headlineTop: "Free for everyone,",
+    headlineBottom: "paid for by one person",
+    subhead:
+      "No subscription, no paywall, nothing locked behind a tier. If the tools have been useful, you can put something back.",
+    facts: ["One-time", "Card, Apple Pay, PayPal"],
+    path: "/donate",
+    badge: "Donate",
+  },
 };
 
 /**

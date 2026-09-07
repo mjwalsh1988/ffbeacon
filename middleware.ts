@@ -22,6 +22,12 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // api/donate/webhook is excluded deliberately. Middleware runs before the
+    // route does, and updateSession calls supabase.auth.getUser(), so a forged
+    // webhook carrying a syntactically valid auth cookie could force one
+    // outbound Supabase Auth request per POST, before the signature check ever
+    // ran. That endpoint authenticates itself with an HMAC and never reads a
+    // session, so it needs nothing middleware provides.
+    "/((?!api/donate/webhook|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

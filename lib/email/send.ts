@@ -16,6 +16,38 @@
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
+/**
+ * A recipient address, reduced to something safe to write to a log.
+ *
+ * "michael@ffbeacon.com" becomes "m***@ffbeacon.com". Enough to tell one
+ * failing recipient from another while debugging, and not the address itself.
+ *
+ * This exists because a runtime log is not a transient thing: it is retained,
+ * searchable, and outside the systems our privacy policy describes. The donation
+ * receipt made that concrete, since /privacy states the donor's address is used
+ * to send the receipt and then discarded, and a warn() carrying it verbatim
+ * would have made that untrue for every send.
+ */
+function maskAddress(value: string): string {
+  const at = value.lastIndexOf("@");
+  if (at <= 0) return "***";
+  return `${value[0]}***${value.slice(at)}`;
+}
+
+function maskRecipients(to: string | string[]): string {
+  return (Array.isArray(to) ? to : [to]).map(maskAddress).join(", ");
+}
+
+/**
+ * Strip anything that looks like an address out of a provider error body before
+ * it is logged. Resend echoes the offending recipient back in a validation
+ * error, so logging its response verbatim reintroduces exactly what
+ * maskAddress() exists to prevent.
+ */
+function scrubAddresses(text: string): string {
+  return text.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[address]");
+}
+
 export const EMAIL_FROM = process.env.EMAIL_FROM ?? "FFBeacon.com <signal@ffbeacon.com>";
 export const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO ?? "michael@ffbeacon.com";
 
@@ -42,7 +74,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
   if (!apiKey) {
     console.warn(
       "[email] RESEND_API_KEY is not set; skipping send to",
-      Array.isArray(args.to) ? args.to.join(", ") : args.to,
+      maskRecipients(args.to),
     );
     return { ok: false, skipped: true };
   }
@@ -71,7 +103,11 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
 
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
-      console.error("[email] Resend responded", res.status, detail.slice(0, 500));
+      console.error(
+        "[email] Resend responded",
+        res.status,
+        scrubAddresses(detail).slice(0, 500),
+      );
       return { ok: false, skipped: false, error: `Resend error ${res.status}` };
     }
 

@@ -117,6 +117,9 @@ const STATIC_PATHS: Array<{ path: string; priority: number }> = [
   { path: "/games/would-you-rather", priority: 0.4 },
   { path: "/about", priority: 0.4 },
   { path: "/author/michael", priority: 0.4 },
+  // /donate is listed; /donate/thanks deliberately is not. A receipt is
+  // per-visit, carries a session id, and is marked noindex on the page itself.
+  { path: "/donate", priority: 0.3 },
   { path: "/privacy", priority: 0.2 },
   { path: "/terms", priority: 0.2 },
 ];
