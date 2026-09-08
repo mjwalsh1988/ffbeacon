@@ -12111,3 +12111,945 @@ SH-T001 to SH-T060 | completed | Saved Sleeper handle: every tool opens on the
        code files: zero em dashes, en dashes, curly quotes, apostrophes,
        ellipses, non-breaking spaces or middots.
      | notes: NOT COMMITTED and NOT PUSHED, by instruction.
+
+---
+
+# Site speed build (PERF-T###)
+
+Plan of record: `docs/performance/site-speed-audit-and-plan.md`. That document
+is the spec; Part 8 is the build. Deviations from it are recorded here under
+the task id rather than decided in place.
+
+Session of 2026-09-08. NOT COMMITTED and NOT PUSHED, by instruction.
+
+## Phase 0 - Measure
+
+PERF-T001 | completed | Field data: @vercel/speed-insights mounted in the root layout
+     | files: package.json, app/layout.tsx
+     | notes: `<SpeedInsights />` from `@vercel/speed-insights/next` sits beside
+       `<Analytics />` at the end of `<body>`. Page views were the only field data
+       the site had, so no audit could quote a real reader's LCP or INP. This is
+       the one change that makes the next audit measurable rather than modelled.
+     | verified: npx tsc --noEmit clean
+
+PERF-T002 | completed | scripts/measure-bundle.ts, run as npm run measure:bundle
+     | files: scripts/measure-bundle.ts, package.json
+     | notes: reads `.next/app-build-manifest.json`, sums per-route chunk bytes raw
+       and gzipped, prints the route table plus the ten largest chunks, and writes
+       the same text to `docs/performance/bundle-<date>.txt` so a before and after
+       can be diffed. Each chunk's gzip size is memoised in a Map: a chunk shared by
+       sixty routes is compressed once, not sixty times, which is the difference
+       between seconds and minutes. Exits 1 with a readable message when the
+       manifest is missing.
+     | deviation: the plan's starter code imports `statSync` and never uses it. It
+       is not imported here, because the repo typechecks and lints scripts.
+     | verified: npx tsc --noEmit and npx tsc --noEmit -p tsconfig.scripts.json both clean
+
+PERF-T003 | completed | Database baseline, then pg_stat_statements_reset()
+     | files: docs/performance/db-baseline-2026-09-08.md
+     | notes: the top 30 shapes by total time, the top 20 by mean over 20 calls, and
+       the 15 largest tables with their scan and dead-tuple counters, all recorded
+       with the exact SQL that produced them so the after-run is the same three
+       queries. Every figure in the audit held: the Realtime WAL poll on top at
+       13,171 s, `get_player_positional_finishes` second at 5,393 s over 7,857
+       calls, and `players` showing 81,321 sequential scans on 10,481 rows.
+       `pg_stat_statements_reset()` was run last, so the comparison window starts
+       from this point.
+     | verified: yes
+
+## Phase 1 - The database
+
+PERF-T010 | completed | The Sleeper-id player lookup, and the index it was defeating
+     | files: supabase/migrations/0271_players_sleeper_slug_tail.sql,
+       lib/sleeper-player-lookup.ts, lib/sleeper-player-lookup.test.ts,
+       lib/players/sleeper-lookup-guard.test.ts, lib/league-view-data.ts,
+       lib/league-power-rankings.ts, lib/trade-analyzer.ts, lib/player-exposure.ts,
+       lib/player-trades.ts, lib/power-pulse/load.ts, lib/database.types.ts
+     | notes: six files carried a copy of this lookup and four of them put the
+       indexed `external_ids->>sleeper` predicate and an unindexable
+       `slug.like.*-<id>` in the SAME `or()`, which makes the whole filter
+       unindexable. Measured on production before: Seq Scan, 10,473 rows removed,
+       1,319.8 ms. After, against the new generated column: Bitmap Index Scan,
+       4.06 ms on cold buffers. The four now adapt over `resolveSleeperPlayers`,
+       and the two that had already split their passes (player-trades,
+       power-pulse/load) had their fallback moved onto the indexed column too.
+     | notes: the backfill in 0271 is a no-op today. All 10,481 rows already carry
+       `external_ids.sleeper` and none of them disagrees with its own slug tail,
+       which was checked before the migration was written. It stays for the row
+       Sleeper adds tomorrow.
+     | notes: `resolveSleeperPlayers` gained `{ throwOnError }`, off by default.
+       The two feed callers want a transaction row to render with an id in place
+       of a name; league-power-rankings WRITES A CACHE from the result, and a
+       silently short lookup there stores a roster priced as though half of it did
+       not exist. That caller passes it.
+     | deviation: the plan named four callers. There were six. The two extra ones
+       were already correct in shape and only needed the fallback re-pointed.
+     | verified: guard test 3/3, lookup test 5/5, npx tsc --noEmit clean, and the
+       EXPLAIN above re-run on production.
+
+PERF-T011 | completed | Signal Scout reads the pre-calculated finishes table
+     | files: lib/signal-scout/stats-bundle.ts, lib/signal-scout/stats-bundle.test.ts
+     | notes: `get_player_positional_finishes` was the single largest query in the
+       ledger by total time (7,857 calls, 686 ms mean, 5,393 s). It ranks every
+       player at a position across every season by summing `player_stats.metadata`
+       per row, which is a full scan of a 293k row table, per round start. The
+       player profile had already moved to the nightly `player_positional_finishes`
+       table; Signal Scout now reads the same rows. Parity was checked against the
+       RPC on production for three players across 2020 to 2025: every (season,
+       finish, players_ranked) triple matched. The RPC is kept as the parity oracle.
+     | notes: the accepted trade is the one the profile already accepted, that the
+       current season's finishes lag by up to a day.
+     | verified: 10 files, 247 tests in lib/signal-scout/, all passing.
+
+PERF-T012 | completed | The draft market view becomes a table
+     | files: supabase/migrations/0272_player_market_latest_table.sql,
+       lib/sync-sleeper-market.ts, lib/database.types.ts
+     | notes: the view was a DISTINCT ON over 109,754 rows whose ordering no index
+       could serve: sequential scan, then an external merge sort spilling 16 MB to
+       disk, 1,330 ms. The same lookup against the new table is 0.479 ms. The view
+       is RENAMED to `player_market_latest_view` and kept for one release, per the
+       plan; it is dropped in a later migration once the sync has run in production.
+     | deviation: two, both found by checking the live data rather than the plan's
+       draft DDL. `adp` is jsonb, not numeric. And `player_id` is NOT unique in the
+       view's output: 3,635 rows over 3,142 distinct player ids, because sleeper
+       and dynastyprocess both write a row per player. The primary key is therefore
+       (source, season_type, sleeper_player_id), which is the view's own DISTINCT ON
+       grouping, with a plain index on player_id for the one reader's lookup.
+     | known gap: `lib/sync-rookie-adp.ts` also writes dynastyprocess rows into
+       `player_market_snapshots` and does not yet maintain the new table, so those
+       rows reflect the one-time seed until it does. Closed below.
+     | verified: RLS policies present, anon SELECT returns 3,635 rows, anon INSERT
+       refused with 42501. 35/35 tests in lib/breakdown/.
+
+PERF-T013 | completed | The two latest-row indexes
+     | files: supabase/migrations/0273_latest_row_indexes.sql
+     | notes: `player_value_history (source, captured_at desc)` and
+       `rankings (generated_at desc)`. Both created CONCURRENTLY, which cannot run
+       inside a transaction block, so they are applied by hand and the migration
+       file carries the statements plus the confirmation. The first came in at
+       15 MB, not the 60 MB the audit estimated.
+     | verified: both indisvalid on production.
+
+PERF-T014 | completed | 58 RLS policies rewritten into the initplan form
+     | files: supabase/migrations/0274_rls_initplan.sql
+     | notes: `auth.uid() = user_id` becomes `(select auth.uid()) = user_id`, which
+       Postgres evaluates once per query instead of once per candidate row. 58
+       policies across 21 tables, derived from `pg_policies` rather than copied from
+       the audit's prose. Nine policies were already in the initplan form and were
+       left alone; the six tables carrying two permissive SELECT policies keep both,
+       because that pair IS the access matrix (own rows plus public rows).
+     | notes: ALTER POLICY rather than DROP and CREATE, so the name, roles, command
+       and permissiveness cannot drift.
+     | verified: pg_policies before and after, 250 rows both times, every
+       (tablename, policyname, permissive, roles, cmd) byte-for-byte identical, and
+       the only qual differences are the wrapping. Semantics proved under
+       begin/rollback on user_preferences, signal_reactions and league_sync_jobs for
+       anon, authenticated and service_role. The advisor's auth_rls_initplan lint
+       went from 58 to 0; multiple_permissive_policies stayed at 6, as intended.
+
+PERF-T015 | completed (indexes) | The six foreign keys on a read path
+     | files: supabase/migrations/0275_hot_fk_indexes.sql
+     | notes: seven indexes, 32 kB to 688 kB each, all CONCURRENTLY. Confirmed first
+       that no existing index led with the column: article_players and
+       beacon_value_references both have composite primary keys that lead with the
+       OTHER column, and draft_pick_values leads with season.
+     | verified: all seven indisvalid on production.
+
+## Phase 2 - The request path
+
+PERF-T041 | completed | Home page: cached content read, member-aware hero streamed behind Suspense
+     | files: lib/home-content.ts, app/page.tsx, lib/beacon-brief/worker.ts,
+       app/guides/fantasy-football-draft-guide/page.tsx
+     | notes: the three public reads (articles, format_configs, source_registry)
+       moved into `lib/home-content.ts loadHomeContent()`, wrapped in
+       `unstable_cache(..., ["home-content"], { revalidate: 300, tags: ["home"] })`
+       via `createCachedReadClient()`. `app/page.tsx` no longer awaits a
+       cookie-based Supabase client for these three reads.
+     | notes: only the pieces that actually read `isMember`/Discord stats moved
+       behind Suspense, not the whole Hero or CtaSection: `HeroPrimaryCta` (the
+       hero's primary button), `DiscordCommunityCardAsync` (the right-column
+       card), and `CtaContent` (the closing CTA's eyebrow, heading, copy and
+       button, which is almost all of that section anyway). The H1, the static
+       copy, the feature pills and the two other hero links render immediately
+       without waiting on auth or Discord. All three share ONE `loadMemberContext()`
+       promise, started but not awaited in `HomePage`, so the auth check and the
+       Discord call each run once regardless of how many boundaries read them.
+     | notes: fallbacks use `role="status"` plus a `sr-only` label and
+       `aria-hidden` pulse shapes, matching the pattern already on
+       `app/leagues/[league_id]/page.tsx` (ActivitySkeleton/RankingsSkeleton).
+       Nothing moves focus on resolve; each fallback reserves roughly the real
+       element's height (min-h-11 for the button, the card's outer chrome and
+       stat-grid shape for the Discord card, stacked bars for the CTA copy) so
+       nothing shifts when the real content streams in.
+     | notes: `revalidateTag("home")` added to `lib/beacon-brief/worker.ts`
+       `handleArticleWrite`, immediately after the article insert succeeds,
+       guarded by `if (published)` (published = settings.autopublish). A draft
+       insert does not change what the home page shows, so it does not bust the
+       cache. This is the ONLY place in worker.ts that inserts a new article; the
+       collision/rewrite path (`applyRewriteToArticle`) only edits an existing
+       row's content and was left alone.
+     | notes: `app/page.tsx` still has no `export const dynamic` override
+       (unchanged: it was never set there to begin with; `isDiscordMember()`
+       reading cookies() makes the route dynamic on its own). No Partial
+       Prerendering flag was touched, per the plan's explicit instruction not to
+       reach for it.
+     | verdict: draft guide (`app/guides/fantasy-football-draft-guide/page.tsx`)
+       LEFT ALONE, force-dynamic kept. Evidence: line 121-125 awaits
+       `searchParams` for `?format=`; line 128-129 calls
+       `resolveFormatSlug(supabase, params.format)`, which (`lib/preferences.ts`
+       lines 91-118) reads `getUserPreferences(supabase)` (a per-user DB row
+       behind auth) and falls back to a cookie via `readCookieSlug`; line 131
+       calls `isDiscordMember()`. The rendered board and the Discord CTA both
+       differ per reader. Caching this page for an hour would serve one reader's
+       resolved format and membership state to everyone else for up to an hour,
+       which breaks both the Source and Format Sync Requirements (CLAUDE.md) and
+       the membership-aware CTA. `dynamic = "force-dynamic"` at line 104 is
+       unchanged and `revalidate` was NOT added.
+     | verified: npx tsc --noEmit clean on all changed files (three pre-existing
+       errors elsewhere in the tree, in league-sync-worker/route.ts and
+       league-bulk-sync.ts, are unrelated uncommitted work from outside this
+       task and untouched by it). No test in the repo imports app/page.tsx or
+       lib/beacon-brief/worker.ts directly; the full lib/beacon-brief suite
+       (12 files, 139 tests) still passes.
+
+PERF-T042 | completed | Discord reads raised to a 24 hour cache (owner-approved 2026-09-08)
+     | files: lib/discord-stats.ts, lib/discord-membership.ts,
+       lib/discord-stats.test.ts, lib/discord-membership.test.ts
+     | notes: `lib/discord-stats.ts` `fetchGuildStats` is now wrapped in
+       `unstable_cache(fetchGuildStats, ["discord-guild-stats"], { revalidate:
+       86_400, tags: ["discord-guild-stats"] })`; the old module-level
+       `CACHE_TTL_MS`/`cachedStats` memo and its stale-on-error fallback are
+       removed, since the Next data cache now owns the TTL and survives a cold
+       start. A failed or malformed fetch returns null, and that null is cached
+       for the same 24 hours as a real value (the hero simply omits the numbers
+       for the window rather than showing stale ones); flagged in this entry
+       since the plan does not call it out explicitly.
+     | notes: `lib/discord-membership.ts` `CACHE_TTL_MS` changed from 5 minutes
+       to `24 * 60 * 60 * 1000`. The per-Discord-id `membershipCache` Map stays
+       in-process, unchanged in shape, per the plan: it is keyed by a reader's
+       own Discord id and must never be shared across readers, which the Next
+       data cache has no way to enforce per key.
+     | deviation: the plan states "the existing tests for both files gain a case
+       at the new TTL." Neither file had a test file before this change
+       (confirmed by search; no discord-stats.test.ts or discord-membership.test.ts
+       existed). Both were written new rather than extended, following the
+       repo's colocated *.test.ts convention.
+     | deviation: `fetchGuildMembership` in discord-membership.ts was changed
+       from module-private to exported, and a test-only
+       `_resetDiscordMembershipCacheForTests()` was added (mirroring
+       `_resetSleeperBudgetForTests` in lib/sleeper-budget.ts). Both exported
+       entry points (`getDiscordMembership`, `isDiscordMember`) are wrapped in
+       React `cache()`, which memoizes a zero-argument function for the life of
+       the module scope; calling either twice with different mocked fetch
+       responses in one test file would just return the first result again, so
+       the TTL logic had to be tested through the argument-taking function that
+       actually holds it.
+     | verified: npx tsc --noEmit clean. npx vitest run
+       lib/discord-stats.test.ts lib/discord-membership.test.ts: 2 files, 13
+       tests, all passing (includes a case holding time at 23 hours inside the
+       new TTL with no second network call, and a case past 24 hours triggering
+       a re-check).
+
+PERF-T022 | completed | Middleware verifies the session token locally
+     | files: lib/supabase/middleware.ts, middleware.ts, lib/supabase/middleware.test.ts
+     | notes: `supabase.auth.getUser()` became `getClaims()`. The old call is a
+       network round trip to the auth server on every matched request for every
+       signed-in reader, 2,821 a day at 70 ms mean, in front of routing. This
+       project publishes an ES256 public key at /auth/v1/.well-known/jwks.json
+       (verified today: one key, kid 568e36a4, alg ES256), so the signature can
+       be checked here in under a millisecond.
+     | notes: the session refresh this function exists for is unaffected.
+       `getClaims()` with no argument calls `getSession()` first, which is what
+       refreshes an expiring token and writes the rotated cookies. Confirmed by
+       reading the installed @supabase/auth-js 2.105.4 source, not assumed.
+     | notes: it degrades safely. For an HS256 token, a token with no key id, or
+       an environment without WebCrypto, auth-js falls back to `getUser()`
+       internally, which is exactly the line this replaced. So this is never
+       less correct than before, only sometimes faster.
+     | notes: the matcher now also excludes /api/cron/, /api/og/, /sitemap.xml,
+       /sitemaps/, /brief/rss.xml and /llms.txt. None of them reads a session,
+       and none is ever the landing spot for the stray OAuth code= the
+       middleware body catches. Verified with a regex harness over 16 paths.
+     | open question for the owner: the audit could not tell from outside
+       whether that ES256 key is the CURRENT signing key or a standby. If it is
+       standby, tokens are still signed with the legacy secret and getClaims
+       falls back to the network call, so this change is correct but saves
+       nothing until someone clicks Rotate in Supabase, Authentication, JWT
+       signing keys. Nothing breaks either way, and readers keep their sessions
+       across a rotation.
+     | verified: 3/3 in lib/supabase/middleware.test.ts (asserts getClaims is
+       called and getUser is not, and covers the matcher in both directions).
+
+PERF-T023 | completed | createAdminClient is React-cached
+     | files: lib/supabase/server.ts
+     | notes: a render that called it three times built three clients, each with
+       its own connection and its own GoTrueClient. It carries no cookies, so
+       there is no per-caller state to keep apart. Outside a request it degrades
+       to a plain call, which is what scripts and cron bodies already had.
+
+PERF-T040 | completed | The league overview stops reading the same row twice
+     | files: lib/league-pulse.ts, app/leagues/[league_id]/page.tsx, plus the
+       other league routes
+     | notes: `pulseLeagueCore` now hands back the `leagues` row it already read
+       (the cached branch) or upserted (the sync branch), as `LeagueCoreRow`,
+       with the shared column list exported as `LEAGUE_CORE_COLUMNS`. On the
+       sync branch the two columns the freshness stamp changes are corrected on
+       the way out, so the caller is told what was actually written.
+     | notes: the two head-count queries on rosters and league_users are now
+       behind an option, default off.
+     | deviation: the plan said the bulk sync passes counts: true. It does not
+       need to. `syncOneLeague` ignores the counts entirely, and
+       lib/league-bulk-sync.ts:234 (which the audit cited) is a different
+       `counts` object about job statuses. The only caller whose own result type
+       promises them is `pulseLeague`, so that is the one that asks. Manager
+       Pulse's `pulseLeagueFootprint` deliberately does not, because it queues
+       dozens of league-seasons per report and nothing there reads them.
+     | notes: the overview page is now three waves instead of nine to eleven
+       serial reads. Wave one is the viewer, the core sync and the source
+       preference; wave two is the format resolution and the header actions.
+       The core sync moved ahead of the legacy tab=transactions redirect, so a
+       redirecting request now warms the league it is being sent to rather than
+       skipping the sync.
+     | verified: npx tsc --noEmit clean, 5/5 in lib/league-bulk-sync.test.ts.
+
+PERF-T050 | completed | Site search is one indexed query, not two
+     | files: lib/player-search.ts, lib/player-search.test.ts
+     | notes: the name filter was an or() across full_name, first_name and
+       last_name. The last two carry no index, and one unindexed arm of an OR
+       makes the whole predicate a sequential scan. It now searches
+       `players.search_name` alone, which migration 0194 built for this and gave
+       a GIN trigram index. Measured on production after: Bitmap Index Scan on
+       idx_players_search_name_trgm, 1.9 ms.
+     | notes: THE QUERY HAS TO BE NORMALIZED THE SAME WAY THE COLUMN IS, and
+       this is the part that would have been a silent bug. `search_name` is
+       lowercased with every non-alphanumeric character stripped, so a reader
+       typing "A.J." was searching for a string with dots in it against a column
+       that has none. `normalizeSearchQuery` does the identical transformation
+       and is tested against four shapes.
+     | notes: the second round trip is gone. `fantasyRelevantPlayerIds` used to
+       send up to 200 uuids to `rankings` per settled keystroke; the answer is
+       the same for every reader and changes once a night, so the whole ranked
+       set (11,852 rows over 812 distinct players) is read once and memoised for
+       five minutes through lib/memo-ttl.ts. The old function survives as a thin
+       filter over that set and issues no query of its own.
+     | verified: 12/12 in lib/player-search.test.ts.
+
+PERF-T051 | completed | The rankings page reads values off the trends table
+     | files: components/rankings/rankings-view.tsx
+     | notes: the page read the whole of `player_value_history` for a format and
+       source with no player filter, no date bound and no limit. PostgREST
+       capped it at 1,000 rows, which happened to be about one day of captures,
+       so the page worked by coincidence; a source capturing more than 1,000
+       rows a day for one format would have returned a partial day.
+       `player_value_trends` carries the current value per (player, format,
+       source) by construction and was already being fetched in the same wave.
+     | deviation: the plan said the column is `value`. It is `current_value`.
+     | deviation: the plan said to drop the history read. One row of it stays,
+       for the "Values as of" date and nothing else. The trends row's own
+       `updated_at` is NOT that date: it is when the trend calculation last ran,
+       which happens nightly whether or not a new value was captured, so for a
+       weekly source like dynastyprocess it would claim today over values
+       captured six days ago. A limit(1) read is not the unbounded read this
+       task removed.
+     | notes: checked on production that trends covers everything history does
+       and more: every (format, source) pair with recent history has at least as
+       many players in trends, and dynastyprocess has 638 in trends against none
+       in a two-day history window.
+
+PERF-T060 | completed | One RPC per worker tick, and a quiet ledger
+     | files: supabase/migrations/0277_league_sync_tick.sql,
+       lib/league-bulk-sync.ts, lib/league-bulk-sync.test.ts, lib/cron-runs.ts,
+       lib/cron-health.ts, app/api/cron/league-sync-worker/route.ts
+     | notes: `league_sync_tick(p_holder, p_lease_seconds, p_limit)` composes the
+       existing try_acquire_league_sync_lease and claim_league_sync_jobs plus a
+       pending count into one round trip. The lease semantics stay in SQL where
+       they were; nothing about them was reimplemented. No rows at all is how
+       the function says the lease is held by somebody else, which is different
+       from an empty claim, and the worker reads the two apart.
+     | notes: `recordCronRun` gained a quietWhen predicate. A pass that claimed
+       nothing, finalised nothing, reaped nothing, completed no request and
+       computed no live report writes no ledger row, with one heartbeat row an
+       hour so cron-health still sees the job alive. This job ticks every minute
+       and cron_runs had reached 76 MB.
+     | notes: the route's separate pending-count query is gone; the count comes
+       back on the pass summary from the same tick that claimed the jobs.
+     | deviation: the route still pre-acquires the lease and still reads settings
+       to size it. Removing that would have moved the reap and the finalize
+       sweep in front of the lease check, so two concurrent passes could both
+       run them. PERF-T020 already made that settings read a memory hit, which
+       is what the duplicate-read half of this task was about.
+     | verified: the RPC called against production with a two-second lease and a
+       throwaway holder returned one row with a null job and a zero pending
+       count, and the lease expired on its own, so the live worker was never
+       locked out. 5/5 in lib/league-bulk-sync.test.ts after its RPC mock was
+       moved to the new shape, and the cron-health heartbeat test passes.
+
+PERF-T061 | completed | Autovacuum thresholds, the one-off vacuum, and a capped payload
+     | files: supabase/migrations/0278_autovacuum_thresholds.sql, lib/cron-runs.ts
+     | notes: player_value_history (1.77 GB, 2.07M rows) had not been
+       autovacuumed since 2026-08-11 and player_stats (949 MB) not since
+       2026-07-24, with 41,328 dead tuples. The default scale factor of 0.2
+       makes a 2M row table wait for 400k dead rows; 0.02 makes it 40k.
+     | notes: vacuum (analyze) was run by hand on both through the SQL console,
+       not as a migration, because it is not repeatable DDL. Both now report 0
+       dead tuples and a last_vacuum of today.
+     | notes: cron_runs.result is truncated to 2 kB before the update, field by
+       field, keeping the row readable and saying it was truncated with the
+       original size rather than storing broken JSON.
+
+PERF-T062 | completed | Cron staggering, and the missing cache tag
+     | files: vercel.json, app/api/cron/sync-sleeper-players/route.ts
+     | notes: sync-dynastyprocess moved to 15 minutes past 09:00 UTC (it shared
+       the hour with sync-sleeper-stats) and sync-nfl-odds to 15 past 13:00 (it
+       shared with beacon-reference-rebuild). Neither pair reads the other's
+       tables, so this was database CPU overlap rather than a correctness issue.
+     | notes: the players sync now calls revalidateTag(CACHE_TAGS.playerDepth)
+       after a successful write, gated so it does not fire on the no-op path or
+       the thrown-error path. The depth chart cache was relying on its 24 hour
+       TTL.
+
+PERF-T030 | completed | The icons and the two logos
+     | files: app/layout.tsx, public/img/favicon.ico, public/img/ff-beacon-logo.png,
+       public/img/ff-beacon-logo-email.png, public/img/apple-touch-icon.png,
+       scripts/optimize-brand-images.ts, package.json
+     | notes: the owner had already replaced two of these by hand before this
+       session started, and had deleted favicon.svg (1,778,077 bytes, an SVG
+       wrapper around a base64 PNG) and favicon-96x96.png. Both were still
+       listed in the layout's icon metadata, so every first visit would have
+       404ed on the file the browser prefers. The SVG entry is gone with a
+       comment saying why, and the 96 px entry now points at the existing
+       ff-beacon-mark-96.png, which is 4,989 bytes and exactly 96 px.
+     | notes: the owner's new favicon (favicon (2).ico, 3,137 bytes, 32 and 16
+       px) replaced the 15,086 byte three-image original. Verified by parsing
+       the ICO directory rather than trusting the filename.
+     | notes: the two logos were resized to 512 px with sharp, by a repeatable
+       script rather than by hand, so the provenance is in the repo. The email
+       logo had not been touched by the owner and was still 1,003,412 bytes at
+       1094 px, embedded in every receipt, Signal email and Discord post and
+       rendered at 78 px. apple-touch-icon.png was 46.8 kB for a 180 px square.
+     | measured: favicon.ico 15,086 to 3,137 bytes. ff-beacon-logo.png 1,333,180
+       (before the owner's pass) to 124,662 (after it) to 58,850. Email logo
+       1,003,412 to 38,488. apple-touch-icon 47,936 to 10,197. First-visit icon
+       bytes went from 1.78 MB to under 9 kB, against the plan's 20 kB target.
+
+PERF-T033 | completed | The layout stops hydrating chat and guide code on every page
+     | files: components/beam/beam-launcher.tsx,
+       components/signal-guide/signal-guide-mount.tsx
+     | notes: BeamChat (567 lines) and GuidePanel were static imports in the root
+       layout's chunk, so every page parsed and hydrated them for panels most
+       readers never open. Both are now next/dynamic with ssr false, gated on
+       the launcher's existing intent state.
+     | notes: the guide needed more than a swap. Unlike BEAM's panel it had no
+       prime-hidden mechanism, so a straight dynamic import would still have
+       fetched the chunk on every guide-enabled page. It gained a `primed` state
+       mirroring the BEAM launcher, set by the same hover, focus, touch and
+       click handlers, and reset on every pathname change.
+     | notes: the loading fallbacks reserve height and carry aria-busy. BEAM's
+       is safe to render while merely primed because its wrapper is hidden,
+       aria-hidden and inert until open; the guide's is null until the panel is
+       actually open, because it has no such wrapper.
+     | deviation: components/discord-cta.tsx was NOT split. On inspection it has
+       no expandable body to separate from a trigger: it is a 175 line floating
+       pill holding a link and a dismiss button, both always visible. Splitting
+       it would add a round trip and a focus risk for no measurable gain, since
+       the 60 to 80 kB the audit describes is BeamChat and GuidePanel.
+
+PERF-T034 | partially completed | Loading boundaries for the tool sections
+     | files: app/tools/loading.tsx, app/rankings/loading.tsx, app/brief/loading.tsx
+     | notes: three of the five the plan asked for, each reusing the branded
+       card from app/leagues/loading.tsx: the PulseLoader mark, one
+       role="status" aria-live="polite" region holding both the section heading
+       and the word Loading, so the skeleton announces once rather than per bar.
+       Every target page renders exactly one h1 through PageMasthead, so the
+       skeleton's h1 is replaced by a real h1 at the same level.
+     | deviation: app/players/loading.tsx and app/[handle]/loading.tsx were NOT
+       created, and this is deliberate. A loading.tsx flushes a 200 status
+       before the page body runs, so a later notFound() renders the not-found UI
+       under a 200: a soft 404. app/leagues/loading.tsx accepts that trade
+       because league URLs are per-reader and are not in the sitemap. Player
+       slugs and profile handles ARE in the sitemap and are the site's primary
+       indexed content, and both routes call notFound() on routine input (a
+       renamed slug, a mistyped handle, a profile that is not live). Turning
+       that traffic into fake 200s is a real SEO cost, not a theoretical one.
+       Closing it properly means an explicit noindex not-found render instead of
+       notFound(), which is its own change.
+
+PERF-T015b | completed | The thirteen unused indexes, dropped
+     | files: supabase/migrations/0276_drop_unused_indexes.sql
+     | notes: the audit's list of thirteen was re-derived rather than taken on
+       trust, four checks per index: `idx_scan` from pg_stat_user_indexes (which
+       was NOT reset with pg_stat_statements, so it is still the long-running
+       total), a grep of the indexed column across lib, app, components and
+       scripts for a real predicate, a search of both the migration files and
+       `pg_proc.prosrc` for a SQL function body using it, and a foreign-key
+       check. All thirteen came back at idx_scan 0 with no predicate anywhere
+       and no foreign key, so all thirteen were dropped.
+     | notes: each drop carries, in the migration comment, the evidence, the
+       scan count and the original `create index` statement read verbatim out of
+       pg_indexes.indexdef, so it is reversible by copy and paste. This is the
+       plan's own requirement and it matters more than usual here, because the
+       whole set is under 5 MB and the audit calls it the lowest priority task
+       in the plan. Correctness beat completeness.
+     | verified: the advisor's unindexed_foreign_keys count is 53 before and 53
+       after, which is the proof that none of them was quietly backing a key;
+       unused_index went 47 to 34, exactly the thirteen and no new findings.
+
+PERF-T020 | completed | An in-process TTL memo for the reference and settings reads
+     | files: lib/memo-ttl.ts, lib/memo-ttl.test.ts, lib/source.ts, the nine
+       settings loaders, lib/beacon-brief-feed.ts, nine admin actions files,
+       lib/manager-pulse/settings.test.ts, lib/signal-scout/settings.test.ts
+     | notes: React `cache()` dedupes within ONE render and nothing across
+       renders, so format_configs was read 8,352 times a day, source_registry
+       6,889, beam_settings 5,063 and so on, at about 45 to 50 ms each, for
+       tables that change when an admin saves a form. Eleven reads are now
+       memoised for 60 seconds, and every admin save action busts its own key
+       after a successful write.
+     | notes: the doc comment on `memoTtl` spends a paragraph on the one thing
+       that must never happen: the store is a single global Map, so a key built
+       from a reader's id, session or preferences would hand that reader's
+       answer to whoever asks next. That is a data leak, not a performance bug,
+       and no TTL length makes it safe. All eleven memoised reads were checked
+       against that and none is user-scoped.
+     | notes: two loaders take an argument that changes the result
+       (`resolveCategory` by slug, `resolveTeam` by abbreviation) and the
+       argument is part of the key.
+     | notes: `lib/on-the-clock/settings.ts` had its own bespoke 30 second cache
+       and an `invalidateOnTheClockSettingsCache()`; both are gone, replaced by
+       the shared memo and a `bustMemo` in the admin action.
+     | known gap: `loadSidebar` in the Brief feed depends on the recent
+       published-article set, not only on an admin save, so its tag counts can
+       be up to a minute stale after a publish. The plan named that function
+       explicitly at "Low risk", so it is the plan's call rather than a new one.
+     | notes: a global vitest setup file (test/setup.ts) now clears the memo
+       before every test. Two settings test files needed a per-file bust for the
+       same reason, and one test in lib/projections/read.test.ts needed a bust
+       MID-TEST because it flips the feature flag and calls the loader twice
+       inside one case. Without that hook a suite that mocks a settings backend
+       per case is served its first case's answer for the rest of the file,
+       which is a failure that reads as belonging to the wrong test.
+     | verified: 8/8 in lib/memo-ttl.test.ts, 82/82 across every existing test
+       file touching a memoised loader.
+
+PERF-4.21-columns | no work needed | The wide player_stats reads
+     | notes: 4.21 says the multi-player `player_stats` reads "return every stat
+       column" and names lib/league-lineups/data.ts and lib/manager-ledger/load.ts
+       as the first callers to check. Checked: neither of those two files reads
+       `player_stats` at all, and every file that does already names its columns
+       explicitly (lib/beacon/stat-profiles.ts through PROFILE_COLUMNS,
+       lib/signal-scout/stats-bundle.ts, lib/player-profile.ts,
+       lib/faab/league-load.ts, lib/breakdown/load-extras.ts). There is no
+       `select("*")` against that table anywhere in lib or app. The 243 ms is
+       the row count and the payload width of the columns that ARE named, not a
+       star select, so there is nothing to narrow here without dropping data a
+       caller renders. Recorded rather than silently skipped.
+
+PERF-T021 | completed | The header frame paints without waiting for its controls
+     | files: components/site-header.tsx, components/site-header-controls.tsx
+     | notes: `SiteHeader` is a plain synchronous function now: the brand cell
+       and the rail toggle, plus a Suspense boundary around the new
+       `SiteHeaderControls`, which holds `loadHeaderData` and its four parallel
+       reads unchanged. The JSX moved verbatim; no copy, control or DOM ordering
+       changed.
+     | notes: no layout shift is structural rather than eyeballed. HeaderShell
+       fixes the header at h-[4.5rem] whatever the children, so vertical shift
+       is impossible; the fallback then mirrors each real control's own height
+       and responsive-hidden classes for horizontal stability.
+     | notes: the fallback renders aria-hidden divs, not disabled buttons, so
+       there is no tab stop inside it. A keyboard reader who tabs into the
+       header before the controls resolve passes straight through rather than
+       landing in a control that becomes enabled underneath them. That is the
+       trap this repo has hit before (a browser blurs a focused element the
+       moment it is disabled), and it is avoided by not having the control at
+       all rather than by trying to manage it. `aria-busy` sits on the container.
+     | notes: every component that moved was checked for a mount-time focus
+       call. Every `.focus()` in them is gated behind an open state set by a user
+       interaction, so nothing steals focus when the controls stream in.
+     | notes: the header region has no accessible name today, before or after,
+       so the "the landmark must not rename itself mid-page" requirement is met
+       by not inventing one.
+     | deviation: the mobile nav TRIGGER stayed inside the streamed controls
+       rather than in the synchronous frame. `AppMobileNav` takes sections,
+       viewer, formats and sources as required props, used only by the drawer,
+       so extracting just the trigger means splitting that component in two with
+       a shared ref for focus restoration on close. That is a real refactor
+       beyond the two files this task names.
+     | IMPORTANT FINDING, recorded so nobody assumes otherwise later: this does
+       NOT make any route static. `site-header-controls.tsx` still reads
+       cookies(), directly through `readCookieSlug` and transitively through
+       `createClient()`, and without partial prerendering (not enabled; the plan
+       rules it out in Part 10) a dynamic API anywhere in the tree opts the whole
+       route out of static rendering however deep the Suspense boundary is. What
+       this changes is WHEN the header's data-dependent HTML streams relative to
+       the page's own, which is the 50 to 110 ms the finding was about. A
+       comment at the top of site-header.tsx says the same thing.
+     | verified: npx tsc --noEmit clean; 41 header-matching tests pass.
+
+PERF-T031 | completed, target missed and said so | On The Clock stops shipping a draft room nobody has opened yet
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx,
+       lib/on-the-clock/heavy-engines.ts (new), and the panels it lazy-loads
+     | notes: the Supabase browser client is gone from module scope. Its only
+       use was one Realtime channel, and it was dragging GoTrue and WebSocket
+       code (242 kB raw across two chunks) onto the route for every reader,
+       live draft or not. `createClient` is now destructured from an await
+       import inside the realtime effect, with a `cancelled` flag for the case
+       where the league or the snapshot changes before the import resolves. The
+       real dependency array, the real subscription body and the real cleanup
+       (removeChannel, not unsubscribe) are unchanged.
+     | notes: about 3,000 lines of engine (the trade catalog, team rollups,
+       awards at 1,285 lines on its own, grades, pick surplus, the recap text)
+       moved behind one barrel, `lib/on-the-clock/heavy-engines.ts`, loaded the
+       first time the reader leaves the default pick view or the draft is
+       already complete. Nine panels are next/dynamic with height-reserving,
+       aria-busy fallbacks.
+     | notes: `PlayerSpotlight` was deliberately NOT split, against the audit's
+       parenthetical. It renders the actual who-to-pick cards on first paint, so
+       deferring it would put a loading gap in the primary pick flow, which this
+       task's own hard requirements forbid.
+     | notes: five panels got their own `enginesLoading` state rather than
+       reusing the existing "FF Beacon values are not available yet" message.
+       That message would have been a lie: the values ARE available, it is the
+       engine chunk that has not arrived.
+     | measured: 953 kB raw and about 300 kB gzip, down to 576 kB raw and 169 kB
+       gzip. That is 377 kB and 40%, and it is 76 kB OVER the plan's 500 kB
+       target. Not claimed as met. What is left in the route chunk was grepped
+       out of the built file: the recommendation engine and its reasoning
+       builder, the available list, the spotlight, and the ADP simulation behind
+       the always-visible sidebar radar. All of it renders on first paint for a
+       live draft. Closing the last 76 kB means either deferring the "why"
+       reasoning text behind a loading state on the pick screen, which is a real
+       UX trade against the no-gap rule, or trimming the recommendation engine
+       itself, which is its own piece of work.
+     | verified: zero hits for GoTrueClient and createBrowserClient in the built
+       page chunk, npx tsc --noEmit clean, npm run build clean, and the number
+       above stable across two consecutive fresh builds.
+
+PERF-T032 | completed | Twelve account forms write through server actions
+     | files: app/login/login-form.tsx, app/my-beacon/**/*.tsx and the matching
+       actions.ts files (account, profile, rankings)
+     | notes: thirteen client components imported `lib/supabase/client`; twelve
+       were forms whose only use of it was a write, and each one was putting the
+       242 kB browser client on its route. The writes are now server actions.
+     | notes: EVERY new action re-derives the acting user server-side through
+       the request-scoped client and re-verifies ownership against the database.
+       It never trusts an id, a handle or a flag from the client. Two examples
+       worth naming: `changePassword` re-reads whether the account has a
+       password through the `account_has_password` RPC rather than believing the
+       prop the form was rendered with, and the board import re-reads the
+       board's own tiers_enabled and tier_count from the database rather than
+       the client's copy before remapping tiers.
+     | notes: the three surfaces that stream files to Storage (avatar, media,
+       the wall composer's image step) keep a browser client, now behind an
+       `import type` at module scope plus a dynamic import at the moment of
+       upload. `/login` keeps its client for the OAuth redirect, dynamically
+       imported on button press. Identity linking is the same; identity
+       UNLINKING became an action that looks the identity up in the caller's own
+       user.identities.
+     | notes: every existing aria-live, role="alert" and aria-describedby
+       pattern was preserved; only what runs inside the existing startTransition
+       callbacks changed. One improvement: the delete-board button used to
+       swallow a failed delete silently, and now announces it and returns focus
+       to the trash icon, because the failure path unmounts the confirm buttons
+       that had focus.
+     | measured: /login 590 to 353. /my-beacon 586-640 down to 352 to 404. The
+       one at 404 is the Signal wall, and the excess there is the GIF and emoji
+       pickers, not the Supabase client.
+     | note for later, not in scope: /my-beacon/sleeper-leagues is now the
+       largest route on the site at 586 kB and it never imported the Supabase
+       client, so nothing in this task touched it. Whatever is in it is a
+       separate question.
+
+## Verification of the whole build
+
+- `npx tsc --noEmit`: clean.
+- `npx vitest run`: 306 files, 4,572 tests, all passing.
+- `npm run build`: clean, every route registered.
+- `npm run measure:bundle`: written to docs/performance/bundle-2026-09-08.txt.
+- Banned-character scan across all 97 changed code files: zero em dashes, en
+  dashes, curly quotes, curly apostrophes, ellipses, middots or non-breaking
+  spaces.
+- Supabase security advisor: four pre-existing warnings, unchanged. Nothing this
+  build added is flagged; `league_sync_tick` is SECURITY DEFINER with a pinned
+  search_path and is granted to postgres and service_role only, matching its
+  sibling lease function exactly.
+
+## One incident, recorded because it nearly cost the session
+
+An agent working PERF-T020 ran `git stash` to compare against a baseline while
+seven other agents were editing the same working tree. That removed every
+uncommitted change in the repo for several minutes. It was recovered with no
+data loss (the stash popped cleanly and every file was verified against a
+backup), but it is the reason every subsequent agent prompt in this session
+carried an explicit prohibition on git state commands. Do not take a "before"
+state by reverting a shared tree.
+
+## Review round, and the fixes that came out of it
+
+Four independent reviewers read the finished build: plan adherence and bugs,
+security, accessibility, and performance. What they found, and what was done
+about it. A finding recorded here with no fix is a decision, not an oversight.
+
+PERF-R001 | fixed | The middleware matcher excluded one OG route that DOES read a session
+     | files: middleware.ts, lib/supabase/middleware.test.ts
+     | found by: the security review.
+     | notes: PERF-T022 excluded `/api/og/` from the session refresh on the
+       stated grounds that OG routes render from an id in the path and never
+       read a session. That is true of nine of the ten. The tenth,
+       `app/api/og/breakdown/[a]/[b]/route.tsx`, builds the COOKIE-BOUND client
+       and resolves the reader's format and source through
+       `resolveFormatSlug` / `resolveSourceSlug`, which call `auth.getUser()`.
+       So a signed-in reader hitting that endpoint on an expiring token would
+       have silently lost their format and source personalization, because
+       middleware was no longer there to rotate the cookie.
+     | notes: it fails safe (a null user falls through to the anonymous
+       defaults), so this was not exploitable. It was still wrong, and the
+       middleware test only covered `/api/og/league/abc`, an admin-client route,
+       so nothing caught it.
+     | fix: the exclusion is now `api/og/(?!breakdown/)`. The alternative was to
+       move that route to the service-role client like its siblings, which would
+       shift it from the anon RLS context to service_role to save one request.
+       Not worth it. A test now pins the exception in both directions.
+
+PERF-R002 | fixed | Three matcher exclusions had no path boundary
+     | files: middleware.ts, lib/supabase/middleware.test.ts
+     | found by: the security review.
+     | notes: `sitemap\.xml`, `brief/rss\.xml` and `llms\.txt` were bare
+       substring alternatives, so `/sitemap.xml.bak`, `/llms.txt.php` and
+       `/brief/rss.xmlx` were excluded from middleware too. Inert today, because
+       nothing is routed under those prefixes, and a silent hole the day
+       something is. The pre-existing `api/donate/webhook` alternative had the
+       same shape.
+     | fix: every literal is anchored, with `$` where the path ends there and a
+       trailing slash where it does not. Verified over 24 paths including
+       `/api/ogsomething`, `/api/cronx` and `/api/donate/webhookx`, all of which
+       correctly still run. Double-slash, percent-encoded and case-variant
+       probes all resolved in the safe direction before and after.
+
+PERF-R003 | fixed | On The Clock announced five loading states twice
+     | files: app/tools/on-the-clock/on-the-clock-client.tsx,
+       app/tools/on-the-clock/draft-complete.tsx
+     | found by: the accessibility review, and it is the most severe finding of
+       the four reports.
+     | notes: five panels have BOTH a `next/dynamic` loading fallback
+       (`PanelLoading`, role="status") and their own `enginesLoading` state
+       (`LoadingCard`, also role="status"), and the two labels were byte-for-byte
+       identical. The panel's own chunk resolves before the much larger
+       heavy-engines chunk, so a live region unmounted and a second one mounted
+       with the same sentence a moment later. Two announcements, same words.
+     | notes: the same review found the mirror-image defect on the completed
+       draft screen: the grade card's letter grade, best pick, worst pick and
+       biggest hole are gated on the engines but `DraftComplete` had no loading
+       state, so they appeared silently with no announcement at all.
+     | fix: `PanelLoading` is no longer a live region. It keeps its reserved
+       height and its aria-busy and its visible text; the announcing is left to
+       the panel that replaces it. A view switch is already announced by the
+       stable wrapper that receives focus. `DraftComplete` gained the same
+       honest engines-loading state its five siblings have, on the part that is
+       actually waiting rather than on the whole card.
+
+PERF-R004 | fixed | The header fallback showed phantom account controls to signed-out readers
+     | files: components/site-header.tsx, components/site-header-controls.tsx
+     | found by: the accessibility review.
+     | notes: `HeaderControlsFallback` always reserved a My Beacon icon and a
+       Sign out button. The real signed-out state renders neither, at any width.
+       So every signed-out visitor, who is most of them, saw a control box
+       appear and then vanish, at every breakpoint including mobile. The
+       original comment bet on the swap being too fast to notice, which is a
+       speed assumption rather than a geometry guarantee.
+     | fix: the frame now reads the request's cookies, which costs no network
+       call, and tells the fallback which shape to reserve. `SiteHeader` is
+       async again for that read, and the comment says why that is not a
+       regression: what this split removed was the AUTH ROUND TRIP, not the
+       cookie read. The cookie is a layout hint and nothing else; it can be
+       stale or forged and it decides only how wide a grey box is.
+     | residual, stated rather than papered over: an admin's Admin link has no
+       placeholder, because admin status is not knowable from a cookie. At lg
+       and up its arrival still nudges the account controls.
+
+PERF-R005 | fixed | The Signal Guide loading fallback was an unnamed dialog
+     | files: components/signal-guide/signal-guide-mount.tsx
+     | found by: the accessibility review.
+     | notes: the fallback carried role="dialog" aria-modal="true" with no
+       accessible name, so it announced as an unnamed dialog for as long as the
+       chunk took. The real panel names itself "Signal Guide"; the fallback now
+       carries the same name, so the name is steady across the swap.
+
+PERF-R006 | fixed | The loading skeletons marked an eyebrow as the page's only h1
+     | files: app/tools/loading.tsx, app/rankings/loading.tsx, app/brief/loading.tsx
+     | found by: the accessibility review.
+     | notes: the three new boundaries put an `<h1>` inside the status region,
+       styled `text-xs uppercase tracking-[0.18em]`. A reader navigating by
+       headings landed on something no sighted reader would call a heading.
+       `app/leagues/loading.tsx`, the pattern these follow, has no heading at
+       all. The section name is now a `<p>` in the same live region, so the
+       announcement is unchanged ("Tools, Loading") and the false heading is
+       gone.
+
+PERF-R007 | fixed | Two caches of the same reference data, one of them never busted
+     | files: app/admin/beacon/actions.ts
+     | found by: the performance review.
+     | notes: the header's `ref:formats` and `ref:sources` memo is busted by the
+       admin save actions. The home page holds its OWN copy of the same two
+       tables in an `unstable_cache` entry with a five minute TTL, and nothing
+       but an article publish ever invalidated it. So an admin toggling a
+       format's is_active saw the header update within a minute and the home
+       page take up to five, which is the kind of inconsistency that gets
+       reported as a bug about the wrong page.
+     | fix: every action that busts `ref:formats` or `ref:sources` now also
+       calls `revalidateTag("home")`.
+
+PERF-R008 | fixed, and the write-up corrected | The idle worker tick is not three requests
+     | files: lib/league-bulk-sync.ts, progress.md
+     | found by: the performance review, which traced the code rather than
+       believing the summary.
+     | notes: PERF-T060's entry described an idle tick as "the lease, one tick
+       RPC, the release". It was actually six: acquire, the reap select, the
+       finalize select, a lease renewal, the tick RPC, and the release. That is
+       still half of the roughly twelve the audit measured, but it is not the
+       three Part 9 asks for, and the entry read as though it were.
+     | fix: the head-of-pass lease renewal is now skipped when the head-of-pass
+       work did nothing, which on this job is most minutes. Reaping no job and
+       finalizing no run means no meaningful time passed, so there is nothing
+       for the top-off to protect against. That is five requests per idle tick.
+     | NOT FIXED, and this is a decision: the reap select and the finalize
+       select still run every minute. Getting to three means changing what a
+       tick DOES (running them every Nth tick, or gating them on the pending
+       count), which is a behaviour change to live queue infrastructure and is
+       not what this task was scoped to. Part 9's "3" is recorded as MISSED at
+       5, not quietly met.
+
+## Reviewer findings deliberately NOT acted on, with the reason
+
+PERF-R009 | not changed | Two of the seven new foreign-key indexes serve no read path
+     | raised by: the performance review, which grepped every caller of
+       `league_power_rankings_cache` and found that all of them filter by
+       `league_id` first, already covered by `idx_lprc_league_format_source`.
+       Nothing filters by `format_config_id` or `source` alone, and the advisor
+       lists both new indexes as unused today.
+     | why they stay: the plan asked for them by name in 6.1, and its own stated
+       reason is cascades rather than reads. Dropping a `format_configs` or a
+       `source_registry` row without them scans a 97,320 row table. They are
+       704 and 720 kB. The reviewer's point is fair and is recorded here so the
+       next audit can settle it with real cascade evidence rather than a guess,
+       but reversing a plan item on a reviewer's reading, in the same session,
+       is not the right way to decide it.
+
+PERF-R010 | not changed | The (source, captured_at) index may cost more in writes than it saves in reads
+     | raised by: the performance review. That read ran about 5 times a day and
+       the index is the seventh on a table taking roughly 4,300 insert
+       statements a day at 435 to 519 ms.
+     | why it stays: the plan priced this trade explicitly in 4.8 and accepted
+       it, and the index came in at 15 MB against the plan's 60 MB estimate. The
+       read's MAXIMUM was 7.5 seconds, which is a user-visible stall on an admin
+       page, not just an average. The reviewer was careful to label this
+       SUSPECTED and unmeasurable until a nightly sync runs against the new
+       schema. That is the right time to settle it: re-read the insert timings
+       after one night and drop the index if they moved.
+
+PERF-R011 | not changed | The delete-board button disables the element that has focus
+     | raised by: the accessibility review, which was asked to look for this
+       defect by name because this repo has hit it before.
+     | why it stays: it is PRE-EXISTING. The diff for that file shows the
+       `disabled={pending}` pairing is unchanged from before this build; only
+       the write moved into a server action, and the build actually IMPROVED the
+       file by announcing a failed delete and returning focus to the trash icon,
+       which it previously swallowed in silence. The same pattern exists in the
+       login form and the profile form, also unchanged. Fixing the pending-window
+       focus loss across all three is a real piece of work and it is not this
+       build's, but it is now written down.
+
+PERF-R012 | recorded | Three routes over the /my-beacon 400 kB target
+     | raised by: the performance review. `/my-beacon/sleeper-leagues` at 586 kB
+       is the largest route on the site now and was already flagged as
+       out of scope. Two more were not: `/my-beacon/draft-tracker/[trackerId]`
+       at 433 kB and `/my-beacon/signal/wall` at 404 kB. None of the three
+       imported the browser Supabase client, so PERF-T032 could not have helped
+       them; whatever is in them is a separate question.
+
+PERF-R013 | recorded | The 100-id chunk sometimes plans as a sequential scan
+     | raised by: the performance review, which measured what the code actually
+       does rather than the doc's example. With 5 ids the slug-tail fallback is
+       a Bitmap Index Scan at 0.12 ms warm; with the real CHUNK of 100 the
+       planner misjudges selectivity and picks a Seq Scan instead, at 8.2 ms.
+       Still about 160 times faster than the 1,319.8 ms it replaced, and the
+       fallback pass runs almost never because the indexed pass resolves
+       everything. Recorded because `docs/performance/results-2026-09-08.md`
+       claims the Bitmap plan without naming the chunk size it was measured at.
+
+PERF-R014 | fixed | The rankings board blanked values the trends table does not carry
+     | files: components/rankings/rankings-view.tsx
+     | found by: the plan-adherence and bug review, which joined the live
+       `rankings` table against `player_value_trends` rather than believing my
+       verification note. It was right that PERF-T051's recorded check was
+       wrong: I compared trends against recent HISTORY, which is not what the
+       page renders.
+     | the real numbers, measured on production: a player can sit in `rankings`
+       with real captured values and have no trends row, because the trend
+       calculation needs a run of history it does not always have and a player
+       the source stopped publishing keeps his ranking for a while after his
+       last capture. On the default source that is 62 of 811 ranked players; on
+       KTC dynasty superflex it is 80 of 491. Kenny Gainwell at rank 147 was one
+       of them.
+     | the correction to the finding: the review said the OLD code would have
+       shown values for these players. Comparing like for like, it mostly would
+       not have. The old read pulled the whole (format, source) history ordered
+       by captured_at with no bound, so PostgREST's 1,000 row cap left it seeing
+       roughly ONE DAY of captures: 72 blanks on that same board, ten MORE than
+       the trends read produced. The genuine regression was narrower and real:
+       three players on dynastyprocess dynasty and three on each of three
+       fantasycalc redraft formats had a value under the old code and lost it.
+     | fix: trends first, then ONE bounded read for whoever trends could not
+       name, filtered to those player ids and the last 30 days. That window is
+       far more generous than the one day the old query effectively saw, and 80
+       players at one row a day cannot approach the 1,000 row cap. Newest row
+       per player wins. The read only runs when there is somebody to look up.
+     | verified on production, across every active (format, source) pair: blanks
+       before ranged from 4 to 80 per board; blanks after are ZERO on every
+       pair, and the regression count is zero. This is now better than the code
+       this build replaced AND better than the code the build shipped, and it
+       closes a defect that predates the whole audit.
+     | cost: one round trip on the rankings page, spent only when a board has an
+       uncovered player, which today is all of them. Correctness over the read
+       count, and it is the honest trade to state rather than hide.
+
+PERF-R015 | recorded | The On The Clock kill switch got slower to take effect
+     | raised by: the plan-adherence review.
+     | notes: `lib/on-the-clock/settings.ts` had a bespoke 30 second cache whose
+       removed comment said the window was short ON PURPOSE, because it holds
+       the tool's master on/off switch and the server-enforced per-draft sync
+       cooldown. PERF-T020 replaced it with the shared 60 second memo, so an
+       admin flipping the kill switch during an incident now takes up to a
+       minute rather than thirty seconds to reach every instance. That was not
+       recorded as a deviation and should have been.
+     | why it stays: the admin save action busts the memo on the process that
+       handled the save, so the flip is immediate there and bounded at 60
+       seconds elsewhere. Halving one knob's TTL means either a second TTL
+       constant threaded through the shared helper or reinstating a bespoke
+       cache for one loader, and both are worse than the honest sentence in this
+       ledger. If sixty seconds is too long for a kill switch, the right fix is
+       a bust that reaches every instance, not a shorter guess.
+
+PERF-R016 | recorded | PERF-T012's "known gap ... Closed below" was never closed in the record
+     | raised by: the plan-adherence review, which is right.
+     | notes: the gap (sync-rookie-adp not maintaining `player_market_latest`)
+       WAS closed in code, by `lib/market-latest.ts` and a call from
+       `lib/sync-rookie-adp.ts`, and the review confirmed that code is correct:
+       it pages past the 1,000 row cap, uses the right conflict key, and picks
+       the newest row per player rather than assuming the batch it just wrote is
+       newest, which matters because that sync can carry a historical date. It
+       shipped with no task id and no verified line. This entry is the record it
+       should have had.
+
+## Final verification, after the review round and its fixes
+
+- `npx tsc --noEmit`: clean.
+- `npx vitest run`: 306 files, 4,574 tests, all passing.
+- `npm run build`: compiled successfully, 467 routes generated, no lint or type
+  failure.
+- `npm run measure:bundle`: rewritten to docs/performance/bundle-2026-09-08.txt.
+- Banned-character scan across all 119 changed code files: zero em dashes, en
+  dashes, curly quotes, curly apostrophes, ellipses, middots or non-breaking
+  spaces.
+- Supabase advisors, security and performance: no finding introduced by this
+  build. The four security warnings are the same four that predate it.
+
+NOT COMMITTED and NOT PUSHED, by instruction.

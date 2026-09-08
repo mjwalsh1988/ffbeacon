@@ -110,18 +110,26 @@ export default async function DecisionsPage({
   })();
 
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
-  if (!pulseResult.ok) notFound();
-
   const supabase = await createClient();
 
-  // Who this page is acting for: the ?username= handle when there is one,
-  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
-  // `linkUsername` is what a link built on this page may carry, which is the
-  // handle only when the reader arrived on one.
-  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  // Neither of these needs the other's result, so they run together rather
+  // than one after another. Who this page is acting for: the ?username=
+  // handle when there is one, otherwise the reader's own saved handle
+  // (lib/sleeper-handle/resolve.ts). `linkUsername` is what a link built on
+  // this page may carry, which is the handle only when the reader arrived on
+  // one.
+  const [pulseResult, viewer] = await Promise.all([
+    pulseLeagueCore(adminClient, sleeperLeagueId),
+    resolveSleeperViewer(supabase, sp.username),
+  ]);
+  if (!pulseResult.ok) notFound();
+
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
+  // This page needs manager_ledger_status, which LEAGUE_CORE_COLUMNS does not
+  // carry (only this route reads it), so it keeps its own select rather than
+  // widening the shared list for one caller. Read after pulseLeagueCore
+  // resolves so it reflects the row that sync just wrote, not a pre-sync one.
   const { data: league } = await supabase
     .from("leagues")
     .select(

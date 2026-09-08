@@ -16,7 +16,6 @@ import { AnimatedGif } from "@/components/signal/animated-gif";
 import { EmojiPicker } from "@/components/signal/emoji-picker";
 import { insertAtCursor } from "@/lib/signal/insert-at-cursor";
 import type { EmojiEntry } from "@/lib/signal/emoji-data";
-import { createClient } from "@/lib/supabase/client";
 import { createPost, type PostImageInput } from "./wall-actions";
 
 /**
@@ -26,6 +25,11 @@ import { createPost, type PostImageInput } from "./wall-actions";
  * codePointLength so it agrees with the database char_length CHECK. Images upload
  * one at a time through the hardening route; submit is blocked until every image
  * has a description. Polite live region confirms success; assertive carries errors.
+ *
+ * The post itself is written through the `createPost` server action. Only the
+ * image upload still touches the browser Supabase client, and only via a
+ * dynamic import on first "Add image" click (PERF-T032): it streams the file
+ * straight to Storage, so there is no server-action equivalent for that half.
  */
 
 const IMAGES_MAX = 4;
@@ -107,6 +111,7 @@ export function WallComposer() {
       // Direct browser upload to the signal-media bucket (no server route, no
       // native image library). Dimensions are read in the browser; the bucket's
       // owner-folder RLS authorizes the write to "<uid>/posts/...".
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const {
         data: { user },

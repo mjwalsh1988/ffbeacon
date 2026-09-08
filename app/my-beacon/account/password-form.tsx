@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Circle, Eye, EyeOff, KeyRound } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { changePassword } from "./actions";
 
 type Status =
   | { kind: "idle" }
@@ -47,13 +47,10 @@ const RULES: Rule[] = [
  */
 export function PasswordForm({
   hasPassword,
-  email,
 }: {
   hasPassword: boolean;
-  email: string | null;
 }) {
   const router = useRouter();
-  const supabase = createClient();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -107,36 +104,13 @@ export function PasswordForm({
     }
 
     startTransition(async () => {
-      // Re-authenticate against the current password before allowing a
-      // change. Without this, anyone with a live session cookie could
-      // hijack the account permanently. Skipped for users who don't yet
-      // have a password (OAuth-only accounts adding one for the first time).
-      if (hasPassword) {
-        if (!email) {
-          setStatus({
-            kind: "error",
-            message: "Account has no email on file; can't verify password.",
-          });
-          return;
-        }
-        const { error: verifyError } = await supabase.auth.signInWithPassword({
-          email,
-          password: currentPassword,
-        });
-        if (verifyError) {
-          setStatus({
-            kind: "error",
-            message: "Current password is incorrect.",
-          });
-          return;
-        }
-      }
-
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) {
-        setStatus({ kind: "error", message: error.message });
+      // The `changePassword` server action re-verifies the current password
+      // itself (re-deriving hasPassword server-side rather than trusting this
+      // form's prop), so a live session cookie alone can never hijack the
+      // account permanently.
+      const result = await changePassword({ currentPassword, newPassword });
+      if (!result.ok) {
+        setStatus({ kind: "error", message: result.error });
         return;
       }
 

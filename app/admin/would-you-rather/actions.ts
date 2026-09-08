@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import {
   loadWouldYouRatherSettings,
   saveWouldYouRatherSettings,
@@ -41,6 +42,9 @@ export async function saveWouldYouRatherSettingsAction(raw: unknown): Promise<Ac
   const result = await saveWouldYouRatherSettings(admin, validated.settings, userId);
   if (!result.ok) return result;
 
+  // Drops this instance's memo of the row. Other instances age out on their
+  // own TTL, so a save is live everywhere inside a minute.
+  bustMemo("settings:would_you_rather");
   revalidatePath(ADMIN_PATH);
   revalidatePath(GAME_PATH);
   return { ok: true };

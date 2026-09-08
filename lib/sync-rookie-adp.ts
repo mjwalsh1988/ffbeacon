@@ -36,6 +36,7 @@ import type { Database, Json } from "./database.types";
 import { parseCsv } from "./csv";
 import { normalizeName } from "./sync-dynastyprocess";
 import { withRetry } from "./supabase/retry";
+import { refreshMarketLatest } from "./market-latest";
 
 type MarketInsert = Database["public"]["Tables"]["player_market_snapshots"]["Insert"];
 
@@ -397,6 +398,25 @@ export async function runRookieAdpSync(
         if (error) throw error;
       },
       { label: `player_market_snapshots rookie upsert ${i}` },
+    );
+  }
+
+  // Keep player_market_latest current for this source (PERF-T012). This sync
+  // can carry a historical snapshot_date, so it asks the snapshots table which
+  // row is actually newest rather than assuming the batch it just wrote is.
+  // See lib/market-latest.ts for why the Sleeper sync does the cheaper thing.
+  // Best-effort: player_market_snapshots above is the source of truth, so a
+  // failure here is logged and swallowed rather than failing a sync that
+  // already succeeded at the part that matters.
+  try {
+    await refreshMarketLatest(supabase, {
+      source: ROOKIE_ADP_SOURCE,
+      seasonType: ROOKIE_SEASON_TYPE,
+    });
+  } catch (err) {
+    console.error(
+      "[sync-rookie-adp] player_market_latest maintenance failed; player_market_snapshots already has this run's data, so the next successful run will catch it up.",
+      err,
     );
   }
 

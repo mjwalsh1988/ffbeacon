@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import { ADMIN_NOTE_MAX } from "./admin-constants";
 import {
   validateSignalScoutSettings,
@@ -210,6 +211,7 @@ export async function saveSignalScoutSettings(raw: unknown): Promise<ActionResul
     return { ok: false, error: "Could not save settings. Please try again." };
   }
 
+  bustMemo("settings:signal_scout");
   revalidatePath("/admin/signal-scout/settings");
   revalidatePath("/games/signal-scout");
   return { ok: true };
@@ -257,6 +259,7 @@ export async function resetSignalScoutSettings(): Promise<
     return { ok: false, error: "Could not reset settings. Please try again." };
   }
 
+  bustMemo("settings:signal_scout");
   revalidatePath("/admin/signal-scout/settings");
   revalidatePath("/games/signal-scout");
   return { ok: true, settings: next };

@@ -2,50 +2,45 @@
 
 import { useCallback, useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Star } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { scopeLabel, type BoardScope } from "@/lib/ranking-boards";
-import { revalidateMySignal } from "./actions";
+import {
+  scopeLabel,
+  PROFILE_TOP_N_CHOICES,
+  PRIMARY_TOP_N_DEFAULT,
+  SECONDARY_TOP_N_DEFAULT,
+  type ProfileBoard,
+} from "@/lib/ranking-boards";
+import {
+  featureBoard as featureBoardAction,
+  unfeatureBoard as unfeatureBoardAction,
+  makeBoardPrimary,
+  moveBoardOrder,
+  setBoardProfileTopN,
+} from "./actions";
 
-// Top-N choices the owner can pick for a featured board. "Default" (null) means
-// the profile uses 10 for the primary board and 5 for secondary boards.
-const TOP_N_CHOICES = [5, 10, 15, 20, 25, 50] as const;
-const PRIMARY_TOP_N_DEFAULT = 10;
-const SECONDARY_TOP_N_DEFAULT = 5;
+export type { ProfileBoard } from "@/lib/ranking-boards";
+
+const TOP_N_CHOICES = PROFILE_TOP_N_CHOICES;
 
 /**
  * Profile-display curation for a user's personal ranking boards. Lets the owner
  * decide which boards appear on their (future) public profile, pick exactly one
  * as the headline ("primary") board, and order the remaining "secondary" boards.
  *
- * All writes go through the browser Supabase client and are gated by the
- * owner-only RLS policies on user_ranking_boards (auth.uid() = user_id). The
- * database also enforces the two hard invariants (at most one primary per user,
- * primary implies visible), so this component keeps the invariants client-side
- * and lets the DB be the backstop. Controls are disabled while a write is in
- * flight so the ordered multi-statement updates never overlap.
+ * Every write goes through a server action in `./actions.ts`, which re-derives
+ * the caller from the request-scoped session client, re-verifies board
+ * ownership, and recomputes the invariants (at most one primary per user,
+ * primary implies visible) from the database rather than trusting whatever
+ * this component last rendered. Each action returns the caller's full,
+ * freshly-read board list, which becomes the new local state, so this
+ * component never has to guess what the server actually did. Controls are
+ * disabled while a write is in flight so the ordered multi-statement updates
+ * never overlap.
  */
-
-export type ProfileBoard = {
-  id: string;
-  name: string;
-  scope: BoardScope;
-  playerCount: number;
-  profileVisible: boolean;
-  profileIsPrimary: boolean;
-  profileSort: number;
-  /** How many ranked players show in the board's profile summary. Null = the
-   * default (10 primary / 5 secondary). */
-  profileTopN: number | null;
-};
-
-const TABLE = "user_ranking_boards";
-
 export function ProfileBoardsManager({
   initialBoards,
 }: {
   initialBoards: ProfileBoard[];
 }) {
-  const supabase = useMemo(() => createClient(), []);
   const [boards, setBoards] = useState<ProfileBoard[]>(initialBoards);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,18 +65,27 @@ export function ProfileBoardsManager({
   );
   const featuredCount = (primary ? 1 : 0) + secondaries.length;
 
-  // Run an ordered set of writes, then commit the local state the writes
-  // produced. On any failure we surface a message and leave state untouched, so
-  // the UI still reflects what is actually persisted.
+  // Run a server action, then commit the board list it returns (the action
+  // recomputes every affected row from the database, so this never trusts a
+  // guess of its own). On any failure we surface a message and leave state
+  // untouched, so the UI still reflects what is actually persisted.
   const run = useCallback(
-    async (work: () => Promise<void>, message: string) => {
+    async (
+      action: () => Promise<
+        { ok: true; boards: ProfileBoard[] } | { ok: false; error: string }
+      >,
+      message: string,
+    ) => {
       setBusy(true);
       setError(null);
       try {
-        await work();
+        const result = await action();
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setBoards(result.boards);
         setAnnouncement(message);
-        // Bust the cached public profile bundle so the change shows on /u/.
-        void revalidateMySignal();
       } catch {
         setError("Could not update your profile display. Please try again.");
       } finally {
@@ -91,180 +95,72 @@ export function ProfileBoardsManager({
     [],
   );
 
-  const stamp = () => new Date().toISOString();
-
-  // Turn a board ON for the profile. The first board featured becomes the
-  // primary automatically; later ones land at the end of the secondary order.
+  // Turn a board ON for the profile. The server decides whether it becomes
+  // the primary (the first board featured always does) and where it lands in
+  // the secondary order.
   const featureBoard = useCallback(
     (board: ProfileBoard) => {
       const hasPrimary = boards.some(
         (b) => b.profileVisible && b.profileIsPrimary,
       );
-      const becomePrimary = !hasPrimary;
-      const maxSort = secondaries.reduce(
-        (max, b) => Math.max(max, b.profileSort),
-        -1,
+      void run(
+        () => featureBoardAction(board.id),
+        `${board.name} is now on your profile${hasPrimary ? "" : " as your primary board"}.`,
       );
-      const nextSort = becomePrimary ? 0 : maxSort + 1;
-      void run(async () => {
-        const { error: updateError } = await supabase
-          .from(TABLE)
-          .update({
-            profile_visible: true,
-            profile_is_primary: becomePrimary,
-            profile_sort: nextSort,
-            updated_at: stamp(),
-          })
-          .eq("id", board.id);
-        if (updateError) throw updateError;
-        setBoards((prev) =>
-          prev.map((b) =>
-            b.id === board.id
-              ? {
-                  ...b,
-                  profileVisible: true,
-                  profileIsPrimary: becomePrimary,
-                  profileSort: nextSort,
-                }
-              : b,
-          ),
-        );
-      }, `${board.name} is now on your profile${becomePrimary ? " as your primary board" : ""}.`);
     },
-    [boards, secondaries, run, supabase],
+    [boards, run],
   );
 
-  // Turn a board OFF. If it was the primary, promote the first secondary so the
-  // profile keeps a headline board whenever any board is still featured.
+  // Turn a board OFF. If it was the primary, the server promotes the first
+  // secondary so the profile keeps a headline board whenever any board is
+  // still featured.
   const unfeatureBoard = useCallback(
     (board: ProfileBoard) => {
-      const promote =
-        board.profileIsPrimary && secondaries.length > 0
-          ? secondaries[0]
-          : null;
-      void run(async () => {
-        const { error: offError } = await supabase
-          .from(TABLE)
-          .update({
-            profile_visible: false,
-            profile_is_primary: false,
-            updated_at: stamp(),
-          })
-          .eq("id", board.id);
-        if (offError) throw offError;
-        if (promote) {
-          const { error: promoteError } = await supabase
-            .from(TABLE)
-            .update({
-              profile_is_primary: true,
-              profile_sort: 0,
-              updated_at: stamp(),
-            })
-            .eq("id", promote.id);
-          if (promoteError) throw promoteError;
-        }
-        setBoards((prev) =>
-          prev.map((b) => {
-            if (b.id === board.id)
-              return { ...b, profileVisible: false, profileIsPrimary: false };
-            if (promote && b.id === promote.id)
-              return { ...b, profileIsPrimary: true, profileSort: 0 };
-            return b;
-          }),
-        );
-      }, `${board.name} is no longer on your profile.`);
+      void run(
+        () => unfeatureBoardAction(board.id),
+        `${board.name} is no longer on your profile.`,
+      );
     },
-    [secondaries, run, supabase],
+    [run],
   );
 
-  // Make a featured secondary the primary. The old primary swaps into the slot
-  // the chosen board vacated, so the secondary order stays sensible.
+  // Make a featured secondary the primary. The server swaps the old primary
+  // into the slot the chosen board vacated, so the secondary order stays
+  // sensible.
   const makePrimary = useCallback(
     (board: ProfileBoard) => {
       const old = boards.find((b) => b.profileVisible && b.profileIsPrimary);
       if (old && old.id === board.id) return;
-      const vacatedSort = board.profileSort;
-      void run(async () => {
-        // Clear the old primary FIRST so the one-primary-per-user index is
-        // never momentarily violated.
-        if (old) {
-          const { error: clearError } = await supabase
-            .from(TABLE)
-            .update({
-              profile_is_primary: false,
-              profile_sort: vacatedSort,
-              updated_at: stamp(),
-            })
-            .eq("id", old.id);
-          if (clearError) throw clearError;
-        }
-        const { error: setError2 } = await supabase
-          .from(TABLE)
-          .update({ profile_is_primary: true, updated_at: stamp() })
-          .eq("id", board.id);
-        if (setError2) throw setError2;
-        setBoards((prev) =>
-          prev.map((b) => {
-            if (old && b.id === old.id)
-              return { ...b, profileIsPrimary: false, profileSort: vacatedSort };
-            if (b.id === board.id) return { ...b, profileIsPrimary: true };
-            return b;
-          }),
-        );
-      }, `${board.name} is now your primary board.`);
+      void run(
+        () => makeBoardPrimary(board.id),
+        `${board.name} is now your primary board.`,
+      );
     },
-    [boards, run, supabase],
+    [boards, run],
   );
 
-  // Reorder a secondary up or down by swapping sort values with its neighbour.
+  // Reorder a secondary up or down; the server swaps sort values with its
+  // neighbour.
   const moveSecondary = useCallback(
     (board: ProfileBoard, direction: "up" | "down") => {
-      const index = secondaries.findIndex((b) => b.id === board.id);
-      const swapIndex = direction === "up" ? index - 1 : index + 1;
-      if (index < 0 || swapIndex < 0 || swapIndex >= secondaries.length) return;
-      const a = secondaries[index];
-      const b = secondaries[swapIndex];
-      void run(async () => {
-        const { error: e1 } = await supabase
-          .from(TABLE)
-          .update({ profile_sort: b.profileSort, updated_at: stamp() })
-          .eq("id", a.id);
-        if (e1) throw e1;
-        const { error: e2 } = await supabase
-          .from(TABLE)
-          .update({ profile_sort: a.profileSort, updated_at: stamp() })
-          .eq("id", b.id);
-        if (e2) throw e2;
-        setBoards((prev) =>
-          prev.map((x) => {
-            if (x.id === a.id) return { ...x, profileSort: b.profileSort };
-            if (x.id === b.id) return { ...x, profileSort: a.profileSort };
-            return x;
-          }),
-        );
-      }, `Moved ${board.name} ${direction} in your profile order.`);
+      void run(
+        () => moveBoardOrder(board.id, direction),
+        `Moved ${board.name} ${direction} in your profile order.`,
+      );
     },
-    [secondaries, run, supabase],
+    [run],
   );
 
   // Set how many ranked players show in this board's profile summary. null
   // restores the per-role default (10 primary / 5 secondary).
   const setTopN = useCallback(
     (board: ProfileBoard, value: number | null) => {
-      void run(async () => {
-        const { error: topNError } = await supabase
-          .from(TABLE)
-          .update({ profile_top_n: value, updated_at: stamp() })
-          .eq("id", board.id);
-        if (topNError) throw topNError;
-        setBoards((prev) =>
-          prev.map((b) =>
-            b.id === board.id ? { ...b, profileTopN: value } : b,
-          ),
-        );
-      }, `Updated how many players show for ${board.name}.`);
+      void run(
+        () => setBoardProfileTopN(board.id, value),
+        `Updated how many players show for ${board.name}.`,
+      );
     },
-    [run, supabase],
+    [run],
   );
 
   return (

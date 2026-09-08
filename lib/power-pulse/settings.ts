@@ -17,23 +17,31 @@ import {
   mergePowerPulseSettings,
   type PowerPulseSettings,
 } from "./default-settings";
+import { memoTtl } from "@/lib/memo-ttl";
 
 export const POWER_PULSE_SETTINGS_ID = "global";
 
+/**
+ * Same row for every caller, admin-edited only: safe to memoise across
+ * requests for a minute. Every League Pulse deep view reads this. See
+ * lib/memo-ttl.ts.
+ */
 export async function loadPowerPulseSettings(
   supabase: SupabaseClient<Database>,
 ): Promise<PowerPulseSettings> {
-  try {
-    const { data, error } = await supabase
-      .from("league_power_pulse_settings")
-      .select("settings")
-      .eq("id", POWER_PULSE_SETTINGS_ID)
-      .maybeSingle();
-    if (error || !data?.settings) return DEFAULT_POWER_PULSE_SETTINGS;
-    return mergePowerPulseSettings(data.settings);
-  } catch {
-    return DEFAULT_POWER_PULSE_SETTINGS;
-  }
+  return memoTtl("settings:power_pulse", 60_000, async () => {
+    try {
+      const { data, error } = await supabase
+        .from("league_power_pulse_settings")
+        .select("settings")
+        .eq("id", POWER_PULSE_SETTINGS_ID)
+        .maybeSingle();
+      if (error || !data?.settings) return DEFAULT_POWER_PULSE_SETTINGS;
+      return mergePowerPulseSettings(data.settings);
+    } catch {
+      return DEFAULT_POWER_PULSE_SETTINGS;
+    }
+  });
 }
 
 /** Persist a full settings document. Admin server actions only. */

@@ -23,11 +23,32 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // api/donate/webhook is excluded deliberately. Middleware runs before the
-    // route does, and updateSession calls supabase.auth.getUser(), so a forged
+    // route does, and updateSession touches Supabase Auth, so a forged
     // webhook carrying a syntactically valid auth cookie could force one
     // outbound Supabase Auth request per POST, before the signature check ever
     // ran. That endpoint authenticates itself with an HMAC and never reads a
     // session, so it needs nothing middleware provides.
-    "/((?!api/donate/webhook|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //
+    // The rest of the exclusions are the routes that never read a session
+    // either, so running the session refresh in front of them is pure cost:
+    // the four crawler and machine-readable files, the OG image routes (which
+    // render from an id in the path through the service-role client), and the
+    // cron routes (which authenticate with CRON_SECRET). None of them is ever
+    // the landing spot for the stray OAuth `?code=` the handler above catches.
+    //
+    // api/og/breakdown IS excluded from that exclusion, because it is the one
+    // OG route that does not fit the sentence above. Its nine siblings build a
+    // service-role client; that one builds the cookie-bound client and resolves
+    // the reader's format and source preferences from the session, so skipping
+    // the refresh there would silently drop a signed-in reader's preferences on
+    // an expiring token. The negative lookahead reads awkwardly, and the
+    // alternative was to change that route's client, which would move it from
+    // the anon RLS context to service_role for a saving of one request.
+    //
+    // Every literal below ends at a boundary, either a slash or the end of the
+    // path. Without that, `/llms.txt.php` and `/sitemap.xml.bak` are excluded
+    // too, which is inert today only because nothing is routed under those
+    // prefixes.
+    "/((?!api/donate/webhook$|api/cron/|api/og/(?!breakdown/)|sitemap\\.xml$|sitemaps/|brief/rss\\.xml$|llms\\.txt$|_next/static|_next/image|favicon\\.ico$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

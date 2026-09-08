@@ -17,6 +17,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { loadAdjustedProjections } from "./read";
 import { SLEEPER_SOURCE, BEACON_SOURCE } from "./source";
+import { bustMemo } from "@/lib/memo-ttl";
 
 // The coverage probe is memoized in process (see availableProjectionSources).
 // Without this, one test's cached answer is another test's fixture and the
@@ -596,6 +597,12 @@ describe("loadAdjustedProjections", () => {
 
   async function runAndCountHeadProbes(enabled: boolean): Promise<number> {
     const headProbes: string[] = [];
+    // The settings loader is memoised across requests now (lib/memo-ttl.ts),
+    // and this helper is called twice INSIDE one test with the flag flipped.
+    // Without the bust the second call is served the first call's settings row,
+    // the feature reads as off both times, and the probe difference is zero.
+    // The global hook in test/setup.ts only runs between tests.
+    bustMemo("settings:");
     const client = fakeClient(buildTables(enabled), headProbes);
     await loadAdjustedProjections({
       supabase: client,

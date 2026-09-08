@@ -2,6 +2,12 @@ import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { pickFallbackFormat, type FormatLike } from "@/lib/format-fallback";
+import { memoTtl } from "@/lib/memo-ttl";
+
+// Reference tables: same rows for every reader, admin-edited only. The TTL
+// memo dedupes across requests and across processes' worth of time; React's
+// cache() (already on both functions below) still dedupes within one render.
+const REF_TTL_MS = 60_000;
 
 const VALID_SOURCE_SLUG = /^[a-z0-9-]+$/;
 
@@ -32,12 +38,14 @@ export type SourceRegistryRow = {
 // they'd each issue their own SELECT against source_registry.
 export const getAvailableSources = cache(
   async (supabase: SupabaseClient<Database>): Promise<SourceRegistryRow[]> => {
-    const { data } = await supabase
-      .from("source_registry")
-      .select("slug, display_name, description, priority, is_default, data_type, supported_format_slugs, update_cadence")
-      .eq("is_active", true)
-      .order("priority");
-    return data ?? [];
+    return memoTtl("ref:sources", REF_TTL_MS, async () => {
+      const { data } = await supabase
+        .from("source_registry")
+        .select("slug, display_name, description, priority, is_default, data_type, supported_format_slugs, update_cadence")
+        .eq("is_active", true)
+        .order("priority");
+      return data ?? [];
+    });
   },
 );
 
@@ -53,14 +61,16 @@ export type ActiveFormatRow = FormatLike & {
 
 export const getActiveFormats = cache(
   async (supabase: SupabaseClient<Database>): Promise<ActiveFormatRow[]> => {
-    const { data } = await supabase
-      .from("format_configs")
-      .select(
-        "id, slug, display_name, is_default, league_type, scoring_type, is_superflex, display_order, te_premium_bonus",
-      )
-      .eq("is_active", true)
-      .order("display_order");
-    return data ?? [];
+    return memoTtl("ref:formats", REF_TTL_MS, async () => {
+      const { data } = await supabase
+        .from("format_configs")
+        .select(
+          "id, slug, display_name, is_default, league_type, scoring_type, is_superflex, display_order, te_premium_bonus",
+        )
+        .eq("is_active", true)
+        .order("display_order");
+      return data ?? [];
+    });
   },
 );
 

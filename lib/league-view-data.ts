@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import { loadLeagueDraftSlots } from "@/lib/league-pick-slots";
 import { computeAgeYears } from "@/lib/player-age";
+import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -402,44 +403,36 @@ function asStringArray(value: Json | null | undefined): string[] {
   return value.filter((v): v is string => typeof v === "string");
 }
 
-/** Sleeper player id → our player row. Exported so the share-card loader can
- * resolve one roster's players without paying for the whole league. */
+/**
+ * Sleeper player id to our player row. Exported so the share-card loader can
+ * resolve one roster's players without paying for the whole league.
+ *
+ * A thin adapter over `resolveSleeperPlayers`. This used to be its own copy of
+ * the lookup, and its copy put the indexed predicate and an unindexable
+ * leading-wildcard LIKE in the same `or()`, which cost the Teams section of
+ * every league overview 0.6 to 2.6 seconds on a sequential scan of `players`
+ * (site-speed-audit-and-plan.md, 4.1). One implementation, one two-pass split,
+ * one place to get it wrong.
+ */
 export async function resolvePlayers(
   supabase: AnySupabase,
   sleeperIds: string[],
 ): Promise<Map<string, ResolvedPlayer>> {
   const map = new Map<string, ResolvedPlayer>();
   if (sleeperIds.length === 0) return map;
-  const CHUNK = 200;
-  for (let i = 0; i < sleeperIds.length; i += CHUNK) {
-    const chunk = sleeperIds.slice(i, i + CHUNK);
-    const ors = chunk
-      .flatMap((id) => [`external_ids->>sleeper.eq.${id}`, `slug.like.*-${id}`])
-      .join(",");
-    const { data } = await supabase
-      .from("players")
-      .select(
-        "id, slug, first_name, last_name, full_name, position, team, external_ids, birth_date, years_experience",
-      )
-      .or(ors);
-    for (const p of data ?? []) {
-      const ext = (p.external_ids as Record<string, unknown>) ?? {};
-      const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      const tail = (p.slug as string).match(/-(\d+)$/)?.[1] ?? null;
-      const sid = fromExternal ?? tail;
-      if (!sid || !chunk.includes(sid)) continue;
-      if (!map.has(sid)) {
-        map.set(sid, {
-          id: p.id,
-          sleeper_id: sid,
-          full_name: p.full_name ?? `${p.first_name} ${p.last_name}`.trim(),
-          position: p.position,
-          team: p.team,
-          age: computeAgeYears(p.birth_date),
-          years_experience: p.years_experience ?? null,
-        });
-      }
-    }
+
+  const lookup = await resolveSleeperPlayers(supabase, sleeperIds);
+  for (const [sid, p] of Object.entries(lookup)) {
+    map.set(sid, {
+      id: p.id,
+      sleeper_id: sid,
+      full_name:
+        p.fullName ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+      position: p.position,
+      team: p.team,
+      age: computeAgeYears(p.birthDate),
+      years_experience: p.yearsExperience,
+    });
   }
   return map;
 }

@@ -6,7 +6,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { formatTeamLabelCompact } from "@/lib/team-label";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -112,13 +112,19 @@ export default async function LeagueTransactionsPage({
   // only when the reader arrived on one.
   const viewer = await resolveSleeperViewer(supabase, sp.username);
   const linkUsername = viewerLinkUsername(viewer);
-  const { data: league } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
+
+  // The row the core already read, rather than a second read of the same one.
+  // The fallback is not dead code: the core's contract allows a null row, and
+  // a page that assumed otherwise would 500 instead of rendering.
+  const league =
+    pulseResult.league ??
+    (
+      await supabase
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
   if (!league) notFound();
 
   // The two shell reads. Both are needed before first paint (the switcher, and

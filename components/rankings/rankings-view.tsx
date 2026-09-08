@@ -154,7 +154,19 @@ export async function RankingsView({
     .order("overall_rank")
     .limit(500);
 
-  const [rankingsResult, valuesResult, trendsResult] = await Promise.all([
+  // THE CURRENT VALUE COMES OFF THE TRENDS ROW, NOT OUT OF HISTORY.
+  //
+  // This used to be a third query: the whole of `player_value_history` for the
+  // format and source, ordered by captured_at descending, with no player filter
+  // (see the note above about the URL length) and no limit. PostgREST capped it
+  // at 1,000 rows, which happened to be about one day of captures, so the page
+  // worked by coincidence. A source capturing more than 1,000 rows a day for one
+  // format would have returned a partial day and blanked values for whoever fell
+  // off the end. `player_value_trends` carries `current_value` per
+  // (player, format, source) by construction, it is the pre-calculated table the
+  // rules in CLAUDE.md say a page should read, and it was already being fetched
+  // in this same wave. One read fewer, and the fragility goes with it.
+  const [rankingsResult, trendsResult, capturedResult] = await Promise.all([
     rankingsResolution.source
       ? position
         ? rankingsQuery.eq("players.position", position)
@@ -162,27 +174,87 @@ export async function RankingsView({
       : Promise.resolve({ data: [] as never }),
     valueHistoryResolution.source
       ? supabase
-          .from("player_value_history")
-          .select("player_id, value, captured_at")
-          .eq("format_config_id", format.id)
-          .eq("source", valueHistoryResolution.source)
-          .order("captured_at", { ascending: false })
-      : Promise.resolve({ data: [] as never }),
-    valueHistoryResolution.source
-      ? supabase
           .from("player_value_trends")
           .select(
-            "player_id, change_7d, change_7d_pct, trend_7d, rank_change_7d, rank_7d_ago, show_trend_7d",
+            "player_id, current_value, change_7d, change_7d_pct, trend_7d, rank_change_7d, rank_7d_ago, show_trend_7d",
           )
           .eq("format_config_id", format.id)
           .eq("source", valueHistoryResolution.source)
       : Promise.resolve({ data: [] as never }),
+    // ONE ROW, for the "Values as of" date and nothing else.
+    //
+    // The trends row's own `updated_at` is not this date. It is when the trend
+    // calculation last ran, which happens nightly whether or not a new value
+    // was captured, so for a weekly source it would say "today" over values
+    // captured six days ago. The capture timestamp is the honest answer to what
+    // the chip claims, and asking for exactly one row of it is not the
+    // unbounded read this task removed.
+    valueHistoryResolution.source
+      ? supabase
+          .from("player_value_history")
+          .select("captured_at")
+          .eq("format_config_id", format.id)
+          .eq("source", valueHistoryResolution.source)
+          .order("captured_at", { ascending: false })
+          .limit(1)
+      : Promise.resolve({ data: [] as never }),
   ]);
 
   const valueByPlayer = new Map<string, { value: number }>();
-  for (const v of valuesResult.data ?? []) {
-    if (valueByPlayer.has(v.player_id)) continue;
-    valueByPlayer.set(v.player_id, { value: v.value });
+  for (const t of trendsResult.data ?? []) {
+    valueByPlayer.set(t.player_id, { value: t.current_value });
+  }
+
+  // THE GAP BETWEEN "RANKED" AND "HAS A TREND ROW", AND WHY IT IS FILLED HERE.
+  //
+  // A player can sit in `rankings` and have real captured values while having
+  // no `player_value_trends` row: the trend calculation needs a run of history
+  // it does not always have, and a player the source stopped publishing keeps
+  // his ranking for a while after his last capture. Measured on production
+  // today, that is 62 of 811 ranked players on the default source, and up to 80
+  // on another.
+  //
+  // The read this replaced did not cover them either, and mostly covered FEWER
+  // of them: it pulled `player_value_history` for the whole (format, source)
+  // ordered by captured_at with no bound, so PostgREST's 1,000 row cap left it
+  // seeing roughly one day of captures, which is 72 blanks on that same board.
+  // But on two sources it happened to cover three players that trends does not,
+  // so a straight swap would have blanked a value that used to render.
+  //
+  // So: trends first, then ONE bounded read for whoever trends could not name.
+  // Filtered to those player ids and to the last 30 days, which is far more
+  // generous than the one day the old query effectively saw, and small enough
+  // that the 1,000 row cap cannot bite (80 players at one row a day is under
+  // two weeks of rows). The first row per player wins, because the order is
+  // newest first. It costs one round trip, and only when there is somebody to
+  // look up.
+  const uncovered = [
+    ...new Set(
+      (rankingsResult.data ?? [])
+        .map(
+          (r) =>
+            (r as unknown as { players: { id: string } }).players?.id ?? null,
+        )
+        .filter((id): id is string => Boolean(id) && !valueByPlayer.has(id)),
+    ),
+  ];
+  if (uncovered.length > 0 && valueHistoryResolution.source) {
+    const cutoff = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const { data: fallbackValues } = await supabase
+      .from("player_value_history")
+      .select("player_id, value")
+      .eq("format_config_id", format.id)
+      .eq("source", valueHistoryResolution.source)
+      .in("player_id", uncovered)
+      .gte("captured_at", cutoff)
+      .order("captured_at", { ascending: false })
+      .limit(1000);
+    for (const row of fallbackValues ?? []) {
+      if (valueByPlayer.has(row.player_id)) continue;
+      valueByPlayer.set(row.player_id, { value: row.value });
+    }
   }
   const trendByPlayer = new Map<
     string,
@@ -277,9 +349,9 @@ export async function RankingsView({
     ? describeSource(registry, valueHistoryResolution.source)
     : "Not available";
 
-  // Freshest snapshot in this pull. The value query is ordered by captured_at
-  // descending, so the first row is the newest one we have.
-  const lastCapturedAt = valuesResult.data?.[0]?.captured_at ?? null;
+  // Freshest snapshot for this (format, source). One row, ordered by
+  // captured_at descending.
+  const lastCapturedAt = capturedResult.data?.[0]?.captured_at ?? null;
 
   const chips: MastheadChip[] = [
     // The source chip says what it is ("Values via ..."); the format chip is

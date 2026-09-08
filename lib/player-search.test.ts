@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { searchFantasyPlayers, fantasyRelevantPlayerIds } from "./player-search";
+import {
+  searchFantasyPlayers,
+  fantasyRelevantPlayerIds,
+  normalizeSearchQuery,
+} from "./player-search";
+import { bustMemo } from "./memo-ttl";
 
 /**
  * These tests exist to keep one specific mistake from coming back.
@@ -58,7 +63,7 @@ function makeClient(opts: {
         return Promise.resolve(resolve({ data: rows, error: null }));
       },
     };
-    for (const op of ["eq", "or", "in", "gte", "order", "limit", "neq", "lt", "not"]) {
+    for (const op of ["eq", "or", "ilike", "in", "gte", "order", "limit", "neq", "lt", "not"]) {
       api[op] = (...args: unknown[]) => {
         rec.filters.push({ op, args });
         return api;
@@ -84,6 +89,9 @@ describe("searchFantasyPlayers", () => {
   let client: never;
 
   beforeEach(() => {
+    // The ranked-player set is memoised across requests now, so without this
+    // the second test in the file is served the first test's answer.
+    bustMemo("ref:ranked-ids");
     const made = makeClient({
       players: PLAYERS,
       // Pearsall and Mahomes are ranked. The retired free agent is not, even
@@ -124,11 +132,45 @@ describe("searchFantasyPlayers", () => {
     expect(posFilter?.args[1]).toEqual(["QB"]);
   });
 
-  it("escapes wildcards so a query of % does not match everything", async () => {
+  it("searches one indexed column rather than an OR across three", async () => {
+    // The OR had two unindexed arms (first_name, last_name), and one unindexed
+    // arm of an OR makes the whole predicate a sequential scan. search_name
+    // (migration 0194) carries a trigram index and subsumes all three, because
+    // a surname is a substring of "first last".
+    await searchFantasyPlayers(client, { query: "pearsall", limit: 10 });
+    const playersQuery = recorded.find((r) => r.table === "players");
+    expect(playersQuery?.filters.find((f) => f.op === "or")).toBeUndefined();
+    const ilike = playersQuery?.filters.find((f) => f.op === "ilike");
+    expect(ilike?.args[0]).toBe("search_name");
+    expect(String(ilike?.args[1])).toBe("%pearsall%");
+  });
+
+  it("keeps a wildcard query from matching everything", async () => {
     await searchFantasyPlayers(client, { query: "50%_off", limit: 10 });
     const playersQuery = recorded.find((r) => r.table === "players");
-    const orFilter = playersQuery?.filters.find((f) => f.op === "or");
-    expect(String(orFilter?.args[0])).toContain("50\\%\\_off");
+    const ilike = playersQuery?.filters.find((f) => f.op === "ilike");
+    // The normalizer strips % and _ before the escaper sees them, because
+    // search_name holds neither character. Either way no wildcard reaches
+    // PostgREST as a wildcard, which is the property under test.
+    expect(String(ilike?.args[1])).toBe("%50off%");
+  });
+
+  it("answers without a query when the search normalizes to nothing", async () => {
+    const rows = await searchFantasyPlayers(client, { query: "...", limit: 10 });
+    expect(rows).toEqual([]);
+    expect(recorded).toHaveLength(0);
+  });
+});
+
+describe("normalizeSearchQuery", () => {
+  it("matches how players.search_name is built", () => {
+    // The column is lowercase, alphanumerics and single spaces only. A query
+    // that keeps its punctuation is being compared against a column that has
+    // none, and matches nobody.
+    expect(normalizeSearchQuery("A.J. Brown")).toBe("aj brown");
+    expect(normalizeSearchQuery("  St. Brown  ")).toBe("st brown");
+    expect(normalizeSearchQuery("Ke'Shawn   Vaughn")).toBe("keshawn vaughn");
+    expect(normalizeSearchQuery("!!!")).toBe("");
   });
 });
 
@@ -141,12 +183,32 @@ describe("fantasyRelevantPlayerIds", () => {
   });
 
   it("bounds the read well above PostgREST's 1000-row default", async () => {
-    // A broad candidate set matches several thousand raw ranking rows (one per
-    // source, format and snapshot). Truncating at the default would silently
-    // drop ranked players from search results.
+    // The whole ranked set is read in one go now, and the default cap would
+    // silently drop ranked players from every search result on the site.
+    bustMemo("ref:ranked-ids");
     const { client, recorded } = makeClient({ players: [], rankedIds: ["a"] });
     await fantasyRelevantPlayerIds(client, ["a", "b"]);
     const limit = recorded[0].filters.find((f) => f.op === "limit");
     expect(Number(limit?.args[0])).toBeGreaterThanOrEqual(50000);
+  });
+
+  it("reads the ranked set once and serves the next caller from memory", async () => {
+    bustMemo("ref:ranked-ids");
+    const { client, recorded } = makeClient({ players: [], rankedIds: ["a"] });
+    await fantasyRelevantPlayerIds(client, ["a"]);
+    await fantasyRelevantPlayerIds(client, ["b"]);
+    expect(recorded.filter((r) => r.table === "rankings")).toHaveLength(1);
+  });
+
+  it("no longer narrows the read to the candidate ids", async () => {
+    // It used to send up to 200 uuids per settled keystroke. The answer is the
+    // same for every reader, so it is read whole and filtered in memory.
+    bustMemo("ref:ranked-ids");
+    const { client, recorded } = makeClient({ players: [], rankedIds: ["a"] });
+    await fantasyRelevantPlayerIds(client, ["a", "b"]);
+    const idFilter = recorded[0].filters.find(
+      (f) => f.op === "in" && f.args[0] === "player_id",
+    );
+    expect(idFilter).toBeUndefined();
   });
 });

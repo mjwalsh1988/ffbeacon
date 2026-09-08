@@ -20,7 +20,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
@@ -91,39 +91,42 @@ export default async function LeaguePositionalWarPage({
     return Number.isFinite(n) ? n : null;
   })();
 
-  // Core pulse only: the league, its rosters and its members. The derived half
-  // is what computes the curve when it is stale, and that is the slow part, so
-  // it runs inside the Suspense boundary below and the masthead paints without
-  // waiting for it.
   const adminClient = createAdminClient();
-  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
-  if (!pulseResult.ok) notFound();
-
   const supabase = await createClient();
 
+  // WAVE ONE. None of these three needs another's result, so they run
+  // together. Core pulse only: the league, its rosters and its members. The
+  // derived half is what computes the curve when it is stale, and that is the
+  // slow part, so it runs inside the Suspense boundary below and the masthead
+  // paints without waiting for it.
+  //
   // Who this page is acting for: the ?username= handle when there is one,
   // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
   // `linkUsername` is what a link built on this page may carry, which is the
   // handle only when the reader arrived on one.
-  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  const [pulseResult, viewer, resolvedSource] = await Promise.all([
+    pulseLeagueCore(adminClient, sleeperLeagueId),
+    resolveSleeperViewer(supabase, sp.username),
+    resolveSourceSlug(supabase, sp.source),
+  ]);
+  if (!pulseResult.ok) notFound();
+
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
-  const { data: league } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
-  if (!league) notFound();
 
-  const { otherLeagues } = await loadLeagueHeaderActions(
-    supabase,
-    league.id,
-    sleeperLeagueId,
-    viewer,
-    league.season != null ? String(league.season) : null,
-  );
+  // The row the core already read, rather than a second read of the same one.
+  // The fallback is not dead code: the core's contract allows a null row, and a
+  // page that assumed otherwise would 500 instead of rendering.
+  const league =
+    pulseResult.league ??
+    (
+      await supabase
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  if (!league) notFound();
 
   // No handle on either link for a saved reader: /tools/league-pulse resolves
   // the same identity itself, and the deep view matches on the Sleeper user id.
@@ -138,8 +141,20 @@ export default async function LeaguePositionalWarPage({
   // source respects the user's pick (CLAUDE.md: League Pulse Format Resolution).
   // Positional WAR itself uses neither, but the masthead reports both.
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
-  const resolvedSource = await resolveSourceSlug(supabase, sp.source);
-  const context = await resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug);
+
+  // WAVE TWO. The header actions need league.id and the viewer resolved above;
+  // the format resolution needs the source slug resolved above. Neither needs
+  // the other's result.
+  const [{ otherLeagues }, context] = await Promise.all([
+    loadLeagueHeaderActions(
+      supabase,
+      league.id,
+      sleeperLeagueId,
+      viewer,
+      league.season != null ? String(league.season) : null,
+    ),
+    resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug),
+  ]);
   const coverageOk = context.coverage !== "none";
 
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;

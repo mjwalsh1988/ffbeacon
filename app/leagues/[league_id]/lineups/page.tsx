@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import { resolveLeagueContext, describeDerived } from "@/lib/league-format-resolution";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
@@ -82,26 +82,36 @@ export const dynamic = "force-dynamic";
 /**
  * The core sync and the league row, once per request.
  *
- * generateMetadata and the page body both need this league. Cached, they share
- * one `pulseLeagueCore` and one select. The sync is INSIDE the cache rather
- * than beside it: a league nobody has opened before does not exist in our
- * tables until that call writes it, and a cached read that ran ahead of the
- * sync would return null, cache the null, and 404 a league created two lines
- * later.
+ * generateMetadata and the page body both need this league. Cached (React's
+ * per-request `cache()`, not the Next data cache, so there is no legality
+ * question about what lives inside it), they share one `pulseLeagueCore`. The
+ * sync is INSIDE the cache rather than beside it: a league nobody has opened
+ * before does not exist in our tables until that call writes it, and a cached
+ * read that ran ahead of the sync would return null, cache the null, and 404 a
+ * league created two lines later.
+ *
+ * Reads the row off `pulseLeagueCore`'s own result rather than selecting it
+ * again: every column this page asks for (id, sleeper_league_id, name, season,
+ * status, total_rosters, last_pulsed_at, roster_positions, scoring_settings,
+ * metadata, format_config_id) is already in LEAGUE_CORE_COLUMNS. The fallback
+ * select only runs on the null branch the core's own contract allows.
  */
 const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
   const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
   if (!pulse.ok) return null;
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata, format_config_id",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
-  return data ? { league: data, cached: pulse.cached } : null;
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
 });
 
 export async function generateMetadata({
@@ -150,25 +160,34 @@ export default async function LeagueLineupsPage({
 
   const supabase = await createClient();
 
-  // Who this page is acting for: the ?username= handle when there is one,
-  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
-  // `linkUsername` is what a link built here may carry, which is the handle
-  // only when the reader arrived on one.
-  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  // WAVE ONE. Who this page is acting for (the ?username= handle when there is
+  // one, otherwise the reader's own saved handle,
+  // lib/sleeper-handle/resolve.ts) and the source preference are independent
+  // reads, neither consuming the other's result. `linkUsername` is what a link
+  // built here may carry, which is the handle only when the reader arrived on
+  // one.
+  const [viewer, resolvedSource] = await Promise.all([
+    resolveSleeperViewer(supabase, sp.username),
+    resolveSourceSlug(supabase, sp.source),
+  ]);
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
 
-  const { otherLeagues } = await loadLeagueHeaderActions(
-    supabase,
-    league.id,
-    sleeperLeagueId,
-    viewer,
-    league.season != null ? String(league.season) : null,
-  );
-
   const sleeperLeague = league.metadata as unknown as Parameters<typeof resolveLeagueContext>[1];
-  const resolvedSource = await resolveSourceSlug(supabase, sp.source);
-  const context = await resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug);
+
+  // WAVE TWO. The header actions need the viewer resolved above; the format
+  // resolution needs the source slug resolved above. Neither needs the other's
+  // result, so they run together rather than one after another.
+  const [{ otherLeagues }, context] = await Promise.all([
+    loadLeagueHeaderActions(
+      supabase,
+      league.id,
+      sleeperLeagueId,
+      viewer,
+      league.season != null ? String(league.season) : null,
+    ),
+    resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug),
+  ]);
   const coverageOk = context.coverage !== "none";
 
   const formatTags = buildLeagueFormatTags({

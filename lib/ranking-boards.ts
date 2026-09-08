@@ -158,3 +158,25 @@ export function readSleeperId(
 
 export const MAX_BOARD_NAME_LENGTH = 80;
 export const MAX_TIERS = 30;
+
+/** Top-N choices the owner can pick for a featured board's profile summary.
+ * Shared between the client editor (rendering the select) and the server
+ * action (validating the chosen value), so the two can never drift apart. */
+export const PROFILE_TOP_N_CHOICES = [5, 10, 15, 20, 25, 50] as const;
+export const PRIMARY_TOP_N_DEFAULT = 10;
+export const SECONDARY_TOP_N_DEFAULT = 5;
+
+/** A board's profile-display state, as read back for the boards manager and
+ * returned by its server actions after a write. */
+export type ProfileBoard = {
+  id: string;
+  name: string;
+  scope: BoardScope;
+  playerCount: number;
+  profileVisible: boolean;
+  profileIsPrimary: boolean;
+  profileSort: number;
+  /** How many ranked players show in the board's profile summary. Null = the
+   * default (10 primary / 5 secondary). */
+  profileTopN: number | null;
+};

@@ -121,7 +121,7 @@ export default async function AccountSettingsPage() {
         icon={KeyRound}
         bodyId="password-body"
       >
-        <PasswordForm hasPassword={hasPassword} email={user.email ?? null} />
+        <PasswordForm hasPassword={hasPassword} />
       </Section>
 
       <Section

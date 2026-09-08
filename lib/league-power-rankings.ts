@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
+import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 
 type ServiceClient = SupabaseClient<Database>;
 
@@ -221,6 +222,15 @@ function asUnknownArray(value: Json | null | undefined): unknown[] {
   return value as unknown[];
 }
 
+/**
+ * A thin adapter over `resolveSleeperPlayers`.
+ *
+ * This was its own copy of the lookup, and the copy put the indexed
+ * `external_ids->>sleeper` predicate and an unindexable `slug.like.*-<id>` in
+ * the same `or()`, which makes the whole filter unindexable and scans
+ * `players` end to end (site-speed-audit-and-plan.md, 4.1). The helper runs the
+ * indexed pass first and the slug-tail pass only for what is left.
+ */
 async function resolvePlayers(
   supabase: ServiceClient,
   sleeperIds: string[],
@@ -228,34 +238,13 @@ async function resolvePlayers(
   const map = new Map<string, PlayerLite>();
   if (sleeperIds.length === 0) return map;
 
-  // Primary: match by external_ids.sleeper.
-  // Fallback: match by slug tail "-<sleeperId>". sync-sleeper-players embeds
-  // the sleeper id in the slug, so even rows where external_ids.sleeper was
-  // somehow stripped still resolve. Mirrors the sync-fantasycalc.ts pattern.
-  const CHUNK = 200;
-  for (let i = 0; i < sleeperIds.length; i += CHUNK) {
-    const chunk = sleeperIds.slice(i, i + CHUNK);
-    const ors = chunk
-      .flatMap((id) => [
-        `external_ids->>sleeper.eq.${id}`,
-        `slug.like.*-${id}`,
-      ])
-      .join(",");
-    const { data, error } = await supabase
-      .from("players")
-      .select("id, slug, position, external_ids")
-      .or(ors);
-    if (error) throw new Error(`player resolve failed: ${error.message}`);
-    for (const p of data ?? []) {
-      const ext = (p.external_ids as Record<string, unknown>) ?? {};
-      const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      const tail = (p.slug as string).match(/-(\d+)$/)?.[1] ?? null;
-      const sid = fromExternal ?? tail;
-      if (!sid || !chunk.includes(sid)) continue;
-      if (!map.has(sid)) {
-        map.set(sid, { player_id: p.id, sleeper_id: sid, position: p.position });
-      }
-    }
+  // throwOnError, because this result is written to a cache. A silently short
+  // lookup here stores a roster priced as though half of it did not exist.
+  const lookup = await resolveSleeperPlayers(supabase, sleeperIds, {
+    throwOnError: true,
+  });
+  for (const [sid, p] of Object.entries(lookup)) {
+    map.set(sid, { player_id: p.id, sleeper_id: sid, position: p.position });
   }
   return map;
 }

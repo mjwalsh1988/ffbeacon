@@ -20,6 +20,7 @@ import {
   type WouldYouRatherSettings,
 } from "./default-settings";
 import { hasAnyWebhook } from "./routing";
+import { memoTtl } from "@/lib/memo-ttl";
 
 type Client = SupabaseClient<Database>;
 
@@ -169,20 +170,26 @@ export function mergeWouldYouRatherSettings(raw: unknown): WouldYouRatherSetting
     : DEFAULT_WOULD_YOU_RATHER_SETTINGS;
 }
 
+/**
+ * Same row for every caller, admin-edited only: safe to memoise across
+ * requests for a minute. See lib/memo-ttl.ts.
+ */
 export async function loadWouldYouRatherSettings(
   supabase: Client,
 ): Promise<WouldYouRatherSettings> {
-  try {
-    const { data, error } = await supabase
-      .from("would_you_rather_settings")
-      .select("settings")
-      .eq("id", WOULD_YOU_RATHER_SETTINGS_ID)
-      .maybeSingle();
-    if (error || !data?.settings) return DEFAULT_WOULD_YOU_RATHER_SETTINGS;
-    return mergeWouldYouRatherSettings(data.settings);
-  } catch {
-    return DEFAULT_WOULD_YOU_RATHER_SETTINGS;
-  }
+  return memoTtl("settings:would_you_rather", 60_000, async () => {
+    try {
+      const { data, error } = await supabase
+        .from("would_you_rather_settings")
+        .select("settings")
+        .eq("id", WOULD_YOU_RATHER_SETTINGS_ID)
+        .maybeSingle();
+      if (error || !data?.settings) return DEFAULT_WOULD_YOU_RATHER_SETTINGS;
+      return mergeWouldYouRatherSettings(data.settings);
+    } catch {
+      return DEFAULT_WOULD_YOU_RATHER_SETTINGS;
+    }
+  });
 }
 
 /** Persist a full settings document. Admin server actions only. */

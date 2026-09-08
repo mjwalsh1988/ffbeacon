@@ -44,6 +44,7 @@ import {
   ChevronRight,
   ClipboardList,
   Gauge,
+  Loader2,
   Medal,
   Radar,
   Repeat,
@@ -91,6 +92,17 @@ export interface DraftCompleteProps {
    * since the draft locked. Null when we cannot tell, which is not zero.
    */
   changedSinceDraft: number | null;
+  /**
+   * True while the heavy-engines chunk that computes `myGrade` is still being
+   * fetched (PERF-T031), matching the prop of the same name on the cockpit's
+   * other five dynamically-loaded panels. A room opened directly on an
+   * already-finished draft reaches this screen before that chunk has to have
+   * loaded, so without this flag the grade, best pick, worst pick and biggest
+   * hole all used to appear with no warning once it arrived: not missing, not
+   * loading, just suddenly there. Defaults to false, the shape this screen had
+   * before the flag existed.
+   */
+  enginesLoading?: boolean;
 }
 
 function ordinal(n: number): string {
@@ -270,8 +282,20 @@ export function DraftComplete({
   teamCount,
   onGoToView,
   changedSinceDraft,
+  enginesLoading = false,
 }: DraftCompleteProps) {
   const leagueHref = sleeperLeagueId ? `/leagues/${sleeperLeagueId}` : null;
+
+  /**
+   * Whether the grade shown in the hero is genuinely still on its way, as
+   * opposed to permanently absent (no rosterId known, or grading disabled).
+   * Only the engines being loaded tells us it MIGHT still arrive; once they
+   * finish loading, a still-null myGrade is a real "no grade for this room"
+   * and this stops being true for good. This is the ONE honest loading
+   * indicator on the whole screen: the record, the roster and the League
+   * Pulse handoff below never wait on it, and it does not gate them.
+   */
+  const gradePending = enginesLoading && !myGrade;
 
   /* Anything we do not know is left out rather than shown as a dash: a missing
      grade means the room could not be graded, and a placeholder would imply a
@@ -411,6 +435,21 @@ export function DraftComplete({
               <p className="mt-2 text-xs text-ink-muted">
                 {ordinal(myGrade.rank)} of {teamCount} in the room
               </p>
+            </div>
+          ) : gradePending ? (
+            // The one announcing state on this screen. Everything else here
+            // (the record above, the ways back into the draft, the League
+            // Pulse handoff) renders immediately and does not wait on this.
+            <div
+              role="status"
+              aria-busy="true"
+              className="flex shrink-0 items-center justify-center gap-2.5 rounded-modal border border-brand-purple/40 bg-base/70 px-6 py-4 text-sm text-ink-muted sm:min-w-[178px]"
+            >
+              <Loader2
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 animate-spin text-brand-cyan"
+              />
+              <span>Grading your draft...</span>
             </div>
           ) : null}
         </div>

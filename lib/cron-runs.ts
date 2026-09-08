@@ -15,6 +15,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
 import { SITE_TIME_ZONE } from "./datetime";
+import { isHeartbeatMinute } from "./cron-health";
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -276,8 +277,30 @@ function isSkippedResult(result: unknown): boolean {
 /**
  * Run `fn` and record the invocation in cron_runs. Returns whatever `fn`
  * returns; rethrows whatever `fn` throws (after recording the failure).
+ *
+ * `quietWhen` (PERF-T060) is for a job that ticks far more often than it has
+ * anything to say, namely league-sync-worker running every minute against a
+ * queue that is idle almost all the time. When it is supplied and the result
+ * satisfies it, the ledger row is skipped outright (no insert, no update)
+ * rather than the normal two-write running/finalize dance, EXCEPT once an
+ * hour, when one row still lands so cron-health's missed-job check keeps
+ * seeing the job alive (see isHeartbeatMinute in lib/cron-health.ts). A
+ * caller that never passes `quietWhen` gets the original behaviour: an
+ * immediate "running" row, updated to a terminal status when `fn` settles,
+ * every single time.
  */
 export async function recordCronRun<T>(
+  admin: SupabaseClient<Database>,
+  jobName: CronJobName,
+  fn: () => Promise<T>,
+  options?: { quietWhen?: (result: T) => boolean },
+): Promise<T> {
+  if (!options?.quietWhen) return recordCronRunAlways(admin, jobName, fn);
+  return recordCronRunQuiet(admin, jobName, fn, options.quietWhen);
+}
+
+/** The original, unconditional recording: a "running" row up front, a terminal update after. */
+async function recordCronRunAlways<T>(
   admin: SupabaseClient<Database>,
   jobName: CronJobName,
   fn: () => Promise<T>,
@@ -308,7 +331,7 @@ export async function recordCronRun<T>(
       status,
       finished_at: new Date().toISOString(),
       duration_ms: Date.now() - started,
-      result: fields.result ?? null,
+      result: truncateResult(fields.result ?? null),
       error: fields.error ?? null,
     };
     try {
@@ -338,6 +361,74 @@ export async function recordCronRun<T>(
     await finalize("error", { error: errMsg(err) });
     throw err;
   }
+}
+
+/**
+ * The quiet-aware recording. `fn` always runs; the ledger write happens only
+ * when there is something worth reading (an error, a non-quiet result, or
+ * the hourly heartbeat), and when it does happen it is a single insert
+ * rather than an insert-then-update pair, because by the time this decides
+ * to write anything at all it already knows the terminal outcome.
+ *
+ * This deliberately does not write a "running" row before `fn` starts. A
+ * process killed mid-`fn` therefore leaves no row for that tick rather than
+ * a stale "running" one, but for a job calling this path (a per-minute
+ * worker with its own lease and its own retrying jobs queue) that trade is
+ * the point: cron-health's missed-job check still catches genuine, sustained
+ * silence within its normal grace window, and a single crashed tick is
+ * indistinguishable from an idle one, which is exactly what "quiet" means.
+ */
+async function recordCronRunQuiet<T>(
+  admin: SupabaseClient<Database>,
+  jobName: CronJobName,
+  fn: () => Promise<T>,
+  quietWhen: (result: T) => boolean,
+): Promise<T> {
+  const started = Date.now();
+  const startedAt = new Date(started).toISOString();
+
+  let result: T;
+  try {
+    result = await fn();
+  } catch (err) {
+    // A failure is never quiet: it always gets a row.
+    try {
+      await admin.from("cron_runs").insert({
+        job_name: jobName,
+        status: "error",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        duration_ms: Date.now() - started,
+        result: null,
+        error: errMsg(err),
+      });
+    } catch (writeErr) {
+      console.warn(
+        `[cron-runs] could not record failure for ${jobName}:`,
+        errMsg(writeErr),
+      );
+    }
+    throw err;
+  }
+
+  if (quietWhen(result) && !isHeartbeatMinute(started)) {
+    return result;
+  }
+
+  try {
+    await admin.from("cron_runs").insert({
+      job_name: jobName,
+      status: isSkippedResult(result) ? "skipped" : "success",
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      duration_ms: Date.now() - started,
+      result: truncateResult(result as unknown as Json),
+      error: null,
+    });
+  } catch (err) {
+    console.warn(`[cron-runs] could not record run for ${jobName}:`, errMsg(err));
+  }
+  return result;
 }
 
 /** How much of one error we are willing to store. Long enough for a stack-free
@@ -387,6 +478,70 @@ function describeError(err: unknown): string {
     return "Unrecognised error object with no message";
   }
   return String(err);
+}
+
+/**
+ * PERF-T061: cap on the stored `result` payload. `cron_runs` was 76 MB for
+ * 24,810 rows, about 3 kB per row, and `result` is the bulk of it: most jobs
+ * report a handful of counters, but a few pass back a large object (a list
+ * of errors, an array of names) that dominates the row. 2 kB keeps the
+ * common case untouched and bounds the rare one.
+ */
+const MAX_RESULT_BYTES = 2048;
+
+/**
+ * Shrink a cron result to fit MAX_RESULT_BYTES, in a way that still reads as
+ * the real result rather than as an opaque blob or invalid JSON.
+ *
+ * A plain object keeps every top-level key: each value is included as-is
+ * while there is room, and a value that would push the payload over budget
+ * is replaced with a short marker naming that value's own size, so the
+ * small, useful fields (counts, flags, a short message) survive next to a
+ * named placeholder for whichever field was actually the problem. Anything
+ * that is not a plain object (a bare array, string, or scalar too big to
+ * store) has no top-level keys to preserve piecewise, so the whole value is
+ * replaced with a marker naming its size instead.
+ */
+function truncateResult(result: Json | null): Json | null {
+  if (result === null) return null;
+
+  const fullBytes = byteLength(result);
+  if (fullBytes <= MAX_RESULT_BYTES) return result;
+
+  if (typeof result !== "object" || Array.isArray(result)) {
+    return {
+      truncated: true,
+      original_bytes: fullBytes,
+      note: "Result was not an object, so it could not be truncated field by field.",
+    };
+  }
+
+  const obj = result as Record<string, Json>;
+  const out: Record<string, Json> = { truncated: true, original_bytes: fullBytes };
+  let used = byteLength(out);
+
+  for (const key of Object.keys(obj)) {
+    const value = obj[key];
+    const valueBytes = byteLength(value);
+    const entryBytes = byteLength(key) + valueBytes + 4; // quotes, colon, comma, slack
+    if (used + entryBytes > MAX_RESULT_BYTES) {
+      out[key] = `[omitted: ${valueBytes} bytes]`;
+      used += byteLength(out[key]) + byteLength(key) + 4;
+      continue;
+    }
+    out[key] = value;
+    used += entryBytes;
+  }
+
+  return out;
+}
+
+function byteLength(value: Json): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) ?? "", "utf8");
+  } catch {
+    return MAX_RESULT_BYTES + 1; // unstringifiable: treat as over budget
+  }
 }
 
 /**

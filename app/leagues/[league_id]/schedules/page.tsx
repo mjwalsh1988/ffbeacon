@@ -6,7 +6,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
 import { ownerLine } from "@/lib/team-label";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -75,15 +75,21 @@ const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
   const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
   if (!pulse.ok) return null;
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
-  return data ? { league: data, cached: pulse.cached } : null;
+  // The row the core already read, rather than a second read of the same one.
+  // Every column this page asks for is already in LEAGUE_CORE_COLUMNS. The
+  // fallback only runs on the null branch the core's own contract allows.
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
 });
 
 export async function generateMetadata({

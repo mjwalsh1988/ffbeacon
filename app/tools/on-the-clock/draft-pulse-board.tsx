@@ -31,7 +31,7 @@ import type { TeamRollup } from "@/lib/on-the-clock/rosters";
 import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
-import { EmptyCard, NotStartedCard } from "./states";
+import { EmptyCard, LoadingCard, NotStartedCard } from "./states";
 
 /** Plain-English name for a Sleeper starting-slot token. */
 const SLOT_LABELS: Record<string, string> = {
@@ -83,6 +83,7 @@ export function DraftPulseBoard({
   pulseTeams,
   myRosterId,
   boardReady,
+  enginesLoading = false,
   draftStarted,
   minReliabilityWeeks,
   isDynasty,
@@ -97,6 +98,12 @@ export function DraftPulseBoard({
   pulseTeams: DraftPulseTeam[];
   myRosterId: number | null;
   boardReady: boolean;
+  /**
+   * True while the rollups engine chunk is still being fetched (PERF-T031).
+   * Distinct from `!boardReady`: the FF Beacon values ARE available here,
+   * only the code that rolls them up per team has not loaded yet.
+   */
+  enginesLoading?: boolean;
   /** False before the first pick lands: the tab has nothing real to say yet. */
   draftStarted: boolean;
   /**
@@ -119,6 +126,9 @@ export function DraftPulseBoard({
   // scores zero, so the presence of rows proves nothing.
   const hasProjections = pulseTeams.some((t) => t.meanStartingPoints > 0);
 
+  if (enginesLoading) {
+    return <LoadingCard label="Loading Draft Pulse..." />;
+  }
   if (!boardReady) {
     return (
       <EmptyCard

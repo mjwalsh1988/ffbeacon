@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { pageShareMetadata } from "@/lib/page-og";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
 import { MemberHeroCta } from "@/components/member-hero-cta";
 import { isDiscordMember } from "@/lib/discord-membership";
 import { getDiscordGuildStats, type DiscordGuildStats } from "@/lib/discord-stats";
+import {
+  loadHomeContent,
+  type HomeArticleRow,
+  type HomeFormatRow,
+  type HomeSourceRow,
+} from "@/lib/home-content";
 import { HeroLavaField } from "@/components/hero-lava-field";
 import { DiscordGlyph } from "@/components/discord-glyph";
 import {
@@ -137,45 +143,24 @@ const FEATURED_TOOLS: FeaturedTool[] = [
 ];
 
 /**
- * How many articles the homepage links, and how many of those get a full card.
+ * How many of the homepage's linked articles get a full card.
  *
- * The remainder render as a headline list beside the cards (see ArticlesSection). The
- * count is the lever on crawl depth: every article listed here is one click from the
- * homepage instead of several pagination hops deep.
+ * The remainder render as a headline list beside the cards (see ArticlesSection).
+ * How many articles are linked in total is decided by lib/home-content.ts, which
+ * owns the query; this only decides the card/headline split of whatever comes back.
  */
-const HOMEPAGE_ARTICLE_COUNT = 25;
 const HOMEPAGE_FEATURED_COUNT = 4;
 
-export default async function HomePage() {
-  const supabase = await createClient();
+/** What the member-aware hero and CTA need: auth state plus a live Discord read.
+ *  Kept separate from loadHomeContent() because neither can run inside
+ *  unstable_cache (it forbids cookies()) and neither is safe to share across
+ *  readers the way the public content is. */
+type MemberContext = {
+  isMember: boolean;
+  discordStats: DiscordGuildStats | null;
+};
 
-  const [{ data: articles }, { data: formats }, { data: sources }] =
-    await Promise.all([
-      // 25, not 4. The homepage is the strongest internal link source on the site,
-      // and it used to pass link equity to only 4 articles while the other ~106 sat
-      // behind pagination. The section below features the newest 4 as cards and lists
-      // the rest as headlines, so ~25 articles are one click from the homepage
-      // without the section turning into a wall.
-      supabase
-        .from("articles")
-        .select("slug, title, tl_dr, article_type, published_at")
-        .eq("status", "published")
-        .order("published_at", { ascending: false })
-        .limit(HOMEPAGE_ARTICLE_COUNT),
-      supabase
-        .from("format_configs")
-        .select("slug, display_name, league_type, scoring_type, is_superflex, te_premium_bonus")
-        .eq("is_active", true)
-        .order("display_order"),
-      supabase
-        .from("source_registry")
-        .select(
-          "slug, display_name, description, data_type, update_cadence, supported_format_slugs, is_default",
-        )
-        .eq("is_active", true)
-        .order("priority"),
-    ]);
-
+async function loadMemberContext(): Promise<MemberContext> {
   // Confirmed Discord members don't need the "Join our Discord" hero/CTA
   // buttons; they get pointed at the toolkit instead. Live guild stats power the
   // hero's community card (null when Discord can't be reached, handled below).
@@ -183,15 +168,25 @@ export default async function HomePage() {
     isDiscordMember(),
     getDiscordGuildStats(),
   ]);
+  return { isMember, discordStats };
+}
+
+export default async function HomePage() {
+  const { articles, formats, sources } = await loadHomeContent();
+
+  // Started here, not awaited: Hero and CtaSection each read this same promise
+  // from their own Suspense boundary, so the auth check and the Discord call
+  // run exactly once and the static sections below don't wait on either of them.
+  const memberContext = loadMemberContext();
 
   return (
     <main id="main">
-      <Hero isMember={isMember} discordStats={discordStats} />
+      <Hero memberContext={memberContext} />
       <ToolsSection />
       <GamesSection />
-      <ArticlesSection articles={articles ?? []} />
-      <SourcesFormatsSection formats={formats ?? []} sources={sources ?? []} />
-      <CtaSection isMember={isMember} />
+      <ArticlesSection articles={articles} />
+      <SourcesFormatsSection formats={formats} sources={sources} />
+      <CtaSection memberContext={memberContext} />
     </main>
   );
 }
@@ -206,13 +201,7 @@ const HERO_FEATURES: HeroFeature[] = [
   { icon: BarChart3, label: "League-specific insights" },
 ];
 
-function Hero({
-  isMember,
-  discordStats,
-}: {
-  isMember: boolean;
-  discordStats: DiscordGuildStats | null;
-}) {
+function Hero({ memberContext }: { memberContext: Promise<MemberContext> }) {
   return (
     <header className="relative overflow-hidden border-b border-line">
       {/* The site header is opaque and sits above this block, so the hero
@@ -257,15 +246,9 @@ function Hero({
             {/* Short labels on purpose: the hero shows two of these three
                 buttons at once, and the longer wording pushed the pair onto two
                 rows at phone width. */}
-            <MemberHeroCta
-              isMember={isMember}
-              size="lg"
-              memberMode="link"
-              memberHref="/tools"
-              memberLabel="Free Tools"
-              memberIcon="tools"
-              joinLabel="Join Discord"
-            />
+            <Suspense fallback={<HeroCtaFallback />}>
+              <HeroPrimaryCta memberContext={memberContext} />
+            </Suspense>
             <Link
               href="/rankings"
               className="inline-flex min-h-11 items-center gap-2 rounded-card border border-line bg-surface/70 px-5 py-3 text-sm font-medium text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
@@ -297,10 +280,49 @@ function Hero({
 
         {/* Right column: the Discord community card with live guild stats. */}
         <div className="mt-12 lg:mt-0">
-          <DiscordCommunityCard isMember={isMember} stats={discordStats} />
+          <Suspense fallback={<DiscordCardFallback />}>
+            <DiscordCommunityCardAsync memberContext={memberContext} />
+          </Suspense>
         </div>
       </div>
     </header>
+  );
+}
+
+/** The hero's primary CTA, resolved from the shared member/Discord read. A
+ *  thin async wrapper rather than passing a boolean prop, so this piece alone
+ *  can sit behind its own Suspense boundary while the static headline and
+ *  copy beside it render immediately. */
+async function HeroPrimaryCta({
+  memberContext,
+}: {
+  memberContext: Promise<MemberContext>;
+}) {
+  const { isMember } = await memberContext;
+  return (
+    <MemberHeroCta
+      isMember={isMember}
+      size="lg"
+      memberMode="link"
+      memberHref="/tools"
+      memberLabel="Free Tools"
+      memberIcon="tools"
+      joinLabel="Join Discord"
+    />
+  );
+}
+
+/** Loading placeholder for the hero's primary CTA button. Same min-height as
+ *  the real button (min-h-11) so it doesn't shift the layout when it resolves. */
+function HeroCtaFallback() {
+  return (
+    <span role="status" className="inline-flex">
+      <span
+        aria-hidden="true"
+        className="h-11 w-40 animate-pulse rounded-card bg-surface/70"
+      />
+      <span className="sr-only">Loading membership status</span>
+    </span>
   );
 }
 
@@ -315,6 +337,45 @@ function GradientWord({ children }: { children: React.ReactNode }) {
     >
       {children}
     </span>
+  );
+}
+
+/** Thin async wrapper so the Discord community card can sit behind its own
+ *  Suspense boundary, independent of the hero's headline and the primary CTA
+ *  button beside it. */
+async function DiscordCommunityCardAsync({
+  memberContext,
+}: {
+  memberContext: Promise<MemberContext>;
+}) {
+  const { isMember, discordStats } = await memberContext;
+  return <DiscordCommunityCard isMember={isMember} stats={discordStats} />;
+}
+
+/** Loading placeholder for the Discord community card. Same outer chrome
+ *  (border, rounded-modal, padding) as the real card and a height close to its
+ *  common case (the stats grid, not the no-stats paragraph) so the layout
+ *  doesn't jump when the real card streams in. */
+function DiscordCardFallback() {
+  return (
+    <div
+      role="status"
+      className="relative overflow-hidden rounded-modal border border-brand-purple/40 bg-surface-elevated/80 p-6 shadow-xl shadow-black/40 sm:p-7"
+    >
+      <div aria-hidden="true" className="flex items-center gap-3">
+        <div className="h-12 w-12 shrink-0 animate-pulse rounded-card bg-base/60" />
+        <div className="space-y-2">
+          <div className="h-5 w-40 animate-pulse rounded bg-base/60" />
+          <div className="h-4 w-28 animate-pulse rounded bg-base/60" />
+        </div>
+      </div>
+      <div aria-hidden="true" className="mt-6 grid grid-cols-2 gap-3">
+        <div className="h-24 animate-pulse rounded-card border border-line bg-base/60" />
+        <div className="h-24 animate-pulse rounded-card border border-line bg-base/60" />
+      </div>
+      <div aria-hidden="true" className="mt-5 h-11 animate-pulse rounded-card bg-base/60" />
+      <span className="sr-only">Loading our Discord community's live numbers</span>
+    </div>
   );
 }
 
@@ -724,24 +785,11 @@ function GameCard({ game }: { game: FeaturedGame }) {
 
 /* ---------- Sources and formats ---------- */
 
-type FormatRow = {
-  slug: string;
-  display_name: string;
-  league_type: string;
-  scoring_type: string;
-  is_superflex: boolean;
-  te_premium_bonus: number;
-};
-
-type SourceRow = {
-  slug: string;
-  display_name: string;
-  description: string | null;
-  data_type: string[];
-  update_cadence: string;
-  supported_format_slugs: string[] | null;
-  is_default: boolean;
-};
+// Row shapes are owned by lib/home-content.ts, which is what actually queries
+// them; these are local aliases so the rest of this file doesn't have to spell
+// out the "Home" prefix everywhere.
+type FormatRow = HomeFormatRow;
+type SourceRow = HomeSourceRow;
 
 const BEACON_SOURCE_SLUG = "ffbeacon";
 
@@ -1000,13 +1048,8 @@ function SourceCard({
 
 /* ---------- Latest from the Beacon Brief ---------- */
 
-type ArticleRow = {
-  slug: string;
-  title: string;
-  tl_dr: string | null;
-  article_type: string;
-  published_at: string | null;
-};
+// Row shape is owned by lib/home-content.ts, which is what actually queries it.
+type ArticleRow = HomeArticleRow;
 
 function formatArticleDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -1161,7 +1204,7 @@ function ArticleCard({ article }: { article: ArticleRow }) {
 
 /* ---------- CTA ---------- */
 
-function CtaSection({ isMember }: { isMember: boolean }) {
+function CtaSection({ memberContext }: { memberContext: Promise<MemberContext> }) {
   return (
     <section aria-labelledby="cta-heading">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -1181,51 +1224,86 @@ function CtaSection({ isMember }: { isMember: boolean }) {
                 "linear-gradient(90deg, transparent 0%, #A855F7 35%, #22D3EE 65%, transparent 100%)",
             }}
           />
-          <div className="relative">
-            <SectionEyebrow>
-              {isMember ? "Already in the crew" : "Ready when you are"}
-            </SectionEyebrow>
-            <h2
-              id="cta-heading"
-              className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
-            >
-              {isMember
-                ? "You're in the Discord. Now let the tools go to work."
-                : "Real people in the Discord, real help on the clock."}
-            </h2>
-            <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
-              {isMember
-                ? "Thanks for being part of the crew, so we'll skip the invite. Everything we build is free and ready to use, from live draft help to trade grades and waiver bids. Drafting tonight? Connect your live Sleeper draft and let On The Clock call out your team's needs pick by pick."
-                : "Jump into our Discord for free lineup, trade, and draft advice from real fantasy players, no matter how new you are. Drafting tonight? Connect your live Sleeper draft and let On The Clock call out your team's needs pick by pick. No paywall, ever."}
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <MemberHeroCta
-                isMember={isMember}
-                size="md"
-                memberMode="link"
-                memberHref="/tools"
-                memberLabel="Explore our fantasy tools"
-                memberIcon="tools"
-              />
-              <Link
-                href="/tools/on-the-clock"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
-              >
-                <Timer aria-hidden="true" className="h-3.5 w-3.5" />
-                Get live draft help
-                <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-              </Link>
-              <Link
-                href="/about"
-                className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-ink-muted hover:text-ink"
-              >
-                Read about the project
-              </Link>
-            </div>
-          </div>
+          {/* Nearly everything below (eyebrow, heading, copy, primary button) reads
+              differently for a confirmed member, so the whole block sits behind one
+              Suspense boundary rather than three. The card's border, background wash
+              and hairline above are decorative and render immediately either way. */}
+          <Suspense fallback={<CtaContentFallback />}>
+            <CtaContent memberContext={memberContext} />
+          </Suspense>
         </div>
       </div>
     </section>
+  );
+}
+
+async function CtaContent({
+  memberContext,
+}: {
+  memberContext: Promise<MemberContext>;
+}) {
+  const { isMember } = await memberContext;
+  return (
+    <div className="relative">
+      <SectionEyebrow>
+        {isMember ? "Already in the crew" : "Ready when you are"}
+      </SectionEyebrow>
+      <h2
+        id="cta-heading"
+        className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl"
+      >
+        {isMember
+          ? "You're in the Discord. Now let the tools go to work."
+          : "Real people in the Discord, real help on the clock."}
+      </h2>
+      <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">
+        {isMember
+          ? "Thanks for being part of the crew, so we'll skip the invite. Everything we build is free and ready to use, from live draft help to trade grades and waiver bids. Drafting tonight? Connect your live Sleeper draft and let On The Clock call out your team's needs pick by pick."
+          : "Jump into our Discord for free lineup, trade, and draft advice from real fantasy players, no matter how new you are. Drafting tonight? Connect your live Sleeper draft and let On The Clock call out your team's needs pick by pick. No paywall, ever."}
+      </p>
+      <div className="mt-7 flex flex-wrap gap-3">
+        <MemberHeroCta
+          isMember={isMember}
+          size="md"
+          memberMode="link"
+          memberHref="/tools"
+          memberLabel="Explore our fantasy tools"
+          memberIcon="tools"
+        />
+        <Link
+          href="/tools/on-the-clock"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+        >
+          <Timer aria-hidden="true" className="h-3.5 w-3.5" />
+          Get live draft help
+          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+        </Link>
+        <Link
+          href="/about"
+          className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-ink-muted hover:text-ink"
+        >
+          Read about the project
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** Loading placeholder for the CTA block. Reserves roughly the same height as
+ *  the real heading + copy + button row (both member and non-member copy run
+ *  two to three lines at this width) so the card doesn't jump when it resolves. */
+function CtaContentFallback() {
+  return (
+    <div role="status" className="relative">
+      <div aria-hidden="true" className="space-y-3">
+        <div className="h-3 w-32 animate-pulse rounded bg-base/60" />
+        <div className="h-8 w-full max-w-md animate-pulse rounded bg-base/60" />
+        <div className="h-4 w-full max-w-xl animate-pulse rounded bg-base/60" />
+        <div className="h-4 w-full max-w-lg animate-pulse rounded bg-base/60" />
+        <div className="mt-4 h-11 w-48 animate-pulse rounded-card bg-base/60" />
+      </div>
+      <span className="sr-only">Loading membership status</span>
+    </div>
   );
 }
 

@@ -85,38 +85,66 @@ describe("deriveCareerHighs", () => {
 // --- loadStatsBundle -----------------------------------------------------
 
 /**
- * Minimal chainable + thenable Supabase mock. The `gte("season", floor)` call
- * actually filters the canned rows by season so the loader's real query shape
- * (order of .eq/.gte/.order calls) can be exercised without a live database.
+ * Minimal chainable + thenable Supabase mock covering both tables loadStatsBundle
+ * reads: player_stats (the weekly rows) and player_positional_finishes (the
+ * pre-calculated finishes cache, replacing the get_player_positional_finishes RPC
+ * per PERF-T011). The `gte("season", floor)` call actually filters the canned
+ * weekly rows by season so the loader's real query shape (order of
+ * .eq/.gte/.order calls) can be exercised without a live database. `from` is a
+ * spy so tests can assert which tables were touched.
  */
-function mockStatsSupabase(rows: WeeklyStatRow[], rpc: { data: unknown; error: unknown }) {
+function mockStatsSupabase(rows: WeeklyStatRow[], finishes: { data: unknown; error: unknown }) {
   let seasonFloor: number | undefined;
-  const rpcSpy = vi.fn(() => Promise.resolve(rpc));
-  const builder: {
-    select: () => typeof builder;
-    eq: () => typeof builder;
-    gte: (col: string, val: number) => typeof builder;
-    order: () => typeof builder;
+  const statsBuilder: {
+    select: () => typeof statsBuilder;
+    eq: () => typeof statsBuilder;
+    gte: (col: string, val: number) => typeof statsBuilder;
+    order: () => typeof statsBuilder;
     then: (
       resolve: (v: { data: unknown; error: unknown }) => void,
       reject: (e: unknown) => void,
     ) => void;
   } = {
-    select: () => builder,
-    eq: () => builder,
+    select: () => statsBuilder,
+    eq: () => statsBuilder,
     gte: (_col, val) => {
       seasonFloor = val;
-      return builder;
+      return statsBuilder;
     },
-    order: () => builder,
+    order: () => statsBuilder,
     then: (resolve) => {
       const filtered = seasonFloor === undefined ? rows : rows.filter((r) => r.season >= seasonFloor!);
       resolve({ data: filtered, error: null });
     },
   };
-  const supabase = { from: () => builder, rpc: rpcSpy };
+
+  const finishesSelectSpy = vi.fn();
+  const finishesBuilder: {
+    select: (cols: string) => typeof finishesBuilder;
+    eq: () => typeof finishesBuilder;
+    in: () => typeof finishesBuilder;
+    order: () => typeof finishesBuilder;
+    then: (
+      resolve: (v: { data: unknown; error: unknown }) => void,
+      reject: (e: unknown) => void,
+    ) => void;
+  } = {
+    select: (cols) => {
+      finishesSelectSpy(cols);
+      return finishesBuilder;
+    },
+    eq: () => finishesBuilder,
+    in: () => finishesBuilder,
+    order: () => finishesBuilder,
+    then: (resolve) => resolve(finishes),
+  };
+
+  const fromSpy = vi.fn((table: string) =>
+    table === "player_positional_finishes" ? finishesBuilder : statsBuilder,
+  );
+  const supabase = { from: fromSpy };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { supabase: supabase as any, rpcSpy };
+  return { supabase: supabase as any, fromSpy, finishesSelectSpy };
 }
 
 function makeRow(season: number, week: number, pts: number, gp = 1): WeeklyStatRow {
@@ -156,7 +184,7 @@ describe("loadStatsBundle", () => {
   });
 
   it("returns hasData false and empty/null fields for a player with no 2020+ rows", async () => {
-    const { supabase, rpcSpy } = mockStatsSupabase([], { data: [], error: null });
+    const { supabase, fromSpy } = mockStatsSupabase([], { data: [], error: null });
     const bundle = await loadStatsBundle(supabase, "player-empty");
     expect(bundle.hasData).toBe(false);
     expect(bundle.seasons).toEqual([]);
@@ -166,7 +194,7 @@ describe("loadStatsBundle", () => {
     expect(bundle.pointsPerGame).toEqual({});
     expect(bundle.finishes.seasons).toEqual([]);
     expect(bundle.finishes.bestFinish).toBeNull();
-    expect(rpcSpy).not.toHaveBeenCalled();
+    expect(fromSpy).not.toHaveBeenCalledWith("player_positional_finishes");
   });
 
   it("finds the most recent season with games played as lastSeason", async () => {
@@ -176,26 +204,62 @@ describe("loadStatsBundle", () => {
     expect(bundle.lastSeason?.season).toBe(2021);
   });
 
-  it("shapes finishes to PPR only and picks the best (lowest) finish, tying to the more recent season", async () => {
+  it("reads finishes from player_positional_finishes (PPR only) and picks the best (lowest) finish, tying to the more recent season", async () => {
     const rows = [makeRow(2021, 1, 20), makeRow(2022, 1, 25)];
-    const rpcData = [
-      { season: 2021, scoring: "pts_ppr", finish: 5, players_ranked: 60, total_points: 200 },
-      { season: 2021, scoring: "pts_half_ppr", finish: 3, players_ranked: 60, total_points: 190 },
-      { season: 2022, scoring: "pts_ppr", finish: 5, players_ranked: 60, total_points: 210 },
+    // Shaped exactly like the query's select list: season, finish, players_ranked.
+    // No scoring column comes back because .eq("scoring", "pts_ppr") already
+    // scoped the rows in the database; there is nothing left to filter client-side.
+    const finishRows = [
+      { season: 2021, finish: 5, players_ranked: 60 },
+      { season: 2022, finish: 5, players_ranked: 60 },
     ];
-    const { supabase } = mockStatsSupabase(rows, { data: rpcData, error: null });
+    const { supabase, fromSpy, finishesSelectSpy } = mockStatsSupabase(rows, {
+      data: finishRows,
+      error: null,
+    });
     const bundle = await loadStatsBundle(supabase, "player-finish");
     expect(bundle.finishes.seasons).toEqual([
       { season: 2022, finish: 5, playersRanked: 60 },
       { season: 2021, finish: 5, playersRanked: 60 },
     ]);
     expect(bundle.finishes.bestFinish).toEqual({ season: 2022, finish: 5, playersRanked: 60 });
+    expect(fromSpy).toHaveBeenCalledWith("player_positional_finishes");
+    expect(finishesSelectSpy).toHaveBeenCalledWith("season, finish, players_ranked");
   });
 
-  it("tolerates an RPC error and still returns the rest of the bundle", async () => {
+  it("tolerates an empty finishes result and still returns the rest of the bundle", async () => {
+    const rows = [makeRow(2021, 1, 20)];
+    const { supabase } = mockStatsSupabase(rows, { data: [], error: null });
+    const bundle = await loadStatsBundle(supabase, "player-no-finish-rows");
+    expect(bundle.hasData).toBe(true);
+    expect(bundle.finishes.seasons).toEqual([]);
+    expect(bundle.finishes.bestFinish).toBeNull();
+  });
+
+  it("tolerates a query error and still returns the rest of the bundle", async () => {
     const rows = [makeRow(2021, 1, 20)];
     const { supabase } = mockStatsSupabase(rows, { data: null, error: { message: "boom" } });
-    const bundle = await loadStatsBundle(supabase, "player-rpc-fail");
+    const bundle = await loadStatsBundle(supabase, "player-finish-query-fail");
+    expect(bundle.hasData).toBe(true);
+    expect(bundle.finishes.seasons).toEqual([]);
+    expect(bundle.finishes.bestFinish).toBeNull();
+  });
+
+  it("tolerates the query throwing and still returns the rest of the bundle", async () => {
+    const rows = [makeRow(2021, 1, 20)];
+    const { supabase } = mockStatsSupabase(rows, { data: [], error: null });
+    const throwingBuilder = {
+      select: () => throwingBuilder,
+      eq: () => throwingBuilder,
+      in: () => throwingBuilder,
+      order: () => throwingBuilder,
+      then: () => {
+        throw new Error("network down");
+      },
+    };
+    const throwingFrom = (table: string) =>
+      table === "player_positional_finishes" ? throwingBuilder : supabase.from(table);
+    const bundle = await loadStatsBundle({ ...supabase, from: throwingFrom }, "player-finish-throws");
     expect(bundle.hasData).toBe(true);
     expect(bundle.finishes.seasons).toEqual([]);
     expect(bundle.finishes.bestFinish).toBeNull();

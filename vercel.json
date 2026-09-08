@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/sync-dynastyprocess",
-      "schedule": "0 9 * * *"
+      "schedule": "15 9 * * *"
     },
     {
       "path": "/api/cron/recalculate-beacon",
@@ -39,7 +39,7 @@
     },
     {
       "path": "/api/cron/sync-nfl-odds",
-      "schedule": "0 13 * * *"
+      "schedule": "15 13 * * *"
     },
     {
       "path": "/api/cron/build-beacon-projections",

@@ -313,7 +313,7 @@ async function resolvePlayers(
     const { data } = await db
       .from("players")
       .select(PLAYER_COLUMNS)
-      .or(chunk.map((id) => `slug.like.*-${id}`).join(","));
+      .in("sleeper_slug_tail", chunk);
     for (const row of data ?? []) {
       const sid = (row.slug as string).match(/-(\d+)$/)?.[1] ?? null;
       if (!sid || !chunk.includes(sid) || out[sid]) continue;

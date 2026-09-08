@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { runSleeperPlayersSync } from "@/lib/sync-sleeper-players";
 import { recordCronRun } from "@/lib/cron-runs";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +35,10 @@ export async function GET(req: Request) {
   const supabase = createAdminClient();
   try {
     const result = await recordCronRun(supabase, "sync-sleeper-players", async () => {
-      return await runSleeperPlayersSync(supabase);
+      const sync = await runSleeperPlayersSync(supabase);
+      // Fresh player rows -> bust the depth chart cache.
+      if (!sync.skipped) revalidateTag(CACHE_TAGS.playerDepth);
+      return sync;
     });
     return NextResponse.json(result);
   } catch (err) {

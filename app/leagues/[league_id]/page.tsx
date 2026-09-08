@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import {
+  LEAGUE_CORE_COLUMNS,
+  pulseLeagueCore,
+  pulseLeagueDerived,
+} from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -150,7 +154,36 @@ export default async function LeagueDeepViewPage({
   // built on this page may carry, which is the handle only when the reader
   // arrived on one.
   const supabase = await createClient();
-  const viewer = await resolveSleeperViewer(supabase, usernameParam);
+  const adminClient = createAdminClient();
+
+  // WAVE ONE. None of these three needs any of the others, and each is a round
+  // trip of its own, so they run together. Before this they were awaited on
+  // their own lines with seven more behind them, which is how the league name
+  // took 400 to 500 ms to appear on a warm cache
+  // (docs/performance/site-speed-audit-and-plan.md, 4.7).
+  //
+  // The core sync is in this wave rather than behind the legacy-tab redirect
+  // below. A redirecting request now starts the sync it used to skip, but that
+  // sync is coalesced and cached, so what it actually does is warm the league
+  // the reader is being sent to.
+  const [viewer, pulseResult, resolvedSource] = await Promise.all([
+    // Who this page is acting for: the ?username= handle when there is one,
+    // otherwise the reader's own saved handle.
+    resolveSleeperViewer(supabase, usernameParam),
+    // First-touch pulse, split in two. The core is the league, its rosters, and
+    // its members: everything the header and the tabs need, and nothing else.
+    // The derived work (transaction history, trade values, Power Pulse) runs
+    // inside the Suspense boundaries below, so a cold league paints its name
+    // and shape immediately instead of holding a blank loader for the whole
+    // sync.
+    pulseLeagueCore(adminClient, sleeperLeagueId),
+    // Source preference. Format is NOT user-controlled inside a league view
+    // (CLAUDE.md: League Pulse Format Resolution rule).
+    resolveSourceSlug(supabase, sourceParam),
+  ]);
+
+  // `linkUsername` is what a link built on this page may carry, which is the
+  // handle only when the reader arrived on one.
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
 
@@ -172,28 +205,24 @@ export default async function LeagueDeepViewPage({
     return Number.isFinite(n) ? n : null;
   })();
 
-  // First-touch pulse, split in two. The core is the league, its rosters, and
-  // its members: everything the header and the tabs need, and nothing else. The
-  // derived work (transaction history, trade values, Power Pulse) runs inside
-  // the Suspense boundaries below, so a cold league paints its name and shape
-  // immediately instead of holding a blank loader for the whole sync.
-  const adminClient = createAdminClient();
-  const pulseResult = await pulseLeagueCore(adminClient, sleeperLeagueId);
-
   if (!pulseResult.ok) {
     // Sync failed (missing league or a transient Sleeper outage; the API
     // can't distinguish them). Show a branded retry state rather than 404.
     return <LeagueLoadError />;
   }
 
-  // Read the canonical row for render (anon-readable, RLS-safe).
-  const { data: league } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, pulse_status, pulse_error, format_config_id, roster_positions, scoring_settings, metadata",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
+  // The row the core already read, rather than a second read of the same one.
+  // The fallback is not dead code: the core's contract allows a null row, and a
+  // page that assumed otherwise would 500 instead of rendering.
+  const league =
+    pulseResult.league ??
+    (
+      await supabase
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
 
   if (!league) notFound();
 
@@ -204,17 +233,23 @@ export default async function LeagueDeepViewPage({
   });
   const scoringTags = buildLeagueScoringTags(league.scoring_settings);
 
-  // Resolve source preference. Format is NOT user-controlled inside a
-  // league view (CLAUDE.md: League Pulse Format Resolution rule). We derive
-  // the league's natural format from Sleeper settings and map to the
-  // closest format the chosen source supports.
-  const resolvedSource = await resolveSourceSlug(supabase, sourceParam);
+  // WAVE TWO. The format resolution derives the league's natural format from
+  // its Sleeper settings and maps it to the closest format the chosen source
+  // supports; the header actions read the searched user's OTHER leagues for the
+  // in-view switcher. Both need the league row and neither needs the other.
   const sleeperLeague = (league.metadata ?? {}) as unknown as SleeperLeague;
-  const context = await resolveLeagueContext(
-    adminClient,
-    sleeperLeague,
-    resolvedSource.slug,
-  );
+  const [context, { otherLeagues }] = await Promise.all([
+    resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug),
+    // The Refresh button is public, so there is no per-viewer refresh gate to
+    // compute. Shared with every other deep-view surface.
+    loadLeagueHeaderActions(
+      supabase,
+      league.id,
+      sleeperLeagueId,
+      viewer,
+      league.season != null ? String(league.season) : null,
+    ),
+  ]);
 
   // Breadcrumb back-link. Forward the searched handle so the logo crumb lands
   // the user back on their own league results, not a blank search form.
@@ -223,18 +258,6 @@ export default async function LeagueDeepViewPage({
   const backHref = linkUsername
     ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
     : "/tools/league-pulse";
-
-  // Header action data: the searched user's OTHER leagues (for the in-view
-  // switcher, fetched only when ?username= is present). Shared with every
-  // other deep-view surface via loadLeagueHeaderActions. The Refresh button
-  // is public, so there is no per-viewer refresh gate to compute.
-  const { otherLeagues } = await loadLeagueHeaderActions(
-    supabase,
-    league.id,
-    sleeperLeagueId,
-    viewer,
-    league.season != null ? String(league.season) : null,
-  );
 
   const lastPulsed = league.last_pulsed_at ? new Date(league.last_pulsed_at) : null;
   const lastPulsedLabel = lastPulsed ? formatRelative(lastPulsed) : "never";

@@ -50,7 +50,7 @@ import { analyzeDraftTrade } from "./actions";
 import { AddAssetDialog } from "./add-asset-dialog";
 import { DraftBoard, type PlacedPickMark } from "./draft-board";
 import { SignalCheckReport } from "./signal-check-report";
-import { EmptyCard } from "./states";
+import { EmptyCard, LoadingCard } from "./states";
 
 type SideId = "a" | "b";
 
@@ -87,6 +87,7 @@ export function TradeAnalyzer({
   pool,
   groups,
   boardReady,
+  enginesLoading = false,
   resolveContext,
   draftId,
   draftCache,
@@ -102,6 +103,13 @@ export function TradeAnalyzer({
   pool: PlayerPool;
   groups: TradeItemGroup[];
   boardReady: boolean;
+  /**
+   * True while the trade-catalog engine chunk is still being fetched
+   * (PERF-T031). Distinct from `!boardReady`: the FF Beacon values ARE
+   * available here, only the code that turns them into a tradeable catalog
+   * has not loaded yet.
+   */
+  enginesLoading?: boolean;
   /** Everything resolveDraftAsset needs. Null while the board is loading. */
   resolveContext: ResolveContext | null;
   draftId: string;
@@ -378,7 +386,9 @@ export function TradeAnalyzer({
         </span>
       </div>
 
-      {!boardReady || groups.length === 0 || !resolveContext ? (
+      {enginesLoading ? (
+        <LoadingCard label="Loading the trade builder..." />
+      ) : !boardReady || groups.length === 0 || !resolveContext ? (
         <EmptyCard
           title="Trade values are not available yet."
           body="The Trade Builder needs this format's FF Beacon board. Both sides price up once it loads."

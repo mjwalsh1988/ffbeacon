@@ -28,17 +28,21 @@ import { createClient } from "@/lib/supabase/server";
  *   - React `cache()` dedupes the whole resolution within a single server
  *     render pass (a page may read it once and pass it down, but this keeps
  *     repeat reads free).
- *   - A short module-level TTL map keyed by Discord id avoids hammering the
- *     Discord API across separate requests from the same warm instance. Only
+ *   - A module-level TTL map keyed by Discord id avoids hammering the Discord
+ *     API across separate requests from the same warm instance. Only
  *     definitive answers (member / not_member) are cached; `unknown` is left
- *     uncached so a transient failure retries on the next navigation.
+ *     uncached so a transient failure retries on the next navigation. 24 hour
+ *     TTL (owner-approved 2026-09-08). This map STAYS in-process rather than
+ *     moving to unstable_cache: it is keyed by a reader's own Discord id and
+ *     must never be shared between readers, and the Next data cache has no
+ *     per-key access control to enforce that.
  */
 
 export type DiscordMembership = "member" | "not_member" | "no_link" | "unknown";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const REQUEST_TIMEOUT_MS = 8_000;
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 type CacheEntry = { status: Exclude<DiscordMembership, "no_link">; expires: number };
 const membershipCache = new Map<string, CacheEntry>();
@@ -62,8 +66,14 @@ function extractDiscordUserId(user: User | null): string | null {
 /**
  * Raw guild membership check against the Discord API. Cached per Discord id
  * for CACHE_TTL_MS. Returns "unknown" on any non-definitive outcome.
+ *
+ * Exported (rather than kept module-private) so the TTL behavior is directly
+ * testable: `getDiscordMembership` and `isDiscordMember` are wrapped in React
+ * `cache()`, which memoizes a zero-argument function for the life of the
+ * render/module scope, so calling either of them twice with different mocked
+ * responses in the same test file would just return the first result again.
  */
-async function fetchGuildMembership(
+export async function fetchGuildMembership(
   discordUserId: string,
 ): Promise<Exclude<DiscordMembership, "no_link">> {
   const token = process.env.DISCORD_BOT_TOKEN;
@@ -130,3 +140,8 @@ export const getDiscordMembership = cache(
 export const isDiscordMember = cache(async (): Promise<boolean> => {
   return (await getDiscordMembership()) === "member";
 });
+
+/** Test-only: clears the in-process membership cache between test cases. */
+export function _resetDiscordMembershipCacheForTests(): void {
+  membershipCache.clear();
+}

@@ -227,6 +227,7 @@ const MAX_CLAIMANTS_SHOWN = 3;
 export function RankingsAwards({
   awards,
   boardReady,
+  enginesLoading = false,
   draftStarted,
   tradesLoading,
   tradesError,
@@ -234,12 +235,21 @@ export function RankingsAwards({
 }: {
   awards: Award[];
   boardReady: boolean;
+  /**
+   * True while the awards engine chunk is still being fetched (PERF-T031).
+   * Distinct from `!boardReady`: the FF Beacon values ARE available here,
+   * only the code that turns them into awards has not loaded yet.
+   */
+  enginesLoading?: boolean;
   /** False before the first pick lands: nothing has been earned yet. */
   draftStarted: boolean;
   tradesLoading: boolean;
   tradesError: string | null;
   onRetryTrades: () => void;
 }) {
+  if (enginesLoading) {
+    return <LoadingCard label="Loading draft awards..." />;
+  }
   if (!boardReady) {
     return (
       <EmptyCard

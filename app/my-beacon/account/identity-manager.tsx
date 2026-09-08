@@ -3,7 +3,7 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Link2Off, ShieldCheck, Mail } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { unlinkProviderIdentity } from "./actions";
 
 /**
  * Shape of the minimum identity fields this component needs. We only pass
@@ -69,7 +69,6 @@ export function IdentityManager({
   const [pending, startTransition] = useTransition();
   const statusId = useId();
 
-  const supabase = createClient();
   // ALWAYS prefer the live browser origin in a client component, the user
   // is physically on `window.location.origin`, so that's the only URL the
   // OAuth callback can come back to without cross-environment surprises.
@@ -102,6 +101,11 @@ export function IdentityManager({
     // checks before falling back to the default home redirect.
     document.cookie = `ff_oauth_return=${encodeURIComponent("/my-beacon/account")}; Path=/; Max-Age=600; SameSite=Lax`;
     startTransition(async () => {
+      // The browser Supabase client (242 kB of GoTrue + WebSocket code) is
+      // loaded only now, on the click that actually needs the OAuth
+      // redirect, rather than in every /my-beacon page's bundle.
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
       const { error } = await supabase.auth.linkIdentity({
         provider,
         options: { redirectTo: callbackUrl },
@@ -114,43 +118,24 @@ export function IdentityManager({
   };
 
   const unlink = (identity: IdentityRow) => {
-    // Guard the last login method client-side; the server (Supabase) also
-    // refuses to unlink the only remaining identity, but a clear message
-    // here is friendlier than a generic API error.
-    const remainingOauth = oauthIdentityCount - 1;
-    if (!hasPassword && remainingOauth < 1) {
-      setStatus({
-        kind: "error",
-        message:
-          "Can't disconnect your only sign-in method. Set a password first or link another provider.",
-      });
-      return;
-    }
-
     setStatus({ kind: "unlinking", provider: identity.provider });
     startTransition(async () => {
-      // Supabase's unlinkIdentity expects the full UserIdentity object
-      // shape, but only `identity_id`, `user_id`, and `provider` are
-      // actually used. We pass the minimum and cast.
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setStatus({ kind: "error", message: "Not signed in" });
+      // unlinkProviderIdentity re-derives the caller and re-checks the
+      // "don't strand the account" guard server-side; this is a friendlier
+      // message shown before the round trip, not the security boundary.
+      const remainingOauth = oauthIdentityCount - 1;
+      if (!hasPassword && remainingOauth < 1) {
+        setStatus({
+          kind: "error",
+          message:
+            "Can't disconnect your only sign-in method. Set a password first or link another provider.",
+        });
         return;
       }
-      const { error } = await supabase.auth.unlinkIdentity({
-        identity_id: identity.identity_id,
-        id: identity.identity_id,
-        user_id: user.id,
-        provider: identity.provider,
-        identity_data: {},
-        created_at: identity.created_at ?? "",
-        last_sign_in_at: identity.last_sign_in_at ?? "",
-        updated_at: identity.created_at ?? "",
-      });
-      if (error) {
-        setStatus({ kind: "error", message: error.message });
+
+      const result = await unlinkProviderIdentity(identity.identity_id);
+      if (!result.ok) {
+        setStatus({ kind: "error", message: result.error });
       } else {
         setStatus({
           kind: "success",

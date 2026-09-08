@@ -3,6 +3,7 @@ import type { Database } from "@/lib/database.types";
 import type { LeagueDraftSlotIndex } from "@/lib/league-pick-slots";
 import type { StartupPickIndex } from "@/lib/league-startup-picks";
 import { describeUnresolved } from "@/lib/startup-draft";
+import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 
 type AnySupabase =
   | SupabaseClient<Database>
@@ -555,38 +556,23 @@ async function loadPlayerMeta(
     { playerId: string | null; name: string; position: string | null; team: string | null }
   >();
   if (sleeperIds.length === 0) return out;
-  // Defense-in-depth: only interpolate numeric ids into the PostgREST
-  // filter language. See lib/league-transactions-data.ts for context.
-  const safeIds = sleeperIds.filter((id) => /^\d+$/.test(id));
-  const CHUNK = 200;
-  for (let i = 0; i < safeIds.length; i += CHUNK) {
-    const chunk = safeIds.slice(i, i + CHUNK);
-    const ors = chunk
-      .flatMap((id) => [
-        `external_ids->>sleeper.eq.${id}`,
-        `slug.like.*-${id}`,
-      ])
-      .join(",");
-    const { data: rows } = await (supabase as SupabaseClient<Database>)
-      .from("players")
-      .select("id, slug, full_name, first_name, last_name, position, team, external_ids")
-      .or(ors);
-    for (const r of rows ?? []) {
-      const ext = (r.external_ids as Record<string, unknown>) ?? {};
-      const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      const tail = (r.slug as string).match(/-(\d+)$/)?.[1] ?? null;
-      const sid = fromExternal ?? tail;
-      if (!sid || !chunk.includes(sid)) continue;
-      if (!out.has(sid)) {
-        out.set(sid, {
-          playerId: r.id,
-          name: r.full_name ?? (`${r.first_name ?? ""} ${r.last_name ?? ""}`.trim() || sid),
-          position: r.position ?? null,
-          team: r.team ?? null,
-        });
-      }
-    }
+
+  // A thin adapter over the shared lookup. This had its own copy, and the copy
+  // put the indexed `external_ids->>sleeper` predicate and an unindexable
+  // `slug.like.*-<id>` in the same `or()`, which makes the whole filter
+  // unindexable and scans `players` end to end, once per set of transaction
+  // rows (site-speed-audit-and-plan.md, 4.1). The helper also carries the
+  // numeric-id filter this function used to do for itself.
+  const lookup = await resolveSleeperPlayers(supabase, sleeperIds);
+  for (const [sid, p] of Object.entries(lookup)) {
+    out.set(sid, {
+      playerId: p.id,
+      name: p.name,
+      position: p.position,
+      team: p.team,
+    });
   }
+
   // Anything still unresolved becomes a placeholder so the UI can render
   // the sleeper id rather than throwing.
   for (const sid of sleeperIds) {

@@ -199,6 +199,23 @@ export function isStaleRunning(startedAt: string, nowMs: number): boolean {
   return nowMs - started > 6 * 3_600_000;
 }
 
+/**
+ * Whether a quiet cron tick should still land a heartbeat row.
+ *
+ * PERF-T060: league-sync-worker skips its cron_runs row entirely on a tick
+ * that claimed nothing and finalised nothing, which is most ticks. Without
+ * some row landing periodically, findMissedJobs above would flag it as
+ * missed after FREQUENT_MAX_GAP_HOURS (3 hours) of true silence, which is a
+ * false alarm for a worker that is running fine and simply has nothing to
+ * do. Gating on the top of the UTC hour gives exactly one heartbeat every
+ * 60 ticks with no state to track between invocations (no timestamp to
+ * store, no read to decide with): the cron fires once a minute, so minute
+ * zero of every hour fires this exactly once.
+ */
+export function isHeartbeatMinute(nowMs: number): boolean {
+  return new Date(nowMs).getUTCMinutes() === 0;
+}
+
 /* ---------------------------------------------------------------------------
  * The database half. Everything above is pure; everything below touches rows.
  * ------------------------------------------------------------------------- */

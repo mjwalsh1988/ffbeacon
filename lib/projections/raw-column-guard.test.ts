@@ -114,6 +114,9 @@ const ALLOWLIST: Record<string, string> = {
   "lib/sync-sleeper-market.ts":
     "Writes to player_market_snapshots (market ADP sync), the same different table as lib/sync-rookie-adp.ts above.",
 
+  "lib/market-latest.ts":
+    "Reads player_market_snapshots and writes player_market_latest (PERF-T012), neither of which is player_weekly_projections. These are Sleeper's published market projections attached to an ADP snapshot, not a weekly projection this product adjusts, so there is no adjusted read path for them to go through. Same different table as the two market sync files above.",
+
   "lib/player-profile.ts":
     "Deliberately left raw. The profile's weekly-projections card and overview panel are the one place on the site that shows a projection engine's own published number, and the per-stat beat/miss comparison grades exactly that number against what happened; routing it through loadAdjustedProjections would grade a figure nobody published. WHICH engine is no longer pinned: both loaders take a required source resolved by lib/projections/current-source.ts, and both headings render its display name. See the comments above loadWeeklyProjections and loadProjectionsMap in that file.",
 

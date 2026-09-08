@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -193,26 +193,40 @@ export default async function LeagueTradeFinderPage({
   const viewer = await resolveSleeperViewer(supabase, sp.username);
   const searchedUsername = viewer?.username ?? null;
   const linkUsername = viewerLinkUsername(viewer);
-  const { data: league } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
+
+  // The row the core already read, rather than a second read of the same one.
+  // The fallback is not dead code: the core's contract allows a null row, and
+  // a page that assumed otherwise would 500 instead of rendering.
+  const league =
+    pulseResult.league ??
+    (
+      await supabase
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
   if (!league) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const sleeperLeague = league.metadata as unknown as Parameters<
+    typeof resolveLeagueContext
+  >[1];
 
-  const { otherLeagues } = await loadLeagueHeaderActions(
-    supabase,
-    league.id,
-    sleeperLeagueId,
-    viewer,
-    league.season != null ? String(league.season) : null,
-  );
+  // WAVE (post-league). None of these three needs another's result: the header
+  // actions need league.id and the viewer resolved above; the source
+  // preference and the signed-in check need only the request's own session.
+  const [{ otherLeagues }, resolvedSource, userResult] = await Promise.all([
+    loadLeagueHeaderActions(
+      supabase,
+      league.id,
+      sleeperLeagueId,
+      viewer,
+      league.season != null ? String(league.season) : null,
+    ),
+    resolveSourceSlug(supabase, sp.source),
+    supabase.auth.getUser(),
+  ]);
+  const user = userResult.data.user;
 
   // No handle on the crumbs for a saved reader: /tools/league-pulse resolves
   // the same identity itself, and the deep view matches on the Sleeper user id.
@@ -223,10 +237,6 @@ export default async function LeagueTradeFinderPage({
   const leagueHref = `/leagues/${sleeperLeagueId}${qs}`;
 
   // Format is the league's own; only the value source follows the reader.
-  const resolvedSource = await resolveSourceSlug(supabase, sp.source);
-  const sleeperLeague = league.metadata as unknown as Parameters<
-    typeof resolveLeagueContext
-  >[1];
   const context = await resolveLeagueContext(
     adminClient,
     sleeperLeague,

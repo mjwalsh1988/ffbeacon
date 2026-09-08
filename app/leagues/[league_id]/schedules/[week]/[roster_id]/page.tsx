@@ -7,7 +7,7 @@ import { formatTeamLabel, ownerLine } from "@/lib/team-label";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resolveSleeperViewer } from "@/lib/sleeper-handle/resolve";
 import { viewerLinkUsername } from "@/lib/sleeper-handle/types";
-import { pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
+import { LEAGUE_CORE_COLUMNS, pulseLeagueCore, pulseLeagueDerived } from "@/lib/league-pulse";
 import { resolveSourceSlug } from "@/lib/preferences";
 import {
   resolveLeagueContext,
@@ -71,23 +71,27 @@ const MAX_ROSTER_ID = 64;
  * of the sync would return null, cache the null, and hand the page a 404 for a
  * league that was created two lines later.
  *
- * The select is the page's full column list rather than the three columns a
- * title needs, because a second narrower query is the thing this exists to
- * avoid.
+ * Reads the row off `pulseLeagueCore`'s own result rather than selecting it
+ * again: every column this page asks for is already in LEAGUE_CORE_COLUMNS.
+ * The fallback select only runs on the null branch the core's own contract
+ * allows.
  */
 const getSyncedLeague = cache(async (sleeperLeagueId: string) => {
   const pulse = await pulseLeagueCore(createAdminClient(), sleeperLeagueId);
   if (!pulse.ok) return null;
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
-  return data ? { league: data, cached: pulse.cached } : null;
+  const league =
+    pulse.league ??
+    (
+      await (
+        await createClient()
+      )
+        .from("leagues")
+        .select(LEAGUE_CORE_COLUMNS)
+        .eq("sleeper_league_id", sleeperLeagueId)
+        .maybeSingle()
+    ).data;
+  return league ? { league, cached: pulse.cached } : null;
 });
 
 /**
@@ -260,21 +264,36 @@ export default async function LeagueMatchupPage({
   const { league, cached: pulseCached } = synced;
 
   const supabase = await createClient();
+  const sleeperLeague = league.metadata as unknown as Parameters<
+    typeof resolveLeagueContext
+  >[1];
 
-  // Who this page is acting for: the ?username= handle when there is one,
-  // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
-  // Every link below carries the handle only when the reader arrived on one,
-  // so a saved reader's copied link resolves to the RECIPIENT's identity.
-  const viewer = await resolveSleeperViewer(supabase, sp.username);
+  // WAVE ONE. Who this page is acting for (the ?username= handle when there is
+  // one, otherwise the reader's own saved handle,
+  // lib/sleeper-handle/resolve.ts) and the source preference are independent
+  // reads, neither consuming the other's result. Every link below carries the
+  // handle only when the reader arrived on one, so a saved reader's copied
+  // link resolves to the RECIPIENT's identity.
+  const [viewer, resolvedSource] = await Promise.all([
+    resolveSleeperViewer(supabase, sp.username),
+    resolveSourceSlug(supabase, sp.source),
+  ]);
   const linkUsername = viewerLinkUsername(viewer);
 
-  const { otherLeagues } = await loadLeagueHeaderActions(
-    supabase,
-    league.id,
-    sleeperLeagueId,
-    viewer,
-    league.season != null ? String(league.season) : null,
-  );
+  // WAVE TWO. The header actions need the viewer resolved above; the format
+  // resolution needs the source slug resolved above. Neither needs the
+  // other's result, so they run together rather than one after another.
+  const [{ otherLeagues }, context] = await Promise.all([
+    loadLeagueHeaderActions(
+      supabase,
+      league.id,
+      sleeperLeagueId,
+      viewer,
+      league.season != null ? String(league.season) : null,
+    ),
+    resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug),
+  ]);
+  const coverageOk = context.coverage !== "none";
 
   const homeHref = linkUsername
     ? `/tools/league-pulse?username=${encodeURIComponent(linkUsername)}`
@@ -287,17 +306,6 @@ export default async function LeagueMatchupPage({
     `/leagues/${sleeperLeagueId}/schedules?view=week&week=${week}`,
     linkUsername,
   );
-
-  const sleeperLeague = league.metadata as unknown as Parameters<
-    typeof resolveLeagueContext
-  >[1];
-  const resolvedSource = await resolveSourceSlug(supabase, sp.source);
-  const context = await resolveLeagueContext(
-    adminClient,
-    sleeperLeague,
-    resolvedSource.slug,
-  );
-  const coverageOk = context.coverage !== "none";
 
   const formatTags = buildLeagueFormatTags({
     rosterPositions: league.roster_positions,

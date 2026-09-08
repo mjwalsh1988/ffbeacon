@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import { validateManagerPulseSettings } from "@/lib/manager-pulse/validate";
 import { saveManagerPulseSettings } from "@/lib/manager-pulse/settings";
 
@@ -28,6 +29,7 @@ export async function saveManagerPulseSettingsAction(raw: unknown): Promise<Acti
   const result = await saveManagerPulseSettings(admin, validated.settings, userId);
   if (!result.ok) return result;
 
+  bustMemo("settings:manager_pulse");
   revalidatePath("/admin/manager-pulse");
   return { ok: true };
 }

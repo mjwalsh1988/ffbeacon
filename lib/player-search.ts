@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { ELIGIBLE_POSITIONS } from "@/lib/ranking-boards";
+import { memoTtl } from "@/lib/memo-ttl";
 
 /**
  * Shared player autocomplete search, used by every player search surface (the
@@ -62,31 +63,74 @@ export const RELEVANCE_WINDOW_DAYS = 90;
 const OVERFETCH_MULTIPLIER = 6;
 const MAX_OVERFETCH = 200;
 
+/** How long one process holds the ranked-player set before re-reading it. */
+const RANKED_SET_TTL_MS = 5 * 60 * 1000;
+
 /**
- * Of the given player ids, return the subset that is currently fantasy relevant
- * (ranked by at least one source within the relevance window).
+ * Every currently fantasy relevant player id, as one memoised set.
  *
- * The explicit high `.limit()` overrides PostgREST's 1000-row default: a large
- * candidate set can match several thousand raw ranking rows (one per
- * source/format/snapshot), and truncating them would silently drop ranked
- * players from the result. We only read `player_id`, so the payload stays small.
+ * This replaces a second round trip that ran on every settled keystroke:
+ * `rankings` filtered by `.in("player_id", up to 200 ids)` with a 50,000 row
+ * limit, just to learn which of the name matches were ranked. It answered a
+ * question that is the same for every reader and changes once a night, and it
+ * was showing up in the scan counters (8,992 sequential scans over 64M tuples).
+ *
+ * The whole answer is small: 11,852 ranking rows across 812 distinct players,
+ * so the set is under a thousand uuids. The explicit high `.limit()` overrides
+ * PostgREST's 1,000 row default, which would otherwise truncate the read and
+ * silently drop ranked players from every search result.
+ *
+ * Memoised rather than user-scoped, which is what makes it safe to share: the
+ * set says which players some source has ranked recently. It carries nothing
+ * about who is asking.
+ */
+export async function rankedPlayerIdSet(
+  supabase: ServerClient,
+): Promise<Set<string>> {
+  return memoTtl("ref:ranked-ids", RANKED_SET_TTL_MS, async () => {
+    const cutoff = new Date(
+      Date.now() - RELEVANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const { data, error } = await supabase
+      .from("rankings")
+      .select("player_id")
+      .gte("generated_at", cutoff)
+      .limit(50000);
+    if (error) throw error;
+    return new Set((data ?? []).map((r) => r.player_id));
+  });
+}
+
+/**
+ * Of the given player ids, return the subset that is currently fantasy relevant.
+ *
+ * A thin filter over `rankedPlayerIdSet`, kept so callers holding a candidate
+ * list keep working. It issues no query of its own.
  */
 export async function fantasyRelevantPlayerIds(
   supabase: ServerClient,
   playerIds: string[],
 ): Promise<Set<string>> {
   if (playerIds.length === 0) return new Set();
-  const cutoff = new Date(
-    Date.now() - RELEVANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-  ).toISOString();
-  const { data, error } = await supabase
-    .from("rankings")
-    .select("player_id")
-    .in("player_id", playerIds)
-    .gte("generated_at", cutoff)
-    .limit(50000);
-  if (error) throw error;
-  return new Set((data ?? []).map((r) => r.player_id));
+  const ranked = await rankedPlayerIdSet(supabase);
+  return new Set(playerIds.filter((id) => ranked.has(id)));
+}
+
+/**
+ * Normalize a typed query the same way `players.search_name` is normalized.
+ *
+ * The column (migration 0194) is `first_name || ' ' || last_name`, lowercased,
+ * with every non-alphanumeric character removed and runs of whitespace
+ * collapsed. A query has to go through the identical transformation or the two
+ * sides of the ILIKE are in different alphabets: "A.J." searched against
+ * "aj brown" matches nothing, and neither does "St. Brown".
+ */
+export function normalizeSearchQuery(query: string): string {
+  return query
+    .replace(/[^a-zA-Z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 /**
@@ -104,17 +148,27 @@ export async function searchFantasyPlayers(
   opts: { query: string; positions?: readonly string[]; limit: number },
 ): Promise<FantasyPlayerRow[]> {
   const positions = opts.positions ?? ELIGIBLE_POSITIONS;
-  const escaped = opts.query.replace(/[%_]/g, (m) => `\\${m}`);
+  const normalized = normalizeSearchQuery(opts.query);
+  // Normalizing can empty a query that was all punctuation. Nothing matches an
+  // empty pattern usefully, so answer before spending a round trip on it.
+  if (!normalized) return [];
+  const escaped = normalized.replace(/[%_]/g, (m) => `\\${m}`);
   const overfetch = Math.min(opts.limit * OVERFETCH_MULTIPLIER, MAX_OVERFETCH);
 
+  // ONE COLUMN, ONE INDEX.
+  //
+  // This used to be an `or()` across full_name, first_name and last_name.
+  // full_name and search_name carry trigram indexes; first_name and last_name
+  // do not, and one unindexed arm of an OR makes the whole predicate a
+  // sequential scan. `search_name` is the column built for exactly this
+  // (migration 0194) and it subsumes all three arms, because a surname is a
+  // substring of "first last".
   const { data, error } = await supabase
     .from("players")
     .select(
       "id, slug, first_name, last_name, full_name, position, team, external_ids",
     )
-    .or(
-      `full_name.ilike.%${escaped}%,first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%`,
-    )
+    .ilike("search_name", `%${escaped}%`)
     .in("position", positions as unknown as string[])
     .order("full_name", { ascending: true, nullsFirst: false })
     .limit(overfetch);
@@ -123,9 +177,6 @@ export async function searchFantasyPlayers(
   const rows = (data ?? []) as FantasyPlayerRow[];
   if (rows.length === 0) return [];
 
-  const relevant = await fantasyRelevantPlayerIds(
-    supabase,
-    rows.map((r) => r.id),
-  );
-  return rows.filter((r) => relevant.has(r.id)).slice(0, opts.limit);
+  const ranked = await rankedPlayerIdSet(supabase);
+  return rows.filter((r) => ranked.has(r.id)).slice(0, opts.limit);
 }

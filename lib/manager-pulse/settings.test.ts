@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import {
@@ -11,6 +11,15 @@ import {
   mergeManagerPulseSettings,
 } from "./default-settings";
 import { validateManagerPulseSettings } from "./validate";
+import { bustMemo } from "@/lib/memo-ttl";
+
+// loadManagerPulseSettings is memoised for a minute (lib/memo-ttl.ts), keyed
+// "settings:manager_pulse" regardless of which mock admin client calls it.
+// Without this reset the second test in a run would silently get back the
+// first test's cached answer instead of exercising its own mock.
+beforeEach(() => {
+  bustMemo("settings:manager_pulse");
+});
 
 type SelectResult = { data: { settings: unknown } | null; error: { message: string } | null };
 

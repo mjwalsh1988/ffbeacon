@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SITE } from "@/lib/site";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -32,11 +33,15 @@ export const metadata: Metadata = {
   // Favicons live in /public/img. We explicitly enumerate them so Next.js
   // never falls back to its starter favicon (which still ships as a stale
   // app/favicon.ico when scaffolded) and so browsers pick the highest-
-  // fidelity variant they support: SVG first, then PNG, then ICO.
+  // fidelity variant they support: PNG first, then ICO.
+  //
+  // There is deliberately no SVG entry. The file that used to sit here was an
+  // SVG wrapper around a base64 PNG, 1.78 MB of it, and being listed first it
+  // was what every modern browser downloaded on a first visit. The 5 kB
+  // 96 px mark below is the same artwork at the size a tab actually draws.
   icons: {
     icon: [
-      { url: "/img/favicon.svg", type: "image/svg+xml" },
-      { url: "/img/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+      { url: "/img/ff-beacon-mark-96.png", sizes: "96x96", type: "image/png" },
       { url: "/img/favicon.ico", sizes: "any" },
     ],
     shortcut: ["/img/favicon.ico"],
@@ -107,6 +112,9 @@ export default function RootLayout({
         <DiscordCta />
         <SignalGuideMount />
         <Analytics />
+        {/* Real-user Web Vitals. Page views alone cannot say whether a change
+            made the site faster for anyone who is not on the office wifi. */}
+        <SpeedInsights />
       </body>
     </html>
   );

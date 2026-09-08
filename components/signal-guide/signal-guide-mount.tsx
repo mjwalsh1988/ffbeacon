@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
 import { HelpCircle } from "lucide-react";
 import { resolveGuidePageKey } from "@/lib/guide/registry";
 import {
@@ -9,7 +10,43 @@ import {
   subscribeToSignalGuideOpen,
 } from "@/lib/guide/open-guide";
 import type { GuidePageContent } from "@/lib/guide/types";
-import { GuidePanel } from "./guide-panel";
+
+// The guide panel (search, the FAQ/terms accordions, the submit-a-question
+// form) is its own chunk rather than riding along in the root layout, because
+// most readers on most pages never open it. It is included in the tree only
+// once `primed` or `panelOpen` is true below, so a reader who never touches
+// the trigger never fetches it. `ssr: false` is safe: the panel is a
+// client-only overlay portalled onto `document.body`.
+const GuidePanel = dynamic(
+  () => import("./guide-panel").then((mod) => mod.GuidePanel),
+  { ssr: false },
+);
+
+/**
+ * Stand-in for the panel while its chunk is still loading. Only ever shown
+ * while `panelOpen` is true (see the `Suspense` fallback below, which is null
+ * while merely primed), sized to match GuidePanel's own dialog frame so
+ * nothing shifts when the real panel takes its place.
+ */
+function GuideLoadingFallback() {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-busy="true"
+      // A dialog needs a name. Without one this is announced as an unnamed
+      // dialog for however long the chunk takes, and the sr-only text below is
+      // its content rather than its label. The real GuidePanel names itself, so
+      // this only has to hold the name steady across the swap.
+      aria-label="Signal Guide"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 sm:items-stretch sm:justify-end"
+    >
+      <div className="flex h-[85vh] w-full max-w-2xl items-center justify-center rounded-t-modal border border-line bg-surface-elevated shadow-2xl shadow-black/60 sm:h-full sm:max-w-md sm:rounded-none sm:rounded-l-modal sm:border-y-0 sm:border-r-0">
+        <span className="sr-only">Loading the Signal Guide</span>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Site-wide Signal Guide launcher. Mounted once in the root layout.
@@ -36,12 +73,20 @@ export function SignalGuideMount() {
   );
   const triggerRef = useRef<HTMLButtonElement>(null);
 
+  // True from the first sign of intent (hover, focus, touch, or an actual
+  // open) onward, for THIS page. Only once this is true does GuidePanel enter
+  // the tree at all, which is what defers its chunk: a reader who never comes
+  // near the trigger never fetches it.
+  const [primed, setPrimed] = useState(false);
+  const warm = useCallback(() => setPrimed(true), []);
+
   useEffect(() => {
     const pageKey = pathname ? resolveGuidePageKey(pathname) : null;
     // Reset on navigation so the previous page's button never lingers.
     setContent(null);
     setPanelOpen(false);
     setFocusRequest(null);
+    setPrimed(false);
     setSignalGuideAvailable(false);
     if (!pageKey) return;
 
@@ -84,6 +129,7 @@ export function SignalGuideMount() {
   // caller never believes an opener exists when none does.
   useEffect(() => {
     const unsubscribe = subscribeToSignalGuideOpen((request) => {
+      warm();
       setFocusRequest(request);
       setPanelOpen(true);
     });
@@ -107,9 +153,13 @@ export function SignalGuideMount() {
           ref={triggerRef}
           type="button"
           onClick={() => {
+            warm();
             setFocusRequest(null);
             setPanelOpen(true);
           }}
+          onPointerEnter={warm}
+          onFocus={warm}
+          onTouchStart={warm}
           aria-haspopup="dialog"
           aria-expanded={panelOpen}
           aria-label={`Open the Signal Guide for ${content.page.title}: help and definitions for this page`}
@@ -122,13 +172,22 @@ export function SignalGuideMount() {
         </button>
       </div>
 
-      <GuidePanel
-        open={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        content={content}
-        focusHeading={focusRequest?.heading ?? null}
-        focusNonce={focusRequest?.nonce ?? 0}
-      />
+      {(primed || panelOpen) && (
+        // The fallback is null while merely primed (nothing should appear
+        // before a real open), and only becomes the reserved-height, aria-busy
+        // placeholder once panelOpen is actually true. Passing `loading` to
+        // `dynamic()` instead would show it the moment the trigger is merely
+        // hovered, since that option cannot see `panelOpen`.
+        <Suspense fallback={panelOpen ? <GuideLoadingFallback /> : null}>
+          <GuidePanel
+            open={panelOpen}
+            onClose={() => setPanelOpen(false)}
+            content={content}
+            focusHeading={focusRequest?.heading ?? null}
+            focusNonce={focusRequest?.nonce ?? 0}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

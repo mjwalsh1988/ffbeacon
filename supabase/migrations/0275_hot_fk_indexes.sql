@@ -1,0 +1,49 @@
+-- Migration 0275: index the six foreign keys that sit on a read path.
+--
+-- Access matrix: UNCHANGED on every table. This migration adds indexes only.
+--
+-- WHY (docs/performance/site-speed-audit-and-plan.md, 4.17 and 6.1)
+--   The Supabase advisor reported sixty unindexed foreign keys. Most are
+--   `updated_by` and `created_by` columns on settings tables that nothing joins
+--   on, and they are deliberately left alone. These six are different: each one
+--   is either read directly by a page or scanned on every delete of its parent.
+--
+--     article_players.player_id             the profile news teaser
+--                                           (lib/player-profile.ts) and the
+--                                           Brief player pages. The primary key
+--                                           is (article_id, player_id), so a
+--                                           lookup by player alone had nothing.
+--     draft_market_adp.player_id            same shape: the primary key leads
+--                                           with format_slug.
+--     beacon_value_references.player_id     primary key leads with version_id.
+--     league_power_pulse_cache.roster_id    only (league_id, ...) indexes
+--                                           existed, so a roster delete scanned.
+--     league_power_rankings_cache
+--       .format_config_id, .source          the read path filters
+--                                           (league_id, format, source) and is
+--                                           already covered by
+--                                           idx_lprc_league_format_source.
+--                                           These two serve cascades and the
+--                                           admin filters.
+--     draft_pick_values.format_config_id    the composite unique key leads with
+--                                           season.
+--
+-- Created CONCURRENTLY, which cannot run inside a transaction block, so the
+-- statements below were run by hand rather than through the migration runner.
+-- Applied to production 2026-09-08; all seven confirmed indisvalid, 32 kB to
+-- 688 kB each.
+--
+--   create index concurrently if not exists idx_article_players_player
+--     on public.article_players (player_id);
+--   create index concurrently if not exists idx_draft_market_adp_player
+--     on public.draft_market_adp (player_id);
+--   create index concurrently if not exists idx_league_power_pulse_cache_roster
+--     on public.league_power_pulse_cache (roster_id);
+--   create index concurrently if not exists idx_lprc_format_config
+--     on public.league_power_rankings_cache (format_config_id);
+--   create index concurrently if not exists idx_lprc_source
+--     on public.league_power_rankings_cache (source);
+--   create index concurrently if not exists idx_draft_pick_values_format_config
+--     on public.draft_pick_values (format_config_id);
+--   create index concurrently if not exists idx_beacon_value_references_player
+--     on public.beacon_value_references (player_id);

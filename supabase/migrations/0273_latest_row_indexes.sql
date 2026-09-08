@@ -1,0 +1,32 @@
+-- Migration 0273: index the two "latest row" reads.
+--
+-- Access matrix: UNCHANGED. Both tables keep the policies they already have
+-- (public SELECT, service_role writes). This migration only adds indexes.
+--
+-- WHY (docs/performance/site-speed-audit-and-plan.md, 4.8)
+--
+--   player_value_history where source = $1 order by captured_at desc limit 1
+--     602 calls, 537 ms mean, 7.5 s max. The existing composite index starts
+--     with format_config_id, so a filter on `source` alone walks the
+--     captured_at index backwards until it happens to find a matching source.
+--     Callers: lib/beacon/signals/source-value.ts, lib/seed-rankings.ts,
+--     app/admin/beacon/rankings/page.tsx.
+--
+--   rankings order by generated_at desc limit 1
+--     978 calls, 152 ms mean. There was no index on generated_at at all.
+--
+-- COST
+--   The first index is roughly 60 MB on a 2.07M row table and adds a small
+--   amount of work to the nightly value inserts. That is the trade the audit
+--   priced: a nightly write cost against a read that runs on an admin page and
+--   in two sync paths.
+--
+-- Both are created CONCURRENTLY, which cannot run inside a transaction block,
+-- so the statements below are run by hand rather than through the migration
+-- runner. Applied to production 2026-09-08.
+--
+--   create index concurrently if not exists idx_player_value_history_source_captured
+--     on public.player_value_history (source, captured_at desc);
+--
+--   create index concurrently if not exists idx_rankings_generated_at
+--     on public.rankings (generated_at desc);

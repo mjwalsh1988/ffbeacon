@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { OnTheClockSettings } from "./types";
 import { DEFAULT_ON_THE_CLOCK_SETTINGS } from "./default-settings";
+import { memoTtl } from "@/lib/memo-ttl";
 
 type Client = SupabaseClient<Database>;
 
@@ -696,61 +697,47 @@ export function validateOnTheClockSettings(raw: unknown): ValidateResult {
 }
 
 /**
- * How long a loaded settings object is reused inside one server instance.
- *
  * Every On The Clock route opens by reading this single row, and an open draft
  * room now asks a route to do that once a minute per viewer on its own. The row
  * changes only when the owner saves the admin form, so re-reading it per request
  * buys nothing and costs a Supabase round trip on the busiest path in the tool.
- *
- * The window is short on purpose: a save reaches every server within it, which is
- * the right latency for a cooldown knob or a kill switch. Nothing depends on the
- * cache existing, so a cold instance simply reads.
+ * The 60 second TTL memo below carries this, keyed "settings:on_the_clock" so
+ * the admin save action can bust it by name.
  */
-const SETTINGS_CACHE_TTL_MS = 30_000;
-
-let settingsCache: { loadedAtMs: number; settings: OnTheClockSettings } | null =
-  null;
-
-/** Drop the memo, so the next read goes to the database. Used after a save. */
-export function invalidateOnTheClockSettingsCache(): void {
-  settingsCache = null;
-}
+const SETTINGS_TTL_MS = 60_000;
 
 /**
  * Load settings for the tool. Always returns a complete, valid object: the stored
  * row is merged onto defaults via the schema's per-field defaults, and any failure
  * falls back to DEFAULT_ON_THE_CLOCK_SETTINGS.
  *
- * Memoized per server instance for SETTINGS_CACHE_TTL_MS. Only a successful read
- * is cached; a failed one falls back to defaults for that request alone rather
- * than pinning the tool to its defaults for the next half minute.
+ * A query error or an unparseable row resolves to the defaults rather than
+ * throwing, so memoTtl treats that outcome as a normal cache hit (only a
+ * REJECTED promise gets evicted early). A bad row therefore pins the tool to
+ * defaults for up to SETTINGS_TTL_MS, same as it did under the old bespoke
+ * cache; a fixed row on the next admin save clears it immediately via
+ * bustMemo.
  */
 export async function loadOnTheClockSettings(
   supabase: Client,
 ): Promise<OnTheClockSettings> {
-  const now = Date.now();
-  if (settingsCache && now - settingsCache.loadedAtMs < SETTINGS_CACHE_TTL_MS) {
-    return settingsCache.settings;
-  }
+  return memoTtl("settings:on_the_clock", SETTINGS_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from("on_the_clock_settings")
+      .select("settings")
+      .eq("id", ON_THE_CLOCK_SETTINGS_ID)
+      .maybeSingle();
 
-  const { data, error } = await supabase
-    .from("on_the_clock_settings")
-    .select("settings")
-    .eq("id", ON_THE_CLOCK_SETTINGS_ID)
-    .maybeSingle();
+    if (error || !data?.settings) return { ...DEFAULT_ON_THE_CLOCK_SETTINGS };
 
-  if (error || !data?.settings) return { ...DEFAULT_ON_THE_CLOCK_SETTINGS };
-
-  const parsed = onTheClockSettingsSchema.safeParse(data.settings);
-  if (!parsed.success) {
-    console.error(
-      "[on-the-clock] stored settings invalid, using defaults",
-      parsed.error.issues,
-    );
-    return { ...DEFAULT_ON_THE_CLOCK_SETTINGS };
-  }
-  const settings = parsed.data as OnTheClockSettings;
-  settingsCache = { loadedAtMs: now, settings };
-  return settings;
+    const parsed = onTheClockSettingsSchema.safeParse(data.settings);
+    if (!parsed.success) {
+      console.error(
+        "[on-the-clock] stored settings invalid, using defaults",
+        parsed.error.issues,
+      );
+      return { ...DEFAULT_ON_THE_CLOCK_SETTINGS };
+    }
+    return parsed.data as OnTheClockSettings;
+  });
 }

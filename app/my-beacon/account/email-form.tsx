@@ -2,7 +2,7 @@
 
 import { useId, useState, useTransition } from "react";
 import { Mail } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { updateEmail } from "./actions";
 
 type Status =
   | { kind: "idle" }
@@ -14,10 +14,11 @@ type Status =
  * it sends a confirmation link to BOTH the old and new addresses, and
  * the change only takes effect after the user clicks both links.
  * We reflect that in the success message so users aren't confused when
- * the displayed email doesn't change instantly.
+ * the displayed email doesn't change instantly. The write goes through the
+ * `updateEmail` server action, which re-derives the caller from the
+ * request-scoped session client.
  */
 export function EmailForm({ currentEmail }: { currentEmail: string | null }) {
-  const supabase = createClient();
   const [email, setEmail] = useState(currentEmail ?? "");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [pending, startTransition] = useTransition();
@@ -32,9 +33,9 @@ export function EmailForm({ currentEmail }: { currentEmail: string | null }) {
     setStatus({ kind: "idle" });
 
     startTransition(async () => {
-      const { error } = await supabase.auth.updateUser({ email: cleaned });
-      if (error) {
-        setStatus({ kind: "error", message: error.message });
+      const result = await updateEmail(cleaned);
+      if (!result.ok) {
+        setStatus({ kind: "error", message: result.error });
       } else {
         setStatus({ kind: "sent", email: cleaned });
       }

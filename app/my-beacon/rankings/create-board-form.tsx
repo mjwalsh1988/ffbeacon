@@ -3,7 +3,6 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import {
   BOARD_SCOPES,
   MAX_BOARD_NAME_LENGTH,
@@ -11,11 +10,13 @@ import {
   scopeLabel,
   type BoardScope,
 } from "@/lib/ranking-boards";
+import { createBoard } from "./actions";
 
 /**
- * Create a new ranking board, then navigate straight into its editor. Writes
- * go through the browser Supabase client and are gated by the owner-only RLS
- * policy on user_ranking_boards (auth.uid() = user_id).
+ * Create a new ranking board, then navigate straight into its editor. The
+ * write goes through the `createBoard` server action, which re-derives the
+ * caller from the request-scoped session client; the owner-only RLS insert
+ * policy on user_ranking_boards (auth.uid() = user_id) is the backstop.
  */
 export function CreateBoardForm() {
   const router = useRouter();
@@ -35,24 +36,12 @@ export function CreateBoardForm() {
     }
     setError(null);
     startTransition(async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setError("You need to be signed in.");
+      const result = await createBoard(cleaned, scope);
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
-      const { data, error: insertError } = await supabase
-        .from("user_ranking_boards")
-        .insert({ user_id: user.id, name: cleaned, scope })
-        .select("id")
-        .single();
-      if (insertError || !data) {
-        setError(insertError?.message ?? "Could not create the board.");
-        return;
-      }
-      router.push(`/my-beacon/rankings/${data.id}`);
+      router.push(`/my-beacon/rankings/${result.boardId}`);
     });
   };
 

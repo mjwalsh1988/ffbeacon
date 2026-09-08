@@ -15,6 +15,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import { BEAM_SETTINGS_ID, validateBeamSettings } from "@/lib/beam/settings";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -43,6 +44,9 @@ export async function saveBeamSettings(raw: unknown): Promise<ActionResult> {
     console.error("[admin/beam] settings save failed", error);
     return { ok: false, error: "Could not save. Try again." };
   }
+  // Drops this instance's memo of the row. Other instances age out on their
+  // own TTL, so a save is live everywhere inside a minute.
+  bustMemo("settings:beam");
   revalidatePath("/admin/beam");
   return { ok: true };
 }

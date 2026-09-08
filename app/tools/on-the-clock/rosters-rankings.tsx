@@ -42,7 +42,7 @@ import {
   type TeamRollup,
 } from "@/lib/on-the-clock/rosters";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
-import { EmptyCard } from "./states";
+import { EmptyCard, LoadingCard } from "./states";
 
 function fmt(v: number): string {
   return Math.round(v).toLocaleString();
@@ -69,6 +69,7 @@ export function RostersRankings({
   teams,
   myRosterId,
   boardReady,
+  enginesLoading = false,
   pulseTeams = [],
   isDynasty = false,
   sortBy = "value",
@@ -77,6 +78,12 @@ export function RostersRankings({
   teams: TeamRollup[];
   myRosterId: number | null;
   boardReady: boolean;
+  /**
+   * True while the rollups engine chunk is still being fetched (PERF-T031).
+   * Distinct from `!boardReady`: the FF Beacon values ARE available here,
+   * only the code that rolls them up per team has not loaded yet.
+   */
+  enginesLoading?: boolean;
   /** Draft Pulse standings. Empty when projections are unavailable. */
   pulseTeams?: DraftPulseTeam[];
   /** Archetype chips are dynasty-only: in redraft every team is competing. */
@@ -88,6 +95,9 @@ export function RostersRankings({
   const [subView, setSubView] = useState<"all" | "mine">("all");
   const myTeam = teams.find((t) => t.isYou) ?? null;
 
+  if (enginesLoading) {
+    return <LoadingCard label="Loading rosters and rankings..." />;
+  }
   if (!boardReady) {
     return (
       <EmptyCard

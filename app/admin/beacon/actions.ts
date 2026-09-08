@@ -7,9 +7,10 @@
  * the DB, so these are the only write path; nothing is a hardcoded constant.
  */
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import { runCalculateBeaconValues } from "@/lib/calculate-beacon-values";
 import { runSeedRankings } from "@/lib/seed-rankings";
 import { runCalculateTrends } from "@/lib/calculate-trends";
@@ -47,6 +48,7 @@ export async function updateBeaconSetting(key: string, raw: string): Promise<Act
     .update({ value: value as never, updated_by: userId, updated_at: new Date().toISOString() })
     .eq("key", key);
   if (error) return fail(error.message);
+  bustMemo("settings:beacon");
   revalidatePath("/admin/beacon");
   return { ok: true };
 }
@@ -93,6 +95,14 @@ export async function toggleSource(slug: string, isActive: boolean): Promise<Act
   }
   const { error } = await admin.from("source_registry").update({ is_active: isActive }).eq("slug", slug);
   if (error) return fail(error.message);
+  bustMemo("ref:sources");
+  // The home page holds its OWN copy of source_registry and format_configs, in
+  // an unstable_cache entry with a five minute TTL (lib/home-content.ts). The
+  // memo bust above only reaches this process's copy of the header's version,
+  // so without this the header would show the change within a minute and the
+  // home page would take up to five, which is the kind of inconsistency an
+  // admin reports as a bug about the wrong page.
+  revalidateTag("home");
   revalidatePath("/admin/beacon");
   return { ok: true };
 }
@@ -105,6 +115,14 @@ export async function setDefaultSource(slug: string): Promise<ActionResult> {
   const admin = createAdminClient();
   const { error } = await admin.rpc("set_default_source", { target_slug: slug });
   if (error) return fail(error.message);
+  bustMemo("ref:sources");
+  // The home page holds its OWN copy of source_registry and format_configs, in
+  // an unstable_cache entry with a five minute TTL (lib/home-content.ts). The
+  // memo bust above only reaches this process's copy of the header's version,
+  // so without this the header would show the change within a minute and the
+  // home page would take up to five, which is the kind of inconsistency an
+  // admin reports as a bug about the wrong page.
+  revalidateTag("home");
   revalidatePath("/admin/beacon");
   return { ok: true };
 }
@@ -136,6 +154,14 @@ export async function moveSource(slug: string, direction: "up" | "down"): Promis
     .update({ priority: a.priority })
     .eq("slug", b.slug);
   if (e2) return fail(e2.message);
+  bustMemo("ref:sources");
+  // The home page holds its OWN copy of source_registry and format_configs, in
+  // an unstable_cache entry with a five minute TTL (lib/home-content.ts). The
+  // memo bust above only reaches this process's copy of the header's version,
+  // so without this the header would show the change within a minute and the
+  // home page would take up to five, which is the kind of inconsistency an
+  // admin reports as a bug about the wrong page.
+  revalidateTag("home");
   revalidatePath("/admin/beacon");
   return { ok: true };
 }
@@ -156,6 +182,10 @@ export async function updateFormatDisplayName(
     .update({ display_name: name })
     .eq("id", formatId);
   if (error) return fail(error.message);
+  bustMemo("ref:formats");
+  // See the note beside the ref:sources busts above: the home page caches
+  // format_configs separately and needs telling too.
+  revalidateTag("home");
   revalidatePath("/admin/beacon");
   return { ok: true };
 }

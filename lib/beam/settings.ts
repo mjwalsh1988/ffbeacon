@@ -15,6 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { CAPABILITY_IDS, type CapabilityId } from "./types";
 import { DEFAULT_BEAM_SETTINGS, type BeamSettings } from "./default-settings";
+import { memoTtl } from "@/lib/memo-ttl";
 
 type Client = SupabaseClient<Database>;
 
@@ -143,23 +144,27 @@ export function validateBeamSettings(raw: unknown): ValidateBeamSettingsResult {
  * row is merged onto defaults by the schema, and any failure falls back whole.
  */
 export async function loadBeamSettings(admin: Client): Promise<BeamSettings> {
-  try {
-    const { data, error } = await admin
-      .from("beam_settings")
-      .select("settings")
-      .eq("id", BEAM_SETTINGS_ID)
-      .maybeSingle();
+  // Same row for every caller, admin-edited only: safe to memoise across
+  // requests for a minute. See lib/memo-ttl.ts.
+  return memoTtl("settings:beam", 60_000, async () => {
+    try {
+      const { data, error } = await admin
+        .from("beam_settings")
+        .select("settings")
+        .eq("id", BEAM_SETTINGS_ID)
+        .maybeSingle();
 
-    if (error || !data?.settings) return { ...DEFAULT_BEAM_SETTINGS };
+      if (error || !data?.settings) return { ...DEFAULT_BEAM_SETTINGS };
 
-    const parsed = beamSettingsSchema.safeParse(data.settings);
-    if (!parsed.success) {
-      console.error("[beam] stored settings invalid, using defaults", parsed.error.issues);
+      const parsed = beamSettingsSchema.safeParse(data.settings);
+      if (!parsed.success) {
+        console.error("[beam] stored settings invalid, using defaults", parsed.error.issues);
+        return { ...DEFAULT_BEAM_SETTINGS };
+      }
+      return parsed.data as BeamSettings;
+    } catch (err) {
+      console.error("[beam] settings load failed, using defaults", err);
       return { ...DEFAULT_BEAM_SETTINGS };
     }
-    return parsed.data as BeamSettings;
-  } catch (err) {
-    console.error("[beam] settings load failed, using defaults", err);
-    return { ...DEFAULT_BEAM_SETTINGS };
-  }
+  });
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import { validateFaabSettings, FAAB_SETTINGS_ID } from "@/lib/faab/settings";
 import type { Json } from "@/lib/database.types";
 
@@ -31,6 +32,7 @@ export async function saveFaabSettings(raw: unknown): Promise<ActionResult> {
   );
   if (error) return { ok: false, error: error.message };
 
+  bustMemo("settings:faab");
   revalidatePath("/admin/faab");
   revalidatePath("/tools/faab");
   return { ok: true };

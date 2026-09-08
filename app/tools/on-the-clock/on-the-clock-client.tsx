@@ -32,7 +32,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ArrowLeft, Gauge, LayoutGrid, List, WifiOff } from "lucide-react";
+import dynamic from "next/dynamic";
+import {
+  ArrowLeft,
+  Gauge,
+  LayoutGrid,
+  List,
+  Loader2,
+  WifiOff,
+} from "lucide-react";
 import type {
   BuildMode,
   LeagueCard,
@@ -64,7 +72,11 @@ import {
   type RationalePoint,
   type SeasonFinish,
 } from "@/lib/on-the-clock/rationale";
-import { createClient } from "@/lib/supabase/client";
+// NOTE: no static import of "@/lib/supabase/client" here. Its only use in this
+// file is the Realtime channel below, and that import brings in the whole
+// browser Supabase client (GoTrue, WebSocket code: 242 kB raw across two
+// chunks per the PERF-T031 audit). It is loaded dynamically inside the effect
+// instead, so a reader who never opens a live draft never pays for it.
 import {
   useDraftSync,
   type SyncBlockedReason,
@@ -113,15 +125,14 @@ import {
   sameDraftCacheContent,
 } from "@/lib/on-the-clock/draft-derive";
 import { formatEastern, formatEasternDate } from "@/lib/datetime";
-import { buildTradeCatalog } from "@/lib/on-the-clock/trade-analyzer";
-import { buildTeamRollups } from "@/lib/on-the-clock/rosters";
-import { computeDraftAwards } from "@/lib/on-the-clock/awards";
-import { computeDraftGrades } from "@/lib/on-the-clock/draft-grade";
-import {
-  buildMarketCurve,
-  computePickSurplus,
-} from "@/lib/on-the-clock/surplus";
-import { tradeMarginsFor } from "@/lib/on-the-clock/trade-margins";
+// NOTE: no static imports here for buildTradeCatalog, buildTeamRollups,
+// computeDraftAwards, computeDraftGrades, computePickSurplus, buildMarketCurve,
+// tradeMarginsFor, computePassedOn, buildRecapText, buildPickValueLookup, or
+// lookupPickValue. None of them answer anything the default "pick" view shows,
+// and together they are about 3,000 lines (awards.ts alone is 1,285). They are
+// loaded as a group through lib/on-the-clock/heavy-engines.ts, dynamically,
+// the first time a view besides "pick" needs them; see the `heavyEngines`
+// state and effect below (PERF-T031).
 import {
   goneBefore,
   nextPickForRoster,
@@ -134,15 +145,7 @@ import {
   turnAlert,
 } from "@/lib/on-the-clock/draft-alerts";
 import type { GoneBeforeEntry } from "@/lib/on-the-clock/draft-alerts";
-import {
-  buildRecapText,
-  computePassedOn,
-} from "@/lib/on-the-clock/draft-recap";
 import type { ResolveContext } from "@/lib/on-the-clock/trade-assets";
-import {
-  buildPickValueLookup,
-  lookupPickValue,
-} from "@/lib/on-the-clock/trade-analyzer";
 import {
   normalizeTradedPicks,
   resolveCurrentDraftPicks,
@@ -165,16 +168,8 @@ import { SidebarSheet } from "./sidebar-sheet";
 import { Panel } from "./panel";
 import { DraftRoomStatus, BestRemainingByPosition } from "./dashboard-panels";
 import { AvailableList } from "./available-list";
-import { DraftBoard } from "./draft-board";
-import { PickList } from "./pick-list";
 import { MyDraft } from "./my-draft";
-import { TradeAnalyzer } from "./trade-analyzer";
-import { RostersRankings } from "./rosters-rankings";
-import { RankingsAwards } from "./rankings-awards";
-import { DraftPulseBoard } from "./draft-pulse-board";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
-import { DraftGrades } from "./draft-grades";
-import { DraftComplete } from "./draft-complete";
 import { DraftAlertAnnouncer, DraftRadar } from "./draft-radar";
 import { BuildModeSelector, BuildModeNotice } from "./build-mode-selector";
 import { PassedOnPanel, RecapBox, RoomSummary } from "./draft-extras";
@@ -184,8 +179,132 @@ import {
   readWatchlist,
   writeWatchlist,
 } from "./draft-prefs";
-import { TradeHistory } from "./trade-history";
 import { LoadingCard, ErrorCard, EmptyCard } from "./states";
+
+/**
+ * Reserved-height, `aria-busy` fallback for a view panel while its chunk
+ * streams in (PERF-T031).
+ *
+ * Deliberately NOT a live region (no `role="status"`, no `aria-live`). Five
+ * of the nine dynamic panels below (RostersRankings, DraftPulseBoard,
+ * TradeAnalyzer, RankingsAwards, DraftGrades) take an `enginesLoading` prop
+ * and render their OWN `LoadingCard` (role="status") from ./states while the
+ * much larger heavy-engines chunk is still loading, using the exact same
+ * sentence this fallback would have used for the same panel. When this
+ * fallback's own chunk resolves first, as it usually does, that swap used to
+ * insert a second `role="status"` region announcing the identical words a
+ * moment after the first one. Two identical announcements back to back is
+ * worse than one, and worse than none.
+ *
+ * The region a reader's focus actually lands on when they switch views is the
+ * stable wrapping `<div id="otc-view-...">` in the JSX below, not this
+ * fallback, so a view switch is already announced by the thing that receives
+ * focus. This box only reserves the layout's height so nothing jumps once the
+ * real panel (which announces once, honestly, if it is still waiting on the
+ * engines) mounts in its place.
+ */
+function PanelLoading({
+  label,
+  minHeight = 240,
+}: {
+  label: string;
+  minHeight?: number;
+}) {
+  return (
+    <div
+      aria-busy="true"
+      style={{ minHeight }}
+      className="flex items-center gap-3 rounded-card border border-line bg-surface/60 p-6 text-sm text-ink-muted"
+    >
+      <Loader2
+        aria-hidden="true"
+        className="h-5 w-5 animate-spin text-brand-cyan"
+      />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+// Dynamically imported: none of these nine render on the room's first paint.
+// The default view is "pick", and a live draft in progress (the common case,
+// this being the tool most likely opened at a draft party) never shows the
+// completion screen either. PlayerSpotlight is deliberately NOT on this list:
+// it IS the "pick" view's first-paint content, unlike what an earlier reading
+// of the audit suggested. Splitting these out of on-the-clock-client.tsx's own
+// chunk is one half of PERF-T031; the other half is the heavy-engines.ts
+// dynamic import below, which most of these panels' data depends on.
+const DraftBoard = dynamic(
+  () => import("./draft-board").then((m) => m.DraftBoard),
+  {
+    loading: () => (
+      <PanelLoading label="Loading the draft board..." minHeight={420} />
+    ),
+  },
+);
+const PickList = dynamic(
+  () => import("./pick-list").then((m) => m.PickList),
+  {
+    loading: () => (
+      <PanelLoading label="Loading the pick list..." minHeight={320} />
+    ),
+  },
+);
+const TradeAnalyzer = dynamic(
+  () => import("./trade-analyzer").then((m) => m.TradeAnalyzer),
+  {
+    loading: () => (
+      <PanelLoading label="Loading the trade builder..." minHeight={420} />
+    ),
+  },
+);
+const RostersRankings = dynamic(
+  () => import("./rosters-rankings").then((m) => m.RostersRankings),
+  {
+    loading: () => (
+      <PanelLoading label="Loading rosters and rankings..." minHeight={420} />
+    ),
+  },
+);
+const RankingsAwards = dynamic(
+  () => import("./rankings-awards").then((m) => m.RankingsAwards),
+  {
+    loading: () => (
+      <PanelLoading label="Loading draft awards..." minHeight={420} />
+    ),
+  },
+);
+const DraftPulseBoard = dynamic(
+  () => import("./draft-pulse-board").then((m) => m.DraftPulseBoard),
+  {
+    loading: () => (
+      <PanelLoading label="Loading Draft Pulse..." minHeight={420} />
+    ),
+  },
+);
+const DraftGrades = dynamic(
+  () => import("./draft-grades").then((m) => m.DraftGrades),
+  {
+    loading: () => (
+      <PanelLoading label="Loading draft grades..." minHeight={420} />
+    ),
+  },
+);
+const DraftComplete = dynamic(
+  () => import("./draft-complete").then((m) => m.DraftComplete),
+  {
+    loading: () => (
+      <PanelLoading label="Loading your draft recap..." minHeight={420} />
+    ),
+  },
+);
+const TradeHistory = dynamic(
+  () => import("./trade-history").then((m) => m.TradeHistory),
+  {
+    loading: () => (
+      <PanelLoading label="Loading trade history..." minHeight={320} />
+    ),
+  },
+);
 
 /**
  * A pulse payload with its per-player map filled back in.
@@ -199,6 +318,15 @@ type ResolvedPulse = Omit<OtcPulsePayload, "players"> & {
 };
 
 type Step = "connect" | "pick-league" | "room";
+
+/**
+ * The trade catalog, team rollups, awards, grades, pick surplus, trade
+ * margins and recap-text functions, loaded as one group the first time a view
+ * besides "pick" needs them (PERF-T031). `typeof import(...)` is a type-only
+ * reference: it costs nothing at runtime, unlike a value import of the same
+ * module would.
+ */
+type HeavyEngines = typeof import("@/lib/on-the-clock/heavy-engines");
 
 /**
  * The cockpit shell that both pre-room steps render inside. Named so the step
@@ -502,6 +630,12 @@ export function OnTheClockClient({
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [cache, setCache] = useState<ShapedDraftCache | null>(null);
+
+  // ----- heavy engines (trade catalog, rollups, awards, grades, surplus,
+  // recap), lazily imported the first time a non-"pick" view or a completed
+  // draft needs them. Null until loaded; every consumer below falls back to
+  // its existing NO_* empty value while it is. (PERF-T031) -----
+  const [heavyEngines, setHeavyEngines] = useState<HeavyEngines | null>(null);
 
   // ----- ranked board (FF Beacon, per league's auto-detected format) -----
   const [board, setBoard] = useState<BoardResult | null>(null);
@@ -1760,7 +1894,15 @@ export function OnTheClockClient({
   }, [runSync]);
 
   // ----- Supabase Realtime: merge co-viewer picks, never call Sleeper/sync.
-  // Skipped entirely in snapshot mode: a completed draft can never change. -----
+  // Skipped entirely in snapshot mode: a completed draft can never change.
+  //
+  // The Supabase browser client is loaded with a dynamic import, not the
+  // top-level one this file used to carry: it is the only thing in this file
+  // that needs it, and a static import brings in the whole browser client
+  // (GoTrue, WebSocket code) whether or not a draft ever goes live
+  // (PERF-T031). `cancelled` guards the case where the league or realtime
+  // flag changes again before the import resolves, so a stale response never
+  // opens a channel for a league this effect has already moved on from. -----
   useEffect(() => {
     if (!league || !realtimeEnabled || snapshot) {
       setLiveStatus(realtimeEnabled && !snapshot ? "connecting" : "off");
@@ -1768,54 +1910,85 @@ export function OnTheClockClient({
     }
     const draftId = league.draftId;
     setLiveStatus("connecting");
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`otc-draft-${draftId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "on_the_clock_pick_cache",
-          filter: `sleeper_draft_id=eq.${draftId}`,
-        },
-        (payload) => {
-          const shaped = mapRealtimePickRow(payload.new);
-          if (!shaped) return;
-          // Realtime ONLY mutates local pick state from the row payload. No fetch.
-          setCache((prev) => {
-            if (!prev) return prev;
-            const picks = mergePick(prev.picks, shaped);
-            // Keep the SAME draft object when the count has not moved. A fresh
-            // one re-fires every memo keyed on cache.draft for no new
-            // information, which on a resent row is every time.
-            const pickCount = Math.max(prev.draft.pickCount, picks.length);
-            return {
-              ...prev,
-              picks,
-              draft:
-                pickCount === prev.draft.pickCount
-                  ? prev.draft
-                  : { ...prev.draft, pickCount },
-            };
-          });
-        },
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") setLiveStatus("live");
-        else if (
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT" ||
-          status === "CLOSED"
-        ) {
-          setLiveStatus("unavailable");
-        }
-      });
+    let cancelled = false;
+    let cleanupChannel: (() => void) | null = null;
+    void import("@/lib/supabase/client").then(({ createClient }) => {
+      if (cancelled) return;
+      const supabase = createClient();
+      const channel = supabase
+        .channel(`otc-draft-${draftId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "on_the_clock_pick_cache",
+            filter: `sleeper_draft_id=eq.${draftId}`,
+          },
+          (payload) => {
+            const shaped = mapRealtimePickRow(payload.new);
+            if (!shaped) return;
+            // Realtime ONLY mutates local pick state from the row payload. No fetch.
+            setCache((prev) => {
+              if (!prev) return prev;
+              const picks = mergePick(prev.picks, shaped);
+              // Keep the SAME draft object when the count has not moved. A fresh
+              // one re-fires every memo keyed on cache.draft for no new
+              // information, which on a resent row is every time.
+              const pickCount = Math.max(prev.draft.pickCount, picks.length);
+              return {
+                ...prev,
+                picks,
+                draft:
+                  pickCount === prev.draft.pickCount
+                    ? prev.draft
+                    : { ...prev.draft, pickCount },
+              };
+            });
+          },
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") setLiveStatus("live");
+          else if (
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT" ||
+            status === "CLOSED"
+          ) {
+            setLiveStatus("unavailable");
+          }
+        });
+
+      cleanupChannel = () => {
+        void supabase.removeChannel(channel);
+      };
+    });
 
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (cleanupChannel) cleanupChannel();
     };
   }, [league, realtimeEnabled, snapshot]);
+
+  // ----- lazy-load the heavy engines (trade catalog, team rollups, awards,
+  // grades, pick surplus, trade margins, recap text) the first time a view
+  // besides "pick" needs them, or the draft has already ended (the "pick"
+  // view becomes the completion screen once nobody is left to pick, and that
+  // screen shows the reader's own grade). A live draft opened at a party
+  // never asks for any of this, so heavy-engines.ts (about 3,000 lines
+  // across its modules) never reaches that reader. (PERF-T031) -----
+  const draftStatusForEngines = cache?.draft.draftStatus ?? null;
+  useEffect(() => {
+    if (heavyEngines) return;
+    const draftDone = draftStatusForEngines === "complete";
+    if (view === "pick" && !draftDone) return;
+    let cancelled = false;
+    void import("@/lib/on-the-clock/heavy-engines").then((mod) => {
+      if (!cancelled) setHeavyEngines(mod);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, draftStatusForEngines, heavyEngines]);
 
   // ----- lazy-load trade history the first time the Trades OR Rankings & Awards tab
   // is opened for a league (the awards need the league's trades too). Snapshot
@@ -2230,8 +2403,8 @@ export function OnTheClockClient({
   // draft plus the future buckets, and it was being rebuilt on every realtime
   // pick for viewers who were looking at a different view entirely.
   const tradeGroups =
-    tradeReady && view === "trade"
-      ? buildTradeCatalog({
+    heavyEngines && tradeReady && view === "trade"
+      ? heavyEngines.buildTradeCatalog({
           mode: pool === "rookies" ? "rookie" : "startup",
           pool,
           available,
@@ -2267,12 +2440,13 @@ export function OnTheClockClient({
   // reaches this. computeDraftAwards and tradeHistoryContext were both extended
   // for the grades tab; this one was not.
   const teamRollups =
+    heavyEngines &&
     (view === "rosters" ||
       view === "rankings" ||
       view === "grades" ||
       view === "pulse") &&
     tradeReady
-      ? buildTeamRollups({
+      ? heavyEngines.buildTeamRollups({
           rosters: draftCache.rosters,
           picks: draftCache.picks,
           tradedPicks,
@@ -2332,8 +2506,8 @@ export function OnTheClockClient({
 
   const awards = snapshotMode
     ? snapshot.awards
-    : (view === "rankings" || view === "grades") && tradeReady
-      ? computeDraftAwards({
+    : heavyEngines && (view === "rankings" || view === "grades") && tradeReady
+      ? heavyEngines.computeDraftAwards({
           rollups: teamRollups,
           avatarByRosterId,
           transactions: tradeHistory ?? [],
@@ -2361,7 +2535,7 @@ export function OnTheClockClient({
     draftStarted &&
     !(snapshotMode && snapshot.snapshotVersion >= 2);
   const gradesContext =
-    gradesNeedSurplus && tradeReady
+    heavyEngines && gradesNeedSurplus && tradeReady
       ? (() => {
           const valueByPlayerId = new Map<string, number>();
           const valueBySleeperId = new Map<string, number>();
@@ -2369,11 +2543,11 @@ export function OnTheClockClient({
             valueByPlayerId.set(p.playerId, p.value);
             if (p.sleeperId) valueBySleeperId.set(p.sleeperId, p.value);
           }
-          return computePickSurplus({
+          return heavyEngines.computePickSurplus({
             picks: draftCache.picks,
             valueByPlayerId,
             valueBySleeperId,
-            curve: buildMarketCurve(boardPlayers),
+            curve: heavyEngines.buildMarketCurve(boardPlayers),
           });
         })()
       : NO_SURPLUS;
@@ -2386,14 +2560,15 @@ export function OnTheClockClient({
         // completion screen, and the completion screen leads with the reader's
         // own grade. Still gated on tradeReady, so it never grades a half-loaded
         // room, and still not computed on any other tab.
-        (view === "grades" || (view === "pick" && !draftInProgress)) &&
+        heavyEngines &&
+          (view === "grades" || (view === "pick" && !draftInProgress)) &&
           tradeReady &&
           settings.grades.enabled
-        ? computeDraftGrades({
+        ? heavyEngines.computeDraftGrades({
             rollups: teamRollups,
             pulseTeams,
             pickSurpluses: gradesContext,
-            tradeMarginByRoster: tradeMarginsFor(
+            tradeMarginByRoster: heavyEngines.tradeMarginsFor(
               tradeHistory ?? [],
               tradeHistoryContext,
             ),
@@ -2407,8 +2582,11 @@ export function OnTheClockClient({
   // What each of your picks cost you against the board. Only computed on the
   // grades tab, where it is read.
   const passedOn =
-    view === "grades" && tradeReady && derived.myRosterId !== null
-      ? computePassedOn({
+    heavyEngines &&
+    view === "grades" &&
+    tradeReady &&
+    derived.myRosterId !== null
+      ? heavyEngines.computePassedOn({
           rosterId: derived.myRosterId,
           picks: draftCache.picks,
           board: boardPlayers,
@@ -2416,8 +2594,8 @@ export function OnTheClockClient({
       : NO_PASSED_ON;
 
   const recapText =
-    view === "grades"
-      ? buildRecapText({
+    heavyEngines && view === "grades"
+      ? heavyEngines.buildRecapText({
           leagueName: league?.name ?? "This league",
           season: league?.season ?? draftCache.draft.season,
           awards,
@@ -2427,18 +2605,28 @@ export function OnTheClockClient({
       : "";
 
   // Everything the trade builder needs to turn a board click into a real asset.
-  const futurePickLookup = buildPickValueLookup(activeBoard?.pickValues ?? []);
-  const tradeResolveContext: ResolveContext | null = tradeReady
-    ? {
-        currentPicks,
-        simulated: simulatedRemaining,
-        valueBoard: boardPlayers,
-        pickValueFor: (season, round, bucket) =>
-          lookupPickValue(futurePickLookup, season, round, bucket),
-        teamNameByRosterId,
-        myRosterId: derived.myRosterId,
-      }
+  // Gated on heavyEngines, same as tradeGroups above: this is Trade Builder
+  // data, and the module that builds it is not loaded until that view opens.
+  const futurePickLookup = heavyEngines
+    ? heavyEngines.buildPickValueLookup(activeBoard?.pickValues ?? [])
     : null;
+  const tradeResolveContext: ResolveContext | null =
+    heavyEngines && tradeReady && futurePickLookup
+      ? {
+          currentPicks,
+          simulated: simulatedRemaining,
+          valueBoard: boardPlayers,
+          pickValueFor: (season, round, bucket) =>
+            heavyEngines.lookupPickValue(
+              futurePickLookup,
+              season,
+              round,
+              bucket,
+            ),
+          teamNameByRosterId,
+          myRosterId: derived.myRosterId,
+        }
+      : null;
 
   // Snapshot provenance line shown in the command bar (snapshot mode only).
   const snapshotNotice = snapshotMode ? buildSnapshotNotice(snapshot) : null;
@@ -2753,6 +2941,13 @@ export function OnTheClockClient({
                   leagueName={league?.name ?? "This league"}
                   season={draftCache.draft.season}
                   sleeperLeagueId={draftCache.draft.sleeperLeagueId}
+                  // Same signal as the other five heavy-engines panels: the
+                  // grade shown here comes from heavyEngines.computeDraftGrades,
+                  // so a room opened directly on an already-finished draft can
+                  // reach this screen before that chunk has loaded. Without
+                  // this, the grade, best pick, worst pick and biggest hole
+                  // tiles used to pop in with no warning once it arrived.
+                  enginesLoading={!heavyEngines}
                   myGrade={
                     derived.myRosterId === null
                       ? null
@@ -2767,7 +2962,11 @@ export function OnTheClockClient({
                           (t) => t.rosterId === derived.myRosterId,
                         ) ?? null)
                   }
-                  teamCount={teamRollups.length}
+                  // draftCache.rosters, not teamRollups.length: the completion
+                  // screen can render before heavyEngines has loaded (a room
+                  // opened on an already-finished draft asks for it on first
+                  // paint), and the roster count does not need that engine.
+                  teamCount={draftCache.rosters.length}
                   onGoToView={selectView}
                   changedSinceDraft={null}
                 />
@@ -3061,6 +3260,7 @@ export function OnTheClockClient({
                 teams={teamRollups}
                 myRosterId={derived.myRosterId}
                 boardReady={tradeReady}
+                enginesLoading={!heavyEngines}
                 pulseTeams={pulseTeams}
                 isDynasty={isDynasty}
                 sortBy={rosterSort}
@@ -3085,6 +3285,7 @@ export function OnTheClockClient({
                 pulseTeams={pulseTeams}
                 myRosterId={derived.myRosterId}
                 boardReady={tradeReady}
+                enginesLoading={!heavyEngines}
                 draftStarted={draftStarted}
                 minReliabilityWeeks={settings.awards.minAccuracyWeeks}
                 isDynasty={isDynasty}
@@ -3156,6 +3357,7 @@ export function OnTheClockClient({
                 pool={pool}
                 groups={tradeGroups}
                 boardReady={tradeReady}
+                enginesLoading={!heavyEngines}
                 resolveContext={tradeResolveContext}
                 draftId={league?.draftId ?? ""}
                 draftCache={draftCache}
@@ -3185,6 +3387,9 @@ export function OnTheClockClient({
               <RankingsAwards
                 awards={awards}
                 boardReady={tradeReady}
+                // Frozen in snapshot mode (snapshot.awards), so the heavy
+                // engines are never in this panel's way there.
+                enginesLoading={!snapshotMode && !heavyEngines}
                 draftStarted={draftStarted}
                 tradesLoading={tradeHistoryLoading}
                 tradesError={tradeHistoryError}
@@ -3218,6 +3423,12 @@ export function OnTheClockClient({
                     grades={grades}
                     inProgress={draftInProgress}
                     boardReady={tradeReady}
+                    // Frozen in a version-2 snapshot (snapshot.grades), so the
+                    // heavy engines are never in this panel's way there.
+                    enginesLoading={
+                      !(snapshotMode && snapshot.snapshotVersion >= 2) &&
+                      !heavyEngines
+                    }
                     draftStarted={draftStarted}
                     pulseAvailable={pulseTeams.length > 0}
                   />

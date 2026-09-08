@@ -14,6 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import type { FaabSettings } from "./types";
 import { DEFAULT_FAAB_SETTINGS } from "./default-settings";
+import { memoTtl } from "@/lib/memo-ttl";
 
 type Client = SupabaseClient<Database>;
 
@@ -325,19 +326,25 @@ export function validateFaabSettings(raw: unknown): ValidateResult {
  * the stored row is merged onto defaults via the schema's per-field defaults,
  * and any failure falls back to DEFAULT_FAAB_SETTINGS.
  */
+/**
+ * Same row for every caller, admin-edited only: safe to memoise across
+ * requests for a minute. See lib/memo-ttl.ts.
+ */
 export async function loadFaabSettings(supabase: Client): Promise<FaabSettings> {
-  const { data, error } = await supabase
-    .from("faab_calculator_settings")
-    .select("settings")
-    .eq("id", FAAB_SETTINGS_ID)
-    .maybeSingle();
+  return memoTtl("settings:faab", 60_000, async () => {
+    const { data, error } = await supabase
+      .from("faab_calculator_settings")
+      .select("settings")
+      .eq("id", FAAB_SETTINGS_ID)
+      .maybeSingle();
 
-  if (error || !data?.settings) return { ...DEFAULT_FAAB_SETTINGS };
+    if (error || !data?.settings) return { ...DEFAULT_FAAB_SETTINGS };
 
-  const parsed = faabSettingsSchema.safeParse(data.settings);
-  if (!parsed.success) {
-    console.error("[faab] stored settings invalid, using defaults", parsed.error.issues);
-    return { ...DEFAULT_FAAB_SETTINGS };
-  }
-  return parsed.data as FaabSettings;
+    const parsed = faabSettingsSchema.safeParse(data.settings);
+    if (!parsed.success) {
+      console.error("[faab] stored settings invalid, using defaults", parsed.error.issues);
+      return { ...DEFAULT_FAAB_SETTINGS };
+    }
+    return parsed.data as FaabSettings;
+  });
 }

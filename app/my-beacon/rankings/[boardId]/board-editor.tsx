@@ -21,8 +21,11 @@ import {
 } from "lucide-react";
 import { PlayerHeadshot } from "@/components/player-headshot";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { createClient } from "@/lib/supabase/client";
-import { revalidateBoardCache } from "../actions";
+import {
+  saveBoardPlayers,
+  saveBoardMeta,
+  replaceBoardFromImport,
+} from "../actions";
 import {
   computeBoardRanks,
   ELIGIBLE_POSITIONS,
@@ -79,7 +82,6 @@ export function BoardEditor({
   importFormats: ImportFormat[];
   defaultSourceSlug: string | null;
 }) {
-  const supabase = useMemo(() => createClient(), []);
   // Ties the position chips to the list they filter, for aria-controls.
   const listId = useId();
 
@@ -120,41 +122,27 @@ export function BoardEditor({
     // Persist in display order so a stored rank_position always means the same
     // thing as the number the user sees. Anything reading the board back by
     // rank_position (the public profile's Top N, for one) then agrees with the
-    // editor instead of reconstructing a different board.
+    // editor instead of reconstructing a different board. The saveBoardPlayers
+    // action re-derives ownership and re-validates every id and tier before
+    // writing; it also decides whether tier values apply based on the
+    // board's OWN tiers_enabled row, so a stale local flag here is caught.
     const snapshot = orderedPlayersRef.current;
     const removals = Array.from(pendingRemovals.current);
     pendingRemovals.current = new Set();
     setSaveState("saving");
-    try {
-      if (removals.length > 0) {
-        const { error } = await supabase
-          .from("user_ranking_board_players")
-          .delete()
-          .eq("board_id", boardId)
-          .in("player_id", removals);
-        if (error) throw error;
-      }
-      if (snapshot.length > 0) {
-        const rows = snapshot.map((p, index) => ({
-          board_id: boardId,
-          player_id: p.playerId,
-          rank_position: index + 1,
-          tier: tiersEnabled ? p.tier : null,
-          updated_at: new Date().toISOString(),
-        }));
-        const { error } = await supabase
-          .from("user_ranking_board_players")
-          .upsert(rows, { onConflict: "board_id,player_id" });
-        if (error) throw error;
-      }
+    const result = await saveBoardPlayers(
+      boardId,
+      removals,
+      snapshot.map((p) => ({ playerId: p.playerId, tier: p.tier })),
+    );
+    if (result.ok) {
       setSaveState("saved");
-      void revalidateBoardCache(boardId);
-    } catch {
+    } else {
       // Re-queue the removals we pulled so they aren't lost on a transient error.
       removals.forEach((id) => pendingRemovals.current.add(id));
       setSaveState("error");
     }
-  }, [supabase, boardId, tiersEnabled]);
+  }, [boardId]);
 
   const schedulePlayerSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -177,25 +165,29 @@ export function BoardEditor({
   // Queued board-meta patch. Held as data rather than captured in the timer
   // closure so a burst of edits collapses into one write, and so an import can
   // take the queue over instead of racing whatever is still in it.
-  const pendingMeta = useRef<Record<string, unknown>>({});
+  type MetaPatch = {
+    name?: string;
+    tiersEnabled?: boolean;
+    tierCount?: number;
+    tierLabels?: Record<string, string>;
+  };
+  const pendingMeta = useRef<MetaPatch>({});
   const metaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const writeMeta = useCallback(
-    async (patch: Record<string, unknown>): Promise<boolean> => {
+    async (patch: MetaPatch): Promise<boolean> => {
       setSaveState("saving");
-      const { error } = await supabase
-        .from("user_ranking_boards")
-        .update({ ...patch, updated_at: new Date().toISOString() })
-        .eq("id", boardId);
-      setSaveState(error ? "error" : "saved");
-      if (!error) void revalidateBoardCache(boardId);
-      return !error;
+      // saveBoardMeta re-derives ownership and validates every field against
+      // the same bounds the database enforces.
+      const result = await saveBoardMeta(boardId, patch);
+      setSaveState(result.ok ? "saved" : "error");
+      return result.ok;
     },
-    [supabase, boardId],
+    [boardId],
   );
 
   const saveMeta = useCallback(
-    (patch: Record<string, unknown>) => {
+    (patch: MetaPatch) => {
       pendingMeta.current = { ...pendingMeta.current, ...patch };
       if (metaTimer.current) clearTimeout(metaTimer.current);
       metaTimer.current = setTimeout(() => {
@@ -211,7 +203,7 @@ export function BoardEditor({
   /** Cancel and hand back any queued meta patch, so a caller doing its own
    * meta write can fold the queue into that write rather than let it land
    * afterwards and clobber the newer values. */
-  const takePendingMeta = useCallback((): Record<string, unknown> => {
+  const takePendingMeta = useCallback((): MetaPatch => {
     if (metaTimer.current) {
       clearTimeout(metaTimer.current);
       metaTimer.current = null;
@@ -236,111 +228,67 @@ export function BoardEditor({
         saveTimer.current = null;
       }
       pendingRemovals.current = new Set();
-      // Take the queued meta patch too. A tier_count write left over from the
-      // tier controls would otherwise fire after this import and shrink the
-      // board back, stranding the rows we are about to write above it.
+
+      // Flush any queued meta patch FIRST, so the replaceBoardFromImport
+      // action (which reads tiers_enabled/tier_count from the database, never
+      // from this component) sees the reader's latest toggle rather than a
+      // stale persisted value. A tier_count write left over from the tier
+      // controls landing AFTER the import would otherwise shrink the board
+      // back and strand the rows the import just wrote.
       const queuedMeta = takePendingMeta();
-
-      // Build the source-tier to board-tier remap when tiers are on.
-      const tierByPlayer = new Map<string, number | null>();
-      let nextTierCount = tierCount;
-      let importedTiers = false;
-      if (tiersEnabled) {
-        const distinct = Array.from(
-          new Set(
-            imported
-              .map((p) => p.tier)
-              .filter((t): t is number => t != null),
-          ),
-        )
-          .sort((a, b) => a - b)
-          .slice(0, MAX_TIERS);
-        if (distinct.length > 0) {
-          const remap = new Map<number, number>();
-          distinct.forEach((srcTier, i) => remap.set(srcTier, i + 1));
-          imported.forEach((p) =>
-            tierByPlayer.set(
-              p.playerId,
-              p.tier != null ? remap.get(p.tier) ?? null : null,
-            ),
-          );
-          nextTierCount = distinct.length;
-          importedTiers = true;
-        }
-      }
-
-      const next: BoardPlayer[] = imported.map((p) => ({
-        rowId: null,
-        playerId: p.playerId,
-        slug: p.slug,
-        name: p.name,
-        position: p.position,
-        team: p.team,
-        sleeperId: p.sleeperId,
-        tier: importedTiers ? tierByPlayer.get(p.playerId) ?? null : null,
-      }));
-      setPlayers(next);
-      if (importedTiers) {
-        setTierCount(nextTierCount);
-        setTierLabels({});
-      }
-      setSaveState("saving");
-
-      const { error: deleteError } = await supabase
-        .from("user_ranking_board_players")
-        .delete()
-        .eq("board_id", boardId);
-      if (deleteError) {
-        setSaveState("error");
-        return false;
-      }
-
-      // Fold the queued patch in behind this import's own values, so a pending
-      // rename still lands while the tier fields we just derived win.
-      const metaPatch = importedTiers
-        ? { ...queuedMeta, tier_count: nextTierCount, tier_labels: {} }
-        : queuedMeta;
-      if (Object.keys(metaPatch).length > 0) {
-        const ok = await writeMeta(metaPatch);
+      if (Object.keys(queuedMeta).length > 0) {
+        const ok = await writeMeta(queuedMeta);
         if (!ok) {
           setSaveState("error");
           return false;
         }
       }
 
-      if (next.length > 0) {
-        // Same invariant as flushPlayers: rank_position is the display order.
-        const orderedNext = orderBoardForDisplay(
-          next,
-          tiersEnabled,
-          importedTiers ? nextTierCount : tierCount,
-        );
-        const rows = orderedNext.map((p, index) => ({
-          board_id: boardId,
-          player_id: p.playerId,
-          rank_position: index + 1,
-          tier: p.tier,
-          updated_at: new Date().toISOString(),
-        }));
-        const { error: insertError } = await supabase
-          .from("user_ranking_board_players")
-          .insert(rows);
-        if (insertError) {
-          setSaveState("error");
-          return false;
-        }
+      setSaveState("saving");
+      const result = await replaceBoardFromImport(
+        boardId,
+        imported.map((p) => ({ playerId: p.playerId, tier: p.tier })),
+      );
+      if (!result.ok) {
+        setSaveState("error");
+        return false;
+      }
+
+      // The table never stores name/position/etc, so rebuild the display
+      // list from the import payload we already have, in the SERVER's
+      // persisted order (result.order), never a locally-recomputed one.
+      const byId = new Map(imported.map((p) => [p.playerId, p]));
+      const next: BoardPlayer[] = result.order.flatMap((playerId) => {
+        const src = byId.get(playerId);
+        if (!src) return [];
+        return [
+          {
+            rowId: null,
+            playerId,
+            slug: src.slug,
+            name: src.name,
+            position: src.position,
+            team: src.team,
+            sleeperId: src.sleeperId,
+            tier: result.tierByPlayer[playerId] ?? null,
+          },
+        ];
+      });
+      setPlayers(next);
+      if (result.importedTiers) {
+        setTierCount(result.tierCount);
+        setTierLabels(result.tierLabels);
       }
 
       setSaveState("saved");
-      void revalidateBoardCache(boardId);
       setAnnouncement(
         `Imported ${next.length} player${next.length === 1 ? "" : "s"} from rankings${
-          importedTiers ? ` into ${nextTierCount} tiers` : ""
+          result.importedTiers ? ` into ${result.tierCount} tiers` : ""
         }.`,
       );
       return true;
     },
-    [supabase, boardId, tiersEnabled, tierCount, takePendingMeta, writeMeta],
+    [boardId, takePendingMeta, writeMeta],
   );
 
   // ----- mutations -------------------------------------------------------
@@ -460,7 +408,7 @@ export function BoardEditor({
   // ----- tier controls ---------------------------------------------------
   const toggleTiers = (enabled: boolean) => {
     setTiersEnabled(enabled);
-    saveMeta({ tiers_enabled: enabled });
+    saveMeta({ tiersEnabled: enabled });
     setAnnouncement(enabled ? "Tiers enabled." : "Tiers disabled.");
     // Re-persist player rows so tier values are written/cleared to match.
     schedulePlayerSave();
@@ -469,7 +417,7 @@ export function BoardEditor({
   const addTier = () => {
     setTierCount((prev) => {
       const next = Math.min(MAX_TIERS, prev + 1);
-      saveMeta({ tier_count: next });
+      saveMeta({ tierCount: next });
       return next;
     });
   };
@@ -482,7 +430,7 @@ export function BoardEditor({
         setPlayers((cur) =>
           cur.map((p) => (p.tier && p.tier > next ? { ...p, tier: null } : p)),
         );
-        saveMeta({ tier_count: next });
+        saveMeta({ tierCount: next });
         schedulePlayerSave();
       }
       return next;
@@ -493,7 +441,7 @@ export function BoardEditor({
     setTierLabels((prev) => {
       const next = { ...prev, [String(tier)]: label };
       if (label.trim().length === 0) delete next[String(tier)];
-      saveMeta({ tier_labels: next });
+      saveMeta({ tierLabels: next });
       return next;
     });
   };

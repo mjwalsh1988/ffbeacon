@@ -15,6 +15,7 @@ import type {
   createClient,
 } from "@/lib/supabase/server";
 import { RELEVANCE_WINDOW_DAYS } from "@/lib/player-search";
+import { memoTtl } from "@/lib/memo-ttl";
 
 /**
  * Either public read client is acceptable here.
@@ -242,6 +243,11 @@ export async function articleIdsForTeam(
   );
 }
 
+/**
+ * One category by slug. news_categories is admin-edited only, so this is safe
+ * to memoise across requests for a minute; the slug is part of the key
+ * because a different slug is a different answer. See lib/memo-ttl.ts.
+ */
 export async function resolveCategory(
   supabase: ReaderClient,
   slug: string,
@@ -251,12 +257,14 @@ export async function resolveCategory(
   name: string;
   description: string | null;
 } | null> {
-  const { data } = await supabase
-    .from("news_categories")
-    .select("id, slug, name, description")
-    .eq("slug", slug)
-    .maybeSingle();
-  return data ?? null;
+  return memoTtl(`ref:brief:category:${slug}`, 60_000, async () => {
+    const { data } = await supabase
+      .from("news_categories")
+      .select("id, slug, name, description")
+      .eq("slug", slug)
+      .maybeSingle();
+    return data ?? null;
+  });
 }
 
 export async function resolvePlayer(
@@ -286,24 +294,47 @@ export async function resolvePlayer(
   };
 }
 
+/**
+ * One team by abbreviation. nfl_teams changes only on a rare admin edit, so
+ * this is safe to memoise across requests for a minute; the abbreviation is
+ * part of the key because a different team is a different answer. See
+ * lib/memo-ttl.ts.
+ */
 export async function resolveTeam(
   supabase: ReaderClient,
   abbreviation: string,
 ): Promise<{ id: string; abbreviation: string; name: string } | null> {
-  const { data } = await supabase
-    .from("nfl_teams")
-    .select("id, abbreviation, name")
-    .eq("abbreviation", abbreviation.toUpperCase())
-    .maybeSingle();
-  return data ?? null;
+  const key = abbreviation.toUpperCase();
+  return memoTtl(`ref:brief:team:${key}`, 60_000, async () => {
+    const { data } = await supabase
+      .from("nfl_teams")
+      .select("id, abbreviation, name")
+      .eq("abbreviation", key)
+      .maybeSingle();
+    return data ?? null;
+  });
 }
 
 /**
  * Build the sidebar: active categories (with published counts), the most-used
  * tags, and the players / teams covered most recently. Everything derives from
  * the recent published set so the lists stay current without extra bookkeeping.
+ *
+ * Memoised for a minute (lib/memo-ttl.ts): the underlying reads
+ * (news_categories, article_players, article_teams, players, nfl_teams) are
+ * PART of the reference-table load named in the site speed plan (4.13), and
+ * this page renders for every reader with no per-reader input, so a shared
+ * in-process copy is safe. A minute of lag on the sidebar's tag counts and
+ * recently-covered lists after a new article publishes is the accepted
+ * tradeoff; the article content itself is unaffected.
  */
 export async function loadSidebar(
+  supabase: ReaderClient,
+): Promise<BriefSidebarData> {
+  return memoTtl("ref:brief:sidebar", 60_000, () => loadSidebarUncached(supabase));
+}
+
+async function loadSidebarUncached(
   supabase: ReaderClient,
 ): Promise<BriefSidebarData> {
   const [catsRes, pubRes] = await Promise.all([

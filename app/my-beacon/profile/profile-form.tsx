@@ -3,11 +3,11 @@
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import {
   clearSleeperHandle,
   saveSleeperHandle,
 } from "@/app/actions/sleeper-handle";
+import { saveProfile } from "./actions";
 
 const MAX_NAME = 80;
 const MAX_BIO = 2000;
@@ -70,44 +70,17 @@ export function ProfileForm({
     event.preventDefault();
     setStatus({ kind: "idle" });
     startTransition(async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setStatus({ kind: "error", message: "You need to be signed in." });
-        return;
-      }
-
-      // 1) Display name lives on the auth user, not our table.
-      const { error: authError } = await supabase.auth.updateUser({
-        data: { display_name: displayName.trim() },
+      // 1) Display name and 2) name/bio, both via the saveProfile server
+      //    action. The Sleeper jsonb is deliberately absent from that write:
+      //    nothing outside app/actions/sleeper-handle.ts writes it.
+      const profileResult = await saveProfile({
+        firstName,
+        lastName,
+        displayName,
+        bio,
       });
-      if (authError) {
-        setStatus({ kind: "error", message: authError.message });
-        return;
-      }
-
-      // 2) Name and bio. The Sleeper jsonb is deliberately absent from this
-      //    upsert: nothing outside app/actions/sleeper-handle.ts writes it.
-      const cleanedFirst = firstName.trim();
-      const cleanedLast = lastName.trim();
-      const cleanedBio = bio.trim();
-
-      const { error: prefsError } = await supabase
-        .from("user_preferences")
-        .upsert(
-          {
-            user_id: user.id,
-            first_name: cleanedFirst.length > 0 ? cleanedFirst : null,
-            last_name: cleanedLast.length > 0 ? cleanedLast : null,
-            bio: cleanedBio.length > 0 ? cleanedBio : null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        );
-      if (prefsError) {
-        setStatus({ kind: "error", message: prefsError.message });
+      if (!profileResult.ok) {
+        setStatus({ kind: "error", message: profileResult.error });
         return;
       }
 

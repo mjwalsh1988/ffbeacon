@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Trash2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import type { createClient } from "@/lib/supabase/client";
 import { ImageWithFallback } from "@/components/image-with-fallback";
 
 const BUCKET = "user-avatars";
@@ -23,6 +23,13 @@ const ACCEPTED: Record<string, string> = {
  * one, so a user can never accumulate multiple avatars. All storage operations
  * are scoped to the caller's own folder by the bucket RLS policies; the path is
  * always prefixed with the user's id.
+ *
+ * The browser Supabase client is loaded with a dynamic import on first
+ * interaction (upload or remove) rather than at module load, because it
+ * streams the file directly to Storage and there is no server-action
+ * equivalent for that. Every other /my-beacon form moved off this client
+ * entirely (PERF-T032); this one and the Signal media uploader keep it,
+ * deferred, for exactly that reason.
  */
 export function AvatarUploader({
   initialAvatarUrl,
@@ -72,6 +79,7 @@ export function AvatarUploader({
 
     startTransition(async () => {
       setStatus({ kind: "working" });
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const {
         data: { user },
@@ -121,6 +129,7 @@ export function AvatarUploader({
   const onRemove = () => {
     startTransition(async () => {
       setStatus({ kind: "working" });
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const {
         data: { user },

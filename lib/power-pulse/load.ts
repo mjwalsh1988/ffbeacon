@@ -357,14 +357,10 @@ export async function loadPlayers(
   const missing = safeIds.filter((id) => !resolved.has(id));
   if (missing.length > 0) {
     for (let i = 0; i < missing.length; i += CHUNK) {
-      const ors = missing
-        .slice(i, i + CHUNK)
-        .map((id) => `slug.like.*-${id}`)
-        .join(",");
       const { data, error } = await supabase
         .from("players")
         .select(SELECT)
-        .or(ors);
+        .in("sleeper_slug_tail", missing.slice(i, i + CHUNK));
       if (error)
         throw new Error(`power pulse player resolve failed: ${error.message}`);
       for (const p of data ?? []) rows.push(p as PlayerQueryRow);

@@ -1,6 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { validateSignalScoutSettings, loadSignalScoutSettings, clampSignalScoutSettings } from "./settings";
 import { DEFAULT_SIGNAL_SCOUT_SETTINGS } from "./default-settings";
+import { bustMemo } from "@/lib/memo-ttl";
+
+// loadSignalScoutSettings is memoised for a minute (lib/memo-ttl.ts), keyed
+// "settings:signal_scout" regardless of which mocked Supabase client calls it.
+// Without this reset the second test in a run would silently get back the
+// first test's cached answer instead of exercising its own mock.
+beforeEach(() => {
+  bustMemo("settings:signal_scout");
+});
 
 describe("validateSignalScoutSettings", () => {
   it("accepts the shipped defaults", () => {

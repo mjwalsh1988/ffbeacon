@@ -15,6 +15,7 @@ import {
   parsePackageMultipliers,
 } from "@/lib/trade-quality";
 import { dbRuleSchema, type ParsedRule } from "./rules/schema";
+import { memoTtl } from "@/lib/memo-ttl";
 
 type Client = SupabaseClient<Database>;
 
@@ -194,20 +195,26 @@ function buildSettings(map: Map<string, RawValue>): SignalCheckSettings {
   };
 }
 
+/**
+ * Same rows for every caller, admin-edited only: safe to memoise across
+ * requests for a minute. See lib/memo-ttl.ts.
+ */
 export async function loadSignalCheckSettings(supabase: Client): Promise<SignalCheckSettings> {
-  const { data, error } = await supabase
-    .from("beacon_settings")
-    .select("key, value")
-    .like("category", "signal_check%");
-  if (error || !data) return { ...DEFAULT_SETTINGS };
-  const map = new Map<string, RawValue>();
-  for (const row of data) {
-    const v = row.value as unknown;
-    if (typeof v === "number" || typeof v === "boolean" || typeof v === "string") {
-      map.set(row.key, v);
+  return memoTtl("settings:signal_check", 60_000, async () => {
+    const { data, error } = await supabase
+      .from("beacon_settings")
+      .select("key, value")
+      .like("category", "signal_check%");
+    if (error || !data) return { ...DEFAULT_SETTINGS };
+    const map = new Map<string, RawValue>();
+    for (const row of data) {
+      const v = row.value as unknown;
+      if (typeof v === "number" || typeof v === "boolean" || typeof v === "string") {
+        map.set(row.key, v);
+      }
     }
-  }
-  return buildSettings(map);
+    return buildSettings(map);
+  });
 }
 
 export interface ActiveRuleset {

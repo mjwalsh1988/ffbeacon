@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../database.types";
 import { FALLBACK_STALE_DAYS, type StaleDays } from "./freshness";
 import { DEFAULT_AI_SYSTEM_PROMPT } from "./signals/ai-adjust";
+import { memoTtl } from "../memo-ttl";
 
 export interface BeaconSettings {
   staleDays: StaleDays;
@@ -206,6 +207,16 @@ function num(v: unknown, fallback: number): number {
 }
 
 export async function loadBeaconSettings(
+  supabase: SupabaseClient<Database>,
+): Promise<BeaconSettings> {
+  // Same rows for every caller, admin-edited only: safe to memoise across
+  // requests for a minute. See lib/memo-ttl.ts. A thrown error is evicted
+  // immediately (memoTtl's own contract), so a bad read is retried on the
+  // very next call rather than pinned for the full TTL.
+  return memoTtl("settings:beacon", 60_000, () => loadBeaconSettingsUncached(supabase));
+}
+
+async function loadBeaconSettingsUncached(
   supabase: SupabaseClient<Database>,
 ): Promise<BeaconSettings> {
   const { data, error } = await supabase

@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useId, useState, useTransition } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup";
 
@@ -35,7 +34,6 @@ export function LoginForm({
   const passwordId = useId();
   const headingId = "login-form-heading";
 
-  const supabase = createClient();
   // Always use the live browser origin so OAuth round-trips land back on
   // the same environment the user started in. `NEXT_PUBLIC_SITE_URL` is
   // canonical (production) and would route dev sessions to the live site.
@@ -69,6 +67,11 @@ export function LoginForm({
   const signInWith = (provider: "google" | "discord") => {
     setStatus({ kind: "idle" });
     startTransition(async () => {
+      // The browser Supabase client (242 kB of GoTrue + WebSocket code) is
+      // loaded only now, on the click that actually needs it, rather than in
+      // /login's own bundle on every visit.
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: { redirectTo: callbackUrl },
@@ -82,6 +85,8 @@ export function LoginForm({
     if (!email) return;
     setStatus({ kind: "idle" });
     startTransition(async () => {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: { emailRedirectTo: callbackUrl },
@@ -99,6 +104,8 @@ export function LoginForm({
     if (!email || !password) return;
     setStatus({ kind: "idle" });
     startTransition(async () => {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({
           email,

@@ -19,6 +19,7 @@ import type { Database } from "@/lib/database.types";
 import type { EligiblePosition, SignalScoutSettings } from "./types";
 import { DEFAULT_SIGNAL_SCOUT_SETTINGS } from "./default-settings";
 import { CLUE_DEFINITIONS } from "./clues";
+import { memoTtl } from "@/lib/memo-ttl";
 
 type Client = SupabaseClient<Database>;
 
@@ -188,19 +189,25 @@ export function clampSignalScoutSettings(raw: SignalScoutSettings): SignalScoutS
  * stored row is merged onto defaults via the schema's per-field defaults, and
  * any failure falls back to DEFAULT_SIGNAL_SCOUT_SETTINGS.
  */
+/**
+ * Same row for every caller, admin-edited only: safe to memoise across
+ * requests for a minute. See lib/memo-ttl.ts.
+ */
 export async function loadSignalScoutSettings(supabase: Client): Promise<SignalScoutSettings> {
-  const { data, error } = await supabase
-    .from("signal_scout_settings")
-    .select("settings")
-    .eq("id", SIGNAL_SCOUT_SETTINGS_ID)
-    .maybeSingle();
+  return memoTtl("settings:signal_scout", 60_000, async () => {
+    const { data, error } = await supabase
+      .from("signal_scout_settings")
+      .select("settings")
+      .eq("id", SIGNAL_SCOUT_SETTINGS_ID)
+      .maybeSingle();
 
-  if (error || !data?.settings) return { ...DEFAULT_SIGNAL_SCOUT_SETTINGS };
+    if (error || !data?.settings) return { ...DEFAULT_SIGNAL_SCOUT_SETTINGS };
 
-  const parsed = signalScoutSettingsSchema.safeParse(data.settings);
-  if (!parsed.success) {
-    console.error("[signal-scout] stored settings invalid, using defaults", parsed.error.issues);
-    return { ...DEFAULT_SIGNAL_SCOUT_SETTINGS };
-  }
-  return parsed.data as SignalScoutSettings;
+    const parsed = signalScoutSettingsSchema.safeParse(data.settings);
+    if (!parsed.success) {
+      console.error("[signal-scout] stored settings invalid, using defaults", parsed.error.issues);
+      return { ...DEFAULT_SIGNAL_SCOUT_SETTINGS };
+    }
+    return parsed.data as SignalScoutSettings;
+  });
 }

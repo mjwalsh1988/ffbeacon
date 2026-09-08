@@ -28,6 +28,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Clears the cross-request memo in lib/memo-ttl.ts before every test. That
+    // Map lives for the life of the process on purpose, so without this a suite
+    // that mocks a settings backend differently per case is served its own
+    // first case's answer in every later one. See test/setup.ts.
+    setupFiles: ["./test/setup.ts"],
     // .tsx as well as .ts. A pure helper that lives beside a component (the
     // side-picking logic in components/manager-pulse/per-type-pair.tsx, say)
     // has to be tested from a .tsx file to import it, and a glob that quietly

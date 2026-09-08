@@ -254,6 +254,14 @@ export type WorkerSummary = {
   finalized: number;
   liveReports: number;
   callsMade: number;
+  /**
+   * PERF-T060: the still-pending count as of the last league_sync_tick call
+   * this pass made, so the caller (the cron route) can decide whether to
+   * self-chain a wake without its own separate count query. 0 on a pass that
+   * never won the lease at all, which is also the pass that should not
+   * self-chain: some other holder is already draining the queue.
+   */
+  pendingCount: number;
 };
 
 type JobOutcome = { ok: true; skipped?: "fresh" } | { ok: false; error: string };
@@ -820,14 +828,49 @@ async function renewLease(admin: Admin, holder: string, seconds: number): Promis
 }
 
 /**
- * One pass of the queue. `renewLease` runs before every claim, `options.holder`
- * naming this pass: its first call also serves as the acquire when nobody
- * holds the lease yet, and every call after that is a genuine renewal. Claiming
- * stops the moment a renewal fails, because that means some other pass now
- * holds it. Exactly one pass drains the queue at a time (see the module doc
- * comment); the caller is responsible for releasing the lease after this
- * returns (the cron route also pre-checks the lease itself, so a held lease
- * can be reported without ever starting a pass).
+ * One row of league_sync_tick's result (migration 0277): a claimed job, or
+ * null when the lease was won but nothing was pending.
+ */
+type LeagueSyncTickRow = { job: LeagueSyncJob | null; pending_count: number };
+
+/**
+ * PERF-T060: acquire-or-renew the lease, claim up to `limit` due jobs, and
+ * read the still-pending count, in one round trip (migration 0277's
+ * league_sync_tick), replacing the separate renewLease + claim_league_sync_jobs
+ * pair the claim loop used to make on every iteration.
+ *
+ * Returns null when the lease could not be acquired (another pass holds it):
+ * the caller treats that exactly like a failed renewal used to, and stops.
+ * Returns `{ claimed: [], pendingCount }` when the lease WAS acquired but
+ * nothing is due yet, which is the common, idle-queue case.
+ */
+async function leagueSyncTick(
+  admin: Admin,
+  holder: string,
+  leaseSeconds: number,
+  limit: number,
+): Promise<{ claimed: LeagueSyncJob[]; pendingCount: number } | null> {
+  const { data, error } = await admin.rpc("league_sync_tick", {
+    p_holder: holder,
+    p_lease_seconds: leaseSeconds,
+    p_limit: limit,
+  });
+  if (error || !data) return null;
+  const rows = data as LeagueSyncTickRow[];
+  if (rows.length === 0) return null; // lease held by somebody else
+  return {
+    claimed: rows.map((r) => r.job).filter((j): j is LeagueSyncJob => j !== null),
+    pendingCount: rows[0]?.pending_count ?? 0,
+  };
+}
+
+/**
+ * One pass of the queue. `leagueSyncTick` runs once per loop iteration, and its
+ * first call also serves as this pass's lease acquire when nobody holds it
+ * yet. Claiming stops the moment a tick returns null, because that means some
+ * other pass now holds it. Exactly one pass drains the queue at a time (see
+ * the module doc comment); the caller is responsible for releasing the lease
+ * after this returns.
  */
 export async function runLeagueSyncWorker(
   admin: Admin,
@@ -847,6 +890,7 @@ export async function runLeagueSyncWorker(
     finalized: 0,
     liveReports: 0,
     callsMade: 0,
+    pendingCount: 0,
   };
   const deadline = Date.now() + sync.passBudgetSeconds * 1000;
   const leaseSeconds = sync.passBudgetSeconds + 30;
@@ -864,20 +908,27 @@ export async function runLeagueSyncWorker(
 
   // Top off the lease right after the head-of-pass work above. That work
   // renews nothing on its own, and if it ran long enough, the claim loop's
-  // OWN first renewal (below) might never even execute: the deadline check
-  // that guards the loop could already have tripped, in which case a lease
+  // OWN first tick (below) might never even execute: the deadline check that
+  // guards the loop could already have tripped, in which case a lease
   // acquired once at the top of this pass would otherwise sit unrenewed
   // until this function returns.
-  await renewLease(admin, options.holder, leaseSeconds);
+  //
+  // Skipped when the head-of-pass work did nothing at all, which on this job is
+  // most minutes: reaping no job and finalizing no run means no meaningful time
+  // passed, so there is nothing for the top-off to protect against. This is one
+  // request per idle tick, on a job that ticks every minute, so it is 1,440
+  // requests a day for a lease that cannot have gone stale in the milliseconds
+  // two empty selects took.
+  if (summary.reaped > 0 || summary.finalized > 0) {
+    await renewLease(admin, options.holder, leaseSeconds);
+  }
 
   while (Date.now() < deadline && calls < sync.maxCallsPerPass) {
-    const renewed = await renewLease(admin, options.holder, leaseSeconds);
-    if (!renewed) break; // somebody else holds it now
-    const { data: claimed, error } = await admin.rpc("claim_league_sync_jobs", {
-      p_limit: sync.jobsPerClaim,
-    });
-    if (error || !claimed || claimed.length === 0) break;
-    const jobs = claimed as LeagueSyncJob[];
+    const tick = await leagueSyncTick(admin, options.holder, leaseSeconds, sync.jobsPerClaim);
+    if (!tick) break; // somebody else holds it now
+    summary.pendingCount = tick.pendingCount;
+    if (tick.claimed.length === 0) break; // nothing due
+    const jobs = tick.claimed;
     summary.claimed += jobs.length;
 
     const leftover: LeagueSyncJob[] = [];

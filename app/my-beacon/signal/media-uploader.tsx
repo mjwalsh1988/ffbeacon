@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Trash2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import type { createClient } from "@/lib/supabase/client";
 import { ImageWithFallback } from "@/components/image-with-fallback";
 import { revalidateMySignal } from "@/app/my-beacon/rankings/actions";
 
@@ -19,6 +19,12 @@ import { revalidateMySignal } from "@/app/my-beacon/rankings/actions";
  *
  * Server-side cropping/resizing/metadata-stripping was removed deliberately; a
  * pure-JS in-browser version can be added later. For now this is a plain upload.
+ *
+ * The browser Supabase client is loaded with a dynamic import on first
+ * interaction rather than at module load (PERF-T032): it streams the file
+ * straight to Storage, so there is no server-action equivalent, but every
+ * page that renders this component still skips the 242 kB client until a
+ * reader actually uploads or removes something.
  */
 
 const BUCKET = "signal-media";
@@ -84,6 +90,7 @@ export function MediaUploader({
 
     startTransition(async () => {
       setStatus({ kind: "working" });
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const {
         data: { user },
@@ -127,6 +134,7 @@ export function MediaUploader({
   const remove = () => {
     startTransition(async () => {
       setStatus({ kind: "working" });
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const {
         data: { user },

@@ -18,6 +18,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import {
@@ -1618,6 +1619,12 @@ async function handleArticleWrite(
     .single();
   if (artErr || !created)
     return { ok: false, error: artErr?.message ?? "article insert failed" };
+
+  // Only when the insert actually landed a published row: a draft (autopublish
+  // off) does not change what the home page's article list shows, so busting
+  // its cache early would win nothing and would just throw away five minutes
+  // of a cache hit for every other reader.
+  if (published) revalidateTag("home");
 
   if (refs.playerIds.length > 0) {
     await admin.from("article_players").insert(

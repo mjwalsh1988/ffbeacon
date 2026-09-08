@@ -19,24 +19,34 @@ import {
   mergeManagerPulseSettings,
   type ManagerPulseSettings,
 } from "./default-settings";
+import { memoTtl } from "@/lib/memo-ttl";
 
 export const MANAGER_PULSE_SETTINGS_ID = "global";
 
-/** Requires the service-role (admin) client. manager_pulse_settings has no anon or authenticated policy. */
+/**
+ * Requires the service-role (admin) client. manager_pulse_settings has no anon
+ * or authenticated policy.
+ *
+ * The worker reads this twice per tick (app/api/cron/league-sync-worker and
+ * lib/league-bulk-sync.ts), so the 60 second TTL memo turns a per-tick pair of
+ * reads into one Postgres round trip a minute. See lib/memo-ttl.ts.
+ */
 export async function loadManagerPulseSettings(
   admin: SupabaseClient<Database>,
 ): Promise<ManagerPulseSettings> {
-  try {
-    const { data, error } = await admin
-      .from("manager_pulse_settings")
-      .select("settings")
-      .eq("id", MANAGER_PULSE_SETTINGS_ID)
-      .maybeSingle();
-    if (error || !data?.settings) return DEFAULT_MANAGER_PULSE_SETTINGS;
-    return mergeManagerPulseSettings(data.settings);
-  } catch {
-    return DEFAULT_MANAGER_PULSE_SETTINGS;
-  }
+  return memoTtl("settings:manager_pulse", 60_000, async () => {
+    try {
+      const { data, error } = await admin
+        .from("manager_pulse_settings")
+        .select("settings")
+        .eq("id", MANAGER_PULSE_SETTINGS_ID)
+        .maybeSingle();
+      if (error || !data?.settings) return DEFAULT_MANAGER_PULSE_SETTINGS;
+      return mergeManagerPulseSettings(data.settings);
+    } catch {
+      return DEFAULT_MANAGER_PULSE_SETTINGS;
+    }
+  });
 }
 
 /** Persist a full settings document. Admin server actions only, and requires the service-role client. */

@@ -33,7 +33,7 @@ import {
   snapshotFromSleeper,
 } from "@/lib/league-activity/record";
 import { projectLeagueActivity } from "@/lib/league-activity/project";
-import type { Database } from "@/lib/database.types";
+import type { Database, Json } from "@/lib/database.types";
 
 export const LEAGUE_PULSE_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
@@ -55,6 +55,33 @@ export type LeaguePulseResult =
   | { ok: false; error: string; sleeperLeagueId: string };
 
 /**
+ * The `leagues` row every deep view renders its header from.
+ *
+ * Named here rather than inferred, because the point of handing it back is that
+ * a page does not read the same row a second time. If a page needs a column
+ * this list lacks, widen this list and the select beside it, once.
+ */
+export const LEAGUE_CORE_COLUMNS =
+  "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, pulse_status, pulse_error, format_config_id, roster_positions, scoring_settings, metadata";
+
+/** Nullability matches the schema exactly. Do not loosen it to make a cast fit. */
+export type LeagueCoreRow = {
+  id: string;
+  sleeper_league_id: string;
+  name: string;
+  season: number;
+  status: string | null;
+  total_rosters: number | null;
+  last_pulsed_at: string | null;
+  pulse_status: string;
+  pulse_error: string | null;
+  format_config_id: string | null;
+  roster_positions: Json;
+  scoring_settings: Json;
+  metadata: Json;
+};
+
+/**
  * What the deep view needs before it can draw anything: the league itself, its
  * rosters, and its members. Everything else (transaction history, rankings,
  * Power Pulse) hangs off this and can arrive afterwards.
@@ -67,7 +94,23 @@ export type LeaguePulseCoreResult =
       season: number;
       /** True when the 60-minute cache answered and Sleeper was not contacted. */
       cached: boolean;
+      /**
+       * Zeroes unless the caller asked for `counts: true`.
+       *
+       * These are two `head: true` counts against rosters and league_users, and
+       * for a long time every caller paid for them while only the bulk sync
+       * summary read them. They are two round trips in the middle of the
+       * critical path of every league page (site-speed-audit-and-plan.md, 4.7).
+       */
       counts: { rosters: number; users: number };
+      /**
+       * The league row itself, so the caller does not read it again.
+       *
+       * Null only when the sync branch could not hand one back. A page that
+       * needs the row should fall back to its own read on null rather than
+       * assume.
+       */
+      league: LeagueCoreRow | null;
     }
   | { ok: false; error: string; sleeperLeagueId: string };
 
@@ -123,7 +166,14 @@ export async function pulseLeague(
   sleeperLeagueId: string,
   options: { force?: boolean } = {},
 ): Promise<LeaguePulseResult> {
-  const core = await pulseLeagueCore(supabase, sleeperLeagueId, options);
+  // counts: true, because THIS function's result type promises them and its
+  // callers (the pulse script, the admin refresh endpoint) print them. Nothing
+  // downstream of pulseLeagueCore itself reads them, which is why they are off
+  // by default everywhere else.
+  const core = await pulseLeagueCore(supabase, sleeperLeagueId, {
+    ...options,
+    counts: true,
+  });
   if (!core.ok) return core;
 
   const derived = await pulseLeagueDerived(supabase, core.leagueRowId, {
@@ -158,21 +208,24 @@ export async function pulseLeague(
 export async function pulseLeagueCore(
   supabase: ServiceClient,
   sleeperLeagueId: string,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; counts?: boolean } = {},
 ): Promise<LeaguePulseCoreResult> {
-  const { force = false } = options;
-  return coalesce(`core:${sleeperLeagueId}:${force}`, async () => {
+  // `counts` defaults OFF. The two head counts it gates are consumed only by
+  // the bulk sync summary, and every league page was paying two round trips
+  // for them in the middle of its critical path.
+  const { force = false, counts: wantCounts = false } = options;
+  return coalesce(`core:${sleeperLeagueId}:${force}:${wantCounts}`, async () => {
     const startedAt = Date.now();
 
     // Widened past what the cache check needs so the activity snapshot below can
-    // be built from this row instead of reading the same one again. The extra
-    // columns are a few kilobytes on a query that was happening anyway, against
-    // a whole round trip saved on the critical path of every full sync.
+    // be built from this row instead of reading the same one again, and so the
+    // caller can render its header from what comes back rather than reading the
+    // same row a third time. The extra columns are a few kilobytes on a query
+    // that was happening anyway, against two whole round trips saved on the
+    // critical path of every league page.
     const { data: existing } = await supabase
       .from("leagues")
-      .select(
-        "id, name, season, status, total_rosters, scoring_settings, roster_positions, metadata, last_pulsed_at, pulse_status",
-      )
+      .select(LEAGUE_CORE_COLUMNS)
       .eq("sleeper_league_id", sleeperLeagueId)
       .maybeSingle();
 
@@ -184,24 +237,30 @@ export async function pulseLeagueCore(
       Date.now() - new Date(existing.last_pulsed_at).getTime() < LEAGUE_PULSE_TTL_MS
     ) {
       // Cache hit: league, roster, and member rows are fresh enough that we do
-      // not re-hit Sleeper at all.
-      const [{ count: rosterCount }, { count: userCount }] = await Promise.all([
-        supabase
-          .from("rosters")
-          .select("id", { count: "exact", head: true })
-          .eq("league_id", existing.id),
-        supabase
-          .from("league_users")
-          .select("id", { count: "exact", head: true })
-          .eq("league_id", existing.id),
-      ]);
+      // not re-hit Sleeper at all. On this branch the whole function is meant
+      // to be one round trip, so the two counts run only when asked for.
+      const [rosterCount, userCount] = wantCounts
+        ? await Promise.all([
+            supabase
+              .from("rosters")
+              .select("id", { count: "exact", head: true })
+              .eq("league_id", existing.id)
+              .then((r) => r.count ?? 0),
+            supabase
+              .from("league_users")
+              .select("id", { count: "exact", head: true })
+              .eq("league_id", existing.id)
+              .then((r) => r.count ?? 0),
+          ])
+        : [0, 0];
       return {
         ok: true as const,
         leagueRowId: existing.id,
         sleeperLeagueId,
         season: Number(existing.season ?? 0),
         cached: true,
-        counts: { rosters: rosterCount ?? 0, users: userCount ?? 0 },
+        counts: { rosters: rosterCount, users: userCount },
+        league: existing as unknown as LeagueCoreRow,
       };
     }
 
@@ -278,10 +337,14 @@ export async function pulseLeagueCore(
       updated_at: new Date().toISOString(),
     };
 
+    // Returning the whole row rather than just its id, so the caller can render
+    // its header from this instead of reading the same row back. The two
+    // columns the stamp below changes are corrected on the way out; every other
+    // column here is what was just written.
     const { data: upserted, error: upsertErr } = await supabase
       .from("leagues")
       .upsert(leagueRow, { onConflict: "sleeper_league_id" })
-      .select("id")
+      .select(LEAGUE_CORE_COLUMNS)
       .single();
 
     if (upsertErr || !upserted) {
@@ -321,13 +384,14 @@ export async function pulseLeagueCore(
     ]);
 
     // Everything the page needs is on disk. Now the league counts as pulsed.
+    const pulsedAt = new Date().toISOString();
     const { error: stampErr } = await supabase
       .from("leagues")
       .update({
-        last_pulsed_at: new Date().toISOString(),
+        last_pulsed_at: pulsedAt,
         pulse_status: "complete",
         pulse_error: null,
-        updated_at: new Date().toISOString(),
+        updated_at: pulsedAt,
       })
       .eq("id", leagueRowId);
     if (stampErr) {
@@ -369,6 +433,14 @@ export async function pulseLeagueCore(
       season,
       cached: false,
       counts: { rosters: rosters.length, users: users.length },
+      league: {
+        ...(upserted as unknown as LeagueCoreRow),
+        // The upsert wrote "syncing" and left last_pulsed_at alone. The stamp
+        // above is what a reader should be told, and it has just succeeded.
+        last_pulsed_at: pulsedAt,
+        pulse_status: "complete",
+        pulse_error: null,
+      },
     };
   });
 }
@@ -801,6 +873,10 @@ export async function pulseLeagueFootprint(
   options: { force?: boolean } = {},
 ): Promise<LeaguePulseResult> {
   const { force = false } = options;
+  // No counts. Manager Pulse queues dozens of league-seasons per report and
+  // nothing on that path reads the roster and member counts, so two head
+  // counts per league would be two round trips per league for nothing. The
+  // zeroes that come back are the documented contract, not a measurement.
   const core = await pulseLeagueCore(supabase, sleeperLeagueId, options);
   if (!core.ok) return core;
 

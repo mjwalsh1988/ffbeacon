@@ -2,9 +2,33 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
 import { BeamMark } from "@/components/beam/beam-mark";
 import { BeamPanel } from "@/components/beam/beam-panel";
-import { BeamChat } from "@/components/beam/beam-chat";
+
+// The transcript, the composer and every answer-card renderer live in this one
+// 567-line chunk, and most readers never open BEAM at all, so it ships as its
+// own bundle instead of riding along on every page. `warm()` below already
+// fetches it on the first sign of intent (hover, focus, touchstart), so by the
+// time a reader actually clicks, the chunk is usually already in. `ssr: false`
+// is safe here because the panel it lives in is a client-only overlay to begin
+// with, portalled onto `document.body`.
+const BeamChat = dynamic(
+  () => import("@/components/beam/beam-chat").then((mod) => mod.BeamChat),
+  {
+    ssr: false,
+    // BeamPanel sizes this slot with flex-1 already, so the loading state
+    // fills the same box the real chat does and nothing shifts when it swaps
+    // in. aria-busy plus a visually hidden label speaks once, from the
+    // container the composer will replace, rather than staying silent while
+    // the chunk downloads.
+    loading: () => (
+      <div className="flex h-full min-h-0 flex-1 items-center justify-center" aria-busy="true">
+        <span className="sr-only">Loading Ask BEAM</span>
+      </div>
+    ),
+  },
+);
 
 /**
  * The header button that opens Ask BEAM, and the panel it opens.

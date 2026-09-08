@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/server";
 import { verifyCronRequest } from "@/lib/cron-auth";
 import { recordCronRun } from "@/lib/cron-runs";
-import { runLeagueSyncWorker } from "@/lib/league-bulk-sync";
+import { runLeagueSyncWorker, type WorkerSummary } from "@/lib/league-bulk-sync";
 import { loadManagerPulseSettings } from "@/lib/manager-pulse/settings";
 import { wakeLeagueSyncWorker } from "@/lib/league-sync-wake";
 
@@ -43,19 +43,36 @@ async function runPass(
   reason: string,
 ): Promise<void> {
   try {
-    const summary = await recordCronRun(admin, "league-sync-worker", () =>
-      runLeagueSyncWorker(admin, { holder }),
+    // quietWhen (PERF-T060). This job ticks every minute and the queue is
+    // empty for most of them, so it was writing 1,440 ledger rows a day about
+    // having found nothing to do, and `cron_runs` had grown to 76 MB. A pass
+    // that claimed nothing AND finalised nothing has nothing to record;
+    // `recordCronRun` still writes one heartbeat row an hour on those, so
+    // /admin/system cron-health can still see the job is alive.
+    const summary = await recordCronRun(
+      admin,
+      "league-sync-worker",
+      () => runLeagueSyncWorker(admin, { holder }),
+      {
+        quietWhen: (s: WorkerSummary) =>
+          s.claimed === 0 &&
+          s.finalized === 0 &&
+          s.reaped === 0 &&
+          s.requestsCompleted === 0 &&
+          s.liveReports === 0,
+      },
     );
     console.log(`[cron/league-sync-worker] pass (${reason})`, summary);
-    const { count } = await admin
-      .from("league_sync_jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending")
-      .lte("run_after", new Date().toISOString());
     await admin.rpc("release_league_sync_lease", { p_holder: holder });
     // Only wake again when pending work actually remains, so the self-chain
     // cannot loop without work: the lease bounds every pass this could start.
-    if ((count ?? 0) > 0) await wakeLeagueSyncWorker("self-chain");
+    //
+    // The count comes back on the pass summary now (PERF-T060). It is read off
+    // the same league_sync_tick call that claimed the jobs, so the separate
+    // head count this used to run every minute is gone. A pass that never won
+    // the lease reports 0, which is also the pass that must not self-chain:
+    // somebody else is already draining.
+    if (summary.pendingCount > 0) await wakeLeagueSyncWorker("self-chain");
   } catch (err) {
     console.error(
       "[cron/league-sync-worker] pass failed",

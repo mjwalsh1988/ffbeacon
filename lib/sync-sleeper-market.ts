@@ -199,6 +199,56 @@ export async function runSleeperMarketSync(
     );
   }
 
+  // Maintain player_market_latest (PERF-T012). It used to be a view that
+  // recomputed "the newest snapshot per player" with a DISTINCT ON sort over
+  // the whole snapshots table on every read; it is now a real table, and the
+  // row this run just wrote for today is by definition the newest one for
+  // its (source, season_type, sleeper_player_id) key, so no read-back query
+  // is needed to populate it. Best-effort: player_market_snapshots above is
+  // the source of truth, so a failure here is logged and swallowed rather
+  // than failing a sync that already succeeded at the part that matters,
+  // matching this file's existing posture toward non-fatal row-level issues
+  // (see the unmatchedPlayers warning below).
+  try {
+    // source/season/season_type come from this run's own variables rather
+    // than the row itself: player_market_snapshots.source and .season_type
+    // carry column defaults, which makes them optional on MarketInsert even
+    // though every push above always sets them explicitly.
+    const latestRows: Database["public"]["Tables"]["player_market_latest"]["Insert"][] = inserts.map(
+      (row) => ({
+        source: MARKET_SOURCE_SLUG,
+        season,
+        season_type: seasonType,
+        snapshot_date: row.snapshot_date,
+        sleeper_player_id: row.sleeper_player_id,
+        player_id: row.player_id,
+        adp: row.adp,
+        projected_pts_ppr: row.projected_pts_ppr,
+        projected_pts_half_ppr: row.projected_pts_half_ppr,
+        projected_pts_std: row.projected_pts_std,
+        updated_at: nowIso,
+      }),
+    );
+
+    for (let i = 0; i < latestRows.length; i += UPSERT_BATCH_SIZE) {
+      const chunk = latestRows.slice(i, i + UPSERT_BATCH_SIZE);
+      await withRetry(
+        async () => {
+          const { error } = await supabase
+            .from("player_market_latest")
+            .upsert(chunk, { onConflict: "source,season_type,sleeper_player_id" });
+          if (error) throw error;
+        },
+        { label: `player_market_latest upsert ${i}` },
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[sync-sleeper-market] player_market_latest maintenance failed; player_market_snapshots already has this run's data, so the next successful run will catch it up.",
+      err,
+    );
+  }
+
   const unmatchedPlayers = inserts.length - matchedPlayers;
   if (unmatchedPlayers > 0) {
     console.warn(

@@ -1,122 +1,107 @@
 # Handoff
 
-Session of 2026-09-04. Build: **Manager Pulse**. Plan of record:
-`docs/manager-pulse/manager-pulse-plan.md` (its section 15 records where the plan and the
-shipped code differ). Tasks: `progress.md`, prefixes `MP-T###` and `MP-R###`.
+Session of 2026-09-08. Build: **the site speed plan**. Plan of record:
+`docs/performance/site-speed-audit-and-plan.md`, whose Part 8 is the build.
+Tasks: `progress.md`, prefix `PERF-T###`, at the very end of that file.
 
-The previous entry (the Projection Engine build, session of 2026-09-01) is
-complete and lives in git history of this file.
+The previous entry (Manager Pulse, session of 2026-09-04) is complete and lives
+in the git history of this file.
 
 ## State
 
 **Nothing is committed. Nothing is pushed.** Everything is in the working tree,
 by instruction.
 
-All six build waves are complete, all four Opus reviews are complete, and every
-finding they raised has been fixed.
+Migrations 0271 through 0278 are APPLIED TO PRODUCTION. They are not revertible
+by discarding the working tree, so read the next section before assuming a
+`git checkout` puts things back.
 
-Green as of the last run:
+## What is already on the production database
 
-- `npx tsc --noEmit` exits 0
-- `npx vitest run`: 271 files, 4,226 tests, all passing
-- `npm run build` clean, all seven new routes registered
-- Banned-character scan clean across all 120 changed files. The only matches are
-  inside `lib/manager-pulse/narrative.test.ts`, which lists them because it is
-  the test asserting narrative output contains none of them.
+| Migration | What it did | Reversible by |
+| --- | --- | --- |
+| 0271 | `players.sleeper_slug_tail` generated column plus its index, and a backfill that touched zero rows | dropping the column and index |
+| 0272 | `player_market_latest` view renamed to `..._view`, real table created, seeded | dropping the table and renaming the view back |
+| 0273 | two indexes: player_value_history (source, captured_at desc), rankings (generated_at desc) | dropping them |
+| 0274 | 58 RLS policies rewritten to the initplan form, by ALTER POLICY | re-running the original expressions; the before snapshot is in the migration's comment |
+| 0275 | seven foreign-key indexes | dropping them |
+| 0276 | thirteen unused indexes dropped, each with its original CREATE beside it | copy and paste the recorded CREATE |
+| 0277 | `league_sync_tick` function | dropping the function; the worker code must go back at the same time |
+| 0278 | autovacuum thresholds on player_value_history and player_stats | resetting the reloptions |
 
-## What Manager Pulse is
+Also run by hand and NOT in a migration, because neither is repeatable DDL:
+`vacuum (analyze)` on `player_value_history` and `player_stats`, and
+`pg_stat_statements_reset()` (see the next section).
 
-Type a Sleeper handle, get that person's fantasy footprint across several
-seasons: what they win, how they draft, who they keep buying, what they overpay
-for, and how to approach them in a trade. Signed-in only; guests get a sign-in
-prompt and a clearly-fenced sample report.
+## The measurement baseline, and why the reset matters
 
-One engine, two consumers. `/tools/manager-pulse` is the first. League Pulse
-Trade Ideas is the second, which is why the engine is a service rather than a
-page.
+`docs/performance/db-baseline-2026-09-08.md` is the last reading of the old
+`pg_stat_statements` window (115 days) plus the exact SQL that produced it. The
+ledger was RESET at the end of that recording, per PERF-T003, so the comparison
+window starts from 2026-09-08. Re-run the three queries in that file for the
+after-run; do not expect the old totals back.
+
+`docs/performance/bundle-<date>.txt` is written by `npm run measure:bundle`,
+which needs a `next build` first.
 
 ## Rules that are easy to break by accident
 
-1. **Dynasty and redraft never pool** for a value-priced figure. `PerTypeStat<T>`
-   has no `all` field on purpose, so the type system carries the rule.
-2. **Every limit is admin-editable.** No cap, cooldown, TTL, window, threshold
-   or sample floor may be a constant in a lib module or a page. The
-   settings-coverage test fails the build if a key is added without a form field.
-3. **A server component must never call a function from a "use client" module.**
-   `components/manager-shell/client-boundary.test.ts` enforces this. See below.
-4. **Nothing triggers a compute it should only read.** Manager Pulse reads
-   `league_manager_ledger_cache`; `getManagerTendencies` is cache-only and never
-   queues a capture.
+1. **Never run `git stash` in this tree while other work is in flight.** It
+   happened once in this session: an agent took a baseline that way and briefly
+   removed every other agent's uncommitted work. Nothing was lost, but the
+   recovery cost half an hour. If you want a before state, take the numbers
+   already recorded above.
 
-## The bug most worth knowing about
+2. **`resolveSleeperPlayers` is the only place allowed to run the slug-tail
+   fallback.** `lib/players/sleeper-lookup-guard.test.ts` fails the suite if the
+   string `slug.like.*-` reappears in code anywhere under app, components, lib
+   or scripts. If you need a column the helper does not return, widen it there
+   once rather than writing a seventh copy.
 
-`lens-switch.tsx` carries `"use client"`, and six server components imported its
-five pure helpers. Next turns every export of a client module into a client
-reference, so those calls threw at render and both the report page and the
-signed-out sample page returned 500. `tsc` passed, because the types are
-correct. Every unit test passed, because a test imports the module directly and
-never crosses the boundary that breaks it. It was found by grepping the BUILT
-server chunk for the throwing proxy.
+3. **`memoTtl` is never for a user-scoped read.** The store is one global Map in
+   one process. A key built from a reader's id would hand that reader's answer
+   to the next person who asks. `lib/memo-ttl.ts` says so at length; the warning
+   is load-bearing.
 
-The helpers now live in `components/manager-shell/lens.ts`, which has no
-directive. `client-boundary.test.ts` stops it recurring, and distinguishes
-rendering a client component (correct, and the point of the boundary) from
-calling a client module's function (broken).
+4. **`pulseLeagueCore` returns zeroes for `counts` unless asked.** That is the
+   documented contract, not a measurement. Only `pulseLeague` asks, because only
+   its own result type promises them.
 
-Being free of React and of fetch is not what makes a function server-safe. Not
-living in a client module is.
+5. **`pulseLeagueCore.league` can be null.** Every caller keeps a fallback read.
+   The null branch is not dead code.
 
-## Live on production
+6. **The rankings page still reads one row of `player_value_history`.** It is
+   the "Values as of" date and it is not derivable from the trends row, whose
+   `updated_at` is when the nightly calculation ran. Do not "finish the job" by
+   deleting it.
 
-Twelve migrations applied to `cilvpyivysjxpxbudkfa`, 0249 through 0260, each
-verified with the project's RLS sequence (policy inventory, anon and
-authenticated role simulation, function grant inspection). Section 15 of the
-plan lists them and explains the three that were not in the plan.
+## What is not done
 
-`lib/database.types.ts` is regenerated and prettier-formatted.
+- **PERF-T032, the account forms.** Twelve forms under `/login` and
+  `/my-beacon/**` still import `lib/supabase/client` to submit, which puts the
+  242 kB browser Supabase client on eight routes. Each form needs its write
+  moved into a server action, and the avatar and media uploaders keep a client
+  behind a dynamic import because they stream files to Storage. This is the
+  largest remaining item and it is twelve separate reviews.
+- **`app/players/loading.tsx` and `app/[handle]/loading.tsx`**, deliberately
+  skipped. See the PERF-T034 entry in `progress.md` for the soft-404 reasoning
+  and what closing it properly would take.
+- **`player_market_latest_view`** is still there. The plan says to drop it in a
+  later migration once `sync-sleeper-market` has run at least once in
+  production. It has not run yet.
+- **The JWT signing key question.** `getClaims()` is in the middleware and is
+  correct either way, but it only saves the round trip if the project's ES256
+  key is the CURRENT signing key rather than a standby. That is one look in the
+  Supabase dashboard under Authentication, JWT signing keys. See the PERF-T022
+  entry.
+- **Three tables have no reader in the app at all**: `beacon_custom_value_cache`,
+  `news_items`, and `vote_matchups` with `votes`. Their indexes were dropped;
+  whether the tables should be retired is the owner's call, recorded in Part 11
+  of the plan.
 
-## What Sleeper can and cannot give us
+## Where to pick up
 
-Probed live; do not re-litigate:
-
-- Multi-season league history works, verified 2019 through 2026.
-- `winners_bracket` gives the champion through the `p:1` match.
-- **There is no per-pick draft timestamp anywhere**, in REST or in GraphQL. Both
-  were introspected. Whole-draft pace is a fact about the ROOM and is labelled as
-  one; per-manager timing is measured going forward into
-  `draft_pick_observations` and starts empty by construction.
-
-## Known limitations, recorded rather than hidden
-
-- The sync queue is FIFO and site-wide, so one large lookup still delays what is
-  behind it. Throughput was improved (batch of 8, footprint jobs paced faster)
-  but the queue is not FAIR. Per-owner round-robin in the claim RPC is the real
-  fix and is not built.
-- Draft grades are null everywhere. `draft_selections` stores no grade and the On
-  The Clock grader is a compute over a live board, so `avgDraftGrade` is honestly
-  absent rather than reimplemented here.
-- The Avoids list judges opportunity from one CURRENT league-wide roster rate
-  rather than a per-season one, so it can overstate opportunity for a player who
-  entered the league mid-window.
-- `finish` is 1 for a champion, 2 for a runner-up, null otherwise. A fuller
-  placement read needs the whole bracket walked. Null is deliberate; a finish is
-  never guessed from the regular-season record.
-- The report is one atomic document behind one Suspense boundary. Splitting the
-  service into independently-resolving sections is possible and not built.
-- `npm audit` reports 7 pre-existing vulnerabilities (5 high, 2 low) in `next`,
-  `sharp`, `postcss`, `nanoid`, `browserslist`, `esbuild` and
-  `postcss-selector-parser`. `package.json` and `package-lock.json` are untouched
-  by this build, so none were introduced here. Needs a separate dependency pass.
-
-## If you pick this up cold
-
-Read `docs/manager-pulse/manager-pulse-plan.md` sections 1 to 3 for what the feature is, then
-its section 15 for what actually shipped, then the `MP-R###` entries at the end
-of `progress.md`, which are the review findings and what was done about each.
-
-## Standing instructions
-
-- Do not commit. Do not push.
-- Update `progress.md` as each task lands, never batched.
-- No em dash, no en dash, no curly quotes, no ellipsis character, no emoji.
-  Straight ASCII only, everywhere.
+`progress.md`, the `PERF-T###` section at the end. Every deviation from the plan
+is recorded there under its task id with the reason, which is the point: several
+of them are places where the plan's draft SQL or column names did not match the
+live database, and following the plan literally would have been wrong.

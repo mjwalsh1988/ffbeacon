@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { resolveSleeperPlayers } from "@/lib/sleeper-player-lookup";
 
 /**
  * How much of each player one manager actually owns, across their leagues.
@@ -311,10 +312,11 @@ type PlayerMeta = {
 /**
  * Sleeper ids to our player rows.
  *
- * Primary match is external_ids.sleeper; the fallback matches the slug tail,
- * because sync-sleeper-players embeds the Sleeper id there, so a row whose
- * external_ids lost its key still resolves. Same two-way lookup as
- * lib/league-power-rankings.ts, and for the same reason.
+ * A thin adapter over `resolveSleeperPlayers`. This was its own copy of the
+ * lookup, and the copy put the indexed `external_ids->>sleeper` predicate and
+ * an unindexable `slug.like.*-<id>` in the same `or()`, which makes the whole
+ * filter unindexable and scans `players` end to end
+ * (site-speed-audit-and-plan.md, 4.1).
  */
 async function resolvePlayers(
   supabase: AnySupabase,
@@ -322,35 +324,19 @@ async function resolvePlayers(
 ): Promise<Map<string, PlayerMeta>> {
   const map = new Map<string, PlayerMeta>();
 
-  for (let i = 0; i < sleeperIds.length; i += RESOLVE_CHUNK) {
-    const chunk = sleeperIds.slice(i, i + RESOLVE_CHUNK);
-    const ors = chunk
-      .flatMap((id) => [`external_ids->>sleeper.eq.${id}`, `slug.like.*-${id}`])
-      .join(",");
-    const { data, error } = await supabase
-      .from("players")
-      .select(
-        "slug, full_name, first_name, last_name, position, team, external_ids",
-      )
-      .or(ors);
-    if (error) continue;
-
-    for (const p of data ?? []) {
-      const ext = (p.external_ids as Record<string, unknown>) ?? {};
-      const fromExternal = typeof ext.sleeper === "string" ? ext.sleeper : null;
-      const tail = p.slug.match(/-(\d+)$/)?.[1] ?? null;
-      const sid = fromExternal ?? tail;
-      if (!sid || !chunk.includes(sid) || map.has(sid)) continue;
-      map.set(sid, {
-        slug: p.slug,
-        name:
-          p.full_name?.trim() ||
-          `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() ||
-          p.slug,
-        position: p.position ?? null,
-        team: p.team ?? null,
-      });
-    }
+  const lookup = await resolveSleeperPlayers(supabase, sleeperIds);
+  for (const [sid, p] of Object.entries(lookup)) {
+    map.set(sid, {
+      slug: p.slug,
+      // The slug is the last resort here rather than the Sleeper id, because
+      // this surface links to the player page and the slug is what it links to.
+      name:
+        p.fullName?.trim() ||
+        `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() ||
+        p.slug,
+      position: p.position,
+      team: p.team,
+    });
   }
   return map;
 }

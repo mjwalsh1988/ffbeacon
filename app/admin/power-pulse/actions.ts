@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import { validatePowerPulseSettings } from "@/lib/power-pulse/validate";
 import { savePowerPulseSettings } from "@/lib/power-pulse/settings";
 
@@ -28,6 +29,10 @@ export async function savePowerPulseSettingsAction(raw: unknown): Promise<Action
   const result = await savePowerPulseSettings(admin, validated.settings, userId);
   if (!result.ok) return result;
 
+  // Drops this instance's memo of the row so the next league view reads the
+  // new settings instead of the stale copy. Other instances age out on their
+  // own TTL.
+  bustMemo("settings:power_pulse");
   revalidatePath("/admin/power-pulse");
   return { ok: true };
 }

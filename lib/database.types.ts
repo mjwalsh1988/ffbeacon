@@ -4012,6 +4012,56 @@ export type Database = {
         };
         Relationships: [];
       };
+      player_market_latest: {
+        Row: {
+          adp: Json;
+          player_id: string | null;
+          projected_pts_half_ppr: number | null;
+          projected_pts_ppr: number | null;
+          projected_pts_std: number | null;
+          season: number;
+          season_type: string;
+          sleeper_player_id: string;
+          snapshot_date: string;
+          source: string;
+          updated_at: string;
+        };
+        Insert: {
+          adp?: Json;
+          player_id?: string | null;
+          projected_pts_half_ppr?: number | null;
+          projected_pts_ppr?: number | null;
+          projected_pts_std?: number | null;
+          season: number;
+          season_type: string;
+          sleeper_player_id: string;
+          snapshot_date: string;
+          source: string;
+          updated_at?: string;
+        };
+        Update: {
+          adp?: Json;
+          player_id?: string | null;
+          projected_pts_half_ppr?: number | null;
+          projected_pts_ppr?: number | null;
+          projected_pts_std?: number | null;
+          season?: number;
+          season_type?: string;
+          sleeper_player_id?: string;
+          snapshot_date?: string;
+          source?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "player_market_latest_player_id_fkey";
+            columns: ["player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       player_market_snapshots: {
         Row: {
           adp: Json;
@@ -4782,6 +4832,7 @@ export type Database = {
           position: string;
           search_last_name: string | null;
           search_name: string | null;
+          sleeper_slug_tail: string | null;
           slug: string;
           source_synced_at: Json;
           status: string;
@@ -4808,6 +4859,7 @@ export type Database = {
           position: string;
           search_last_name?: string | null;
           search_name?: string | null;
+          sleeper_slug_tail?: string | null;
           slug: string;
           source_synced_at?: Json;
           status?: string;
@@ -4834,6 +4886,7 @@ export type Database = {
           position?: string;
           search_last_name?: string | null;
           search_name?: string | null;
+          sleeper_slug_tail?: string | null;
           slug?: string;
           source_synced_at?: Json;
           status?: string;
@@ -6851,7 +6904,7 @@ export type Database = {
         };
         Relationships: [];
       };
-      player_market_latest: {
+      player_market_latest_view: {
         Row: {
           adp: Json | null;
           created_at: string | null;
@@ -7060,6 +7113,13 @@ export type Database = {
           scoring: string;
           season: number;
           total_points: number;
+        }[];
+      };
+      league_sync_tick: {
+        Args: { p_holder: string; p_lease_seconds: number; p_limit: number };
+        Returns: {
+          job: Database["public"]["Tables"]["league_sync_jobs"]["Row"];
+          pending_count: number;
         }[];
       };
       rebuild_player_roster_exposure: { Args: never; Returns: Json };

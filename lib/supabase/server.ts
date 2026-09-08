@@ -60,7 +60,16 @@ export function createCachedReadClient() {
   );
 }
 
-export function createAdminClient() {
+/**
+ * The service-role client, for server-side work that must bypass RLS.
+ *
+ * Wrapped in `cache()` for the same reason `createClient` is: a render that
+ * calls it three times was building three clients, each with its own connection
+ * and its own GoTrueClient. It carries no cookies, so there is no per-caller
+ * state to keep apart. Outside a request (a script, a cron body) `cache()`
+ * degrades to a plain call, which is the behaviour those callers already had.
+ */
+export const createAdminClient = cache(function createAdminClient() {
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SECRET_KEY!,
@@ -73,4 +82,4 @@ export function createAdminClient() {
       },
     },
   );
-}
+});

@@ -1,5 +1,5 @@
 import "server-only";
-import { cache } from "react";
+import { unstable_cache } from "next/cache";
 
 /**
  * Live FF Beacon Discord guild stats (server-only).
@@ -24,12 +24,16 @@ import { cache } from "react";
  * read and we will not fabricate them, so the hero shows only what is real.
  *
  * Failure semantics: any missing config, network error, non-200, or malformed
- * payload returns the last good cached value if we have one, otherwise null.
- * The hero renders gracefully without the numbers when this is null.
+ * payload returns null. The hero renders gracefully without the numbers when
+ * this is null.
  *
- * Caching: a short module-level TTL keeps us from hitting Discord on every
- * render of a warm instance, and React `cache()` dedupes reads within one
- * render pass.
+ * Caching: wrapped in unstable_cache with a 24 hour TTL (owner-approved
+ * 2026-09-08; a day's lag on a member count is fine). This replaces the old
+ * module-level TTL memo: unlike an in-process map, the Next data cache is
+ * shared across server instances and survives a cold start, so a fresh
+ * deploy or a scaled-out instance doesn't have to pay for its own Discord
+ * call. A future admin "refresh" action can force a re-fetch with
+ * revalidateTag("discord-guild-stats").
  */
 
 export type DiscordGuildStats = {
@@ -41,9 +45,6 @@ export type DiscordGuildStats = {
 
 const DISCORD_API = "https://discord.com/api/v10";
 const REQUEST_TIMEOUT_MS = 8_000;
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-let cachedStats: { stats: DiscordGuildStats; expires: number } | null = null;
 
 async function fetchGuildStats(): Promise<DiscordGuildStats | null> {
   const token = process.env.DISCORD_BOT_TOKEN;
@@ -52,21 +53,18 @@ async function fetchGuildStats(): Promise<DiscordGuildStats | null> {
   // null so the hero simply omits the live numbers.
   if (!token || !guildId) return null;
 
-  const now = Date.now();
-  if (cachedStats && cachedStats.expires > now) return cachedStats.stats;
-
   try {
     const res = await fetch(
       `${DISCORD_API}/guilds/${encodeURIComponent(guildId)}?with_counts=true`,
       {
         headers: { Authorization: `Bot ${token}` },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        // These counts are volatile; manage our own TTL and never let the fetch
-        // layer cache the response.
+        // The Next data cache below is what manages the TTL now; never let the
+        // fetch layer cache this response on top of it.
         cache: "no-store",
       },
     );
-    if (!res.ok) return cachedStats?.stats ?? null;
+    if (!res.ok) return null;
     const json = (await res.json()) as {
       approximate_member_count?: unknown;
       approximate_presence_count?: unknown;
@@ -74,18 +72,24 @@ async function fetchGuildStats(): Promise<DiscordGuildStats | null> {
     const memberCount = json.approximate_member_count;
     const onlineCount = json.approximate_presence_count;
     if (typeof memberCount !== "number" || typeof onlineCount !== "number") {
-      return cachedStats?.stats ?? null;
+      return null;
     }
-    const stats: DiscordGuildStats = { memberCount, onlineCount };
-    cachedStats = { stats, expires: now + CACHE_TTL_MS };
-    return stats;
+    return { memberCount, onlineCount };
   } catch {
-    return cachedStats?.stats ?? null;
+    return null;
   }
 }
 
 /**
- * Live guild stats for the current render, deduped per render pass. Returns
- * null when the numbers cannot be resolved (config missing, API error, etc.).
+ * Live guild stats, cached 24 hours in the Next data cache. Returns null when
+ * the numbers cannot be resolved (config missing, API error, malformed
+ * payload). A null result is cached for the same 24 hours as a real one: the
+ * owner accepted that trade-off when approving the longer TTL, since it only
+ * means the hero omits the numbers instead of showing stale ones. Use
+ * revalidateTag("discord-guild-stats") to force an earlier retry.
  */
-export const getDiscordGuildStats = cache(fetchGuildStats);
+export const getDiscordGuildStats = unstable_cache(
+  fetchGuildStats,
+  ["discord-guild-stats"],
+  { revalidate: 86_400, tags: ["discord-guild-stats"] },
+);

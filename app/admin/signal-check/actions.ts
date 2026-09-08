@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/server";
+import { bustMemo } from "@/lib/memo-ttl";
 import { ruleInputSchema } from "@/lib/signal-check/rules/schema";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -57,6 +58,7 @@ export async function updateSignalCheckSetting(key: string, raw: string): Promis
     after: { value: value } as never,
   });
 
+  bustMemo("settings:signal_check");
   revalidatePath("/admin/signal-check");
   return { ok: true };
 }

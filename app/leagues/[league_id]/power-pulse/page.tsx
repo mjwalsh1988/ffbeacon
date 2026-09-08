@@ -94,29 +94,32 @@ export default async function LeaguePowerPulsePage({
 
   const supabase = await createClient();
 
+  // WAVE ONE. None of these three needs another's result, so they run
+  // together rather than one after another. This page needs power_pulse_status
+  // and power_pulse_detail, which LEAGUE_CORE_COLUMNS does not carry (only this
+  // route reads them), so it keeps its own select rather than widening the
+  // shared list for one caller. Run after pulseLeagueCore has resolved (above)
+  // so it reflects the row that sync just wrote, not a pre-sync one.
+  //
   // Who this page is acting for: the ?username= handle when there is one,
   // otherwise the reader's own saved handle (lib/sleeper-handle/resolve.ts).
   // `linkUsername` is what a link built on this page may carry, which is the
   // handle only when the reader arrived on one.
-  const viewer = await resolveSleeperViewer(supabase, sp.username);
-  const searchedUsername = viewer?.username ?? null;
-  const linkUsername = viewerLinkUsername(viewer);
-  const { data: league } = await supabase
-    .from("leagues")
-    .select(
-      "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata, power_pulse_status, power_pulse_detail",
-    )
-    .eq("sleeper_league_id", sleeperLeagueId)
-    .maybeSingle();
+  const [viewer, { data: league }, resolvedSource] = await Promise.all([
+    resolveSleeperViewer(supabase, sp.username),
+    supabase
+      .from("leagues")
+      .select(
+        "id, sleeper_league_id, name, season, status, total_rosters, last_pulsed_at, roster_positions, scoring_settings, metadata, power_pulse_status, power_pulse_detail",
+      )
+      .eq("sleeper_league_id", sleeperLeagueId)
+      .maybeSingle(),
+    resolveSourceSlug(supabase, sp.source),
+  ]);
   if (!league) notFound();
 
-  const { otherLeagues } = await loadLeagueHeaderActions(
-    supabase,
-    league.id,
-    sleeperLeagueId,
-    viewer,
-    league.season != null ? String(league.season) : null,
-  );
+  const searchedUsername = viewer?.username ?? null;
+  const linkUsername = viewerLinkUsername(viewer);
 
   // No handle on either link for a saved reader: /tools/league-pulse resolves
   // the same identity itself, and the deep view matches on the Sleeper user id.
@@ -133,12 +136,20 @@ export default async function LeaguePowerPulsePage({
   const sleeperLeague = league.metadata as unknown as Parameters<
     typeof resolveLeagueContext
   >[1];
-  const resolvedSource = await resolveSourceSlug(supabase, sp.source);
-  const context = await resolveLeagueContext(
-    adminClient,
-    sleeperLeague,
-    resolvedSource.slug,
-  );
+
+  // WAVE TWO. The header actions need league.id and the viewer resolved above;
+  // the format resolution needs the source slug resolved above. Neither needs
+  // the other's result.
+  const [{ otherLeagues }, context] = await Promise.all([
+    loadLeagueHeaderActions(
+      supabase,
+      league.id,
+      sleeperLeagueId,
+      viewer,
+      league.season != null ? String(league.season) : null,
+    ),
+    resolveLeagueContext(adminClient, sleeperLeague, resolvedSource.slug),
+  ]);
   const coverageOk = context.coverage !== "none";
 
   // Which number this league's readers came for. The ordering is Power Pulse

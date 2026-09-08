@@ -17,7 +17,7 @@
 
 import { GraduationCap } from "lucide-react";
 import type { DraftGrade } from "@/lib/on-the-clock/draft-grade";
-import { EmptyCard, NotStartedCard } from "./states";
+import { EmptyCard, LoadingCard, NotStartedCard } from "./states";
 
 function letterTone(letter: string): string {
   if (letter.startsWith("A")) return "text-emerald-300 border-emerald-400/50 bg-emerald-400/10";
@@ -31,16 +31,26 @@ export function DraftGrades({
   grades,
   inProgress,
   boardReady,
+  enginesLoading = false,
   draftStarted,
   pulseAvailable,
 }: {
   grades: DraftGrade[];
   inProgress: boolean;
   boardReady: boolean;
+  /**
+   * True while the grading engine chunk is still being fetched (PERF-T031).
+   * Distinct from `!boardReady`: the FF Beacon values ARE available here,
+   * only the code that grades a draft from them has not loaded yet.
+   */
+  enginesLoading?: boolean;
   /** False before the first pick lands: there is nothing to grade. */
   draftStarted: boolean;
   pulseAvailable: boolean;
 }) {
+  if (enginesLoading) {
+    return <LoadingCard label="Loading draft grades..." />;
+  }
   if (!boardReady) {
     return (
       <EmptyCard

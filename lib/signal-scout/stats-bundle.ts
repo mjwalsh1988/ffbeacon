@@ -105,8 +105,15 @@ export function deriveCareerHighs(seasons: SeasonAgg[]): StatsBundle["careerHigh
 }
 
 /**
- * PPR positional finishes for the given seasons via the get_player_positional_finishes
- * RPC. Tolerates RPC failure (network error, thrown exception) by returning an
+ * PPR positional finishes for the given seasons, read from the nightly-rebuilt
+ * player_positional_finishes cache (see lib/player-profile.ts loadPositionalFinishes)
+ * instead of the get_player_positional_finishes RPC. The RPC re-ranks the whole
+ * position across the full player_stats table on every call; the table is one
+ * indexed SELECT for the same (player, season, scoring, finish, players_ranked)
+ * shape. The accepted trade is the one the profile already accepted: the current
+ * season's finishes can lag the RPC by up to a day, until the nightly rebuild
+ * catches up. The RPC stays in place as the parity oracle behind that rebuild.
+ * Tolerates a failed query (network error, thrown exception) by returning an
  * empty result rather than propagating, since a missing finish clue is fine but
  * a broken round start is not.
  */
@@ -118,18 +125,20 @@ async function loadFinishes(
   if (seasons.length === 0) return { seasons: [], bestFinish: null };
 
   try {
-    const { data, error } = await supabase.rpc("get_player_positional_finishes", {
-      p_player_id: playerId,
-      p_seasons: seasons,
-    });
+    const { data, error } = await supabase
+      .from("player_positional_finishes")
+      .select("season, finish, players_ranked")
+      .eq("player_id", playerId)
+      .eq("scoring", "pts_ppr")
+      .in("season", seasons)
+      .order("season", { ascending: false });
 
     if (error || !data) {
-      if (error) console.error("[signal-scout] positional finishes RPC failed", error);
+      if (error) console.error("[signal-scout] positional finishes query failed", error);
       return { seasons: [], bestFinish: null };
     }
 
     const rows: FinishRow[] = (data as Array<Record<string, unknown>>)
-      .filter((r) => String(r.scoring) === "pts_ppr")
       .map((r) => ({
         season: Number(r.season),
         finish: Number(r.finish),
@@ -146,7 +155,7 @@ async function loadFinishes(
 
     return { seasons: rows, bestFinish };
   } catch (err) {
-    console.error("[signal-scout] positional finishes RPC threw", err);
+    console.error("[signal-scout] positional finishes query threw", err);
     return { seasons: [], bestFinish: null };
   }
 }

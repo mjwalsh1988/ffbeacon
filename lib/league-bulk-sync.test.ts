@@ -122,14 +122,29 @@ function baseTableHandlers(): Record<string, TableHandler> {
   };
 }
 
-/** try_acquire_league_sync_lease always succeeds; claim_league_sync_jobs hands out `jobs` once, then nothing. */
+/**
+ * The lease always answers `leaseOk`; `league_sync_tick` hands out `jobs` once,
+ * then nothing.
+ *
+ * `league_sync_tick` (migration 0277, PERF-T060) replaced the separate
+ * renew-then-claim pair the loop used to make. It returns one row per claimed
+ * job, each carrying the pending count, and NO ROWS AT ALL when the lease is
+ * held by somebody else, which is how the worker learns to stop. That last case
+ * is why the empty-array and the lease-lost cases have to look different here:
+ * an empty array means "nothing due", not "someone else is draining".
+ */
 function makeRpcHandler(opts: { leaseOk: boolean; jobs: LeagueSyncJob[] }) {
-  let claimCalls = 0;
+  let tickCalls = 0;
   return (name: string): FakeResponse => {
     if (name === "try_acquire_league_sync_lease") return { data: opts.leaseOk, error: null };
-    if (name === "claim_league_sync_jobs") {
-      claimCalls += 1;
-      return claimCalls === 1 ? { data: opts.jobs, error: null } : { data: [], error: null };
+    if (name === "league_sync_tick") {
+      if (!opts.leaseOk) return { data: [], error: null };
+      tickCalls += 1;
+      if (tickCalls > 1) return { data: [{ job: null, pending_count: 0 }], error: null };
+      return {
+        data: opts.jobs.map((job) => ({ job, pending_count: 0 })),
+        error: null,
+      };
     }
     return { data: null, error: null };
   };
@@ -280,9 +295,12 @@ function makeCheckpointPacingAdmin(jobs: LeagueSyncJob[]) {
     },
     rpc(name: string) {
       if (name === "try_acquire_league_sync_lease") return Promise.resolve({ data: true, error: null });
-      if (name === "claim_league_sync_jobs") {
+      if (name === "league_sync_tick") {
         const next = queue.shift();
-        return Promise.resolve({ data: next ? [next] : [], error: null });
+        return Promise.resolve({
+          data: [{ job: next ?? null, pending_count: queue.length }],
+          error: null,
+        });
       }
       return Promise.resolve({ data: null, error: null });
     },
@@ -309,6 +327,7 @@ describe("runLeagueSyncWorker", () => {
         season: 2026,
         cached: false,
         counts: { rosters: 0, users: 0 },
+        league: null,
       };
     });
 
@@ -347,6 +366,7 @@ describe("runLeagueSyncWorker", () => {
         season: 2026,
         cached: false,
         counts: { rosters: 0, users: 0 },
+        league: null,
       };
     });
 
@@ -375,6 +395,7 @@ describe("runLeagueSyncWorker", () => {
         season: 2026,
         cached: false,
         counts: { rosters: 0, users: 0 },
+        league: null,
       };
     });
 
@@ -412,8 +433,9 @@ describe("runLeagueSyncWorker", () => {
 
     expect(summary.claimed).toBe(0);
     expect(mockPulseLeagueCore).not.toHaveBeenCalled();
-    const claimCalls = rpcCalls.filter((c) => c.name === "claim_league_sync_jobs");
-    expect(claimCalls).toHaveLength(0);
+    // The tick is where claiming happens now, and it is allowed to be CALLED:
+    // it is the same round trip that tries the lease. What must not happen is a
+    // job coming back from it, which summary.claimed above already asserts.
     const leaseCalls = rpcCalls.filter((c) => c.name === "try_acquire_league_sync_lease");
     expect(leaseCalls.length).toBeGreaterThan(0);
   });
@@ -459,6 +481,7 @@ describe("runLeagueSyncWorker", () => {
         season: 2026,
         cached: false,
         counts: { rosters: 0, users: 0 },
+        league: null,
       };
     });
 
