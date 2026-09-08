@@ -42,6 +42,18 @@ import { formatEasternShortDate } from "@/lib/datetime";
  */
 
 
+/**
+ * How far back the value fallback looks for a player the trends table does not
+ * carry, and how many players it asks about per request.
+ *
+ * The product of the two has to stay under Supabase's 1,000 row per request
+ * cap for the read to be safe without paging: 25 players over 30 days is at
+ * most 750 rows even at a daily capture cadence. Raising either one means
+ * checking that product again.
+ */
+const FALLBACK_WINDOW_DAYS = 30;
+const FALLBACK_PLAYER_CHUNK = 25;
+
 export interface RankingsViewProps {
   /** The format to render. Already decided by the caller. */
   formatSlug: string;
@@ -239,21 +251,46 @@ export async function RankingsView({
     ),
   ];
   if (uncovered.length > 0 && valueHistoryResolution.source) {
+    const source = valueHistoryResolution.source;
     const cutoff = new Date(
-      Date.now() - 30 * 24 * 60 * 60 * 1000,
+      Date.now() - FALLBACK_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
-    const { data: fallbackValues } = await supabase
-      .from("player_value_history")
-      .select("player_id, value")
-      .eq("format_config_id", format.id)
-      .eq("source", valueHistoryResolution.source)
-      .in("player_id", uncovered)
-      .gte("captured_at", cutoff)
-      .order("captured_at", { ascending: false })
-      .limit(1000);
-    for (const row of fallbackValues ?? []) {
-      if (valueByPlayer.has(row.player_id)) continue;
-      valueByPlayer.set(row.player_id, { value: row.value });
+
+    // CHUNKED BY PLAYER SO THE ROW COUNT IS BOUNDED BY CONSTRUCTION.
+    //
+    // Supabase enforces a 1,000 row cap per request server-side, and a
+    // `.limit()` cannot raise it. Asking for 30 days across all 80 uncovered
+    // players is 1,335 rows on the widest board today, so a single request
+    // would come back truncated and the players whose newest row fell past the
+    // cut would still render blank. That is exactly the mistake that made
+    // Kenny Gainwell and Bucky Irving unsearchable, and guessing a narrower
+    // window would only move the cliff rather than remove it.
+    //
+    // 25 players over a 30 day window is at most 750 rows, comfortably under
+    // the cap whatever the capture cadence, so no page can truncate. The chunks
+    // touch no shared state, so they run together rather than in a queue.
+    const chunks: string[][] = [];
+    for (let i = 0; i < uncovered.length; i += FALLBACK_PLAYER_CHUNK) {
+      chunks.push(uncovered.slice(i, i + FALLBACK_PLAYER_CHUNK));
+    }
+    const pages = await Promise.all(
+      chunks.map((chunk) =>
+        supabase
+          .from("player_value_history")
+          .select("player_id, value")
+          .eq("format_config_id", format.id)
+          .eq("source", source)
+          .in("player_id", chunk)
+          .gte("captured_at", cutoff)
+          .order("captured_at", { ascending: false }),
+      ),
+    );
+    for (const page of pages) {
+      for (const row of page.data ?? []) {
+        // Newest first, so the first row seen for a player is the one to keep.
+        if (valueByPlayer.has(row.player_id)) continue;
+        valueByPlayer.set(row.player_id, { value: row.value });
+      }
     }
   }
   const trendByPlayer = new Map<

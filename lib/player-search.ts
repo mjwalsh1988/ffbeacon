@@ -67,6 +67,15 @@ const MAX_OVERFETCH = 200;
 const RANKED_SET_TTL_MS = 5 * 60 * 1000;
 
 /**
+ * Rows per page when reading the ranked set.
+ *
+ * 1,000 is Supabase's own `max-rows`, so asking for more per page gets 1,000
+ * anyway. Matching it exactly is what makes "a short page is the last page" a
+ * safe way to stop.
+ */
+const RANKED_PAGE = 1000;
+
+/**
  * Every currently fantasy relevant player id, as one memoised set.
  *
  * This replaces a second round trip that ran on every settled keystroke:
@@ -75,10 +84,24 @@ const RANKED_SET_TTL_MS = 5 * 60 * 1000;
  * question that is the same for every reader and changes once a night, and it
  * was showing up in the scan counters (8,992 sequential scans over 64M tuples).
  *
- * The whole answer is small: 11,852 ranking rows across 812 distinct players,
- * so the set is under a thousand uuids. The explicit high `.limit()` overrides
- * PostgREST's 1,000 row default, which would otherwise truncate the read and
- * silently drop ranked players from every search result.
+ * IT HAS TO BE PAGED, AND A `.limit()` IS NOT PAGING.
+ *
+ * `rankings` holds one row per (player, format, source), so 812 distinct
+ * players arrive as 11,852 rows. The first version of this function asked for
+ * them with `.limit(50000)`, carrying over a comment that claimed a high limit
+ * overrides PostgREST's 1,000 row default. It does not. Supabase enforces
+ * `max-rows` server-side and the limit cannot raise it, so the read came back
+ * with exactly 1,000 rows covering 519 of the 812 players, and the other 293
+ * silently vanished from every search box on the site. Kenny Gainwell and Bucky
+ * Irving were two of them.
+ *
+ * The predecessor to this function was safe from that only by accident: it
+ * filtered `.in("player_id", up to 200 ids)` first, so its result was never
+ * near the cap. Reading the whole table is what exposed the wrong comment.
+ *
+ * So: `.range()` until a short page comes back, the same shape as
+ * `lib/market-latest.ts`. Twelve requests, once per five minutes per process,
+ * shared by every reader on that process.
  *
  * Memoised rather than user-scoped, which is what makes it safe to share: the
  * set says which players some source has ranked recently. It carries nothing
@@ -91,13 +114,26 @@ export async function rankedPlayerIdSet(
     const cutoff = new Date(
       Date.now() - RELEVANCE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
-    const { data, error } = await supabase
-      .from("rankings")
-      .select("player_id")
-      .gte("generated_at", cutoff)
-      .limit(50000);
-    if (error) throw error;
-    return new Set((data ?? []).map((r) => r.player_id));
+    const ids = new Set<string>();
+    for (let offset = 0; ; offset += RANKED_PAGE) {
+      const { data, error } = await supabase
+        .from("rankings")
+        .select("player_id")
+        .gte("generated_at", cutoff)
+        .order("player_id", { ascending: true })
+        .range(offset, offset + RANKED_PAGE - 1);
+      if (error) throw error;
+      const page = data ?? [];
+      for (const row of page) ids.add(row.player_id);
+      // A short page is the last page. An empty one ends it too, which is what
+      // stops the loop when the row count is an exact multiple of the page.
+      if (page.length < RANKED_PAGE) break;
+      // A hard stop, so a runaway table can never spin this forever. At one row
+      // per (player, format, source) the real count is about 12,000; 200,000 is
+      // far past any plausible growth and still terminates.
+      if (offset > 200_000) break;
+    }
+    return ids;
   });
 }
 

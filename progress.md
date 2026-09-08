@@ -13053,3 +13053,47 @@ PERF-R016 | recorded | PERF-T012's "known gap ... Closed below" was never closed
   build. The four security warnings are the same four that predate it.
 
 NOT COMMITTED and NOT PUSHED, by instruction.
+
+PERF-R017 | fixed | Search lost 293 of 812 ranked players, because a high limit is not paging
+     | files: lib/player-search.ts, lib/player-search.test.ts,
+       components/rankings/rankings-view.tsx
+     | found by: the owner, who could not find Kenneth Gainwell or Bucky Irving
+       in the Beacon Breakdown search box. It affected every search surface on
+       the site, not just that one: /api/search, /api/players/search,
+       /api/breakdown/search, /api/signal-check/search and the Signal Scout
+       search all go through `searchFantasyPlayers`.
+     | the defect, and it is mine, from PERF-T050. `rankedPlayerIdSet` read the
+       whole `rankings` table with `.limit(50000)`, carrying over a comment that
+       claimed a high limit overrides PostgREST's 1,000 row default. IT DOES
+       NOT. Supabase enforces `max-rows` server-side and no client limit can
+       raise it. Measured against the live REST API with the publishable key:
+       the read returned exactly 1,000 rows covering 519 of the 812 ranked
+       players. The other 293 were filtered out of every autocomplete on the
+       site as "not fantasy relevant".
+     | why the old code was safe: it was safe by accident. It filtered
+       `.in("player_id", up to 200 ids)` BEFORE reading, so its result was never
+       anywhere near the cap. Reading the whole table is what exposed the wrong
+       comment, and I copied the comment forward instead of testing it.
+     | fix: `.range()` until a short page comes back, the same idiom
+       `lib/market-latest.ts` already uses. Verified against the live API: 12
+       pages, 812 distinct players, both named players present.
+     | the second instance, found while fixing the first: the value fallback
+       PERF-R014 added to the rankings board had the same shape, a single read
+       with `.limit(1000)`. Measured: it needs 1,335 rows on the widest board,
+       so it was truncating too, and the players whose newest row fell past the
+       cut would have gone on rendering blank. It is now chunked at 25 players
+       per request over a 30 day window, which is at most 750 rows and cannot
+       truncate whatever the capture cadence. Bounded by construction rather
+       than by a guess at a safe window, and the two constants carry a comment
+       saying their product is the thing that must stay under the cap.
+     | test: `lib/player-search.test.ts` gained a case that feeds 2,500 ranked
+       ids and asserts a player in the third page is still found, that more than
+       one request was made, and that every request carries a range of at most
+       1,000. The test double now honours `.range()` so the cap can actually be
+       exercised; before this it returned every row regardless, which is why the
+       old suite passed while the site was broken.
+     | note, unrelated to the bug and worth knowing: "Kenneth Gainwell" finds
+       nothing because his `players` row is "Kenny Gainwell". The slug is
+       `kenneth-gainwell-7567`, so the formal name exists in the data but not in
+       any column search reads. That was true before this build too. Searching
+       "gainwell" works.

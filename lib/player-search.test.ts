@@ -54,13 +54,26 @@ function makeClient(opts: {
           }))
         : opts.rankedIds.map((id) => ({ player_id: id }));
 
+    // A range, when one is applied, so a paged read can be exercised. The real
+    // PostgREST caps every page at max-rows (1,000 on this project) whatever
+    // limit is asked for, which is the whole reason the paging exists.
+    let from = 0;
+    let to = Number.MAX_SAFE_INTEGER;
+
     const api: Record<string, unknown> = {
       select(columns: string) {
         rec.columns = columns;
         return api;
       },
+      range(f: number, t: number) {
+        from = f;
+        to = t;
+        rec.filters.push({ op: "range", args: [f, t] });
+        return api;
+      },
       then(resolve: (v: { data: unknown; error: null }) => unknown) {
-        return Promise.resolve(resolve({ data: rows, error: null }));
+        const page = rows.slice(from, Math.min(to + 1, rows.length));
+        return Promise.resolve(resolve({ data: page, error: null }));
       },
     };
     for (const op of ["eq", "or", "ilike", "in", "gte", "order", "limit", "neq", "lt", "not"]) {
@@ -182,14 +195,40 @@ describe("fantasyRelevantPlayerIds", () => {
     expect(recorded).toHaveLength(0);
   });
 
-  it("bounds the read well above PostgREST's 1000-row default", async () => {
-    // The whole ranked set is read in one go now, and the default cap would
-    // silently drop ranked players from every search result on the site.
+  it("pages past PostgREST's 1000-row cap instead of trusting a high limit", async () => {
+    // THE REGRESSION THIS FILE EXISTS FOR, THE SECOND TIME.
+    //
+    // `rankings` holds one row per (player, format, source), so a few hundred
+    // players arrive as thousands of rows. The first version of the ranked-set
+    // read asked for them with `.limit(50000)`, on the belief that a high limit
+    // overrides PostgREST's default. It does not: Supabase enforces max-rows
+    // server-side, the read came back with exactly 1,000 rows covering 519 of
+    // 812 players, and the other 293 disappeared from every search box on the
+    // site. Kenny Gainwell and Bucky Irving were two of them.
     bustMemo("ref:ranked-ids");
-    const { client, recorded } = makeClient({ players: [], rankedIds: ["a"] });
-    await fantasyRelevantPlayerIds(client, ["a", "b"]);
-    const limit = recorded[0].filters.find((f) => f.op === "limit");
-    expect(Number(limit?.args[0])).toBeGreaterThanOrEqual(50000);
+    const rankedIds = Array.from({ length: 2500 }, (_, i) => `p-${i}`);
+    const { client, recorded } = makeClient({ players: [], rankedIds });
+
+    const found = await fantasyRelevantPlayerIds(client, [
+      "p-0",
+      "p-1200",
+      "p-2499",
+    ]);
+
+    // A player in the third page is still ranked. Under the old read he was not.
+    expect(found.has("p-0")).toBe(true);
+    expect(found.has("p-1200")).toBe(true);
+    expect(found.has("p-2499")).toBe(true);
+
+    // And it got there by paging, not by asking for one enormous page.
+    const pages = recorded.filter((r) => r.table === "rankings");
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages) {
+      const range = page.filters.find((f) => f.op === "range");
+      expect(range, "every ranked-set read must carry a range").toBeDefined();
+      const [start, end] = range!.args as [number, number];
+      expect(end - start + 1).toBeLessThanOrEqual(1000);
+    }
   });
 
   it("reads the ranked set once and serves the next caller from memory", async () => {
