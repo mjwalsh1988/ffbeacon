@@ -25,6 +25,14 @@ export type NavViewerState = {
   defaultFormatConfigId: string | null;
   /** The viewer's saved default value source, when they have one. */
   defaultSourceSlug: string | null;
+  /**
+   * Whether the bookmark bar shows under the header. Read here rather than in
+   * its own query for the same reason everything else in this object is: the
+   * layout, the header and the bookmark loader all want a piece of
+   * `user_preferences` in the same render, and one cached read serves all
+   * three.
+   */
+  bookmarksBarEnabled: boolean;
 };
 
 const SIGNED_OUT: NavViewerState = {
@@ -32,6 +40,7 @@ const SIGNED_OUT: NavViewerState = {
   isAdmin: false,
   defaultFormatConfigId: null,
   defaultSourceSlug: null,
+  bookmarksBarEnabled: true,
 };
 
 export const getNavViewer = cache(async (): Promise<NavViewerState> => {
@@ -44,7 +53,9 @@ export const getNavViewer = cache(async (): Promise<NavViewerState> => {
 
     const { data: prefs } = await supabase
       .from("user_preferences")
-      .select("is_admin, default_format_config_id, default_source_slug")
+      .select(
+        "is_admin, default_format_config_id, default_source_slug, bookmarks_bar_enabled",
+      )
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -53,6 +64,9 @@ export const getNavViewer = cache(async (): Promise<NavViewerState> => {
       isAdmin: Boolean(prefs?.is_admin),
       defaultFormatConfigId: prefs?.default_format_config_id ?? null,
       defaultSourceSlug: prefs?.default_source_slug ?? null,
+      // A reader with no preferences row yet gets the bar, which is the same
+      // answer the column's default gives.
+      bookmarksBarEnabled: prefs?.bookmarks_bar_enabled ?? true,
     };
   } catch {
     return SIGNED_OUT;

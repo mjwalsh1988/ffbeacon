@@ -67,6 +67,7 @@ import {
   type BulkSyncState,
   type LeagueSyncJobStatus,
 } from "@/lib/league-bulk-sync-types";
+import { BookmarkLeagueButton } from "@/components/bookmarks/bookmark-league-button";
 import { LeagueDetailSheet } from "./league-detail-sheet";
 
 /**
@@ -183,7 +184,16 @@ function leagueHref(
  * mostly have none) still reserves the same width and the names below it stay
  * on one left edge.
  */
-const PUBLIC_GRID = "grid-cols-[3rem_minmax(0,1fr)_7rem_4.5rem_16rem]";
+// The last track is the bookmark button. It is outside the row's open-league
+// link, because a button inside a link is invalid markup and a browser will not
+// press it reliably.
+//
+// `auto` rather than a fixed width, because this tool is reachable signed out
+// and the button renders nothing for a visitor with no account. An auto track
+// collapses to zero when it is empty, so a signed-out reader gets the same
+// table they had before rather than a dead gutter down the right-hand edge.
+const PUBLIC_GRID =
+  "grid-cols-[3rem_minmax(0,1fr)_7rem_4.5rem_16rem_auto]";
 const MOBILE_GRID = "grid-cols-[minmax(0,1fr)_1.5rem]";
 
 /**
@@ -852,6 +862,9 @@ function DesktopPublicList({
         <span className="text-center">Status</span>
         <span className="text-center">Teams</span>
         <span>Your team</span>
+        {/* Holds the bookmark track open. Says nothing, like the logo
+            placeholder above, because the whole strip is aria-hidden. */}
+        <span />
       </div>
       <ul
         role="list"
@@ -918,6 +931,18 @@ function DesktopPublicList({
                   sleeperLeagueId={league.league_id}
                   leagueTeamCount={league.total_rosters}
                   sourceSlug={sourceSlug}
+                />
+              </span>
+              {/* Save the league itself, from the list. Without it the only way
+                  to bookmark a league on a desktop was to open it first, and
+                  the button in the breadcrumb bar above this table means the
+                  TOOL page, which is a different thing that looks the same.
+                  Renders nothing for a signed-out reader. */}
+              <span className="flex justify-center py-4">
+                <BookmarkLeagueButton
+                  sleeperLeagueId={league.league_id}
+                  leagueName={league.name}
+                  variant="icon"
                 />
               </span>
             </li>
@@ -1077,7 +1102,8 @@ function DesktopDashboardTable({
         <caption className="sr-only">
           Your saved Sleeper leagues. {STANDING_ORDER_NOTE} Click a league name
           to open its deep view. Each row starts with two switches, Featured and
-          Shown on profile, which control what appears on your public profile.
+          Shown on profile, which control what appears on your public profile,
+          and ends with a button that bookmarks the league.
         </caption>
         {/* Real table cells throughout, so this one keeps normal table layout
             (columns line up by construction) and its full table semantics.
@@ -1103,6 +1129,11 @@ function DesktopDashboardTable({
             </th>
             <th scope="col" className="px-3 py-3 text-left">
               Your team
+            </th>
+            {/* Icon-only cells below, so the column is named here rather than
+                on every button. */}
+            <th scope="col" className="px-3 py-3 text-center">
+              <span className="sr-only">Bookmark</span>
             </th>
           </tr>
         </thead>
@@ -1186,6 +1217,13 @@ function DesktopDashboardTable({
                     leagueTeamCount={league.total_rosters}
                     sourceSlug={sourceSlug}
                     bulkStatus={bulkStatus}
+                  />
+                </td>
+                <td className="px-3 py-4 text-center">
+                  <BookmarkLeagueButton
+                    sleeperLeagueId={league.league_id}
+                    leagueName={league.name}
+                    variant="icon"
                   />
                 </td>
               </tr>

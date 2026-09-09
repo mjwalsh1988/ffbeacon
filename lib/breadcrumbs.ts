@@ -45,6 +45,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/login": "Sign in",
   "/my-beacon": "My Beacon",
   "/my-beacon/account": "Account",
+  "/my-beacon/bookmarks": "Bookmarks",
   "/my-beacon/draft-tracker": "Draft Tracker",
   "/my-beacon/draft-tracker/new": "Set up a draft",
   "/my-beacon/profile": "Profile",

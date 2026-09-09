@@ -20,6 +20,8 @@ import { AppMobileNav } from "@/components/app-shell/app-mobile-nav";
 import { buildNavTree } from "@/lib/nav-tree";
 import { getNavViewer } from "@/lib/nav-viewer";
 import { BeamLauncher } from "@/components/beam/beam-launcher";
+import { BookmarksLauncherSlot } from "@/components/bookmarks/bookmark-slots";
+import { isHandheldRequest } from "@/lib/device";
 import { DonateLauncher } from "@/components/donate/donate-launcher";
 import { stripeConfigured } from "@/lib/donate/stripe";
 
@@ -42,7 +44,12 @@ async function loadHeaderData(): Promise<{
   preferredFormatSlug: string | null;
   preferredSourceSlug: string | null;
   defaultSourceSlug: string | null;
-  beamStarters: string[];
+  /**
+   * Null on a handheld, where Ask BEAM is not offered at all, so its settings
+   * row is never read. Anything else would be a database round trip for a
+   * control that does not render.
+   */
+  beamStarters: string[] | null;
 }> {
   try {
     const supabase = await createClient();
@@ -55,11 +62,15 @@ async function loadHeaderData(): Promise<{
     // layout also calls. It is React-cached, so the two of us share one auth
     // round trip and one user_preferences read per render rather than each
     // making our own.
+    // Ask BEAM is a desktop feature (see lib/device.ts). On a handheld its
+    // settings row is not read at all: the launcher is not rendered there, so
+    // the read would buy nothing.
+    const isHandheld = await isHandheldRequest();
     const [formats, sources, viewer, beamSettings] = await Promise.all([
       getActiveFormats(supabase),
       getAvailableSources(supabase),
       getNavViewer(),
-      loadBeamSettings(createAdminClient()),
+      isHandheld ? Promise.resolve(null) : loadBeamSettings(createAdminClient()),
     ]);
 
     let preferredFormatSlug: string | null = null;
@@ -112,7 +123,9 @@ async function loadHeaderData(): Promise<{
       preferredFormatSlug,
       preferredSourceSlug,
       defaultSourceSlug: pickDefaultSource(sources),
-      beamStarters: starterExamples(beamSettings.capabilities.disabled, 4),
+      beamStarters: beamSettings
+        ? starterExamples(beamSettings.capabilities.disabled, 4)
+        : null,
     };
   } catch {
     return {
@@ -184,9 +197,28 @@ export async function SiteHeaderControls() {
         {/* Site search: icon trigger visible on every breakpoint, opens the
             accessible search palette (players, articles, tools). */}
         <SiteSearch />
-        {/* Ask BEAM: the same reach as search, at every breakpoint, because
-            it answers the questions search cannot. Opens the slide-in panel. */}
-        <BeamLauncher starters={beamStarters} />
+        {/* Ask BEAM: DESKTOP ONLY. It used to sit here at every width, which
+            put three product controls plus an account button into a phone's
+            header and left no room for anything else. On a handheld the slot
+            belongs to the bookmarks trigger below, which is the only way into
+            the bookmark list when there is no bar.
+
+            Two gates, and they are not redundant. `isHandheld` is a user-agent
+            guess and decides whether the SETTINGS ROW IS READ at all; the
+            `lg` class decides what is PAINTED, so a narrow desktop window
+            loses the launcher too without anyone having to guess about it. */}
+        {beamStarters !== null && (
+          <span className="hidden lg:inline-flex">
+            <BeamLauncher starters={beamStarters} />
+          </span>
+        )}
+        {/* Your bookmarks. Below lg it is the only route to them; on a device
+            the server read as a handheld it shows at every width, because no
+            bar was loaded for it to fall back on. Renders nothing at all when
+            signed out. */}
+        <Suspense fallback={null}>
+          <BookmarksLauncherSlot />
+        </Suspense>
         {/* Donate: sits to the right of the two product controls, at every
             breakpoint. Last in the cluster on purpose, because it is the one
             control here that is not part of using the site. */}
@@ -337,11 +369,21 @@ export function HeaderControlsFallback({
           aria-hidden="true"
           className="h-9 w-9 rounded-card border border-line bg-surface"
         />
-        {/* Ask BEAM trigger, every breakpoint. */}
+        {/* Ask BEAM trigger, desktop only now. */}
         <div
           aria-hidden="true"
-          className="h-9 w-9 rounded-card border border-brand-purple/50 bg-brand-purple/10"
+          className="hidden lg:block h-9 w-9 rounded-card border border-brand-purple/50 bg-brand-purple/10"
         />
+        {/* The bookmarks trigger stands where BEAM used to below lg, and only
+            for a reader who looks signed in. A signed-out visitor never gets
+            one, so reserving a box for them would be the phantom control this
+            fallback exists to avoid. */}
+        {likelySignedIn && (
+          <div
+            aria-hidden="true"
+            className="h-9 w-9 rounded-card border border-brand-cyan/50 bg-brand-cyan/10 lg:hidden"
+          />
+        )}
         {/* Donate trigger: icon-only below sm, icon plus label at sm+. */}
         <div
           aria-hidden="true"

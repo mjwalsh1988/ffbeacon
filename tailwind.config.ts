@@ -64,6 +64,15 @@ const config: Config = {
           success: "#10B981",
           warning: "#F59E0B",
           danger: "#EF4444",
+          // The SOLID fill for a destructive button, and the only place it is
+          // used. #EF4444 reads well as danger TEXT on the dark page (about
+          // 5.3:1), but white on it is 3.76:1, and a confirm button's label is
+          // 14px semibold, which does not qualify as large text. So a filled
+          // danger control gets this instead, which carries white at about
+          // 6.4:1 in the same hue. Do not solve that with black text: it
+          // passes and it reads as a warning rather than as "this deletes
+          // something".
+          "danger-deep": "#B91C1C",
         },
         // Fantasy position palette: one distinct hue per positional group, used to
         // color-code drafted picks (board + list) and position tags (rosters). Chosen

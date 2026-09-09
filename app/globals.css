@@ -1184,6 +1184,143 @@
 }
 
 /**
+ * The bookmark bar's minimise animation.
+ *
+ * Driven by `data-bookmark-bar` on <html>, which a blocking script in
+ * app/layout.tsx sets from local storage before the first paint, for exactly
+ * the reason the rail's width is (see above): React cannot know the remembered
+ * value until it has hydrated, so a React-driven height would paint the bar
+ * open and then snap it shut on every page load for anyone who minimised it.
+ *
+ * TWO PROPERTIES MOVE TOGETHER AND THEY DO DIFFERENT JOBS. The track's height
+ * is what takes the bar out of the page, so the breadcrumb bar underneath rises
+ * to meet the header instead of a gap being left behind. The inner row's
+ * transform is what makes it read as sliding UP behind the header rather than
+ * simply being deleted: it travels up through a clipped box whose top edge is
+ * flush with the header above it.
+ *
+ * The tab that pulls it back down lives OUTSIDE the track, so it is never
+ * clipped and never moves.
+ */
+.bookmark-bar-track {
+  overflow: hidden;
+  /* Must equal the row height plus the list's vertical padding: h-7 (1.75rem)
+     plus py-1.5 twice (0.75rem). The track clips, so if either changes without
+     this changing, the bar loses its bottom edge. */
+  height: 2.5rem;
+  visibility: visible;
+  transition:
+    height 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s;
+  /* Paint containment, which is doing real work next to `overflow: hidden`.
+     It is NOT keeping the height animation off the rest of the page: layout
+     containment isolates a subtree's internal layout from its ancestors, and
+     says nothing about this element's own border box changing size. Collapsing
+     from 40px to 0 does reflow the page below, on an explicit press and never
+     on scroll or a route change, and any collapse that actually reclaims the
+     space is a layout animation by definition. */
+  contain: layout paint;
+}
+
+.bookmark-bar-inner {
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-bookmark-bar="collapsed"] .bookmark-bar-track {
+  height: 0;
+  /*
+   * `visibility: hidden` takes the collapsed bar out of the TAB ORDER and the
+   * accessibility tree, and it does so from the same attribute the height
+   * already uses, which means it applies at the first paint.
+   *
+   * That is the whole point. The React `inert` on the same element cannot
+   * apply until hydration, and the blocking script has already collapsed the
+   * bar before then, so without this there is a window (seconds, on a slow
+   * connection) in which every bookmark link inside a strip the reader closed
+   * is still a focusable, invisible tab stop.
+   *
+   * Delayed by the length of the animation so the bar does not blank out
+   * halfway through sliding up. Restoring it is immediate, from the 0s
+   * transition on the open state above.
+   */
+  visibility: hidden;
+  transition:
+    height 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s 200ms;
+}
+
+[data-bookmark-bar="collapsed"] .bookmark-bar-inner {
+  transform: translateY(-100%);
+}
+
+/**
+ * The per-bookmark options button fades in on hover, which is no use at all on
+ * a device that has no hover. A touchscreen laptop, and any tablet whose user
+ * agent reads as a desktop (iPadOS Safari reports Macintosh by default), would
+ * otherwise have reorder, rename and remove behind an invisible 24px box, with
+ * a long press producing a `contextmenu` event as the only other way in.
+ */
+@media (hover: none) {
+  .bookmark-row-menu-trigger {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bookmark-bar-track,
+  .bookmark-bar-inner {
+    transition: none;
+  }
+}
+
+/**
+ * The bookmark bar docks under the header and scrolls with it.
+ *
+ * Desktop only, which is the only place the bar exists at all.
+ *
+ * WHY THE RAIL MOVES TOO. The rail is `sticky top-[4.5rem]`, the header's own
+ * height, and so is this bar. Left alone they would both stop in the same
+ * place and the bar, being full width and painted later, would cover the top
+ * of the rail, which is where its navigation links are. So the rail sticks
+ * BELOW the bar instead, by the bar's height, and gives that height back to
+ * its own so it still ends at the bottom of the viewport.
+ *
+ * `:has()` rather than a class or an attribute set from React, because the
+ * answer has to be right in the first painted frame: a JavaScript-driven offset
+ * would land after hydration and visibly shift the rail on every page load. A
+ * browser without `:has()` simply keeps today's behaviour, where the bar
+ * scrolls away, rather than getting a broken layout.
+ */
+/**
+ * How much vertical space the docked bar takes, which is the TRACK and nothing
+ * else. The pull tab is absolutely positioned and overhangs, so it adds no
+ * height here, and it is 44px wide at the right-hand end while the rail this
+ * feeds is on the left, so the two never meet.
+ */
+:root {
+  --bookmark-bar-h: 2.5rem;
+}
+
+[data-bookmark-bar="collapsed"] {
+  --bookmark-bar-h: 0rem;
+}
+
+@media (min-width: 1024px) {
+  .bookmark-bar-sticky {
+    position: sticky;
+    top: 4.5rem;
+    /* Under the header, which is z-40, so the bar reads as sliding beneath it.
+       Above the page, so nothing scrolls over the top of it. */
+    z-index: 30;
+  }
+
+  body:has(.bookmark-bar-sticky) .app-rail {
+    top: calc(4.5rem + var(--bookmark-bar-h));
+    height: calc(100dvh - 4.5rem - var(--bookmark-bar-h));
+  }
+}
+
+/**
  * The two-level rail. Both levels are stacked in the same box and slide as a
  * pair: the level you are leaving goes out to the left while the one you are
  * entering comes in from the right, so moving in and out of a section reads as

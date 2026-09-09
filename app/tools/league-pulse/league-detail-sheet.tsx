@@ -13,6 +13,7 @@ import {
 import { TeamStandingFigure } from "@/components/team-standing-figure";
 import { LeagueSyncButton } from "@/components/league-sync-button";
 import { LeagueProfileToggles } from "@/components/league-profile-toggles";
+import { BookmarkLeagueButton } from "@/components/bookmarks/bookmark-league-button";
 
 /**
  * The Featured / Shown pair, when the surface that opened this sheet has them.
@@ -230,6 +231,18 @@ export function LeagueDetailSheet({
             Open league
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </LeagueOpenLink>
+          {/* Under the primary action, and secondary to it, because opening the
+              league is what this sheet is for. It is here at all because the
+              sheet does not change the address: the save button in the
+              breadcrumb bar behind it means the tool page, so without this
+              there was no way to bookmark the league a reader was looking at.
+              Renders nothing for a signed-out reader. */}
+          <div className="mt-2">
+            <BookmarkLeagueButton
+              sleeperLeagueId={league.league_id}
+              leagueName={league.name}
+            />
+          </div>
         </div>
       </div>
     </SlideUpDialog>

@@ -153,6 +153,13 @@ const ALL_SECTIONS: SiteNavNode[] = [
         icon: "users",
       },
       {
+        id: "/my-beacon/bookmarks",
+        label: "Bookmarks",
+        href: "/my-beacon/bookmarks",
+        hint: "Pages you saved, and the bar they sit in",
+        icon: "bookmark",
+      },
+      {
         id: "/my-beacon/rankings",
         label: "Rankings Boards",
         href: "/my-beacon/rankings",

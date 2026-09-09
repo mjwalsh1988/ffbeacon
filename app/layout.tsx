@@ -21,6 +21,11 @@ import {
   SidebarProvider,
   SIDEBAR_INIT_SCRIPT,
 } from "@/components/app-shell/sidebar-state";
+import { BOOKMARK_BAR_INIT_SCRIPT } from "@/components/bookmarks/collapsed-state";
+import {
+  BookmarkBarSlot,
+  BookmarkToggleSlot,
+} from "@/components/bookmarks/bookmark-slots";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -69,6 +74,9 @@ export default function RootLayout({
       // one attribute, which is what `suppressHydrationWarning` is for; without
       // it React reports the script's own work as a mismatch on every load.
       data-sidebar="expanded"
+      // Same story as data-sidebar: the server says open, and the blocking
+      // script below minimises it before paint for anyone who had.
+      data-bookmark-bar="open"
       suppressHydrationWarning
       className={`dark ${GeistSans.variable} ${GeistMono.variable}`}
     >
@@ -77,6 +85,9 @@ export default function RootLayout({
             rail is simply the right width from the first frame instead of
             painting collapsed and snapping open once React hydrates. */}
         <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
+        {/* Same trick, same reason, for whether the bookmark bar is minimised.
+            See components/bookmarks/collapsed-state.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: BOOKMARK_BAR_INIT_SCRIPT }} />
       </head>
       <body className="font-sans antialiased">
         <a
@@ -94,11 +105,24 @@ export default function RootLayout({
             <BreadcrumbLabelProvider>
             <div className="flex min-h-screen flex-col">
               <SiteHeader />
+              {/* The bookmark bar, full width directly under the header, the
+                  way a browser draws one. Its own boundary: it needs an auth
+                  read, and nothing else on the page waits for it. Renders
+                  nothing for a signed-out reader, on a handheld, or for anyone
+                  who has saved no pages. */}
+              <Suspense fallback={null}>
+                <BookmarkBarSlot />
+              </Suspense>
               <AppShell
                 siteUrl={SITE.url}
                 rail={
                   <Suspense fallback={<AppRailFallback />}>
                     <AppRailSections />
+                  </Suspense>
+                }
+                bookmarkAction={
+                  <Suspense fallback={null}>
+                    <BookmarkToggleSlot />
                   </Suspense>
                 }
               >

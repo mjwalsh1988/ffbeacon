@@ -52,6 +52,9 @@ import {
   TrendingDown,
   RefreshCw,
   CalendarDays,
+  Bookmark,
+  User,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 
@@ -96,6 +99,14 @@ export const NAV_ICONS = {
   trendingDown: TrendingDown,
   refresh: RefreshCw,
   calendar: CalendarDays,
+  // Added for the bookmark bar: the fallback glyph for a saved page we have
+  // nothing more specific to say about, and the player-profile glyph.
+  bookmark: Bookmark,
+  user: User,
+  // The plain shield, matching the placeholder components/league-logo.tsx draws
+  // for a league with no logo of its own. Distinct from `shield` above, which is
+  // a ShieldCheck and reads as "verified".
+  league: Shield,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

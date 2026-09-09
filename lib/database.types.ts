@@ -6266,6 +6266,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      user_bookmarks: {
+        Row: {
+          created_at: string;
+          id: string;
+          label: string;
+          path: string;
+          sort_order: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          label: string;
+          path: string;
+          sort_order?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          label?: string;
+          path?: string;
+          sort_order?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       user_draft_tracker_picks: {
         Row: {
           created_at: string;
@@ -6369,6 +6399,7 @@ export type Database = {
         Row: {
           avatar_path: string | null;
           bio: string | null;
+          bookmarks_bar_enabled: boolean;
           created_at: string;
           default_format_config_id: string | null;
           default_source_slug: string | null;
@@ -6382,6 +6413,7 @@ export type Database = {
         Insert: {
           avatar_path?: string | null;
           bio?: string | null;
+          bookmarks_bar_enabled?: boolean;
           created_at?: string;
           default_format_config_id?: string | null;
           default_source_slug?: string | null;
@@ -6395,6 +6427,7 @@ export type Database = {
         Update: {
           avatar_path?: string | null;
           bio?: string | null;
+          bookmarks_bar_enabled?: boolean;
           created_at?: string;
           default_format_config_id?: string | null;
           default_source_slug?: string | null;

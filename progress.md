@@ -13097,3 +13097,163 @@ PERF-R017 | fixed | Search lost 293 of 812 ranked players, because a high limit 
        `kenneth-gainwell-7567`, so the formal name exists in the data but not in
        any column search reads. That was true before this build too. Searching
        "gainwell" works.
+
+T718 | completed | Bookmarks: save any page, and get it back in one press
+     | files: supabase/migrations/{0279_user_bookmarks,
+     |   0280_user_bookmarks_cap_and_index}.sql, lib/bookmarks/{types,path,icon,
+     |   label,load}.ts (+ path/icon/label tests), lib/device.ts,
+     |   app/actions/bookmarks.ts, components/bookmarks/{store,collapsed-state,
+     |   use-bookmark-actions,lazy,bookmark-slots,bookmark-toggle,bookmark-bar,
+     |   bookmark-row-menu,bookmarks-launcher,rename-bookmark-dialog}.tsx,
+     |   app/my-beacon/bookmarks/{page,bookmarks-manager}.tsx,
+     |   app/{layout,globals.css}, components/app-shell/{app-shell,nav-icons},
+     |   components/{site-header-controls,confirm-dialog}.tsx,
+     |   components/league-shell/league-shell.tsx, lib/{nav-viewer,nav-tree,
+     |   breadcrumbs}.ts, tailwind.config.ts
+     | verified: yes (RLS proved on prod with rolled-back probes, four review
+     |   agents: implementation, security, accessibility, performance)
+     | A signed-in reader presses the bookmark button at the right end of the
+     | breadcrumb bar, opposite the trail, and the page joins a browser-style
+     | bar under the header. Right-click a bookmark for move left, move right,
+     | rename, remove; a pull tab on the bottom-right slides the whole bar up
+     | behind the header and remembers that per device.
+     | THE PATH IS A SECURITY BOUNDARY, not a stored string. It ends up in an
+     | href, so lib/bookmarks/path.ts and three CHECK constraints both refuse
+     | protocol-relative ("//evil.example", the one that looks like a path),
+     | absolute URLs to any other host, javascript: and data:, backslashes
+     | (which some browsers normalise to "/" AFTER a naive check passes), and
+     | any whitespace or control character. Tested both ways, in the suite and
+     | against prod inside a rollback.
+     | The icon is DERIVED from the path, never stored, so a bookmark saved a
+     | year ago picks up whatever glyph the navigation uses for that tool today.
+     | The query string is kept: a League Pulse tab, an On The Clock draft and
+     | a shared verdict all live in one, and dropping it would land the reader
+     | somewhere other than where they pressed save.
+     | MOBILE HAS NO BAR AND MAKES NO QUERY. lib/device.ts reads the user agent
+     | ONLY to decide whether the server does work, never what anything looks
+     | like; layout is CSS at lg as everywhere else. A phone opens the same list
+     | as a bottom sheet from the header, fetched once on the first sign of
+     | intent. Ask BEAM became desktop-only in the same change and gave up that
+     | header slot, so its settings row is no longer read on a phone either.
+     | Saving a page that is ALREADY saved changes nothing and says so. The
+     | button derives its label from the breadcrumb, so an upsert would have
+     | quietly reverted a renamed bookmark and reported it as "Saved". That bit
+     | hardest on a phone, where the button does not yet know the answer.
+     | The four reviewers found things and they are fixed, not noted:
+     | - Every `disabled={busy}` moved to `aria-disabled` plus a guard. The
+     |   browser drops focus to `body` when the focused element is disabled and
+     |   never gives it back, so every press landed the reader at the top of the
+     |   document. Inside the mobile sheet it ejected them from the dialog.
+     | - Choosing a row-menu item restored no focus, so Rename and Remove handed
+     |   their dialog `body` as the element to return to. close() now moves
+     |   focus before React commits the unmount.
+     | - A desktop reader who switched the bar OFF had no route to their
+     |   bookmarks at all, while the manage page said in writing that they did.
+     |   The header trigger now shows at every width when the bar is off.
+     | - The sheet compared the stored path against the pathname alone, so no
+     |   bookmark with a query string could ever be the current page. One
+     |   helper, currentBookmarkPath, and both surfaces call it.
+     | - A collapsed bar stayed tabbable until hydration, which is exactly what
+     |   the blocking-script pattern exists to prevent. `visibility: hidden` on
+     |   the same attribute the height uses closes the window; `inert` stays for
+     |   after hydration. Neither alone is enough.
+     | - The row-menu button was invisible without hover, which is every
+     |   touchscreen laptop and every iPad (Safari reports Macintosh). Pinned on
+     |   under `@media (hover: none)`.
+     | - A scroll closed the menu, and VoiceOver scrolls as it moves between
+     |   items. It follows its trigger instead.
+     | - Signed-out visitors were downloading the whole bookmark UI: webpack
+     |   merges every client module in the layout entry into one always-loaded
+     |   chunk, so SiteSearch pulled it in. Measured +29 kB raw, +10 kB gzip on
+     |   /layout for people with no account. A dynamic import (components/
+     |   bookmarks/lazy.tsx) puts it in an async chunk that is never merged.
+     |   Now +2 kB raw, +1 kB gzip, and the chunks are absent from the served
+     |   HTML of a request with no session. Verified by curl against next start.
+     | - deleteBookmark fired one UPDATE per row whose position moved: removing
+     |   the first of forty was thirty-nine concurrent statements. One batched
+     |   upsert, whatever the list looks like.
+     | - White on #EF4444 is 3.76:1 and every destructive confirm on the SITE
+     |   used it at 14px semibold. New signal.danger-deep token, 6.4:1, same
+     |   hue. That one is a shared-component fix beyond this feature.
+     | The cap is now a trigger (0280) rather than only a read-then-write check,
+     | and the (user_id, sort_order) index is dropped: EXPLAIN showed the
+     | planner used it for the equality only and sorted anyway, while every
+     | reorder writes the column it indexed.
+     | Not done, and deliberately: no rate limit on the actions. Every one needs
+     | a session, writes only the caller's own rows, and the row count is capped
+     | in the database, which is how this codebase already treats user-owned
+     | CRUD (app/my-beacon/rankings/actions.ts has none either). No cross-tab
+     | sync, matching sidebar-state.tsx; the manage page publishes the server
+     | list on arrival so the surface that exists to be authoritative is.
+
+T719 | completed | Bookmarks: a league is not the tool, and each page of one is its own
+     | files: lib/bookmarks/{path,types,icon,load}.ts (+ path/icon tests),
+     |   components/bookmarks/{store,use-bookmark-target,bookmark-toggle,
+     |   bookmark-league-button,bookmark-icon,bookmark-bar,bookmarks-launcher}.tsx,
+     |   app/my-beacon/bookmarks/bookmarks-manager.tsx,
+     |   app/tools/league-pulse/{league-results,league-detail-sheet}.tsx,
+     |   components/app-shell/nav-icons.ts
+     | depends on: T718
+     | found by: the owner. Saved League Pulse, then tried to save a league
+     | inside it, and the League Pulse bookmark disappeared.
+     | The cause was not a bug in the toggle. League Pulse opens a league in a
+     | SHEET without changing the address, and the desktop list navigates only
+     | on Open league, so a reader looking at a league is, as far as the URL is
+     | concerned, still standing on /tools/league-pulse. The button in the
+     | breadcrumb bar was correctly toggling that page: it was already saved, so
+     | it came off. Nothing anywhere offered to save the league itself.
+     | Three controls now do, and none of them guesses from the address:
+     | - the desktop league tables, both the public tool and the dashboard,
+     |   carry a bookmark button at the end of every row. The public grid's new
+     |   track is `auto` rather than a fixed width, because that tool is
+     |   reachable signed out and the button renders nothing for a visitor with
+     |   no account; an auto track collapses instead of leaving a dead gutter.
+     | - the league detail sheet, which is the mobile route into a league,
+     |   carries the same control as a labelled button under Open league.
+     | - the deep view already had one, and it is unchanged.
+     | A LEAGUE PATH IS NOW CANONICAL. `?username=` is the shareable-link
+     | mechanism and `?name=` is a first-paint title hint; neither says which
+     | page this is, and the deep view's own Copy link button already draws that
+     | line for the same reason. Without it, two readers who bookmarked the same
+     | league would store two different rows, and the bar could never mark a
+     | league page as current for anyone who arrived from the list. `?tab=teams`
+     | is NOT stripped: that genuinely is a different page, so the Teams tab,
+     | Lineups, Transactions and the rest are each their own bookmark, labelled
+     | "<League>: <Section>".
+     | The strip is scoped to /leagues/ paths only. On The Clock uses
+     | ?username= to choose whose drafts to show, so a bookmark that dropped it
+     | would point somewhere else entirely.
+     | A LEAGUE WEARS ITS OWN LOGO. `/leagues/...` used to take the League Pulse
+     | glyph, so the tool and every league saved out of it were the same picture
+     | on a bar where the icon is most of what a reader scans. It gets the
+     | league's Sleeper avatar, and the plain shield that every league list on
+     | the site already uses as its placeholder when there is none.
+     | The logo is DERIVED, not stored, like every other bookmark icon: one
+     | query against `leagues` when the list is read, selecting the single jsonb
+     | key rather than `metadata`, which is the whole raw Sleeper object. So a
+     | commissioner changing the league logo changes it on every reader's bar,
+     | and a league bookmarked before we had ever synced it picks the logo up
+     | the first time somebody opens it. The id goes through
+     | `sleeperAvatarUrl`, which validates it, because it is a raw external
+     | value deciding which host an img points at.
+     | Individual Brief stories, player profiles and drafts were already
+     | bookmarkable and already carried their real titles rather than their
+     | slugs, through the breadcrumb label each of those pages registers. A test
+     | now holds the whole guarantee: fourteen representative pages normalise to
+     | fourteen distinct bookmarks, with exactly one intended collision, the
+     | league reached with and without the viewer params.
+     | The store learned `signedIn` as a fact separate from the list, because
+     | the league buttons sit deep inside a page with no server slot of their
+     | own and must not offer a control to a signed-out reader. Recorded by any
+     | surface that mounts, and kept apart from the list on purpose: three
+     | surfaces mount on a normal page, only some carry a list, and whichever
+     | published first would otherwise decide.
+     | The save logic is now one hook, `useBookmarkTarget`, shared by the
+     | breadcrumb button and the league buttons, so the already-saved wording,
+     | the announcement and the warm-on-intent fetch cannot drift between them.
+     | Cost: +5 kB raw, +2 kB gzip on /tools/league-pulse, which a signed-out
+     | visitor pays for a button they are not shown. Accepted rather than put
+     | behind a second dynamic import, because the gate has to run to know
+     | whether to load, so the chunk would be fetched for everyone anyway. The
+     | root layout is unchanged at +2 kB raw, and no bookmark chunk is served to
+     | a request with no session; verified again by curl against next start.

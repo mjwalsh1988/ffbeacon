@@ -96,9 +96,13 @@ export function ConfirmDialog({
     tone === "danger"
       ? "border-signal-danger/40 bg-signal-danger/10 text-signal-danger"
       : "border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan";
+  // `signal-danger-deep` rather than `signal-danger`. White on #EF4444 is
+  // 3.76:1 and this label is 14px semibold, so it failed WCAG 1.4.3 on every
+  // destructive confirmation on the site; the deeper red carries white at about
+  // 6.4:1 in the same hue. See tailwind.config.ts.
   const confirmClass =
     tone === "danger"
-      ? "bg-signal-danger text-white hover:opacity-90"
+      ? "bg-signal-danger-deep text-white hover:opacity-90"
       : "bg-beacon text-black hover:opacity-90";
 
   return createPortal(

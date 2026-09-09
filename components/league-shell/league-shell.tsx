@@ -19,15 +19,16 @@
  * it paints nothing.
  */
 
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { LeagueBreadcrumb, type LeagueCrumb } from "@/components/league-breadcrumb";
 import { LeagueHeaderActions } from "@/components/league-header-actions";
+import { BookmarkToggleSlot } from "@/components/bookmarks/bookmark-slots";
 import type { SwitcherLeague } from "@/components/league-switcher";
 import type { SleeperViewer } from "@/lib/sleeper-handle/types";
 import { LeagueRailSections } from "./league-rail-sections";
 import { LeagueMobileNav } from "./league-mobile-nav";
 import { LeagueMasthead, type LeagueMastheadProps } from "./league-masthead";
-import type { LeagueTabId } from "./nav-items";
+import { LEAGUE_NAV_ITEMS, type LeagueTabId } from "./nav-items";
 
 export function LeagueShell({
   sleeperLeagueId,
@@ -84,12 +85,27 @@ export function LeagueShell({
             />
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
               <LeagueBreadcrumb homeHref={homeHref} crumbs={crumbs} />
-              <LeagueHeaderActions
-                copyHref={copyHref}
-                copyAriaLabel={copyAriaLabel}
-                otherLeagues={otherLeagues}
-                viewer={viewer}
-              />
+              <div className="flex w-full items-center gap-2 sm:w-auto">
+                <LeagueHeaderActions
+                  copyHref={copyHref}
+                  copyAriaLabel={copyAriaLabel}
+                  otherLeagues={otherLeagues}
+                  viewer={viewer}
+                />
+                {/* League Pulse draws its own breadcrumb, so the shared bar
+                    (and the save button that rides in it) is not painted here.
+                    This is that same button, in the one place on this surface
+                    where it belongs.
+
+                    The label is written out rather than derived, because the
+                    URL here is a Sleeper id: a breadcrumb-derived name would
+                    save nine sections of nine leagues as "Overview". */}
+                <Suspense fallback={null}>
+                  <BookmarkToggleSlot
+                    pageLabel={`${masthead.leagueName}: ${sectionLabel(activeTab)}`}
+                  />
+                </Suspense>
+              </div>
             </div>
           </div>
 
@@ -111,4 +127,9 @@ export function LeagueShell({
       </div>
     </main>
   );
+}
+
+/** The written name of a league section, for a bookmark's default label. */
+function sectionLabel(tabId: LeagueTabId): string {
+  return LEAGUE_NAV_ITEMS.find((item) => item.id === tabId)?.label ?? "League";
 }
