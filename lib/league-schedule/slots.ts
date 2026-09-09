@@ -56,11 +56,16 @@ export const SLOT_GROUP_LABEL: Record<SlotGroup, string> = {
 };
 
 /**
- * The phone-width form of a slot label.
+ * The short form of a slot label, used at EVERY width.
  *
  * Only SUPERFLEX needs one: every other token is four characters or fewer and
  * fits the column as it is. Anything not listed falls through unchanged rather
  * than being truncated, so a new slot token cannot quietly turn into nonsense.
+ *
+ * It was the phone-width form until the same overflow turned up on a desktop,
+ * where a long player name widens the row and the nine-character word ran under
+ * the projection beside it. One form everywhere is also one fewer way for the
+ * two breakpoints to disagree about what a slot is called.
  */
 const SHORT_SLOT_LABEL: Record<string, string> = {
   SUPERFLEX: "SF",

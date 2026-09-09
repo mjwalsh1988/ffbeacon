@@ -279,14 +279,14 @@ export function MatchupTable({
                       scope="row"
                       className="w-14 px-1 py-2 text-center align-middle text-[11px] font-bold uppercase tracking-wide text-ink-muted"
                     >
-                      {/* SUPERFLEX is nine characters in a fourteen-pixel-wide
-                          column, so the phone gets SF and everything from the
-                          small breakpoint up gets the full word. Both are in the
-                          DOM rather than swapped by script, and the screen
-                          reader hears the spelled-out description either way, so
-                          nothing is lost at any width. */}
-                      <span className="sm:hidden">{shortSlotLabel(row.home.slot.label)}</span>
-                      <span className="hidden sm:inline">{row.home.slot.label}</span>
+                      {/* SF AT EVERY WIDTH. SUPERFLEX is nine characters in a
+                          column sized for four, and the phone was not the only
+                          place it overflowed: on a desktop it ran under the
+                          projection beside it whenever a player's name pushed
+                          the row wide. Nothing is lost by shortening it, because
+                          the spelled-out description below is what a screen
+                          reader hears either way. */}
+                      {shortSlotLabel(row.home.slot.label)}
                       {/* "W/T" read aloud is noise, so the spelled-out form rides
                           along and the abbreviation stays for the eye. */}
                       <span className="sr-only">, {row.home.slot.description}</span>
