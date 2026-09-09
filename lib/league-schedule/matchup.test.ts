@@ -104,6 +104,7 @@ function side(
     reserve?: string[];
     taxi?: string[];
     actualTotal?: number | null;
+    officialPoints?: number | null;
     actualByPlayer?: Record<string, number>;
   },
 ): MatchupSideInput {
@@ -120,6 +121,7 @@ function side(
     reserveSleeperIds: opts.reserve ?? [],
     taxiSleeperIds: opts.taxi ?? [],
     actualTotal: opts.actualTotal ?? null,
+    officialPoints: opts.officialPoints ?? opts.actualTotal ?? null,
     actualByPlayer: new Map(Object.entries(opts.actualByPlayer ?? {})),
   };
 }
@@ -312,7 +314,7 @@ describe("buildMatchupView on a final week", () => {
     expect(view.home.slots[0].player?.actual).toBe(24.1);
   });
 
-  it("leaves actual null on a week that has not been played", () => {
+  it("leaves actual null on a week nobody has scored in yet", () => {
     const w = world(["QB", "BN"], [{ id: "qb1", position: "QB", points: 20 }]);
     const view = buildMatchupView(
       input(
@@ -320,14 +322,86 @@ describe("buildMatchupView on a final week", () => {
         side(w.slots, {
           starters: ["qb1"],
           all: ["qb1"],
+          // Sleeper publishes the current week's row from Tuesday with every
+          // score at zero. That is not a game in progress, and a table of 0.0s
+          // presented as results is exactly what this asserts against.
+          actualByPlayer: { qb1: 0 },
+        }),
+        null,
+      ),
+    );
+    expect(view.resultsVisible).toBe(false);
+    expect(view.home.slots[0].player?.actual).toBeNull();
+    expect(view.home.actualTotal).toBeNull();
+    expect(view.home.scoredTotal).toBeNull();
+  });
+});
+
+describe("a week in progress", () => {
+  /**
+   * POINTS ON THE BOARD MAKE A WEEK LIVE, and a live week DISPLAYS results
+   * while everything that GRADES it keeps waiting for Sleeper to settle the
+   * week. These two switches drifting into one is what would tell a manager at
+   * one o'clock on a Sunday that they had left forty points on their bench,
+   * when three of their starters kick off at four.
+   */
+  it("shows real points as soon as anybody scores, without settling the week", () => {
+    const w = world(["QB", "BN"], [{ id: "qb1", position: "QB", points: 20 }]);
+    const view = buildMatchupView(
+      input(
+        w,
+        side(w.slots, {
+          starters: ["qb1"],
+          all: ["qb1"],
+          officialPoints: 24.1,
           actualByPlayer: { qb1: 24.1 },
         }),
         null,
       ),
     );
-    expect(view.home.slots[0].player?.actual).toBeNull();
+
+    expect(view.resultsVisible).toBe(true);
+    expect(view.isFinal).toBe(false);
+    // Displayed.
+    expect(view.home.slots[0].player?.actual).toBe(24.1);
+    expect(view.home.scoredTotal).toBe(24.1);
+    // Not graded. `actualTotal` feeds the retrospective and stays final-only.
     expect(view.home.actualTotal).toBeNull();
   });
+
+  it("counts the opponent's kickoff as the week starting, for both sides", () => {
+    const w = world(
+      ["QB", "BN"],
+      [
+        { id: "qb1", position: "QB", points: 20 },
+        { id: "qb2", position: "QB", points: 18 },
+      ],
+    );
+    const view = buildMatchupView(
+      input(
+        w,
+        // Nobody on this roster has kicked off yet.
+        side(w.slots, { rosterId: 1, starters: ["qb1"], all: ["qb1"] }),
+        side(w.slots, {
+          rosterId: 2,
+          starters: ["qb2"],
+          all: ["qb2"],
+          officialPoints: 11.4,
+          actualByPlayer: { qb2: 11.4 },
+        }),
+      ),
+    );
+
+    // A team whose whole lineup plays Monday night has still had their
+    // opponent's Sunday happen to them, so the whole matchup switches over
+    // together rather than one column at a time.
+    expect(view.resultsVisible).toBe(true);
+    expect(view.away?.slots[0].player?.actual).toBe(11.4);
+    // Nothing published for this one yet, which is a missing RESULT and stays
+    // null rather than becoming a zero.
+    expect(view.home.slots[0].player?.actual).toBeNull();
+  });
+
 });
 
 describe("the settled-week bench retrospective", () => {

@@ -467,7 +467,7 @@ export function LineupBoard({
       <PlayerDetailDialog
         player={openPlayer}
         week={week}
-        isFinal={isFinal}
+        showsResults={status.showsResults}
         onClose={close}
         extras={openPlayer ? <LineupExtras player={openPlayer} average={environmentAverage} /> : null}
       />

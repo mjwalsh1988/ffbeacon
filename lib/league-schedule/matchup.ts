@@ -6,9 +6,10 @@
  * a database. lib/league-schedule/data.ts does the fetching.
  *
  * The rule that shapes almost every branch below: a projection and a result are
- * not the same kind of number, and neither is a zero. `actual` is populated on
- * a final week and only on a final week, so nothing downstream can print a
- * result for a game nobody has played. A missing projection stays null rather
+ * not the same kind of number, and neither is a zero. `actual` is populated
+ * once there is a result to report, which is a final week or a week with points
+ * already on the board, so nothing downstream can print a result for a game
+ * nobody has played. A missing projection stays null rather
  * than becoming a zero, because a zero reads as an answer and would quietly
  * drag a team total down. That is the same distinction projectPlayerWeek makes
  * when it returns null, and it survives all the way to the cell.
@@ -16,6 +17,12 @@
  * Projections are still computed on a settled week, because the lineup table
  * prints the projection beside the result. Which of the two a cell shows is the
  * view's decision, not this file's.
+ *
+ * DISPLAYING A RESULT AND GRADING ONE ARE DIFFERENT SWITCHES. `resultsVisible`
+ * turns live scores on the moment a game starts; `isFinal` is what the optimal
+ * lineup, the bench gap and every swap sentence still wait for. Grading a
+ * Sunday afternoon against partial scores would tell a manager they left forty
+ * points on the bench because three of their starters kick off at four.
  *
  * THE BENCH RETROSPECTIVE IS GRADED ON RESULTS, NOT ON PROJECTIONS. "You left
  * 18.4 points on your bench in week 3" is a claim about a week that has been
@@ -51,6 +58,11 @@ import {
   reliabilityMultiplier,
 } from "@/lib/power-pulse/project";
 import { PULSE_SLOT_ELIGIBILITY } from "@/lib/power-pulse/types";
+// The one test for "has this week started". lib/league-lineups/status.ts
+// imports nothing, so reaching for it here closes no cycle, and a second copy
+// of the rule is how the Lineups board and this page would end up disagreeing
+// about whether a Sunday is under way.
+import { hasLivePoints } from "@/lib/league-lineups/status";
 import type { SetLineupEntry } from "./lineups";
 import type {
   BenchUpgrade,
@@ -89,6 +101,15 @@ export type MatchupSideInput = {
   taxiSleeperIds: string[];
   /** Actual points this side scored. Null when the week is not final. */
   actualTotal: number | null;
+  /**
+   * The league's own published points for this side, whatever state the week is
+   * in. On a live week this is the running score.
+   *
+   * Separate from `actualTotal` on purpose: that one is final-only and feeds the
+   * retrospective, this one feeds the display. Optional, and a caller that
+   * leaves it out gets null rather than a zero.
+   */
+  officialPoints?: number | null;
   /** Actual per-player points, from readRosteredPlayerPoints. */
   actualByPlayer: Map<string, number>;
 };
@@ -159,20 +180,32 @@ function emptySlotStandIn(slot: ScheduleSlot): SchedulePlayer {
 function buildSide(
   input: BuildMatchupInput,
   side: MatchupSideInput,
+  /**
+   * True when real points are on the board anywhere in this matchup, so every
+   * row should carry one. Decided once for the whole matchup rather than per
+   * side, because a week is live or it is not: a side whose starters all play
+   * the late game has not had a different Sunday from their opponent.
+   */
+  resultsVisible: boolean,
 ): MatchupSide {
   const reserve = new Set(side.reserveSleeperIds);
   const taxi = new Set(side.taxiSleeperIds);
 
   /**
-   * What a player actually scored, on a final week only. The per-player map
-   * from `players_points` wins because it covers the bench too; the slot's own
-   * `starters_points` value is the fallback for a row whose map is missing.
+   * What a player actually scored, once there are results to report. The
+   * per-player map from `players_points` wins because it covers the bench too;
+   * the slot's own `starters_points` value is the fallback for a row whose map
+   * is missing.
+   *
+   * Gated on `resultsVisible` rather than on `isFinal`, so a week in progress
+   * carries live scores. Nothing that GRADES the week moves with it:
+   * `gradePoints` below stays on `isFinal`, and so does `actualTotal`.
    */
   const actualFor = (
     sleeperId: string,
     fallback: number | null,
   ): number | null => {
-    if (!input.isFinal) return null;
+    if (!resultsVisible) return null;
     const fromMap = side.actualByPlayer.get(sleeperId);
     if (fromMap !== undefined && Number.isFinite(fromMap)) return fromMap;
     return fallback;
@@ -490,6 +523,7 @@ function buildSide(
     projectedTotal,
     sigma,
     actualTotal: input.isFinal ? side.actualTotal : null,
+    scoredTotal: resultsVisible ? (side.officialPoints ?? side.actualTotal) : null,
     optimalTotal,
     pointsLeftOnBench,
     benchUpgrades,
@@ -499,8 +533,18 @@ function buildSide(
 
 /** Build the whole matchup, both sides, from plain data. */
 export function buildMatchupView(input: BuildMatchupInput): MatchupView {
-  const home = buildSide(input, input.home);
-  const away = input.away ? buildSide(input, input.away) : null;
+  // A settled week always shows results. An unsettled one shows them the moment
+  // anybody in the matchup scores, which is what makes a Sunday afternoon read
+  // as a Sunday afternoon rather than as a table of forecasts nobody needs any
+  // more. Both sides are consulted: a team whose whole lineup plays Monday night
+  // has still had their opponent's Sunday happen to them.
+  const resultsVisible =
+    input.isFinal ||
+    hasLivePoints(input.home.actualByPlayer) ||
+    (input.away ? hasLivePoints(input.away.actualByPlayer) : false);
+
+  const home = buildSide(input, input.home, resultsVisible);
+  const away = input.away ? buildSide(input, input.away, resultsVisible) : null;
 
   // A settled week has a score on the board, so a win probability for it is not
   // a forecast, it is a distraction. An unpaired roster has nobody to beat.
@@ -528,5 +572,6 @@ export function buildMatchupView(input: BuildMatchupInput): MatchupView {
     away,
     homeWinProb,
     hasUnprojectableSlots: input.slots.some((slot) => !slot.projectable),
+    resultsVisible,
   };
 }

@@ -7,6 +7,13 @@ import {
   type ShareCardPositionGroup,
 } from "@/lib/league-share-card";
 import type { SleeperLeague } from "@/lib/sleeper";
+import {
+  OG_FONTS,
+  OG_FONT_FAMILY,
+  OG_LOGO_DATA_URI,
+  OG_WORDMARK,
+} from "@/lib/og/assets";
+import { clip, displayName } from "@/lib/og/display-name";
 
 export const runtime = "nodejs";
 
@@ -164,7 +171,8 @@ export async function GET(
         flexDirection: "column",
         background: `linear-gradient(180deg, ${BG} 0%, ${BG_BASE} 100%)`,
         color: INK,
-        fontFamily: "sans-serif",
+        fontFamily: OG_FONT_FAMILY,
+        fontWeight: 500,
         padding: "36px 40px 28px 40px",
         position: "relative",
       }}
@@ -190,16 +198,29 @@ export async function GET(
           marginBottom: 14,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${PURPLE} 0%, ${CYAN} 100%)`,
-            }}
+        {/* THE SAME MARK AND THE SAME WORDMARK AS THE MATCHUP CARD. These two
+            images end up side by side in the same group chat, so a gradient
+            square on one and the beacon on the other reads as two different
+            products. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={OG_LOGO_DATA_URI}
+            alt=""
+            width={30}
+            height={30}
+            style={{ width: 30, height: 30 }}
           />
-          <p style={{ fontSize: 21, fontWeight: 700, margin: 0 }}>FF Beacon</p>
+          <p
+            style={{
+              fontSize: 23,
+              fontWeight: 900,
+              margin: 0,
+              letterSpacing: -0.5,
+            }}
+          >
+            {OG_WORDMARK}
+          </p>
         </div>
         <p style={{ fontSize: 15, color: INK_MUTED, margin: 0 }}>
           {clip(league.name, 42)}
@@ -326,13 +347,14 @@ export async function GET(
           <LegendMark icon={STAR_ICON} label="Top 14 at the position" />
           <LegendMark icon={SCISSORS_ICON} label="Cut candidate" />
         </div>
-        <p style={{ fontSize: 15, color: INK_SUBTLE, margin: 0 }}>
-          ffbeacon.com
+        <p style={{ fontSize: 15, fontWeight: 900, color: INK_MUTED, margin: 0 }}>
+          {OG_WORDMARK}
         </p>
       </div>
     </div>,
     {
       ...SIZE,
+      fonts: OG_FONTS,
       headers: {
         "cache-control":
           "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
@@ -460,11 +482,14 @@ function PositionColumn({
                   ST
                 </p>
               </div>
-              {/* A badged row spends 13px on the mark, so its name is clipped
-                  shorter. Satori does not ellipsize on its own: without this
-                  the name would wrap and the row would grow a second line. */}
-              <p style={{ fontSize: 13, color: INK, margin: 0, flex: 1 }}>
-                {clip(p.name, p.topAtPosition || p.dropCandidate ? 12 : 15)}
+              {/* A badged row spends 13px on the mark, so its name gets a
+                  shorter budget. Satori does not ellipsize on its own: without
+                  this the name would wrap and the row would grow a second line.
+                  `displayName` rather than a raw clip, so a name too long for
+                  the column becomes "A. St. Brown" rather than "Amon-Ra St....",
+                  which is a string naming nobody. */}
+              <p style={{ fontSize: 13, fontWeight: 500, color: INK, margin: 0, flex: 1 }}>
+                {displayName(p.name, p.topAtPosition || p.dropCandidate ? 14 : 17)}
               </p>
               {(p.topAtPosition || p.dropCandidate) && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -698,20 +723,38 @@ function notFoundImage(reason: string): Response {
         justifyContent: "center",
         background: BG,
         color: INK,
-        fontFamily: "sans-serif",
+        fontFamily: OG_FONT_FAMILY,
+        fontWeight: 500,
       }}
     >
-      <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
-      <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 16 }}>{reason}</p>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={OG_LOGO_DATA_URI}
+        alt=""
+        width={64}
+        height={64}
+        style={{ width: 64, height: 64 }}
+      />
+      <p style={{ fontSize: 46, fontWeight: 900, margin: "16px 0 0 0" }}>
+        {OG_WORDMARK}
+      </p>
+      <p style={{ fontSize: 24, fontWeight: 500, color: INK_MUTED, marginTop: 14 }}>
+        {reason}
+      </p>
     </div>,
-    { ...SIZE, status: 404 },
+    {
+      ...SIZE,
+      status: 404,
+      fonts: OG_FONTS,
+      // next/og defaults a header-less response to `immutable, max-age=31536000`,
+      // which would pin a "not found" image at the edge for a year and keep
+      // serving it long after the league or the roster turns up.
+      headers: { "cache-control": "public, max-age=0, s-maxage=60" },
+    },
   );
 }
 
-function clip(s: string, n: number): string {
-  if (s.length <= n) return s;
-  return s.slice(0, n - 1) + "...";
-}
+
 
 function formatNumber(n: number): string {
   return Math.round(n).toLocaleString();

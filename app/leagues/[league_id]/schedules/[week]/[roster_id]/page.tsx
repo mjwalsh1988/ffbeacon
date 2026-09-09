@@ -34,6 +34,12 @@ import type {
   ScheduleBoard,
 } from "@/lib/league-schedule/types";
 import { MatchupTable } from "@/components/league-schedule/matchup-table";
+import { CopyImageButton } from "@/components/copy-image-button";
+import { CopyLinkButton } from "@/components/copy-link-button";
+import {
+  buildShareCard,
+  describeShareCard,
+} from "@/lib/league-schedule/share-card";
 import { WinProbBar } from "@/components/league-schedule/win-prob-bar";
 import { BenchUpgrades } from "@/components/league-schedule/bench-upgrades";
 import { ScheduleEmpty } from "@/components/league-schedule/schedule-empty";
@@ -374,6 +380,7 @@ export default async function LeagueMatchupPage({
           resynced={!pulseCached}
           linkUsername={linkUsername}
           scheduleHref={scheduleHref}
+          leagueName={league.name}
         />
       </Suspense>
     </LeagueShell>
@@ -398,6 +405,7 @@ async function MatchupBody({
   resynced,
   linkUsername,
   scheduleHref,
+  leagueName,
 }: {
   leagueRowId: string;
   sleeperLeagueId: string;
@@ -408,6 +416,8 @@ async function MatchupBody({
   resynced: boolean;
   linkUsername: string | null;
   scheduleHref: string;
+  /** Named on the share card, which travels without the page around it. */
+  leagueName: string;
 }) {
   const admin = createAdminClient();
   await pulseLeagueDerived(admin, leagueRowId, { resynced });
@@ -518,11 +528,20 @@ async function MatchupBody({
 
         <MatchupHeader view={view} />
 
+        <ShareStrip
+          view={view}
+          leagueName={leagueName}
+          sleeperLeagueId={sleeperLeagueId}
+          week={week}
+          sleeperRosterId={sleeperRosterId}
+          linkUsername={linkUsername}
+        />
+
         <Panel
           eyebrow="The lineups"
           title="Slot by slot"
           helper={
-            view.isFinal
+            view.resultsVisible
               ? "What each slot scored. Tap any player for the full numbers."
               : "Projected points in this league's scoring. Tap any player for the full numbers."
           }
@@ -536,17 +555,28 @@ async function MatchupBody({
           <MatchupTable view={view} />
         </Panel>
 
-        <BenchUpgrades
-          side={view.home}
-          isFinal={view.isFinal}
-          week={view.week}
-        />
-        {view.away && (
-          <BenchUpgrades
-            side={view.away}
-            isFinal={view.isFinal}
-            week={view.week}
-          />
+        {/* NOT WHILE THE GAMES ARE ON. Every figure in these two panels is
+            graded by `gradePoints`, which waits for `isFinal`, so during a live
+            week they would offer a manager waiver-shaped advice about a lineup
+            that is already being played, using projections for players who have
+            finished and for players who have not started. The table above says
+            in a sentence why they are absent, which is the same call CLAUDE.md
+            makes for the Lineups optimiser panel. */}
+        {!(view.resultsVisible && !view.isFinal) && (
+          <>
+            <BenchUpgrades
+              side={view.home}
+              isFinal={view.isFinal}
+              week={view.week}
+            />
+            {view.away && (
+              <BenchUpgrades
+                side={view.away}
+                isFinal={view.isFinal}
+                week={view.week}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -568,6 +598,91 @@ async function MatchupBody({
 }
 
 /**
+ * The two ways this matchup leaves the page.
+ *
+ * THE IMAGE IS THE PRIMARY CONTROL, deliberately, because it is what the moment
+ * actually calls for: somebody wants the scoreboard IN the group chat, not a
+ * link to it. Most places people paste render a PNG inline and a URL as a blue
+ * word. The link is offered beside it for the other intent, which is "go and
+ * look at this page".
+ *
+ * The image button carries the scoreboard as a SENTENCE
+ * (`describeShareCard`), so the confirmation a screen reader hears names the
+ * score rather than only saying that something was copied. A picture is the one
+ * thing a reader cannot check for themselves after the fact.
+ *
+ * The card is built here rather than in the button because it is one pure
+ * function over a view this component already holds: doing it on the client
+ * would mean shipping the whole matchup a second time as props.
+ */
+function ShareStrip({
+  view,
+  leagueName,
+  sleeperLeagueId,
+  week,
+  sleeperRosterId,
+  linkUsername,
+}: {
+  view: MatchupView;
+  leagueName: string;
+  sleeperLeagueId: string;
+  week: number;
+  sleeperRosterId: number;
+  linkUsername: string | null;
+}) {
+  const card = buildShareCard(view, leagueName);
+  const imageHref = `/api/og/matchup/${sleeperLeagueId}/${week}/${sleeperRosterId}/share`;
+  const pageHref = withUsername(
+    `/leagues/${sleeperLeagueId}/schedules/${week}/${sleeperRosterId}`,
+    linkUsername,
+  );
+  const teams = view.away
+    ? `${view.home.teamName} against ${view.away.teamName}`
+    : view.home.teamName;
+
+  return (
+    <section
+      aria-labelledby="matchup-share"
+      className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface/50 px-3 py-2.5"
+    >
+      <h2
+        id="matchup-share"
+        className="mr-1 text-[11px] font-bold uppercase tracking-[0.18em] text-ink-subtle"
+      >
+        Share
+      </h2>
+      {/* EVERY ACCESSIBLE NAME LEADS WITH THE VISIBLE LABEL (WCAG 2.5.3). A
+          speech-input user says what they can see, so "Copy image" has to be the
+          start of the name and not a phrase the name happens to be about. The
+          rest of the sentence is what the button will actually put on the
+          clipboard, which is the part a reader cannot check afterwards. */}
+      <CopyImageButton
+        imageHref={imageHref}
+        description={describeShareCard(card)}
+        ariaLabel={`Copy image: the week ${week} scoreboard for ${teams}, as a picture on the clipboard`}
+      />
+      <CopyLinkButton
+        href={imageHref}
+        prewarmHref={imageHref}
+        icon="image"
+        noun="Image link"
+        label="Copy image link"
+        size="md"
+        ariaLabel={`Copy image link: a web address for the week ${week} scoreboard picture for ${teams}`}
+      />
+      <CopyLinkButton
+        href={pageHref}
+        icon="link"
+        noun="Matchup link"
+        label="Copy page link"
+        size="md"
+        ariaLabel={`Copy page link: a web address for this week ${week} matchup page`}
+      />
+    </section>
+  );
+}
+
+/**
  * Both teams, the week, its state, the two totals, and the win probability.
  *
  * The heading is an h2: the masthead above owns this page's h1 (the league
@@ -576,15 +691,25 @@ async function MatchupBody({
  */
 function MatchupHeader({ view }: { view: MatchupView }) {
   const { home, away, isFinal, isCurrent, week } = view;
-  const homeTotal = isFinal ? home.actualTotal : home.projectedTotal;
+  // The scoreboard leads with real points from the first kickoff, not from the
+  // moment Sleeper settles the week. Everything the header says about the week
+  // being OVER still waits for `isFinal`.
+  const showsResults = view.resultsVisible;
+  const homeTotal = showsResults ? home.scoredTotal : home.projectedTotal;
   const awayTotal = away
-    ? isFinal
-      ? away.actualTotal
+    ? showsResults
+      ? away.scoredTotal
       : away.projectedTotal
     : null;
   const homeProb = view.homeWinProb;
 
-  const state = isFinal ? "Final" : isCurrent ? "This week" : "Upcoming";
+  const state = isFinal
+    ? "Final"
+    : showsResults
+      ? "In progress"
+      : isCurrent
+        ? "This week"
+        : "Upcoming";
 
   return (
     <section
@@ -625,6 +750,7 @@ function MatchupHeader({ view }: { view: MatchupView }) {
           side={home}
           total={homeTotal}
           isFinal={isFinal}
+          showsResults={showsResults}
           tone="home"
           leading={leadingSide(homeTotal, awayTotal) === "home"}
         />
@@ -633,6 +759,7 @@ function MatchupHeader({ view }: { view: MatchupView }) {
             side={away}
             total={awayTotal}
             isFinal={isFinal}
+            showsResults={showsResults}
             tone="away"
             leading={leadingSide(homeTotal, awayTotal) === "away"}
           />
@@ -647,7 +774,7 @@ function MatchupHeader({ view }: { view: MatchupView }) {
         )}
       </div>
 
-      {away && homeProb !== null && (
+      {away && homeProb !== null && !showsResults && (
         <div className="mt-4 rounded-card border border-line bg-base/40 p-3 sm:p-4">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-cyan">
             Win chance
@@ -662,10 +789,38 @@ function MatchupHeader({ view }: { view: MatchupView }) {
         </div>
       )}
 
+      {/* WHY THE BAR IS GONE, in words, both times it goes. A panel that simply
+          vanishes reads as a bug; a sentence in its place is the answer. The
+          live case is the more important of the two: the win chance is built
+          from whole-week projections, so once half the games have been played
+          it is describing a game that is already under way and would sit
+          directly above scores that contradict it. */}
       {away && isFinal && (
         <p className="mt-3 text-sm text-ink-muted">
           This week is final, so there is no win chance left to report. The
           scores above are what happened.
+        </p>
+      )}
+
+      {away && showsResults && !isFinal && (
+        <p className="mt-3 text-sm text-ink-muted">
+          Games are being played, so the numbers above are live scores rather
+          than projections. The win chance comes back off the board while a week
+          is in progress, because it is built from whole week forecasts and
+          those stop describing a game once it has started.
+        </p>
+      )}
+
+      {/* THE THIRD REASON THE BAR IS NOT THERE, and the one that is easiest to
+          leave as a hole: an unplayed week where one side has no projected total
+          at all, so there is no probability to compute. Without this branch that
+          reader gets a missing panel and no sentence, which is the exact outcome
+          the other two exist to prevent. */}
+      {away && !showsResults && homeProb === null && (
+        <p className="mt-3 text-sm text-ink-muted">
+          There is no win chance to report for this matchup. One of the two
+          lineups has no projected total, which happens when a roster is empty or
+          when Sleeper publishes no projection for anybody in it.
         </p>
       )}
     </section>
@@ -700,13 +855,21 @@ function SideSummary({
   side,
   total,
   isFinal,
+  showsResults,
   tone,
   leading,
 }: {
   side: MatchupSide;
   total: number | null;
+  /** The week has settled. Drives the word "Won", and nothing else. */
   isFinal: boolean;
-  /** Which end of the win-probability bar below this card belongs to. */
+  /** Real points are on the board, so `total` is a score, not a forecast. */
+  showsResults: boolean;
+  /**
+   * Which end of the beacon gradient this card takes, cyan on the left and
+   * purple on the right. It pairs the card with its half of the win-chance bar
+   * below on an unplayed week, and with its own column on the share image.
+   */
   tone: "home" | "away";
   /** True on the side with the higher total. Drives a word, not just a tint. */
   leading: boolean;
@@ -761,11 +924,11 @@ function SideSummary({
 
       <div className="mt-auto pt-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          {isFinal ? "Scored" : "Projected"}
+          {showsResults ? "Scored" : "Projected"}
         </p>
         {total === null ? (
           <p className="mt-0.5 text-sm text-ink-subtle">
-            {isFinal ? "Not available" : "No projection"}
+            {showsResults ? "Not available" : "No projection"}
           </p>
         ) : (
           <p

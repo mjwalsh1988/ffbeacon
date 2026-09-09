@@ -80,7 +80,12 @@ export type SchedulePlayer = {
   projected: number | null;
   /** Spread of the weekly outcome. Null alongside a null projection. */
   sigma: number | null;
-  /** What they actually scored. Non-null only on a final week. */
+  /**
+   * What they actually scored. Non-null once RESULTS ARE VISIBLE, which is a
+   * final week or a week with points already on the board, and null before
+   * that. Which of `actual` and `projected` a surface leads with is the
+   * surface's decision: see MatchupView.resultsVisible.
+   */
   actual: number | null;
   /** True when the player sits on IR or the taxi squad. */
   isInactive: boolean;
@@ -132,6 +137,19 @@ export type MatchupSide = {
   /** What the side actually scored. Non-null only on a final week. */
   actualTotal: number | null;
   /**
+   * The league's own official points for this side, present whenever RESULTS
+   * ARE VISIBLE: a final week, and a week with points already on the board.
+   *
+   * Deliberately separate from `actualTotal`, which stays final-only. A week in
+   * progress DISPLAYS real points, and every retrospective figure beside them
+   * (the optimal fill, the gap, each swap) stays graded on projections until
+   * the week settles, because grading a Sunday afternoon against partial scores
+   * tells a manager they left forty points on the bench when three of their
+   * starters play at four o'clock. Same two switches, same reason, as the
+   * Lineups board.
+   */
+  scoredTotal: number | null;
+  /**
    * The best legal lineup, for comparison against the set one. Graded on the
    * same basis as the week: actual points once the week is final, projections
    * before then. A settled week's retrospective has to be answered with results.
@@ -163,6 +181,16 @@ export type MatchupView = {
   homeWinProb: number | null;
   /** True when the league publishes IDP slots we cannot project. */
   hasUnprojectableSlots: boolean;
+  /**
+   * True when real points should be the headline figure on every row: the week
+   * is final, or somebody in it has already scored.
+   *
+   * "In progress" means POINTS ARE ON THE BOARD, not that the calendar says so.
+   * Sleeper publishes the current week's matchup row from Tuesday with every
+   * score at zero, so a switch decided by week number alone would label four
+   * quiet days as live and print a lineup of 0.0s as though those were results.
+   */
+  resultsVisible: boolean;
 };
 
 /** One matchup as the week board and the team season list show it. */

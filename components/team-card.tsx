@@ -5,6 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { BeaconValue } from "@/components/beacon-value-icon";
 import { CopyLinkButton } from "@/components/copy-link-button";
+import { CopyImageButton } from "@/components/copy-image-button";
 import { ownerLine } from "@/lib/team-label";
 import { formatValue } from "@/lib/format-value";
 import { PlayerHeadshot } from "@/components/player-headshot";
@@ -191,6 +192,27 @@ export function TeamCard({
     if (!includePicks) qs.set("picks", "off");
     const suffix = qs.toString();
     return `/api/og/team/${sleeperLeagueId}/${sleeperRosterId}${suffix ? `?${suffix}` : ""}`;
+  })();
+
+  /**
+   * The card in a sentence, for the copy-image button to announce.
+   *
+   * A picture is the one thing a reader cannot check for themselves after the
+   * fact, so the confirmation names what is actually on it rather than only
+   * saying that something was copied. Built from the same figures the header
+   * above draws, so the words and the image cannot disagree.
+   */
+  const shareImageDescription = (() => {
+    const parts = [teamName];
+    const owner = ownerLine(teamName, ownerDisplayName || ownerSleeperUsername);
+    if (owner) parts.push(owner);
+    parts.push(
+      `${record.wins}-${record.losses}${record.ties ? `-${record.ties}` : ""}`,
+    );
+    if (statRanks.total !== null && teamCount > 0) {
+      parts.push(`ranked ${statRanks.total} of ${teamCount} by roster value`);
+    }
+    return `${parts.join(", ")}.`;
   })();
 
   // The plain page link, deliberately without the `?username=` the in-view
@@ -389,21 +411,33 @@ export function TeamCard({
           >
             Share
           </span>
-          <span className="flex items-center gap-2">
+          {/* THE PICTURE FIRST, THEN THE TWO LINKS. Copying the bytes is what
+              the moment usually calls for: somebody wants the roster IN the
+              group chat, and most places people paste render a pasted PNG
+              inline and a pasted URL as a blue word. The links stay for the
+              other intent, which is "go and look at this". Same three controls,
+              same order, as the matchup scoreboard. */}
+          <span className="flex flex-wrap items-center justify-end gap-2">
+            <CopyImageButton
+              imageHref={shareImageHref}
+              description={shareImageDescription}
+              size="sm"
+              ariaLabel={`Copy image: the ${teamName} roster card, as a picture on the clipboard`}
+            />
             <CopyLinkButton
               href={shareImageHref}
               prewarmHref={shareImageHref}
               icon="image"
               noun="Image link"
               size="sm"
-              ariaLabel={`Copy shareable image link for ${teamName}`}
+              ariaLabel={`Copy image link: a web address for the ${teamName} roster picture`}
             />
             <CopyLinkButton
               href={rosterPageHref}
               icon="link"
               noun="Roster link"
               size="sm"
-              ariaLabel={`Copy link to the ${teamName} roster page`}
+              ariaLabel={`Copy page link: a web address for the ${teamName} roster page`}
             />
           </span>
         </div>

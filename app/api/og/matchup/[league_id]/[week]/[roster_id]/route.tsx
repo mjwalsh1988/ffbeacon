@@ -97,7 +97,10 @@ export async function GET(
     .select("id, name, season, metadata")
     .eq("sleeper_league_id", sleeperLeagueId)
     .maybeSingle();
-  if (!league) return notFoundImage(`League ${sleeperLeagueId} not found`);
+  // Not echoed back. See the share route beside this one: 64 caller-chosen
+  // characters on an FF Beacon wordmark, cached at the edge, is a defacement
+  // primitive and the reader already knows which link they followed.
+  if (!league) return notFoundImage("That league is not on FF Beacon yet");
 
   const season = Number(league.season);
   if (!Number.isFinite(season))
@@ -119,15 +122,28 @@ export async function GET(
 
   const view = result.view;
   const { home, away, isFinal } = view;
-  const homeTotal = isFinal ? home.actualTotal : home.projectedTotal;
+  // THE SAME SWITCH THE PAGE AND THE TALL SHARE CARD USE. Points go on the board
+  // from the first Thursday kickoff, and a link preview still showing forecasts
+  // on a Sunday evening would contradict both the page it links to and the
+  // portrait image copied from that page.
+  const showsResults = view.resultsVisible;
+  const homeTotal = showsResults ? home.scoredTotal : home.projectedTotal;
   const awayTotal = away
-    ? isFinal
-      ? away.actualTotal
+    ? showsResults
+      ? away.scoredTotal
       : away.projectedTotal
     : null;
-  const homeProb = view.homeWinProb;
+  // A win chance is a whole-week forecast, so it comes off once there are real
+  // points to look at instead.
+  const homeProb = showsResults ? null : view.homeWinProb;
 
-  const state = isFinal ? "Final" : view.isCurrent ? "This week" : "Upcoming";
+  const state = isFinal
+    ? "Final"
+    : showsResults
+      ? "In progress"
+      : view.isCurrent
+        ? "This week"
+        : "Upcoming";
 
   return new ImageResponse(
     <div
@@ -183,7 +199,7 @@ export async function GET(
         <SidePanel
           side={home}
           total={homeTotal}
-          isFinal={isFinal}
+          showsResults={showsResults}
           winProb={homeProb}
           align="left"
         />
@@ -222,7 +238,7 @@ export async function GET(
           <SidePanel
             side={away}
             total={awayTotal}
-            isFinal={isFinal}
+            showsResults={showsResults}
             winProb={homeProb === null ? null : 1 - homeProb}
             align="right"
           />
@@ -261,7 +277,9 @@ export async function GET(
         <p style={{ fontSize: 13, color: INK_SUBTLE, margin: 0 }}>
           {isFinal
             ? "Final scores from Sleeper"
-            : "Projected under this league's own scoring settings"}
+            : showsResults
+              ? "Live scores from Sleeper, with games still to play"
+              : "Projected under this league's own scoring settings"}
         </p>
         <p style={{ fontSize: 15, color: INK_SUBTLE, margin: 0 }}>
           ffbeacon.com
@@ -288,17 +306,18 @@ export async function GET(
 function SidePanel({
   side,
   total,
-  isFinal,
+  showsResults,
   winProb,
   align,
 }: {
   side: MatchupSide;
   total: number | null;
-  isFinal: boolean;
+  /** Real points are on the board, so every figure here is a score. */
+  showsResults: boolean;
   winProb: number | null;
   align: "left" | "right";
 }) {
-  const starters = topStarters(side, isFinal);
+  const starters = topStarters(side, showsResults);
   const record = `${side.record.wins}-${side.record.losses}${
     side.record.ties > 0 ? `-${side.record.ties}` : ""
   }`;
@@ -361,7 +380,7 @@ function SidePanel({
             {total === null ? "--" : total.toFixed(1)}
           </p>
           <p style={{ fontSize: 14, color: INK_SUBTLE, margin: 0 }}>
-            {isFinal ? "scored" : "projected"}
+            {showsResults ? "scored" : "projected"}
             {winProb !== null ? `, ${Math.round(winProb * 100)}% to win` : ""}
           </p>
         </div>
@@ -438,7 +457,7 @@ function SidePanel({
  */
 function topStarters(
   side: MatchupSide,
-  isFinal: boolean,
+  showsResults: boolean,
 ): {
   name: string;
   team: string | null;
@@ -458,7 +477,7 @@ function topStarters(
       name: entry.player.name,
       team: entry.player.team,
       slotLabel: entry.slot.label,
-      points: isFinal ? entry.player.actual : entry.player.projected,
+      points: showsResults ? entry.player.actual : entry.player.projected,
     }))
     .filter((entry) => entry.points !== null)
     .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
@@ -483,7 +502,14 @@ function notFoundImage(reason: string): Response {
       <p style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>FF Beacon</p>
       <p style={{ fontSize: 24, color: INK_MUTED, marginTop: 16 }}>{reason}</p>
     </div>,
-    { ...SIZE, status: 404 },
+    {
+      ...SIZE,
+      status: 404,
+      // next/og defaults a header-less response to `immutable, max-age=31536000`,
+      // which would pin "no game stored for this roster" at the edge for a year
+      // and keep serving it after Sleeper publishes the week.
+      headers: { "cache-control": "public, max-age=0, s-maxage=60" },
+    },
   );
 }
 

@@ -43,9 +43,26 @@ type CopyLinkButtonProps = {
  *   5. Restores idle state
  *
  * Failure mode: when clipboard.writeText rejects (e.g. permission denied,
- * insecure context) we fall through to selecting the URL inside a hidden
- * <input> and prompting the user to copy manually. The screen reader
- * announcement reflects this with "Press Ctrl+C to copy".
+ * insecure context) we fall through to selecting the URL inside an <input> and
+ * prompting the user to copy manually. The screen reader announcement reflects
+ * this with "Press Ctrl+C to copy".
+ *
+ * THE FALLBACK INPUT IS HIDDEN UNTIL IT IS REAL, AND THEN IT IS ACTUALLY
+ * VISIBLE. Three things were wrong with the first version of it, and each one
+ * only bites in the state nobody tests:
+ *
+ *   It had no accessible name, so focus landed on "edit, read only,
+ *   https://..." with nothing saying why the reader was suddenly there. It
+ *   carries a label now, and `aria-describedby` points at the instruction.
+ *
+ *   It kept `sr-only` and `opacity: 0` while focused, so a SIGHTED keyboard
+ *   user had focus parked on a one-pixel clipped box with no ring anywhere on
+ *   the page, permanently: the manual state deliberately has no reset timer.
+ *   Revealing it is now part of entering the state.
+ *
+ *   `aria-hidden` came off through `removeAttribute`, which React never
+ *   reconciles because its own vdom still says the attribute is unchanged. It
+ *   is driven by state instead, so it goes back when the state does.
  */
 export function CopyLinkButton({
   href,
@@ -99,18 +116,16 @@ export function CopyLinkButton({
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setStatus("idle"), 2500);
     } catch {
+      // The state drives the markup; this only moves focus into it. Selecting
+      // has to happen after React has rendered the visible input, so it waits a
+      // frame rather than racing the commit.
       setStatus("manual");
-      const node = fallbackInputRef.current;
-      if (node) {
-        node.value = resolvedUrl;
-        node.removeAttribute("aria-hidden");
-        node.style.position = "fixed";
-        node.style.top = "50%";
-        node.style.left = "50%";
-        node.style.opacity = "0";
+      requestAnimationFrame(() => {
+        const node = fallbackInputRef.current;
+        if (!node) return;
         node.focus({ preventScroll: true });
         node.select();
-      }
+      });
     }
   };
 
@@ -153,6 +168,7 @@ export function CopyLinkButton({
         : "";
 
   const glyphSize = size === "xs" ? 12 : 14;
+  const manual = status === "manual";
 
   return (
     <>
@@ -185,14 +201,46 @@ export function CopyLinkButton({
       <span className="sr-only" aria-live="polite" role="status">
         {announcement}
       </span>
-      <input
-        ref={fallbackInputRef}
-        type="text"
-        readOnly
-        aria-hidden="true"
-        tabIndex={-1}
-        className="sr-only"
-      />
+
+      {/* Present in the DOM either way so the ref is stable, and out of the
+          accessibility tree AND out of the tab order until the clipboard has
+          actually failed. In the manual state it becomes a real, visible,
+          labelled field, because that is the state where a reader has to see
+          and operate it. */}
+      {/* NO useId, AND NO id/htmlFor PAIR. The label WRAPS the input, which is
+          the implicit association and needs no generated id at all. The explicit
+          form cost a hydration mismatch: adding a `useId` to a component that
+          renders inside the league shell shifted the generated id of the
+          bookmark bar beside it, and React reported the tree as hydrated with
+          mismatched attributes. The hint sits outside the label so it does not
+          land in the accessible name, and it is said in the live region above
+          either way, so nothing is lost by ear. */}
+      <span className={manual ? "flex w-full flex-col gap-1" : "sr-only"}>
+        <label className={manual ? "flex flex-col gap-1" : "sr-only"}>
+          <span
+            className={manual ? "text-xs font-semibold text-ink-muted" : "sr-only"}
+          >
+            {noun} to copy
+          </span>
+          <input
+            ref={fallbackInputRef}
+            type="text"
+            readOnly
+            value={manual ? resolvedUrl : ""}
+            aria-hidden={manual ? undefined : "true"}
+            tabIndex={manual ? 0 : -1}
+            className={
+              manual
+                ? "w-full rounded-card border border-brand-cyan/60 bg-base px-2 py-2 text-xs text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
+                : "sr-only"
+            }
+          />
+        </label>
+        <span className={manual ? "text-xs text-ink-muted" : "sr-only"}>
+          Clipboard access was refused. Press Control C, or Command C, to copy
+          the selected text.
+        </span>
+      </span>
     </>
   );
 }

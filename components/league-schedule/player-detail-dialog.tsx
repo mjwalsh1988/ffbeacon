@@ -99,14 +99,19 @@ function describeReliability(reliability: number | null): string {
 export function PlayerDetailDialog({
   player,
   week,
-  isFinal,
+  showsResults,
   onClose,
   extras,
 }: {
   /** Null closes the dialog. The parent keeps the selection. */
   player: SchedulePlayer | null;
   week: number;
-  isFinal: boolean;
+  /**
+   * True once real points are on the board, so Actual points is a row worth
+   * showing. Deliberately not `isFinal`: a week in progress has a score, and a
+   * dialog that hid it would contradict the number on the row that opened it.
+   */
+  showsResults: boolean;
   onClose: () => void;
   /**
    * Extra `<Row>` elements, appended inside the same description list. Built by
@@ -159,7 +164,7 @@ export function PlayerDetailDialog({
         )}
 
         <dl className="mt-4 space-y-3">
-          {isFinal && (
+          {showsResults && (
             <Row
               term="Actual points"
               value={player.actual === null ? "Not available" : `${fmtPoints(player.actual)}`}

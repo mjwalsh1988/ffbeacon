@@ -524,6 +524,11 @@ export async function loadMatchupDetail(
       reserveSleeperIds: roster.reserveSleeperIds,
       taxiSleeperIds: roster.taxiSleeperIds,
       actualTotal: row.is_final ? Number(row.points ?? 0) : null,
+      // The same column, ungated. On a live week it is the running score, which
+      // is what the share card and the header lead with once games are under
+      // way. `actualTotal` above stays final-only because the retrospective
+      // hangs off it.
+      officialPoints: Number(row.points ?? 0),
       actualByPlayer: readRosteredPlayerPoints(raw),
     };
   };

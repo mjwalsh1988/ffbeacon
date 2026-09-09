@@ -26,6 +26,19 @@ const nextConfig: NextConfig = {
   // to load on Vercel and crashes the function at import time with
   // FUNCTION_INVOCATION_FAILED before any handler code (or its try/catch) runs.
   serverExternalPackages: ["sharp"],
+  // THE SHARE-IMAGE FONTS HAVE TO BE TRACED EXPLICITLY.
+  //
+  // lib/og/assets.ts reads two Geist TTFs off disk at module load, because
+  // satori cannot decode the woff2 files next/font ships. A runtime
+  // `readFileSync` is invisible to Vercel's file tracer, which follows imports,
+  // so without this the fonts exist in development and are missing in
+  // production: every generated image would fall back to whatever face satori
+  // finds, or fail outright. The beacon mark is read from public/, which is
+  // deployed as static output, but it is listed too so one entry covers every
+  // file that module opens.
+  outputFileTracingIncludes: {
+    "/api/og/**": ["./assets/og-fonts/**", "./public/img/ff-beacon-mark-96.png"],
+  },
   // Global security response headers (FFB-SEC-005). Applied to every route.
   // CSP ships in Report-Only mode; see lib/security-headers.ts for the path to
   // enforcement. Vercel additionally injects HSTS on production domains.

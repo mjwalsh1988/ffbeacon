@@ -116,16 +116,16 @@ const WINNING_HALF = "bg-brand-cyan/[0.055]";
 /**
  * Which half of a paired row is ahead, or neither.
  *
- * Graded on the same basis as the week: what was actually scored once the week
- * is final, projections before then. A null on either side means there is no
+ * Read off whichever number the row is DISPLAYING: real points once the week has
+ * started, projections before it. A null on either side means there is no
  * comparison to make, and a tie is not a win, so both come back null and no
  * tint is drawn. Nothing here invents a zero to compare against.
  */
-function slotLeader(row: PairedRow, isFinal: boolean): "home" | "away" | null {
+function slotLeader(row: PairedRow, showsResults: boolean): "home" | "away" | null {
   const value = (entry: MatchupSlotEntry | null): number | null => {
     const player = entry?.player;
     if (!player) return null;
-    return isFinal ? player.actual : player.projected;
+    return showsResults ? player.actual : player.projected;
   };
   const home = value(row.home);
   const away = value(row.away);
@@ -204,6 +204,24 @@ export function MatchupTable({
   const awayColId = `${tableId}-away`;
 
   const { home, away, isFinal, week } = view;
+  // WHAT THE ROWS SHOW versus WHAT THE WEEK IS GRADED ON, and they are not the
+  // same switch. Points go on the board from the first Thursday kickoff, so a
+  // table still printing forecasts on a Sunday evening reads as a page that does
+  // not know what day it is. The footer's Best lineup and Difference stay on
+  // `isFinal` underneath, because grading a half-played week against partial
+  // scores would tell a manager they benched forty points when three of their
+  // starters have not kicked off yet.
+  const showsResults = view.resultsVisible;
+  // A WEEK IN PROGRESS IS THE AWKWARD ONE, and the footer is where it shows.
+  // "Scored so far" is real; Best lineup and Difference underneath it are still
+  // computed from projections, because `gradePoints` in matchup.ts waits for
+  // `isFinal` on purpose. Left side by side with nothing said, a reader hears
+  // "scored so far 88.2, best lineup 110.1, difference plus 21.9" in table
+  // navigation and has every reason to read that last figure as points they have
+  // already left on their bench today. It is a forecast of a gap, not a measured
+  // one, so it is held back rather than dressed up, which is the same call
+  // CLAUDE.md makes for the Lineups optimiser panel.
+  const inProgress = showsResults && !isFinal;
   const rows = groupRows(pairSlots(home, away));
   const colCount = away ? 3 : 2;
 
@@ -260,7 +278,7 @@ export function MatchupTable({
               </tr>
               {groupRowsList.map((row) => {
                 const slotId = `${tableId}-${row.key}`;
-                const lead = slotLeader(row, isFinal);
+                const lead = slotLeader(row, showsResults);
                 return (
                   <tr key={row.key} className="align-top">
                     <td
@@ -269,7 +287,7 @@ export function MatchupTable({
                     >
                       <PlayerCell
                         entry={row.home}
-                        isFinal={isFinal}
+                        showsResults={showsResults}
                         align="start"
                         onOpen={handleOpen}
                       />
@@ -298,7 +316,7 @@ export function MatchupTable({
                       >
                         <PlayerCell
                           entry={row.away}
-                          isFinal={isFinal}
+                          showsResults={showsResults}
                           align="end"
                           onOpen={handleOpen}
                         />
@@ -318,14 +336,18 @@ export function MatchupTable({
               made the block read as four equally important numbers and left the
               eye to find the one that mattered. */}
           <tfoot className="border-t-2 border-line-accent bg-surface-elevated/60">
-            {isFinal && (
+            {showsResults && (
               <TotalRow
-                label="Final"
+                // The label is the state, so a running score is never presented
+                // as a result. `scoredTotal` is the league's own published figure
+                // either way, so the number does not change meaning when the
+                // word does.
+                label={isFinal ? "Final" : "Scored so far"}
                 rowId={`${tableId}-final`}
                 homeColId={homeColId}
                 awayColId={awayColId}
-                homeValue={home.actualTotal}
-                awayValue={away?.actualTotal ?? null}
+                homeValue={home.scoredTotal}
+                awayValue={away?.scoredTotal ?? null}
                 hasAway={away !== null}
                 emphasis
               />
@@ -338,32 +360,51 @@ export function MatchupTable({
               homeValue={home.projectedTotal}
               awayValue={away?.projectedTotal ?? null}
               hasAway={away !== null}
-              emphasis={!isFinal}
-              // On a final week the projection is the footnote, not the
-              // headline, so it drops to the supporting tier with the other two.
-              secondary={isFinal}
+              emphasis={!showsResults}
+              // Once there are real points the projection is the footnote, not
+              // the headline, so it drops to the supporting tier with the other
+              // two.
+              secondary={showsResults}
             />
-            <TotalRow
-              label="Best lineup"
-              rowId={`${tableId}-optimal`}
-              homeColId={homeColId}
-              awayColId={awayColId}
-              homeValue={home.optimalTotal}
-              awayValue={away?.optimalTotal ?? null}
-              hasAway={away !== null}
-              secondary
-            />
-            <TotalRow
-              label="Difference"
-              rowId={`${tableId}-difference`}
-              homeColId={homeColId}
-              awayColId={awayColId}
-              homeValue={home.pointsLeftOnBench}
-              awayValue={away?.pointsLeftOnBench ?? null}
-              hasAway={away !== null}
-              signed
-              secondary
-            />
+            {!inProgress && (
+              <TotalRow
+                label="Best lineup"
+                rowId={`${tableId}-optimal`}
+                homeColId={homeColId}
+                awayColId={awayColId}
+                homeValue={home.optimalTotal}
+                awayValue={away?.optimalTotal ?? null}
+                hasAway={away !== null}
+                secondary
+              />
+            )}
+            {!inProgress && (
+              <TotalRow
+                label="Difference"
+                rowId={`${tableId}-difference`}
+                homeColId={homeColId}
+                awayColId={awayColId}
+                homeValue={home.pointsLeftOnBench}
+                awayValue={away?.pointsLeftOnBench ?? null}
+                hasAway={away !== null}
+                signed
+                secondary
+              />
+            )}
+            {inProgress && (
+              <tr>
+                <td
+                  colSpan={colCount}
+                  className="px-2 py-2 text-[11px] leading-relaxed text-ink-muted"
+                >
+                  This week is in progress, so the points above are live and a
+                  player whose game has not kicked off reads 0.0. The best
+                  lineup and the difference are held back until the week
+                  settles: grading a half played Sunday would report points left
+                  on a bench by players who have not taken the field yet.
+                </td>
+              </tr>
+            )}
             {view.hasUnprojectableSlots && unprojectableSlots > 0 && (
               <tr>
                 <td
@@ -396,7 +437,7 @@ export function MatchupTable({
         <PlayerDetailDialog
           player={openPlayer}
           week={week}
-          isFinal={isFinal}
+          showsResults={showsResults}
           onClose={closeDetail}
         />
       )}
@@ -414,12 +455,13 @@ export function MatchupTable({
  */
 function PlayerCell({
   entry,
-  isFinal,
+  showsResults,
   align,
   onOpen,
 }: {
   entry: MatchupSlotEntry | null;
-  isFinal: boolean;
+  /** True once real points are on the board, so the cell leads with the score. */
+  showsResults: boolean;
   align: "start" | "end";
   onOpen: (player: SchedulePlayer) => void;
 }) {
@@ -439,7 +481,7 @@ function PlayerCell({
     );
   }
 
-  const points = isFinal ? player.actual : player.projected;
+  const points = showsResults ? player.actual : player.projected;
   const opponent = opponentLabel(player.nflOpponent, player.nflIsHome);
 
   return (
@@ -447,7 +489,7 @@ function PlayerCell({
       type="button"
       onClick={() => onOpen(player)}
       aria-haspopup="dialog"
-      aria-label={spokenPlayer(player, isFinal)}
+      aria-label={spokenPlayer(player, showsResults)}
       className={`flex min-h-11 w-full items-start gap-2 rounded-card px-1 py-1.5 text-left transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan ${
         align === "end" ? "flex-row-reverse text-right" : ""
       }`}
@@ -487,7 +529,7 @@ function PlayerCell({
             {player.position}
             {player.team ? `, ${player.team}` : ""} {opponent}
           </span>
-          {isFinal && player.projected !== null && (
+          {showsResults && player.projected !== null && (
             <span className="mt-0.5 block truncate text-[11px] text-ink-subtle">
               {fmtPoints(player.projected)} proj
             </span>
@@ -518,7 +560,7 @@ function PlayerCell({
         {points === null
           ? // A played week with no number is missing a RESULT, not a forecast,
             // and "no projection" would send a reader looking for the wrong thing.
-            isFinal
+            showsResults
             ? "No score"
             : "No proj"
           : fmtPoints(points)}
@@ -531,16 +573,17 @@ function PlayerCell({
  * The accessible name for a player cell.
  *
  * Position and team stay as the codes we hold; inventing "Buffalo Bills" from
- * "BUF" would mean shipping a mapping table nobody maintains. A final week says
- * what was scored first and the projection second, because on a played week the
- * result is the fact and the projection is the footnote.
+ * "BUF" would mean shipping a mapping table nobody maintains. A week with points
+ * on the board says what was scored first and the projection second, because
+ * once a game has started the score is the fact and the projection is the
+ * footnote.
  */
-function spokenPlayer(player: SchedulePlayer, isFinal: boolean): string {
+function spokenPlayer(player: SchedulePlayer, showsResults: boolean): string {
   const parts: string[] = [player.name, player.position];
   if (player.team) parts.push(player.team);
   parts.push(opponentWords(player.nflOpponent, player.nflIsHome));
 
-  if (isFinal) {
+  if (showsResults) {
     parts.push(
       player.actual === null
         ? "no score recorded"
