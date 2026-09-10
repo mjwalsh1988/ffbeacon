@@ -91,7 +91,7 @@ const PAGE_CARDS: Record<string, PageCard> = {
     badge: "All tools",
   },
   "signal-check": {
-    eyebrow: "Trade grader",
+    eyebrow: "Fantasy football trade calculator",
     headlineTop: "Is this trade",
     headlineBottom: "actually fair?",
     subhead:
@@ -121,7 +121,7 @@ const PAGE_CARDS: Record<string, PageCard> = {
     badge: "On The Clock",
   },
   faab: {
-    eyebrow: "Waiver bid calculator",
+    eyebrow: "Fantasy football FAAB calculator",
     headlineTop: "How much to bid,",
     headlineBottom: "and when to stop",
     subhead:

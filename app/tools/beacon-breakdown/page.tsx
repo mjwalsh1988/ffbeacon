@@ -691,15 +691,15 @@ function PackageHandoff({ aName, bName }: { aName: string; bName: string }) {
       </h3>
       <p className="mt-1 text-sm leading-relaxed text-ink-muted">
         Real trades are rarely one for one. If {aName} and {bName} are only part
-        of the deal, build the whole thing in Signal Check: it prices
-        multi-player packages and draft picks together and grades the trade end
-        to end.
+        of the deal, build the whole thing in the Signal Check trade calculator:
+        it prices multi-player packages and draft picks together and grades the
+        trade end to end.
       </p>
       <Link
         href="/tools/signal-check"
         className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-card border border-line bg-base px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-cyan/60 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
       >
-        Build the full trade in Signal Check
+        Build the full trade in the Signal Check Trade Calculator
         <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
       </Link>
     </section>

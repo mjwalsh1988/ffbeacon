@@ -126,9 +126,9 @@ const FEATURED_TOOLS: FeaturedTool[] = [
   },
   {
     href: "/tools/signal-check",
-    title: "Signal Check",
+    title: "Signal Check Trade Calculator",
     description:
-      "Thinking about a trade? Build both sides and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
+      "Thinking about a trade? Build both sides in our fantasy football trade calculator and get the Beacon Verdict: who wins, by how much, and why, in plain English and weighted for your league's exact scoring.",
     cta: "Analyze a trade",
     icon: Scale,
   },

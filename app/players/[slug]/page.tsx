@@ -54,8 +54,12 @@ export async function generateMetadata({
   const name = player.full_name ?? `${player.first_name} ${player.last_name}`;
   const posTeam = `${player.position}${player.team ? `, ${player.team}` : ""}`;
   const canonical = `${SITE.url}/players/${slug}`;
-  const title = `${name}: Is He Worth It? Value, Stats, and News`;
-  const description = `Everything on ${name} (${posTeam}) in one place: what he is worth in a trade right now and which way that is heading, how he has actually scored, and the news that changes it.`;
+  // The title leads with the words a reader actually types. "Is He Worth It?"
+  // was a better headline than it was a search result: it matched nothing
+  // anyone looks for, and it pushed stats and trade value past where a SERP
+  // truncates. Everything named here is a section the profile really has.
+  const title = `${name} Fantasy Football Stats, Trade Value, News`;
+  const description = `${name} (${posTeam}) fantasy football profile: trade value and its trend, weekly projections for start or sit calls, game-log stats, and the latest news.`;
   const ogImage = `${SITE.url}/api/og/player/${slug}`;
   return {
     title,

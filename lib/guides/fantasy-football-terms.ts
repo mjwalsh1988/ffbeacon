@@ -650,7 +650,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A trade calculator adds up the value on both sides of a proposed deal and reports which side comes out ahead.",
           "Treat the output as a starting point rather than a ruling. A calculator does not know you are already two starters deep at the position you are trading away.",
         ],
-        link: { href: "/tools/signal-check", label: "Grade a trade with Signal Check" },
+        link: {
+          href: "/tools/signal-check",
+          label: "Grade a trade with the Signal Check Trade Calculator",
+        },
       },
       {
         id: "buy-low",
@@ -1036,7 +1039,10 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "The Beacon Verdict is the plain-English call our trade analyzer returns: who wins a trade, by how much, and why.",
           "It reads values for your exact scoring format rather than a generic one, and it reports its own confidence so you know when a draft pick estimate is doing the heavy lifting.",
         ],
-        link: { href: "/tools/signal-check", label: "Get a verdict on your trade" },
+        link: {
+          href: "/tools/signal-check",
+          label: "Get a verdict in the Signal Check Trade Calculator",
+        },
       },
       {
         id: "signal-guide",

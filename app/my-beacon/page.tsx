@@ -91,7 +91,7 @@ const TOOLS: Destination[] = [
   },
   {
     href: "/tools/signal-check",
-    title: "Signal Check",
+    title: "Signal Check Trade Calculator",
     body: "Grade a trade and see the margin, the shape, and how confident the read is.",
     icon: Scale,
     accent: "purple",

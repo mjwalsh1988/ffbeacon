@@ -60,7 +60,10 @@ const UNSUPPORTED_MESSAGE: Record<BeamUnsupportedReason, string> = {
 const UNSUPPORTED_LINKS: Partial<Record<BeamUnsupportedReason, BeamLink[]>> = {
   "out-of-scope": [
     { href: "/tools/league-pulse", label: "Sync your league in League Pulse" },
-    { href: "/tools/signal-check", label: "Grade a trade in Signal Check" },
+    {
+      href: "/tools/signal-check",
+      label: "Grade a trade in the Signal Check Trade Calculator",
+    },
   ],
   "unsupported-stat": [{ href: "/rankings", label: "Browse the rankings board" }],
 };

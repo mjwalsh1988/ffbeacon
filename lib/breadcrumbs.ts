@@ -67,7 +67,7 @@ const ROUTE_LABELS: Record<string, string> = {
   "/tools/faab": "FAAB Calculator",
   "/tools/league-pulse": "League Pulse",
   "/tools/on-the-clock": "On The Clock",
-  "/tools/signal-check": "Signal Check",
+  "/tools/signal-check": "Signal Check Trade Calculator",
   "/tools/signal-check/v": "Shared Verdict",
   "/u": "Profiles",
 };

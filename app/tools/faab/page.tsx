@@ -23,16 +23,18 @@ import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead, type MastheadChip } from "@/components/app-shell/page-masthead";
 import { isDiscordMember } from "@/lib/discord-membership";
 
+const META_TITLE = "FAAB Calculator for Fantasy Football: What to Bid";
+const META_DESCRIPTION =
+  "A free fantasy football FAAB calculator: how much to bid on any waiver claim, and when to walk away. Priced against your roster, your rivals, and your league.";
+
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/faab" },
-  title: "FAAB Calculator: What to Bid on Waivers",
-  description:
-    "How much to bid on any waiver claim, and when to walk away. Priced against your own roster, what your rivals can still spend, and what your league has been paying all season.",
+  title: META_TITLE,
+  description: META_DESCRIPTION,
   ...pageShareMetadata({
     key: "faab",
-    title: "FAAB Calculator: What to Bid on Waivers",
-    description:
-      "How much to bid on any waiver claim, and when to walk away. Priced against your own roster, what your rivals can still spend, and what your league has been paying all season.",
+    title: META_TITLE,
+    description: META_DESCRIPTION,
     path: "/tools/faab",
   }),
 };
@@ -174,7 +176,7 @@ export default async function FaabPage({
           masthead={
           <PageMasthead
             eyebrow="Tools"
-            title="FAAB Calculator"
+            title="Fantasy Football FAAB Calculator"
             description="What to bid, and when to walk away. Connect your Sleeper league to price the claim against your real roster, or enter your setup by hand."
             chips={mastheadChips}
             actions={

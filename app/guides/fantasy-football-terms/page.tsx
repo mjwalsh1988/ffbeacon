@@ -458,8 +458,8 @@ function Closing() {
       <p className="mt-4 leading-relaxed text-ink-muted">
         A glossary is only useful when you go use the words. The rankings board
         shows tiers, positional ranks, and seven-day movement for whichever
-        format you play. Signal Check grades a trade and tells you its
-        confidence. League Pulse reads your actual Sleeper league and scores
+        format you play. The Signal Check trade calculator grades a trade and
+        tells you its confidence. League Pulse reads your actual Sleeper league and scores
         every team in it. All free, all built to work by keyboard and by screen
         reader.
       </p>
@@ -471,7 +471,7 @@ function Closing() {
         />
         <ClosingLink
           href="/tools/signal-check"
-          label="Signal Check"
+          label="Signal Check Trade Calculator"
           detail="Grade a trade and get the Beacon Verdict"
         />
         <ClosingLink

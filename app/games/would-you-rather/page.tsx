@@ -225,7 +225,7 @@ export default async function WouldYouRatherPage() {
                 <LinkTile
                   href="/tools/signal-check"
                   icon={Scale}
-                  title="Signal Check"
+                  title="Signal Check Trade Calculator"
                   body="Grade a trade of your own, with the same pipeline behind the reveal."
                   accent="purple"
                 />

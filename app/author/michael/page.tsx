@@ -252,7 +252,7 @@ export default async function AuthorMichaelPage() {
             <LinkTile
               href="/tools/signal-check"
               icon={Scale}
-              title="Signal Check"
+              title="Signal Check Trade Calculator"
               body="Trade grades that state the margin and the confidence rather than a letter."
               accent="purple"
             />

@@ -262,7 +262,7 @@ export default async function AboutPage() {
             <LinkTile
               href="/tools/signal-check"
               icon={Scale}
-              title="Signal Check"
+              title="Signal Check Trade Calculator"
               body="Grade a trade and get the verdict, the value margin, and how confident the read is."
               accent="purple"
             />

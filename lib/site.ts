@@ -78,9 +78,12 @@ export const TOOLS_NAV: NavChild[] = [
     description: "Scout any manager before you offer",
   },
   {
-    label: "Signal Check",
+    // The menu label is the job, not the product name: nobody looking for a
+    // trade calculator searches for "Signal Check". The brand name stays in the
+    // hint under it, and on the tool's own page.
+    label: "Trade Calculator",
     href: "/tools/signal-check",
-    description: "Grade any trade with the Beacon Verdict",
+    description: "Signal Check: grade any trade with the Beacon Verdict",
   },
   {
     label: "Beacon Breakdown",
@@ -137,7 +140,9 @@ export type SearchableTool = {
 };
 
 /** Tools + primary destinations, in the order the search palette lists them.
- * Descriptions are reused verbatim from TOOLS_NAV where they exist. */
+ * Descriptions track TOOLS_NAV closely but are not required to match it: the
+ * nav hint carries the brand name for a reader who only sees "Trade Calculator"
+ * in the menu, and a search result already shows the fuller label. */
 export const SEARCHABLE_TOOLS: SearchableTool[] = [
   {
     label: "Rankings Board",
@@ -146,10 +151,20 @@ export const SEARCHABLE_TOOLS: SearchableTool[] = [
     keywords: ["rankings", "board", "values", "tiers", "adp"],
   },
   {
-    label: "Signal Check",
+    label: "Signal Check Trade Calculator",
     href: "/tools/signal-check",
     description: "Grade any trade with the Beacon Verdict",
-    keywords: ["trade", "grade", "calculator", "analyzer", "verdict"],
+    keywords: [
+      "trade",
+      "grade",
+      "calculator",
+      "trade calculator",
+      "fantasy football trade calculator",
+      "analyzer",
+      "trade analyzer",
+      "verdict",
+      "signal check",
+    ],
   },
   {
     label: "Beacon Breakdown",
@@ -269,7 +284,7 @@ export const FOOTER_COLUMNS: Array<{ heading: string; links: FooterLink[] }> = [
       { label: "Sleeper League Pulse", href: "/tools/league-pulse" },
       { label: "On The Clock", href: "/tools/on-the-clock" },
       { label: "Manager Pulse", href: "/tools/manager-pulse" },
-      { label: "Signal Check", href: "/tools/signal-check" },
+      { label: "Trade Calculator", href: "/tools/signal-check" },
       { label: "Beacon Breakdown", href: "/tools/beacon-breakdown" },
       { label: "FAAB Calculator", href: "/tools/faab" },
     ],

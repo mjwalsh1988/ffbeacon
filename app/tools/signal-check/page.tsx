@@ -17,16 +17,32 @@ import { PageMasthead } from "@/components/app-shell/page-masthead";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * WHAT IT IS COMES FIRST, WHAT IT IS CALLED COMES SECOND.
+ *
+ * Nobody searches for "Signal Check". They search for a trade calculator, and a
+ * result is read left to right, in a box that clips around sixty characters. So
+ * the head term opens both the title and the description, and the product name
+ * follows it in the same breath. The brand is not lost: it is in the title, in
+ * the description, in the h1 and in the site suffix the layout appends.
+ *
+ * The h1 below builds the same phrase from `settings.publicLabel`, which is
+ * admin-editable, so the two can drift if the tool is ever renamed in admin.
+ * They cannot share one value: `metadata` is evaluated at module scope and
+ * cannot await a settings read. If the label changes, change this line with it.
+ */
+const META_TITLE = "Fantasy Football Trade Calculator: Signal Check";
+const META_DESCRIPTION =
+  "Free fantasy football trade calculator. Put both sides into Signal Check and get a straight answer: who wins, by how much, and why. Redraft or dynasty.";
+
 export const metadata: Metadata = {
   alternates: { canonical: "/tools/signal-check" },
-  title: "Trade Analyzer: Is This Trade Fair?",
-  description:
-    "Put both sides of a fantasy football trade in and get a straight answer: who wins, by how much, and the reason why. Players and draft picks, redraft or dynasty, free to use.",
+  title: META_TITLE,
+  description: META_DESCRIPTION,
   ...pageShareMetadata({
     key: "signal-check",
-    title: "Trade Analyzer: Is This Trade Fair?",
-    description:
-      "Put both sides of a fantasy football trade in and get a straight answer: who wins, by how much, and the reason why. Players and draft picks, redraft or dynasty, free to use.",
+    title: META_TITLE,
+    description: META_DESCRIPTION,
     path: "/tools/signal-check",
   }),
 };
@@ -148,10 +164,19 @@ function Masthead({
   resultLabel: string;
   isMember: boolean;
 }) {
+  // The h1 leads with what the tool IS and names it second, matching the meta
+  // title above. A reader searching for a trade calculator does not know this
+  // one is called Signal Check, so the words they typed are the first thing on
+  // the page they land on, and the name is right beside them.
+  //
+  // The description then does the explaining, which is what it is for. It says
+  // the name again rather than repeating "fantasy football trade calculator":
+  // the phrase is already in the title, the description and the heading, and a
+  // fourth run of it would read like it was written for a crawler.
   return (
     <PageMasthead
       eyebrow="Tools"
-      title={`${featureLabel}: the ${resultLabel}, explained.`}
+      title={`Fantasy Football Trade Calculator: ${featureLabel}`}
       description={`Add players and draft picks to each side. ${featureLabel} weighs them with FF Beacon Values for your league format and returns the ${resultLabel}: who wins, the margin, and a plain-language reason, with no guesswork.`}
       actions={
         <>

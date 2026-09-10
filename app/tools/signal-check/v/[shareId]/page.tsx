@@ -40,7 +40,7 @@ export async function generateMetadata({
   const { shareId } = await params;
   const payload = await loadPayload(shareId);
   if (!payload) {
-    return { title: "Signal Check", robots: { index: false } };
+    return { title: "Signal Check Trade Calculator", robots: { index: false } };
   }
   const title = `${payload.verdictLabel} | ${payload.featureLabel}`;
   const description = payload.explanation.slice(0, 200);
@@ -206,7 +206,7 @@ export default async function SignalCheckSharePage({
                 href="/tools/signal-check"
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-card bg-beacon px-4 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
-                Analyze your own trade
+                Analyze your own trade in the Signal Check Trade Calculator
                 <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
               </Link>
             </div>
