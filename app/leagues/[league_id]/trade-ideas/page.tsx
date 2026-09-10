@@ -655,6 +655,10 @@ async function TradeFinderSection({
    */
   const myStatusKey =
     finderLeague.teams.find((t) => t.rosterId === myRosterId)?.statusKey ?? null;
+  // Only the bottom band opens on the value preset. A Loaded team owns more than
+  // its ranking shows AND is still in the playoff picture, so the deal it wants
+  // is the one that turns some of that into a starter, which is what the
+  // Contender preset looks for.
   const defaultStrategy: TradeStrategy =
     finderLeague.isDynasty && myStatusKey === "rebuilder" ? "value" : "contender";
 

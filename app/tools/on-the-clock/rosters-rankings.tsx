@@ -34,6 +34,7 @@ import {
   topBadgeLabel,
 } from "@/lib/roster-badges";
 import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
+import { ARCHETYPE_REASON, ARCHETYPE_TONE } from "./archetype";
 import {
   ROSTER_POSITIONS,
   type RosterFuturePick,
@@ -72,6 +73,7 @@ export function RostersRankings({
   enginesLoading = false,
   pulseTeams = [],
   isDynasty = false,
+  playoffTeams = null,
   sortBy = "value",
   onSortChange,
 }: {
@@ -88,6 +90,12 @@ export function RostersRankings({
   pulseTeams?: DraftPulseTeam[];
   /** Archetype chips are dynasty-only: in redraft every team is competing. */
   isDynasty?: boolean;
+  /**
+   * Sleeper's settings.playoff_teams, or null when the draft cache never
+   * carried it. Draws the Contender and Bubble cut lines, so a team reads the
+   * same here as it does in League Pulse.
+   */
+  playoffTeams?: number | null;
   sortBy?: "value" | "pulse";
   onSortChange?: (next: "value" | "pulse") => void;
 }) {
@@ -147,6 +155,7 @@ export function RostersRankings({
       pulseRank: pulse.rank,
       valueRank: rollup.rank,
       teamCount: teams.length,
+      playoffTeams,
     });
   };
 
@@ -335,20 +344,17 @@ function TeamRosterCard({
             {status && (
               <p className="mt-1.5">
                 <span
-                  title={status.reason}
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                    status.key === "competitor"
-                      ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
-                      : status.key === "rebuilder"
-                        ? "border-sky-400/50 bg-sky-400/10 text-sky-300"
-                        : "border-zinc-400/40 bg-zinc-400/10 text-zinc-300"
-                  }`}
+                  title={ARCHETYPE_REASON[status.key]}
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${ARCHETYPE_TONE[status.key]}`}
                 >
                   {status.label}
                 </span>
                 {/* The reason lives in a title attribute, which most screen
-                    readers never surface. It is the useful half of the chip. */}
-                <span className="sr-only">, {status.reason}</span>
+                    readers never surface. It is the useful half of the chip.
+                    This room's own sentence, not classifyTeamStatus's, which
+                    says "by Power Pulse" about a ranking every tile on this page
+                    calls Draft Pulse. See ./archetype. */}
+                <span className="sr-only">, {ARCHETYPE_REASON[status.key]}</span>
               </p>
             )}
           </div>

@@ -37,10 +37,10 @@ type LeagueKeyLayout =
   | "inline";
 
 /**
- * Four cards for three bands. The third band is one call with two names: a
- * dynasty or keeper roster low on wins is holding assets for later, and a
- * redraft roster in the same place has nothing to hold them for. Both appear
- * here because this list sits above leagues of both kinds.
+ * Five cards for four bands. The bottom band is one call with two names: a
+ * dynasty or keeper roster below the playoff picture is holding assets for
+ * later, and a redraft roster in the same place has nothing to hold them for.
+ * Both appear here because this list sits above leagues of both kinds.
  */
 const TAG_ENTRIES: {
   key: TeamStatusKey;
@@ -50,22 +50,27 @@ const TAG_ENTRIES: {
   {
     key: "competitor",
     variant: "dynasty",
-    blurb: "Near the top of the league on expected wins.",
+    blurb: "Ranked inside most of this league's playoff field.",
+  },
+  {
+    key: "loaded",
+    variant: "dynasty",
+    blurb: "Within range of the playoffs, and worth well more than its ranking.",
   },
   {
     key: "middle",
     variant: "dynasty",
-    blurb: "Mid-table on expected wins and on roster value.",
+    blurb: "Within range of the playoffs, with nothing pulling it either way.",
   },
   {
     key: "rebuilder",
     variant: "dynasty",
-    blurb: "Dynasty or keeper. Low on expected wins, high on trade value.",
+    blurb: "Dynasty or keeper. Out of range of the playoffs, banking assets.",
   },
   {
     key: "rebuilder",
     variant: "redraft",
-    blurb: "Redraft. Low on expected wins, with no next year to bank on.",
+    blurb: "Redraft. Out of range of the playoffs, with no next year to bank on.",
   },
 ];
 
@@ -75,8 +80,8 @@ const FIGURE_ENTRIES: { term: string; def: string }[] = [
     def: "Projected finish. Gold, silver, or bronze on the top three.",
   },
   {
-    term: "Rebuilder, Longshot",
-    def: "Roster value and where it ranks, because neither one is measured in wins.",
+    term: "Loaded, Rebuilder, Longshot",
+    def: "Roster value and where it ranks, because none of these three is measured by a finish.",
   },
 ];
 
@@ -92,8 +97,8 @@ export function LeagueKey({
 }) {
   const panel = layout === "panel";
   // The tag cards are one column in the sidebar and spread out inline. Three
-  // across is what stops the key being taller than it is useful now that the
-  // third band carries both of its names.
+  // across is what stops the key being taller than it is useful now that there
+  // are four bands and the bottom one carries both of its names.
   const tagGrid = panel ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3";
   const figureGrid = panel ? "grid-cols-1" : "sm:grid-cols-2";
 
@@ -160,8 +165,9 @@ export function LeagueKey({
       </div>
 
       <p className="border-t border-line px-4 py-3 text-[11px] leading-relaxed text-ink-subtle">
-        Expected wins come from Power Pulse, which projects the rest of the
-        season. One league syncs at a time.
+        The ranking is Power Pulse, which projects the rest of the season. The
+        cut lines follow your league&apos;s own playoff field. One league syncs
+        at a time.
       </p>
     </div>
   );

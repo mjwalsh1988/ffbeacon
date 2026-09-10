@@ -976,6 +976,12 @@ export function OnTheClockClient({
   const detectedFormatSlug =
     activeBoard?.formatSlug ?? league?.formatSlug ?? "";
   const isDynasty = /dynasty/i.test(detectedFormatSlug);
+  // Sleeper's settings.playoff_teams for the drafting league, straight off the
+  // cached draft meta. It draws the Contender and Bubble cut lines on the
+  // archetype chips, so a roster reads the same in this room as it does inside
+  // League Pulse. Null when the cache never carried it, which the classifier
+  // handles with its own documented fallback.
+  const leaguePlayoffTeams = cache?.draft.playoffTeams ?? null;
   const tradeReady = activeBoard?.status === "ok";
 
   // The build-mode question is only real in a DYNASTY STARTUP. A redraft team is
@@ -3263,6 +3269,7 @@ export function OnTheClockClient({
                 enginesLoading={!heavyEngines}
                 pulseTeams={pulseTeams}
                 isDynasty={isDynasty}
+                playoffTeams={leaguePlayoffTeams}
                 sortBy={rosterSort}
                 onSortChange={setRosterSort}
               />
@@ -3289,6 +3296,7 @@ export function OnTheClockClient({
                 draftStarted={draftStarted}
                 minReliabilityWeeks={settings.awards.minAccuracyWeeks}
                 isDynasty={isDynasty}
+                playoffTeams={leaguePlayoffTeams}
                 weeks={
                   snapshotMode
                     ? (snapshot.pulse?.weeks.length ?? 0)

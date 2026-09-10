@@ -95,6 +95,13 @@ export type LineupViewParams = {
   sleeperRosterId: number;
   /** Sleeper's playoff_week_start, so the rest-of-season window ends correctly. */
   playoffWeekStart: number;
+  /**
+   * Sleeper's playoff_teams, RAW and unparsed, straight off `leagues.metadata`.
+   * Draws the Contender and Bubble cut lines on the status tag.
+   * classifyTeamStatus does the parsing and owns the fallback, so every surface
+   * applies one rule.
+   */
+  playoffTeams: unknown;
   /** From resolveLeagueContext. Null when no source covers this league's format. */
   formatConfigId: string | null;
   /** The reader's resolved value source, for ranks and market values. */
@@ -180,6 +187,7 @@ export async function loadLineupView(
     currentWeek,
     sleeperRosterId,
     playoffWeekStart,
+    playoffTeams,
     formatConfigId,
     sourceSlug,
     isKeeperLeague,
@@ -485,6 +493,7 @@ export async function loadLineupView(
     pulseRank: pulseRankByRosterRow.get(roster.id) ?? null,
     valueRank: valueRankByRosterRow.get(roster.id) ?? null,
     teamCount: rosters.length,
+    playoffTeams,
     variant: statusVariant,
   });
 

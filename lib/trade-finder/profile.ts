@@ -182,7 +182,7 @@ export function leagueStarterBaselines(
 }
 
 /**
- * Contender / Bubble / Rebuilder, as the engine reads it.
+ * Contender / Loaded / Bubble / Rebuilder, as the engine reads it.
  *
  * `isDynasty` defaults to true so a caller that has not thought about it gets
  * the reading with more information in it. The engine always passes the
@@ -195,6 +195,10 @@ export function directionOf(team: FinderTeam, isDynasty = true): TeamDirection {
   if (!isDynasty) return "win-now";
   if (team.statusKey === "competitor") return "win-now";
   if (team.statusKey === "rebuilder") return "rebuild";
+  // "loaded" and "middle" both land here on purpose. A Loaded team owns more
+  // than its ranking shows, which is an argument for trading and no argument at
+  // all about which direction. Reading it as a rebuild would be exactly the
+  // mistake lib/league-team-status.ts split the band out to stop.
   return "balanced";
 }
 

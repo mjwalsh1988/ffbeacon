@@ -23,7 +23,7 @@ export type ProjectionInput = {
   projectedSeed: number | null;
   /** Teams the finish is out of. Null alongside a null seed. */
   rankedTeamCount: number | null;
-  /** The Contender / Bubble / Rebuilder tag, when we have one. */
+  /** The Contender / Loaded / Bubble / Rebuilder tag, when we have one. */
   statusLabel: string | null;
 };
 

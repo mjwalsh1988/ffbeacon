@@ -9,8 +9,8 @@ import {
 import { BeaconValueIcon, BEACON_SOURCE_SLUG } from "@/components/beacon-value-icon";
 
 /**
- * The figure that sits beside the Contender / Bubble / Rebuilder tag on a
- * league row. Which number belongs to which tag, and how it is worded, is
+ * The figure that sits beside the Contender / Loaded / Bubble / Rebuilder tag
+ * on a league row. Which number belongs to which tag, and how it is worded, is
  * decided in lib/team-standing-figure.ts; this file is how it looks.
  *
  * It is a pill, deliberately, built to the same recipe as TeamStatusBadge:
@@ -26,6 +26,18 @@ import { BeaconValueIcon, BEACON_SOURCE_SLUG } from "@/components/beacon-value-i
  * Colour is never the only signal: the ordinal is spelled out inside every
  * pill, the icon differs between a medal and a plain finish, and the
  * screen-reader sentence names the measure being quoted.
+ *
+ * WHY BOTH PILLS ARE role="img"
+ *   Each one is an icon plus a formatted number that only means anything
+ *   together, so the whole pill carries one name and its parts are hidden. That
+ *   needs a role: `aria-label` on a bare `<span>` is a label on role=generic,
+ *   which ARIA 1.2 does not permit and which a screen reader is free to ignore.
+ *   Ignoring it here would not make the pill terse, it would make it SILENT,
+ *   because every child inside is aria-hidden and there is no other text node.
+ *   That was a live risk on the Loaded and Rebuilder rows in the league detail
+ *   sheet, where the pill is the only place the roster value appears. `role=img`
+ *   is the same pattern the League Pulse charts use for the same reason: a
+ *   composite graphic with one text alternative.
  */
 
 /** Border, fill, text, and glow per placement. One string per tone so a tone is
@@ -39,10 +51,21 @@ const MEDAL_TONE: Record<number, string> = {
 
 const PLAIN_TONE = "border-line-accent bg-base/70 text-ink-muted";
 
-/** The bottom band's value pill. Purple, matching the Rebuilder or Longshot
- *  tag it sits beside. */
-const VALUE_TONE =
-  "border-brand-purple/50 bg-brand-purple/10 text-ink shadow-[0_0_18px_-9px_rgba(168,85,247,0.8)]";
+/**
+ * The value pill, in the colour of the tag it sits beside.
+ *
+ * Two bands print a value figure and they are different colours, so one fixed
+ * tone would put a purple pill against a green tag on every Loaded row and
+ * break the "two pills read as one unit" idea the whole component is built on.
+ * The label text is `text-ink` either way, so only the frame changes and the
+ * contrast of the number itself is untouched.
+ */
+const VALUE_TONE: Record<"loaded" | "rebuilder", string> = {
+  loaded:
+    "border-signal-success/50 bg-signal-success/10 text-ink shadow-[0_0_18px_-9px_rgba(16,185,129,0.8)]",
+  rebuilder:
+    "border-brand-purple/50 bg-brand-purple/10 text-ink shadow-[0_0_18px_-9px_rgba(168,85,247,0.8)]",
+};
 
 const SIZE = {
   sm: { pill: "gap-1 px-2 py-0.5 text-[10px]", icon: "h-3 w-3" },
@@ -70,9 +93,10 @@ export function TeamStandingFigure({
   if (hasValueFigure(input)) {
     return (
       <span
+        role="img"
         title={sentence}
         aria-label={sentence}
-        className={`${base} ${VALUE_TONE} ${className}`}
+        className={`${base} ${VALUE_TONE[input.statusKey === "loaded" ? "loaded" : "rebuilder"]} ${className}`}
       >
         {/* Coins, not the finish-line flag the other pill uses. The icon is the
             first thing read at a glance, and a flag here would say "finish" on
@@ -85,9 +109,9 @@ export function TeamStandingFigure({
         {/* Value, then its rank in parentheses: "98,808 (3rd)". The rank used to
             sit behind a rule and spell out "by value", which cost most of the
             pill's width in a 13.5rem column. What the ordinal measures is
-            carried by the coins mark, the purple tone that matches the tag
-            beside it, and the hover and screen-reader sentence, which still
-            says "ranked 3rd of 12 by roster value" in full. */}
+            carried by the coins mark, the tone that matches the tag beside it,
+            and the hover and screen-reader sentence, which still says "ranked
+            3rd of 12 by roster value" in full. */}
         <span aria-hidden="true" className="font-mono tabular-nums">
           {formatValue(input.totalValue)}
           {input.valueRank != null && (
@@ -106,6 +130,7 @@ export function TeamStandingFigure({
 
   return (
     <span
+      role="img"
       title={sentence}
       aria-label={sentence}
       className={`${base} ${medal ?? PLAIN_TONE} ${className}`}

@@ -142,7 +142,7 @@ export interface WyrTeamNote {
   playoffOdds: number | null;
   titleOdds: number | null;
   valueRank: number | null;
-  /** Contender / Bubble / Rebuilder, or null when there is no Pulse rank. */
+  /** Contender / Loaded / Bubble / Rebuilder, or null when there is no Pulse rank. */
   statusLabel: string | null;
   /** One sentence saying why the team landed in that band. */
   statusReason: string | null;

@@ -77,10 +77,22 @@ const REDRAFT_LONGSHOT: TeamStatus = classifyTeamStatus({
   variant: "redraft",
 }) as TeamStatus;
 
+// Still inside the playoff picture, and worth far more than that rank suggests.
+// Before the bands were tied to the playoff field this roster came back a
+// Rebuilder and got a rebuilder's waiver ordering.
+const LOADED: TeamStatus = classifyTeamStatus({
+  pulseRank: 7,
+  valueRank: 1,
+  teamCount: 12,
+  playoffTeams: 7,
+  variant: "dynasty",
+}) as TeamStatus;
+
 describe("classify fixtures are what the tests below assume", () => {
   it("produces a contender, a rebuilder and a redraft longshot", () => {
     expect(CONTENDER.key).toBe("competitor");
     expect(REBUILDER.key).toBe("rebuilder");
+    expect(LOADED.key).toBe("loaded");
     expect(REDRAFT_LONGSHOT.variant).toBe("redraft");
   });
 });
@@ -226,6 +238,18 @@ describe("buildWaiverSuggestions", () => {
     expect(out[0].fit).toBe("upside");
   });
 
+  it("ranks a Loaded team on this week, because it is still in the picture", () => {
+    // The whole point of splitting this band out: a team inside the playoff
+    // field should not be handed a rebuilder's waiver wire.
+    const out = buildWaiverSuggestions(
+      [candidate("helper", 4, 300), candidate("prospect", 0, 40)],
+      LOADED,
+    );
+    expect(out[0].player.sleeperId).toBe("helper");
+    expect(out[0].fit).toBe("start-now");
+    expect(out[0].note).not.toContain("rebuild is not usually won");
+  });
+
   it("still labels the start-now pickup honestly for a rebuilder", () => {
     const out = buildWaiverSuggestions(
       [candidate("helper", 4, 300), candidate("prospect", 0, 40)],
@@ -280,6 +304,13 @@ describe("goalBrief", () => {
 
   it("says a contender is ranked on points this week", () => {
     expect(goalBrief(CONTENDER)).toContain("this week");
+  });
+
+  it("tells a Loaded team the ranking is about converting what it owns", () => {
+    expect(goalBrief(LOADED)).toContain("worth more than your ranking");
+    expect(goalBrief(LOADED)).toContain("this week");
+    // The one thing it must not say. That sentence belongs to the band below.
+    expect(goalBrief(LOADED)).not.toContain("worth holding");
   });
 
   it("names the missing model rather than inventing a goal", () => {

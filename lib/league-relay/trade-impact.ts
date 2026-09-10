@@ -41,7 +41,7 @@ type Admin = SupabaseClient<Database>;
 export interface ExecutedTeamImpact {
   rosterId: number;
   teamName: string;
-  /** Contender / Bubble / Rebuilder band, from Power Pulse. Null without one. */
+  /** Contender / Loaded / Bubble / Rebuilder band, from Power Pulse. Null without one. */
   statusKey: TeamImpact["statusKey"];
   statusLabel: string | null;
   pulseRank: number | null;

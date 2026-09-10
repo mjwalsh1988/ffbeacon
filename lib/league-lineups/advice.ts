@@ -205,6 +205,10 @@ export type WaiverCandidate = {
  *     still listed and still labelled honestly; it is simply not led with.
  *   - A bubble team gets the contender ordering, because a team still in it
  *     should act like one until it is not.
+ *   - A Loaded team gets the contender ordering too, and for a sharper version
+ *     of the same reason. It is in the playoff picture already and its problem
+ *     is converting what it owns into wins, so the waiver wire is one of the few
+ *     places it can add a starter without giving anything up.
  *
  * A null `status` means Power Pulse has not run for this league yet. Everything
  * still works: the ordering falls back to what helps this week, which is the
@@ -271,6 +275,8 @@ function waiverNote(
     if (status?.key === "rebuilder") {
       return `Adds about ${points} points${where} this week. Useful, though a rebuild is not usually won on a waiver claim.`;
     }
+    // A Loaded team is deliberately not singled out here. It is in the picture,
+    // so the plain sentence below is the true one: the points are the point.
     return `Adds about ${points} points${where} to your best lineup this week.`;
   }
 
@@ -303,8 +309,11 @@ export function goalBrief(status: TeamStatus | null): string {
   if (status.key === "competitor") {
     return "You are built to win now, so these are ranked on what adds the most points this week.";
   }
+  if (status.key === "loaded") {
+    return "Your roster is worth more than your ranking, so these are ranked on who turns that into wins this week.";
+  }
   if (status.key === "rebuilder") {
-    return "Your assets are ahead of your wins, so these are ranked on who is worth holding rather than who helps on Sunday.";
+    return "You are below the playoff picture, so these are ranked on who is worth holding rather than who helps on Sunday.";
   }
   return "You are in the pack, so these are ranked on what helps this week. Nothing here is worth mortgaging.";
 }

@@ -408,6 +408,7 @@ async function LineupBody({
     currentWeek,
     sleeperRosterId: rosterId,
     playoffWeekStart,
+    playoffTeams: resolvePlayoffTeams(metadata),
     formatConfigId,
     sourceSlug,
     isKeeperLeague,
@@ -741,6 +742,18 @@ function LineupSkeleton() {
       <span className="sr-only">Loading your lineup</span>
     </div>
   );
+}
+
+/**
+ * Sleeper's playoff_teams, raw and unparsed.
+ *
+ * Deliberately NOT coerced or defaulted here. lib/league-team-status.ts owns
+ * both, so every surface that draws a Contender cut line applies the same rule,
+ * and it needs to tell the league's own setting apart from our fallback.
+ */
+function resolvePlayoffTeams(metadata: unknown): unknown {
+  return (metadata as { settings?: Record<string, unknown> } | null)?.settings
+    ?.playoff_teams;
 }
 
 /** Sleeper's playoff_week_start, or the usual 15 when it is unset. */

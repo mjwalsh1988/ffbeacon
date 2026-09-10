@@ -1,7 +1,8 @@
 /**
- * The number that goes under the Contender / Bubble / Rebuilder tag, as data.
+ * The number that goes under the Contender / Loaded / Bubble / Rebuilder tag,
+ * as data.
  *
- * The tag says which of three shapes a roster is. It does not say how close the
+ * The tag says which of four shapes a roster is. It does not say how close the
  * season is, and that is the thing a manager acts on: 2nd is a season worth
  * protecting, 6th is a season worth a trade. So each tag gets the figure that
  * answers its own question.
@@ -14,6 +15,10 @@
  *     worth and where that sits in the league. Neither one is measured in wins,
  *     and printing a projected 11th next to that tag tells its owner nothing
  *     they did not choose.
+ *   - Loaded gets the value figure too, for the opposite reason. The tag exists
+ *     because the roster is worth more than the finish suggests, so the value is
+ *     the half of that sentence the tag does not already say. The finish is not
+ *     lost: the tag's own reason quotes both ranks.
  *
  * Every sentence names the measure it quotes ("by expected wins", "by roster
  * value"). The tag's own explanation quotes Power Pulse, and a hard schedule
@@ -52,16 +57,17 @@ export type FigureInput = {
 };
 
 /**
- * True when the rebuilder branch has a value figure to print.
+ * True when this tag's figure is roster value rather than a projected finish.
  *
- * The bottom band shows value or it shows nothing useful. This used to also demand
- * an exact format-and-source match, which meant every Unmatched league quietly
- * showed a projected finish instead, and a projected finish is the single number
- * a rebuild is not measured by.
+ * Two bands qualify and for opposite reasons. The bottom band shows value or it
+ * shows nothing useful. The Loaded band shows value because value is precisely
+ * what put it there. This used to also demand an exact format-and-source match,
+ * which meant every Unmatched league quietly showed a projected finish instead,
+ * and a projected finish is the single number a rebuild is not measured by.
  */
 export function hasValueFigure(input: FigureInput): boolean {
   return (
-    input.statusKey === "rebuilder" &&
+    (input.statusKey === "rebuilder" || input.statusKey === "loaded") &&
     input.totalValue != null &&
     Number.isFinite(Number(input.totalValue))
   );

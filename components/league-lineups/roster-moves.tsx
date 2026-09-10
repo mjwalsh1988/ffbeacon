@@ -3,7 +3,7 @@
  * pick up, and who you could afford to lose to make room.
  *
  * BOTH ARE FRAMED BY WHAT THE TEAM IS PLAYING FOR. lib/league-lineups/advice.ts
- * decides the order and the words from the team's Contender / Bubble /
+ * decides the order and the words from the team's Contender / Loaded / Bubble /
  * Rebuilder standing, and the brief at the top of the waiver panel says which
  * one applies rather than leaving a reader to infer it from the ordering.
  *

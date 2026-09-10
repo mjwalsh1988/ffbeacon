@@ -14,6 +14,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/database.types";
 import type { ScoringSettings } from "@/lib/league-scoring";
 import { SLEEPER_SOURCE } from "@/lib/projections/source-constants";
+import {
+  DEFAULT_PLAYOFF_TEAMS,
+  DEFAULT_PLAYOFF_WEEK_START,
+} from "./playoff-defaults";
 import type { PulsePosition, ScheduleWeek } from "./types";
 import { PULSE_POSITIONS } from "./types";
 
@@ -224,9 +228,11 @@ export async function loadLeague(
     status: data.status,
     rosterPositions: asStringArray(data.roster_positions),
     scoringSettings: (data.scoring_settings ?? {}) as ScoringSettings,
-    // Sleeper defaults: a six-team field starting in week 15.
-    playoffTeams: positiveIntOrNull(settings.playoff_teams) ?? 6,
-    playoffWeekStart: positiveIntOrNull(settings.playoff_week_start) ?? 15,
+    // Sleeper defaults, shared with the status tag and the visible cut line so
+    // the three cannot drift. See lib/power-pulse/playoff-defaults.ts.
+    playoffTeams: positiveIntOrNull(settings.playoff_teams) ?? DEFAULT_PLAYOFF_TEAMS,
+    playoffWeekStart:
+      positiveIntOrNull(settings.playoff_week_start) ?? DEFAULT_PLAYOFF_WEEK_START,
     // Zero is a real value here (one week per round) rather than an absent one,
     // so intOrNull, not positiveIntOrNull.
     playoffRoundType: intOrNull(settings.playoff_round_type) ?? 0,

@@ -95,7 +95,7 @@ export type PulseTeam = {
    */
   rankDivergence: number | null;
   /**
-   * Contender / Bubble / Rebuilder, derived from the two ranks
+   * Contender / Loaded / Bubble / Rebuilder, derived from the two ranks
    * above. Null when there is no Power Pulse rank to read.
    */
   status: TeamStatus | null;
@@ -153,18 +153,25 @@ export async function loadPowerPulseView(
           .eq("format_config_id", formatConfigId)
           .eq("source", sourceSlug)
       : Promise.resolve({ data: [], error: null }),
-    // Only for the wording on the status tag. Sleeper's league type lives in
-    // the raw payload and nowhere else on the row, so this reads the one league
-    // rather than making all six callers thread a flag down to here.
+    // The status tag's two inputs from the raw payload: Sleeper's league type
+    // picks the wording, and settings.playoff_teams draws the Contender and
+    // Bubble cut lines. Both live in the payload and nowhere else on the row, so
+    // this reads the one league rather than making all six callers thread them
+    // down to here.
     supabase.from("leagues").select("metadata").eq("id", leagueRowId).maybeSingle(),
   ]);
 
   const pulseRows = pulseRes.data ?? [];
   if (pulseRows.length === 0) return null;
 
-  const variant: TeamStatusVariant = deriveStatusVariant(
-    (leagueRes.data?.metadata ?? {}) as unknown as SleeperLeague,
-  );
+  const sleeperLeague = (leagueRes.data?.metadata ?? {}) as unknown as SleeperLeague;
+  const variant: TeamStatusVariant = deriveStatusVariant(sleeperLeague);
+  // Raw and unparsed, including the zero Sleeper writes on a league whose
+  // bracket is not set up. classifyTeamStatus owns both the parsing and the
+  // fallback so every surface applies the same rule.
+  const playoffTeams: unknown = (
+    sleeperLeague as { settings?: Record<string, unknown> } | null
+  )?.settings?.playoff_teams;
 
   const rosters = rostersRes.data ?? [];
   const usersById = new Map((usersRes.data ?? []).map((u) => [u.sleeper_user_id, u]));
@@ -252,7 +259,16 @@ export async function loadPowerPulseView(
       status: classifyTeamStatus({
         pulseRank,
         valueRank,
+        // The SCORED teams, not leagues.total_rosters, because `pulseRank` is a
+        // position among these rows and a denominator that counted rosters
+        // Power Pulse skipped would say "5th of 12" about a ranking that only
+        // ran to 10. The league list uses total_rosters for the same reason in
+        // reverse: it has no pulse rows in hand for the leagues it is only
+        // tagging. The two agree in every league in production today, and the
+        // bands are more sensitive to this than the old percentiles were, so if
+        // they ever diverge this is the comment to come back to.
         teamCount: pulseRows.length,
+        playoffTeams,
         variant,
       }),
     };

@@ -29,6 +29,7 @@ import { ArrowDown, ArrowUp, Gauge } from "lucide-react";
 import type { DraftPulseTeam } from "@/lib/on-the-clock/draft-pulse";
 import type { TeamRollup } from "@/lib/on-the-clock/rosters";
 import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
+import { ARCHETYPE_REASON, ARCHETYPE_TONE } from "./archetype";
 import { PULSE_POSITIONS, type PulsePosition } from "@/lib/power-pulse/types";
 import { POSITION_BADGE } from "@/lib/on-the-clock/position-colors";
 import { EmptyCard, LoadingCard, NotStartedCard } from "./states";
@@ -87,6 +88,7 @@ export function DraftPulseBoard({
   draftStarted,
   minReliabilityWeeks,
   isDynasty,
+  playoffTeams = null,
   weeks,
   slotsEstimated,
   scoringEstimated,
@@ -113,6 +115,12 @@ export function DraftPulseBoard({
    */
   minReliabilityWeeks: number;
   isDynasty: boolean;
+  /**
+   * Sleeper's settings.playoff_teams for this league, or null when the draft
+   * cache never carried it. Draws the Contender and Bubble cut lines on the
+   * archetype chip, so a team reads the same here as it does in League Pulse.
+   */
+  playoffTeams?: number | null;
   /** How many remaining weeks the averages were taken over. */
   weeks: number;
   /** True when the league's roster_positions were unavailable and slots were guessed. */
@@ -193,7 +201,12 @@ export function DraftPulseBoard({
         team,
         pulse,
         status: isDynasty
-          ? classifyTeamStatus({ pulseRank: pulse.rank, valueRank: team.rank, teamCount })
+          ? classifyTeamStatus({
+              pulseRank: pulse.rank,
+              valueRank: team.rank,
+              teamCount,
+              playoffTeams,
+            })
           : null,
         swing: team.rank - pulse.rank,
       };
@@ -639,15 +652,10 @@ function ValueTable({ rows, myRosterId }: { rows: PulseRow[]; myRosterId: number
 // The gap
 // ---------------------------------------------------------------------------
 
-/** The archetype chip's meaning, in this tab's own vocabulary. */
 function archetypeReason(row: PulseRow): string {
-  if (row.status?.key === "competitor") {
-    return "near the top by Draft Pulse, so this roster can put points on the field now";
-  }
-  if (row.status?.key === "rebuilder") {
-    return "not near the top by Draft Pulse, and holding more value than it can start";
-  }
-  return "in the pack on both the points ranking and the value ranking";
+  return row.status
+    ? ARCHETYPE_REASON[row.status.key]
+    : ARCHETYPE_REASON.middle;
 }
 
 function MoverCard({ row }: { row: PulseRow }) {
@@ -687,13 +695,7 @@ function MoverCard({ row }: { row: PulseRow }) {
         {row.status && (
           <p className="mt-1.5">
             <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                row.status.key === "competitor"
-                  ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
-                  : row.status.key === "rebuilder"
-                    ? "border-sky-400/50 bg-sky-400/10 text-sky-300"
-                    : "border-zinc-400/40 bg-zinc-400/10 text-zinc-300"
-              }`}
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${ARCHETYPE_TONE[row.status.key]}`}
             >
               {row.status.label}
             </span>

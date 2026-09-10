@@ -208,7 +208,7 @@ function buildSummary(o: {
         ? "You are built to win now, so the lineup is the half that counts"
         : o.statusKey === "rebuilder"
           ? "You are not winning now, so the value is the half that counts"
-          : "Neither half outweighs the other for a team in the middle";
+          : "Neither half outweighs the other for a team still in the picture";
     return `${valuePart}, and it is worth ${winsPart} to you. ${direction}.`;
   }
 
@@ -227,6 +227,10 @@ function buildSummary(o: {
  * team in the middle gets no tiebreak, because the classifier declined to say
  * which way it is pointing and inventing one here would be a claim the rest of
  * the page does not make.
+ *
+ * A Loaded team gets no tiebreak either, and that is the honest answer rather
+ * than an omission: the band means the two measures already disagree about this
+ * roster, so breaking a split with the same disagreement would be circular.
  */
 function decide(
   valueFavours: Favours,

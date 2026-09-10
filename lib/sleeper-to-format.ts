@@ -31,7 +31,7 @@ export function deriveKeeperStyle(league: SleeperLeague): KeeperStyle {
 }
 
 /**
- * Which vocabulary the Contender / Bubble / Rebuilder tag speaks in this
+ * Which vocabulary the Contender / Loaded / Bubble / Rebuilder tag speaks in this
  * league. Keeper takes the dynasty words: a keeper roster carries players
  * forward, so banking assets for next year is a real plan there. Everything
  * else is a one-year league, where the third band reads Longshot instead.

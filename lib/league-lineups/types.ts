@@ -272,7 +272,7 @@ export type LineupView = {
   record: { wins: number; losses: number; ties: number };
   /** Power Pulse rank in this league. Null when the cache has no row. */
   pulseRank: number | null;
-  /** Contender / Bubble / Rebuilder, which frames every recommendation. */
+  /** Contender / Loaded / Bubble / Rebuilder, which frames every recommendation. */
   status: TeamStatus | null;
   /** The starters, grouped by position block, in the league's own slot order. */
   groups: LineupGroup[];

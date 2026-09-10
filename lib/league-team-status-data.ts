@@ -1,6 +1,6 @@
 /**
- * Read layer for the Contender / Rebuilder tag on the league list, and for the
- * figure that now sits beside it.
+ * Read layer for the Contender / Loaded / Bubble / Rebuilder tag on the league
+ * list, and for the figure that sits beside it.
  *
  * The list at /tools/league-pulse and on My Beacon shows every league a Sleeper
  * handle belongs to, which can be twenty rooms or more. Calculating Power Pulse
@@ -111,7 +111,14 @@ export async function loadSearchedTeamStatuses(
   try {
     const { data: leagueRows } = await supabase
       .from("leagues")
-      .select("id, sleeper_league_id, total_rosters, format_config_id")
+      // playoff_teams comes out of the raw Sleeper payload through a JSON path
+      // rather than by selecting `metadata`, which would drag the whole league
+      // object back for every row on a list that can be twenty-plus leagues
+      // long. It draws the Contender and Bubble cut lines, so the tag on this
+      // list and the tag inside the league have to read the same setting.
+      .select(
+        "id, sleeper_league_id, total_rosters, format_config_id, playoff_teams:metadata->settings->>playoff_teams",
+      )
       .in("sleeper_league_id", sleeperLeagueIds.slice(0, PAGE));
     if (!leagueRows || leagueRows.length === 0) return out;
 
@@ -247,6 +254,9 @@ export async function loadSearchedTeamStatuses(
           pulseRank,
           valueRank: chosen?.overall_rank ?? null,
           teamCount: Number(league.total_rosters ?? 0),
+          // Raw. PostgREST hands a `->>` path back as text, and
+          // classifyTeamStatus parses it, so no surface coerces it differently.
+          playoffTeams: league.playoff_teams,
           variant: variantByLeagueId[league.sleeper_league_id] ?? "dynasty",
         }),
       });

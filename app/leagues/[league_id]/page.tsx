@@ -25,7 +25,7 @@ import {
 import { TransactionVolumePanel } from "@/components/league-overview/transaction-volume-panel";
 import { PulseLeaders } from "@/components/power-pulse/pulse-leaders";
 import { loadLeagueReadiness, type LeagueReadiness } from "@/lib/league-readiness";
-import { classifyTeamStatus, type TeamStatus } from "@/lib/league-team-status";
+import type { TeamStatus } from "@/lib/league-team-status";
 import { PreDraftNotice } from "@/components/power-pulse/pre-draft-notice";
 import { type SleeperLeague } from "@/lib/sleeper";
 import { loadLeagueHeaderActions } from "@/lib/league-header-data";
@@ -943,7 +943,7 @@ async function TeamsPanel({
     );
   }
 
-  // Contender / Bubble / Rebuilder per roster, so a team card
+  // Contender / Loaded / Bubble / Rebuilder per roster, so a team card
   // carries the same tag the rankings table and the league list show.
   const statusByRoster: Record<string, TeamStatus> = {};
   for (const t of pulseView?.teams ?? []) {

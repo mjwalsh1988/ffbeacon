@@ -29,6 +29,14 @@ describe("describeStandingFigure", () => {
     );
   });
 
+  it("gives a Loaded team the value figure too, because value is what tagged it", () => {
+    // The tag already says this roster is ranked below what it owns. The figure
+    // beside it is the "what it owns" half; the finish is in the tag's reason.
+    expect(describeStandingFigure({ ...base, statusKey: "loaded" })).toBe(
+      "Total roster value 4,182, ranked 3rd of 12 by roster value.",
+    );
+  });
+
   it("ranks a rebuilder against every roster, not only the ones Power Pulse scored", () => {
     // rankedTeamCount can trail leagueTeamCount when a roster has no Pulse row.
     // A value rank covers the whole league, so it must use the league's count.

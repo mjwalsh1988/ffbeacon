@@ -44,7 +44,7 @@ type TeamCardProps = {
   /** True when the league's selected value source is FF Beacon, so each
    * position subtotal renders with the FF Beacon mark. */
   valueIsBeacon?: boolean;
-  /** Contender / Bubble / Rebuilder for this roster. Null before
+  /** Contender / Loaded / Bubble / Rebuilder for this roster. Null before
    * Power Pulse has run for the league, and on pre-draft leagues where there
    * is nothing to judge yet. */
   teamStatus?: TeamStatus | null;

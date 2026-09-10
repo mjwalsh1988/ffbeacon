@@ -481,9 +481,11 @@ function fillsHoleReason(input: ReasonInput): TradeReason | null {
  * Whether the deal points the same way the roster does.
  *
  * A contender is judged on the lineup and a rebuilder on the value, because
- * those are the two different things the two teams are playing for. A bubble
- * team gets neither reason: there is no direction to agree or disagree with, and
- * asserting one would be a claim the status classifier declined to make.
+ * those are the two different things the two teams are playing for. A Bubble or
+ * Loaded team gets neither reason: there is no direction to agree or disagree
+ * with, and asserting one would be a claim the status classifier declined to
+ * make. For Loaded it would be worse than a guess, because that band exists
+ * precisely to say the two measures disagree about this roster.
  *
  * Branches on `statusKey`, never on the label. The label is the word a reader
  * sees and it changes with the league (Rebuilder in dynasty, Longshot in
@@ -523,6 +525,10 @@ function directionReason(input: ReasonInput): TradeReason | null {
     return null;
   }
 
+  // No "loaded" branch, deliberately. A direction reason asserts which half of
+  // the deal a reader should weigh, and the Loaded band exists precisely because
+  // the two halves disagree about this roster. Returning nothing leaves the
+  // value and wins figures on screen to speak for themselves.
   if (m.statusKey === "rebuilder") {
     if (!finite(m.valueDelta) || !finite(m.valueBefore) || m.valueBefore <= 0)
       return null;

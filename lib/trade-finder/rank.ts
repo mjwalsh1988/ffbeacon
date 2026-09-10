@@ -479,8 +479,9 @@ const GOAL_WEIGHTS: Record<TradeGoal, ScoreWeights> = {
  * 21-year-old; a team five games out does not want a 30-year-old back who wins
  * them a meaningless week 14.
  *
- * So the reader's Power Pulse standing (Contender / Bubble / Rebuilder, the
- * same call the rest of League Pulse renders, via lib/league-team-status.ts)
+ * So the reader's Power Pulse standing (Contender / Loaded / Bubble /
+ * Rebuilder, the same call the rest of League Pulse renders, via
+ * lib/league-team-status.ts)
  * rescales what the score is measuring:
  *
  *   Contender. Wins are the point, so the schedule-aware wins term leads and

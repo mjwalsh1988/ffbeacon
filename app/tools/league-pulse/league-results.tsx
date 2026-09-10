@@ -128,7 +128,7 @@ function leagueFilterText(
  * jumped to directly.
  */
 const STANDING_ORDER_NOTE =
-  "Within each type, your Contenders come first, then Bubble teams, then Rebuilders and Longshots. Leagues we have not synced yet come last.";
+  "Within each type, your Contenders come first, then Loaded teams, then Bubble teams, then Rebuilders and Longshots. Leagues we have not synced yet come last.";
 
 /**
  * Where a row should land: always the league's Overview.

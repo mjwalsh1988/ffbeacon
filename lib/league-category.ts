@@ -60,17 +60,20 @@ export function categorizeLeague(league: SleeperLeague): LeagueCategoryKey {
  * Where each standing sits in the list, inside its category.
  *
  * Competing teams first, because they are the ones with something to do this
- * week. Rebuilders and Longshots last for the same reason. A league we hold no
- * standing for lands past them: it is not a claim that the team is bad, it is the
- * absence of a claim, and the bottom is where a row goes when the sort has
- * nothing to say about it.
+ * week. Loaded teams second: they are in the picture too, and they are the ones
+ * carrying assets a trade could turn into wins, which makes them the most
+ * actionable rooms on the list after the contenders. Rebuilders and Longshots
+ * last. A league we hold no standing for lands past them: it is not a claim that
+ * the team is bad, it is the absence of a claim, and the bottom is where a row
+ * goes when the sort has nothing to say about it.
  */
 const STANDING_ORDER: Record<TeamStatusKey, number> = {
   competitor: 0,
-  middle: 1,
-  rebuilder: 2,
+  loaded: 1,
+  middle: 2,
+  rebuilder: 3,
 };
-const UNRANKED_ORDER = 3;
+const UNRANKED_ORDER = 4;
 
 /** A league id to the standing of THIS reader's team in it, where we have one. */
 export type StandingLookup = Readonly<
@@ -87,8 +90,9 @@ function standingOrder(
 
 /**
  * Group leagues into the ordered category buckets. Within a bucket, leagues run
- * Contender, Bubble, then Rebuilder or Longshot, then whatever has no standing
- * yet, and alphabetically (case- and accent-insensitive) inside each band.
+ * Contender, Loaded, Bubble, then Rebuilder or Longshot, then whatever has no
+ * standing yet, and alphabetically (case- and accent-insensitive) inside each
+ * band.
  * Empty buckets are dropped so the UI only renders sections that actually have
  * leagues. Input order is not mutated.
  *

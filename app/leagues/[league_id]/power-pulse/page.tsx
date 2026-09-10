@@ -34,6 +34,7 @@ import { PositionalWarSection } from "@/components/league-war/positional-war-sec
 import { HowPowerPulseWorks } from "@/components/power-pulse/how-power-pulse-works";
 import { PreDraftNotice } from "@/components/power-pulse/pre-draft-notice";
 import { loadPowerPulseSettings } from "@/lib/power-pulse/settings";
+import { DEFAULT_PLAYOFF_TEAMS } from "@/lib/power-pulse/playoff-defaults";
 import { loadLeagueReadiness } from "@/lib/league-readiness";
 import { loadLeagueTeamCards } from "@/lib/league-view-data";
 import { formatEastern } from "@/lib/datetime";
@@ -162,15 +163,15 @@ export default async function LeaguePowerPulsePage({
   const settings =
     (league.metadata as { settings?: Record<string, number> } | null)
       ?.settings ?? {};
-  // Same rule the engine applies in lib/power-pulse/load.ts: Sleeper leaves this
-  // at zero on a league whose bracket is not set up, and a cut line drawn at
-  // seed zero would tell every team it misses the playoffs while the simulation
-  // behind the odds assumed a six-team field.
+  // Same rule the engine applies in lib/power-pulse/load.ts, off the same
+  // constant: Sleeper leaves this at zero on a league whose bracket is not set
+  // up, and a cut line drawn at seed zero would tell every team it misses the
+  // playoffs while the simulation behind the odds assumed a six-team field.
   const configuredPlayoffTeams = Number(settings.playoff_teams);
   const playoffTeams =
     Number.isFinite(configuredPlayoffTeams) && configuredPlayoffTeams > 0
       ? configuredPlayoffTeams
-      : 6;
+      : DEFAULT_PLAYOFF_TEAMS;
 
   const scoringDescription = describeLeagueScoring(
     (league.scoring_settings ?? {}) as ScoringSettings,

@@ -62,11 +62,20 @@ export const ENVIRONMENT_TIER_CLASS: Record<EnvironmentTier, string> = {
   low: "border-signal-warning/40 text-signal-warning",
 };
 
-/** The status chip, matched to the three bands. Paired with the word every time. */
+/**
+ * The status chip, matched to the four bands. Paired with the word every time.
+ *
+ * Text colours match components/team-status-badge.tsx, and for the same reason:
+ * measured against its own 10 percent fill, `brand-purple` runs 4.03 to 4.70
+ * and fails AA on the darker card grounds, while `purple-400` runs 5.78 to
+ * 6.96. The border stays on `brand-purple`, which is decoration and answers to
+ * the 3:1 non-text threshold.
+ */
 export const STATUS_TONE: Record<TeamStatusKey, string> = {
   competitor: "border-brand-cyan/50 bg-brand-cyan/10 text-brand-cyan",
+  loaded: "border-signal-success/50 bg-signal-success/10 text-signal-success",
   middle: "border-line-accent bg-base/60 text-ink-muted",
-  rebuilder: "border-brand-purple/50 bg-brand-purple/10 text-brand-purple",
+  rebuilder: "border-brand-purple/50 bg-brand-purple/10 text-purple-400",
 };
 
 /**

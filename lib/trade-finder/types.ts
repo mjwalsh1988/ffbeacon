@@ -304,7 +304,7 @@ export type FinderTeam = {
   rosterId: number;
   teamName: string;
   ownerHandle: string | null;
-  /** Contender / Bubble / Rebuilder. Null when the league has no Power Pulse. */
+  /** Contender / Loaded / Bubble / Rebuilder. Null when the league has no Power Pulse. */
   statusKey: TeamStatusKey | null;
   statusLabel: string | null;
   pulseRank: number | null;
