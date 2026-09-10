@@ -1,6 +1,65 @@
 import type { NextConfig } from "next";
 import { securityHeadersForNextConfig } from "./lib/security-headers";
 
+/**
+ * Beacon Brief slugs that no longer resolve, all sent to the Brief index.
+ *
+ * Thirty-one of these were removed on 2026-07-30 as news with no fantasy
+ * bearing (docs/beacon-brief/beacon-brief-removals-2026-07-30.md). The last one,
+ * hunter-henry-patriots-extension, was archived without a merged survivor, so
+ * there is no article to point it at either.
+ *
+ * laremy-tunsil-torn-triceps-commanders is deliberately absent: it has a real
+ * replacement and gets its own entry in redirects() below.
+ *
+ * Nothing here should ever come back as a published slug. If one does, delete
+ * its line: a redirect would shadow the article and the article would never be
+ * reachable.
+ */
+const RETIRED_BRIEF_SLUGS = [
+  // Deaths and illness of people with no active NFL role.
+  "chris-johnson-als-diagnosis",
+  "bills-legend-jim-kelly-stroke-reveal",
+  "saints-lb-keith-mitchell-passes-away",
+  "rams-legend-leroy-irvin-dies-68",
+  "texans-co-founder-janice-mcnair-passes-away-89",
+  "remembering-joe-delaney-42-years",
+  "doug-martin-parents-wrongful-death-lawsuit-oakland",
+  // Ceremonial honors and tributes.
+  "adrian-peterson-vikings-ring-of-honor",
+  "chris-johnson-titans-ring-of-honor-2026-season-opener",
+  "commanders-tribute-john-riggins-schefter",
+  "commanders-retire-john-riggins-44-jersey-week-9-rams",
+  "eagles-lurie-stuart-scott-enspire-award-autism",
+  "bills-oj-simpson-not-honored-new-highmark-stadium",
+  // Uniforms and stadiums.
+  "bengals-white-bengal-uniforms-snf-steelers-week-10",
+  "chiefs-new-stadium-renderings-2031",
+  // League business, ownership, finance, calendar.
+  "packers-record-revenue-2025-financial-report-leadership-change",
+  "seahawks-sale-vinod-khosla-9-billion-record",
+  "2027-nfl-draft-washington-dc-dates",
+  "super-bowl-lxii-date-february-13-2028-atlanta",
+  "nfl-tmrw-sports-pro-flag-football-league-venue-renderings",
+  // Broadcast and media careers.
+  "chase-daniel-espn-multi-year-extension-sec-nation-nfl-studio",
+  "tony-romo-arrested-owi-milwaukee",
+  // Non-player staff with no scheme or usage change.
+  "browns-hire-ryan-grigson-senior-football-advisor-chris-cooper-promoted",
+  "jaguars-promote-waldron-farwell-title-designations",
+  "cardinals-ryan-gold-suspended-indefinitely-gambling-policy",
+  "nfl-suspends-cardinals-ryan-gold-gambling",
+  "titans-scout-blaise-taylor-guilty-murder",
+  "myron-rolle-nflpa-strategic-advisory-player-brain-health",
+  "gerald-alexander-vikings-suspension",
+  // Off-field personal items with no availability impact.
+  "caleb-williams-iceman-trademark-refused",
+  // Wrong sport: a basketball recruit.
+  "marcus-spears-jr-commits-texas-reclassifies-2026",
+  // Archived with no merged survivor, so there is nothing to redirect to.
+  "hunter-henry-patriots-extension",
+] as const;
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
@@ -125,7 +184,8 @@ const nextConfig: NextConfig = {
       // (docs/beacon-brief/beacon-brief-removals-2026-07-30.md), which left the redirect
       // pointing at a deleted page. A permanent redirect to a 404 is worse for
       // both readers and crawlers than the 404 itself, so the pair came out with
-      // the articles. The retired slug now 404s, which is the honest answer.
+      // the articles. Both slugs now land in RETIRED_BRIEF_SLUGS below, which
+      // sends them to the Brief index rather than to a page that is not there.
       {
         source: "/brief/jacoby-brissett-new-deal-cardinals-2026-starter",
         destination: "/brief/jacoby-brissett-cardinals-reworked-contract-2026",
@@ -326,6 +386,34 @@ const nextConfig: NextConfig = {
       {
         source: "/games/signal-scout/leaderboards",
         destination: "/games/signal-scout",
+        permanent: true,
+      },
+      // The 2026-07-30 removal list, plus the two articles that were archived
+      // without a survivor. Google Search Console was reporting all 33 as 404s.
+      //
+      // A reader arriving on one of these is not lost, they are early: the
+      // Discord posts announcing every removed article were deliberately left
+      // in place (see the removals doc), so those links are still live in a
+      // chat somewhere and will be for years. Landing them on the Brief index
+      // is a better answer than a dead end.
+      //
+      // What this is NOT is an attempt to keep the ranking. These articles were
+      // deleted because they were not fantasy football, and Google is entitled
+      // to treat a redirect to a section index as a soft 404 and drop the URL,
+      // which is the correct outcome. The redirect is for the person, not the
+      // crawler.
+      ...RETIRED_BRIEF_SLUGS.map((slug) => ({
+        source: `/brief/${slug}`,
+        destination: "/brief",
+        permanent: true,
+      })),
+      // The one retired slug with a real replacement. The Tunsil triceps
+      // article was archived; the Commanders IR article covers the same injury
+      // to the same player and is published, so this one goes to the article
+      // rather than to the index.
+      {
+        source: "/brief/laremy-tunsil-torn-triceps-commanders",
+        destination: "/brief/commanders-newton-tunsil-injured-reserve",
         permanent: true,
       },
     ];
