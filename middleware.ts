@@ -31,7 +31,7 @@ export const config = {
     //
     // The rest of the exclusions are the routes that never read a session
     // either, so running the session refresh in front of them is pure cost:
-    // the four crawler and machine-readable files, the OG image routes (which
+    // the five crawler and machine-readable files, the OG image routes (which
     // render from an id in the path through the service-role client), and the
     // cron routes (which authenticate with CRON_SECRET). None of them is ever
     // the landing spot for the stray OAuth `?code=` the handler above catches.
@@ -45,10 +45,14 @@ export const config = {
     // alternative was to change that route's client, which would move it from
     // the anon RLS context to service_role for a saving of one request.
     //
+    // `llms(?:-full)?\.txt$` covers both machine-readable documents. They are
+    // the same kind of route as the sitemaps: public, cached, and reading no
+    // session, so running the auth refresh in front of either is pure cost.
+    //
     // Every literal below ends at a boundary, either a slash or the end of the
     // path. Without that, `/llms.txt.php` and `/sitemap.xml.bak` are excluded
     // too, which is inert today only because nothing is routed under those
     // prefixes.
-    "/((?!api/donate/webhook$|api/cron/|api/og/(?!breakdown/)|sitemap\\.xml$|sitemaps/|brief/rss\\.xml$|llms\\.txt$|_next/static|_next/image|favicon\\.ico$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/donate/webhook$|api/cron/|api/og/(?!breakdown/)|sitemap\\.xml$|sitemaps/|brief/rss\\.xml$|llms(?:-full)?\\.txt$|_next/static|_next/image|favicon\\.ico$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

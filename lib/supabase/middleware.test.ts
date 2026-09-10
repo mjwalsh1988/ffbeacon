@@ -89,6 +89,7 @@ describe("the middleware matcher", () => {
       "/sitemaps/players.xml",
       "/brief/rss.xml",
       "/llms.txt",
+      "/llms-full.txt",
       // Static assets.
       "/favicon.ico",
       "/img/ff-beacon-logo.png",
@@ -116,6 +117,8 @@ describe("the middleware matcher", () => {
     for (const path of [
       "/sitemap.xml.bak",
       "/llms.txt.php",
+      "/llms-full.txt.php",
+      "/llms-fullx.txt",
       "/brief/rss.xmlx",
       "/api/ogsomething",
       "/api/cronx",

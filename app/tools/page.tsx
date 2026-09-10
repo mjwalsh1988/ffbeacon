@@ -20,6 +20,11 @@ import { MemberHeroCta } from "@/components/member-hero-cta";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
 import { isDiscordMember } from "@/lib/discord-membership";
+import {
+  TOOL_CATALOG,
+  type ToolCatalogEntry,
+  type ToolHref,
+} from "@/lib/tools-catalog";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/tools" },
@@ -88,117 +93,24 @@ function Masthead({ isMember }: { isMember: boolean }) {
 
 /* ---------- Tools ---------- */
 
-type Tool = {
-  icon: LucideIcon;
-  href:
-    | "/tools/league-pulse"
-    | "/tools/on-the-clock"
-    | "/tools/manager-pulse"
-    | "/tools/beacon-breakdown"
-    | "/tools/signal-check"
-    | "/tools/faab";
-  eyebrow: string;
-  title: string;
-  pitch: string;
-  bullets: string[];
-  cta: string;
+/** The catalog entry plus the icon the page draws for it. Icons are resolved
+ *  here, keyed by href, so lib/tools-catalog.ts stays presentation-free and the
+ *  llms.txt routes can read the same descriptions without pulling in lucide. */
+type Tool = ToolCatalogEntry & { icon: LucideIcon };
+
+const TOOL_ICONS: Record<ToolHref, LucideIcon> = {
+  "/tools/league-pulse": Workflow,
+  "/tools/on-the-clock": Timer,
+  "/tools/manager-pulse": UserSearch,
+  "/tools/beacon-breakdown": Swords,
+  "/tools/signal-check": Scale,
+  "/tools/faab": Calculator,
 };
 
-// Order mirrors the homepage tools grid and the header/mobile Tools
-// dropdown (lib/site.ts TOOLS_NAV). Rankings Board lives on its own
-// top-level page and is intentionally not listed here.
-const TOOLS: Tool[] = [
-  {
-    icon: Workflow,
-    href: "/tools/league-pulse",
-    eyebrow: "League management",
-    title: "Sleeper League Pulse",
-    pitch:
-      "Bring every Sleeper league you're in into one place. See your full roster portfolio at a glance, with values and standings tuned to each league's actual scoring.",
-    bullets: [
-      "Every league tied to your Sleeper username, and saving it once means no typing at all",
-      "Real rosters, recent trades, and accurate draft pick values",
-      "Power rankings calibrated to your league's actual settings",
-      "Tap any team to see a full breakdown of their roster",
-    ],
-    cta: "Sync a league",
-  },
-  {
-    icon: Timer,
-    href: "/tools/on-the-clock",
-    eyebrow: "Live drafts",
-    title: "On The Clock",
-    pitch:
-      "Connect your active Sleeper draft and FF Beacon points you to the best pick for your team, then keeps everything else you need in one hub. Built to work the same by eye or by ear.",
-    bullets: [
-      "Best Available and Team Need picks tuned to your league format",
-      "A trade calculator and an analyzer for startup and rookie drafts",
-      "Every team roster plus the full trade and transaction history",
-      "Live power rankings, startup draft grades, and awards",
-    ],
-    cta: "Open the draft room",
-  },
-  {
-    icon: Swords,
-    href: "/tools/beacon-breakdown",
-    eyebrow: "Player comparison",
-    title: "Beacon Breakdown",
-    pitch:
-      "Two players. One verdict. Drop any two players into a matchup card and see who has the edge, with side-by-side values, rankings, trends, and a plain-English bottom line you can screenshot and share.",
-    bullets: [
-      "Head-to-head cards with a single Beacon Edge meter up top",
-      "Every row shows who wins: value, rank, production, risk, and upside",
-      "Dynasty and redraft outlooks weighted to your league format",
-      "A Beacon Verdict that reads like a real take, not a stat dump",
-    ],
-    cta: "Compare players",
-  },
-  {
-    icon: UserSearch,
-    href: "/tools/manager-pulse",
-    eyebrow: "Know your league mates",
-    title: "Manager Pulse",
-    pitch:
-      "Type any Sleeper username and see how that person actually plays. Four seasons of their real history, so you know who you are dealing with before you send the offer.",
-    bullets: [
-      "The players they keep buying, and the ones they never touch",
-      "What they overpay for, priced against real market value",
-      "How they draft, how often they win, how fast they move",
-      "Dynasty and redraft kept apart, because they are different games",
-    ],
-    cta: "Scout a manager",
-  },
-  {
-    icon: Scale,
-    href: "/tools/signal-check",
-    eyebrow: "Trade analysis",
-    title: "Signal Check",
-    pitch:
-      "Build any trade and get the Beacon Verdict: who wins, by how much, and why. Powered by FF Beacon Values and weighted for your league format, with a plain-language reason for every call.",
-    bullets: [
-      "Add players and, in dynasty, draft picks to either side",
-      "FF Beacon Values weighted to your exact league format",
-      "A clear margin and a near-even guard so tiny edges aren't oversold",
-      "Freeze and share a clean public verdict link",
-    ],
-    cta: "Analyze a trade",
-  },
-  {
-    icon: Calculator,
-    href: "/tools/faab",
-    eyebrow: "Waivers & bids",
-    title: "FAAB Calculator",
-    pitch:
-      "Take the guesswork out of waiver Tuesday. Get a recommended bid range that factors in the player's actual value and how badly your roster needs them.",
-    bullets: [
-      "Search any player, not just the top names everyone is chasing",
-      "Bids weighted by current value, your league size, and remaining FAAB",
-      "Adjusts for your roster's positional need at that spot",
-      "Explains the recommendation in plain English so you can adjust",
-    ],
-    cta: "Run a bid",
-  },
-];
+const TOOLS: Tool[] = TOOL_CATALOG.map((tool) => ({
+  ...tool,
+  icon: TOOL_ICONS[tool.href],
+}));
 
 function ToolSection({ tool, tinted }: { tool: Tool; tinted: boolean }) {
   const headingId = `tool-${tool.href.replace(/\//g, "-").replace(/^-+/, "")}-heading`;
@@ -222,11 +134,22 @@ function ToolSection({ tool, tinted }: { tool: Tool; tinted: boolean }) {
             <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-brand-cyan">
               {tool.eyebrow}
             </p>
+            {/* The heading is the link. This page is the strongest internal
+                pointer each tool page has, and the only anchor text it used to
+                offer was the button below, which says "Analyze a trade" or
+                "Run a bid": true, but it names no destination. A heading link
+                gives the tool's real name to a crawler and, more to the point,
+                to anyone tabbing through links or pulling up a links list. */}
             <h2
               id={headingId}
               className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl"
             >
-              {tool.title}
+              <Link
+                href={tool.href}
+                className="rounded-sm transition-colors hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-cyan"
+              >
+                {tool.title}
+              </Link>
             </h2>
           </div>
           <div className="space-y-6">

@@ -88,6 +88,17 @@ export default function RootLayout({
         {/* Same trick, same reason, for whether the bookmark bar is minimised.
             See components/bookmarks/collapsed-state.ts. */}
         <script dangerouslySetInnerHTML={{ __html: BOOKMARK_BAR_INIT_SCRIPT }} />
+        {/* Points an agent at the machine-readable description of the site, the
+            way llms.txt v2 recommends. `describedby` is a registered link
+            relation (IANA), so this is the standard mechanism rather than an
+            invented one, and it costs one tag on a page a crawler already has.
+            The corpus itself is linked from inside that file.
+
+            No `type`: the body is markdown but the route serves it as
+            text/plain, which is what the llms.txt convention specifies and what
+            crawlers expect. Advertising text/markdown here would promise a
+            content type the response does not carry. */}
+        <link rel="describedby" href={`${SITE.url}/llms.txt`} />
       </head>
       <body className="font-sans antialiased">
         <a

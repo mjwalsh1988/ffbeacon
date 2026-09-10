@@ -5,6 +5,7 @@ import {
   ArrowRight,
   BarChart3,
   Clock,
+  Gamepad2,
   Newspaper,
   Radar,
   Vote,
@@ -16,6 +17,7 @@ import { Panel } from "@/components/dashboard-panel";
 import { PageBody } from "@/components/app-shell/page-body";
 import { PageColumns } from "@/components/app-shell/page-columns";
 import { PageMasthead } from "@/components/app-shell/page-masthead";
+import { GAME_CATALOG, type GameCatalogEntry } from "@/lib/games-catalog";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/games" },
@@ -31,42 +33,28 @@ export const metadata: Metadata = {
   }),
 };
 
-type Game = {
-  /** Absent while the game is still being built. A card with no href renders as
-   *  a non-interactive placeholder rather than a link to a page that is not
-   *  there yet. Mirrors FeaturedGame on the homepage. */
-  href?: string;
-  title: string;
-  tagline: string;
-  description: string;
-  /** Only meaningful on a playable game. */
-  cta?: string;
-  icon: LucideIcon;
-  status: string;
+/** The catalog entry plus the presentation this page adds. Icons and the status
+ *  badge are resolved here, so lib/games-catalog.ts stays presentation-free and
+ *  the llms.txt routes can read the same descriptions without pulling in lucide.
+ *
+ *  Keyed by TITLE, not href: a game still in development has no href yet and
+ *  still has to render a card, so keying on href would leave its icon undefined
+ *  and throw where the placeholder branch below is meant to catch it. The
+ *  fallback exists for the same reason, so a catalog entry added without a
+ *  presentation row degrades to a placeholder rather than crashing the page. */
+type Game = GameCatalogEntry & { icon: LucideIcon; status: string };
+
+const GAME_PRESENTATION: Record<string, { icon: LucideIcon; status: string }> = {
+  "Signal Scout": { icon: Radar, status: "New" },
+  "Would You Rather?": { icon: Vote, status: "New" },
 };
 
-const GAMES: Game[] = [
-  {
-    href: "/games/signal-scout",
-    title: "Signal Scout",
-    tagline: "Decode the profile. Find the player.",
-    description:
-      "A mystery player. A handful of clues. Decode the scouting profile and name the player before the signal burns out.",
-    cta: "Start scouting",
-    icon: Radar,
-    status: "New",
-  },
-  {
-    href: "/games/would-you-rather",
-    title: "Would You Rather?",
-    tagline: "Two sides. One vote.",
-    description:
-      "A real trade out of a real league, with the managers' names taken off. Call the winner, then see how the room voted and what the full grade says.",
-    cta: "Call a trade",
-    icon: Vote,
-    status: "New",
-  },
-];
+const UNBUILT_GAME = { icon: Gamepad2, status: "In development" };
+
+const GAMES: Game[] = GAME_CATALOG.map((game) => ({
+  ...game,
+  ...(GAME_PRESENTATION[game.title] ?? UNBUILT_GAME),
+}));
 
 export default function GamesPage() {
   const playable = GAMES.filter((game) => game.href).length;
@@ -131,7 +119,7 @@ export default function GamesPage() {
                   href="/tools"
                   icon={Wrench}
                   title="Every free tool"
-                  body="League Pulse, On The Clock, Signal Check, and the rest."
+                  body="League Pulse, On The Clock, the Signal Check trade calculator, and the rest."
                 />
               </div>
             </Panel>
