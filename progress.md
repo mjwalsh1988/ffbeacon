@@ -14602,3 +14602,81 @@ DSN-T011 | completed | Final verification
        and the site refuses framing), so mobile rests on the review's class
        audit. ESLint did not run: npx fetched ESLint 10 and the repo has no
        eslint.config file. NOT COMMITTED and NOT PUSHED, by instruction.
+
+## SEO audit, step 1: Quick fixes (2026-09-11)
+
+Plan of record: docs/seo-audit/seo-audit-and-plan.md. Step 1 is the "Quick
+fixes" list on the owner's explainer page (A03, A04, A02, B03 title, B06 first
+bullet, C03, C01 steps 1 and 2). Part 0 of the plan records what was built,
+every deviation from Part 6 and both reviews. Task ids match the plan's Part 9.
+Owner decision 1 made 2026-09-11: Brief articles credited to FF Beacon, Michael
+as editor, autopublish stays on. NOT COMMITTED and NOT PUSHED, by instruction.
+
+SA-T010 | completed | Move the Brief loading boundary into app/brief/(feed)/ so a missing article is a real 404
+     | files: app/brief/(feed)/page.tsx, app/brief/(feed)/loading.tsx, app/brief/(feed)/category, team, tag, player (git mv)
+     | verified: yes. Local production build: a fake article answers 404; /brief and /brief/team/BUF answer 200. URLs unchanged.
+     | notes: the first multi-source git mv failed part way ("Permission denied" on the category folder, a transient OneDrive or editor lock); the two files it had moved were staged with git add -A and the four folders moved one at a time.
+
+SA-T011 | completed | Middleware 308 for ?format= on /rankings and /rankings/[format]; delete the in-page redirect
+     | files: lib/rankings-format-redirect.ts (new), lib/rankings-format-redirect.test.ts (new), middleware.ts, app/rankings/[format]/page.tsx, app/rankings/page.tsx (comment)
+     | verified: yes. Tests; locally both shapes answer 308 with other parameters kept, uppercase values lowercased.
+     | notes: slug checked by shape, not a static list (plan Part 0). All 13 format_configs rows are active and no migration ever deleted, renamed or deactivated one (checked 2026-09-11).
+
+SA-T012 | completed | htmlLimitedBots with search and answer crawlers, plus a regex test
+     | files: lib/seo/html-limited-bots.ts (new), lib/seo/html-limited-bots.test.ts (new), next.config.ts
+     | verified: yes. Locally Googlebot gets the title at byte 1,886 with the head ending at 4,818; Chrome still streams it. The page body still streams behind loading screens; A01 fixes that.
+
+SA-T013 | completed | Share the player metadata read; parallelise the Brief metadata reads
+     | files: none
+     | notes: found unnecessary. The player metadata read is one indexed lookup that runs alongside the page load; the two Brief reads are dependent.
+
+SA-T020 | completed | Home title
+     | files: app/page.tsx
+     | verified: yes, "FF Beacon: Free Fantasy Football Rankings, Tools and News" served locally. The hero sentence (SA-T020b) is open.
+
+SA-T023 | completed | Root robots with max-image-preview:large
+     | files: app/layout.tsx, components/signal/profile-view.tsx
+     | verified: yes. No index or follow at the root (both reviews: an explicit "index" sat beside Next's own "noindex" on not-found branches). Locally: a normal page carries only the preview directives; a not-found page carries those plus "noindex"; /join keeps "noindex, follow"; a live Signal profile now carries the directives (it used to set robots to undefined, which wiped the default).
+
+SA-T030 | completed | Brief byline, disclosure line and author JSON-LD per owner decision 1
+     | files: app/brief/[slug]/page.tsx, app/page.tsx (comment), app/author/michael/page.tsx (comment)
+     | verified: yes. Locally: "By FF Beacon", then "This story was written by FF Beacon's automated news desk. Michael built the desk and oversees it."; NewsArticle author Organization, editor Person; og article:author FF Beacon. Two lines rather than one after the SEO review. C01 steps 3 to 5 (SA-T031, SA-T032, corrections note) are open.
+
+SA-T033 | completed | Correct the llms context and full text to match the site
+     | files: lib/llms/context.ts, lib/llms/llms-full-txt.ts, lib/llms/llms-txt.ts
+     | verified: yes, served text read back locally. No test pinned the old wording.
+
+SA-T035 | completed | Resolve the step 1 review findings, and final verification
+     | files: app/layout.tsx, components/signal/profile-view.tsx, app/brief/(feed)/loading.tsx, lib/rankings-format-redirect.ts, lib/rankings-format-redirect.test.ts, lib/seo/html-limited-bots.ts, lib/llms/context.ts, lib/llms/llms-full-txt.ts, app/brief/[slug]/page.tsx, app/rankings/page.tsx, app/page.tsx, app/author/michael/page.tsx, docs/README.md
+     | depends on: SA-T010 to SA-T033
+     | notes: implementation review: no high or medium findings, nine low, all fixed or recorded in plan Part 0. SEO review: one medium (the page body still streams behind loading screens), recorded for A01; the rest fixed or recorded (RSS managingEditor is now SA-T026). Accessibility and security were covered inside the implementation review: no open redirect (destination is always this origin's /rankings/ plus a lowercase slug), reading order and link text of the byline confirmed, byline moved to text-ink-muted for contrast.
+     | verified: npx tsc --noEmit zero errors; npx vitest run 333 files and 5,053 tests passing; npm run build succeeds; local production curl checks as listed above; non-ASCII scan clean over every touched file. A background next start outlived its stopped task and served the old build to one round of checks; the node process was killed and every check re-run against the new build.
+
+## SEO audit: the five owner decisions (2026-09-11)
+
+The owner answered Part 5's decisions 1 to 5. Plan record: Part 0b of
+docs/seo-audit/seo-audit-and-plan.md. NOT COMMITTED and NOT PUSHED, by
+instruction.
+
+SA-T111 | completed | Remove `editor` from the Brief NewsArticle markup; author stays the Organization
+     | files: app/brief/[slug]/page.tsx, app/page.tsx (comment), app/author/michael/page.tsx (comment)
+     | verified: yes, no "editor" in the served JSON-LD.
+
+SA-T080 | completed | /rankings as a format hub; a saved format (account or cookie) lands on its board with a 307
+     | files: app/rankings/page.tsx, lib/rankings-hub.ts, lib/rankings-hub.test.ts, lib/breadcrumbs.ts, lib/rankings-format-redirect.ts, lib/rankings-format-redirect.test.ts, app/rankings/(board)/[format] and app/rankings/(board)/loading.tsx (git mv), lib/sitemap/sections.ts, app/api/cron/recalculate-derived/route.ts, lib/llms/llms-txt.ts, lib/llms/llms-full-txt.ts, lib/beam/engine.ts, lib/beam/capabilities/rankings-top.ts, player-value.ts, player-rank.ts, help-capabilities.ts, lib/guides/fantasy-football-terms.ts
+     | verified: yes. Locally: hub 200 at 108 KB; cookie 307 with source kept; ?view=formats hub; unknown cookie stays on the hub; breadcrumb and JSON-LD correct; new description served.
+
+SA-T112 | completed | Keep public Signal profiles indexed; correct the sitemap comment about boards
+     | files: lib/sitemap/sections.ts
+
+SA-T109 | completed | robots.txt: training crawlers allowed in one wildcard group, decision recorded, Host line removed
+     | files: app/robots.ts | owner action: check Vercel Firewall and Bot Protection settings
+
+SA-T110 | completed | Google preferred sources link on every Brief article and listing page
+     | files: lib/preferred-source.ts, lib/preferred-source.test.ts, components/beacon-brief/preferred-source-link.tsx, app/brief/[slug]/page.tsx, components/beacon-brief/brief-feed.tsx
+     | verified: yes, the deeplink renders on an article and on /brief.
+
+SA-T113 | completed | Review fixes and final verification for the decisions
+     | depends on: SA-T080 to SA-T112
+     | notes: implementation review: all five correct; fixed the board-promising links, a stale editor comment, six stale path comments, the view flag leaking onto boards. SEO review: all five correct; fixed the hub description (an exception to the title freeze, recorded), both llms entries, the hub's nightly lastmod and IndexNow ping; recorded the A01 caching contract. Accessibility and security covered in the implementation review: heading order h1, h2, h3, h3, h2 on the hub; the redirect target is a slug from the active-formats list plus URLSearchParams-encoded values.
+     | verified: npx tsc --noEmit zero errors; npx vitest run 335 files and 5,062 tests passing; npm run build succeeds; local production curl checks; non-ASCII scan clean.

@@ -64,17 +64,16 @@ export async function GET(req: Request) {
       const rankings = await runSeedRankings(supabase);
       const trends = await runCalculateTrends(supabase);
 
-      // Rankings and trends just rebuilt from the freshest value sync; push the
-      // rankings board and every format page to IndexNow. Fired via after() so
-      // a slow or failed ping never adds to this cron's own duration, and
-      // gated on both rebuilds actually succeeding: a failed rankings rebuild
-      // leaves the previous rows in place, so there is nothing new to push.
+      // Rankings and trends just rebuilt from the freshest value sync; push
+      // every format page to IndexNow. Fired via after() so a slow or failed
+      // ping never adds to this cron's own duration, and gated on both rebuilds
+      // actually succeeding: a failed rankings rebuild leaves the previous rows
+      // in place, so there is nothing new to push. /rankings itself is not
+      // pushed: since 2026-09-11 it is a directory of these boards whose content
+      // does not change nightly, and IndexNow asks for changed URLs only.
       if (rankings.ok && trends.ok) {
         const activeFormats = await getActiveFormats(supabase);
-        const urls = [
-          "/rankings",
-          ...activeFormats.map((format) => `/rankings/${format.slug}`),
-        ];
+        const urls = activeFormats.map((format) => `/rankings/${format.slug}`);
         after(() => submitIndexNow(urls));
       }
 

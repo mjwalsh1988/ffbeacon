@@ -139,9 +139,9 @@ export function buildLlmsTxt(data: LlmsData): string {
 
   section("Rankings and player values", [
     link(
-      "Rankings board",
+      "Rankings by format",
       u("/rankings"),
-      "Every ranked player and dynasty draft pick for the selected format and value source, with tiers, positional rank and the seven-day move",
+      "The directory of every league format's rankings board, with a short guide to which format a league is. A reader who has already picked a format is taken straight to that board",
     ),
     ...data.formats.map((f) =>
       link(
@@ -207,7 +207,7 @@ export function buildLlmsTxt(data: LlmsData): string {
     link(
       SITE.author.name,
       u(SITE.author.bylineHref),
-      "The person who builds and writes FF Beacon, and the byline on every article",
+      "The person who builds FF Beacon, writes its guides, and oversees the automated news desk that drafts the Beacon Brief",
     ),
     link(
       "Support FF Beacon",

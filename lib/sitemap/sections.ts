@@ -45,7 +45,11 @@
  *   /leagues/**         Per-user league data, unbounded in count.
  *   /tools/trade-calculator/v/[shareId]   User-generated share artifacts.
  *   /brief/player/[slug]              Sets robots noindex.
- *   /[handle]/rankings/[boardId]      Sets robots index:false.
+ *   /[handle]/rankings/[boardId]      Indexable when the board is published and its
+ *                       owner's profile is live (only the not-found branch sets
+ *                       noindex). Left out of this file because each board is linked
+ *                       from its owner's profile, which is listed. Owner decision
+ *                       2026-09-11: public Signal profiles stay indexed.
  *   /brief/tag/[tag]                  Hundreds of thin filter pages. They stay
  *                       crawlable through in-page links, but advertising them would
  *                       spend crawl budget that belongs to articles and profiles.
@@ -300,11 +304,11 @@ async function coreSection(supabase: Admin): Promise<SitemapUrl[]> {
     // The homepage surfaces the latest Beacon Brief coverage, so the newest article's
     // timestamp is a real answer for when it last changed.
     { loc: `${SITE.url}/`, lastModified: newestArticleAt, priority: 1 },
-    {
-      loc: `${SITE.url}/rankings`,
-      lastModified: rankingsUpdatedAt,
-      priority: 0.9,
-    },
+    // The hub. No lastmod: since 2026-09-11 it is a directory of the format boards
+    // (owner decision, plan finding D04), and its content no longer changes when
+    // the nightly rankings rebuild does. A date that moved every night without the
+    // page changing would teach Google to ignore this file's dates.
+    { loc: `${SITE.url}/rankings`, priority: 0.9 },
     { loc: `${SITE.url}/brief`, lastModified: newestArticleAt, priority: 0.7 },
     ...STATIC_PATHS.map(({ path, priority }) => ({
       loc: `${SITE.url}${path}`,

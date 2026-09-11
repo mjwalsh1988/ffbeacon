@@ -115,7 +115,7 @@ export const helpCapabilities: BeamCapability<Params, Result> = {
         note: "Built from what BEAM can answer right now, so it is never out of date.",
       }),
       links: [
-        { href: "/rankings", label: "Browse the rankings board" },
+        { href: "/rankings", label: "Browse the rankings" },
         {
           href: "/tools/league-pulse",
           label: "Sync your league in League Pulse",

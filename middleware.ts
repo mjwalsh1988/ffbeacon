@@ -1,4 +1,5 @@
 import { updateSession } from "@/lib/supabase/middleware";
+import { rankingsFormatRedirect } from "@/lib/rankings-format-redirect";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
@@ -17,6 +18,12 @@ export async function middleware(request: NextRequest) {
     // when we copy them over, `code` will be re-added explicitly.
     return NextResponse.redirect(forwardUrl);
   }
+  // A ?format= on a rankings URL is a permanent move to that format's own path
+  // (lib/rankings-format-redirect.ts). It is answered here, before any render,
+  // because app/rankings/(board)/loading.tsx flushes a 200 before a page-level redirect()
+  // can run, which turned it into a meta refresh inside a 200.
+  const rankingsRedirect = rankingsFormatRedirect(request);
+  if (rankingsRedirect) return rankingsRedirect;
   return updateSession(request);
 }
 

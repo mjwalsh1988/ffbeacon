@@ -1,3 +1,5 @@
+import { SITE } from "@/lib/site";
+
 /**
  * The prose both machine-readable documents share.
  *
@@ -68,7 +70,8 @@ export const SLEEPER_INTEGRATION: string[] = [
  *
  * These are the words a model is most likely to meet with no idea what they
  * mean, because they exist nowhere else. Each definition says what the thing
- * measures rather than how it is computed: the models themselves are not public.
+ * measures rather than how it is computed. The method is written out in plain
+ * English at /guides/how-ff-beacon-works for anyone who wants the how.
  */
 export const BEACON_TERMS: Array<{ term: string; definition: string }> = [
   {
@@ -114,12 +117,12 @@ export const BEACON_TERMS: Array<{ term: string; definition: string }> = [
   {
     term: "The Beacon Brief",
     definition:
-      "FF Beacon's NFL news desk, written for fantasy managers. Every story leads with what the news does to a roster rather than only what happened, and credits the named original reporter.",
+      `FF Beacon's NFL news desk, written for fantasy managers. Every story leads with what the news does to a roster rather than only what happened. Stories are drafted by FF Beacon's automated news desk from public reporting and published under the FF Beacon byline, with a note on every article saying so. ${SITE.author.name} built the desk and oversees it.`,
   },
   {
     term: "BEAM",
     definition:
-      "The site's built-in question answering assistant. It answers questions about players and values from the same data the pages render, and says so when a question is outside what it can see.",
+      "The site's built-in question answering assistant, available on desktop only. It answers questions about players and values from the same data the pages render, and says so when a question is outside what it can see.",
   },
   {
     term: "Signal profile",
@@ -132,14 +135,14 @@ export const BEACON_TERMS: Array<{ term: string; definition: string }> = [
 export const BRIEF_CONTEXT: string[] = [
   "The Beacon Brief publishes NFL news selected for fantasy relevance. A story is written when it changes what a manager should do: an injury, a transaction, a depth chart or usage shift, a suspension, a coaching or scheme change, a notable performance, or rookie and draft news.",
   "News with no fantasy bearing is deliberately not covered, and articles that turn out to have none are removed rather than kept for traffic.",
-  "Every article credits the named original reporter alongside FF Beacon.",
+  `Articles are drafted by FF Beacon's automated news desk from public reporting and published under the FF Beacon byline, with a note on every article saying so. ${SITE.author.name} built the desk and oversees it.`,
 ];
 
 /** Guidance for a model quoting the site. Practical, not legal. */
 export const CITATION_NOTES: string[] = [
   "Attribution is welcome. Please cite FF Beacon and link the specific page the answer came from.",
   "Player values change daily. Quote the date, the league format and the value source shown on the page rather than presenting a value as permanent.",
-  "Beacon Brief articles report on a named original source. Credit that reporter as well as FF Beacon.",
+  "Beacon Brief articles are drafted from public reporting. Where an article names the original reporter, credit that reporter as well as FF Beacon.",
   "Do not present a third-party value source's numbers as FF Beacon's own model, or the other way round. The site keeps them apart and so should any answer drawn from it.",
   "Anything under /leagues/, /tools/manager-pulse/<handle> or a reader's own account is generated from one person's league or Sleeper history. Those pages are not part of this corpus and should not be crawled or quoted as site content.",
 ];

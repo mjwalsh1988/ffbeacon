@@ -1,3 +1,5 @@
+import { RANKINGS_HUB_HREF } from "@/lib/rankings-hub";
+
 /**
  * Breadcrumbs for every route on the site, derived from the pathname.
  *
@@ -179,12 +181,28 @@ export function buildBreadcrumbs(pathname: string): Crumb[] {
     const label = ROUTE_LABELS[prefix] ?? humanizeSegment(segment);
     crumbs.push({
       label,
-      href: isLast || NON_NAVIGABLE.has(prefix) ? undefined : prefix,
+      href:
+        isLast || NON_NAVIGABLE.has(prefix)
+          ? undefined
+          : (CRUMB_HREF_OVERRIDES[prefix] ?? prefix),
     });
   });
 
   return crumbs;
 }
+
+/**
+ * Crumbs whose link needs more than the bare path.
+ *
+ * /rankings sends a reader with a saved format straight to that format's board
+ * (lib/rankings-hub.ts). From a format page, a "Rankings" crumb pointing at the bare
+ * path would bounce that reader back to the page they are on, so it asks for the
+ * hub explicitly. The structured data below strips the query and keeps the
+ * canonical /rankings.
+ */
+const CRUMB_HREF_OVERRIDES: Record<string, string> = {
+  "/rankings": RANKINGS_HUB_HREF,
+};
 
 /**
  * The same trail as JSON-LD, for search engines. Home is included here because
@@ -203,7 +221,9 @@ export function breadcrumbJsonLd(
     "@type": "ListItem",
     position: index + 1,
     name: crumb.label,
-    item: `${base}${crumb.href ?? pathname}`,
+    // Structured data names canonical pages, so any query a crumb's visible link
+    // carries (the rankings hub flag, see CRUMB_HREF_OVERRIDES) is dropped here.
+    item: `${base}${(crumb.href ?? pathname).split("?")[0]}`,
   }));
 
   return {

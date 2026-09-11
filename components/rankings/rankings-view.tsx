@@ -30,7 +30,9 @@ import { isBestBall } from "@/lib/rankings-formats";
 import { ALL_TERMS } from "@/lib/guides/fantasy-football-terms";
 
 /**
- * The rankings board, shared by /rankings and /rankings/[format].
+ * The rankings board, rendered by every /rankings/[format] page. Until 2026-09-11 the
+ * /rankings hub rendered it too; the hub is now a format directory (plan finding D04),
+ * so the notes below about "the hub" describe how it used to call this.
  *
  * Extracted so the two routes can differ in exactly the way that matters for search
  * (headline, title, meta description, canonical) while rendering byte-identical data,

@@ -2,7 +2,7 @@
  * The rankings board read, cached (SEO-T978).
  *
  * /rankings/[format] declares generateStaticParams and force-dynamic together
- * (app/rankings/[format]/page.tsx), so none of the twelve format pages
+ * (app/rankings/(board)/[format]/page.tsx), so none of the twelve format pages
  * prerender and every request re-runs the full board query. Partial
  * Prerendering would fix this properly; until that lands, this module wraps
  * the read in unstable_cache as the pragmatic interim

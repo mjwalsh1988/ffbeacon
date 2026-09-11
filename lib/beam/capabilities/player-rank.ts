@@ -125,7 +125,7 @@ export const playerRank: BeamCapability<Params, Result> = {
       speech: buildSpeech({ headline, facts, caveats: [], context }),
       facts,
       context,
-      links: [playerLink(player), { href: "/rankings", label: "Full rankings board" }],
+      links: [playerLink(player), { href: "/rankings", label: "Full rankings" }],
       caveats: [],
     };
   },

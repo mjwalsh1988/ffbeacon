@@ -50,9 +50,12 @@ export const metadata: Metadata = {
 /**
  * /author/michael
  *
- * The byline page every article and guide on the site points at, which makes it
- * the page Google reads to decide whether the author behind them is a real
- * person with real standing. It carries the Person schema, the visible
+ * The byline page every guide on the site points at, and the page every Beacon
+ * Brief article's disclosure line links to (Brief articles are credited to FF
+ * Beacon, and that line names Michael as the person who built the automated news
+ * desk and oversees it). That makes it the page Google
+ * reads to decide whether the person behind them is a real person with real
+ * standing. It carries the Person schema, the visible
  * biography that schema claims, and links to the work itself.
  *
  * Laid out as a dashboard rather than a marketing page: a masthead, panels down

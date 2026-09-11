@@ -10,6 +10,7 @@ import { BriefShell } from "@/components/beacon-brief/brief-shell";
 import { BriefRailSections } from "@/components/beacon-brief/brief-rail-sections";
 import { BriefPagination } from "@/components/beacon-brief/brief-pagination";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { PreferredSourceLink } from "@/components/beacon-brief/preferred-source-link";
 import { PageBody } from "@/components/app-shell/page-body";
 import {
   PageMasthead,
@@ -202,6 +203,13 @@ export async function BriefFeed({
           </>
         )}
       </BriefShell>
+
+      {/* Google's preferred source link on every Brief listing page (owner
+          decision 2026-09-11, plan finding G05). Below the list and the
+          pagination, so it never sits between a reader and the stories. */}
+      <PageBody>
+        <PreferredSourceLink className="border-t border-line pt-8" />
+      </PageBody>
 
       <DiscordCtaSection
         eyebrow="Talk about the news"

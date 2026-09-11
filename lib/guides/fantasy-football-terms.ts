@@ -484,7 +484,7 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A tier is a group of players close enough in value to be roughly interchangeable, labeled T1, T2, and so on.",
           "Tiers are more useful than ranks during a live draft. If three players share a tier and two will still be there next round, take the position you cannot fill later. The gap between tiers matters far more than the gap inside one.",
         ],
-        link: { href: "/rankings", label: "See tiers on the rankings board" },
+        link: { href: "/rankings", label: "See tiers in the rankings" },
       },
       {
         id: "reach",
@@ -642,7 +642,7 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A player's value is a single number representing what he is worth in trades and rankings for one specific scoring format.",
           "It is a market read rather than a points projection: what the fantasy community, or a model, would pay. A value quoted without its format attached is incomplete, since the same tight end is worth two different numbers in PPR and TE Premium.",
         ],
-        link: { href: "/rankings", label: "See values on the rankings board" },
+        link: { href: "/rankings", label: "See values in the rankings" },
       },
       {
         id: "trade-calculator",
@@ -990,7 +990,7 @@ export const GLOSSARY_SECTIONS: GlossarySection[] = [
           "A data source is where a set of rankings comes from. We publish our own FF Beacon value and also carry other trusted sources so you can compare them side by side.",
           "Different sources rank the same player differently, and the disagreement is itself information. The strip near the top of any rankings page names which source you are currently reading.",
         ],
-        link: { href: "/rankings", label: "Compare sources on the rankings board" },
+        link: { href: "/rankings", label: "Compare sources in the rankings" },
       },
       {
         id: "ff-beacon-value",

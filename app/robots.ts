@@ -21,8 +21,21 @@ import { SITE } from "@/lib/site";
  *   - Allow lines precede the broader Disallow so the more specific rule wins under
  *     the longest-match precedence every major crawler uses.
  *
- * AI crawlers are intentionally NOT blocked. Answer engines are a growing referral
- * source for a site like this, and /llms.txt exists specifically to feed them.
+ * AI crawlers are intentionally NOT blocked, and that includes the ones that collect
+ * training data (GPTBot, ClaudeBot, CCBot, Google-Extended, Applebot-Extended). The
+ * owner decided this on 2026-09-11 (docs/seo-audit/seo-audit-and-plan.md, finding
+ * G03): answer engines are a growing referral source for a site like this, and being
+ * in the training data is one way a small brand becomes a name the models know.
+ * Blocking them would do nothing for search rankings.
+ *
+ * So they share the wildcard group below rather than getting groups of their own. A
+ * crawler with its own group ignores the wildcard entirely, so a named group would
+ * have to repeat every disallow line, and a copy that drifted would open /admin or
+ * /my-beacon to that one crawler. If a crawler ever needs different treatment, give
+ * it a group that repeats the full disallow list.
+ *
+ * Vercel's Firewall and Bot Protection settings can block AI crawlers regardless of
+ * this file. Those live in the Vercel dashboard, not the repo.
  */
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -49,6 +62,7 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: `${SITE.url}/sitemap.xml`,
-    host: SITE.url,
+    // No `host`: Google and Bing ignore the Host directive, and Yandex dropped it
+    // in 2018. The canonical host is set by redirects and canonical tags instead.
   };
 }

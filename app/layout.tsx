@@ -40,6 +40,28 @@ export const metadata: Metadata = {
   },
   description: "Your signal through the fantasy noise.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://ffbeacon.com"),
+  // Site-wide preview permissions (docs/seo-audit/seo-audit-and-plan.md, finding
+  // B06). max-image-preview:large is what lets Google show a page with a large
+  // image in Discover and other image-led results; before this, only the pages
+  // that set it themselves (Brief articles and the guides) were eligible.
+  // max-snippet -1 lifts the snippet length cap.
+  //
+  // Deliberately no index or follow here. Both are what a crawler assumes when
+  // nothing says otherwise, so listing them changes nothing, and leaving them out
+  // means a not-found branch that Next marks noindex never carries a
+  // contradicting "index" beside it. On the general robots tag rather than
+  // googleBot only, because Bing honours max-image-preview and max-snippet too.
+  //
+  // Next merges metadata shallowly, so a page or layout that sets its own
+  // `robots` replaces this whole object: every noindex route (leagues, admin,
+  // the Brief player archive, thin articles) keeps exactly the directives it
+  // sets. A page must omit the key rather than set it to undefined, or it wipes
+  // this default (see components/signal/profile-view.tsx).
+  robots: {
+    "max-image-preview": "large",
+    "max-snippet": -1,
+    "max-video-preview": -1,
+  },
   // Favicons live in /public/img. We explicitly enumerate them so Next.js
   // never falls back to its starter favicon (which still ships as a stale
   // app/favicon.ico when scaffolded) and so browsers pick the highest-

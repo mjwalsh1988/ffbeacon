@@ -44,7 +44,12 @@ import { TERM_COUNT } from "@/lib/guides/fantasy-football-terms";
 // What the homepage says about itself to a search engine and to anyone who
 // pastes the link into a group chat. Leads with what is free and what you get,
 // because that is the question a stranger is actually asking.
-const HOME_TITLE = "FF Beacon - Your signal through the fantasy noise.";
+//
+// The title names the site in the words people search for ("fantasy football
+// rankings", tools, news). The slogan it replaced matched no search anyone types
+// (docs/seo-audit/seo-audit-and-plan.md, finding B03). The slogan stays as the
+// page's h1. 57 characters, under the 60 a results page shows.
+const HOME_TITLE = "FF Beacon: Free Fantasy Football Rankings, Tools and News";
 const HOME_DESCRIPTION =
   "Free fantasy football rankings, trade grades, draft help, and league tools, with a Discord to sanity-check your lineup. Works by ear or by eye.";
 
@@ -281,9 +286,10 @@ function Hero({ memberContext }: { memberContext: Promise<MemberContext> }) {
             ))}
           </ul>
 
-          {/* Byline. Same "By {name}" pattern as the Beacon Brief and guide
-              pages (rel="author" ties the link to the person the NewsArticle
-              and Article schema on those pages already name). */}
+          {/* Byline. Same "By {name}" pattern as the guide pages (rel="author"
+              ties the link to the person their Article schema already names).
+              Beacon Brief articles credit FF Beacon as author instead, because
+              software drafts them. */}
           <p className="mt-6 text-xs text-ink-subtle">
             Built by{" "}
             <Link

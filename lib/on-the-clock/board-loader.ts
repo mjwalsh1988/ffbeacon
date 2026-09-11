@@ -16,7 +16,8 @@
  *    imply staleness. The no-rankings empty state triggers only when a (format,
  *    source) has zero ranking rows.
  *  - Per-table source resolution. Rankings and values can resolve to different
- *    sources (exactly as app/rankings/page.tsx does), via resolveSourceForFormat.
+ *    sources (exactly as the rankings board in components/rankings/rankings-view.tsx
+ *    does), via resolveSourceForFormat.
  *
  * K/DEF appear only when an active source ranks them (today only ffbeacon does, and
  * it is gated off); the loader includes them when present and coerces positions to

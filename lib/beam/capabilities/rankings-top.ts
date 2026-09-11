@@ -157,7 +157,7 @@ export const rankingsTop: BeamCapability<Params, Result> = {
           formatDisplay: ctx.formatDisplay,
           sourceDisplay: ctx.sourceDisplay,
         }),
-        links: [{ href: "/rankings", label: "Open the rankings board" }],
+        links: [{ href: "/rankings", label: "Open the rankings" }],
         caveats,
       };
     }
@@ -202,7 +202,7 @@ export const rankingsTop: BeamCapability<Params, Result> = {
         sourceDisplay: ctx.sourceDisplay,
         asOf: result.generatedAt,
       }),
-      links: [{ href: "/rankings", label: "Open the full rankings board" }],
+      links: [{ href: "/rankings", label: "Open the full rankings" }],
       caveats,
     };
   },

@@ -170,7 +170,7 @@ export const playerValue: BeamCapability<Params, Result> = {
       context,
       links: [
         playerLink(player),
-        { href: "/rankings", label: "Full rankings board" },
+        { href: "/rankings", label: "Full rankings" },
       ],
       caveats,
     };

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { pageShareMetadata } from "@/lib/page-og";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createCachedReadClient, createClient } from "@/lib/supabase/server";
 import { readPosition } from "@/lib/format";
 import { getActiveFormats } from "@/lib/source";
@@ -98,17 +98,13 @@ export default async function FormatRankingsPage({
 }: PageProps) {
   const [{ format: slug }, query] = await Promise.all([params, searchParams]);
 
-  // The header's format dropdown pushes `${pathname}?format=<slug>` (see
-  // components/format-toggle.tsx), which on this route would put two formats in one
-  // URL. Redirect to the path for the format the reader picked, so the dropdown keeps
-  // working and a format never has two addresses. Position and source carry over.
-  if (query.format && query.format !== slug) {
-    const carry = new URLSearchParams();
-    if (query.position) carry.set("position", query.position);
-    if (query.source) carry.set("source", query.source);
-    const suffix = carry.toString() ? `?${carry.toString()}` : "";
-    redirect(`/rankings/${query.format}${suffix}`);
-  }
+  // No `?format=` handling here. The header's format dropdown pushes
+  // `${pathname}?format=<slug>` (see components/format-toggle.tsx), which on this
+  // route would put two formats in one URL, and middleware answers that with a
+  // permanent 308 to the chosen format's path before this page renders
+  // (lib/rankings-format-redirect.ts). A redirect() from here could not do that:
+  // app/rankings/(board)/loading.tsx has already flushed a 200 by the time it runs, so it
+  // went out as a meta refresh inside a 200 whose canonical still named this page.
 
   const format = await activeFormat(slug);
   if (!format) notFound();

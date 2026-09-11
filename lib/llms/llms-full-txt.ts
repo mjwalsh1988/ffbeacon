@@ -115,10 +115,10 @@ export function buildLlmsFullTxt(data: LlmsData): string {
     out.push("");
   }
 
-  h3("Rankings board");
+  h3("Rankings boards");
   source("/rankings");
   p(
-    "The reference board rather than a tool you run against your own league: every ranked player and, in dynasty formats, every draft pick, for the selected format and value source, with tiers, positional rank and the seven-day move beside each one.",
+    "The reference boards rather than a tool you run against your own league: for each league format, every ranked player and, in dynasty formats, every draft pick, for the selected value source, with tiers, positional rank and the seven-day move beside each one. The rankings page itself is a directory of those boards; a reader who has already picked a format is taken straight to that board.",
     `Each format also has its own page at ${u("/rankings/{format-slug}")}, listed under "League formats" below.`,
   );
 
@@ -266,8 +266,8 @@ export function buildLlmsFullTxt(data: LlmsData): string {
   h2("Editorial and authorship");
   source(SITE.author.bylineHref);
   p(
-    `${SITE.name} is written and built by ${SITE.author.name}, who is the byline on every Beacon Brief article and every guide. There is no other editorial staff and no sponsored content.`,
-    "Beacon Brief stories report on named original reporting and credit that reporter. FF Beacon adds the fantasy read on top of it rather than claiming the reporting.",
+    `${SITE.name} is built by ${SITE.author.name}, who writes every guide and is the byline on each of them. There is no other editorial staff and no sponsored content.`,
+    `Beacon Brief articles are drafted by ${SITE.name}'s automated news desk from public reporting and published under the ${SITE.name} byline, with a note on every article saying so. ${SITE.author.name} built the desk and oversees it. ${SITE.name} adds the fantasy read on top of the reporting rather than claiming the reporting.`,
   );
 
   /* ---------------------------------------------------------------- */

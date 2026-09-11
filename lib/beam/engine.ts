@@ -65,7 +65,7 @@ const UNSUPPORTED_LINKS: Partial<Record<BeamUnsupportedReason, BeamLink[]>> = {
       label: "Grade a trade in the Signal Check Trade Calculator",
     },
   ],
-  "unsupported-stat": [{ href: "/rankings", label: "Browse the rankings board" }],
+  "unsupported-stat": [{ href: "/rankings", label: "Browse the rankings" }],
 };
 
 /**

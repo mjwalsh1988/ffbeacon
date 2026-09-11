@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { securityHeadersForNextConfig } from "./lib/security-headers";
+import { HTML_LIMITED_BOTS } from "./lib/seo/html-limited-bots";
 
 /**
  * Beacon Brief slugs that no longer resolve, all sent to the Brief index.
@@ -62,6 +63,11 @@ const RETIRED_BRIEF_SLUGS = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Which user agents get the page's metadata inside <head> instead of streamed
+  // into the body after the first flush. Next's default leaves out Googlebot and
+  // every answer-engine crawler; see lib/seo/html-limited-bots.ts for the
+  // measurement and the reasoning (plan finding A02).
+  htmlLimitedBots: HTML_LIMITED_BOTS,
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "sleepercdn.com" },

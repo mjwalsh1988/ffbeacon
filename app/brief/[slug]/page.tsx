@@ -24,6 +24,7 @@ import { BriefShell } from "@/components/beacon-brief/brief-shell";
 import { BriefSidebar } from "@/components/beacon-brief/brief-sidebar";
 import { BriefRailSections } from "@/components/beacon-brief/brief-rail-sections";
 import { DiscordCtaSection } from "@/components/discord-cta-section";
+import { PreferredSourceLink } from "@/components/beacon-brief/preferred-source-link";
 import { SetBreadcrumbLabel } from "@/components/app-shell/breadcrumb-label";
 
 type PageProps = { params: Promise<{ slug: string }> };
@@ -152,7 +153,9 @@ export async function generateMetadata({
       type: "article",
       publishedTime: article.publishedAt ?? undefined,
       modifiedTime: article.lastUpdated ?? undefined,
-      authors: [SITE.author.name],
+      // The desk, not a person: the same credit as the visible byline and the
+      // NewsArticle author below.
+      authors: [SITE.name],
       section: article.category?.name,
       tags: article.tags,
       images: [{ url: ogImage, width: 1200, height: 630, alt: article.title }],
@@ -236,12 +239,17 @@ export default async function BriefArticlePage({ params }: PageProps) {
       isAccessibleForFree: true,
       ...(article.publishedAt ? { datePublished: article.publishedAt } : {}),
       ...(article.lastUpdated ? { dateModified: article.lastUpdated } : {}),
-      // A named Person author carries more weight than an Organization for news
-      // eligibility, and it points at the real byline page.
+      // The author is the Organization, matching the visible byline above (plan
+      // finding C01, owner decisions 2026-09-11). These stories are drafted by
+      // software, so naming a Person as author would claim a writer the page
+      // itself says there was not. There is deliberately no `editor`: Google does
+      // not use it, and with autopublish on nobody edits each article, so it
+      // would be a claim the page cannot back. The visible line under the byline
+      // still names who built the desk and oversees it.
       author: {
-        "@type": "Person",
-        name: SITE.author.name,
-        url: `${SITE.url}${SITE.author.bylineHref}`,
+        "@type": "Organization",
+        name: SITE.name,
+        url: SITE.url,
       },
       publisher: {
         "@type": "Organization",
@@ -374,19 +382,32 @@ export default async function BriefArticlePage({ params }: PageProps) {
               {article.title}
             </h1>
 
-            {/* Visible byline linking to the author page. The NewsArticle schema
-                declares a Person author, and Google's news guidance expects that
-                claim to be visible and attributable on the page itself, not only in
-                structured data. rel="author" ties the link to the byline. */}
-            <p className="mt-3 text-xs text-ink-subtle">
-              By{" "}
+            {/* Byline, then a separate disclosure line (docs/seo-audit/
+                seo-audit-and-plan.md, finding C01; the owner chose this credit on
+                2026-09-11). Articles are drafted by software, so the byline names
+                the publisher exactly as the NewsArticle schema below does (the
+                Organization as author), and the next line says
+                in words how the story was made and who stands behind the desk.
+
+                Two lines rather than "By FF Beacon's automated news desk": Google's
+                guidance on AI-generated content prefers an accurate byline plus a
+                separate note on how the page was made over giving the automation a
+                byline of its own, and a personal byline on text no person wrote is
+                the claim it warns against. The link has no rel="author" because
+                Michael built the desk and oversees it but did not write these
+                stories, and the schema names only the Organization. Both lines
+                are plain text in reading order directly under the headline, never
+                a tooltip, so a screen reader hears them before the story starts. */}
+            <p className="mt-3 text-xs text-ink-muted">By {SITE.name}</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              This story was written by {SITE.name}&apos;s automated news desk.{" "}
               <Link
-                rel="author"
                 href={SITE.author.bylineHref}
                 className="font-semibold text-ink-muted underline underline-offset-2 hover:text-brand-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-cyan"
               >
                 {SITE.author.name}
-              </Link>
+              </Link>{" "}
+              built the desk and oversees it.
             </p>
 
             {showUpdated && article.lastUpdated && (
@@ -562,6 +583,11 @@ export default async function BriefArticlePage({ params }: PageProps) {
             </ul>
           </section>
         )}
+
+        {/* Google's preferred source link (owner decision 2026-09-11, plan
+            finding G05). After the story and what follows it, so it never
+            interrupts the reading. */}
+        <PreferredSourceLink className="mx-auto mt-12 max-w-4xl border-t border-line pt-8" />
 
         <div className="mx-auto mt-12 max-w-4xl">
           <Link

@@ -78,8 +78,11 @@ export async function buildProfileMetadata(
     description,
     alternates: { canonical: url },
     // Drafts, private, and hidden profiles must never be indexed, even though
-    // the owner can still load them for preview.
-    robots: isLive ? undefined : { index: false, follow: false },
+    // the owner can still load them for preview. A live profile omits the key
+    // entirely rather than setting it to undefined: Next merges metadata key by
+    // key, and a present-but-undefined `robots` replaces the root layout's
+    // site-wide preview permissions with nothing.
+    ...(isLive ? {} : { robots: { index: false, follow: false } }),
     openGraph: {
       type: "profile",
       title,
